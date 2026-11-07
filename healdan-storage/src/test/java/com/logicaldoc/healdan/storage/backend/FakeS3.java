@@ -88,8 +88,9 @@ import com.sun.net.httpserver.HttpsServer;
  * the body follows at once.
  * <p>
  * It records every request ({@link #requests}), and misbehaves on demand ({@link #fail}, {@link #stall},
- * {@link #stallBody}, {@link #delay}, {@link #drop}, {@link #corrupt}, {@link #refuseSignatures},
- * {@link #echoSignatures}, {@link #denyAccess}) until {@link #behave}. Close it in an {@code @After} method.
+ * {@link #stallBody}, {@link #delay}, {@link #drop}, {@link #corrupt}, {@link #failWithoutBody},
+ * {@link #headWithoutLength}, {@link #cutOff}, {@link #refuseSignatures}, {@link #echoSignatures}, {@link #denyAccess})
+ * until {@link #behave}. Close it in an {@code @After} method.
  */
 public final class FakeS3 implements AutoCloseable {
 
@@ -146,8 +147,9 @@ public final class FakeS3 implements AutoCloseable {
 	}
 
 	private enum Fault {
-		ANSWER, STALL, STALL_BODY, DELAY, DROP, CORRUPT, SIGNATURE, ECHO
+		ANSWER, BARE, NO_LENGTH, CUT_OFF, STALL, STALL_BODY, DELAY, DROP, CORRUPT, SIGNATURE, ECHO
 	}
+
 
 	private record Rule(Predicate<Request> when, Fault fault, int status, String code, Duration delay,
 			AtomicInteger times) {
@@ -272,11 +274,12 @@ public final class FakeS3 implements AutoCloseable {
 
 	/**
 	 * @return settings for a backend in that bucket, under that prefix: this server, its region and access key, path
-	 *         style, connection and read timeouts of a second, 20 seconds for an upload's attempt, and one attempt
+	 *         style, connection and read timeouts of a second, 20 seconds for an upload's attempt, a floor rate of 1
+	 *         GiB/s (so a test's file gets that timeout, whatever its size), and one attempt
 	 */
 	public S3Settings settings(String bucket, String prefix) {
 		return new S3Settings(endpoint, REGION, bucket, prefix, true, ACCESS_KEY, Duration.ofSeconds(1),
-				Duration.ofSeconds(1), Duration.ofSeconds(20), 1);
+				Duration.ofSeconds(1), Duration.ofSeconds(20), 1L << 30, 1);
 	}
 
 	/** Makes a bucket, if it isn't there */
@@ -337,6 +340,34 @@ public final class FakeS3 implements AutoCloseable {
 	/** Answers that part's upload with this error until {@link #behave} */
 	public FakeS3 failPart(int number, int status, String code) {
 		return rule(part(number), Fault.ANSWER, status, code, null, null);
+	}
+
+	/**
+	 * Answers every request of that kind with that status and no body, until {@link #behave}: what the client sees of
+	 * a refusal a server sends before {@code 100 Continue}, as Garage and Wasabi may, since the SDK's URL-connection
+	 * client then reads the status alone (its {@code getAndHandle100Bug}). The JDK's server here always sends
+	 * {@code 100 Continue} first.
+	 */
+	public FakeS3 failWithoutBody(Op op, int status) {
+		return rule(r -> r.op() == op, Fault.BARE, status, null, null, null);
+	}
+
+	/** As {@link #failWithoutBody}, for that part's upload only */
+	public FakeS3 failPartWithoutBody(int number, int status) {
+		return rule(part(number), Fault.BARE, status, null, null, null);
+	}
+
+	/** Answers every HEAD without its {@code Content-Length}, until {@link #behave} */
+	public FakeS3 headWithoutLength() {
+		return rule(r -> r.op() == Op.HEAD_OBJECT, Fault.NO_LENGTH, 0, null, null, null);
+	}
+
+	/**
+	 * Answers every GET with its whole length announced, sends only that many of its bytes, and drops the connection,
+	 * until {@link #behave}
+	 */
+	public FakeS3 cutOff(int bytes) {
+		return rule(r -> r.op() == Op.GET_OBJECT, Fault.CUT_OFF, bytes, null, null, null);
 	}
 
 	/**
@@ -504,6 +535,14 @@ public final class FakeS3 implements AutoCloseable {
 						return;
 					}
 					case DELAY -> Thread.sleep(rule.delay().toMillis());
+					case BARE -> {
+						send(exchange, request, rule.status(), null, new byte[0]);
+						return;
+					}
+					// No exchange attributes: the JDK's server keeps them on the context, for every later request
+					case NO_LENGTH, CUT_OFF -> {
+						// Applied to the answer
+					}
 					default -> {
 						// CORRUPT was applied to the body
 					}
@@ -514,7 +553,7 @@ public final class FakeS3 implements AutoCloseable {
 				error(exchange, request, refused.status, refused.code, refused.getMessage(), Map.of());
 				return;
 			}
-			answer(exchange, request, body);
+			answer(exchange, request, body, rule);
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		} catch (IOException e) {
@@ -727,7 +766,8 @@ public final class FakeS3 implements AutoCloseable {
 		return null;
 	}
 
-	private void answer(HttpExchange exchange, Request request, byte[] body) throws IOException {
+	/** @param rule the fault to apply to the answer, if any */
+	private void answer(HttpExchange exchange, Request request, byte[] body, Rule rule) throws IOException {
 		NavigableMap<String, Stored> objects = buckets.get(request.bucket());
 		if (request.op() == Op.OTHER) {
 			error(exchange, request, 501, "NotImplemented", "The fake doesn't do " + request.method(), Map.of());
@@ -745,7 +785,7 @@ public final class FakeS3 implements AutoCloseable {
 				exchange.getResponseHeaders().set("ETag", stored.etag());
 				send(exchange, request, 200, null, new byte[0]);
 			}
-			case GET_OBJECT, HEAD_OBJECT -> get(exchange, request, objects.get(request.key()));
+			case GET_OBJECT, HEAD_OBJECT -> get(exchange, request, objects.get(request.key()), rule);
 			case DELETE_OBJECT -> {
 				objects.remove(request.key());
 				send(exchange, request, 204, null, new byte[0]);
@@ -800,7 +840,7 @@ public final class FakeS3 implements AutoCloseable {
 				Map.of("UploadId", String.valueOf(request.query().get("uploadId"))));
 	}
 
-	private static void get(HttpExchange exchange, Request request, Stored stored) throws IOException {
+	private static void get(HttpExchange exchange, Request request, Stored stored, Rule rule) throws IOException {
 		if (stored == null) {
 			error(exchange, request, 404, "NoSuchKey", "The specified key does not exist.",
 					Map.of("Key", request.key()));
@@ -812,8 +852,17 @@ public final class FakeS3 implements AutoCloseable {
 		exchange.getResponseHeaders().set("Accept-Ranges", "bytes");
 		exchange.getResponseHeaders().set("Content-Type", "application/octet-stream");
 		if (request.op() == Op.HEAD_OBJECT) {
-			exchange.getResponseHeaders().set("Content-Length", Long.toString(bytes.length));
+			if (rule == null || rule.fault() != Fault.NO_LENGTH)
+				exchange.getResponseHeaders().set("Content-Length", Long.toString(bytes.length));
 			exchange.sendResponseHeaders(200, -1);
+			return;
+		}
+		if (rule != null && rule.fault() == Fault.CUT_OFF) {
+			// The length announced, fewer bytes sent: closing the exchange then drops the connection
+			exchange.sendResponseHeaders(200, bytes.length);
+			OutputStream out = exchange.getResponseBody();
+			out.write(bytes, 0, Math.min(rule.status(), bytes.length));
+			out.flush();
 			return;
 		}
 		long[] range = range(request.header("range"), bytes.length);

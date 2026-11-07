@@ -17,17 +17,21 @@ import java.util.Locale;
  * @param region the region, as the provider names it ({@code garage} for Garage)
  * @param bucket the bucket
  * @param prefix where in the bucket the backend's objects go: kept without a leading {@code /} and with one trailing
- *        {@code /} ({@code healdan/}), or empty for the bucket's top
+ *        {@code /} ({@code healdan/}), or empty for the bucket's top. No folder of it may start with a digit or a dot:
+ *        CE's layout starts every key with a digit, so another backend at {@code healdan/123/} would put its document
+ *        45's file where this one's document 12345's is, unseen by either marker
  * @param pathStyle {@code https://host/bucket/key} rather than {@code https://bucket.host/key}
  * @param accessKey the access key's id, which isn't secret
  * @param connectTimeout how long a connection may take to open
  * @param readTimeout how long a read may wait for the next byte
  * @param uploadTimeout how long each attempt of an upload's request may take, its body sent and its answer read: the
  *        read timeout doesn't end a write that stalls. Reads have no such bound, so a long download isn't cut
+ * @param uploadRate the slowest rate, in bytes a second, an upload's request is given time for: its attempt timeout
+ *        is the longer of {@code uploadTimeout} and its bytes at this rate
  * @param attempts how many times the client sends a request that fails in a way it may retry, the first included
  */
 public record S3Settings(URI endpoint, String region, String bucket, String prefix, boolean pathStyle, String accessKey,
-		Duration connectTimeout, Duration readTimeout, Duration uploadTimeout, int attempts) {
+		Duration connectTimeout, Duration readTimeout, Duration uploadTimeout, long uploadRate, int attempts) {
 
 	/** A connection's timeout in use (Global Constraints) */
 	public static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
@@ -38,6 +42,9 @@ public record S3Settings(URI endpoint, String region, String bucket, String pref
 	/** An upload request's attempt timeout in use: a 64 MiB put at 1 Mbit/s takes about 9 minutes */
 	public static final Duration UPLOAD_TIMEOUT = Duration.ofMinutes(10);
 
+	/** The slowest rate an upload is given time for in use, 64 KiB/s: a 64 MiB put gets about 17 minutes */
+	public static final long UPLOAD_RATE = 64L << 10;
+
 	/** The client's attempts in use: the SDK's default of 4 would hold a read for 4 minutes on a stalled server */
 	public static final int ATTEMPTS = 2;
 
@@ -46,6 +53,11 @@ public record S3Settings(URI endpoint, String region, String bucket, String pref
 		region = required(region, "region");
 		bucket = required(bucket, "bucket");
 		prefix = prefix(prefix);
+		if (!prefix.isEmpty())
+			for (String folder : prefix.substring(0, prefix.length() - 1).split("/", -1))
+				if (!folder.isEmpty() && (Character.isDigit(folder.charAt(0)) || folder.charAt(0) == '.'))
+					throw new IllegalArgumentException("No folder of the prefix may start with a digit or a dot, as "
+							+ "the files' folders do: " + folder);
 		accessKey = required(accessKey, "access key");
 		if (connectTimeout == null || connectTimeout.isNegative() || connectTimeout.isZero())
 			throw new IllegalArgumentException("The connection timeout must be positive");
@@ -53,6 +65,8 @@ public record S3Settings(URI endpoint, String region, String bucket, String pref
 			throw new IllegalArgumentException("The read timeout must be positive");
 		if (uploadTimeout == null || uploadTimeout.isNegative() || uploadTimeout.isZero())
 			throw new IllegalArgumentException("The upload timeout must be positive");
+		if (uploadRate < 1)
+			throw new IllegalArgumentException("The upload rate must be positive");
 		if (attempts < 1)
 			throw new IllegalArgumentException("A request needs at least one attempt");
 	}
@@ -60,12 +74,29 @@ public record S3Settings(URI endpoint, String region, String bucket, String pref
 	/** Settings with the timeouts and attempts in use */
 	public S3Settings(URI endpoint, String region, String bucket, String prefix, boolean pathStyle, String accessKey) {
 		this(endpoint, region, bucket, prefix, pathStyle, accessKey, CONNECT_TIMEOUT, READ_TIMEOUT, UPLOAD_TIMEOUT,
-				ATTEMPTS);
+				UPLOAD_RATE, ATTEMPTS);
 	}
 
 	/** @return these settings with other timeouts and attempts, as tests shorten them */
 	public S3Settings withTimeouts(Duration connect, Duration read, Duration upload, int tries) {
-		return new S3Settings(endpoint, region, bucket, prefix, pathStyle, accessKey, connect, read, upload, tries);
+		return new S3Settings(endpoint, region, bucket, prefix, pathStyle, accessKey, connect, read, upload,
+				uploadRate, tries);
+	}
+
+	/** @return these settings with another floor rate for uploads */
+	public S3Settings withUploadRate(long bytesPerSecond) {
+		return new S3Settings(endpoint, region, bucket, prefix, pathStyle, accessKey, connectTimeout, readTimeout,
+				uploadTimeout, bytesPerSecond, attempts);
+	}
+
+	/**
+	 * @param bytes what an upload's request sends
+	 * @return its attempt timeout: {@link #uploadTimeout}, or the bytes at {@link #uploadRate} if that is longer (a
+	 *         16 MiB part keeps ten minutes in use, a 64 MiB put gets about 17)
+	 */
+	public Duration uploadTimeoutFor(long bytes) {
+		Duration atRate = Duration.ofMillis(Math.ceilDiv(Math.multiplyExact(Math.max(0, bytes), 1000L), uploadRate));
+		return atRate.compareTo(uploadTimeout) > 0 ? atRate : uploadTimeout;
 	}
 
 	/**

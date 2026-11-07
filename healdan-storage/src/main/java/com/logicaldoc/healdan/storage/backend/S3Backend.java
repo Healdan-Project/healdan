@@ -9,6 +9,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
@@ -18,11 +19,14 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
@@ -88,6 +92,9 @@ public final class S3Backend implements Backend, Closeable {
 	/** A larger one in parts of this size, the last smaller */
 	public static final int PART_SIZE = 16 << 20;
 
+	/** The most parts S3 takes in an upload: 10,000 of 16 MiB is about 156 GiB */
+	public static final int MAX_PARTS = 10_000;
+
 	/** A marker is a line; anything longer isn't one */
 	private static final int MARKER_LIMIT = 1024;
 
@@ -101,6 +108,9 @@ public final class S3Backend implements Backend, Closeable {
 	 * to its test certificate; it is read when a backend is built.
 	 */
 	static volatile TlsTrustManagersProvider trustManagers;
+
+	/** Looks endpoints' hosts up when a backend is built: the JDK's in production, a map in tests */
+	static volatile Function<String, InetAddress[]> resolver = Endpoints.DNS;
 
 	private final long id;
 
@@ -119,8 +129,9 @@ public final class S3Backend implements Backend, Closeable {
 	 * @param secret the access key's secret, kept by the client alone
 	 * @param create writes the marker when the bucket and prefix have none; otherwise the marker must already be there
 	 *        and name this install and this backend, or {@link #check()} fails
-	 * @throws BackendFailingException if creating, and the bucket and prefix hold the marker of another backend or
-	 *         install, or can't be reached ({@link BackendUnreachableException}), found or written to
+	 * @throws BackendFailingException if the endpoint breaks the endpoint rule ({@link Endpoints}); if its host can't
+	 *         be looked up ({@link BackendUnreachableException}); or if creating, and the bucket and prefix hold the
+	 *         marker of another backend or install, or can't be reached, found or written to
 	 */
 	public S3Backend(long id, String installId, S3Settings settings, String secret, boolean create)
 			throws BackendFailingException {
@@ -133,6 +144,13 @@ public final class S3Backend implements Backend, Closeable {
 		this.id = id;
 		this.installId = installId;
 		this.settings = settings;
+		try {
+			Endpoints.check(settings.endpoint(), resolver);
+		} catch (Endpoints.HostNotFound e) {
+			throw new BackendUnreachableException("Backend " + id + " can't be reached: " + e.getMessage());
+		} catch (IllegalArgumentException e) {
+			throw new BackendFailingException("Backend " + id + "'s endpoint is refused: " + e.getMessage());
+		}
 
 		UrlConnectionHttpClient.Builder httpBuilder = UrlConnectionHttpClient.builder()
 				.connectionTimeout(settings.connectTimeout()).socketTimeout(settings.readTimeout());
@@ -194,9 +212,13 @@ public final class S3Backend implements Backend, Closeable {
 		return settings.prefix() + key;
 	}
 
-	/** Gives an upload's request its attempt timeout */
-	private void uploadAttempt(AwsRequestOverrideConfiguration.Builder override) {
-		override.apiCallAttemptTimeout(settings.uploadTimeout());
+	/**
+	 * @param bytes what the request sends
+	 * @return what gives an upload's request its attempt timeout ({@link S3Settings#uploadTimeoutFor})
+	 */
+	private Consumer<AwsRequestOverrideConfiguration.Builder> uploadAttempt(long bytes) {
+		Duration timeout = settings.uploadTimeoutFor(bytes);
+		return override -> override.apiCallAttemptTimeout(timeout);
 	}
 
 	private String markerKey() {
@@ -212,18 +234,25 @@ public final class S3Backend implements Backend, Closeable {
 		return "bucket " + bucket() + (settings.prefix().isEmpty() ? "" : " under " + settings.prefix());
 	}
 
-	/** @return the marker's text, or empty if there is none */
+	/**
+	 * @return the marker's text, or empty if there is none. It is read as any object is ({@link Download}), so one cut
+	 *         off on its way is an outage, not another backend's marker, and its connection isn't used again.
+	 */
 	private Optional<String> readMarker() throws BackendFailingException {
-		try (ResponseInputStream<GetObjectResponse> in = client
-				.getObject(b -> b.bucket(bucket()).key(markerKey()))) {
-			byte[] bytes = in.readNBytes(MARKER_LIMIT + 1);
-			if (bytes.length > MARKER_LIMIT)
-				in.abort();
-			return Optional.of(new String(bytes, StandardCharsets.UTF_8));
+		ResponseInputStream<GetObjectResponse> response;
+		try {
+			response = client.getObject(b -> b.bucket(bucket()).key(markerKey()));
 		} catch (NoSuchKeyException e) {
 			return Optional.empty();
 		} catch (SdkException e) {
-			throw checkFailure("read its marker", e);
+			throw checkFailure(failure("read its marker", e));
+		}
+		Long length = response.response().contentLength();
+		try (InputStream in = new Download(response, markerKey(), length == null ? -1 : length)) {
+			// A longer object isn't a marker; closing it unread aborts its connection
+			return Optional.of(new String(in.readNBytes(MARKER_LIMIT + 1), StandardCharsets.UTF_8));
+		} catch (BackendFailingException e) {
+			throw e;
 		} catch (IOException e) {
 			throw new BackendUnreachableException(
 					"Backend " + id + " can't be reached: its marker's read stopped: " + e.getMessage(), e);
@@ -241,9 +270,9 @@ public final class S3Backend implements Backend, Closeable {
 		try {
 			client.putObject(b -> b.bucket(bucket()).key(markerKey()).contentLength((long) bytes.length)
 					.contentMD5(base64(md5(bytes))).contentType("text/plain; charset=UTF-8")
-					.overrideConfiguration(this::uploadAttempt), RequestBody.fromBytes(bytes));
+					.overrideConfiguration(uploadAttempt(bytes.length)), RequestBody.fromBytes(bytes));
 		} catch (SdkException e) {
-			throw checkFailure("write its marker", e);
+			throw checkFailure(uploadFailure("write its marker", e));
 		}
 		log.info("Backend {} wrote its marker {} in bucket {}", id, markerKey(), bucket());
 	}
@@ -294,10 +323,10 @@ public final class S3Backend implements Backend, Closeable {
 			try {
 				client.putObject(
 						b -> b.bucket(bucket()).key(objectKey).contentLength(size).contentMD5(base64(digest))
-								.overrideConfiguration(this::uploadAttempt),
+								.overrideConfiguration(uploadAttempt(size)),
 						RequestBody.fromContentProvider(source, size, OCTET_STREAM));
 			} catch (SdkException e) {
-				throw source.failureOr(failure("upload " + key, e));
+				throw source.failureOr(uploadFailure("upload " + key, e));
 			}
 		}
 	}
@@ -307,7 +336,11 @@ public final class S3Backend implements Backend, Closeable {
 	 * each part goes up with its own, so the object is the bytes hashed, and the bytes the caller meant.
 	 */
 	private void multipart(String key, String objectKey, Path file, long size, byte[] md5) throws IOException {
-		int count = (int) ((size + PART_SIZE - 1) / PART_SIZE);
+		long parts64 = (size + PART_SIZE - 1) / PART_SIZE;
+		if (parts64 > MAX_PARTS)
+			throw new IOException("The file for " + key + " is " + size + " bytes: more than S3's 10,000 parts of "
+					+ (PART_SIZE >> 20) + " MiB");
+		int count = (int) parts64;
 		byte[][] parts = new byte[count][];
 		MessageDigest whole = digest();
 		for (int i = 0; i < count; i++) {
@@ -320,9 +353,9 @@ public final class S3Backend implements Backend, Closeable {
 		String uploadId;
 		try {
 			uploadId = client.createMultipartUpload(b -> b.bucket(bucket()).key(objectKey).contentType(OCTET_STREAM)
-					.overrideConfiguration(this::uploadAttempt)).uploadId();
+					.overrideConfiguration(uploadAttempt(0))).uploadId();
 		} catch (SdkException e) {
-			throw failure("start the upload of " + key, e);
+			throw uploadFailure("start the upload of " + key, e);
 		}
 		try {
 			List<CompletedPart> completed = new ArrayList<>(count);
@@ -336,19 +369,19 @@ public final class S3Backend implements Backend, Closeable {
 						String etag = client.uploadPart(
 								b -> b.bucket(bucket()).key(objectKey).uploadId(uploadId).partNumber(number)
 										.contentLength(length).contentMD5(partMd5)
-										.overrideConfiguration(this::uploadAttempt),
+										.overrideConfiguration(uploadAttempt(length)),
 								RequestBody.fromContentProvider(source, length, OCTET_STREAM)).eTag();
 						completed.add(CompletedPart.builder().partNumber(number).eTag(etag).build());
 					} catch (SdkException e) {
-						throw source.failureOr(failure("upload part " + number + " of " + key, e));
+						throw source.failureOr(uploadFailure("upload part " + number + " of " + key, e));
 					}
 				}
 			}
 			try {
 				client.completeMultipartUpload(b -> b.bucket(bucket()).key(objectKey).uploadId(uploadId)
-						.multipartUpload(m -> m.parts(completed)).overrideConfiguration(this::uploadAttempt));
+						.multipartUpload(m -> m.parts(completed)).overrideConfiguration(uploadAttempt(0)));
 			} catch (SdkException e) {
-				throw failure("finish the upload of " + key, e);
+				throw uploadFailure("finish the upload of " + key, e);
 			}
 		} catch (IOException | RuntimeException | Error e) {
 			abort(key, objectKey, uploadId, e);
@@ -356,13 +389,13 @@ public final class S3Backend implements Backend, Closeable {
 		}
 	}
 
-	/** Aborts an upload, and if that fails too, keeps the first failure and logs the second */
+	/** Aborts an upload, and if that fails too, however it fails, keeps the first failure and logs the second */
 	private void abort(String key, String objectKey, String uploadId, Throwable first) {
 		try {
 			client.abortMultipartUpload(b -> b.bucket(bucket()).key(objectKey).uploadId(uploadId)
-					.overrideConfiguration(this::uploadAttempt));
-		} catch (SdkException e) {
-			IOException aborting = failure("abort the upload of " + key, e);
+					.overrideConfiguration(uploadAttempt(0)));
+		} catch (RuntimeException e) {
+			Exception aborting = e instanceof SdkException sdk ? failure("abort the upload of " + key, sdk) : e;
 			first.addSuppressed(aborting);
 			log.warn("Backend {}: the unfinished upload of {} couldn't be aborted ({}); "
 					+ "the bucket's rule for incomplete uploads clears it", id, key, aborting.getMessage());
@@ -431,8 +464,9 @@ public final class S3Backend implements Backend, Closeable {
 
 	/** @return the object's size, -1 when there is none (HEAD can't tell a missing bucket from a missing key) */
 	private long head(String key, String objectKey) throws IOException {
+		Long length;
 		try {
-			return client.headObject(b -> b.bucket(bucket()).key(objectKey)).contentLength();
+			length = client.headObject(b -> b.bucket(bucket()).key(objectKey)).contentLength();
 		} catch (NoSuchKeyException e) {
 			return -1;
 		} catch (S3Exception e) {
@@ -442,6 +476,9 @@ public final class S3Backend implements Backend, Closeable {
 		} catch (SdkException e) {
 			throw failure("look up " + key, e);
 		}
+		if (length == null)
+			throw new IOException("Backend " + id + " answered the look-up of " + key + " without its length");
+		return length;
 	}
 
 	@Override
@@ -536,11 +573,10 @@ public final class S3Backend implements Backend, Closeable {
 	private IOException failure(String what, SdkException e) {
 		if (e instanceof SdkServiceException service) {
 			int status = service.statusCode();
-			String code = service instanceof AwsServiceException aws && aws.awsErrorDetails() != null
-					? aws.awsErrorDetails().errorCode()
-					: null;
-			String answer = status + (code != null && ERROR_CODE.matcher(code).matches() ? " " + code : "");
-			if (status >= 500)
+			String code = errorCode(e);
+			String answer = status + (code != null ? " " + code : "");
+			if (status >= 500 || status == 429 || "SlowDown".equals(code)
+					|| (status == 400 && "RequestTimeout".equals(code)))
 				return new BackendUnreachableException(
 						"Backend " + id + " can't be reached: the server answered " + answer + " to " + what);
 			if (status == 401 || status == 403)
@@ -556,12 +592,43 @@ public final class S3Backend implements Backend, Closeable {
 		return new IOException("Backend " + id + " couldn't " + what + ": " + e.getClass().getSimpleName());
 	}
 
+	/** @return the answer's S3 error code, if it has one that looks like one */
+	private static String errorCode(SdkException e) {
+		String code = e instanceof AwsServiceException aws && aws.awsErrorDetails() != null
+				? aws.awsErrorDetails().errorCode()
+				: null;
+		return code != null && ERROR_CODE.matcher(code).matches() ? code : null;
+	}
+
+	/**
+	 * Maps an upload's failure as {@link #failure} does, and tells a missing bucket from a missing upload when the
+	 * answer is a {@code 404} with no code. A server that refuses an upload before {@code 100 Continue}, as Garage
+	 * and Wasabi may, reaches the SDK's URL-connection client as a status with no body; a {@code GET} sends no body,
+	 * so a list says whether the bucket is there.
+	 */
+	private IOException uploadFailure(String what, SdkException e) {
+		IOException mapped = failure(what, e);
+		if (e instanceof SdkServiceException service && service.statusCode() == 404 && errorCode(e) == null
+				&& !(mapped instanceof BackendFailingException) && bucketMissing())
+			return new BackendFailingException("Backend " + id + ": bucket not found: " + bucket());
+		return mapped;
+	}
+
+	/** @return whether a list of the bucket says it doesn't exist; any other answer, or none, says no */
+	private boolean bucketMissing() {
+		try {
+			client.listObjectsV2(b -> b.bucket(bucket()).prefix(settings.prefix()).maxKeys(1));
+			return false;
+		} catch (SdkException e) {
+			return "NoSuchBucket".equals(errorCode(e));
+		}
+	}
+
 	/**
 	 * Maps a failure of the backend's own check, or of writing its marker: any refusal there is the backend's, as no
 	 * file is involved.
 	 */
-	private BackendFailingException checkFailure(String what, SdkException e) {
-		IOException mapped = failure(what, e);
+	private BackendFailingException checkFailure(IOException mapped) {
 		return mapped instanceof BackendFailingException failing ? failing
 				: new BackendFailingException(mapped.getMessage());
 	}

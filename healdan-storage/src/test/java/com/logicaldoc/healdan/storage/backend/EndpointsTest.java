@@ -124,6 +124,22 @@ public class EndpointsTest {
 	public void testANameThatDoesNotResolveFails() {
 		fails("http://no-such-name.lan:3900");
 		fails("http://nothing.lan:3900");
+		// as a host not found, which is no verdict on the rule (DNS may be down), unlike a public address
+		for (String endpoint : new String[] { "http://no-such-name.lan:3900", "http://nothing.lan:3900" })
+			try {
+				Endpoints.check(URI.create(endpoint), resolver);
+				fail(endpoint + " passed");
+			} catch (Endpoints.HostNotFound expected) {
+				// as it should
+			}
+		try {
+			Endpoints.check(URI.create("http://split.lan"), resolver);
+			fail("A public address passed");
+		} catch (Endpoints.HostNotFound e) {
+			fail("A public address reported as a host not found");
+		} catch (IllegalArgumentException expected) {
+			// as it should
+		}
 	}
 
 	@Test

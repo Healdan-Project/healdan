@@ -17,10 +17,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.io.RandomAccessFile;
+import java.io.UncheckedIOException;
 import java.io.StringWriter;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.NonWritableChannelException;
@@ -36,6 +39,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
@@ -713,8 +717,132 @@ public class S3BackendTest extends BackendContract {
 		// and 5xx, once the attempts are spent, is unreachable
 		fake.behave().fail(Op.PUT_OBJECT, 500, "InternalError");
 		unreachable(() -> backend.put("1/2/doc/1.1", source(data), md5(data)));
+
+		// So are throttling and a request the server timed out: outages, not the file's failures
+		for (Object[] answer : new Object[][] { { 429, "TooManyRequests" }, { 503, "SlowDown" }, { 400, "SlowDown" },
+				{ 400, "RequestTimeout" } }) {
+			fake.behave().fail((Integer) answer[0], (String) answer[1]);
+			unreachable(() -> backend.put("1/2/doc/1.1", source(data), md5(data)));
+			unreachable(() -> read("1/2/doc/1.0"));
+			unreachable(() -> backend.list("", 10));
+			unreachable(backend::check);
+		}
+		fake.behave().fail(429, "TooManyRequests");
+		unreachable(() -> backend.size("1/2/doc/1.0"));
+		fake.behave().failPart(1, 400, "RequestTimeout");
+		unreachable(() -> putBig(big));
+		assertEquals(0, fake.openUploads());
 		fake.behave();
 		assertArrayEquals(data, read("1/2/doc/1.0"));
+	}
+
+	@Test
+	public void testMissingBucketOnAnUpload() throws IOException {
+		byte[] data = bytes(100);
+		S3Backend nowhere = backend(fake.settings("no-such-bucket", ""), 7, false);
+
+		// A refusal sent before 100-continue reaches the client as a 404 with no code: a GET then tells a missing
+		// bucket from anything else
+		fake.failWithoutBody(Op.PUT_OBJECT, 404);
+		failing(() -> nowhere.put("1/2/doc/1.0", source(data), md5(data)), "bucket not found");
+		failing(() -> nowhere.stage("1/2/doc/1.0", source(data), md5(data)), "bucket not found");
+		fake.behave().failWithoutBody(Op.CREATE_UPLOAD, 404);
+		Big big = big(70 * MIB, 6);
+		failing(() -> nowhere.put("1/2/doc/big", big.path(), big.md5()), "bucket not found");
+		// With the bucket there, it stays the file's failure
+		fake.behave().failWithoutBody(Op.PUT_OBJECT, 404);
+		refusedFile(() -> backend.put("1/2/doc/1.0", source(data), md5(data)), "404");
+
+		// A part: the bucket gone during the upload, and then still there (as a NoSuchUpload would be)
+		fake.behave().failPartWithoutBody(1, 404).fail(Op.LIST_OBJECTS, 404, "NoSuchBucket");
+		failing(() -> putBig(big), "bucket not found");
+		assertEquals(0, fake.openUploads());
+		fake.behave().failPartWithoutBody(1, 404);
+		refusedFile(() -> putBig(big), "404");
+		assertEquals(0, fake.openUploads());
+
+		// The status alone still says what a 403 and a 503 are
+		fake.behave().failWithoutBody(Op.PUT_OBJECT, 403);
+		failing(() -> backend.put("1/2/doc/1.0", source(data), md5(data)), "access denied");
+		fake.behave().failPartWithoutBody(1, 403);
+		failing(() -> putBig(big), "access denied");
+		fake.behave().failWithoutBody(Op.PUT_OBJECT, 503);
+		unreachable(() -> backend.put("1/2/doc/1.0", source(data), md5(data)));
+		fake.behave();
+		assertEquals(0, fake.openUploads());
+	}
+
+	@Test
+	public void testEndpointCheckedWhenBuilt() throws IOException {
+		// FakeS3 on loopback HTTP passes: the contract's backend was built on it
+
+		// A public address over http:// is refused, naming the rule
+		S3Settings open = new S3Settings(URI.create("http://8.8.8.8:9000"), FakeS3.REGION, BUCKET, "", true,
+				FakeS3.ACCESS_KEY);
+		BackendFailingException refused = failing(() -> backend(open, 7, false), "private network");
+		assertFalse(refused.getMessage().contains(SECRET));
+
+		List<String> looked = new ArrayList<>();
+		Map<String, String> names = Map.of("storage.example", "52.95.110.1", "nas.lan", "10.0.0.9");
+		S3Backend.resolver = host -> {
+			looked.add(host);
+			String address = names.get(host);
+			if (address == null)
+				throw new UncheckedIOException(new UnknownHostException(host));
+			return new InetAddress[] { InetAddress.ofLiteral(address) };
+		};
+		try {
+			failing(() -> backend(settingsAt("http://storage.example:9000"), 7, false), "private network");
+			backend(settingsAt("http://nas.lan:9000"), 7, false).close();
+			// A name that can't be looked up is no verdict: DNS may be down
+			unreachable(() -> backend(settingsAt("http://gone.lan:9000"), 7, false));
+			// and https:// needs no lookup
+			looked.clear();
+			backend(settingsAt("https://s3.us-east-2.wasabisys.com"), 7, false).close();
+			assertTrue(looked.toString(), looked.isEmpty());
+		} finally {
+			S3Backend.resolver = Endpoints.DNS;
+		}
+	}
+
+	private static S3Settings settingsAt(String endpoint) {
+		return new S3Settings(URI.create(endpoint), FakeS3.REGION, BUCKET, "", true, FakeS3.ACCESS_KEY);
+	}
+
+	@Test
+	public void testBrokenAnswers() throws IOException {
+		byte[] data = bytes(100);
+		backend.put("1/2/doc/1.0", source(data), md5(data));
+
+		// A HEAD without its length: an IOException, not a NullPointerException
+		fake.headWithoutLength();
+		refusedFile(() -> backend.size("1/2/doc/1.0"), "without its length");
+		refusedFile(() -> backend.open("1/2/doc/1.0").close(), "without its length");
+		refusedFile(() -> backend.hold("1/2/doc/1.0"), "without its length");
+
+		// A marker cut off on its way is an outage, not another backend's marker, and creating over it writes nothing
+		fake.behave().cutOff(5);
+		unreachable(backend::check);
+		fake.clearRequests();
+		unreachable(() -> backend(fake, 7, "", true));
+		assertTrue(fake.requests(Op.PUT_OBJECT).isEmpty());
+		// and so is a file cut off
+		unreachable(() -> read("1/2/doc/1.0"));
+		fake.behave();
+		assertEquals(INSTALL + " 7\n", text(fake.object(BUCKET, ".healdan-backend")));
+		backend.check();
+	}
+
+	/** A sparse file of 10,001 parts, which takes no room: refused before it's read, and before any request */
+	@Test(timeout = 10_000)
+	public void testTooManyParts() throws IOException {
+		Path huge = work.resolve("huge.bin");
+		try (RandomAccessFile file = new RandomAccessFile(huge.toFile(), "rw")) {
+			file.setLength(10_001L * S3Backend.PART_SIZE);
+		}
+		fake.clearRequests();
+		refusedFile(() -> backend.put("1/2/doc/huge", huge, null), "10,000 parts");
+		assertTrue(fake.requests().toString(), fake.requests().isEmpty());
 	}
 
 	@Test
@@ -733,14 +861,19 @@ public class S3BackendTest extends BackendContract {
 		assertFalse("The thread was left interrupted", Thread.interrupted());
 		assertTrue(fake.object(BUCKET, "1/2/doc/1.0").isEmpty());
 
-		// A part, likewise: the upload is aborted
+		// A part, likewise: the upload is aborted. Two seconds, so the first part, answered, is well within its own
+		S3Backend parts = backend(fake.settings(BUCKET, "").withTimeouts(Duration.ofSeconds(1), Duration.ofSeconds(30),
+				Duration.ofSeconds(2), 1), 7, false);
 		Big big = big(70 * MIB, 41);
 		fake.behave().stallBody(2);
+		fake.clearRequests();
 		start = System.nanoTime();
-		unreachable(() -> quick.put("1/2/doc/big", big.path(), big.md5()));
+		unreachable(() -> parts.put("1/2/doc/big", big.path(), big.md5()));
 		took = (System.nanoTime() - start) / 1_000_000;
 		assertTrue("took " + took + " ms", took < 10_000);
 		assertFalse("The thread was left interrupted", Thread.interrupted());
+		// Part 2 was sent, so part 1 was answered: only part 2's stall ended it
+		assertEquals(List.of(1, 2), fake.requests(Op.UPLOAD_PART).stream().map(Request::partNumber).toList());
 		assertEquals(0, fake.openUploads());
 		assertEquals(1, fake.requests(Op.ABORT_UPLOAD).size());
 
@@ -810,7 +943,8 @@ public class S3BackendTest extends BackendContract {
 			closed = socket.getLocalPort();
 		}
 		S3Settings nowhere = new S3Settings(URI.create("http://127.0.0.1:" + closed), FakeS3.REGION, BUCKET, "",
-				true, FakeS3.ACCESS_KEY, Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(20), 1);
+				true, FakeS3.ACCESS_KEY, Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(20), 1L << 30,
+				1);
 		assertTrue(causedBy(unreachable(backend(nowhere, 7, false)::check), java.net.ConnectException.class));
 		unreachable(() -> backend(nowhere, 7, true));
 

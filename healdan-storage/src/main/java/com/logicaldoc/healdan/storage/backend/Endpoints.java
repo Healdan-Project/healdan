@@ -31,6 +31,16 @@ public final class Endpoints {
 	private Endpoints() {
 	}
 
+	/** The endpoint's host can't be looked up: no verdict on the rule, as DNS may be down */
+	public static final class HostNotFound extends IllegalArgumentException {
+
+		private static final long serialVersionUID = 1L;
+
+		HostNotFound(String message) {
+			super(message);
+		}
+	}
+
 	/**
 	 * Applies the rule, looking the host up with the JDK's resolver.
 	 *
@@ -45,6 +55,7 @@ public final class Endpoints {
 	 *
 	 * @param endpoint the endpoint as typed
 	 * @param resolver gives a host's addresses, and throws if it has none; asked only for {@code http://} to a name
+	 * @throws HostNotFound if the host has no address to check
 	 * @throws IllegalArgumentException saying what is wrong
 	 */
 	public static void check(URI endpoint, Function<String, InetAddress[]> resolver) {
@@ -74,10 +85,10 @@ public final class Endpoints {
 			try {
 				addresses = resolver.apply(host);
 			} catch (RuntimeException e) {
-				throw new IllegalArgumentException("The endpoint's host " + host + " can't be found");
+				throw new HostNotFound("The endpoint's host " + host + " can't be found");
 			}
 		if (addresses == null || addresses.length == 0)
-			throw new IllegalArgumentException("The endpoint's host " + host + " can't be found");
+			throw new HostNotFound("The endpoint's host " + host + " can't be found");
 		for (InetAddress address : addresses)
 			if (!privateOrLoopback(address))
 				throw new IllegalArgumentException("http:// is only for an address on a private network, and " + host
