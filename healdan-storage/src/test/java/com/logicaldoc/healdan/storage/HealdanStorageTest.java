@@ -29,6 +29,7 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.Test;
@@ -38,7 +39,10 @@ import com.logicaldoc.core.runtime.Aspect;
 import com.logicaldoc.core.runtime.RunLevel;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
+import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
+import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
+import com.logicaldoc.healdan.storage.backend.FakeDns;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
@@ -464,6 +468,36 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 
 		cloud.s3().unreachable(false);
 		assertEquals("never read", text(resource(uncached, "1.0")));
+	}
+
+	@Test
+	public void testCachedFileReadsWhenItsBackendCantBeBuilt() throws Exception {
+		Document cached = upload(cloud, "read before the outage");
+		moveToBucket(cloud, cached.getId(), "1.0");
+		assertEquals("read before the outage", text(resource(cached, "1.0")));
+		Document uncached = upload(cloud, "never read");
+		moveToBucket(cloud, uncached.getId(), "1.0");
+
+		// A restart during an outage: the backend is built from its row, and its http:// host can't be looked up
+		StorageBackend row = StorageBackendDAO.get().findById(cloud.backendId());
+		row.setEndpoint("http://cloud.lan:3900");
+		row.setPathStyleOn(true);
+		row.setSecret(SecretBox.get().seal("a secret"));
+		StorageBackendDAO.get().store(row);
+		Backends.get().use(cloud.backendId(), null);
+		try (FakeDns dns = FakeDns.of(Map.of())) {
+			assertThrows(BackendUnreachableException.class, () -> Backends.get().entry(cloud.backendId()));
+			assertEquals(List.of("cloud.lan"), dns.looked());
+
+			assertEquals("a cached file still reads", "read before the outage", text(resource(cached, "1.0")));
+			assertEquals("and by range", "before",
+					new String(store().getBytes(resource(cached, "1.0"), 5, 6), StandardCharsets.UTF_8));
+
+			StorageUnreachableException e = assertThrows(StorageUnreachableException.class,
+					() -> store().getBytes(resource(uncached, "1.0")));
+			assertEquals("This file is in Cloud's cloud storage, which can't be reached right now.", e.getMessage());
+			assertThrows(StorageUnreachableException.class, () -> store().getBytes(resource(uncached, "1.0"), 2, 3));
+		}
 	}
 
 	@Test

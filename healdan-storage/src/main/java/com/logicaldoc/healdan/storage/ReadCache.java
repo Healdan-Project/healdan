@@ -141,6 +141,18 @@ public class ReadCache {
 	}
 
 	/**
+	 * Looks a write of a file up in the cache, with no backend: one that can't be built, in an outage, still has its
+	 * cached files read (spec section 6.5).
+	 *
+	 * @param backendId the row's backend
+	 * @param write the row's write id
+	 * @return the entry, marked read; empty if it isn't cached, and nothing is downloaded
+	 */
+	public Optional<Path> cached(long backendId, long docId, String resource, long write) {
+		return Optional.ofNullable(hit(entryName(backendId, docId, resource, write)));
+	}
+
+	/**
 	 * The file's plain bytes as a file in the cache, downloaded and decrypted if it isn't there.
 	 *
 	 * @param backend where the file is

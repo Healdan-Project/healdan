@@ -424,10 +424,16 @@ public class HealdanStorage extends AbstractStore {
 	}
 
 	/**
-	 * A whole read. S3's goes through the read cache, which holds plain bytes; a local file is decrypted as it is read,
-	 * and one missing from its place is read from .held/.
+	 * A whole read. S3's goes through the read cache, which holds plain bytes and is looked in before the backend is
+	 * built, so a cached file opens while its backend can't be built (spec section 6.5); a local file is decrypted as
+	 * it is read, and one missing from its place is read from .held/.
 	 */
 	private static InputStream open(StoredFile row, String key) throws IOException {
+		if (backends().isS3(row.backendId())) {
+			Optional<InputStream> hit = hit(row, false);
+			if (hit.isPresent())
+				return hit.get();
+		}
 		Backends.Entry entry = backends().entry(row.backendId());
 		if (entry.s3()) {
 			Optional<InputStream> cached = cached(entry, row, key, false);
@@ -457,10 +463,25 @@ public class HealdanStorage extends AbstractStore {
 
 	/**
 	 * @param ranged whether a channel is wanted, else a stream
+	 * @return the file's entry in the read cache, opened, if it is there; nothing is built or fetched
+	 */
+	private static <T> Optional<T> hit(StoredFile row, boolean ranged) throws IOException {
+		Optional<Path> path = ReadCache.get().cached(row.backendId(), row.docId(), row.resource(), row.write());
+		if (path.isEmpty())
+			return Optional.empty();
+		try {
+			return Optional.of(openEntry(path.get(), ranged));
+		} catch (NoSuchFileException e) {
+			// Dropped to make room between the lookup and the open: the backend is built and it is fetched again
+			return Optional.empty();
+		}
+	}
+
+	/**
+	 * @param ranged whether a channel is wanted, else a stream
 	 * @return the file's entry in the read cache, opened (fetched first if it isn't there); empty if the file is too
 	 *         big to be cached, whose ranges are read from the bucket
 	 */
-	@SuppressWarnings("unchecked")
 	private static <T> Optional<T> cached(Backends.Entry entry, StoredFile row, String key, boolean ranged)
 			throws IOException {
 		ReadCache cache = ReadCache.get();
@@ -470,14 +491,19 @@ public class HealdanStorage extends AbstractStore {
 			if (path.isEmpty())
 				return Optional.empty();
 			try {
-				return Optional.of((T) (ranged ? FileChannel.open(path.get(), StandardOpenOption.READ)
-						: Files.newInputStream(path.get())));
+				return Optional.of(openEntry(path.get(), ranged));
 			} catch (NoSuchFileException e) {
 				// Dropped to make room between the lookup and the open: fetch it again
 				if (attempt > 0)
 					throw e;
 			}
 		}
+	}
+
+	/** @return a cache entry opened as a channel if ranged, else as a stream */
+	@SuppressWarnings("unchecked")
+	private static <T> T openEntry(Path path, boolean ranged) throws IOException {
+		return (T) (ranged ? FileChannel.open(path, StandardOpenOption.READ) : Files.newInputStream(path));
 	}
 
 	/** @return the file's plain bytes as a channel, which reads a range without reading what is before it */
@@ -500,10 +526,16 @@ public class HealdanStorage extends AbstractStore {
 	}
 
 	/**
-	 * A file in the read cache is read from there. S3's other files (over a tenth of the cache) are each read by a
-	 * ranged request, and an encrypted one decrypts only the segments it covers.
+	 * A file in the read cache is read from there, looked up before the backend is built, as {@link #open} does. S3's
+	 * other files (over a tenth of the cache) are each read by a ranged request, and an encrypted one decrypts only the
+	 * segments it covers.
 	 */
 	private static SeekableByteChannel channel(StoredFile row, String key) throws IOException {
+		if (backends().isS3(row.backendId())) {
+			Optional<SeekableByteChannel> hit = hit(row, true);
+			if (hit.isPresent())
+				return hit.get();
+		}
 		Backends.Entry entry = backends().entry(row.backendId());
 		if (entry.s3()) {
 			Optional<SeekableByteChannel> cached = cached(entry, row, key, true);

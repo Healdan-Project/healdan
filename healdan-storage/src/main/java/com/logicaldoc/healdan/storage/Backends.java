@@ -190,11 +190,14 @@ public class Backends {
 
 	/**
 	 * Uses a backend in place of the one its row would build, for tests: a {@code MemoryBackend} for an S3 row, say.
-	 * Its kind and cipher still come from the row.
+	 * Its kind and cipher still come from the row. Null goes back to building it from the row.
 	 */
 	void use(long id, Backend backend) {
 		forget(id);
-		given.put(id, backend);
+		if (backend == null)
+			given.remove(id);
+		else
+			given.put(id, backend);
 	}
 
 	/**
