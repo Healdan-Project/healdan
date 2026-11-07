@@ -339,6 +339,33 @@ public class StorageDataTest extends AbstractStorageTestCase {
 	}
 
 	@Test
+	public void testDeleteAllIsForGood() throws Exception {
+		long other = backend("other");
+		long third = backend("third");
+		useBackend(10, other);
+		useBackend(11, third);
+		StorageBackend backend = StorageBackendDAO.get().findById(other);
+		backend.setSecret("v1:sealed");
+		StorageBackendDAO.get().store(backend);
+
+		StoreBackendDAO.get().deleteAll(List.of(StoreBackendDAO.get().findByStore(10).orElseThrow(),
+				StoreBackendDAO.get().findByStore(11).orElseThrow()));
+		assertEquals(Integer.valueOf(0), jdbc().queryForObject("select count(*) from hd_storage_store", Integer.class));
+		useBackend(10, 1);
+
+		StorageBackendDAO.get().deleteAll(List.of(StorageBackendDAO.get().findById(other),
+				StorageBackendDAO.get().findById(third)));
+		assertEquals(Integer.valueOf(1), jdbc().queryForObject("select count(*) from hd_storage_backend", Integer.class));
+		assertEquals(Integer.valueOf(0), jdbc().queryForObject(
+				"select count(*) from hd_storage_backend where hd_secret is not null", Integer.class));
+
+		// Original is refused
+		assertThrows(PersistenceException.class, () -> StorageBackendDAO.get()
+				.deleteAll(List.of(StorageBackendDAO.get().findById(StorageBackend.ORIGINAL))));
+		assertNotNull(StorageBackendDAO.get().findById(StorageBackend.ORIGINAL));
+	}
+
+	@Test
 	public void testOriginalCantBeRemoved() throws Exception {
 		assertThrows(PersistenceException.class, () -> StorageBackendDAO.get().remove(StorageBackend.ORIGINAL));
 		assertThrows(PersistenceException.class, () -> StorageBackendDAO.get().delete(StorageBackend.ORIGINAL));

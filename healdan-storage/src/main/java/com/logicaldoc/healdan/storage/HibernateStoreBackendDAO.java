@@ -3,6 +3,7 @@
 
 package com.logicaldoc.healdan.storage;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -53,5 +54,17 @@ public class HibernateStoreBackendDAO extends HibernatePersistentObjectDAO<Store
 			getCurrentSession().remove(row);
 			getCurrentSession().flush();
 		}
+	}
+
+	/**
+	 * CE's bulk delete only marks the rows too, so each goes through {@link #delete}.
+	 */
+	@Override
+	@Transactional(rollbackOn = Exception.class)
+	public void deleteAll(Collection<StoreBackend> entities, int code) throws PersistenceException {
+		if (entities == null)
+			return;
+		for (StoreBackend entity : List.copyOf(entities))
+			delete(entity.getId(), code);
 	}
 }

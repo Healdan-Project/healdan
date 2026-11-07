@@ -3,6 +3,9 @@
 
 package com.logicaldoc.healdan.storage;
 
+import java.util.Collection;
+import java.util.List;
+
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
@@ -50,5 +53,17 @@ public class HibernateStorageBackendDAO extends HibernatePersistentObjectDAO<Sto
 	@Transactional(rollbackOn = Exception.class)
 	public void delete(long id, int code) throws PersistenceException {
 		remove(id);
+	}
+
+	/**
+	 * CE's bulk delete only marks the rows too, so each goes through {@link #delete}.
+	 */
+	@Override
+	@Transactional(rollbackOn = Exception.class)
+	public void deleteAll(Collection<StorageBackend> entities, int code) throws PersistenceException {
+		if (entities == null)
+			return;
+		for (StorageBackend entity : List.copyOf(entities))
+			delete(entity.getId(), code);
 	}
 }
