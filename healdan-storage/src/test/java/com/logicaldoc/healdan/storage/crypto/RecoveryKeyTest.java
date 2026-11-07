@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.storage.crypto;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -59,6 +60,26 @@ public class RecoveryKeyTest {
 			assertArrayEquals(key, RecoveryKey.parse(text.replace(" ", "")));
 			assertArrayEquals(key, RecoveryKey.parse(text.replace(' ', '-')));
 			assertArrayEquals(key, RecoveryKey.parse("  " + text.replace(" ", " - ") + "\n"));
+		}
+	}
+
+	@Test
+	public void testSmartPunctuationIsIgnored() {
+		byte[] key = key();
+		String text = RecoveryKey.format(key);
+		assertArrayEquals(key, RecoveryKey.parse(text.replace(' ', '\u00a0')));
+		assertArrayEquals(key, RecoveryKey.parse(text.replace(' ', '\u2013')));
+		assertArrayEquals(key, RecoveryKey.parse(text.replace(' ', '\u2014')));
+		assertArrayEquals(key, RecoveryKey.parse(text.replace(' ', '\u2009')));
+	}
+
+	@Test
+	public void testMessageNamesNoSingleLetter() {
+		String bare = RecoveryKey.format(key()).replace(" ", "");
+		for (String typed : new String[] { "U" + bare.substring(1), "!" + bare.substring(1) }) {
+			IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> RecoveryKey.parse(typed));
+			assertTrue(e.getMessage(), e.getMessage().contains("Crockford's base32 digits and letters"));
+			assertFalse(e.getMessage(), e.getMessage().contains(", not U"));
 		}
 	}
 

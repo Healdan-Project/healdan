@@ -84,7 +84,23 @@ public class TinkClasspathTest {
 					enc.write(plain);
 				}
 				try (InputStream dec = aead.newDecryptingStream(new ByteArrayInputStream(out.toByteArray()), aad)) {
-					return dec.readAllBytes();
+					byte[] whole = dec.readAllBytes();
+					// The ranged path, as Task 6's reads take it: a seekable channel over the ciphertext file
+					java.nio.file.Path file = java.nio.file.Files.createTempFile(java.nio.file.Path.of("target"), "tink", ".bin");
+					try {
+						java.nio.file.Files.write(file, out.toByteArray());
+						try (var channel = aead.newSeekableDecryptingChannel(java.nio.file.Files.newByteChannel(file), aad)) {
+							channel.position(1_048_500);
+							java.nio.ByteBuffer range = java.nio.ByteBuffer.allocate(80);
+							while (range.hasRemaining() && channel.read(range) > 0)
+								;
+							if (!Arrays.equals(Arrays.copyOfRange(whole, 1_048_500, 1_048_580), range.array()))
+								throw new IllegalStateException("the ranged read differs");
+						}
+					} finally {
+						java.nio.file.Files.deleteIfExists(file);
+					}
+					return whole;
 				}
 			} catch (Exception e) {
 				throw new IllegalStateException(e);

@@ -110,12 +110,17 @@ public class BackendKeys {
 			byte[] key = Files.readAllBytes(file);
 			return key.length == KEY_BYTES ? Optional.of(key) : Optional.empty();
 		} catch (IOException e) {
+			// An unreadable file (permissions, a failing disk) is not a missing one, which the admin needs to tell apart
+			log.warn("The key file {} of storage backend {} can't be read: {}: {}", file, backendId,
+					e.getClass().getSimpleName(), e.getMessage());
 			return Optional.empty();
 		}
 	}
 
 	/**
-	 * Puts a key back (Enter Recovery Key), replacing a file that is missing or holds another key.
+	 * Puts a key back (Enter Recovery Key), replacing a file that is missing or holds another key. The file it replaces
+	 * may be another backend's only copy of its key (a file renamed onto the wrong id), so unless it holds this same key
+	 * it is kept as {@code backend-<id>.key.replaced-<millis>}, with mode 600.
 	 *
 	 * @param backendId the backend's id
 	 * @param key the 32 key bytes
@@ -159,6 +164,8 @@ public class BackendKeys {
 				// Another server sharing the folder may have made a key while this one waited
 				if (!replace && Files.exists(file))
 					throw new IOException("The key file " + file + " exists already, which is not overwritten");
+				if (replace)
+					keepReplaced(backendId, file, key);
 				Path fresh = folder.resolve(file.getFileName() + ".new");
 				Files.deleteIfExists(fresh);
 				try {
@@ -176,6 +183,27 @@ public class BackendKeys {
 					Files.deleteIfExists(fresh);
 				}
 				syncFolder();
+			}
+		}
+	}
+
+	/** Keeps the bytes of a key file that {@code key} is about to replace, unless they are the same */
+	private void keepReplaced(long backendId, Path file, byte[] key) throws IOException {
+		if (!Files.isRegularFile(file))
+			return;
+		byte[] old = Files.readAllBytes(file);
+		if (java.util.Arrays.equals(old, key))
+			return;
+		for (long millis = System.currentTimeMillis();; millis++) {
+			Path aside = folder.resolve(file.getFileName() + ".replaced-" + millis);
+			try (FileChannel channel = FileChannel.open(aside,
+					EnumSet.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE), ownerOnly(false))) {
+				channel.write(ByteBuffer.wrap(old));
+				channel.force(true);
+				log.warn("The key file of storage backend {} held another key, kept as {}.", backendId, aside.getFileName());
+				return;
+			} catch (java.nio.file.FileAlreadyExistsException taken) {
+				// the same millisecond: try the next
 			}
 		}
 	}

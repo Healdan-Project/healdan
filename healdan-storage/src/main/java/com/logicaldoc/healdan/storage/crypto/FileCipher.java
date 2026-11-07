@@ -73,14 +73,44 @@ public final class FileCipher {
 	 * @param plain the file to encrypt
 	 * @param cipher the file to write, which this overwrites
 	 * @param associated the object it belongs to, as {@link #associated} gives
-	 * @throws IOException if either file can't be used
+	 * @throws IOException if either file can't be used, or the plaintext can't be read to its end; the ciphertext file
+	 *         is then removed, never left holding a well-formed prefix
 	 */
 	public void encrypt(Path plain, Path cipher, String associated) throws IOException {
-		try (InputStream in = Files.newInputStream(plain);
-				OutputStream out = aead.newEncryptingStream(Files.newOutputStream(cipher), aad(associated))) {
-			in.transferTo(out);
+		try (InputStream in = Files.newInputStream(plain)) {
+			encrypt(in, cipher, associated);
+		}
+	}
+
+	void encrypt(InputStream plain, Path cipher, String associated) throws IOException {
+		OutputStream raw = Files.newOutputStream(cipher);
+		try {
+			OutputStream out = aead.newEncryptingStream(raw, aad(associated));
+			plain.transferTo(out);
+			out.close();
 		} catch (GeneralSecurityException e) {
+			discard(raw, cipher, e);
 			throw new IOException("Can't encrypt", e);
+		} catch (IOException | RuntimeException | Error e) {
+			discard(raw, cipher, e);
+			throw e;
+		}
+	}
+
+	/**
+	 * Gives up an encryption. The encrypting stream is not closed, as closing it would write the final segment, and a
+	 * well-formed ciphertext of only a prefix would remain; the raw stream is, and the file removed.
+	 */
+	private static void discard(OutputStream raw, Path cipher, Throwable cause) {
+		try {
+			raw.close();
+		} catch (IOException e) {
+			cause.addSuppressed(e);
+		}
+		try {
+			Files.deleteIfExists(cipher);
+		} catch (IOException e) {
+			cause.addSuppressed(e);
 		}
 	}
 

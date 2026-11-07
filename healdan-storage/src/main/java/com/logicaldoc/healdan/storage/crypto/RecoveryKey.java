@@ -9,7 +9,7 @@ import java.math.BigInteger;
  * A key as a person keeps it: the same 32 bytes in Crockford's base32, 52 characters in 13 groups of 4. The 256 bits
  * fill 51 characters and one bit of the 52nd, so the last character is {@code 0} or {@code G}.
  * <p>
- * {@link #parse} reads case-insensitively, ignores spaces and hyphens, and reads {@code O} as {@code 0} and
+ * {@link #parse} reads case-insensitively, ignores spaces and dashes (non-breaking spaces and en dashes too, as smart punctuation makes them), and reads {@code O} as {@code 0} and
  * {@code I} and {@code L} as {@code 1}, as Crockford does. Because the last character carries one bit of the key and
  * four spare bits that must be zero, a one-character typo is either refused or changes the key, which the check object
  * catches. Nothing here puts a key or the text typed in a message.
@@ -53,7 +53,7 @@ public final class RecoveryKey {
 			throw new IllegalArgumentException("A recovery key is " + CHARACTERS + " characters");
 		StringBuilder bare = new StringBuilder();
 		for (char c : typed.toCharArray()) {
-			if (Character.isWhitespace(c) || c == '-')
+			if (Character.isWhitespace(c) || Character.isSpaceChar(c) || Character.getType(c) == Character.DASH_PUNCTUATION)
 				continue;
 			char upper = Character.toUpperCase(c);
 			if (upper == 'O')
@@ -61,7 +61,7 @@ public final class RecoveryKey {
 			else if (upper == 'I' || upper == 'L')
 				upper = '1';
 			if (ALPHABET.indexOf(upper) < 0)
-				throw new IllegalArgumentException("A recovery key has only digits and letters, not U");
+				throw new IllegalArgumentException("A recovery key has only Crockford's base32 digits and letters");
 			bare.append(upper);
 		}
 		if (bare.length() != CHARACTERS)

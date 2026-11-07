@@ -28,6 +28,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.logicaldoc.healdan.support.LogCapture;
+
 public class BackendKeysTest {
 
 	private Path root;
@@ -93,7 +95,8 @@ public class BackendKeysTest {
 			CountDownLatch start = new CountDownLatch(1);
 			List<Future<byte[]>> results = new ArrayList<>();
 			for (int i = 0; i < 2; i++) {
-				// Another BackendKeys each, as two servers sharing the folder have
+				// Another BackendKeys each; in one JVM the monitor serialises them, which is what this tests (the file lock
+				// between processes isn't exercised here)
 				BackendKeys mine = new BackendKeys(folder);
 				Callable<byte[]> make = () -> {
 					start.await();
@@ -141,6 +144,64 @@ public class BackendKeysTest {
 		assertArrayEquals(other, keys.read(3).orElseThrow());
 		assertThrows(IllegalArgumentException.class, () -> keys.restore(3, new byte[31]));
 		assertArrayEquals(other, keys.read(3).orElseThrow());
+	}
+
+	@Test
+	public void testRestoreKeepsAnotherKeyAside() throws IOException {
+		byte[] old = keys.make(6);
+		byte[] fresh = new byte[32];
+		java.util.Arrays.fill(fresh, (byte) 7);
+		keys.restore(6, fresh);
+		Path aside;
+		try (var names = Files.list(folder)) {
+			List<Path> kept = names.filter(p -> p.getFileName().toString().startsWith("backend-6.key.replaced-"))
+					.toList();
+			assertEquals(1, kept.size());
+			aside = kept.get(0);
+		}
+		assertArrayEquals(old, Files.readAllBytes(aside));
+		assertArrayEquals(fresh, keys.read(6).orElseThrow());
+		if (posix())
+			assertEquals("rw-------", PosixFilePermissions.toString(Files.getPosixFilePermissions(aside)));
+		// A second replacement in the same millisecond or later keeps its own
+		keys.restore(6, old);
+		try (var names = Files.list(folder)) {
+			assertEquals(2, names.filter(p -> p.getFileName().toString().contains(".replaced-")).count());
+		}
+	}
+
+	@Test
+	public void testRestoreOfTheSameKeyKeepsNothing() throws IOException {
+		byte[] key = keys.make(6);
+		keys.restore(6, key.clone());
+		try (var names = Files.list(folder)) {
+			assertEquals(0, names.filter(p -> p.getFileName().toString().contains(".replaced-")).count());
+		}
+		keys.restore(9, key); // a missing file leaves nothing aside either
+		try (var names = Files.list(folder)) {
+			assertEquals(0, names.filter(p -> p.getFileName().toString().contains(".replaced-")).count());
+		}
+	}
+
+	@Test
+	public void testAnUnreadableFileIsEmptyAndLogged() throws IOException {
+		assumeTrue(posix());
+		byte[] key = keys.make(3);
+		Path file = folder.resolve("backend-3.key");
+		Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("---------"));
+		try (LogCapture log = LogCapture.of(BackendKeys.class)) {
+			assumeTrue("running as a user that can read it anyway", !Files.isReadable(file));
+			assertTrue(keys.read(3).isEmpty());
+			assertTrue(log.lines().toString(), log.lines().stream()
+					.anyMatch(l -> l.startsWith("WARN") && l.contains("backend-3.key") && l.contains("can't be read")));
+			assertFalse(log.lines().toString().contains(java.util.HexFormat.of().formatHex(key)));
+			// A missing file is not logged as unreadable
+			log.lines();
+			assertTrue(keys.read(404).isEmpty());
+			assertEquals(1, log.lines().size());
+		} finally {
+			Files.setPosixFilePermissions(file, PosixFilePermissions.fromString("rw-------"));
+		}
 	}
 
 	@Test

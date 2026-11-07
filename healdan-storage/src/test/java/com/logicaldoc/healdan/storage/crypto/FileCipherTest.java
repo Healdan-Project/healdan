@@ -106,7 +106,7 @@ public class FileCipherTest {
 		byte[] plain = bytes(3 << 20);
 		Path out = encrypted(plain, cipher, AAD);
 		long[][] ranges = { { 0, 1 }, { plain.length - 1, 1 }, { 1_048_500, 40 }, { 2_097_060, 40 }, { 1_048_519, 2 },
-				{ 1_048_520, 1 }, { 2_097_079, 2 }, { 2_097_080, 1 }, { 2_500_000, 1000 }, { 100, 3_000_000 } };
+				{ 1_048_520, 1 }, { 2_097_079, 2 }, { 2_097_080, 1 }, { 2_500_000, 1000 }, { 3_145_650, 50 }, { 3_145_727, 1 }, { 100, 3_000_000 } };
 		for (long[] r : ranges) {
 			int length = (int) Math.min(r[1], plain.length - r[0]);
 			assertArrayEquals(r[0] + "+" + r[1], Arrays.copyOfRange(plain, (int) r[0], (int) r[0] + length),
@@ -169,6 +169,74 @@ public class FileCipherTest {
 			assertThrows("cut at " + cut, IOException.class, () -> decrypt(shorter, cipher, AAD));
 			assertThrows("cut at " + cut, IOException.class, () -> range(shorter, cipher, AAD, 0, plain.length));
 		}
+	}
+
+	@Test
+	public void testChannelAtAndPastTheEnd() throws IOException {
+		byte[] plain = bytes(3 << 20);
+		Path out = encrypted(plain, cipher, AAD);
+		for (long position : new long[] { plain.length, plain.length + 10 }) {
+			try (SeekableByteChannel channel = cipher.decrypting(Files.newByteChannel(out), AAD)) {
+				channel.position(position);
+				assertEquals(-1, channel.read(ByteBuffer.allocate(10)));
+			}
+		}
+	}
+
+	@Test
+	public void testChannelOfATruncatedFileRefusesAtAndPastTheEnd() throws IOException {
+		byte[] plain = bytes(3 << 20);
+		Path out = encrypted(plain, cipher, AAD);
+		byte[] all = Files.readAllBytes(out);
+		// Missing its last segment, and cut inside the last one
+		for (int cut : new int[] { 3 << 20, all.length - 5 }) {
+			Path shorter = Files.createTempFile(folder, "short", ".bin");
+			Files.write(shorter, Arrays.copyOf(all, cut));
+			for (long position : new long[] { plain.length, plain.length + 10 })
+				assertThrows("cut at " + cut + ", position " + position, IOException.class, () -> {
+					try (SeekableByteChannel channel = cipher.decrypting(Files.newByteChannel(shorter), AAD)) {
+						channel.position(Math.min(position, channel.size()));
+						channel.read(ByteBuffer.allocate(10));
+					}
+				});
+		}
+	}
+
+	/** A source that fails after a while, as a disk or a network does */
+	private static InputStream failingAfter(int bytes) {
+		return new InputStream() {
+			private int sent;
+
+			@Override
+			public int read() throws IOException {
+				if (sent >= bytes)
+					throw new IOException("the source failed");
+				sent++;
+				return 'x';
+			}
+
+			@Override
+			public int read(byte[] b, int off, int len) throws IOException {
+				if (sent >= bytes)
+					throw new IOException("the source failed");
+				int n = Math.min(len, bytes - sent);
+				Arrays.fill(b, off, off + n, (byte) 'x');
+				sent += n;
+				return n;
+			}
+		};
+	}
+
+	@Test
+	public void testInterruptedEncryptLeavesNoCiphertext() throws IOException {
+		Path out = folder.resolve("interrupted.bin");
+		IOException e = assertThrows(IOException.class, () -> cipher.encrypt(failingAfter(3_000_000), out, AAD));
+		assertEquals("the source failed", e.getMessage());
+		assertFalse("a valid shorter ciphertext remains", Files.exists(out));
+		// A file left by an earlier attempt goes too
+		Files.write(out, new byte[] { 1 });
+		assertThrows(IOException.class, () -> cipher.encrypt(failingAfter(10), out, AAD));
+		assertFalse(Files.exists(out));
 	}
 
 	@Test

@@ -31,9 +31,14 @@ public final class KeyCheck {
 	public static final String ASSOCIATED = "healdan-check";
 
 	/** What the check object holds */
-	public static final byte[] PLAINTEXT = "Healdan storage check".getBytes(StandardCharsets.UTF_8);
+	private static final byte[] PLAINTEXT = "Healdan storage check".getBytes(StandardCharsets.UTF_8);
 
 	private KeyCheck() {
+	}
+
+	/** @return a copy of what the check object holds */
+	static byte[] plaintext() {
+		return PLAINTEXT.clone();
 	}
 
 	/**

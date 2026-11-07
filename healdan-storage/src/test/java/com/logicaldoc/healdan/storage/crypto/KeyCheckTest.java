@@ -50,7 +50,7 @@ public class KeyCheckTest {
 		java.nio.file.Path in = java.nio.file.Files.createTempFile(java.nio.file.Path.of("target"), "kc", ".bin");
 		java.nio.file.Path out = java.nio.file.Files.createTempFile(java.nio.file.Path.of("target"), "kc", ".bin");
 		try {
-			java.nio.file.Files.write(in, KeyCheck.PLAINTEXT);
+			java.nio.file.Files.write(in, KeyCheck.plaintext());
 			cipher.encrypt(in, out, "1/1.0"); // right plaintext, other associated data
 			assertFalse(KeyCheck.verify(cipher, java.nio.file.Files.readAllBytes(out)));
 		} finally {
@@ -71,9 +71,14 @@ public class KeyCheckTest {
 	}
 
 	@Test
-	public void testPlaintextIsFixedAndNotTheAssociatedData() throws IOException {
-		byte[] a = KeyCheck.make(cipher());
-		assertFalse(a.length == 0);
-		assertArrayEquals(KeyCheck.PLAINTEXT, KeyCheck.PLAINTEXT.clone());
+	public void testPlaintextIsACopyAndWhatTheObjectHolds() throws IOException {
+		byte[] plaintext = KeyCheck.plaintext();
+		java.util.Arrays.fill(plaintext, (byte) 0);
+		assertFalse("handed out the shared array", java.util.Arrays.equals(plaintext, KeyCheck.plaintext()));
+		FileCipher cipher = cipher();
+		try (java.io.InputStream in = cipher.decrypting(new java.io.ByteArrayInputStream(KeyCheck.make(cipher)),
+				KeyCheck.ASSOCIATED)) {
+			assertArrayEquals(KeyCheck.plaintext(), in.readAllBytes());
+		}
 	}
 }
