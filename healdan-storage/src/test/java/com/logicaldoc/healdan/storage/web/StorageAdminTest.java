@@ -59,6 +59,7 @@ import com.logicaldoc.healdan.storage.StorageFixtures;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
 import com.logicaldoc.healdan.storage.StorageSettings;
 import com.logicaldoc.healdan.storage.StoreBackendDAO;
+import com.logicaldoc.healdan.storage.StoreTracking;
 import com.logicaldoc.healdan.storage.StoredFile;
 import com.logicaldoc.healdan.storage.StoredFiles;
 import com.logicaldoc.healdan.storage.backend.FakeDns;
@@ -611,5 +612,132 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 		assertEquals(5, StorageSettings.get().cacheGb());
 		refused("no holding period", "365", () -> admin.saveSettings(0, 6, 3, boss));
 		assertEquals(2, StorageSettings.get().transfers());
+	}
+
+	/**
+	 * A database that refuses the second of the three writes, as a failing disk or a dropped connection would: the
+	 * first is rolled back with it, as the tab's "all of them or none" says
+	 */
+	@Test
+	public void testSaveSettingsInOneTransaction() throws Exception {
+		admin.saveSettings(10, 5, 2, boss);
+		jdbc().execute("create trigger hd_test_refuse_cache before update on hd_setting referencing new row as newrow "
+				+ "for each row when (newrow.name = 'storage.cacheGb') begin atomic "
+				+ "signal sqlstate '45000' set message_text = 'refused by the test'; end");
+		try {
+			assertThrows(RuntimeException.class, () -> admin.saveSettings(20, 6, 3, boss));
+		} finally {
+			jdbc().execute("drop trigger hd_test_refuse_cache");
+		}
+
+		assertEquals(10, StorageSettings.get().holdDays());
+		assertEquals(5, StorageSettings.get().cacheGb());
+		assertEquals(2, StorageSettings.get().transfers());
+	}
+
+	/**
+	 * An empty backend's place can change, but not while a Store keeps its files there: a save into that Store, or an
+	 * upload the mover had begun, would land at the old place while the row moved to the new one
+	 */
+	@Test
+	public void testPlaceFixedWhileAStoreUsesIt() throws Exception {
+		Path root = freshFolder("mapped");
+		GUIStorageBackend folder = admin.add(local("Mapped", root, null), null, boss);
+		Folder local = fx.store("Mapped Store");
+		admin.setStoreBackend(local.getId(), folder.getId(), boss);
+		assertFalse(find(admin.overview(), folder.getId()).isInUse());
+
+		Path elsewhere = freshFolder("mapped-elsewhere");
+		folder.setPath(elsewhere.toString());
+		refused("a Store uses the folder", "Mapped Store", () -> admin.save(folder, null, boss));
+		assertEquals(root.toString(), StorageBackendDAO.get().findById(folder.getId()).getPath());
+		assertTrue(Files.exists(root.resolve(LocalBackend.MARKER)));
+		assertFalse(Files.exists(elsewhere.resolve(LocalBackend.MARKER)));
+
+		// An encrypted S3 backend's prefix too: its marker and check object stay where they are, and nothing is written
+		// at the prefix it would have moved to
+		GUIStorageBackend vault = s3("Vault", "vault/");
+		vault.setEncrypted(true);
+		GUIStorageBackend added = admin.add(vault, "secret", boss);
+		String key = added.getRecoveryKey();
+		admin.confirmRecoveryKey(added.getId(), key.substring(key.length() - 4), boss);
+		Folder cloud = fx.store("Vault Store");
+		admin.setStoreBackend(cloud.getId(), added.getId(), boss);
+
+		added.setPrefix("moved/");
+		refused("a Store uses the bucket", "Vault Store", () -> admin.save(added, null, boss));
+		assertEquals("vault/", StorageBackendDAO.get().findById(added.getId()).getPrefix());
+		assertTrue(fake.object(BUCKET, "vault/" + LocalBackend.MARKER).isPresent());
+		assertTrue(fake.object(BUCKET, "vault/" + LocalBackend.CHECK).isPresent());
+		assertEquals(List.of(), fake.keys(BUCKET).stream().filter(k -> k.startsWith("moved/")).toList());
+		assertEquals(BackendHealth.State.OK, BackendHealth.get().status(added.getId()).state());
+	}
+
+	/** A link is followed: a folder that leads into another's is refused as that folder would be (call 23) */
+	@Test
+	public void testNoSharedPlaceThroughALink() throws Exception {
+		Files.createDirectories(original());
+		Path other = StorageFixtures.root(sf.localBackend("other", false));
+		Path links = freshFolder("links");
+		Path toOriginal = links.resolve("to-original");
+		Path toOther = links.resolve("to-other");
+		Path toStaging = links.resolve("to-staging");
+		try {
+			Files.createSymbolicLink(toOriginal, original());
+			Files.createSymbolicLink(toOther, other);
+			Files.createDirectories(Staging.folder());
+			Files.createSymbolicLink(toStaging, Staging.folder());
+		} catch (UnsupportedOperationException | IOException e) {
+			Assume.assumeNoException("This file system can't make a symbolic link", e);
+		}
+		long count = backends();
+
+		for (Path place : List.of(toOriginal, toOriginal.resolve("inside"), toOther, toOther.resolve("inside"),
+				toStaging.resolve("inside")))
+			refused(place.toString(), "can't be", () -> admin.add(local("Linked", place, null), null, boss));
+		assertEquals(count, backends());
+		assertTrue(Files.exists(original().resolve(LocalBackend.MARKER)));
+	}
+
+	/**
+	 * While CE keeps its files in its own store, nothing on the tab writes: storage backends are off, and the tab says
+	 * so
+	 */
+	@Test
+	public void testWritesRefusedWhileOff() throws Exception {
+		GUIStorageBackend added = admin.add(local("Spare", freshFolder("spare"), null), null, boss);
+		Folder store = fx.store("Spare Store");
+		long count = backends();
+		admin.on = () -> false;
+		try {
+			GUIStorageOverview overview = admin.overview();
+			assertFalse(overview.isOn());
+			assertEquals(count, overview.getBackends().length);
+
+			GUIStorageBackend renamed = find(overview, added.getId());
+			renamed.setName("Renamed");
+			long id = added.getId();
+			List<ThrowingRunnable> writes = List.of(
+					() -> admin.add(local("Other", freshFolder("other-off"), null), null, boss),
+					() -> admin.testNew(local("Other", freshFolder("other-off"), null), null),
+					() -> admin.save(renamed, null, boss), () -> admin.test(id),
+					() -> admin.confirmRecoveryKey(id, "0000", boss), () -> admin.showRecoveryKey(id, boss),
+					() -> admin.enterRecoveryKey(id, "0000", boss), () -> admin.remove(id, boss),
+					() -> admin.setStoreBackend(store.getId(), id, boss), () -> admin.retry(store.getId(), boss),
+					() -> admin.saveSettings(5, 5, 5, boss));
+			for (ThrowingRunnable write : writes)
+				refused("a write while off", "Storage backends are off", write);
+
+			// Reads still answer
+			assertEquals(List.of(), admin.keyEvents(id));
+			assertEquals(List.of(), admin.stuck(store.getId()));
+			assertArrayEquals(new long[] { 0, 0 }, admin.previewSwitch(store.getId(), id));
+		} finally {
+			admin.on = StoreTracking::active;
+		}
+		assertEquals(count, backends());
+		assertEquals("Spare", StorageBackendDAO.get().findById(added.getId()).getName());
+		assertEquals(StorageBackend.ORIGINAL, StoredFiles.get().storeBackend(store.getId()));
+		assertEquals(StorageSettings.DEFAULT_HOLD_DAYS, StorageSettings.get().holdDays());
 	}
 }

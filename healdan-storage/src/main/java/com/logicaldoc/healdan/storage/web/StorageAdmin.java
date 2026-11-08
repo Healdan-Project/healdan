@@ -7,11 +7,6 @@ import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.InvalidPathException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -24,8 +19,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BooleanSupplier;
 
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,7 +48,6 @@ import com.logicaldoc.healdan.storage.BackendHealth;
 import com.logicaldoc.healdan.storage.BackendTest;
 import com.logicaldoc.healdan.storage.Backends;
 import com.logicaldoc.healdan.storage.HeldCopies;
-import com.logicaldoc.healdan.storage.ReadCache;
 import com.logicaldoc.healdan.storage.Staging;
 import com.logicaldoc.healdan.storage.StorageBackend;
 import com.logicaldoc.healdan.storage.StorageBackendDAO;
@@ -69,36 +64,37 @@ import com.logicaldoc.healdan.storage.StoredFiles;
 import com.logicaldoc.healdan.storage.StoredFiles.Usage;
 import com.logicaldoc.healdan.storage.backend.Backend;
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
-import com.logicaldoc.healdan.storage.backend.Endpoints;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.backend.S3Backend;
-import com.logicaldoc.healdan.storage.backend.S3Settings;
 import com.logicaldoc.healdan.storage.crypto.BackendKeys;
 import com.logicaldoc.healdan.storage.crypto.FileCipher;
 import com.logicaldoc.healdan.storage.crypto.KeyCheck;
 import com.logicaldoc.healdan.storage.crypto.RecoveryKey;
 import com.logicaldoc.healdan.storage.mover.Mover;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.storage.web.BackendDrafts.Draft;
 import com.logicaldoc.util.spring.Context;
 
 /**
- * The Storage tab's rules (spec sections 8 to 11, call 23), apart from its servlet, which checks the administrator:
+ * The Storage tab's operations (spec sections 8 to 11), apart from its servlet, which checks the administrator, and
+ * from {@link BackendDrafts}, which checks what the tab sends:
  * <ul>
- * <li>a backend is checked whole before anything is written, and an add or a move of an empty backend's place that
- * fails part-way is undone, so the place is free to try again;</li>
  * <li>an add tests the settings, saves the row, writes the marker (refusing another backend's or install's), makes an
- * encrypted backend's key file and check object, and tests the backend in full; an encrypted one isn't offered to
- * Stores until its recovery key's last group is typed back;</li>
- * <li>backends never share a place: an S3 bucket and prefix that equal or hold another's on the same host, or a
- * folder that is, holds or is inside Original's, staging's, the cache's, the configuration folder, the key files' or
- * another backend's;</li>
- * <li>the bucket, prefix and path can't change once a file is recorded or held on the backend, and encryption is
- * chosen when the backend is added, as its recovery key is shown then;</li>
+ * encrypted backend's key file and check object, and tests the backend in full; a step that fails undoes the ones
+ * before it, so the place is free to try again. An encrypted backend isn't offered to Stores until its recovery key's
+ * last group is typed back;</li>
+ * <li>the bucket, prefix and path can't change once a file is recorded or held on the backend, or while a Store keeps
+ * its files there, and encryption is chosen when the backend is added, as its recovery key is shown then;</li>
  * <li>a save, a confirmed or entered recovery key, a removal and Test drop the backend's built entry
  * ({@link Backends#forget}), so the next use builds it from its row and key file as they are then;</li>
  * <li>a Store switch checks the Store's rows first, writes its row in a short transaction of its own, and wakes the
  * mover once that has committed.</li>
  * </ul>
+ * Every write is refused while CE keeps its files in its own store, as every other storage bean then does nothing.
+ * Two administrators' writes are serialised only around the checks and writes that must not interleave: no network
+ * call is made holding that lock, so a backend that doesn't answer holds up nothing else. What an operation checked
+ * before the lock is checked again under it. A backend whose add is still writing its marker, key file and check
+ * object, after its row is saved, is left alone by every other write until the add ends.
+ * <p>
  * The S3 secret is sealed with {@link SecretBox} and never logged, answered or put in a message, nor is a key or a
  * recovery key, but for {@link #showRecoveryKey}'s answer to an administrator, which is recorded and logged. Backend
  * changes, a Store's backend changing, and each showing and entering of a recovery key are logged at info.
@@ -107,26 +103,6 @@ import com.logicaldoc.util.spring.Context;
 public class StorageAdmin {
 
 	private static final Logger log = LoggerFactory.getLogger(StorageAdmin.class);
-
-	/**
-	 * The longest S3 prefix (as stored, with its last {@code /}) and local path: a held location,
-	 * {@code hd_storage_held.hd_location}, then always fits (pre-flight 4.5)
-	 */
-	static final int MAX_PLACE = 255;
-
-	/** The longest name, as {@code hd_name} holds */
-	static final int MAX_NAME = 100;
-
-	static final int MAX_ENDPOINT = 1000;
-
-	static final int MAX_REGION = 100;
-
-	static final int MAX_BUCKET = 255;
-
-	static final int MAX_ACCESS_KEY = 255;
-
-	/** The longest S3 secret, in the bytes that are sealed: its sealed value fits {@code hd_secret} */
-	static final int MAX_SECRET_BYTES = 1000;
 
 	/** The most stuck files listed at once */
 	static final int MAX_STUCK = 1000;
@@ -151,27 +127,6 @@ public class StorageAdmin {
 		/** @return how many stored values are sealed with the missing key */
 		public long sealed() {
 			return sealed;
-		}
-	}
-
-	/**
-	 * A backend's settings as the tab sent them, each one checked.
-	 *
-	 * @param root a local folder's path, absolute; null for S3
-	 * @param s3 an S3 backend's settings; null for a local folder
-	 * @param secret the S3 secret as typed, stripped; null to keep the stored one
-	 */
-	private record Draft(String kind, String name, Path root, S3Settings s3, boolean encrypted, String secret) {
-
-		boolean isS3() {
-			return s3 != null;
-		}
-
-		/** @return where it is, for the log */
-		String where() {
-			if (!isS3())
-				return root.toString();
-			return s3.endpoint() + ", bucket " + s3.bucket() + (s3.prefix().isEmpty() ? "" : " under " + s3.prefix());
 		}
 	}
 
@@ -201,8 +156,19 @@ public class StorageAdmin {
 
 	private final SecretBox box;
 
-	/** A short transaction of its own, for the Store switch */
+	private final BackendDrafts drafts;
+
+	/** A short transaction of its own, for the Store switch and the settings */
 	private final TransactionTemplate own;
+
+	/** Held around the checks and writes that must not interleave between two administrators; never over the network */
+	private final Object writing = new Object();
+
+	/** The backends whose add is writing their marker, key file and check object, which no other write touches */
+	private final Set<Long> adding = ConcurrentHashMap.newKeySet();
+
+	/** Whether CE keeps its files through {@code HealdanStorage}; tests turn it off */
+	volatile BooleanSupplier on = StoreTracking::active;
 
 	@Autowired
 	public StorageAdmin(StorageBackendDAO backends, StoreBackendDAO stores, StorageEventDAO events, StoredFiles files,
@@ -222,6 +188,7 @@ public class StorageAdmin {
 		this.storeOf = storeOf;
 		this.mover = mover;
 		this.box = box;
+		this.drafts = new BackendDrafts(keys.folder());
 		this.own = new TransactionTemplate(transactions);
 		this.own.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
 	}
@@ -240,7 +207,7 @@ public class StorageAdmin {
 	 */
 	public GUIStorageOverview overview() throws PersistenceException {
 		GUIStorageOverview overview = new GUIStorageOverview();
-		overview.setOn(StoreTracking.active());
+		overview.setOn(on.getAsBoolean());
 
 		List<StorageBackend> rows = rows();
 		Map<Long, Usage> usage = files.usageByBackend();
@@ -305,6 +272,7 @@ public class StorageAdmin {
 	 * @throws PersistenceException error at data layer
 	 */
 	public List<String> testNew(GUIStorageBackend backend, String secret) throws PersistenceException {
+		requireOn();
 		if (backend == null)
 			throw refuse("The backend is missing.");
 		if (backend.getId() == StorageBackend.ORIGINAL)
@@ -312,18 +280,19 @@ public class StorageAdmin {
 		StorageBackend existing = backend.getId() != 0 ? row(backend.getId()) : null;
 		Draft draft;
 		try {
-			draft = draft(backend, secret, existing);
-			checkPlace(draft, existing == null ? 0 : existing.getId());
+			draft = BackendDrafts.draft(backend, secret, existing);
+			drafts.checkPlace(draft, existing == null ? 0 : existing.getId(), rows());
 		} catch (HealdanRuleException e) {
 			return List.of(e.getMessage());
 		}
-		return trial(draft, existing, existing != null && samePlace(existing, draft));
+		return trial(draft, existing, existing != null && BackendDrafts.samePlace(existing, draft));
 	}
 
 	/**
 	 * Adds a backend (spec section 11): Test on the settings, the row saved, the marker written, for an encrypted
 	 * backend its key file and check object, and the full Test, the key check included. A step that fails undoes the
-	 * ones before it. An encrypted backend isn't offered to Stores until {@link #confirmRecoveryKey}.
+	 * ones before it. An encrypted backend isn't offered to Stores until {@link #confirmRecoveryKey}. Only the row's
+	 * checks and write take the lock: Test, the marker, the key file and the full Test run outside it.
 	 *
 	 * @param backend the settings
 	 * @param secret the S3 secret
@@ -332,13 +301,13 @@ public class StorageAdmin {
 	 * @throws PersistenceException a {@link HealdanRuleException} saying why it was refused; a {@link SecretKeyMissing},
 	 *         with nothing written, if the secret can't be sealed for want of the secret key file
 	 */
-	public synchronized GUIStorageBackend add(GUIStorageBackend backend, String secret, User by)
-			throws PersistenceException {
+	public GUIStorageBackend add(GUIStorageBackend backend, String secret, User by) throws PersistenceException {
+		requireOn();
 		if (backend == null)
 			throw refuse("The backend is missing.");
-		Draft draft = draft(backend, secret, null);
-		checkName(draft.name(), 0);
-		checkPlace(draft, 0);
+		Draft draft = BackendDrafts.draft(backend, secret, null);
+		// Checked now, to refuse at once, and again under the lock
+		checkFree(draft, 0);
 		// Before anything is written: a missing secret key file is the administrator's question
 		String sealed = draft.isS3() ? seal(draft.secret(), backend.isNewKey()) : null;
 		List<String> problems = trial(draft, null, false);
@@ -347,10 +316,14 @@ public class StorageAdmin {
 
 		StorageBackend row = new StorageBackend();
 		row.setTenantId(by.getTenantId());
-		apply(row, draft);
+		BackendDrafts.apply(row, draft);
 		row.setSecret(sealed);
 		row.setKeyConfirmedOn(false);
-		backends.store(row);
+		synchronized (writing) {
+			checkFree(draft, 0);
+			backends.store(row);
+			adding.add(row.getId());
+		}
 		long id = row.getId();
 
 		Placed placed = null;
@@ -369,6 +342,7 @@ public class StorageAdmin {
 		} finally {
 			if (placed != null)
 				placed.close();
+			adding.remove(id);
 		}
 		health.check(id);
 		log.info("Storage backend {} ({}, {}{}) was added by {}", id, row.getName(), draft.where(),
@@ -398,6 +372,13 @@ public class StorageAdmin {
 		built.forget(id);
 	}
 
+	/** Refuses a draft whose name or place another backend has */
+	private void checkFree(Draft draft, long id) throws PersistenceException {
+		List<StorageBackend> rows = rows();
+		BackendDrafts.checkName(draft.name(), id, rows);
+		drafts.checkPlace(draft, id, rows);
+	}
+
 	/**
 	 * Confirms an encrypted backend's recovery key, which lets Stores use the backend.
 	 *
@@ -406,26 +387,31 @@ public class StorageAdmin {
 	 * @param by the administrator
 	 * @throws PersistenceException a {@link HealdanRuleException} if it isn't the key's last group
 	 */
-	public synchronized void confirmRecoveryKey(long backendId, String lastGroup, User by) throws PersistenceException {
-		StorageBackend row = encrypted(backendId);
-		byte[] key = keys.read(backendId).orElseThrow(() -> refuse("The key file of this backend is missing, so its "
-				+ "recovery key can't be confirmed: enter the recovery key to put it back."));
-		if (!RecoveryKey.isLastGroup(key, lastGroup))
-			throw refuse("That isn't the last group of this backend's recovery key: type its last four characters, as "
-					+ "it was shown.");
-		if (!row.isKeyConfirmedOn()) {
-			row.setKeyConfirmedOn(true);
-			backends.store(row);
-			log.info("The recovery key of storage backend {} ({}) was confirmed by {}", backendId, row.getName(),
-					by.getUsername());
+	public void confirmRecoveryKey(long backendId, String lastGroup, User by) throws PersistenceException {
+		requireOn();
+		synchronized (writing) {
+			StorageBackend row = encrypted(backendId);
+			notAdding(backendId);
+			byte[] key = keys.read(backendId).orElseThrow(() -> refuse("The key file of this backend is missing, so its "
+					+ "recovery key can't be confirmed: enter the recovery key to put it back."));
+			if (!RecoveryKey.isLastGroup(key, lastGroup))
+				throw refuse("That isn't the last group of this backend's recovery key: type its last four characters, "
+						+ "as it was shown.");
+			if (!row.isKeyConfirmedOn()) {
+				row.setKeyConfirmedOn(true);
+				backends.store(row);
+				log.info("The recovery key of storage backend {} ({}) was confirmed by {}", backendId, row.getName(),
+						by.getUsername());
+			}
+			built.forget(backendId);
 		}
-		built.forget(backendId);
 	}
 
 	/**
 	 * Saves a backend's settings: its name, and for S3 the endpoint, region, access key, secret and path style. While
-	 * nothing is recorded or held on it, its bucket, prefix or path may change too, and its new place gets its marker,
-	 * and its check object, before the row points there.
+	 * nothing is recorded or held on it and no Store uses it, its bucket, prefix or path may change too, and its new
+	 * place gets its marker, and its check object, before the row points there. The new place is written outside the
+	 * lock; the checks are made again under it before the row changes, and the new place undone if they fail.
 	 *
 	 * @param backend the settings; Original's name alone is taken
 	 * @param secret a new S3 secret; null or blank keeps the stored one
@@ -434,35 +420,28 @@ public class StorageAdmin {
 	 * @throws PersistenceException a {@link HealdanRuleException} saying why it was refused; a {@link SecretKeyMissing},
 	 *         with nothing saved, as for {@link #add}
 	 */
-	public synchronized GUIStorageBackend save(GUIStorageBackend backend, String secret, User by)
-			throws PersistenceException {
+	public GUIStorageBackend save(GUIStorageBackend backend, String secret, User by) throws PersistenceException {
+		requireOn();
 		if (backend == null)
 			throw refuse("The backend is missing.");
-		StorageBackend row = row(backend.getId());
-		long id = row.getId();
+		StorageBackend before = row(backend.getId());
+		long id = before.getId();
+		notAdding(id);
 		if (id == StorageBackend.ORIGINAL)
-			return renameOriginal(row, backend.getName(), by);
+			return renameOriginal(backend.getName(), by);
 
-		Draft draft = draft(backend, secret, row);
-		checkName(draft.name(), id);
-		if (draft.encrypted() != row.isEncryptedOn())
-			throw refuse("A backend's encryption is chosen when it is added, as its recovery key is shown then. To "
-					+ "change it, remove the backend while it is empty and add it again.");
-		boolean moves = !samePlace(row, draft);
-		if (moves && inUse(id))
-			throw refuse(moved(row, draft) + " can't change once files are recorded or held on the backend.");
-		checkPlace(draft, id);
+		Draft draft = BackendDrafts.draft(backend, secret, before);
+		boolean moves = checkSave(before, draft);
 		String sealed = draft.secret() != null ? seal(draft.secret(), backend.isNewKey()) : null;
-		List<String> changes = changes(row, draft, sealed != null);
 
 		Placed placed = null;
 		Backend was = null;
 		if (moves) {
-			byte[] key = row.isEncryptedOn() ? keys.read(id).orElseThrow(() -> refuse("The key file of this backend is "
-					+ "missing, so its new place can't get its check object: enter its recovery key first.")) : null;
+			byte[] key = before.isEncryptedOn() ? keys.read(id).orElseThrow(() -> refuse("The key file of this backend "
+					+ "is missing, so its new place can't get its check object: enter its recovery key first.")) : null;
 			was = formerPlace(id);
 			try {
-				placed = place(draft, id, plainSecret(draft, row));
+				placed = place(draft, id, plainSecret(draft, before));
 				if (key != null)
 					placed.writeCheck(new FileCipher(key));
 			} catch (IOException | PersistenceException | RuntimeException e) {
@@ -474,11 +453,22 @@ public class StorageAdmin {
 				throw refuse("The backend wasn't saved: " + message(e));
 			}
 		}
+
+		StorageBackend row;
+		List<String> changes;
 		try {
-			apply(row, draft);
-			if (sealed != null)
-				row.setSecret(sealed);
-			backends.store(row);
+			synchronized (writing) {
+				row = row(id);
+				notAdding(id);
+				if (checkSave(row, draft) != moves)
+					throw refuse("The backend was changed meanwhile, so this wasn't saved: open it again.");
+				changes = BackendDrafts.changes(row, draft, sealed != null);
+				BackendDrafts.apply(row, draft);
+				if (sealed != null)
+					row.setSecret(sealed);
+				backends.store(row);
+				built.forget(id);
+			}
 		} catch (PersistenceException | RuntimeException e) {
 			if (placed != null)
 				placed.undo();
@@ -490,23 +480,52 @@ public class StorageAdmin {
 		}
 		if (was != null)
 			clearPlace(was, row.isEncryptedOn());
-		built.forget(id);
 		health.check(id);
 		log.info("Storage backend {} ({}) was saved by {}{}", id, row.getName(), by.getUsername(),
 				changes.isEmpty() ? ", unchanged" : ": " + String.join(", ", changes) + " changed");
 		return toGUI(row);
 	}
 
-	private GUIStorageBackend renameOriginal(StorageBackend row, String typed, User by) throws PersistenceException {
-		String name = text(typed, "name", MAX_NAME);
-		checkName(name, StorageBackend.ORIGINAL);
-		if (!name.equals(row.getName())) {
-			String was = row.getName();
-			row.setName(name);
-			backends.store(row);
-			log.info("Storage backend {} ({}) was renamed {} by {}", row.getId(), was, name, by.getUsername());
+	/**
+	 * The checks of a save that read the rows: the draft keeps the backend's encryption; its place changes only while
+	 * nothing is recorded or held on the backend and no Store keeps its files there; and its name and place are its
+	 * own.
+	 *
+	 * @return whether the draft moves the backend to another place
+	 */
+	private boolean checkSave(StorageBackend row, Draft draft) throws PersistenceException {
+		if (draft.encrypted() != row.isEncryptedOn())
+			throw refuse("A backend's encryption is chosen when it is added, as its recovery key is shown then. To "
+					+ "change it, remove the backend while it is empty and add it again.");
+		boolean moves = !BackendDrafts.samePlace(row, draft);
+		if (moves && inUse(row.getId()))
+			throw refuse(BackendDrafts.moved(row, draft)
+					+ " can't change once files are recorded or held on the backend.");
+		if (moves) {
+			// A save into the Store, or an upload the mover began, would land at the old place as the row moved
+			List<String> using = storesUsing(row.getId());
+			if (!using.isEmpty())
+				throw refuse("%s can't change while %s its files on this backend: give %s another backend first."
+						.formatted(BackendDrafts.moved(row, draft), keeps(using), using.size() == 1 ? "it" : "them"));
 		}
-		built.forget(row.getId());
+		checkFree(draft, row.getId());
+		return moves;
+	}
+
+	private GUIStorageBackend renameOriginal(String typed, User by) throws PersistenceException {
+		String name = BackendDrafts.name(typed);
+		StorageBackend row;
+		synchronized (writing) {
+			row = row(StorageBackend.ORIGINAL);
+			BackendDrafts.checkName(name, StorageBackend.ORIGINAL, rows());
+			if (!name.equals(row.getName())) {
+				String was = row.getName();
+				row.setName(name);
+				backends.store(row);
+				log.info("Storage backend {} ({}) was renamed {} by {}", row.getId(), was, name, by.getUsername());
+			}
+			built.forget(row.getId());
+		}
 		health.check(row.getId());
 		return toGUI(row);
 	}
@@ -523,15 +542,16 @@ public class StorageAdmin {
 	}
 
 	/**
-	 * Test of a saved backend in full, as its row and key file now are, its marker and key included: the built entry is
-	 * dropped first, so a key file deleted or swapped since fails it (pre-flight 1.16), and the outcome is recorded in
-	 * its health, or the tab would show OK while Test says the key file is gone.
+	 * Test of a saved backend in full, as its row and key file now are, its marker and key included. The built entry
+	 * is dropped first, so a key file deleted or swapped since fails Test, rather than the key kept in memory passing
+	 * it; and the outcome is recorded in its health, or the tab would show OK while Test says the key file is gone.
 	 *
 	 * @param backendId the backend
 	 * @return empty if it passed; otherwise the problems
 	 * @throws PersistenceException error at data layer
 	 */
 	public List<String> test(long backendId) throws PersistenceException {
+		requireOn();
 		row(backendId);
 		built.forget(backendId);
 		List<String> problems = new ArrayList<>();
@@ -558,6 +578,7 @@ public class StorageAdmin {
 	 *         missing
 	 */
 	public String showRecoveryKey(long backendId, User by) throws PersistenceException {
+		requireOn();
 		StorageBackend row = encrypted(backendId);
 		byte[] key = keys.read(backendId).orElseThrow(() -> refuse("The key file of this backend is missing or can't be "
 				+ "read, so there is no key to show: enter its recovery key to put the file back."));
@@ -569,16 +590,18 @@ public class StorageAdmin {
 
 	/**
 	 * Rebuilds an encrypted backend's key file from its recovery key (spec section 9). The key typed must decrypt the
-	 * backend's check object, read before anything is written, so a mistyped or another backend's key can't replace
-	 * the file. Recorded ({@code key-entered}) and logged, never with the key.
+	 * backend's check object, read before anything is written and before the lock is taken, so a mistyped or another
+	 * backend's key can't replace the file. Recorded ({@code key-entered}) and logged, never with the key.
 	 *
 	 * @param backendId the backend
 	 * @param typed the recovery key as typed
 	 * @param by the administrator
 	 * @throws PersistenceException a {@link HealdanRuleException} if the key isn't the backend's, or can't be checked
 	 */
-	public synchronized void enterRecoveryKey(long backendId, String typed, User by) throws PersistenceException {
-		StorageBackend row = encrypted(backendId);
+	public void enterRecoveryKey(long backendId, String typed, User by) throws PersistenceException {
+		requireOn();
+		encrypted(backendId);
+		notAdding(backendId);
 		byte[] key;
 		try {
 			key = RecoveryKey.parse(typed);
@@ -605,15 +628,21 @@ public class StorageAdmin {
 		} finally {
 			built.release(backend);
 		}
-		try {
-			keys.restore(backendId, key);
-		} catch (IOException e) {
-			throw refuse("The recovery key is right, but its key file couldn't be written: " + e.getMessage());
+
+		StorageBackend row;
+		synchronized (writing) {
+			row = encrypted(backendId);
+			notAdding(backendId);
+			try {
+				keys.restore(backendId, key);
+			} catch (IOException e) {
+				throw refuse("The recovery key is right, but its key file couldn't be written: " + e.getMessage());
+			}
+			record(backendId, StorageEvent.KEY_ENTERED, by);
+			built.forget(backendId);
 		}
-		record(backendId, StorageEvent.KEY_ENTERED, by);
 		log.info("The recovery key of storage backend {} ({}) was entered by {}, and its key file put back", backendId,
 				row.getName(), by.getUsername());
-		built.forget(backendId);
 		health.check(backendId);
 	}
 
@@ -640,51 +669,67 @@ public class StorageAdmin {
 	/**
 	 * Removes a backend (spec section 8): only once no Store uses it and no file is recorded or held on it. Its key
 	 * file goes, its row is deleted for good, so its sealed secret leaves the database, and its marker and check object
-	 * are deleted, so another backend may have its place.
+	 * are deleted, outside the lock, so another backend may have its place.
 	 *
 	 * @param backendId the backend; never Original
 	 * @param by the administrator
 	 * @throws PersistenceException a {@link HealdanRuleException} saying why it can't be removed
 	 */
-	public synchronized void remove(long backendId, User by) throws PersistenceException {
+	public void remove(long backendId, User by) throws PersistenceException {
+		requireOn();
 		if (backendId == StorageBackend.ORIGINAL)
 			throw refuse("Original can be renamed, but not removed: it keeps the files of every Store that has no "
 					+ "other backend.");
-		StorageBackend row = row(backendId);
-		List<String> using = new ArrayList<>();
-		for (StoreBackend store : stores.findAll())
-			if (store.getDeleted() == 0 && store.getBackendId() == backendId)
-				using.add(storeName(store.getStoreId()));
-		if (!using.isEmpty())
-			throw refuse("%s %s its files on this backend: give %s another backend first.".formatted(
-					(using.size() == 1 ? "Store " : "Stores ") + String.join(", ", using),
-					using.size() == 1 ? "keeps" : "keep", using.size() == 1 ? "it" : "them"));
-		long recorded = files.countOn(backendId);
-		if (recorded > 0)
-			throw refuse("%s on this backend: it can be removed once they have moved off it.".formatted(
-					recorded == 1 ? "1 file is recorded" : recorded + " files are recorded"));
-		long heldOn = held.countOn(backendId);
-		if (heldOn > 0)
-			throw refuse(("%s held on this backend until the holding period ends: it can be removed once the purge has "
-					+ "deleted them.").formatted(heldOn == 1 ? "1 copy is" : heldOn + " copies are"));
-
+		row(backendId);
 		Backend place = formerPlace(backendId);
+		StorageBackend row;
 		try {
-			keys.delete(backendId);
-		} catch (IOException e) {
-			built.release(place);
-			throw refuse("The backend's key file couldn't be deleted, so the backend wasn't removed: " + e.getMessage());
-		}
-		try {
-			backends.remove(backendId);
+			synchronized (writing) {
+				row = row(backendId);
+				notAdding(backendId);
+				List<String> using = storesUsing(backendId);
+				if (!using.isEmpty())
+					throw refuse("%s its files on this backend: give %s another backend first."
+							.formatted(keeps(using), using.size() == 1 ? "it" : "them"));
+				long recorded = files.countOn(backendId);
+				if (recorded > 0)
+					throw refuse("%s on this backend: it can be removed once they have moved off it.".formatted(
+							recorded == 1 ? "1 file is recorded" : recorded + " files are recorded"));
+				long heldOn = held.countOn(backendId);
+				if (heldOn > 0)
+					throw refuse(("%s held on this backend until the holding period ends: it can be removed once the "
+							+ "purge has deleted them.").formatted(heldOn == 1 ? "1 copy is" : heldOn + " copies are"));
+				try {
+					keys.delete(backendId);
+				} catch (IOException e) {
+					throw refuse("The backend's key file couldn't be deleted, so the backend wasn't removed: "
+							+ e.getMessage());
+				}
+				backends.remove(backendId);
+				built.forget(backendId);
+			}
 		} catch (PersistenceException | RuntimeException e) {
 			built.release(place);
 			throw e;
 		}
-		built.forget(backendId);
 		if (place != null)
 			clearPlace(place, row.isEncryptedOn());
 		log.info("Storage backend {} ({}) was removed by {}", backendId, row.getName(), by.getUsername());
+	}
+
+	/** @return the names of the Stores that keep their files on the backend */
+	private List<String> storesUsing(long backendId) throws PersistenceException {
+		List<String> using = new ArrayList<>();
+		for (StoreBackend store : stores.findAll())
+			if (store.getDeleted() == 0 && store.getBackendId() == backendId)
+				using.add(storeName(store.getStoreId()));
+		return using;
+	}
+
+	/** @return "Store A keeps", or "Stores A, B keep" */
+	private static String keeps(List<String> stores) {
+		return (stores.size() == 1 ? "Store " : "Stores ") + String.join(", ", stores)
+				+ (stores.size() == 1 ? " keeps" : " keep");
 	}
 
 	/**
@@ -712,42 +757,56 @@ public class StorageAdmin {
 	 * @param by the administrator
 	 * @throws PersistenceException a {@link HealdanRuleException} if it can't
 	 */
-	public synchronized void setStoreBackend(long storeId, long backendId, User by) throws PersistenceException {
+	public void setStoreBackend(long storeId, long backendId, User by) throws PersistenceException {
+		requireOn();
 		Folder store = store(storeId);
-		StorageBackend row = row(backendId);
-		if (row.isEncryptedOn() && !row.isKeyConfirmedOn())
-			throw refuse("The recovery key of backend " + row.getName() + " isn't confirmed yet, so no Store can use "
-					+ "it: confirm its recovery key first.");
-		long was = files.storeBackend(storeId);
-		if (was == backendId)
+		offered(row(backendId));
+		if (files.storeBackend(storeId) == backendId)
 			return;
-
 		tracking.checkStore(storeId);
-		try {
-			own.executeWithoutResult(status -> {
-				try {
-					Optional<StoreBackend> mapped = stores.findByStore(storeId);
-					if (backendId == StorageBackend.ORIGINAL) {
-						if (mapped.isPresent())
-							stores.delete(mapped.get().getId());
-					} else {
-						StoreBackend m = mapped.orElseGet(StoreBackend::new);
-						m.setTenantId(store.getTenantId());
-						m.setStoreId(storeId);
-						m.setBackendId(backendId);
-						stores.store(m);
+
+		StorageBackend row;
+		long was;
+		synchronized (writing) {
+			row = row(backendId);
+			notAdding(backendId);
+			offered(row);
+			was = files.storeBackend(storeId);
+			if (was == backendId)
+				return;
+			try {
+				own.executeWithoutResult(status -> {
+					try {
+						Optional<StoreBackend> mapped = stores.findByStore(storeId);
+						if (backendId == StorageBackend.ORIGINAL) {
+							if (mapped.isPresent())
+								stores.delete(mapped.get().getId());
+						} else {
+							StoreBackend m = mapped.orElseGet(StoreBackend::new);
+							m.setTenantId(store.getTenantId());
+							m.setStoreId(storeId);
+							m.setBackendId(backendId);
+							stores.store(m);
+						}
+						files.storeBackendChanged(storeId);
+					} catch (PersistenceException e) {
+						throw new Unchecked(e);
 					}
-					files.storeBackendChanged(storeId);
-				} catch (PersistenceException e) {
-					throw new Unchecked(e);
-				}
-			});
-		} catch (Unchecked e) {
-			throw e.cause;
+				});
+			} catch (Unchecked e) {
+				throw e.cause;
+			}
 		}
 		mover.wake();
 		log.info("Store {} ({}) keeps its files on storage backend {} ({}) from now on, not {}, as {} set it; they move "
 				+ "in the background", storeId, store.getName(), backendId, row.getName(), was, by.getUsername());
+	}
+
+	/** Refuses a backend Stores can't have yet: an encrypted one whose recovery key isn't confirmed */
+	private static void offered(StorageBackend row) throws HealdanRuleException {
+		if (row.isEncryptedOn() && !row.isKeyConfirmedOn())
+			throw refuse("The recovery key of backend " + row.getName() + " isn't confirmed yet, so no Store can use "
+					+ "it: confirm its recovery key first.");
 	}
 
 	/** A checked exception through a transaction's callback */
@@ -794,14 +853,17 @@ public class StorageAdmin {
 	 *
 	 * @param storeId a Store; 0 for the files with no Store
 	 * @param by the administrator
+	 * @throws PersistenceException a {@link HealdanRuleException} if storage backends are off
 	 */
-	public void retry(long storeId, User by) {
+	public void retry(long storeId, User by) throws PersistenceException {
+		requireOn();
 		log.info("{} retried the stuck files of {}", by.getUsername(), storeId == 0 ? "no Store" : "Store " + storeId);
 		mover.retry(storeId);
 	}
 
 	/**
-	 * Saves the storage settings, each checked before any is written; the transfers apply at once.
+	 * Saves the storage settings, each checked before any is written, and all of them in one transaction; the transfers
+	 * apply at once.
 	 *
 	 * @param holdDays the holding period, in days
 	 * @param cacheGb the read cache's size, in GB
@@ -809,251 +871,28 @@ public class StorageAdmin {
 	 * @param by the administrator
 	 * @throws PersistenceException a {@link HealdanRuleException} if one is out of range
 	 */
-	public synchronized void saveSettings(int holdDays, int cacheGb, int transfers, User by)
-			throws PersistenceException {
+	public void saveSettings(int holdDays, int cacheGb, int transfers, User by) throws PersistenceException {
+		requireOn();
 		if (holdDays < 1 || holdDays > StorageSettings.MAX_HOLD_DAYS)
 			throw refuse("The holding period must be from 1 to %d days.".formatted(StorageSettings.MAX_HOLD_DAYS));
 		if (cacheGb < 1 || cacheGb > StorageSettings.MAX_CACHE_GB)
 			throw refuse("The read cache must be from 1 to %d GB.".formatted(StorageSettings.MAX_CACHE_GB));
 		if (transfers < 1 || transfers > StorageSettings.MAX_TRANSFERS)
 			throw refuse("Parallel transfers must be from 1 to %d.".formatted(StorageSettings.MAX_TRANSFERS));
-		settings.setHoldDays(holdDays);
-		settings.setCacheGb(cacheGb);
-		settings.setTransfers(transfers);
+		synchronized (writing) {
+			// In one transaction, so a write that fails leaves the others as they were
+			own.executeWithoutResult(status -> {
+				settings.setHoldDays(holdDays);
+				settings.setCacheGb(cacheGb);
+				settings.setTransfers(transfers);
+			});
+		}
 		mover.resize(transfers);
 		log.info("The storage settings were saved by {}: copies held {} days, a {} GB read cache, {} transfers at once",
 				by.getUsername(), holdDays, cacheGb, transfers);
 	}
 
-	// Checking what the tab sent
-
-	/**
-	 * @param existing the backend's row, for a save; null for an add
-	 * @return the settings, each checked: S3's against the endpoint rule (Global Constraints)
-	 */
-	private Draft draft(GUIStorageBackend backend, String secret, StorageBackend existing)
-			throws HealdanRuleException {
-		String kind = StringUtils.strip(backend.getKind());
-		if (!StorageBackend.LOCAL.equals(kind) && !StorageBackend.S3.equals(kind))
-			throw refuse("Choose the kind of backend: a local folder or S3.");
-		if (existing != null && !kind.equals(existing.getKind()))
-			throw refuse("A backend's kind can't change.");
-		String name = text(backend.getName(), "name", MAX_NAME);
-		boolean s3 = StorageBackend.S3.equals(kind);
-		// On for S3 unless the administrator turns it off; off for a local folder unless turned on
-		boolean encrypted = backend.getEncrypted() != null ? backend.getEncrypted() : s3;
-		if (!s3)
-			return new Draft(kind, name, root(backend.getPath()), null, encrypted, null);
-
-		S3Settings place = s3Settings(backend);
-		String typed = StringUtils.strip(secret);
-		if (StringUtils.isEmpty(typed)) {
-			if (existing == null || StringUtils.isBlank(existing.getSecret()))
-				throw refuse("The secret can't be empty.");
-			typed = null;
-		} else if (typed.getBytes(StandardCharsets.UTF_8).length > MAX_SECRET_BYTES) {
-			throw refuse(("The secret can't be longer than %d characters, or fewer in a script that takes more than one "
-					+ "byte a character.").formatted(MAX_SECRET_BYTES));
-		}
-		return new Draft(kind, name, null, place, encrypted, typed);
-	}
-
-	/** @return the text, stripped, which the database can hold */
-	private static String text(String value, String what, int max) throws HealdanRuleException {
-		String text = StringUtils.strip(value);
-		if (StringUtils.isEmpty(text))
-			throw refuse("The %s can't be empty.".formatted(what));
-		if (text.length() > max)
-			throw refuse("The %s can't be longer than %d characters.".formatted(what, max));
-		// MariaDB's utf8 tables hold no character beyond the Basic Multilingual Plane (R33)
-		if (!BasicPlane.holds(text))
-			throw refuse("The %s can't contain emoji or other characters the database can't store.".formatted(what));
-		return text;
-	}
-
-	/** @return a local folder's path as typed, absolute and normalised, as it is stored */
-	private static Path root(String typed) throws HealdanRuleException {
-		String text = text(typed, "path", Integer.MAX_VALUE);
-		Path path;
-		try {
-			path = Path.of(text);
-		} catch (InvalidPathException e) {
-			throw refuse("The path isn't a folder's path: " + e.getReason() + ".");
-		}
-		if (!path.isAbsolute())
-			throw refuse("The path must be the folder's whole path in the container, from /, such as /mnt/archive.");
-		path = path.normalize();
-		if (path.toString().length() > MAX_PLACE)
-			throw refuse("The path can't be longer than %d characters.".formatted(MAX_PLACE));
-		return path;
-	}
-
-	/** @return an S3 backend's place, checked as {@link S3Backend} checks it when it is built */
-	private static S3Settings s3Settings(GUIStorageBackend backend) throws HealdanRuleException {
-		String endpoint = text(backend.getEndpoint(), "endpoint", MAX_ENDPOINT);
-		String region = text(backend.getRegion(), "region", MAX_REGION);
-		String bucket = text(backend.getBucket(), "bucket", MAX_BUCKET);
-		String prefix = S3Settings.prefix(backend.getPrefix());
-		if (prefix.length() > MAX_PLACE)
-			throw refuse("The prefix can't be longer than %d characters, with the / it is kept with at its end."
-					.formatted(MAX_PLACE));
-		if (!BasicPlane.holds(prefix))
-			throw refuse("The prefix can't contain emoji or other characters the database can't store.");
-		String accessKey = text(backend.getAccessKey(), "access key", MAX_ACCESS_KEY);
-		S3Settings settings;
-		try {
-			settings = new S3Settings(new URI(endpoint), region, bucket, prefix, backend.isPathStyle(), accessKey);
-		} catch (URISyntaxException e) {
-			throw refuse("The endpoint isn't an address, such as https://s3.example.com.");
-		} catch (IllegalArgumentException e) {
-			throw refuse(e.getMessage() + ".");
-		}
-		try {
-			S3Backend.checkEndpoint(settings);
-		} catch (Endpoints.HostNotFound e) {
-			throw refuse(e.getMessage() + ", so its addresses can't be checked: http:// is only for an address on a "
-					+ "private network.");
-		} catch (IllegalArgumentException e) {
-			throw refuse(e.getMessage() + ".");
-		}
-		return settings;
-	}
-
-	/** Refuses a name another backend has, whatever its case */
-	private void checkName(String name, long id) throws PersistenceException {
-		for (StorageBackend other : rows())
-			if (other.getId() != id && name.equalsIgnoreCase(StringUtils.strip(other.getName())))
-				throw refuse("Another backend is called " + other.getName() + ": give this one a name of its own.");
-	}
-
-	/**
-	 * Backends can't share a place (call 23): an S3 bucket and prefix can't equal or hold another's on the same host
-	 * (an empty prefix holds every other), and a folder can't be, hold or sit inside Original's, staging's, the
-	 * cache's, the configuration folder, the key files' folder, or another backend's.
-	 *
-	 * @param id the backend's own id, which isn't compared with itself; 0 for one not added yet
-	 */
-	private void checkPlace(Draft draft, long id) throws PersistenceException {
-		for (StorageBackend other : rows()) {
-			if (other.getId() == id)
-				continue;
-			if (draft.isS3() && StorageBackend.S3.equals(other.getKind()) && sharesBucket(draft.s3(), other))
-				throw refuse("This bucket and prefix share their place with backend " + other.getName()
-						+ ": two backends can't keep files in one place, so neither prefix may hold the other's. "
-						+ "Choose another prefix, or another bucket.");
-			if (!draft.isS3() && StorageBackend.LOCAL.equals(other.getKind()))
-				apart(draft.root(), other.getId() == StorageBackend.ORIGINAL ? "Original's folder"
-						: "the folder of backend " + other.getName(), folder(other));
-		}
-		if (!draft.isS3()) {
-			apart(draft.root(), "staging's folder", Staging.folder());
-			apart(draft.root(), "the read cache's folder", ReadCache.folder());
-			apart(draft.root(), "the configuration folder", BackendKeys.configurationFolder());
-			apart(draft.root(), "the storage key files' folder", keys.folder().toAbsolutePath().normalize());
-		}
-	}
-
-	/** @return whether the settings' place equals or holds the row's, or sits inside it, on the same host */
-	private static boolean sharesBucket(S3Settings mine, StorageBackend other) {
-		String host;
-		try {
-			host = URI.create(StringUtils.trimToEmpty(other.getEndpoint())).getHost();
-		} catch (IllegalArgumentException e) {
-			return false;
-		}
-		if (host == null || !host.equalsIgnoreCase(mine.endpoint().getHost())
-				|| !StringUtils.strip(StringUtils.defaultString(other.getBucket())).equalsIgnoreCase(mine.bucket()))
-			return false;
-		String theirs = S3Settings.prefix(other.getPrefix());
-		return mine.prefix().startsWith(theirs) || theirs.startsWith(mine.prefix());
-	}
-
-	private static void apart(Path folder, String otherName, Path other) throws HealdanRuleException {
-		if (other == null)
-			return;
-		Path theirs = other.toAbsolutePath().normalize();
-		if (folder.startsWith(theirs) || theirs.startsWith(folder))
-			throw refuse("The folder " + folder + " can't be, hold or sit inside " + otherName + " (" + theirs
-					+ "): give the backend a folder of its own.");
-	}
-
-	/** @return a local backend's folder, absolute; null for one without */
-	private static Path folder(StorageBackend row) {
-		if (row.getId() == StorageBackend.ORIGINAL)
-			return Staging.original();
-		if (StringUtils.isBlank(row.getPath()))
-			return null;
-		try {
-			return Path.of(row.getPath().trim()).toAbsolutePath().normalize();
-		} catch (InvalidPathException e) {
-			return null;
-		}
-	}
-
-	/** @return whether the draft keeps the row's bucket and prefix, or its folder */
-	private static boolean samePlace(StorageBackend row, Draft draft) {
-		if (draft.isS3())
-			return draft.s3().bucket().equals(StringUtils.strip(row.getBucket()))
-					&& draft.s3().prefix().equals(S3Settings.prefix(row.getPrefix()));
-		return draft.root().equals(folder(row));
-	}
-
-	/** @return what of the place a draft changes, for the refusal */
-	private static String moved(StorageBackend row, Draft draft) {
-		if (!draft.isS3())
-			return "The path";
-		return draft.s3().bucket().equals(StringUtils.strip(row.getBucket())) ? "The prefix" : "The bucket";
-	}
-
-	/** @return the settings a save changes, by name, for the log: never their values, the secret's above all */
-	private static List<String> changes(StorageBackend row, Draft draft, boolean secret) {
-		List<String> changes = new ArrayList<>();
-		if (!draft.name().equals(row.getName()))
-			changes.add("its name");
-		if (draft.isS3()) {
-			S3Settings s3 = draft.s3();
-			if (!s3.endpoint().toString().equals(row.getEndpoint()))
-				changes.add("the endpoint");
-			if (!s3.region().equals(row.getRegion()))
-				changes.add("the region");
-			if (!s3.bucket().equals(row.getBucket()))
-				changes.add("the bucket");
-			if (!s3.prefix().equals(row.getPrefix()))
-				changes.add("the prefix");
-			if (s3.pathStyle() != row.isPathStyleOn())
-				changes.add("path style");
-			if (!s3.accessKey().equals(row.getAccessKey()))
-				changes.add("the access key");
-			if (secret)
-				changes.add("the secret");
-		} else if (!draft.root().toString().equals(row.getPath())) {
-			changes.add("the path");
-		}
-		return changes;
-	}
-
-	/** @return whether a file is recorded or held on the backend */
-	private boolean inUse(long backendId) {
-		return files.countOn(backendId) > 0 || held.countOn(backendId) > 0;
-	}
-
-	private static void apply(StorageBackend row, Draft draft) {
-		row.setName(draft.name());
-		row.setKind(draft.kind());
-		row.setEncryptedOn(draft.encrypted());
-		if (draft.isS3()) {
-			S3Settings s3 = draft.s3();
-			row.setPath(null);
-			row.setEndpoint(s3.endpoint().toString());
-			row.setRegion(s3.region());
-			row.setBucket(s3.bucket());
-			row.setPrefix(s3.prefix());
-			row.setPathStyleOn(s3.pathStyle());
-			row.setAccessKey(s3.accessKey());
-		} else {
-			row.setPath(draft.root().toString());
-		}
-	}
+	// The secret
 
 	/**
 	 * Seals a typed secret: with a new key only once the administrator confirmed it, as the key file may be missing
@@ -1231,6 +1070,27 @@ public class StorageAdmin {
 		if (!row.isEncryptedOn())
 			throw refuse("Backend " + row.getName() + " isn't encrypted, so it has no recovery key.");
 		return row;
+	}
+
+	/**
+	 * Refuses every write while CE keeps its files in its own store, as every other storage bean then does nothing: the
+	 * tab says storage backends are off
+	 */
+	private void requireOn() throws HealdanRuleException {
+		if (!on.getAsBoolean())
+			throw refuse("Storage backends are off: this server keeps its files in LogicalDOC's own store, so nothing on "
+					+ "the Storage tab can be changed.");
+	}
+
+	/** Refuses to touch a backend whose add hasn't ended */
+	private void notAdding(long id) throws HealdanRuleException {
+		if (adding.contains(id))
+			throw refuse("That backend is still being added: try again once its add has finished.");
+	}
+
+	/** @return whether a file is recorded or held on the backend */
+	private boolean inUse(long backendId) {
+		return files.countOn(backendId) > 0 || held.countOn(backendId) > 0;
 	}
 
 	/** @return the Store's folder */

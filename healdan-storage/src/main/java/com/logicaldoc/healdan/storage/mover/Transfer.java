@@ -222,7 +222,7 @@ final class Transfer {
 	/**
 	 * @return whether the Storage tab dropped either backend the transfer used ({@code Backends.forget}) while it ran,
 	 *         which closed its S3 client under it: the failure is then the edit's, not the file's or the backend's, so
-	 *         it counts no try, pauses nothing, and the next pass tries again (ruling C.3)
+	 *         it counts no try, pauses nothing, and the next pass tries again
 	 */
 	private boolean forgotten(Backends.Entry from, Backends.Entry to) {
 		boolean dropped = !mover.backends().current(from) || !mover.backends().current(to);

@@ -201,8 +201,9 @@ public class Backends {
 	/**
 	 * @param entry a backend as {@link #entry} gave it
 	 * @return whether it is still the one kept for its backend: false once {@link #forget} dropped it, which closed its
-	 *         S3 client, so a transfer that used it and then failed was stopped by the Storage tab, not refused (ruling
-	 *         C.3)
+	 *         S3 client. A transfer that used it and then failed was stopped by the Storage tab's save or Test, not
+	 *         refused, so it counts no try and the next pass moves the file; {@code forget} closes at once rather than
+	 *         wait for the transfers
 	 */
 	public boolean current(Entry entry) {
 		return built.get(entry.id()) == entry;
