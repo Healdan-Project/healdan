@@ -4,8 +4,9 @@ weight: 7
 ---
 
 Healdan's own settings are under **Administration → Healdan → Settings**. Click **Save** after changing them.
-Clients are saved from their own window, without Save. Signing in through a provider, such as Microsoft Entra ID,
-is set up on the **Sign-In** tab beside them: see [Sign-In Providers](#sign-in-providers).
+Clients are saved from their own window, without Save. Two tabs sit beside them: **Sign-In**, which sets up signing
+in through a provider, such as Microsoft Entra ID (see [Sign-In Providers](#sign-in-providers)), and **Storage**,
+which sets up where each Store keeps its files (see [The Storage Tab](#the-storage-tab)).
 
 ![The Healdan settings panel, with the Sign-In tab beside it: matter labels, numbering, default Class, the Recent Matters window, the next doc #, the two device sign-in limits, API origins allowed (CORS), and the client list with Add client and Edit, holding seven clients from 998 Ashcombe Reeve LLP to 1006 Oliver and Grace Pemberton](healdan-settings.png)
 
@@ -364,3 +365,17 @@ also loses their helper. Web page sessions aren't checked again: see
   aren't checked again, and last as a password sign-in's do. Check warns about it.
 - **A provider that issues a new refresh token at each check** and refuses the old one can sign a helper out if its
   answer to a check is lost on the way. The helper then asks the person to sign in again.
+
+## The Storage Tab
+
+The **Storage** tab sets up the storage backends, the places where Healdan keeps documents' files: a folder on the
+server, or a bucket at an S3 service such as Wasabi. It has three parts:
+
+- **Backends,** with **Add Backend**, **Edit**, **Test**, **Show Recovery Key**, **Enter Recovery Key**, **Remove**
+  and **Refresh**: each backend, where it is, whether it's encrypted, what it holds and whether it works.
+- **Stores,** each with its backend, which you change there, and its files waiting to move or stuck.
+- **Settings:** the **Holding Period**, the **Read Cache**'s size and **Parallel Transfers**, with their own
+  **Save**.
+
+Changes take effect at once, with no restart. [Storage Backends](../storage-backends/) describes the tab and what each
+part does.
