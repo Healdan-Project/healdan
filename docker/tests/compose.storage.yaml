@@ -7,7 +7,7 @@ services:
       - ./docker/tests/garage/garage.toml:/etc/garage.toml:ro
       - garage-data:/var/lib/garage
     ports:
-      - "127.0.0.1:13900:3900"
+      - "127.0.0.1:${SMOKE_GARAGE_PORT:-13900}:3900"
   garage-setup:
     image: busybox:1.37
     network_mode: "service:garage"

@@ -7,12 +7,14 @@ import static com.logicaldoc.healdan.storage.StorageFixtures.moveToBucket;
 import static com.logicaldoc.healdan.storage.StorageFixtures.resource;
 import static com.logicaldoc.healdan.storage.StorageFixtures.text;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -23,6 +25,7 @@ import org.junit.Test;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.store.Store;
+import com.logicaldoc.healdan.storage.BackendHealth.KnownOutageException;
 import com.logicaldoc.healdan.storage.BackendHealth.State;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
 import com.logicaldoc.healdan.storage.backend.GatedBackend;
@@ -55,6 +58,8 @@ public class KnownOutageReadsTest extends AbstractStorageTestCase {
 
 	private GatedBackend gate;
 
+	private GatedBackend otherGate;
+
 	private ExecutorService threads;
 
 	@Override
@@ -76,7 +81,11 @@ public class KnownOutageReadsTest extends AbstractStorageTestCase {
 	public void tearDown() throws IOException {
 		if (gate != null)
 			gate.openAll();
+		if (otherGate != null)
+			otherGate.openAll();
 		health.clock = System::currentTimeMillis;
+		health.refusing = () -> {
+		};
 		Context.get(StorageStartup.class).stop();
 		Mover.get().stop();
 		threads.shutdownNow();
@@ -85,9 +94,45 @@ public class KnownOutageReadsTest extends AbstractStorageTestCase {
 
 	/** @return a document on the bucket, never read, so not in the read cache */
 	private Document onTheBucket(String text) throws Exception {
-		Document doc = fx.upload(cloud.folder(), "a.txt", text, fx.admin());
-		moveToBucket(cloud, doc.getId(), "1.0");
+		return onTheBucket(cloud, text);
+	}
+
+	private Document onTheBucket(Side side, String text) throws Exception {
+		Document doc = fx.upload(side.folder(), "a.txt", text, fx.admin());
+		moveToBucket(side, doc.getId(), "1.0");
 		return doc;
+	}
+
+	/** Starts the storage's background work, as a real start does, and waits for its first check of the bucket */
+	private void start() throws Exception {
+		Context.get(StorageStartup.class).started();
+		long deadline = System.currentTimeMillis() + 20_000;
+		while (health.status(cloud.backendId()).state() != State.OK) {
+			assertTrue("the start's check of the bucket passed", System.currentTimeMillis() < deadline);
+			Thread.sleep(50);
+		}
+	}
+
+	/** @return the file's text, read within 10 seconds; null if every read in that time was refused */
+	private static String readWithin(Document doc) throws Exception {
+		long deadline = System.currentTimeMillis() + 10_000;
+		while (System.currentTimeMillis() < deadline) {
+			try {
+				return text(resource(doc, "1.0"));
+			} catch (StorageUnreachableException e) {
+				Thread.sleep(100);
+			}
+		}
+		return null;
+	}
+
+	/** Waits until no check of the backend is under way or waiting on the retest thread */
+	private void awaitNoCheck(long backendId) throws Exception {
+		long deadline = System.currentTimeMillis() + 20_000;
+		while (health.underWay(backendId)) {
+			assertTrue("the backend's check ended", System.currentTimeMillis() < deadline);
+			Thread.sleep(50);
+		}
 	}
 
 	private static long fastWarnings(LogCapture log) {
@@ -227,5 +272,153 @@ public class KnownOutageReadsTest extends AbstractStorageTestCase {
 		int calls = cloud.s3().calls();
 		assertEquals("never read", text(resource(doc, "1.0")));
 		assertTrue(cloud.s3().calls() > calls);
+	}
+
+	/** A refusal touched nothing, so its report changes nothing: a backend found OK meanwhile stays OK */
+	@Test
+	public void testARefusalReportsNoFailure() throws Exception {
+		Document doc = onTheBucket("never read");
+		health.checkAll();
+		cloud.s3().unreachable(true);
+		assertThrows(StorageUnreachableException.class, () -> text(resource(doc, "1.0")));
+		KnownOutageException refusal = assertThrows(KnownOutageException.class,
+				() -> health.refuseKnownOutage(cloud.backendId(), Duration.ofSeconds(60)));
+
+		cloud.s3().unreachable(false);
+		health.retest();
+		assertEquals(State.OK, health.status(cloud.backendId()).state());
+
+		health.reportFailure(cloud.backendId(), refusal);
+		assertEquals(State.OK, health.status(cloud.backendId()).state());
+	}
+
+	/**
+	 * The race, through a read: a retest finds the backend between the read's refusal and its answer, which then
+	 * leaves the backend OK rather than declaring the outage again
+	 */
+	@Test
+	public void testARetestDuringARefusalStands() throws Exception {
+		Document doc = onTheBucket("never read");
+		health.checkAll();
+		cloud.s3().unreachable(true);
+		assertThrows(StorageUnreachableException.class, () -> text(resource(doc, "1.0")));
+
+		health.refusing = () -> {
+			cloud.s3().unreachable(false);
+			health.retest();
+		};
+		try (LogCapture log = LogCapture.of(BackendHealth.class)) {
+			assertThrows("refused before the retest found it", StorageUnreachableException.class,
+					() -> text(resource(doc, "1.0")));
+			health.refusing = () -> {
+			};
+
+			assertEquals(State.OK, health.status(cloud.backendId()).state());
+			assertEquals(log.lines().toString(), 0,
+					log.lines().stream().filter(l -> l.startsWith("WARN ") && l.contains("its transfers wait")).count());
+		}
+		assertEquals("never read", text(resource(doc, "1.0")));
+	}
+
+	/**
+	 * Minor 1: a read refused for an outage found more than a few seconds ago asks for an early retest, so the read
+	 * after the backend is back succeeds within seconds, not retestSeconds (60 here) later
+	 */
+	@Test
+	public void testARefusedReadChecksEarly() throws Exception {
+		Document doc = onTheBucket("never read");
+		start();
+		cloud.s3().unreachable(true);
+		assertThrows(StorageUnreachableException.class, () -> text(resource(doc, "1.0")));
+
+		cloud.s3().unreachable(false);
+		later(BackendHealth.EARLY_RETEST_AFTER.toSeconds() + 1);
+		assertThrows("refused, as the outage is known", StorageUnreachableException.class,
+				() -> text(resource(doc, "1.0")));
+
+		assertEquals("read within seconds of the refusal", "never read", readWithin(doc));
+		assertEquals(State.OK, health.status(cloud.backendId()).state());
+	}
+
+	/** A finding younger than a few seconds asks for no early retest: the check that made it has just run */
+	@Test
+	public void testNoEarlyRetestForAFreshFinding() throws Exception {
+		Document doc = onTheBucket("never read");
+		start();
+		gate = StorageFixtures.gated(cloud);
+		cloud.s3().unreachable(true);
+		assertThrows(StorageUnreachableException.class, () -> text(resource(doc, "1.0")));
+		int checks = gate.checks();
+
+		for (int i = 0; i < 5; i++)
+			assertThrows(StorageUnreachableException.class, () -> text(resource(doc, "1.0")));
+		Thread.sleep(500);
+		assertEquals(checks, gate.checks());
+		assertFalse(health.underWay(cloud.backendId()));
+	}
+
+	/** A burst of refused reads, as a folder's thumbnails, starts one early retest at most */
+	@Test
+	public void testABurstOfRefusalsChecksOnce() throws Exception {
+		Document doc = onTheBucket("never read");
+		start();
+		gate = StorageFixtures.gated(cloud);
+		cloud.s3().unreachable(true);
+		assertThrows(StorageUnreachableException.class, () -> text(resource(doc, "1.0")));
+		int checks = gate.checks();
+
+		later(BackendHealth.EARLY_RETEST_AFTER.toSeconds() + 1);
+		gate.atCheck.close();
+		for (int i = 0; i < 10; i++)
+			assertThrows(StorageUnreachableException.class, () -> text(resource(doc, "1.0")));
+		gate.atCheck.awaitEntered(1);
+		assertTrue(health.underWay(cloud.backendId()));
+
+		// Still unreachable, so a second retest waiting behind it would check again
+		gate.atCheck.open();
+		awaitNoCheck(cloud.backendId());
+		Thread.sleep(500);
+		assertEquals("one check for the burst", checks + 1, gate.checks());
+		assertEquals(State.FAILING, health.status(cloud.backendId()).state());
+	}
+
+	/**
+	 * Minor 2: a retest round marks every backend it will check as under way when it starts, so one's finding doesn't
+	 * lapse while another's check stalls; each mark ends with its own check, whatever it found
+	 */
+	@Test
+	public void testTheRoundKeepsEachBackendUnderWay() throws Exception {
+		Side other = sf.s3Side("Other", false);
+		assertTrue("checked after Cloud in a round", other.backendId() > cloud.backendId());
+		Document stalled = onTheBucket("never read");
+		Document waiting = onTheBucket(other, "never read either");
+		health.checkAll();
+		cloud.s3().unreachable(true);
+		other.s3().unreachable(true);
+		assertThrows(StorageUnreachableException.class, () -> text(resource(stalled, "1.0")));
+		assertThrows(StorageUnreachableException.class, () -> text(resource(waiting, "1.0")));
+
+		gate = StorageFixtures.gated(cloud);
+		otherGate = StorageFixtures.gated(other);
+		int otherChecks = otherGate.checks();
+		gate.atCheck.close();
+		later(600);
+		Future<?> round = threads.submit(health::retest);
+		gate.atCheck.awaitEntered(1);
+
+		// Cloud's check stalls; Other's waits its turn, its finding ten minutes old
+		int calls = other.s3().calls();
+		assertThrows(StorageUnreachableException.class, () -> text(resource(waiting, "1.0")));
+		assertEquals("Other's read sent nothing", calls, other.s3().calls());
+		assertEquals("Other isn't checked yet", otherChecks, otherGate.checks());
+		assertTrue(health.underWay(other.backendId()));
+
+		other.s3().unreachable(false);
+		gate.atCheck.open();
+		round.get(20, TimeUnit.SECONDS);
+		assertEquals(State.FAILING, health.status(cloud.backendId()).state());
+		assertEquals(State.OK, health.status(other.backendId()).state());
+		assertFalse(health.underWay(cloud.backendId()));
+		assertFalse(health.underWay(other.backendId()));
 	}
 }

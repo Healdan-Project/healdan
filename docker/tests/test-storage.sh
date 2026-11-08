@@ -20,9 +20,10 @@
 # were, A and D read from Original, C reads through Garage (its first read, as it was never cached), E reads from the
 # cache rebuilt from its folder with Garage stopped, and the held objects are still in Garage.
 # A check that claims a read from the cache stops Garage first, so it can fail.
-# Usage: BASE=http://127.0.0.1:8080 GARAGE_CONTAINER=<id> APP_CONTAINER=<id> DB_CONTAINER=<id> STATE=<file> \
-#        docker/tests/test-storage.sh [after-restart]
-# STATE keeps what the first run learnt for the second. Needs curl 8.0.0 or later (only from 8.0.0 does --aws-sigv4
+# Usage: BASE=http://127.0.0.1:8080 S3=http://127.0.0.1:13900 GARAGE_CONTAINER=<id> APP_CONTAINER=<id> \
+#        DB_CONTAINER=<id> STATE=<file> docker/tests/test-storage.sh [after-restart]
+# S3 is Garage's S3 API on the host (the overlay's SMOKE_GARAGE_PORT; 13900 if unset). STATE keeps what the first run
+# learnt for the second. Needs curl 8.0.0 or later (only from 8.0.0 does --aws-sigv4
 # send the x-amz-content-sha256 header, without which Garage refuses a request), jq, sha256sum and docker; the Docker
 # containers are passed in, as the script has neither the smoke test's project nor its env file.
 # docker/smoke-test.sh runs it as step 5f, and again in step 8.
@@ -34,7 +35,7 @@ cd "$(dirname "$0")/../.."
 MODE=${1:-checks}
 WAIT=60
 # Garage's S3 API on the host (the overlay's port), and the overlay's fixed test key
-S3=http://127.0.0.1:13900
+S3=${S3:-http://127.0.0.1:13900}
 BUCKET=healdan-smoke
 S3_KEY=GK0123456789abcdef01234567
 S3_SECRET=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef

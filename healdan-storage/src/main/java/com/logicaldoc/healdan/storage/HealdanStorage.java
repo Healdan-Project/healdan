@@ -492,7 +492,8 @@ public class HealdanStorage extends AbstractStore {
 		else
 			log.warn("Document {}'s {} can't be read: storage backend {} is unreachable", row.docId(), row.resource(),
 					row.backendId());
-		// So that an outage met by reads, while nothing moves, shows as one and the alert sees it
+		// So that an outage met by reads, while nothing moves, shows as one and the alert sees it; a refusal for a
+		// known outage reports nothing, as it met nothing
 		BackendHealth.get().reportFailure(row.backendId(), cause);
 		StorageUnreachableException outage = new StorageUnreachableException(store, cloud(row.backendId()), cause);
 		ReadOutages.note(outage);

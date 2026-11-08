@@ -15,6 +15,8 @@ PORT=${SMOKE_PORT:-18080}
 BASE="http://127.0.0.1:$PORT"
 # The stand-in sign-in provider's host port (docker/tests/compose.signin.yaml), on 127.0.0.1 only.
 KEYCLOAK_PORT=${SMOKE_KEYCLOAK_PORT:-18180}
+# The stand-in S3 server's host port (docker/tests/compose.storage.yaml), on 127.0.0.1 only.
+GARAGE_PORT=${SMOKE_GARAGE_PORT:-13900}
 WORK=$(mktemp -d)
 ENV_FILE=$WORK/smoke.env
 # Awkward on purpose: exercises .env quoting, context.properties escaping and the JDBC login.
@@ -72,7 +74,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-printf "DB_PASSWORD='%s'\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\n" "$PW" "$PORT" "$KEYCLOAK_PORT" > "$ENV_FILE"
+printf "DB_PASSWORD='%s'\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\nSMOKE_GARAGE_PORT=%s\n" "$PW" "$PORT" \
+  "$KEYCLOAK_PORT" "$GARAGE_PORT" > "$ENV_FILE"
 
 # Fixtures: a 16x16 PNG and a one-page PDF with a correct xref table.
 python3 - "$WORK" <<'PY'
@@ -338,8 +341,9 @@ echo "== 5f. storage backends against the stand-in Garage (S3 spec section 16.1)
 # output carries its own PASS/FAIL lines. It stops and starts Garage itself, and step 8 runs it again after the restart,
 # with what it kept in $WORK/storage.state.
 storage_test() { # [after-restart]
-  env BASE="$BASE" GARAGE_CONTAINER="$(compose ps -q garage)" APP_CONTAINER="$(compose ps -q app)" \
-    DB_CONTAINER="$(compose ps -q db)" STATE="$WORK/storage.state" bash docker/tests/test-storage.sh "$@"
+  env BASE="$BASE" S3="http://127.0.0.1:$GARAGE_PORT" GARAGE_CONTAINER="$(compose ps -q garage)" \
+    APP_CONTAINER="$(compose ps -q app)" DB_CONTAINER="$(compose ps -q db)" STATE="$WORK/storage.state" \
+    bash docker/tests/test-storage.sh "$@"
 }
 storage_started=$SECONDS
 check "storage backends against the stand-in" storage_test
