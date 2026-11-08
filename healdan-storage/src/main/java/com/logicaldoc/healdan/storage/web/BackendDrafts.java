@@ -84,6 +84,20 @@ final class BackendDrafts {
 		}
 	}
 
+	/**
+	 * A backend's place as {@link #samePlace} compares it: its bucket and prefix, or its folder. A value, so that what
+	 * a save read before the lock can be compared with the row under it.
+	 */
+	record Place(String bucket, String prefix, Path folder) {
+
+		/** @return the row's place as it is now */
+		static Place of(StorageBackend row) {
+			if (StorageBackend.S3.equals(row.getKind()))
+				return new Place(StringUtils.strip(row.getBucket()), S3Settings.prefix(row.getPrefix()), null);
+			return new Place(null, null, BackendDrafts.folder(row));
+		}
+	}
+
 	/** The folder of the backends' key files */
 	private final Path keysFolder;
 

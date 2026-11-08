@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BooleanSupplier;
+import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,9 +80,9 @@ import com.logicaldoc.util.spring.Context;
  * from {@link BackendDrafts}, which checks what the tab sends:
  * <ul>
  * <li>an add tests the settings, saves the row, writes the marker (refusing another backend's or install's), makes an
- * encrypted backend's key file and check object, and tests the backend in full; a step that fails undoes the ones
- * before it, so the place is free to try again. An encrypted backend isn't offered to Stores until its recovery key's
- * last group is typed back;</li>
+ * encrypted backend's key file and check object, tests the backend in full, and records the showing of the recovery
+ * key it answers; a step that fails undoes the ones before it, so the place is free to try again. An encrypted backend
+ * isn't offered to Stores until its recovery key's last group is typed back;</li>
  * <li>the bucket, prefix and path can't change once a file is recorded or held on the backend, or while a Store keeps
  * its files there, and encryption is chosen when the backend is added, as its recovery key is shown then;</li>
  * <li>a save, a confirmed or entered recovery key, a removal and Test drop the backend's built entry
@@ -96,8 +97,9 @@ import com.logicaldoc.util.spring.Context;
  * object, after its row is saved, is left alone by every other write until the add ends.
  * <p>
  * The S3 secret is sealed with {@link SecretBox} and never logged, answered or put in a message, nor is a key or a
- * recovery key, but for {@link #showRecoveryKey}'s answer to an administrator, which is recorded and logged. Backend
- * changes, a Store's backend changing, and each showing and entering of a recovery key are logged at info.
+ * recovery key, but for {@link #add}'s and {@link #showRecoveryKey}'s answers to an administrator, each recorded and
+ * logged as a showing. Backend changes, a Store's backend changing, and each showing and entering of a recovery key
+ * are logged at info.
  */
 @Component
 public class StorageAdmin {
@@ -290,8 +292,10 @@ public class StorageAdmin {
 
 	/**
 	 * Adds a backend (spec section 11): Test on the settings, the row saved, the marker written, for an encrypted
-	 * backend its key file and check object, and the full Test, the key check included. A step that fails undoes the
-	 * ones before it. An encrypted backend isn't offered to Stores until {@link #confirmRecoveryKey}. Only the row's
+	 * backend its key file and check object, and the full Test, the key check included; then, for an encrypted backend,
+	 * the showing of its recovery key, which the answer carries, is recorded ({@code key-shown}, question 8) and
+	 * logged, as {@link #showRecoveryKey}'s are. A step that fails undoes the ones before it, so no key is answered
+	 * without its record. An encrypted backend isn't offered to Stores until {@link #confirmRecoveryKey}. Only the row's
 	 * checks and write take the lock: Test, the marker, the key file and the full Test run outside it.
 	 *
 	 * @param backend the settings
@@ -336,9 +340,12 @@ public class StorageAdmin {
 			}
 			built.forget(id);
 			BackendTest.run(built.entry(id), keys, true);
-		} catch (IOException | RuntimeException e) {
+			// The answer shows the recovery key, often the only time it is shown: recorded once nothing else can fail
+			if (key != null)
+				record(id, StorageEvent.KEY_SHOWN, by);
+		} catch (IOException | PersistenceException | RuntimeException e) {
 			undoAdd(id, placed, key != null);
-			throw refuse("The backend wasn't added: " + message(e));
+			throw refuse("The backend wasn't added: " + message(e, id));
 		} finally {
 			if (placed != null)
 				placed.close();
@@ -347,6 +354,9 @@ public class StorageAdmin {
 		health.check(id);
 		log.info("Storage backend {} ({}, {}{}) was added by {}", id, row.getName(), draft.where(),
 				draft.encrypted() ? ", encrypted" : "", by.getUsername());
+		if (key != null)
+			log.info("The recovery key of storage backend {} ({}) was shown to {}, as it was added", id, row.getName(),
+					by.getUsername());
 
 		GUIStorageBackend answer = toGUI(row);
 		if (key != null)
@@ -411,7 +421,8 @@ public class StorageAdmin {
 	 * Saves a backend's settings: its name, and for S3 the endpoint, region, access key, secret and path style. While
 	 * nothing is recorded or held on it and no Store uses it, its bucket, prefix or path may change too, and its new
 	 * place gets its marker, and its check object, before the row points there. The new place is written outside the
-	 * lock; the checks are made again under it before the row changes, and the new place undone if they fail.
+	 * lock; the checks are made again under it before the row changes, and the new place undone if they fail, or if
+	 * another save moved the backend meanwhile: the place this save would clear is then no longer the backend's.
 	 *
 	 * @param backend the settings; Original's name alone is taken
 	 * @param secret a new S3 secret; null or blank keeps the stored one
@@ -429,6 +440,8 @@ public class StorageAdmin {
 		notAdding(id);
 		if (id == StorageBackend.ORIGINAL)
 			return renameOriginal(backend.getName(), by);
+		// Where the backend was when this save began, which it clears if it moves the backend
+		BackendDrafts.Place read = BackendDrafts.Place.of(before);
 
 		Draft draft = BackendDrafts.draft(backend, secret, before);
 		boolean moves = checkSave(before, draft);
@@ -450,7 +463,7 @@ public class StorageAdmin {
 					placed.close();
 				}
 				built.release(was);
-				throw refuse("The backend wasn't saved: " + message(e));
+				throw refuse("The backend wasn't saved: " + message(e, id));
 			}
 		}
 
@@ -460,8 +473,11 @@ public class StorageAdmin {
 			synchronized (writing) {
 				row = row(id);
 				notAdding(id);
-				if (checkSave(row, draft) != moves)
+				// Moved meanwhile, it would clear the place it read rather than the one the other save gave it; with
+				// the place as read, the draft moves the backend as it did before the lock
+				if (!BackendDrafts.Place.of(row).equals(read))
 					throw refuse("The backend was changed meanwhile, so this wasn't saved: open it again.");
+				checkSave(row, draft);
 				changes = BackendDrafts.changes(row, draft, sealed != null);
 				BackendDrafts.apply(row, draft);
 				if (sealed != null)
@@ -553,16 +569,17 @@ public class StorageAdmin {
 	public List<String> test(long backendId) throws PersistenceException {
 		requireOn();
 		row(backendId);
+		notAdding(backendId);
 		built.forget(backendId);
 		List<String> problems = new ArrayList<>();
 		try {
 			BackendTest.run(built.entry(backendId), keys, true);
 		} catch (BackendFailingException e) {
-			problems.add(message(e));
+			problems.add(message(e, backendId));
 		}
 		BackendHealth.Status status = health.check(backendId);
 		if (problems.isEmpty() && status.state() == BackendHealth.State.FAILING)
-			problems.add(status.error());
+			problems.add(named(status.error(), backendId));
 		return problems;
 	}
 
@@ -580,6 +597,7 @@ public class StorageAdmin {
 	public String showRecoveryKey(long backendId, User by) throws PersistenceException {
 		requireOn();
 		StorageBackend row = encrypted(backendId);
+		notAdding(backendId);
 		byte[] key = keys.read(backendId).orElseThrow(() -> refuse("The key file of this backend is missing or can't be "
 				+ "read, so there is no key to show: enter its recovery key to put the file back."));
 		record(backendId, StorageEvent.KEY_SHOWN, by);
@@ -614,7 +632,7 @@ public class StorageAdmin {
 			backend = built.withoutKey(backendId);
 		} catch (BackendFailingException e) {
 			throw refuse("The backend can't be used, so the recovery key can't be checked and wasn't put back: "
-					+ message(e));
+					+ message(e, backendId));
 		}
 		try {
 			if (!KeyCheck.verify(backend, LocalBackend.CHECK, new FileCipher(key)))
@@ -624,7 +642,8 @@ public class StorageAdmin {
 			throw refuse("The backend's check object is missing, so the recovery key can't be checked against it, and "
 					+ "nothing was written.");
 		} catch (IOException e) {
-			throw refuse("The backend's check object can't be read, so the recovery key wasn't put back: " + message(e));
+			throw refuse("The backend's check object can't be read, so the recovery key wasn't put back: "
+					+ message(e, backendId));
 		} finally {
 			built.release(backend);
 		}
@@ -947,16 +966,26 @@ public class StorageAdmin {
 			}
 			return List.of();
 		} catch (BackendFailingException e) {
-			return List.of(samePlace ? message(e) : unsaved(message(e)));
+			return List.of(message(e, id));
 		} catch (HealdanRuleException | IllegalArgumentException e) {
-			return List.of(e.getMessage());
+			return List.of(named(e.getMessage(), id));
 		}
 	}
 
-	/** @return a message about a backend not saved yet, which names it by the id it was built with, without it */
-	private static String unsaved(String message) {
-		return message.replaceAll("\\bBackend " + UNSAVED + "\\b", "The backend").replaceAll("\\bbackend " + UNSAVED
-				+ "\\b", "the backend");
+	/**
+	 * Names a backend in a message for the tab as "this backend", rather than by its id, which means nothing to an
+	 * administrator: "Backend 12" or "Storage backend 12" becomes "This backend", and "backend 12" or "storage backend
+	 * 12" becomes "this backend". Another backend's id, or a longer number, stays. The log keeps the ids.
+	 *
+	 * @param message a message from the backend, its build, its check or its Test; possibly null
+	 * @param id the backend's id, or the one a backend not saved yet was built with
+	 * @return the message without the id
+	 */
+	static String named(String message, long id) {
+		if (message == null)
+			return null;
+		return Pattern.compile("\\b(?:[Ss]torage [Bb]ackend|[Bb]ackend) " + id + "\\b").matcher(message)
+				.replaceAll(m -> Character.isUpperCase(m.group().charAt(0)) ? "This backend" : "this backend");
 	}
 
 	/**
@@ -1147,7 +1176,7 @@ public class StorageAdmin {
 
 		BackendHealth.Status status = health.status(id);
 		gui.setStatus(status.state().name().toLowerCase(Locale.ROOT));
-		gui.setError(status.error());
+		gui.setError(named(status.error(), id));
 		gui.setSince(status.since());
 		gui.setUnreachable(status.unreachable());
 
@@ -1165,6 +1194,11 @@ public class StorageAdmin {
 	private static String message(Exception e) {
 		Throwable cause = e instanceof UncheckedIOException && e.getCause() != null ? e.getCause() : e;
 		return cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+	}
+
+	/** @return the failure's message for the tab, which names the backend without its id ({@link #named}) */
+	private static String message(Exception e, long id) {
+		return named(message(e), id);
 	}
 
 	private static HealdanRuleException refuse(String message) {

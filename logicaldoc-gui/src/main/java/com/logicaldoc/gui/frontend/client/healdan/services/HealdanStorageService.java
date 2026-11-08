@@ -61,7 +61,8 @@ public interface HealdanStorageService extends RemoteService {
 	 * @param secret the S3 secret
 	 *
 	 * @return the backend as added, with its recovery key if it is encrypted:
-	 *         the only time it comes with the answer
+	 *         the only time it comes with the answer, and a showing that is
+	 *         recorded in its Key History as Show Recovery Key's are
 	 *
 	 * @throws ServerException as the interface says; a
 	 *         {@link SecretKeyMissingException}, with nothing added, if
@@ -83,8 +84,10 @@ public interface HealdanStorageService extends RemoteService {
 	public void confirmRecoveryKey(long backendId, String lastGroup) throws ServerException;
 
 	/**
-	 * Saves a backend's settings. The bucket, prefix, path and encryption can't
-	 * change once a file is recorded or held on it.
+	 * Saves a backend's settings. Its encryption never changes here: it is
+	 * chosen when the backend is added, as its recovery key is shown then. Its
+	 * place (the folder's path, or the bucket and prefix) can't change once a
+	 * file is recorded or held on it, nor while a Store keeps its files there.
 	 *
 	 * @param backend the settings
 	 * @param secret a new S3 secret; null or blank keeps the stored one

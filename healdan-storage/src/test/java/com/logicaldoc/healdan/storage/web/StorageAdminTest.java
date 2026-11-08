@@ -21,14 +21,23 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.SecureRandom;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import org.junit.Assume;
@@ -68,9 +77,11 @@ import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend;
 import com.logicaldoc.healdan.storage.backend.S3Backend;
 import com.logicaldoc.healdan.storage.crypto.BackendKeys;
+import com.logicaldoc.healdan.storage.crypto.RecoveryKey;
 import com.logicaldoc.healdan.storage.mover.Mover;
 import com.logicaldoc.healdan.storage.mover.StorageStartup;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
 
@@ -150,6 +161,36 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 		jdbc().update("insert into hd_storage_file (hd_docid, hd_resource, hd_backendid, hd_storeid, hd_size, "
 				+ "hd_write, hd_stored, hd_attempts, hd_stuck) values (?, '1.0', ?, ?, 5, 1, ?, 0, 0)", docId, backendId,
 				storeId, new Timestamp(System.currentTimeMillis()));
+	}
+
+	/** @return the id of the backend with that name, whose add may still be under way */
+	private static long idOf(String name) {
+		return jdbc().queryForObject("select ld_id from hd_storage_backend where hd_name = ?", Long.class, name);
+	}
+
+	/** @return how many showings and enterings of recovery keys are recorded */
+	private static long events() {
+		return jdbc().queryForObject("select count(*) from hd_storage_event", Long.class);
+	}
+
+	/**
+	 * Asserts that a call on another thread was refused, with that text
+	 *
+	 * @return the refusal's message
+	 */
+	private static String refusedThere(String message, String text, Future<?> call) {
+		ExecutionException e = assertThrows(message, ExecutionException.class,
+				() -> call.get(WAIT.toSeconds(), TimeUnit.SECONDS));
+		assertTrue(message + ": " + e.getCause(),
+				e.getCause() instanceof HealdanRuleException && e.getCause().getMessage().contains(text));
+		return e.getCause().getMessage();
+	}
+
+	/** Asserts that a message calls a backend this backend, and never names it by its id */
+	private static void assertNamed(String message, long id) {
+		assertNotNull(message);
+		assertTrue(message, message.contains("this backend") || message.contains("This backend"));
+		assertFalse(message, Pattern.compile("(?i)\\bbackend " + id + "\\b").matcher(message).find());
 	}
 
 	private static void refused(String message, String text, ThrowingRunnable run) {
@@ -739,5 +780,205 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 		assertEquals("Spare", StorageBackendDAO.get().findById(added.getId()).getName());
 		assertEquals(StorageBackend.ORIGINAL, StoredFiles.get().storeBackend(store.getId()));
 		assertEquals(StorageSettings.DEFAULT_HOLD_DAYS, StorageSettings.get().holdDays());
+	}
+
+	/**
+	 * A backend whose add is still writing its marker, key file and check object is left alone by every other write
+	 * until the add ends: a Store given it meanwhile would keep it after a failed add deleted its row, and Test or Show
+	 * Recovery Key would act on a backend that isn't there yet
+	 */
+	@Test
+	public void testWritesWaitForAnAdd() throws Exception {
+		long count = backends();
+		long events = events();
+		Folder store = fx.store("Waiting Store");
+		GUIStorageBackend plain = s3("Plain", "plain/");
+		GUIStorageBackend vault = s3("Vault", "vault/");
+		vault.setEncrypted(true);
+		fake.holdPut("plain/" + LocalBackend.MARKER).holdPut("vault/" + LocalBackend.MARKER);
+		ExecutorService threads = Executors.newFixedThreadPool(2);
+		try {
+			Future<GUIStorageBackend> plainAdd = threads.submit(() -> admin.add(plain, "secret", boss));
+			Future<GUIStorageBackend> vaultAdd = threads.submit(() -> admin.add(vault, "secret", boss));
+			// Each add has saved its row and stopped at its marker
+			await("both adds at their markers", () -> fake.held().size() == 2);
+			long plainId = idOf("Plain");
+			long vaultId = idOf("Vault");
+			GUIStorageBackend renamedPlain = s3("Plain Renamed", "plain/");
+			renamedPlain.setId(plainId);
+			GUIStorageBackend renamedVault = s3("Vault Renamed", "vault/");
+			renamedVault.setEncrypted(true);
+			renamedVault.setId(vaultId);
+			byte[] another = new byte[32];
+			new SecureRandom().nextBytes(another);
+
+			Map<String, ThrowingRunnable> writes = new LinkedHashMap<>();
+			writes.put("Test of the plain backend", () -> admin.test(plainId));
+			writes.put("a save of the plain backend", () -> admin.save(renamedPlain, null, boss));
+			writes.put("a Store given the plain backend", () -> admin.setStoreBackend(store.getId(), plainId, boss));
+			writes.put("Test of the encrypted backend", () -> admin.test(vaultId));
+			writes.put("a save of the encrypted backend", () -> admin.save(renamedVault, null, boss));
+			writes.put("its recovery key shown", () -> admin.showRecoveryKey(vaultId, boss));
+			writes.put("its recovery key confirmed", () -> admin.confirmRecoveryKey(vaultId, "ABCD", boss));
+			writes.put("its recovery key entered",
+					() -> admin.enterRecoveryKey(vaultId, RecoveryKey.format(another), boss));
+			writes.put("the plain backend removed", () -> admin.remove(plainId, boss));
+			writes.put("the encrypted backend removed", () -> admin.remove(vaultId, boss));
+			List<String> wrong = new ArrayList<>();
+			for (Map.Entry<String, ThrowingRunnable> write : writes.entrySet())
+				try {
+					write.getValue().run();
+					wrong.add(write.getKey() + ": went ahead");
+				} catch (HealdanRuleException e) {
+					if (!e.getMessage().contains("still being added"))
+						wrong.add(write.getKey() + ": " + e.getMessage());
+				} catch (Throwable e) {
+					wrong.add(write.getKey() + ": " + e);
+				}
+			assertEquals("every other write on a backend being added is refused", List.of(), wrong);
+
+			// Then both adds fail at their markers, and are undone
+			fake.fail(FakeS3.Op.PUT_OBJECT, 403, "AccessDenied").release();
+			refusedThere("the plain add", "wasn't added", plainAdd);
+			refusedThere("the encrypted add", "wasn't added", vaultAdd);
+			assertFalse(Files.exists(keys().file(vaultId)));
+		} finally {
+			fake.behave();
+			threads.shutdownNow();
+		}
+		// Nothing is left of them, and no Store keeps its files on a backend that isn't there
+		assertEquals(count, backends());
+		assertEquals(events, events());
+		assertEquals(StorageBackend.ORIGINAL, StoredFiles.get().storeBackend(store.getId()));
+		assertTrue(StoreBackendDAO.get().findByStore(store.getId()).isEmpty());
+		assertEquals(List.of(), fake.keys(BUCKET));
+	}
+
+	/**
+	 * Two administrators move one empty backend at once: the save that reaches the lock second finds that the place it
+	 * read has changed meanwhile, and is refused, taking its own marker back. Neither its new place nor the first
+	 * save's keeps a marker of this backend that nothing points to.
+	 */
+	@Test
+	public void testRacingPlaceChanges() throws Exception {
+		long id = admin.add(s3("Moving", "first/"), "secret", boss).getId();
+		GUIStorageBackend toThird = s3("Moving", "third/");
+		toThird.setId(id);
+		GUIStorageBackend toSecond = s3("Moving", "second/");
+		toSecond.setId(id);
+
+		fake.holdPut("third/" + LocalBackend.MARKER);
+		ExecutorService threads = Executors.newSingleThreadExecutor();
+		try {
+			// One save stops at its new place's marker, outside the lock
+			Future<GUIStorageBackend> slow = threads.submit(() -> admin.save(toThird, null, boss));
+			await("the slow save at its marker", () -> fake.held().size() == 1);
+			// Another moves the backend meanwhile
+			admin.save(toSecond, null, boss);
+			fake.release();
+			refusedThere("the slow save", "changed meanwhile", slow);
+		} finally {
+			fake.behave();
+			threads.shutdownNow();
+		}
+		assertEquals("second/", StorageBackendDAO.get().findById(id).getPrefix());
+		assertTrue(fake.object(BUCKET, "second/" + LocalBackend.MARKER).isPresent());
+		assertTrue(fake.object(BUCKET, "first/" + LocalBackend.MARKER).isEmpty());
+		assertTrue(fake.object(BUCKET, "third/" + LocalBackend.MARKER).isEmpty());
+		assertEquals(List.of(), admin.test(id));
+	}
+
+	/**
+	 * An add that fails is undone, and records no showing of the recovery key it never shows: neither when its full
+	 * Test fails, nor when the record of the showing can't be written, so no key is answered unrecorded
+	 */
+	@Test
+	public void testFailedAddRecordsNothing() throws Exception {
+		long count = backends();
+		long events = events();
+
+		// The full Test, after the marker, key file and check object, fails
+		GUIStorageBackend vault = s3("Vault", "vault/");
+		vault.setEncrypted(true);
+		fake.holdPut("vault/" + LocalBackend.MARKER);
+		ExecutorService threads = Executors.newSingleThreadExecutor();
+		long id = 0;
+		try {
+			Future<GUIStorageBackend> add = threads.submit(() -> admin.add(vault, "secret", boss));
+			await("the add at its marker", () -> fake.held().size() == 1);
+			id = idOf("Vault");
+			// What the full Test checks then refuses its marker
+			StorageFixtures.useBackend(id, MemoryBackend.s3Like(id).failCheck(true));
+			fake.release();
+			// Named as the tab names it, not by its id
+			assertNamed(refusedThere("an add whose full Test fails", "wasn't added", add), id);
+		} finally {
+			fake.behave();
+			threads.shutdownNow();
+			if (id != 0)
+				StorageFixtures.useBackend(id, null);
+		}
+		assertEquals(count, backends());
+		assertEquals(events, events());
+		assertFalse(Files.exists(keys().file(id)));
+		assertEquals(List.of(), fake.keys(BUCKET));
+
+		// The showing's record can't be written: the add is undone, rather than answer a key with no record
+		Path folder = freshFolder("refused");
+		jdbc().execute("create trigger hd_test_refuse_event before insert on hd_storage_event referencing new row as "
+				+ "newrow for each row begin atomic signal sqlstate '45000' set message_text = 'refused by the test'; "
+				+ "end");
+		try {
+			refused("the showing's record refused", "wasn't added",
+					() -> admin.add(local("Refused", folder, true), null, boss));
+		} finally {
+			jdbc().execute("drop trigger hd_test_refuse_event");
+		}
+		assertEquals(count, backends());
+		assertEquals(events, events());
+		assertFalse(Files.exists(folder.resolve(LocalBackend.MARKER)));
+		assertFalse(Files.exists(folder.resolve(LocalBackend.CHECK)));
+		try (Stream<Path> files = Files.exists(keys().folder()) ? Files.list(keys().folder()) : Stream.empty()) {
+			assertEquals(List.of(), files.filter(f -> f.getFileName().toString().endsWith(".key")).toList());
+		}
+	}
+
+	/**
+	 * A backend's status and its Test call it "this backend", not by its id, which means nothing to an administrator;
+	 * the log keeps the id
+	 */
+	@Test
+	public void testMessagesNameNoBackendId() throws Exception {
+		// Its own id only, in the case the message gave it
+		assertEquals("This backend can't be reached: no answer",
+				StorageAdmin.named("Backend 4951 can't be reached: no answer", 4951));
+		assertEquals("This backend's settings are refused",
+				StorageAdmin.named("Storage backend 4951's settings are refused", 4951));
+		assertEquals("The key file of this backend is missing",
+				StorageAdmin.named("The key file of storage backend 4951 is missing", 4951));
+		assertEquals("Test of this backend failed: while reading: This backend: access denied",
+				StorageAdmin.named("Test of backend 4951 failed: while reading: Backend 4951: access denied", 4951));
+		assertEquals("Backend 49510 and backend 12 stay", StorageAdmin.named("Backend 49510 and backend 12 stay", 4951));
+		assertNull(StorageAdmin.named(null, 4951));
+
+		// An S3 backend that refuses its key, and a folder whose marker is gone
+		long s3Id = admin.add(s3("Refusing", "refusing/"), "secret", boss).getId();
+		Path root = freshFolder("unmounted");
+		long localId = admin.add(local("Unmounted", root, null), null, boss).getId();
+		Files.delete(root.resolve(LocalBackend.MARKER));
+		fake.denyAccess();
+		try (LogCapture log = LogCapture.of(BackendHealth.class)) {
+			for (long id : List.of(s3Id, localId)) {
+				List<String> problems = admin.test(id);
+				assertEquals(problems.toString(), 1, problems.size());
+				assertNamed(problems.get(0), id);
+				GUIStorageBackend shown = find(admin.overview(), id);
+				assertEquals("failing", shown.getStatus());
+				assertNamed(shown.getError(), id);
+				assertTrue(log.lines().toString(), log.lines().stream().anyMatch(l -> l.contains("backend " + id)));
+			}
+		} finally {
+			fake.behave();
+		}
 	}
 }

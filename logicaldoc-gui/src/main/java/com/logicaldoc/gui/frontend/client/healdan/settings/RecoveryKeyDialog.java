@@ -209,7 +209,7 @@ public class RecoveryKeyDialog extends Window {
 		grid.setHeight(240);
 		grid.setSelectionType(SelectionStyle.NONE);
 		grid.setEmptyMessage(StorageUi.encrypted(backend)
-				? "Its recovery key hasn't been shown or entered since it was added"
+				? "No showing or entering of its recovery key is recorded"
 				: "It isn't encrypted, so it has no recovery key");
 		grid.setFields(date, event, by);
 		ListGridRecord[] records = new ListGridRecord[events.length];

@@ -83,7 +83,7 @@ public class KnownOutageReadsTest extends AbstractStorageTestCase {
 			gate.openAll();
 		if (otherGate != null)
 			otherGate.openAll();
-		health.clock = System::currentTimeMillis;
+		health.clock = System::nanoTime;
 		health.refusing = () -> {
 		};
 		Context.get(StorageStartup.class).stop();
@@ -141,7 +141,7 @@ public class KnownOutageReadsTest extends AbstractStorageTestCase {
 
 	/** Moves the clock the outage's age is read with on by that many seconds */
 	private void later(long seconds) {
-		health.clock = () -> System.currentTimeMillis() + seconds * 1000;
+		health.clock = () -> System.nanoTime() + TimeUnit.SECONDS.toNanos(seconds);
 	}
 
 	@Test

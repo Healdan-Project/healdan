@@ -96,7 +96,10 @@ public class BackendHealth {
 	private volatile Runnable recovered = () -> {
 	};
 
-	/** When each backend's state was last found, by a check or a report, by {@link #clock} */
+	/**
+	 * When each backend's state was last found, by a check or a report, by {@link #clock}: only ever compared with it,
+	 * for an outage's age, never shown
+	 */
 	private final Map<Long, Long> found = new ConcurrentHashMap<>();
 
 	/**
@@ -111,8 +114,12 @@ public class BackendHealth {
 	/** Each backend's outage that reads failing at once were warned of, by when it began */
 	private final Map<Long, Date> warnedOutage = new ConcurrentHashMap<>();
 
-	/** Tests: the clock an outage's age is read with */
-	volatile LongSupplier clock = System::currentTimeMillis;
+	/**
+	 * Tests: the clock an outage's age is read with, in nanoseconds. Monotonic, so a wall clock set back can't make an
+	 * age negative, which would keep reads refused until the next retest; when an outage began ({@link Status#since})
+	 * is the wall clock's, as people read it.
+	 */
+	volatile LongSupplier clock = System::nanoTime;
 
 	/**
 	 * How old an outage's finding is before a read refused for it asks for an early retest: 5 seconds. Long enough that
@@ -228,12 +235,12 @@ public class BackendHealth {
 			return Optional.empty();
 		Long at = found.get(backendId);
 		long age = at == null ? Long.MAX_VALUE : clock.getAsLong() - at;
-		if (!underWay(backendId) && age >= fresh.toMillis())
+		if (!underWay(backendId) && age >= fresh.toNanos())
 			return Optional.empty();
 		if (!Objects.equals(warnedOutage.put(backendId, status.since()), status.since()))
 			log.warn("Storage backend {} can't be reached, so reads of its files the read cache doesn't hold fail at "
 					+ "once until a retest finds it again: {}", backendId, status.error());
-		if (age >= EARLY_RETEST_AFTER.toMillis())
+		if (age >= EARLY_RETEST_AFTER.toNanos())
 			retestEarly(backendId);
 		return Optional.of(status);
 	}

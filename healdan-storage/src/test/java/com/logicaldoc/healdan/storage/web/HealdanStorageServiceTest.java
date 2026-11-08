@@ -286,6 +286,46 @@ public class HealdanStorageServiceTest extends AbstractStorageTestCase {
 		assertEquals(id, StoredFiles.get().storeBackend(store.getId()));
 	}
 
+	/**
+	 * An add shows an encrypted backend's recovery key, often the only time it is shown, so that showing is recorded
+	 * and logged as Show Recovery Key's are (question 8): the tab then says when it was last shown
+	 */
+	@Test
+	public void testAddRecordsItsShowing() throws Exception {
+		try (LogCapture log = LogCapture.of(StorageAdmin.class)) {
+			GUIStorageBackend added = service().addBackend(local("Vault", freshFolder("vault"), true), null);
+			long id = added.getId();
+			String key = added.getRecoveryKey();
+			assertNotNull(key);
+
+			List<StorageEvent> events = StorageEventDAO.get().findByBackend(id);
+			assertEquals(1, events.size());
+			assertEquals(StorageEvent.KEY_SHOWN, events.get(0).getEvent());
+			assertEquals(bossUser.getId(), events.get(0).getUserId());
+			assertEquals("boss", events.get(0).getUserName());
+			GUIStorageEvent[] listed = service().keyEvents(id);
+			assertEquals(1, listed.length);
+			assertEquals(GUIStorageEvent.KEY_SHOWN, listed[0].getEvent());
+			GUIStorageBackend shown = find(service().load(), id);
+			assertNotNull(shown.getKeyShown());
+			assertEquals("boss", shown.getKeyShownBy());
+
+			List<String> lines = log.lines().stream().filter(l -> l.contains("recovery key")).toList();
+			assertEquals(log.lines().toString(), 1, lines.size());
+			assertTrue(lines.get(0), lines.get(0).contains("boss"));
+			assertTrue(lines.get(0), lines.get(0).contains("storage backend " + id));
+			for (String line : log.lines()) {
+				assertFalse(line, line.contains(key));
+				assertFalse(line, line.contains(key.replace(" ", "")));
+			}
+		}
+
+		// A plain backend has no recovery key, so its add shows none
+		GUIStorageBackend plain = service().addBackend(local("Plain", freshFolder("plain"), null), null);
+		assertEquals(0, service().keyEvents(plain.getId()).length);
+		assertNull(find(service().load(), plain.getId()).getKeyShown());
+	}
+
 	@Test
 	public void testShowRecoveryKeyRecorded() throws Exception {
 		GUIStorageBackend added = service().addBackend(local("Vault", freshFolder("vault"), true), null);
@@ -296,14 +336,16 @@ public class HealdanStorageServiceTest extends AbstractStorageTestCase {
 		try (LogCapture log = LogCapture.of(StorageAdmin.class)) {
 			assertEquals(key, service().showRecoveryKey(id));
 
+			// The add's showing, then this one
 			List<StorageEvent> events = StorageEventDAO.get().findByBackend(id);
-			assertEquals(1, events.size());
-			assertEquals(StorageEvent.KEY_SHOWN, events.get(0).getEvent());
-			assertEquals(id, events.get(0).getBackendId());
-			assertEquals(bossUser.getId(), events.get(0).getUserId());
-			assertEquals("boss", events.get(0).getUserName());
+			assertEquals(2, events.size());
+			StorageEvent last = events.get(1);
+			assertEquals(StorageEvent.KEY_SHOWN, last.getEvent());
+			assertEquals(id, last.getBackendId());
+			assertEquals(bossUser.getId(), last.getUserId());
+			assertEquals("boss", last.getUserName());
 			GUIStorageEvent[] listed = service().keyEvents(id);
-			assertEquals(1, listed.length);
+			assertEquals(2, listed.length);
 			assertEquals(GUIStorageEvent.KEY_SHOWN, listed[0].getEvent());
 			assertEquals("boss", listed[0].getUserName());
 			GUIStorageBackend shown = find(service().load(), id);
@@ -313,8 +355,9 @@ public class HealdanStorageServiceTest extends AbstractStorageTestCase {
 			// Each showing is recorded, newest first
 			assertEquals(key, service().showRecoveryKey(id));
 			listed = service().keyEvents(id);
-			assertEquals(2, listed.length);
+			assertEquals(3, listed.length);
 			assertTrue(listed[0].getDate().compareTo(listed[1].getDate()) >= 0);
+			assertTrue(listed[1].getDate().compareTo(listed[2].getDate()) >= 0);
 
 			// Logged with who and which backend, never with the key
 			List<String> lines = log.lines().stream().filter(l -> l.contains("recovery key")).toList();
@@ -332,7 +375,7 @@ public class HealdanStorageServiceTest extends AbstractStorageTestCase {
 		// The record outlives the backend
 		service().removeBackend(id);
 		assertNull(StorageBackendDAO.get().findById(id));
-		assertEquals(2, service().keyEvents(id).length);
+		assertEquals(3, service().keyEvents(id).length);
 	}
 
 	@Test
@@ -361,16 +404,18 @@ public class HealdanStorageServiceTest extends AbstractStorageTestCase {
 		assertFalse(Files.exists(keyFile));
 		assertHolds("not a key", "recovery key", () -> service().enterRecoveryKey(id, "not a key"));
 		assertFalse(Files.exists(keyFile));
-		assertEquals(0, service().keyEvents(id).length);
+		// Only the add's showing: nothing typed wrong is recorded
+		assertEquals(1, service().keyEvents(id).length);
 
 		// The right one, in any case
 		service().enterRecoveryKey(id, key.toLowerCase());
 		assertArrayEquals(RecoveryKey.parse(key), Files.readAllBytes(keyFile));
 		assertEquals("ok", find(service().load(), id).getStatus());
 		GUIStorageEvent[] events = service().keyEvents(id);
-		assertEquals(1, events.length);
+		assertEquals(2, events.length);
 		assertEquals(GUIStorageEvent.KEY_ENTERED, events[0].getEvent());
 		assertEquals("boss", events[0].getUserName());
+		assertEquals(GUIStorageEvent.KEY_SHOWN, events[1].getEvent());
 
 		// The next write is encrypted under it, and what was there reads
 		Document after = fx.upload(side.folder(), "after.txt", "written after the key came back", fx.admin());
