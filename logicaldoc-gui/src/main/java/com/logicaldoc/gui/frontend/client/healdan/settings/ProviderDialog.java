@@ -434,19 +434,10 @@ public class ProviderDialog extends Window {
 	 * a new key, which leaves those values unreadable (ruling R37).
 	 */
 	private void askNewKey(GUISignInProvider saving, String secret, long sealed) {
-		String values = sealed == 1 ? "1 stored value is" : sealed + " stored values are";
-		LD.ask("Make a New Secret Key", "Healdan's secret key file is missing, and " + values + " sealed with it: "
-				+ "client secrets, the S3 secrets of storage backends, and the refresh tokens of Healdan Helpers that "
-				+ "signed in through a provider. If it went missing by mistake, restore it from a backup and save "
-				+ "again: nothing needs restarting, and nothing is lost.<br><br>A new key keeps the client secret you "
-				+ "typed, and nothing sealed before can be opened: you enter each other provider's client secret "
-				+ "again, and each storage backend's S3 secret on the Storage tab (those backends fail until then); "
-				+ "Healdan Helpers that signed in through a provider sign in again. Make a new key?", 480, yes -> {
-					if (Boolean.TRUE.equals(yes)) {
-						saving.setNewKey(true);
-						send(saving, secret);
-					}
-				});
+		NewKeyQuestion.ask("client secret", sealed, () -> {
+			saving.setNewKey(true);
+			send(saving, secret);
+		});
 	}
 
 	private void check() {
