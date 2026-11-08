@@ -21,6 +21,7 @@ import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.email.AlreadyFiledException;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.util.StorageUnreachableException;
 
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -33,6 +34,9 @@ import jakarta.ws.rs.ext.ExceptionMapper;
  * <li>an {@link ApiProblem} as it is;</li>
  * <li>the once-per-matter rule's refusal as {@code 409 already-filed}, with
  * its message and the copy as {@code document} (M5 spec §6.4);</li>
+ * <li>a file that can't be read because its cloud storage can't be reached
+ * as {@code 503 storage-unreachable}, with its message, which names the Store
+ * (S3 storage spec §6.5);</li>
  * <li>any other Healdan veto as {@code 409 refused}, with its message;</li>
  * <li>JSON that can't be read as {@code 400 bad-request};</li>
  * <li>what JAX-RS raises with its own status: {@code 404 not-found},
@@ -61,6 +65,10 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 		AlreadyFiledException filed = find(exception, AlreadyFiledException.class);
 		if (filed != null)
 			return problem(alreadyFiled(filed));
+
+		StorageUnreachableException unreachable = find(exception, StorageUnreachableException.class);
+		if (unreachable != null)
+			return problem(new ApiProblem(503, "storage-unreachable", unreachable.getMessage()));
 
 		HealdanVetoException veto = find(exception, HealdanVetoException.class);
 		if (veto != null)

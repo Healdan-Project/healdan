@@ -430,17 +430,30 @@ public class HealdanStorage extends AbstractStore {
 		StoredFile current = row.get();
 		try {
 			try {
-				return open(current, key, ranged);
+				return outageAware(open(current, key, ranged), current, ranged);
 			} catch (FileNotFoundException e) {
 				Optional<StoredFile> now = files().find(docId, name);
 				if (now.isEmpty() || !moved(current, now.get()))
 					throw e;
 				current = now.get();
-				return open(current, key, ranged);
+				// The retry is inside the same catch, so its outage is converted too
+				return outageAware(open(current, key, ranged), current, ranged);
 			}
 		} catch (BackendUnreachableException e) {
 			throw unreachable(current, e);
 		}
+	}
+
+	/**
+	 * @return the stream or channel, which also converts the outage its own reads meet, so that none escapes as a
+	 *         {@link BackendUnreachableException}; S3's are the only ones that can meet one
+	 */
+	@SuppressWarnings("unchecked")
+	private static <T> T outageAware(T opened, StoredFile row, boolean ranged) throws IOException {
+		if (!backends().isS3(row.backendId()))
+			return opened;
+		return (T) (ranged ? UnreachableReads.wrap((SeekableByteChannel) opened, e -> unreachable(row, e))
+				: UnreachableReads.wrap((InputStream) opened, e -> unreachable(row, e)));
 	}
 
 	/** @return the exception for a file whose S3 backend can't be reached, naming its Store (spec section 6.5) */
@@ -455,7 +468,9 @@ public class HealdanStorage extends AbstractStore {
 			}
 		log.warn("Document {}'s {} can't be read: storage backend {} is unreachable", row.docId(), row.resource(),
 				row.backendId());
-		return new StorageUnreachableException(store, cause);
+		StorageUnreachableException outage = new StorageUnreachableException(store, cause);
+		ReadOutages.note(outage);
+		return outage;
 	}
 
 	private static boolean moved(StoredFile before, StoredFile now) {

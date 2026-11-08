@@ -239,7 +239,7 @@ public final class StorageFixtures {
 	 * Does what the mover will (Task 11): puts a staged file on its Store's S3 backend, encrypted if the backend is,
 	 * points its row there and takes it out of staging.
 	 */
-	static void moveToBucket(Side side, long docId, String resource) throws Exception {
+	public static void moveToBucket(Side side, long docId, String resource) throws Exception {
 		StoredFile row = row(docId, resource);
 		assertEquals("only a staged file is uploaded", 0L, row.backendId());
 		Path staged = staged(docId, resource);

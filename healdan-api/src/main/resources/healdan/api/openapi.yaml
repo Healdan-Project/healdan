@@ -819,7 +819,15 @@ paths:
 
         A document protected by a password is always `403 forbidden` through
         the API: open it in Healdan's web page. A document whose file is
-        missing from storage is `500 server-error`.
+        missing from storage is `500 server-error`, as is one that exists
+        but can't be read.
+
+        A file in cloud storage that can't be reached right now, when it
+        isn't among the recently read ones the server keeps, is
+        `503 storage-unreachable`. Its `detail` names the Store, and is
+        meant to be shown as it is. Nothing about the file is wrong: ask
+        again later. It is answered before any of the file is sent, never
+        as a `200` that stops short.
 
         `HEAD` answers with the headers alone, and records nothing.
       tags: [Documents]
@@ -854,6 +862,8 @@ paths:
               schema:
                 type: string
                 contentMediaType: application/octet-stream
+        '503':
+          $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
   /v1/documents/{docNumber}/thumbnail:
@@ -869,7 +879,8 @@ paths:
         The server makes thumbnails in the background after each save, so a
         document whose thumbnail hasn't been made yet, like one whose file
         has none, is `404 not-found`: show a placeholder, and ask again
-        later.
+        later. So is a thumbnail that can't be read, such as one in cloud
+        storage that can't be reached right now.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -1596,7 +1607,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, server-error]
         fields:
           type: array
           items:

@@ -252,6 +252,28 @@ public class DocumentResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testUnreadableFileIsNot200() throws Exception {
+		Document d = file("a.txt", "Lease draft");
+		// The file is there (the store says so) but can't be read: a folder in its place
+		java.nio.file.Path stored;
+		try (java.util.stream.Stream<java.nio.file.Path> tree = java.nio.file.Files
+				.walk(((FSStore) Store.get()).getRoot().toPath())) {
+			stored = tree.filter(java.nio.file.Files::isRegularFile)
+					.filter(f -> f.getFileName().toString().equals(d.getFileVersion())
+							&& f.toString().contains(java.io.File.separator + "doc" + java.io.File.separator))
+					.findFirst().orElseThrow();
+		}
+		java.nio.file.Files.delete(stored);
+		java.nio.file.Files.createDirectory(stored);
+
+		ApiResponse response = get("/api/v1/documents/" + number(d) + "/content").token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 500, response.status());
+		assertEquals("server-error", response.code());
+		assertEquals("Something went wrong on the server.", response.json().path("detail").textValue());
+	}
+
+	@Test
 	public void testContent() throws Exception {
 		Document d = file("a.docx", "Lease draft");
 		checkin(d, boss, "Lease draft, second", false);

@@ -276,6 +276,39 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testStorageUnreachablePostpones() throws Exception {
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		Document b = fx.upload(folder, "b.docx", "b", fx.admin());
+		Set<Long> tried = new HashSet<>();
+		PreviewWorker unreachable = new PreviewWorker() {
+			@Override
+			void convert(Document doc, Version version, String fileVersion) throws Exception {
+				tried.add(doc.getId());
+				if (doc.getId() == a.getId())
+					throw new IllegalStateException("Cannot convert", new com.logicaldoc.healdan.util.StorageUnreachableException("Main", new IOException("down")));
+				super.convert(doc, version, fileVersion);
+			}
+		};
+		Instant aBefore = nextTry(a);
+
+		try (LogCapture capture = LogCapture.of(PreviewWorker.class)) {
+			assertEquals("the other job still runs", 2, unreachable.runOnce(T));
+			assertTrue(capture.lines().toString(), capture.lines().stream().noneMatch(l -> l.contains("Giving up")));
+		}
+
+		assertEquals(Set.of(a.getId(), b.getId()), tried);
+		assertEquals("no try is spent", 0, PreviewJobs.get().find(a.getId(), "1.0").orElseThrow().attempts());
+		Instant next = nextTry(a);
+		assertTrue(next + " vs " + T, !next.isBefore(T.plus(java.time.Duration.ofMinutes(10))));
+		assertTrue(next + " vs " + T, next.isBefore(T.plus(java.time.Duration.ofMinutes(11))));
+		assertTrue(aBefore.isBefore(next));
+		assertFalse(queued(b, "1.0"));
+		assertTrue(Store.get().exists(pdfOf(b, "1.0")));
+		// Only the file in the cloud waits: the others' round isn't paused
+		assertEquals(0, unreachable.runOnce(T.plus(java.time.Duration.ofMinutes(5))));
+	}
+
+	@Test
 	public void testStillUnavailableAfterThePausePausesAgain() throws Exception {
 		fx.upload(folder, "a.docx", "a", fx.admin());
 		fx.upload(folder, "b.docx", "b", fx.admin());

@@ -271,6 +271,10 @@ public class DocumentResource {
 				throw new ApiProblem(500, "server-error", "The document's file is missing from storage.");
 			long size = Store.get().size(resource);
 
+			// Opened before the answer starts, so that a file that can't be read is an error, never a 200 with a
+			// body that stops. The body closes it
+			InputStream in = head ? null : openStream(resource);
+
 			// While the caller's session is at hand, and before the first byte is sent
 			if (!head)
 				recordDownload(document, caller.user(), caller.session());
@@ -278,8 +282,7 @@ public class DocumentResource {
 			StreamingOutput body = head ? out -> {
 				// No body: CXF would send the file itself, and a missing entity would make it send Content-Length 0
 			} : out -> {
-				// Opened here so that it is closed here, whatever happens to the response
-				try (InputStream in = Store.get().getStream(resource)) {
+				try (in) {
 					in.transferTo(out);
 				}
 			};
@@ -287,6 +290,19 @@ public class DocumentResource {
 					.header(HttpHeaders.CONTENT_DISPOSITION, disposition(fileName)).build();
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read the content of document #" + docNumber, e);
+		}
+	}
+
+	/**
+	 * @return the file's stream
+	 * @throws IllegalStateException if it can't be opened; an unreachable cloud storage is its cause, and answered
+	 *         {@code 503} by {@link ProblemMapper}
+	 */
+	private static InputStream openStream(StoreResource resource) {
+		try {
+			return Store.get().getStream(resource);
+		} catch (IOException e) {
+			throw new IllegalStateException("Can't read the file of document #" + resource.getDocId(), e);
 		}
 	}
 
@@ -319,8 +335,18 @@ public class DocumentResource {
 			if (!Store.get().exists(resource))
 				throw ApiProblem.notFound("Document #%d has no thumbnail yet.".formatted(docNumber));
 			long size = Store.get().size(resource);
+			// Opened before the answer starts. A thumbnail that can't be read is one that isn't there yet (spec section
+			// 6.5): clients show their placeholder and ask again
+			InputStream in;
+			try {
+				in = Store.get().getStream(resource);
+			} catch (IOException e) {
+				log.warn("The thumbnail of document #{} can't be read: {}", docNumber, e.getClass().getSimpleName());
+				log.debug("The thumbnail of document #{} can't be read", docNumber, e);
+				throw ApiProblem.notFound("Document #%d has no thumbnail yet.".formatted(docNumber));
+			}
 			StreamingOutput body = out -> {
-				try (InputStream in = Store.get().getStream(resource)) {
+				try (in) {
 					in.transferTo(out);
 				}
 			};

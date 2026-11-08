@@ -304,6 +304,8 @@ public class MemoryBackend implements Backend {
 
 			@Override
 			public int read() throws IOException {
+				if (unreachable)
+					throw new BackendUnreachableException("Backend " + id + " is unreachable");
 				if (limit >= 0 && pos >= limit)
 					throw new IOException("Backend " + id + " failed after " + limit + " bytes");
 				return pos < bytes.length ? bytes[pos++] & 0xff : -1;
@@ -313,6 +315,8 @@ public class MemoryBackend implements Backend {
 			public int read(byte[] b, int off, int len) throws IOException {
 				if (len == 0)
 					return 0;
+				if (unreachable)
+					throw new BackendUnreachableException("Backend " + id + " is unreachable");
 				if (pos >= bytes.length)
 					return -1;
 				if (limit >= 0 && pos >= limit)
@@ -340,6 +344,8 @@ public class MemoryBackend implements Backend {
 
 			@Override
 			public int read(ByteBuffer dst) throws IOException {
+				if (unreachable)
+					throw new BackendUnreachableException("Backend " + id + " is unreachable");
 				if (position >= bytes.length)
 					return -1;
 				if (limit >= 0 && position >= limit)

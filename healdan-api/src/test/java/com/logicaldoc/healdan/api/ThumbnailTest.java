@@ -90,6 +90,28 @@ public class ThumbnailTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testUnreadableThumbnailIsNotThereYet() throws Exception {
+		StoreResource resource = StoreResource.builder().docId(d.getId()).fileVersion(d.getFileVersion())
+				.suffixThumbnail().build();
+		Store.get().store(new ByteArrayInputStream(PNG), resource);
+		// There (the store says so) but can't be read: a folder in its place
+		java.nio.file.Path stored;
+		try (java.util.stream.Stream<java.nio.file.Path> tree = java.nio.file.Files
+				.walk(((FSStore) Store.get()).getRoot().toPath())) {
+			stored = tree.filter(java.nio.file.Files::isRegularFile)
+					.filter(f -> f.getFileName().toString().equals(d.getFileVersion() + "-thumb.png")).findFirst()
+					.orElseThrow();
+		}
+		java.nio.file.Files.delete(stored);
+		java.nio.file.Files.createDirectory(stored);
+
+		ApiResponse response = get(path()).token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 404, response.status());
+		assertEquals("not-found", response.code());
+	}
+
+	@Test
 	public void testUnreadable404() throws Exception {
 		Store.get().store(new ByteArrayInputStream(PNG),
 				StoreResource.builder().docId(d.getId()).fileVersion(d.getFileVersion()).suffixThumbnail().build());

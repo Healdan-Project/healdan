@@ -26,6 +26,7 @@ import com.logicaldoc.core.document.thumbnail.ThumbnailManager;
 import com.logicaldoc.core.security.TenantDAO;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
+import com.logicaldoc.healdan.util.StorageUnreachableException;
 import com.logicaldoc.util.spring.Context;
 
 import jakarta.annotation.PreDestroy;
@@ -262,10 +263,29 @@ public class PreviewWorker {
 			postpone(jobs, job, e.getMessage(), resume);
 			return true;
 		}
+		StorageUnreachableException outage = storageUnreachable(failure);
+		if (outage != null) {
+			// A cloud storage outage says nothing about the file either, and may last longer than the tries do.
+			// Only this job waits: the other jobs' files may be local
+			log.warn("Document {} version {} can't be read, its storage is unreachable; its preview waits",
+					job.docId(), job.fileVersion());
+			postpone(jobs, job, outage.getMessage(), clock.get().plus(UNAVAILABLE_WAIT));
+			return false;
+		}
 		String message = failure.getMessage() != null ? failure.getMessage() : failure.getClass().getName();
 		log.warn("Cannot convert document {} version {}: {}", job.docId(), job.fileVersion(), message);
 		fail(jobs, job, message, clock.get());
 		return false;
+	}
+
+	/** @return the failure, or the cause of it, that says a file can't be read for want of its storage; else null */
+	private static StorageUnreachableException storageUnreachable(Throwable failure) {
+		// Bounded, in case of a loop of causes
+		Throwable t = failure;
+		for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause())
+			if (t instanceof StorageUnreachableException outage)
+				return outage;
+		return null;
 	}
 
 	/**
