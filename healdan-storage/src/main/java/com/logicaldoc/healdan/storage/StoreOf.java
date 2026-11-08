@@ -72,16 +72,6 @@ public class StoreOf {
 		return row[0] == null ? Optional.empty() : ofFolder(row[0]);
 	}
 
-	/**
-	 * @param docId a document
-	 * @return its folder's id as its row has it now, through the caller's transaction; null if it has no row or folder
-	 */
-	public Long folderOf(long docId) {
-		List<Long> folders = jdbc.queryForList("select ld_folderid from ld_document where ld_id = ?", Long.class,
-				docId);
-		return folders.isEmpty() ? null : folders.get(0);
-	}
-
 	/** The target of an alias, which can't be an alias itself */
 	private Optional<Long> ofTarget(long targetId) {
 		List<Long> folders = jdbc.queryForList("select ld_folderid from ld_document where ld_id = ?", Long.class,

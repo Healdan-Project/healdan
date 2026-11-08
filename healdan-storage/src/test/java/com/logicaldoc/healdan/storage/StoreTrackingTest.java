@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import org.junit.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
@@ -31,6 +33,7 @@ import com.logicaldoc.healdan.storage.StorageFixtures.Side;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.plugin.PluginException;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Each file's row keeps the Store its document is in (spec section 5, call 10) through CE's moves, merges and
@@ -212,6 +215,26 @@ public class StoreTrackingTest extends AbstractStorageTestCase {
 		assertStore(b, doc.getId(), "1.0");
 		assertNotNull("waiting for the mover", row(doc.getId(), "1.0").waiting());
 		assertEquals(List.of(doc.getId()), misplaced());
+	}
+
+	@Test
+	public void testFolderChangeFlushedBeforeTheStoreTracksTheStore() throws Exception {
+		Document doc = upload(a, "a.txt");
+		DocumentHistory changed = changed();
+		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+			try {
+				Document loaded = DocumentDAO.get().findById(doc.getId(), true);
+				loaded.setFolder(b.folder());
+				// A query on documents first: Hibernate writes the new folder before the store's listeners read it
+				DocumentDAO.get().findByWhere("_entity.id = " + doc.getId(), null, null);
+				DocumentDAO.get().store(loaded, changed);
+			} catch (PersistenceException e) {
+				throw new IllegalStateException(e);
+			}
+		});
+
+		assertStore(b, doc.getId(), "1.0");
+		assertNotNull("waiting for the mover", row(doc.getId(), "1.0").waiting());
 	}
 
 	@Test

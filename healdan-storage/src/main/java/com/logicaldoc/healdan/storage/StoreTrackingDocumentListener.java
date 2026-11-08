@@ -12,13 +12,16 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentListener;
+import com.logicaldoc.healdan.rules.StoredRows;
 
 /**
  * Tells {@link StoreTracking} when a stored document may be in another Store than its files' rows say: a move or a
- * restore, or any other store that gives it another folder, as only a folder changes a document's Store. Other stores
- * (indexing, renames, locks, checkouts) cost one read of the document's folder, made before the store
- * ({@link #beforeStore}). It never refuses anything, and reads before CE's transaction ends and writes after it
- * commits. CE creates it by reflection, hence the public no-arg constructor.
+ * restore, or any other store that gives it another folder, as only a folder changes a document's Store. The folder
+ * it compares is the one the document had before its session first wrote it ({@link StoredRows#documentFolder(long,
+ * Map)}), so a query that made Hibernate write the new folder earlier in the transaction doesn't hide the change; the
+ * rules' listeners read it for the same store, so other stores (indexing, renames, locks, checkouts) cost nothing more.
+ * It never refuses anything, and reads before CE's transaction ends and writes after it commits. CE creates it by
+ * reflection, hence the public no-arg constructor.
  */
 public class StoreTrackingDocumentListener implements DocumentListener {
 
@@ -37,7 +40,7 @@ public class StoreTrackingDocumentListener implements DocumentListener {
 		if (!StoreTracking.active() || document.getId() == 0L || arrival(transaction) || dictionary == null)
 			return;
 		Long folder = document.getFolder() == null ? null : document.getFolder().getId();
-		if (!Objects.equals(StoreOf.get().folderOf(document.getId()), folder))
+		if (!Objects.equals(StoredRows.get().documentFolder(document.getId(), dictionary), folder))
 			dictionary.put(FOLDER_CHANGED, Boolean.TRUE);
 	}
 
