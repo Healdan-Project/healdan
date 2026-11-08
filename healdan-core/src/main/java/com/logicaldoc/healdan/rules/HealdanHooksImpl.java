@@ -36,6 +36,8 @@ import com.logicaldoc.healdan.profile.StoredProfile;
 import com.logicaldoc.healdan.security.PermissionRules;
 import com.logicaldoc.healdan.util.CacheEvictor;
 
+import com.logicaldoc.util.spring.Context;
+
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
@@ -228,6 +230,8 @@ public class HealdanHooksImpl implements HealdanHooks {
 		evictor.evictDocumentsAfterCompletion(documentIds);
 		Propagation.get().restampSubtree(folderId);
 		PermissionRules.get().narrowTree(folderId);
+		for (FolderTreeListener listener : Context.get().getBeansOfType(FolderTreeListener.class))
+			listener.afterTreeRestored(folderId, parentId, documentIds);
 	}
 
 	@Override
