@@ -18,12 +18,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.rules.FolderTreeListener;
+import com.logicaldoc.healdan.storage.mover.Mover;
 import com.logicaldoc.util.spring.Context;
 
 /**
  * Keeps each file's row in the Store its document is in (spec section 5, call 10). The listeners and the folder
  * restore hook tell it what changed; it reads the Store again from the folders' parent ids and gives the rows
- * ({@link StoredFiles#setStore}), which leaves a row misplaced when its backend isn't the new Store's, for the mover.
+ * ({@link StoredFiles#setStore}), which leaves a row misplaced when its backend isn't the new Store's, and wakes the
+ * mover once that commits.
  * <p>
  * It writes only after CE's transaction commits, so a move that is vetoed or rolled back changes nothing, and in a
  * transaction of its own, because a write made inside the commit callback would join the transaction that has
@@ -43,13 +45,16 @@ public class StoreTracking implements FolderTreeListener {
 
 	private final PlatformTransactionManager transactions;
 
+	private final Mover mover;
+
 	@Autowired
 	public StoreTracking(StoredFiles files, StoreOf storeOf, NightlyCheck check,
-			PlatformTransactionManager transactions) {
+			PlatformTransactionManager transactions, Mover mover) {
 		this.files = files;
 		this.storeOf = storeOf;
 		this.check = check;
 		this.transactions = transactions;
+		this.mover = mover;
 	}
 
 	/**
@@ -62,12 +67,12 @@ public class StoreTracking implements FolderTreeListener {
 	/**
 	 * @return whether CE writes through {@link HealdanStorage}
 	 */
-	static boolean active() {
+	public static boolean active() {
 		return Store.get() instanceof HealdanStorage;
 	}
 
 	/**
-	 * Re-reads a document's Store and gives its rows.
+	 * Re-reads a document's Store and gives its rows, then wakes the mover for any it left misplaced.
 	 *
 	 * @param docId the document
 	 */
@@ -75,6 +80,7 @@ public class StoreTracking implements FolderTreeListener {
 		if (!active())
 			return;
 		files.setStore(List.of(docId), storeOf.of(docId).orElse(null));
+		mover.wake();
 	}
 
 	/**
@@ -87,6 +93,7 @@ public class StoreTracking implements FolderTreeListener {
 		if (!active() || documentIds.isEmpty())
 			return;
 		files.setStore(documentIds, storeOf.ofFolder(folderId).orElse(null));
+		mover.wake();
 	}
 
 	/**

@@ -16,13 +16,15 @@ import com.logicaldoc.healdan.email.EmailIndexWorker;
 import com.logicaldoc.healdan.preview.PreviewWorker;
 import com.logicaldoc.healdan.seed.SeedRunner;
 import com.logicaldoc.healdan.signin.AdminSignInAlert;
+import com.logicaldoc.util.spring.Context;
 
 import jakarta.annotation.PostConstruct;
 
 /**
  * Prepares Healdan's data when the Spring context starts: first the schema, then the seeds,
  * then the listeners that need what the seeds made. A failure throws
- * {@link HealdanStartupException} and stops the startup.
+ * {@link HealdanStartupException} and stops the startup. At a real start it
+ * then starts the workers and tells each {@link HealdanStartListener}.
  */
 /*
  * The seeds reach the DAOs and the config through Context.get(), which is only
@@ -55,15 +57,30 @@ public class HealdanStartup {
 	}
 
 	/*
-	 * The workers start only when the migrations and seeds ran. Tests build the
-	 * context before the schema exists, so for them run() returns false and
-	 * no thread starts.
+	 * The workers and the start listeners start only when the migrations and
+	 * seeds ran. Tests build the context before the schema exists, so for them
+	 * run() returns false and no thread starts.
 	 */
 	@PostConstruct
 	void start() {
 		if (run()) {
 			previewWorker.start();
 			emailIndexWorker.start();
+			for (HealdanStartListener listener : Context.get().getBeansOfType(HealdanStartListener.class))
+				started(listener);
+		}
+	}
+
+	/**
+	 * Tells a listener that Healdan has started. One that fails is logged and the
+	 * start goes on: its data is migrated and seeded already, and LogicalDOC
+	 * still serves what the listener's work doesn't touch.
+	 */
+	private static void started(HealdanStartListener listener) {
+		try {
+			listener.started();
+		} catch (RuntimeException e) {
+			log.error("{} failed to start: {}", listener.getClass().getSimpleName(), e.getMessage(), e);
 		}
 	}
 

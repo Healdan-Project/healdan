@@ -162,7 +162,7 @@ public class StoredFiles {
 	 * @param storeId a Store; null for none
 	 * @return the backend the Store uses: Original's for no Store, or a Store with no row
 	 */
-	long storeBackend(Long storeId) {
+	public long storeBackend(Long storeId) {
 		if (storeId == null)
 			return ORIGINAL;
 		List<Long> backends = jdbc.queryForList(

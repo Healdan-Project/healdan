@@ -17,13 +17,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.healdan.storage.mover.Mover;
 import com.logicaldoc.util.spring.Context;
 
 /**
  * The backstop for {@link StoreTracking} (spec section 5, call 10): works every row's Store out again from the
  * folders' parent ids, read once, and gives the rows that differ the right one, which leaves them misplaced for the
- * mover when their backend isn't their Store's. Each fix is logged. Does nothing unless CE's Store is a
- * {@link HealdanStorage}.
+ * mover when their backend isn't their Store's, and wakes it. Each fix is logged. {@code StorageStartup} runs it at
+ * 03:17 every night. Does nothing unless CE's Store is a {@link HealdanStorage}.
  */
 @Component
 public class NightlyCheck {
@@ -36,11 +37,14 @@ public class NightlyCheck {
 
 	private final StoredFiles files;
 
+	private final Mover mover;
+
 	@Autowired
-	public NightlyCheck(DataSource dataSource, StoreOf storeOf, StoredFiles files) {
+	public NightlyCheck(DataSource dataSource, StoreOf storeOf, StoredFiles files, Mover mover) {
 		this.jdbc = new JdbcTemplate(dataSource);
 		this.storeOf = storeOf;
 		this.files = files;
+		this.mover = mover;
 	}
 
 	/**
@@ -100,8 +104,10 @@ public class NightlyCheck {
 			files.setStore(entry.getValue().stream().map(Fix::docId).distinct().toList(), entry.getKey());
 			fixed += entry.getValue().size();
 		}
-		if (fixed > 0)
+		if (fixed > 0) {
 			log.info("The Store check fixed {} files", fixed);
+			mover.wake();
+		}
 		return fixed;
 	}
 

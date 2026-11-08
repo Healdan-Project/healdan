@@ -3,7 +3,13 @@
 
 package com.logicaldoc.healdan.storage;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
+
+import org.springframework.core.Ordered;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * One lock per file (call 20): a striped lock in the JVM, keyed by a document and one of its resources. Saves and
@@ -14,6 +20,12 @@ import java.util.concurrent.locks.ReentrantLock;
  * The locks are reentrant, so a save that runs inside another of the same file waits for nothing. Two files can share
  * a stripe, so a caller never holds two files' locks at once: a thread holding one and waiting for another could wait
  * for a thread doing the reverse.
+ * <p>
+ * A file's lock ends before its writer's transaction does (a folder copy stores each file and goes on to the next),
+ * and the row locks of what it wrote last until then. So the mover, which writes rows holding a file's lock, never
+ * does while a transaction still open wrote that file's rows ({@link #writtenByOpenTransaction}): it would wait for the
+ * row lock holding the file's lock, which that transaction may want again, through a shared stripe, until the
+ * database's lock-wait timeout.
  */
 public final class FileLocks {
 
@@ -21,6 +33,9 @@ public final class FileLocks {
 	private static final int STRIPES = 1024;
 
 	private static final ReentrantLock[] LOCKS = new ReentrantLock[STRIPES];
+
+	/** The files open transactions wrote holding their lock, as {@code <docId>/<resource>}: how many transactions */
+	private static final Map<String, Integer> OPEN = new ConcurrentHashMap<>();
 
 	static {
 		for (int i = 0; i < STRIPES; i++)
@@ -49,6 +64,45 @@ public final class FileLocks {
 		ReentrantLock lock = stripe(docId, resource);
 		lock.lock();
 		return lock::unlock;
+	}
+
+	/**
+	 * Marks a file as written by the caller's transaction, if one is open, until it commits or rolls back. Called
+	 * holding the file's lock, before its rows are written.
+	 *
+	 * @param docId the document
+	 * @param resource its resource
+	 */
+	public static void writtenInTransaction(long docId, String resource) {
+		if (!TransactionSynchronizationManager.isSynchronizationActive())
+			return;
+		String file = docId + "/" + resource;
+		OPEN.merge(file, 1, Integer::sum);
+		try {
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public int getOrder() {
+					// Before anything the transaction's end wakes, such as the mover
+					return Ordered.HIGHEST_PRECEDENCE;
+				}
+
+				@Override
+				public void afterCompletion(int status) {
+					OPEN.computeIfPresent(file, (key, count) -> count > 1 ? count - 1 : null);
+				}
+			});
+		} catch (RuntimeException e) {
+			OPEN.computeIfPresent(file, (key, count) -> count > 1 ? count - 1 : null);
+			throw e;
+		}
+	}
+
+	/**
+	 * @return whether a transaction still open wrote the file's rows holding its lock: their row locks last until it
+	 *         ends
+	 */
+	public static boolean writtenByOpenTransaction(long docId, String resource) {
+		return OPEN.containsKey(docId + "/" + resource);
 	}
 
 	/**

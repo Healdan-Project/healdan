@@ -19,8 +19,8 @@ import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 import com.logicaldoc.util.spring.Context;
 
 /**
- * Deletes held copies for good once their purge date has come (spec section 8). Task 11's {@code StorageStartup} runs
- * it daily, not in the first 10 minutes after a start; tests call {@link #run()}.
+ * Deletes held copies for good once their purge date has come (spec section 8). {@code StorageStartup} runs it daily,
+ * not in the first 10 minutes after a start; tests call {@link #run()}.
  * <p>
  * Each copy is purged holding its file's lock ({@link FileLocks}, call 22), with its checks inside it:
  * <ul>
@@ -44,7 +44,7 @@ public class Purge {
 
 	private static final Logger log = LoggerFactory.getLogger(Purge.class);
 
-	/** Whether a file is being moved by the mover now; none until Task 11 sets it */
+	/** Whether the mover is moving a file now; {@code StorageStartup} gives it {@code Mover.moving} */
 	private volatile BiPredicate<Long, String> inTransfer = (docId, resource) -> false;
 
 	/**
@@ -55,7 +55,7 @@ public class Purge {
 	}
 
 	/**
-	 * @param inTransfer given a held copy's doc id and resource, whether the mover is moving that file now. Task 11's
+	 * @param inTransfer given a held copy's doc id and resource, whether the mover is moving that file now.
 	 *        {@code StorageStartup} sets it to {@code Mover.moving} before it starts the purge.
 	 */
 	public void setInTransfer(BiPredicate<Long, String> inTransfer) {

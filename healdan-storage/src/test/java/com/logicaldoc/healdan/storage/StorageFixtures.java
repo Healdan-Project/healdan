@@ -26,6 +26,8 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.matter.Matter;
+import com.logicaldoc.healdan.storage.backend.Backend;
+import com.logicaldoc.healdan.storage.backend.GatedBackend;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend;
 import com.logicaldoc.healdan.storage.crypto.BackendKeys;
@@ -58,7 +60,7 @@ public final class StorageFixtures {
 	 */
 	public record Side(String name, Folder store, Folder folder, long backendId, Path root, MemoryBackend s3) {
 
-		boolean isS3() {
+		public boolean isS3() {
 			return s3 != null;
 		}
 
@@ -78,7 +80,7 @@ public final class StorageFixtures {
 	 * @param encrypted whether its files are encrypted, with a key made for it
 	 * @return the backend's id; its folder holds its marker
 	 */
-	long localBackend(String name, boolean encrypted) throws Exception {
+	public long localBackend(String name, boolean encrypted) throws Exception {
 		Path root = LOCAL_ROOTS.resolve(name).toAbsolutePath();
 		FileUtils.deleteDirectory(root.toFile());
 		Files.createDirectories(root);
@@ -135,15 +137,35 @@ public final class StorageFixtures {
 	}
 
 	/** @return a Store on a new local backend */
-	Side localSide(String name, boolean encrypted) throws Exception {
+	public Side localSide(String name, boolean encrypted) throws Exception {
 		long id = localBackend(name.toLowerCase(), encrypted);
 		return side(name, id, root(id), null);
 	}
 
 	/** @return a Store on a new S3-kind backend */
-	Side s3Side(String name, boolean encrypted) throws Exception {
+	public Side s3Side(String name, boolean encrypted) throws Exception {
 		MemoryBackend s3 = s3Backend(name.toLowerCase(), encrypted);
 		return side(name, s3.id(), null, s3);
+	}
+
+	/**
+	 * Uses a backend in place of the one a backend's row would build ({@link Backends#use}), for the tests of other
+	 * packages.
+	 */
+	public static void useBackend(long backendId, Backend backend) {
+		Backends.get().use(backendId, backend);
+	}
+
+	/**
+	 * @return a {@link GatedBackend} in front of the side's backend, which its files now go through: the S3 fake, or
+	 *         the local folder
+	 */
+	public static GatedBackend gated(Side side) {
+		Backend inner = side.isS3() ? side.s3()
+				: new LocalBackend(side.backendId(), StorageSettings.get().installId(), side.root(), false);
+		GatedBackend gated = new GatedBackend(inner);
+		useBackend(side.backendId(), gated);
+		return gated;
 	}
 
 	/** Gives a Store a backend, or another one */
@@ -156,7 +178,7 @@ public final class StorageFixtures {
 	}
 
 	/** @return a local backend's folder */
-	static Path root(long backendId) throws Exception {
+	public static Path root(long backendId) throws Exception {
 		return Path.of(StorageBackendDAO.get().findById(backendId).getPath());
 	}
 
@@ -170,25 +192,25 @@ public final class StorageFixtures {
 	}
 
 	/** @return where a staged file is */
-	static Path staged(long docId, String resource) {
+	public static Path staged(long docId, String resource) {
 		return Staging.folder().resolve(key(docId, resource));
 	}
 
 	/** @return where a local backend keeps a file */
-	static Path local(Path root, long docId, String resource) {
+	public static Path local(Path root, long docId, String resource) {
 		return root.resolve(key(docId, resource));
 	}
 
 	/** @return where a local backend holds a file */
-	static Path held(Path root, long docId, String resource) {
+	public static Path held(Path root, long docId, String resource) {
 		return root.resolve(LocalBackend.HELD).resolve(key(docId, resource));
 	}
 
-	static StoreResource resource(long docId, String name) {
+	public static StoreResource resource(long docId, String name) {
 		return StoreResource.builder().docId(docId).name(name).build();
 	}
 
-	static StoreResource resource(Document doc, String fileVersion) throws Exception {
+	public static StoreResource resource(Document doc, String fileVersion) throws Exception {
 		return StoreResource.builder().document(doc).fileVersion(fileVersion).build();
 	}
 
@@ -197,16 +219,16 @@ public final class StorageFixtures {
 				.orElseThrow(() -> new AssertionError("No row for " + docId + "/" + resource));
 	}
 
-	static String text(StoreResource resource) throws IOException {
+	public static String text(StoreResource resource) throws IOException {
 		return new String(Store.get().getBytes(resource), StandardCharsets.UTF_8);
 	}
 
 	/** @return a file holding the text */
-	static File file(String text) throws IOException {
+	public static File file(String text) throws IOException {
 		return file(text.getBytes(StandardCharsets.UTF_8));
 	}
 
-	static File file(byte[] bytes) throws IOException {
+	public static File file(byte[] bytes) throws IOException {
 		File file = Files.createTempFile("storage-test", ".bin").toFile();
 		Files.write(file.toPath(), bytes);
 		return file;
@@ -235,7 +257,7 @@ public final class StorageFixtures {
 	}
 
 	/** @return the held rows of a document, by location */
-	static List<HeldCopy> heldRows(long docId) {
+	public static List<HeldCopy> heldRows(long docId) {
 		return jdbc().query("select hd_backendid, hd_location, hd_docid, hd_resource, hd_held, hd_purge "
 				+ "from hd_storage_held where hd_docid = ? order by hd_backendid, hd_location", (rs, i) -> new HeldCopy(
 						rs.getLong(1), rs.getString(2), rs.getLong(3), rs.getString(4),

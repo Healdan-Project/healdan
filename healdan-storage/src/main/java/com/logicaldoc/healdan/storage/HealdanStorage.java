@@ -44,6 +44,7 @@ import com.logicaldoc.healdan.storage.backend.BackendFailingException;
 import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.crypto.FileCipher;
+import com.logicaldoc.healdan.storage.mover.Mover;
 import com.logicaldoc.healdan.util.StorageUnreachableException;
 
 /**
@@ -52,8 +53,10 @@ import com.logicaldoc.healdan.util.StorageUnreachableException;
  * the document's Store and that Store's backend.
  * <ul>
  * <li>A save into a Store on a local backend is written there, encrypted if the backend is. One into a Store on an S3
- * backend, or whose Store can't be told yet, lands in staging, plain, and its row is left for the mover. Either way the
- * row gets a new write id and the plaintext size, which CE's size check ({@code WRITECHECK}) reads.</li>
+ * backend, or whose Store can't be told yet, lands in staging, plain, its row is left for the mover, and the mover is
+ * woken once the save commits. Either way the row gets a new write id and the plaintext size, which CE's size check
+ * ({@code WRITECHECK}) reads. A backend that is failing refuses the save, and one not yet checked since the start is
+ * checked first ({@link BackendHealth}).</li>
  * <li>A save that replaces a copy on another backend, and every delete, holds the old copy (spec section 8): a local
  * one moves under its backend's {@code .held/}, an S3 one stays where it is, and a row in {@code hd_storage_held}
  * keeps it until its purge date.</li>
@@ -93,7 +96,7 @@ public class HealdanStorage extends AbstractStore {
 	/**
 	 * @return where a document's resource is kept on every backend, in CE's layout: {@code 123/45/doc/1.2}
 	 */
-	String keyOf(long docId, String resource) {
+	public String keyOf(long docId, String resource) {
 		return computeRelativePath(docId, resource);
 	}
 
@@ -167,10 +170,13 @@ public class HealdanStorage extends AbstractStore {
 		// Got first, as one in the wrong folder is refused before anything is written, and outside the file's lock, as
 		// the first one reads the cache's whole folder
 		ReadCache cache = ReadCache.get();
+		long target;
 		try (FileLocks.Held held = FileLocks.lock(docId, name)) {
+			FileLocks.writtenInTransaction(docId, name);
 			Long storeId = StoreOf.get().of(docId).orElse(null);
 			long storeBackend = files().storeBackend(storeId);
-			long target = target(storeId, storeBackend);
+			target = target(storeId, storeBackend);
+			BackendHealth.get().beforeWrite(target);
 			Optional<StoredFile> before = files().find(docId, name);
 			// A file with no row can only be in Original's folder (call 11), and this save replaces it
 			boolean unrecorded = before.isEmpty() && target != StorageBackend.ORIGINAL
@@ -183,6 +189,8 @@ public class HealdanStorage extends AbstractStore {
 			else if (unrecorded)
 				holdReplaced(StorageBackend.ORIGINAL, key, docId, name);
 		}
+		if (target == Staging.ID)
+			Mover.get().wake();
 	}
 
 	/**
@@ -282,6 +290,7 @@ public class HealdanStorage extends AbstractStore {
 		// first one reads the cache's whole folder
 		ReadCache cache = ReadCache.get();
 		try (FileLocks.Held held = FileLocks.lock(docId, name)) {
+			FileLocks.writtenInTransaction(docId, name);
 			Optional<StoredFile> row = files().find(docId, name);
 			if (row.isPresent()) {
 				if (!Held.hold(row.get().backendId(), key, docId, name))
