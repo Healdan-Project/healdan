@@ -19,6 +19,7 @@ import com.logicaldoc.healdan.storage.backend.BackendCommon;
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
 import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
+import com.logicaldoc.healdan.storage.crypto.BackendKeys;
 import com.logicaldoc.healdan.storage.crypto.FileCipher;
 import com.logicaldoc.healdan.storage.crypto.KeyCheck;
 
@@ -54,20 +55,31 @@ public final class BackendTest {
 	}
 
 	/**
-	 * Tests a built backend, its key too if it is encrypted.
+	 * Tests a built backend, its key too if it is encrypted, read from its key file as it is now.
 	 *
 	 * @param entry the backend, built
+	 * @param keys the key files
 	 * @param checkMarker whether to check its marker
 	 * @throws BackendFailingException if a step fails
 	 */
-	public static void run(Backends.Entry entry, boolean checkMarker) throws BackendFailingException {
-		run(entry.backend(), entry.s3(), entry.cipher(), checkMarker);
+	public static void run(Backends.Entry entry, BackendKeys keys, boolean checkMarker) throws BackendFailingException {
+		FileCipher cipher = null;
+		if (entry.encrypted() && checkMarker) {
+			// The key file as it is now: the entry's cipher is the one built when the backend was, and a key file
+			// deleted or swapped since is what Test is for. The live entry stays, as transfers may be using it
+			byte[] key = keys.read(entry.id()).orElseThrow(() -> new KeyCheck.KeyException("The key file of backend "
+					+ entry.id() + " is missing: enter the recovery key to put it back"));
+			cipher = new FileCipher(key);
+		}
+		run(entry.backend(), entry.s3(), cipher, checkMarker);
 	}
 
 	/**
 	 * @param backend the backend
 	 * @param lists whether to list the test object: only S3 lists dot names
-	 * @param cipher the backend's cipher, whose key is checked against the check object; null if its files are plain
+	 * @param cipher the backend's cipher, whose key is checked against the check object; null if its files are plain.
+	 *        It is not used when {@code checkMarker} is false: a backend not saved yet has no check object until the
+	 *        add writes it, and the full Test after the add checks the key
 	 * @param checkMarker whether to check its marker. A local folder not saved yet has none to write test objects
 	 *        beside, so it is only probed ({@link LocalBackend#probe}): it exists, is writable and belongs to no backend
 	 * @throws BackendFailingException if a step fails
@@ -80,7 +92,7 @@ public final class BackendTest {
 			LocalBackend.probe(local.root());
 		else
 			objects(backend, lists);
-		if (cipher != null)
+		if (cipher != null && checkMarker)
 			KeyCheck.require(backend, LocalBackend.CHECK, cipher);
 	}
 
@@ -91,14 +103,9 @@ public final class BackendTest {
 		String key = LocalBackend.TEST + UUID.randomUUID();
 		boolean written = false;
 		try {
-			Path file = Files.createTempFile("healdan-test", ".bin");
-			try {
-				Files.write(file, bytes);
-				step("writing the test object", () -> backend.put(key, file, BackendCommon.md5(bytes)));
-			} finally {
-				Files.deleteIfExists(file);
-			}
+			// Set first: a put that stored the object and then failed on its answer still has it deleted
 			written = true;
+			put(backend, key, bytes);
 
 			step("reading the test object back", () -> {
 				try (InputStream in = backend.get(key)) {
@@ -141,6 +148,37 @@ public final class BackendTest {
 				} catch (IOException | RuntimeException ignored) {
 					// The step that failed is what the admin is told
 				}
+		}
+	}
+
+	/** Writes a test object, the step Test and {@link #probeWrite} share */
+	private static void put(Backend backend, String key, byte[] bytes) throws IOException {
+		Path file = Files.createTempFile("healdan-test", ".bin");
+		try {
+			Files.write(file, bytes);
+			step("writing the test object", () -> backend.put(key, file, BackendCommon.md5(bytes)));
+		} finally {
+			Files.deleteIfExists(file);
+		}
+	}
+
+	/**
+	 * Probes that a backend takes writes: puts a test object and deletes it. For a backend whose marker and check
+	 * object read fine and whose one request was refused, to tell a file's refusal from the backend's.
+	 *
+	 * @param backend the backend
+	 * @throws BackendFailingException if the write or the delete is refused; a {@link BackendUnreachableException} for
+	 *         an outage
+	 */
+	public static void probeWrite(Backend backend) throws BackendFailingException {
+		String key = LocalBackend.TEST + UUID.randomUUID();
+		try {
+			put(backend, key, new byte[] { 1 });
+			backend.delete(key);
+		} catch (BackendUnreachableException e) {
+			throw e;
+		} catch (IOException e) {
+			throw new BackendFailingException("Backend " + backend.id() + " refuses writes: " + e.getMessage(), e);
 		}
 	}
 

@@ -18,8 +18,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.communication.EMail;
-import com.logicaldoc.core.communication.Recipient;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
@@ -30,13 +28,14 @@ import com.logicaldoc.healdan.signin.OutgoingEmail;
 import com.logicaldoc.util.spring.Context;
 
 /**
- * The daily alert (spec section 10.3): when a file has waited more than 24 hours to reach its Store's backend (its
- * row's {@code hd_waiting}, set when the backend stopped matching the Store's, so a Store switched an hour ago raises
- * nothing however old its files are), or a backend has been failing that long, the members of the {@code admin} group
- * who have an email get the {@code storage.alert} template, through M4's sender, which throws where CE's would drop an
- * email without a word. At most one a day: {@code storage.alert.sent} holds the day it last went, and is written only
- * once every email was taken, so a mail server that was down is tried again at the next run. Nothing goes while
- * outgoing email isn't set up ({@link OutgoingEmail#isSetUp}).
+ * The alert (spec section 10.3), run hourly by {@code StorageStartup}: when a file has waited more than 24 hours to
+ * reach its Store's backend (its row's {@code hd_waiting}, set when the backend stopped matching the Store's, so a
+ * Store switched an hour ago raises nothing however old its files are), or a backend has been failing that long, the
+ * members of the {@code admin} group who are enabled, not expired and have an email get the {@code storage.alert}
+ * template, through M4's sender, which throws where CE's would drop an email without a word. At most one a day:
+ * {@code storage.alert.sent} holds the day it last went, and is written only once every email was taken, so a mail
+ * server that was down is tried again at the next hourly run, and the first alert comes within 25 hours of the
+ * condition. Nothing goes while outgoing email isn't set up ({@link OutgoingEmail#isSetUp}).
  * <p>
  * It names no file, backend or address: the email sends the admin to the Storage tab, and nothing is logged above debug
  * about who was emailed.
@@ -134,7 +133,8 @@ public class StorageAlert {
 			if (group == null)
 				return admins;
 			for (User user : UserDAO.get().findByGroup(group.getId()))
-				if (StringUtils.isNotBlank(user.getEmail()))
+				// A disabled or expired account belongs to someone barred or gone
+				if (user.isEnabled() && !user.isExpired() && StringUtils.isNotBlank(user.getEmail()))
 					admins.add(user);
 		} catch (PersistenceException e) {
 			log.warn("The members of the {} group can't be read, so the storage alert isn't sent: {}", ADMINS,
@@ -144,16 +144,6 @@ public class StorageAlert {
 	}
 
 	private static void send(User user) throws Exception {
-		EMail email = new EMail();
-		email.setTenantId(user.getTenantId());
-		email.setHtml(true);
-		email.setLocale(user.getLocale());
-		email.setAuthor("SYSTEM");
-		Recipient recipient = new Recipient();
-		recipient.setAddress(user.getEmail());
-		recipient.setName(user.getFullName());
-		recipient.setMode(Recipient.Mode.TO);
-		email.getRecipients().add(recipient);
-		OutgoingEmail.sendTemplate(email, TEMPLATE, new HashMap<>());
+		OutgoingEmail.sendTemplate(user, TEMPLATE, new HashMap<>());
 	}
 }

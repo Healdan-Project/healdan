@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.storage.BackendHealth;
+import com.logicaldoc.healdan.storage.BackendTest;
 import com.logicaldoc.healdan.storage.Backends;
 import com.logicaldoc.healdan.storage.FileLocks;
 import com.logicaldoc.healdan.storage.HealdanStorage;
@@ -389,16 +390,30 @@ final class Transfer {
 	}
 
 	/**
-	 * A refusal from the backend, as access denied to one object: the backend is checked at once. If it passes, the
-	 * refusal is the file's, a try used as any other failure; otherwise the backend is failing, and pauses. An outage
-	 * pauses without a check, as it counts no attempt either.
+	 * A refusal from the backend, as access denied to one object: the backend is checked at once, and, when the target
+	 * refused a write, a write to it is probed too ({@link BackendTest#probeWrite}), since the check only reads. If both
+	 * pass, the refusal is the file's, a try used as any other failure; otherwise the backend is failing, and pauses.
+	 * An outage pauses without a check, as it counts no attempt either.
 	 */
 	private Outcome refused(long backendId, StoredFile row, BackendFailingException e) {
 		if (e instanceof BackendUnreachableException)
 			return pause(backendId, e);
-		if (mover.health().check(backendId).state() == BackendHealth.State.OK)
-			return failed(row, e);
-		return Outcome.PAUSED;
+		if (mover.stopping())
+			return Outcome.STOPPED;
+		if (mover.health().check(backendId).state() != BackendHealth.State.OK)
+			return Outcome.PAUSED;
+		if (backendId == target) {
+			// The check only reads. A refused write to the target may be the whole backend's: credentials that lost
+			// write access pass it, and every file would then use its tries
+			try {
+				BackendTest.probeWrite(mover.backends().entry(backendId).backend());
+			} catch (BackendUnreachableException unreachable) {
+				return pause(backendId, unreachable);
+			} catch (BackendFailingException failing) {
+				return pause(backendId, failing);
+			}
+		}
+		return failed(row, e);
 	}
 
 	/**

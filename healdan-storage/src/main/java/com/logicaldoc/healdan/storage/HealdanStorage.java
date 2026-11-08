@@ -43,9 +43,11 @@ import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
 import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
+import com.logicaldoc.healdan.storage.crypto.BackendKeys;
 import com.logicaldoc.healdan.storage.crypto.FileCipher;
 import com.logicaldoc.healdan.storage.mover.Mover;
 import com.logicaldoc.healdan.util.StorageUnreachableException;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Healdan's {@code Store}, the one bean CE's {@code <bean id="store" class="${store}"/>} makes, so CE's own document
@@ -653,7 +655,7 @@ public class HealdanStorage extends AbstractStore {
 		boolean ok = true;
 		for (long id : ids)
 			try {
-				BackendTest.run(backends().entry(id), true);
+				BackendTest.run(backends().entry(id), Context.get(BackendKeys.class), true);
 			} catch (BackendFailingException e) {
 				log.warn("Storage backend {} fails its check: {}", id, e.getMessage());
 				ok = false;

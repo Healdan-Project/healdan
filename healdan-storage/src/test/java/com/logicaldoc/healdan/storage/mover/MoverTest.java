@@ -267,6 +267,26 @@ public class MoverTest extends AbstractStorageTestCase {
 	}
 
 	@Test
+	public void testBackendRefusingEveryWriteIsPausedAndCountsNoTries() throws Exception {
+		Document one = upload(cloud, "one");
+		Document two = upload(cloud, "two");
+		// Its marker and check object read fine, but the credentials lost write access
+		cloud.s3().denyOps(Op.PUT);
+
+		assertEquals(0, mover.runOnce());
+
+		assertEquals(BackendHealth.State.FAILING, health.status(cloud.backendId()).state());
+		assertFalse(health.status(cloud.backendId()).unreachable());
+		assertEquals(0, row(one.getId(), "1.0").attempts());
+		assertEquals(0, row(two.getId(), "1.0").attempts());
+
+		// Once writes work again the next retest resumes it, and both move
+		cloud.s3().clearFaults();
+		health.retest();
+		assertEquals(2, mover.runOnce());
+	}
+
+	@Test
 	public void testAccessDeniedToTheWholeBackendPausesIt() throws Exception {
 		Document doc = upload(cloud, "waits");
 		// Its check is refused too: the credentials are the failure, not one file

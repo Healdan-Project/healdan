@@ -4,18 +4,31 @@
 package com.logicaldoc.healdan.storage.mover;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.time.Duration;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
 
+import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.storage.AbstractStorageTestCase;
+import com.logicaldoc.healdan.storage.BackendHealth;
+import com.logicaldoc.healdan.storage.NightlyCheck;
+import com.logicaldoc.healdan.storage.Purge;
+import com.logicaldoc.healdan.storage.StorageAlert;
+import com.logicaldoc.healdan.storage.StorageSettings;
+import com.logicaldoc.healdan.storage.StoredFiles;
+
 /**
  * The nightly check runs at 03:17 server time, and never in the first 10 minutes after a start (Global Constraints'
- * timings).
+ * timings); the alert is scheduled, and a run that throws leaves it scheduled.
  */
-public class StorageStartupTest {
+public class StorageStartupTest extends AbstractStorageTestCase {
 
 	private static final ZoneId ZONE = ZoneId.of("Europe/London");
 
@@ -46,5 +59,35 @@ public class StorageStartupTest {
 		assertEquals(ZonedDateTime.of(2026, 10, 25, 3, 17, 0, 0, ZONE), next);
 		assertEquals(3, next.getHour());
 		assertEquals(17, next.getMinute());
+	}
+
+	@Test
+	public void testAlertIsScheduledAndSurvivesAFailingRun() throws Exception {
+		AtomicInteger runs = new AtomicInteger();
+		CountDownLatch enough = new CountDownLatch(3);
+		StorageAlert failing = new StorageAlert(BackendHealth.get(), StoredFiles.get(), HealdanSettings.get()) {
+			@Override
+			public boolean run() {
+				enough.countDown();
+				// An exception, then an error the mail stack may throw, then ordinary runs
+				int n = runs.incrementAndGet();
+				if (n == 1)
+					throw new IllegalStateException("The mail server is down");
+				if (n == 2)
+					throw new NoClassDefFoundError("jakarta/mail/Whatever");
+				return false;
+			}
+		};
+		StorageStartup startup = new StorageStartup(BackendHealth.get(), Mover.get(), Purge.get(),
+				NightlyCheck.get(), failing, StorageSettings.get());
+		startup.afterStart = Duration.ZERO;
+		startup.alertEvery = Duration.ofMillis(50);
+		try {
+			startup.started();
+			assertTrue("the alert ran three times, though two runs threw", enough.await(20, TimeUnit.SECONDS));
+		} finally {
+			startup.stop();
+			Mover.get().stop();
+		}
 	}
 }

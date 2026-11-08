@@ -15,6 +15,7 @@ import java.util.Arrays;
 import com.logicaldoc.healdan.storage.backend.Backend;
 import com.logicaldoc.healdan.storage.backend.BackendCommon;
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
+import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 
 /**
  * The check object of an encrypted backend (spec section 9): a fixed plaintext encrypted under the backend's key, with
@@ -33,6 +34,19 @@ public final class KeyCheck {
 
 	/** What the check object holds */
 	private static final byte[] PLAINTEXT = "Healdan storage check".getBytes(StandardCharsets.UTF_8);
+
+	/**
+	 * A backend's key isn't the one it was made with, or its check object can't show that: what a retest of the
+	 * backend clears its cached entry for, since a key file put back by hand is read again only by a new cipher.
+	 */
+	public static class KeyException extends BackendFailingException {
+
+		private static final long serialVersionUID = 1L;
+
+		public KeyException(String message) {
+			super(message);
+		}
+	}
 
 	private KeyCheck() {
 	}
@@ -126,15 +140,14 @@ public final class KeyCheck {
 			if (verify(backend, key, cipher))
 				return;
 		} catch (FileNotFoundException e) {
-			throw new BackendFailingException("The check object of backend " + id + " is missing, so its key can't be "
+			throw new KeyException("The check object of backend " + id + " is missing, so its key can't be "
 					+ "checked: nothing is written until it is back");
 		} catch (BackendFailingException e) {
 			throw e;
 		} catch (IOException e) {
-			throw new BackendFailingException(
-					"The check object of backend " + id + " can't be read: " + e.getMessage());
+			throw new KeyException("The check object of backend " + id + " can't be read: " + e.getMessage());
 		}
-		throw new BackendFailingException("The key file of backend " + id + " isn't the key it was made with: its "
+		throw new KeyException("The key file of backend " + id + " isn't the key it was made with: its "
 				+ "check object doesn't decrypt. Enter the recovery key to put the right key back");
 	}
 }

@@ -23,6 +23,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.Test;
 
 import com.logicaldoc.core.communication.EMail;
+import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.signin.SignInTestHooks;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
@@ -72,6 +74,7 @@ public class StorageAlertTest extends AbstractStorageTestCase {
 
 	@Override
 	public void tearDown() throws IOException {
+		alert.clock = Clock.systemDefaultZone();
 		SignInTestHooks.reset();
 		for (Map.Entry<String, String> saved : savedConfig.entrySet())
 			if (saved.getValue() == null)
@@ -130,6 +133,25 @@ public class StorageAlertTest extends AbstractStorageTestCase {
 		after(Duration.ofHours(73));
 		assertFalse(alert.run());
 		assertEquals(2, emails.size());
+	}
+
+	@Test
+	public void testDisabledAndExpiredAdminsGetNothing() throws Exception {
+		User gone = sf.fx.user("gone", "admin");
+		gone.setEnabled(false);
+		UserDAO.get().store(gone);
+		User expired = sf.fx.user("expired", "admin");
+		expired.setExpire(new java.util.Date(System.currentTimeMillis() - 1000));
+		UserDAO.get().store(expired);
+		sf.fx.user("current", "admin");
+		waitingFile();
+		after(Duration.ofHours(25));
+
+		assertTrue(alert.run());
+
+		List<String> told = emails.stream().map(e -> e.getRecipients().iterator().next().getAddress()).sorted()
+				.toList();
+		assertEquals(List.of("admin@admin.net", "current@example.com"), told);
 	}
 
 	@Test

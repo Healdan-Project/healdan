@@ -14,11 +14,13 @@ import static com.logicaldoc.healdan.storage.StorageFixtures.text;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -33,13 +35,14 @@ import org.junit.Test;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.store.Store;
+import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.storage.BackendHealth.State;
 import com.logicaldoc.healdan.storage.BackendHealth.Status;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
 import com.logicaldoc.healdan.storage.backend.GatedBackend;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
-import com.logicaldoc.healdan.storage.crypto.BackendKeys;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
+import com.logicaldoc.healdan.storage.crypto.BackendKeys;
 import com.logicaldoc.healdan.storage.mover.Mover;
 import com.logicaldoc.healdan.storage.mover.StorageStartup;
 import com.logicaldoc.healdan.support.HealdanFixtures;
@@ -347,6 +350,21 @@ public class BackendHealthTest extends AbstractStorageTestCase {
 	}
 
 	@Test
+	public void testKeyPutBackByHandRecoversAtTheNextRetest() throws Exception {
+		Side safe = sf.localSide("Safe", true);
+		byte[] right = Context.get(BackendKeys.class).read(safe.backendId()).orElseThrow();
+		swapKey(safe.backendId());
+		assertEquals(State.FAILING, health.check(safe.backendId()).state());
+
+		// The right key file is back, by hand: nothing else tells the live entry
+		Context.get(BackendKeys.class).restore(safe.backendId(), right);
+		health.retest();
+
+		assertEquals(State.OK, health.status(safe.backendId()).state());
+		assertEquals("saved again", text(resource(upload(safe, "saved again"), "1.0")));
+	}
+
+	@Test
 	public void testCheckObjectMissing() throws Exception {
 		Side safe = sf.localSide("Safe", true);
 		upload(safe, "has files");
@@ -373,7 +391,9 @@ public class BackendHealthTest extends AbstractStorageTestCase {
 		row.setPrefix("healdan/");
 		row.setAccessKey("AKTEST");
 		// Sealed under a key that is gone: it doesn't open
-		row.setSecret("sealed:under-another-key");
+		Path elsewhere = Files.createTempDirectory("secret-box").resolve("other.key");
+		row.setSecret(new SecretBox(elsewhere, () -> 0L).seal("a secret"));
+		assertNull(SecretBox.get().open(row.getSecret()));
 		StorageBackendDAO.get().store(row);
 
 		Status status = health.check(row.getId());

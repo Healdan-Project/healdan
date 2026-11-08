@@ -35,19 +35,19 @@ import jakarta.annotation.PreDestroy;
  * mover's files in transfer (call 22). Then, on a thread of its own, so a backend that doesn't answer never holds up
  * the webapp's start, it checks every backend, before the mover's first pass (call 24), and starts the mover and the
  * retests of backends not OK, every {@code storage.retestSeconds}, on a thread of their own that a long purge or
- * nightly check can't hold up; the purge and the admins' alert ({@link StorageAlert}) run daily and the nightly Store
- * check at 03:17 server time, none in the first 10 minutes after the start. Each step runs whatever another failed
- * with, and each recurring task schedules its next run whatever its run failed with, so no one failure, a setting that
- * can't be read among them, stops the rest.
- * Saves meanwhile check the backend they reach themselves ({@link BackendHealth#beforeWrite}). Does nothing unless
- * CE's Store is a {@code HealdanStorage}.
+ * nightly check can't hold up; the purge runs daily, the admins' alert ({@link StorageAlert}) hourly, and the nightly
+ * Store check at 03:17 server time, none in the first 10 minutes after the start. Each step runs whatever another
+ * failed with, and each recurring task schedules its next run whatever its run failed with, an {@link Error} such as
+ * a missing class too (but for a {@link VirtualMachineError}), so no one failure, a setting that can't be read among
+ * them, stops the rest. Saves meanwhile check the backend they reach themselves
+ * ({@link BackendHealth#beforeWrite}). Does nothing unless CE's Store is a {@code HealdanStorage}.
  */
 @Component
 public class StorageStartup implements HealdanStartListener {
 
 	private static final Logger log = LoggerFactory.getLogger(StorageStartup.class);
 
-	/** Neither the purge nor the nightly check runs this soon after a start */
+	/** None of the purge, the alert and the nightly check runs this soon after a start */
 	static final Duration AFTER_START = Duration.ofMinutes(10);
 
 	/** When the nightly check runs, server time */
@@ -67,7 +67,7 @@ public class StorageStartup implements HealdanStartListener {
 
 	private final StorageSettings settings;
 
-	/** Runs the start, the purge and the nightly check */
+	/** Runs the start, the purge, the alert and the nightly check */
 	private volatile ScheduledExecutorService scheduler;
 
 	/** Runs the backends' retests, and nothing else */
@@ -76,7 +76,13 @@ public class StorageStartup implements HealdanStartListener {
 	/** The wait between retests when {@code storage.retestSeconds} can't be read; tests shorten it */
 	volatile Duration retestFallback = Duration.ofSeconds(StorageSettings.DEFAULT_RETEST_SECONDS);
 
-	/** Whether the purge and the nightly check are scheduled */
+	/** How long after a start the purge and the alert first run; tests shorten it */
+	volatile Duration afterStart = AFTER_START;
+
+	/** How often the alert runs */
+	volatile Duration alertEvery = Duration.ofHours(1);
+
+	/** Whether the purge, the alert and the nightly check are scheduled */
 	private volatile boolean scheduledDaily;
 
 	@Autowired
@@ -126,12 +132,12 @@ public class StorageStartup implements HealdanStartListener {
 		safely("mover's start", mover::start);
 		if (stopped(running))
 			return;
-		long purgeDelay = Math.max(0, Duration.between(ZonedDateTime.now(), start.plus(AFTER_START)).toMillis());
+		long purgeDelay = Math.max(0, Duration.between(ZonedDateTime.now(), start.plus(afterStart)).toMillis());
 		try {
 			running.scheduleAtFixedRate(() -> safely("purge", purge::run), purgeDelay, DAY_MS, TimeUnit.MILLISECONDS);
-			// The alert's own failures are logged and never end its schedule; a day's alert is sent once however often
-			// it runs
-			running.scheduleAtFixedRate(() -> safely("storage alert", alert::run), purgeDelay, DAY_MS,
+			// Hourly, so a send that failed is tried again within the hour; storage.alert.sent keeps it to one email a
+			// day, and the first alert comes within 25 hours. Its failures are logged and never end its schedule
+			running.scheduleAtFixedRate(() -> safely("storage alert", alert::run), purgeDelay, alertEvery.toMillis(),
 					TimeUnit.MILLISECONDS);
 		} catch (RejectedExecutionException e) {
 			return; // stopped meanwhile
@@ -145,7 +151,7 @@ public class StorageStartup implements HealdanStartListener {
 		return scheduler != running || Thread.currentThread().isInterrupted();
 	}
 
-	/** @return whether the purge and the nightly check are scheduled; for tests */
+	/** @return whether the purge, the alert and the nightly check are scheduled; for tests */
 	boolean scheduledDaily() {
 		return scheduledDaily;
 	}
@@ -207,7 +213,10 @@ public class StorageStartup implements HealdanStartListener {
 	private static void safely(String what, Runnable work) {
 		try {
 			work.run();
-		} catch (RuntimeException e) {
+		} catch (VirtualMachineError e) {
+			throw e;
+		} catch (Throwable e) {
+			// An Error such as a NoClassDefFoundError from the mail stack must not end a schedule either
 			log.error("The storage's {} failed: {}", what, e.getMessage(), e);
 		}
 	}

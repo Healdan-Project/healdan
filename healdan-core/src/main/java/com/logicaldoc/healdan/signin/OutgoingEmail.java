@@ -15,10 +15,12 @@ import com.logicaldoc.core.automation.AutomationException;
 import com.logicaldoc.core.communication.EMail;
 import com.logicaldoc.core.communication.EMailSender;
 import com.logicaldoc.core.communication.MessageTemplate;
+import com.logicaldoc.core.communication.Recipient;
 import com.logicaldoc.core.communication.MessageTemplateDAO;
 import com.logicaldoc.core.runtime.Aspect;
 import com.logicaldoc.core.runtime.RunLevel;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
 
@@ -170,5 +172,28 @@ public final class OutgoingEmail {
 	public static void sendTemplate(EMail email, String template, Map<String, Object> dictionary) throws Exception {
 		fill(email, template, dictionary);
 		send(email);
+	}
+
+	/**
+	 * Builds an HTML email from the system to a user, in the user's language, fills it from a message template and
+	 * hands it to the mail server, on the calling thread.
+	 *
+	 * @param user the recipient, who has an email address
+	 * @param template the template's name
+	 * @param dictionary what the template is given; the locale is added
+	 * @throws Exception if the template can't be read or formatted, or the mail server didn't take the email
+	 */
+	public static void sendTemplate(User user, String template, Map<String, Object> dictionary) throws Exception {
+		EMail email = new EMail();
+		email.setTenantId(user.getTenantId());
+		email.setHtml(true);
+		email.setLocale(user.getLocale());
+		email.setAuthor("SYSTEM");
+		Recipient recipient = new Recipient();
+		recipient.setAddress(user.getEmail());
+		recipient.setName(user.getFullName());
+		recipient.setMode(Recipient.Mode.TO);
+		email.getRecipients().add(recipient);
+		sendTemplate(email, template, dictionary);
 	}
 }

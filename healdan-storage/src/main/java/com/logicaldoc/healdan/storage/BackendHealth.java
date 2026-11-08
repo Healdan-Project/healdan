@@ -73,6 +73,9 @@ public class BackendHealth {
 
 	private final Map<Long, Status> states = new ConcurrentHashMap<>();
 
+	/** The backends whose last check failed on their key, whose cached entry a retest drops */
+	private final Set<Long> keyFailures = ConcurrentHashMap.newKeySet();
+
 	/** One lock for each backend's check */
 	private final Map<Long, Object> checking = new ConcurrentHashMap<>();
 
@@ -147,8 +150,12 @@ public class BackendHealth {
 	 */
 	public void retest() {
 		for (long id : known())
-			if (!available(id))
+			if (!available(id)) {
+				// A key file put back by hand is read only by a new entry. The backend fails, so no transfer uses it
+				if (keyFailures.contains(id))
+					backends.forget(id);
 				check(id);
+			}
 	}
 
 	/**
@@ -164,10 +171,16 @@ public class BackendHealth {
 				entry.backend().check();
 				if (entry.encrypted())
 					KeyCheck.require(entry.backend(), LocalBackend.CHECK, entry.cipher());
+				keyFailures.remove(backendId);
 				ok(backendId);
 			} catch (BackendUnreachableException e) {
+				keyFailures.remove(backendId);
 				failing(backendId, e.getMessage(), true);
 			} catch (BackendFailingException | RuntimeException e) {
+				if (e instanceof KeyCheck.KeyException)
+					keyFailures.add(backendId);
+				else
+					keyFailures.remove(backendId);
 				failing(backendId, message(e), false);
 			}
 			return status(backendId);

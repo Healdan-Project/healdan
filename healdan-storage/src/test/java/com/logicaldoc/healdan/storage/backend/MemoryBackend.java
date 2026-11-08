@@ -60,6 +60,8 @@ public class MemoryBackend implements Backend {
 
 	private volatile boolean failingCheck;
 
+	private volatile Set<Op> deniedOps = EnumSet.noneOf(Op.class);
+
 	/** The keys the backend refuses as access denied, as S3 does an object a policy forbids */
 	private final Set<String> denied = ConcurrentHashMap.newKeySet();
 
@@ -111,6 +113,17 @@ public class MemoryBackend implements Backend {
 		return this;
 	}
 
+	/**
+	 * Refuses these operations on every key as access denied, a {@link BackendFailingException}, while the backend's
+	 * own check and its other operations work. No operations clears it.
+	 */
+	public MemoryBackend denyOps(Op... ops) {
+		Set<Op> set = EnumSet.noneOf(Op.class);
+		set.addAll(Arrays.asList(ops));
+		this.deniedOps = set;
+		return this;
+	}
+
 	/** Its {@code check} throws {@link BackendFailingException}, as when its credentials are refused. */
 	public MemoryBackend failCheck(boolean failing) {
 		this.failingCheck = failing;
@@ -144,6 +157,7 @@ public class MemoryBackend implements Backend {
 		refuseNext = 0;
 		refused = EnumSet.noneOf(Op.class);
 		denied.clear();
+		deniedOps = EnumSet.noneOf(Op.class);
 		failingCheck = false;
 		failAfterBytes = -1;
 		unreachable = false;
@@ -201,7 +215,7 @@ public class MemoryBackend implements Backend {
 		}
 		if (refused.contains(op))
 			throw new IOException("Backend " + id + " refuses " + op);
-		if (denied.contains(key))
+		if (denied.contains(key) || deniedOps.contains(op))
 			throw new BackendFailingException("Backend " + id + ": access denied (403 AccessDenied) to " + op + " " + key);
 	}
 

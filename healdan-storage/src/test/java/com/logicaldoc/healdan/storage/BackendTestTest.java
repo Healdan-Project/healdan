@@ -27,6 +27,7 @@ import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.storage.backend.S3Backend;
+import com.logicaldoc.healdan.storage.crypto.BackendKeys;
 import com.logicaldoc.healdan.storage.crypto.FileCipher;
 import com.logicaldoc.healdan.storage.crypto.KeyCheck;
 
@@ -130,6 +131,12 @@ public class BackendTestTest {
 		MemoryBackend lists = MemoryBackend.s3Like(8).refuse(Op.LIST);
 		BackendFailingException list = failure(() -> BackendTest.run(lists, true));
 		assertTrue(list.getMessage(), list.getMessage().contains("listing"));
+		assertEquals("the test object is deleted anyway", List.of(), lists.refuse().list("", 100));
+
+		MemoryBackend gets = new MemoryBackend(9).refuse(Op.GET);
+		BackendFailingException get = failure(() -> BackendTest.run(gets, true));
+		assertTrue(get.getMessage(), get.getMessage().contains("reading the test object back"));
+		assertEquals("the test object is deleted anyway", List.of(), gets.refuse().list("", 100));
 	}
 
 	@Test
@@ -171,5 +178,32 @@ public class BackendTestTest {
 
 		BackendFailingException wrong = failure(() -> BackendTest.run(backend, false, cipher(), true));
 		assertTrue(wrong.getMessage(), wrong.getMessage().contains("key"));
+	}
+
+	@Test
+	public void testReadsTheKeyFileAsItIsOnDiskNow() throws Exception {
+		BackendKeys keys = new BackendKeys(work.newFolder("keys").toPath());
+		FileCipher cipher = new FileCipher(keys.make(4));
+		MemoryBackend backend = new MemoryBackend(4);
+		KeyCheck.write(backend, LocalBackend.CHECK, cipher);
+		Backends.Entry live = new Backends.Entry(4, backend, false, cipher);
+		BackendTest.run(live, keys, true);
+
+		// The file is swapped while the backend is OK: the live entry still holds the old key
+		byte[] original = keys.read(4).orElseThrow();
+		keys.restore(4, new byte[32]);
+		BackendFailingException swapped = failure(() -> BackendTest.run(live, keys, true));
+		assertTrue(swapped.getMessage(), swapped.getMessage().contains("key"));
+
+		// Deleted
+		keys.restore(4, original);
+		BackendTest.run(live, keys, true);
+		Files.delete(keys.file(4));
+		BackendFailingException missing = failure(() -> BackendTest.run(live, keys, true));
+		assertTrue(missing.getMessage(), missing.getMessage().contains("key file")
+				&& missing.getMessage().contains("recovery key"));
+
+		// A backend not saved yet has no check object: its key isn't checked until the add has written it
+		BackendTest.run(new Backends.Entry(5, new MemoryBackend(5), false, cipher), keys, false);
 	}
 }
