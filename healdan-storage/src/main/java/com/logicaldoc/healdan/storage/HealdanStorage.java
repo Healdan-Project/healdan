@@ -634,7 +634,9 @@ public class HealdanStorage extends AbstractStore {
 	}
 
 	/**
-	 * Runs each backend's check, staging's and Original's included, and records nothing (Task 12 makes this Test).
+	 * Test (spec section 10.1) on each backend, staging's and Original's included: its marker, a test object written,
+	 * read whole and by a range, listed on S3 and deleted, and its key if it is encrypted. Records no row and holds
+	 * nothing.
 	 *
 	 * @return whether every backend passed
 	 */
@@ -651,7 +653,7 @@ public class HealdanStorage extends AbstractStore {
 		boolean ok = true;
 		for (long id : ids)
 			try {
-				backends().entry(id).backend().check();
+				BackendTest.run(backends().entry(id), true);
 			} catch (BackendFailingException e) {
 				log.warn("Storage backend {} fails its check: {}", id, e.getMessage());
 				ok = false;

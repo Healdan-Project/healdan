@@ -137,6 +137,11 @@ public class LocalBackend implements Backend {
 		}
 	}
 
+	/** @return the backend's folder */
+	public Path root() {
+		return root;
+	}
+
 	@Override
 	public long id() {
 		return id;
@@ -180,8 +185,8 @@ public class LocalBackend implements Backend {
 		try {
 			found = Files.readString(marker, StandardCharsets.UTF_8);
 		} catch (NoSuchFileException e) {
-			throw new BackendFailingException("The folder of backend " + id + " has no " + MARKER
-					+ ": it may not be mounted");
+			throw new BackendFailingException("The marker " + MARKER + " of backend " + id
+					+ " is missing from its folder: the folder may not be mounted");
 		} catch (java.nio.charset.CharacterCodingException e) {
 			throw new BackendFailingException("The marker of backend " + id + " is garbled", e);
 		} catch (IOException e) {

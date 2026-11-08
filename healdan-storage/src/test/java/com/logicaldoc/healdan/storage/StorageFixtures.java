@@ -32,6 +32,7 @@ import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend;
 import com.logicaldoc.healdan.storage.crypto.BackendKeys;
 import com.logicaldoc.healdan.storage.crypto.FileCipher;
+import com.logicaldoc.healdan.storage.crypto.KeyCheck;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
@@ -92,9 +93,9 @@ public final class StorageFixtures {
 		row.setEncryptedOn(encrypted);
 		row.setKeyConfirmedOn(encrypted);
 		StorageBackendDAO.get().store(row);
-		new LocalBackend(row.getId(), StorageSettings.get().installId(), root, true);
+		LocalBackend backend = new LocalBackend(row.getId(), StorageSettings.get().installId(), root, true);
 		if (encrypted)
-			Context.get(BackendKeys.class).make(row.getId());
+			KeyCheck.write(backend, LocalBackend.CHECK, new FileCipher(Context.get(BackendKeys.class).make(row.getId())));
 		return row.getId();
 	}
 
@@ -116,9 +117,9 @@ public final class StorageFixtures {
 		row.setEncryptedOn(encrypted);
 		row.setKeyConfirmedOn(encrypted);
 		StorageBackendDAO.get().store(row);
-		if (encrypted)
-			Context.get(BackendKeys.class).make(row.getId());
 		MemoryBackend backend = MemoryBackend.s3Like(row.getId());
+		if (encrypted)
+			KeyCheck.write(backend, LocalBackend.CHECK, new FileCipher(Context.get(BackendKeys.class).make(row.getId())));
 		Backends.get().use(row.getId(), backend);
 		return backend;
 	}

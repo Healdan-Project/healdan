@@ -25,6 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.logicaldoc.core.store.Store;
+import com.logicaldoc.healdan.storage.BackendHealth;
 import com.logicaldoc.healdan.storage.Backends;
 import com.logicaldoc.healdan.storage.FileLocks;
 import com.logicaldoc.healdan.storage.HealdanStorage;
@@ -63,7 +64,9 @@ import com.logicaldoc.healdan.storage.crypto.FileCipher;
  * The file's lock is taken only for the commit, and never while a transaction still open wrote the row: that one's
  * row lock lasts until it ends, and it may want the lock again, so the commit waits for nothing a CE transaction holds.
  * A failure counts an attempt and sets the next try ({@link RetrySchedule}); a backend that can't be reached or used
- * counts none and pauses its transfers until its retest.
+ * counts none and pauses its transfers until its retest. A refusal of one object ({@code BackendFailingException},
+ * as S3's access denied) is checked at once against the backend: if it still passes its check the refusal is the
+ * file's and counts an attempt, and otherwise the backend pauses.
  */
 final class Transfer {
 
@@ -182,7 +185,7 @@ final class Transfer {
 			return outcome;
 		} catch (BackendFailingException e) {
 			discard(to, staged);
-			return pause(using, e);
+			return refused(using, row, e);
 		} catch (IOException | RuntimeException e) {
 			discard(to, staged);
 			if (mover.stopping())
@@ -383,6 +386,19 @@ final class Transfer {
 			return true;
 		Optional<StoredFile> now = files.find(docId, resource);
 		return now.isPresent() && now.get().backendId() == target;
+	}
+
+	/**
+	 * A refusal from the backend, as access denied to one object: the backend is checked at once. If it passes, the
+	 * refusal is the file's, a try used as any other failure; otherwise the backend is failing, and pauses. An outage
+	 * pauses without a check, as it counts no attempt either.
+	 */
+	private Outcome refused(long backendId, StoredFile row, BackendFailingException e) {
+		if (e instanceof BackendUnreachableException)
+			return pause(backendId, e);
+		if (mover.health().check(backendId).state() == BackendHealth.State.OK)
+			return failed(row, e);
+		return Outcome.PAUSED;
 	}
 
 	/**

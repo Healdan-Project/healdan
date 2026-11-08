@@ -237,6 +237,46 @@ public class MoverTest extends AbstractStorageTestCase {
 	}
 
 	@Test
+	public void testObjectRefusedAsAccessDeniedIsTheFilesFailure() throws Exception {
+		Document refused = upload(cloud, "refused");
+		Document fine = upload(cloud, "moves");
+		String key = key(refused.getId(), "1.0");
+		cloud.s3().deny(key);
+
+		// The bucket passes its check, so the refusal is the object's: a try used, not a backend paused
+		assertEquals(1, mover.runOnce());
+
+		StoredFile after = row(refused.getId(), "1.0");
+		assertEquals(0L, after.backendId());
+		assertEquals(1, after.attempts());
+		assertTrue(after.lastError(), after.lastError().contains("access denied"));
+		assertEquals(BackendHealth.State.OK, health.status(cloud.backendId()).state());
+		assertEquals(cloud.backendId(), row(fine.getId(), "1.0").backendId());
+
+		// Ten tries make it stuck, the backend never failing, and the other files keep moving
+		for (int failure = 2; failure <= 10; failure++) {
+			due();
+			assertEquals(0, mover.runOnce());
+			assertEquals(failure, row(refused.getId(), "1.0").attempts());
+		}
+		assertTrue(row(refused.getId(), "1.0").stuck());
+		assertEquals(BackendHealth.State.OK, health.status(cloud.backendId()).state());
+		Document later = upload(cloud, "moves too");
+		assertEquals(1, mover.runOnce());
+		assertEquals(cloud.backendId(), row(later.getId(), "1.0").backendId());
+	}
+
+	@Test
+	public void testAccessDeniedToTheWholeBackendPausesIt() throws Exception {
+		Document doc = upload(cloud, "waits");
+		// Its check is refused too: the credentials are the failure, not one file
+		cloud.s3().deny(key(doc.getId(), "1.0")).failCheck(true);
+		assertEquals(0, mover.runOnce());
+		assertEquals(0, row(doc.getId(), "1.0").attempts());
+		assertEquals(BackendHealth.State.FAILING, health.status(cloud.backendId()).state());
+	}
+
+	@Test
 	public void testVerifiedBeforeRowMoves() throws Exception {
 		// From staging
 		Document doc = upload(cloud, "verified");

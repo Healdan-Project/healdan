@@ -157,4 +157,18 @@ public final class OutgoingEmail {
 	static void send(EMail email) throws Exception {
 		sender.send(email);
 	}
+
+	/**
+	 * Fills an email from a message template and hands it to the mail server, on the calling thread, for another
+	 * module's alerts: this sender throws where CE's {@code EMailSender} would drop an email silently.
+	 *
+	 * @param email the email, its locale, tenant and recipients set
+	 * @param template the template's name
+	 * @param dictionary what the template is given; the locale is added
+	 * @throws Exception if the template can't be read or formatted, or the mail server didn't take the email
+	 */
+	public static void sendTemplate(EMail email, String template, Map<String, Object> dictionary) throws Exception {
+		fill(email, template, dictionary);
+		send(email);
+	}
 }

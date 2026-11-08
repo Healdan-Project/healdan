@@ -23,6 +23,7 @@ import com.logicaldoc.healdan.storage.BackendHealth;
 import com.logicaldoc.healdan.storage.NightlyCheck;
 import com.logicaldoc.healdan.storage.Purge;
 import com.logicaldoc.healdan.storage.ReadCache;
+import com.logicaldoc.healdan.storage.StorageAlert;
 import com.logicaldoc.healdan.storage.StorageSettings;
 import com.logicaldoc.healdan.storage.StoreTracking;
 
@@ -34,9 +35,10 @@ import jakarta.annotation.PreDestroy;
  * mover's files in transfer (call 22). Then, on a thread of its own, so a backend that doesn't answer never holds up
  * the webapp's start, it checks every backend, before the mover's first pass (call 24), and starts the mover and the
  * retests of backends not OK, every {@code storage.retestSeconds}, on a thread of their own that a long purge or
- * nightly check can't hold up; the purge runs daily and the nightly Store check at 03:17 server time, neither in the
- * first 10 minutes after the start. Each step runs whatever another failed with, and each recurring task schedules its
- * next run whatever its run failed with, so no one failure, a setting that can't be read among them, stops the rest.
+ * nightly check can't hold up; the purge and the admins' alert ({@link StorageAlert}) run daily and the nightly Store
+ * check at 03:17 server time, none in the first 10 minutes after the start. Each step runs whatever another failed
+ * with, and each recurring task schedules its next run whatever its run failed with, so no one failure, a setting that
+ * can't be read among them, stops the rest.
  * Saves meanwhile check the backend they reach themselves ({@link BackendHealth#beforeWrite}). Does nothing unless
  * CE's Store is a {@code HealdanStorage}.
  */
@@ -61,6 +63,8 @@ public class StorageStartup implements HealdanStartListener {
 
 	private final NightlyCheck nightly;
 
+	private final StorageAlert alert;
+
 	private final StorageSettings settings;
 
 	/** Runs the start, the purge and the nightly check */
@@ -76,12 +80,13 @@ public class StorageStartup implements HealdanStartListener {
 	private volatile boolean scheduledDaily;
 
 	@Autowired
-	public StorageStartup(BackendHealth health, Mover mover, Purge purge, NightlyCheck nightly,
+	public StorageStartup(BackendHealth health, Mover mover, Purge purge, NightlyCheck nightly, StorageAlert alert,
 			StorageSettings settings) {
 		this.health = health;
 		this.mover = mover;
 		this.purge = purge;
 		this.nightly = nightly;
+		this.alert = alert;
 		this.settings = settings;
 	}
 
@@ -124,6 +129,10 @@ public class StorageStartup implements HealdanStartListener {
 		long purgeDelay = Math.max(0, Duration.between(ZonedDateTime.now(), start.plus(AFTER_START)).toMillis());
 		try {
 			running.scheduleAtFixedRate(() -> safely("purge", purge::run), purgeDelay, DAY_MS, TimeUnit.MILLISECONDS);
+			// The alert's own failures are logged and never end its schedule; a day's alert is sent once however often
+			// it runs
+			running.scheduleAtFixedRate(() -> safely("storage alert", alert::run), purgeDelay, DAY_MS,
+					TimeUnit.MILLISECONDS);
 		} catch (RejectedExecutionException e) {
 			return; // stopped meanwhile
 		}

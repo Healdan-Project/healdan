@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.storage.crypto;
 
 import java.io.ByteArrayInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -13,6 +14,7 @@ import java.util.Arrays;
 
 import com.logicaldoc.healdan.storage.backend.Backend;
 import com.logicaldoc.healdan.storage.backend.BackendCommon;
+import com.logicaldoc.healdan.storage.backend.BackendFailingException;
 
 /**
  * The check object of an encrypted backend (spec section 9): a fixed plaintext encrypted under the backend's key, with
@@ -105,5 +107,34 @@ public final class KeyCheck {
 		try (InputStream in = backend.get(key)) {
 			return verify(cipher, in.readAllBytes());
 		}
+	}
+
+	/**
+	 * Requires that a backend's check object decrypts under the cipher's key: what the start's and each retest's check,
+	 * and Test, ask of an encrypted backend.
+	 *
+	 * @param backend the backend
+	 * @param key the check object's key in it
+	 * @param cipher the backend's cipher
+	 * @throws BackendUnreachableException if the object can't be read because the backend can't be reached
+	 * @throws BackendFailingException if the object is missing, can't be read, or doesn't decrypt: the key file isn't
+	 *         the key the backend was made with
+	 */
+	public static void require(Backend backend, String key, FileCipher cipher) throws BackendFailingException {
+		long id = backend.id();
+		try {
+			if (verify(backend, key, cipher))
+				return;
+		} catch (FileNotFoundException e) {
+			throw new BackendFailingException("The check object of backend " + id + " is missing, so its key can't be "
+					+ "checked: nothing is written until it is back");
+		} catch (BackendFailingException e) {
+			throw e;
+		} catch (IOException e) {
+			throw new BackendFailingException(
+					"The check object of backend " + id + " can't be read: " + e.getMessage());
+		}
+		throw new BackendFailingException("The key file of backend " + id + " isn't the key it was made with: its "
+				+ "check object doesn't decrypt. Enter the recovery key to put the right key back");
 	}
 }

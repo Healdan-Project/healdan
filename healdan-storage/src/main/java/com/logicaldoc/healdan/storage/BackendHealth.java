@@ -20,17 +20,21 @@ import org.springframework.stereotype.Component;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
 import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
+import com.logicaldoc.healdan.storage.backend.LocalBackend;
+import com.logicaldoc.healdan.storage.crypto.KeyCheck;
 import com.logicaldoc.util.spring.Context;
 
 /**
  * Each backend's health (spec section 10.3, call 24), staging's included, kept in memory: unchecked until its first
  * check, then OK or failing, with the last error and since when. Each change is logged.
  * <p>
- * A backend's check is its own {@code check()}: its marker, and for S3 its reachability. A
- * {@link BackendUnreachableException} makes it failing as unreachable, and any other failure, a backend that can't be
- * built among them, failing. {@code StorageStartup} checks every backend at start, before the mover's first pass, and
- * each one not OK again every {@code storage.retestSeconds}; one found OK again wakes the mover. The mover also reports
- * a backend it found unreachable or couldn't build.
+ * A backend's check is its own {@code check()}: its marker, and for S3 its reachability and its bucket; then, if it is
+ * encrypted, its check object under its key file's key (spec section 9). A {@link BackendUnreachableException} makes it
+ * failing as unreachable, and any other failure failing, with its own wording: the marker missing or another
+ * backend's, the bucket not found, the key not the one the backend was made with or its check object missing, a
+ * secret that won't open, a backend that can't be built. {@code StorageStartup} checks every backend at start, before
+ * the mover's first pass, and each one not OK again every {@code storage.retestSeconds}; one found OK again wakes the
+ * mover. The mover also reports a backend it found unreachable or couldn't build.
  * <p>
  * A failing backend refuses writes (saves into an S3 Store land in staging, so they don't notice), and the mover leaves
  * its files, and an unchecked one's, alone ({@link #unavailable}). A write that reaches a backend still unchecked runs
@@ -156,7 +160,10 @@ public class BackendHealth {
 	public Status check(long backendId) {
 		synchronized (checkLock(backendId)) {
 			try {
-				backends.entry(backendId).backend().check();
+				Backends.Entry entry = backends.entry(backendId);
+				entry.backend().check();
+				if (entry.encrypted())
+					KeyCheck.require(entry.backend(), LocalBackend.CHECK, entry.cipher());
 				ok(backendId);
 			} catch (BackendUnreachableException e) {
 				failing(backendId, e.getMessage(), true);

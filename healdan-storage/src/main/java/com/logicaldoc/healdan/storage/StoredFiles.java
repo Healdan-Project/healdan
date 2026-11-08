@@ -318,6 +318,17 @@ public class StoredFiles {
 	}
 
 	/**
+	 * @param cutoff a time
+	 * @return how many files have waited, since their row's backend stopped matching their Store's, from before it
+	 */
+	public long waitingBefore(Date cutoff) {
+		Long count = jdbc.queryForObject(
+				"select count(*) from hd_storage_file where hd_waiting is not null and hd_waiting < ?", Long.class,
+				new Timestamp(cutoff.getTime()));
+		return count == null ? 0 : count;
+	}
+
+	/**
 	 * @return for each Store with files, and for the files with no Store (store id null, first), how many files there
 	 *         are, how many wait, how many are stuck, and their total size
 	 */

@@ -38,6 +38,7 @@ import com.logicaldoc.healdan.storage.BackendHealth.Status;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
 import com.logicaldoc.healdan.storage.backend.GatedBackend;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
+import com.logicaldoc.healdan.storage.crypto.BackendKeys;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.storage.mover.Mover;
 import com.logicaldoc.healdan.storage.mover.StorageStartup;
@@ -271,5 +272,114 @@ public class BackendHealthTest extends AbstractStorageTestCase {
 		assertEquals("saved in the outage", Files.readString(staged(doc.getId(), "1.0")));
 		assertEquals("saved in the outage", text(resource(doc, "1.0")));
 		assertEquals(0, cloud.s3().calls(Op.PUT, key(doc.getId(), "1.0")));
+	}
+
+	/** Replaces a backend's key file with another key, as a restore of the wrong file would */
+	private static void swapKey(long backendId) throws IOException {
+		Context.get(BackendKeys.class).restore(backendId, new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+				16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32 });
+		Backends.get().forget(backendId);
+	}
+
+	@Test
+	public void testMissingMarker() throws Exception {
+		Side gone = sf.localSide("Gone", false);
+		Document doc = upload(gone, "saved while mounted");
+		health.checkAll();
+		assertEquals(State.OK, health.status(gone.backendId()).state());
+
+		// An unmounted share: the mount point is an empty folder
+		Files.delete(gone.root().resolve(LocalBackend.MARKER));
+		Status status = health.check(gone.backendId());
+
+		assertEquals(State.FAILING, status.state());
+		assertFalse(status.unreachable());
+		assertTrue(status.error(), status.error().contains("marker") && status.error().contains("missing"));
+		IOException refused = assertThrows(IOException.class,
+				() -> Store.get().store(file("thumbnail"), resource(doc.getId(), "1.0-thumb.png")));
+		assertTrue(refused.getMessage(), refused.getMessage().contains("failing"));
+		assertThrows(Exception.class, () -> upload(gone, "refused"));
+		assertEquals(List.of(), files(gone.root()).stream().filter(f -> f.contains("thumb")).toList());
+	}
+
+	@Test
+	public void testWrongKey() throws Exception {
+		Side safe = sf.localSide("Safe", true);
+		Side vault = sf.s3Side("Vault", true);
+		Document waiting = upload(vault, "waits in staging");
+		health.checkAll();
+		assertEquals(State.OK, health.status(safe.backendId()).state());
+		assertEquals(State.OK, health.status(vault.backendId()).state());
+
+		// A key file swapped for another: the check object doesn't decrypt, whatever the file's size
+		swapKey(safe.backendId());
+		swapKey(vault.backendId());
+		health.retest();
+		assertEquals("OK ones aren't tested again", State.OK, health.status(safe.backendId()).state());
+		Status local = health.check(safe.backendId());
+		Status bucket = health.check(vault.backendId());
+		assertEquals(State.FAILING, local.state());
+		assertTrue(local.error(), local.error().contains("key"));
+		assertEquals(State.FAILING, bucket.state());
+
+		// It refuses writes, and the mover doesn't write to it
+		assertThrows(Exception.class, () -> upload(safe, "refused"));
+		assertEquals(List.of(), files(safe.root()));
+		assertEquals(0L, rowsOn(safe.backendId()));
+		assertTrue(health.unavailable().contains(vault.backendId()));
+		assertEquals(0, Mover.get().runOnce());
+		assertEquals(0, vault.s3().calls(Op.PUT, key(waiting.getId(), "1.0")));
+		assertEquals(0L, row(waiting.getId(), "1.0").backendId());
+		assertEquals(0, row(waiting.getId(), "1.0").attempts());
+	}
+
+	@Test
+	public void testWrongKeyBeforeTheFirstWrite() throws Exception {
+		Side safe = sf.localSide("Safe", true);
+		swapKey(safe.backendId());
+		assertEquals(State.UNCHECKED, health.status(safe.backendId()).state());
+
+		// The first write checks first, and nothing is written under the key that wasn't checked
+		assertThrows(Exception.class, () -> upload(safe, "never written"));
+		assertEquals(State.FAILING, health.status(safe.backendId()).state());
+		assertEquals(List.of(), files(safe.root()));
+		assertEquals(0L, rowsOn(safe.backendId()));
+	}
+
+	@Test
+	public void testCheckObjectMissing() throws Exception {
+		Side safe = sf.localSide("Safe", true);
+		upload(safe, "has files");
+		assertEquals(State.OK, health.check(safe.backendId()).state());
+
+		Files.delete(safe.root().resolve(LocalBackend.CHECK));
+		Status status = health.check(safe.backendId());
+
+		assertEquals(State.FAILING, status.state());
+		assertFalse(status.unreachable());
+		assertTrue(status.error(), status.error().contains("check object"));
+		assertThrows(Exception.class, () -> upload(safe, "refused"));
+	}
+
+	@Test
+	public void testSecretUnopened() throws Exception {
+		StorageBackend row = new StorageBackend();
+		row.setTenantId(com.logicaldoc.core.security.Tenant.DEFAULT_ID);
+		row.setName("Lost secret");
+		row.setKind(StorageBackend.S3);
+		row.setEndpoint("https://s3.example.test");
+		row.setRegion("test-1");
+		row.setBucket("healdan-tests");
+		row.setPrefix("healdan/");
+		row.setAccessKey("AKTEST");
+		// Sealed under a key that is gone: it doesn't open
+		row.setSecret("sealed:under-another-key");
+		StorageBackendDAO.get().store(row);
+
+		Status status = health.check(row.getId());
+
+		assertEquals(State.FAILING, status.state());
+		assertFalse(status.unreachable());
+		assertTrue(status.error(), status.error().contains("enter the secret again"));
 	}
 }

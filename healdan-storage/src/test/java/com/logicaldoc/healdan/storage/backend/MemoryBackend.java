@@ -58,6 +58,11 @@ public class MemoryBackend implements Backend {
 
 	private volatile boolean unreachable;
 
+	private volatile boolean failingCheck;
+
+	/** The keys the backend refuses as access denied, as S3 does an object a policy forbids */
+	private final Set<String> denied = ConcurrentHashMap.newKeySet();
+
 	private volatile Duration slow = Duration.ZERO;
 
 	private volatile boolean corruptNextPut;
@@ -97,6 +102,21 @@ public class MemoryBackend implements Backend {
 		return this;
 	}
 
+	/**
+	 * Refuses every operation on these keys as access denied, a {@link BackendFailingException}, while the backend's
+	 * own check passes.
+	 */
+	public MemoryBackend deny(String... keys) {
+		denied.addAll(Arrays.asList(keys));
+		return this;
+	}
+
+	/** Its {@code check} throws {@link BackendFailingException}, as when its credentials are refused. */
+	public MemoryBackend failCheck(boolean failing) {
+		this.failingCheck = failing;
+		return this;
+	}
+
 	/** Every operation, {@code check} too, throws {@link BackendUnreachableException}. */
 	public MemoryBackend unreachable(boolean unreachable) {
 		this.unreachable = unreachable;
@@ -123,6 +143,8 @@ public class MemoryBackend implements Backend {
 	public MemoryBackend clearFaults() {
 		refuseNext = 0;
 		refused = EnumSet.noneOf(Op.class);
+		denied.clear();
+		failingCheck = false;
 		failAfterBytes = -1;
 		unreachable = false;
 		slow = Duration.ZERO;
@@ -179,6 +201,8 @@ public class MemoryBackend implements Backend {
 		}
 		if (refused.contains(op))
 			throw new IOException("Backend " + id + " refuses " + op);
+		if (denied.contains(key))
+			throw new BackendFailingException("Backend " + id + ": access denied (403 AccessDenied) to " + op + " " + key);
 	}
 
 	private static byte[] md5(byte[] bytes) {
@@ -377,6 +401,8 @@ public class MemoryBackend implements Backend {
 	public void check() throws BackendFailingException {
 		if (unreachable)
 			throw new BackendUnreachableException("Backend " + id + " is unreachable");
+		if (failingCheck)
+			throw new BackendFailingException("Backend " + id + ": access denied (403 AccessDenied) to its marker");
 	}
 
 	private static final String HELD = LocalBackend.HELD + "/";
