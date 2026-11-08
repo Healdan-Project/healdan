@@ -9,7 +9,7 @@ A backend is **failing** when Healdan can't use it. Its **Status**, on the **Sto
 
 | Why | What the status says, in part | What to do |
 |---|---|---|
-| An S3 service, or the network to it, is down, or a folder can't be read | "can't be reached" | wait, or put the network right. Saves and cached files carry on meanwhile (below) |
+| An S3 service, or the network to it, is down, or a folder can't be read | "can't be reached", or for a local folder "can't be read" | wait, or put the network right. Saves and cached files carry on meanwhile (below) |
 | The bucket is gone | "bucket not found". A bucket deleted while the server runs shows first as "can't be reached", and as "bucket not found" after the next check | make the bucket again, or give the backend's Stores another backend |
 | The S3 service refuses the access key | "check its access key and secret" | put them right with **Edit** |
 | The S3 secret can't be read, as after Healdan's secret key was made again | "enter the secret again in Edit" | type the secret again with **Edit** |
@@ -57,7 +57,7 @@ either, as they aren't there. Mount the share again: the next check, within a mi
 **Test**.
 
 A folder that can't be read at all, as when a share stops answering, is an outage, as an S3 service's is: its status
-says "can't be reached", and saves into its Stores are refused. Once the outage is found, reads of its files fail at
+says "can't be read", and saves into its Stores are refused. Once the outage is found, reads of its files fail at
 once with a message that names the Store, as an S3 backend's does, but doesn't call it cloud storage, such as "This
 file is in Firm's storage, which can't be reached right now." When the share answers again, the next check, within a
 minute, finds the backend.
