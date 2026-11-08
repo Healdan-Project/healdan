@@ -20,6 +20,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -63,8 +64,10 @@ import com.logicaldoc.util.spring.Context;
  * one moves under its backend's {@code .held/}, an S3 one stays where it is, and a row in {@code hd_storage_held}
  * keeps it until its purge date.</li>
  * <li>Reads go to the row's place. {@code exists}, {@code size} and {@code listResources} answer from the rows, never
- * a backend, and a file version is matched exactly ({@code 1.2} is not {@code 1.20}). A file with no row is looked
- * for in Original's folder, where only CE's own store could have put it (call 11), and listed from there too.</li>
+ * a backend, and a file version is matched exactly ({@code 1.2} is not {@code 1.20}). While the row's backend is a
+ * known outage ({@link BackendHealth#knownOutage}), a read the read cache can't serve fails at once. A file with no row
+ * is looked for in Original's folder, where only CE's own store could have put it (call 11), and listed from there
+ * too.</li>
  * </ul>
  * Saves and deletes hold the file's lock ({@link FileLocks}) while they write or delete its bytes and its row. It is not
  * a Spring component: only CE's bean definition makes it, and {@link #init()} reads no table, as Spring calls it before
@@ -482,13 +485,30 @@ public class HealdanStorage extends AbstractStore {
 			} catch (PersistenceException e) {
 				log.debug("The name of Store {} can't be read: {}", row.storeId(), e.getMessage());
 			}
-		log.warn("Document {}'s {} can't be read: storage backend {} is unreachable", row.docId(), row.resource(),
-				row.backendId());
+		if (cause instanceof BackendHealth.KnownOutageException)
+			// The outage was warned of once, by BackendHealth
+			log.debug("Document {}'s {} can't be read: storage backend {} is a known outage", row.docId(),
+					row.resource(), row.backendId());
+		else
+			log.warn("Document {}'s {} can't be read: storage backend {} is unreachable", row.docId(), row.resource(),
+					row.backendId());
 		// So that an outage met by reads, while nothing moves, shows as one and the alert sees it
 		BackendHealth.get().reportFailure(row.backendId(), cause);
 		StorageUnreachableException outage = new StorageUnreachableException(store, cloud(row.backendId()), cause);
 		ReadOutages.note(outage);
 		return outage;
+	}
+
+	/**
+	 * @return how long an outage BackendHealth found stays known: {@code storage.retestSeconds}, after which a retest
+	 *         finds it again; the default if the setting can't be read, as in a database outage
+	 */
+	private static Duration knownFor() {
+		try {
+			return Duration.ofSeconds(StorageSettings.get().retestSeconds());
+		} catch (RuntimeException e) {
+			return Duration.ofSeconds(StorageSettings.DEFAULT_RETEST_SECONDS);
+		}
 	}
 
 	/** @return whether the backend is S3's; false if that can't be told, as "storage" is true of either kind */
@@ -520,6 +540,10 @@ public class HealdanStorage extends AbstractStore {
 			if (hit.isPresent())
 				return hit.get();
 		}
+		// Before the backend is built or asked: a read during a known outage would only wait out the client's attempts
+		BackendHealth health = BackendHealth.get();
+		if (health.status(row.backendId()).unreachable())
+			health.refuseKnownOutage(row.backendId(), knownFor());
 		Backends.Entry entry = backends().entry(row.backendId());
 		if (entry.s3()) {
 			Optional<T> cached = cached(entry, row, key, ranged);

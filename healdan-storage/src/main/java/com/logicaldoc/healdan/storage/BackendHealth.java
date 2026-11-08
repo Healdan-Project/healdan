@@ -3,14 +3,17 @@
 
 package com.logicaldoc.healdan.storage;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.LongSupplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,9 +43,12 @@ import com.logicaldoc.util.spring.Context;
  * as failing and the alert sees it.
  * <p>
  * A failing backend refuses writes (saves into an S3 Store land in staging, so they don't notice), and the mover leaves
- * its files, and an unchecked one's, alone ({@link #unavailable}). A write that reaches a backend still unchecked runs
- * its check first, holding the backend's check lock, so that concurrent first writes check once: seeds and tests write
- * before the start's check runs, and nothing is written under a key that wasn't checked.
+ * its files, and an unchecked one's, alone ({@link #unavailable}). While a backend is known to be unreachable, found so
+ * by a check or a report younger than {@code storage.retestSeconds}, or with a check of it under way, its reads that
+ * the read cache can't serve fail at once ({@link #knownOutage}) rather than each wait out the S3 client's
+ * attempts, which hold a Tomcat thread up to two minutes for a server that stalls. A write that reaches a backend still
+ * unchecked runs its check first, holding the backend's check lock, so that concurrent first writes check once: seeds
+ * and tests write before the start's check runs, and nothing is written under a key that wasn't checked.
  */
 @Component
 public class BackendHealth {
@@ -85,6 +91,18 @@ public class BackendHealth {
 	/** What a backend found OK, for the first time or again, does: wakes the mover */
 	private volatile Runnable recovered = () -> {
 	};
+
+	/** When each backend's state was last found, by a check or a report, by {@link #clock} */
+	private final Map<Long, Long> found = new ConcurrentHashMap<>();
+
+	/** The backends whose check is under way */
+	private final Set<Long> checkingNow = ConcurrentHashMap.newKeySet();
+
+	/** Each backend's outage that reads failing at once were warned of, by when it began */
+	private final Map<Long, Date> warnedOutage = new ConcurrentHashMap<>();
+
+	/** Tests: the clock an outage's age is read with */
+	volatile LongSupplier clock = System::currentTimeMillis;
 
 	/** Tests: runs when a write finds its backend unchecked, before it waits for the backend's check lock */
 	volatile Runnable firstWrite = () -> {
@@ -142,6 +160,30 @@ public class BackendHealth {
 	}
 
 	/**
+	 * Tells a read whether to fail at once: whether the backend is failing because it can't be reached, and that is
+	 * known, found by a check or a report less than {@code fresh} ago or with a check of it under way. Its first answer
+	 * for an outage is logged as a warning, once for each backend and outage. Only a check or the mover finds an outage
+	 * again: a read reports one only while the backend isn't failing yet ({@link #reportFailure}), so reads alone never
+	 * keep it known.
+	 *
+	 * @param backendId a backend's id
+	 * @param fresh how long a finding stays known: {@code storage.retestSeconds}, as a retest then finds it again
+	 * @return the backend's health if it is a known outage; empty if a read should try the backend
+	 */
+	public Optional<Status> knownOutage(long backendId, Duration fresh) {
+		Status status = status(backendId);
+		if (status.state() != State.FAILING || !status.unreachable())
+			return Optional.empty();
+		Long at = found.get(backendId);
+		if (!checkingNow.contains(backendId) && (at == null || clock.getAsLong() - at >= fresh.toMillis()))
+			return Optional.empty();
+		if (!Objects.equals(warnedOutage.put(backendId, status.since()), status.since()))
+			log.warn("Storage backend {} can't be reached, so reads of its files the read cache doesn't hold fail at "
+					+ "once until a retest finds it again: {}", backendId, status.error());
+		return Optional.of(status);
+	}
+
+	/**
 	 * Checks every backend, staging's included: at start, before the mover's first pass (call 24).
 	 */
 	public void checkAll() {
@@ -174,6 +216,7 @@ public class BackendHealth {
 	 */
 	public Status check(long backendId) {
 		synchronized (checkLock(backendId)) {
+			checkingNow.add(backendId);
 			try {
 				Backends.Entry entry = backends.entry(backendId);
 				entry.backend().check();
@@ -190,6 +233,8 @@ public class BackendHealth {
 				else
 					keyFailures.remove(backendId);
 				failing(backendId, message(e), false);
+			} finally {
+				checkingNow.remove(backendId);
 			}
 			return status(backendId);
 		}
@@ -286,11 +331,14 @@ public class BackendHealth {
 			states.keySet().removeIf(id -> !ids.contains(id));
 		}
 		keyFailures.removeIf(id -> !ids.contains(id));
+		found.keySet().removeIf(id -> !ids.contains(id));
+		warnedOutage.keySet().removeIf(id -> !ids.contains(id));
 	}
 
 	private void ok(long backendId) {
 		Status before;
 		synchronized (states) {
+			found.put(backendId, clock.getAsLong());
 			before = status(backendId);
 			if (before.state() == State.OK)
 				return;
@@ -307,6 +355,7 @@ public class BackendHealth {
 	private void failing(long backendId, String error, boolean unreachable) {
 		Status before;
 		synchronized (states) {
+			found.put(backendId, clock.getAsLong());
 			before = status(backendId);
 			boolean was = before.state() == State.FAILING;
 			states.put(backendId,
@@ -318,6 +367,31 @@ public class BackendHealth {
 			log.warn("Storage backend {} can't be reached, and its transfers wait: {}", backendId, error);
 		else
 			log.warn("Storage backend {} is failing, and refuses writes: {}", backendId, error);
+	}
+
+	/**
+	 * A read refused at once, as its backend is a known outage ({@link #knownOutage}): the warning was the outage's, so
+	 * the read's own is left out
+	 */
+	public static final class KnownOutageException extends BackendUnreachableException {
+
+		private static final long serialVersionUID = 1L;
+
+		KnownOutageException(long backendId, Status status) {
+			super("Storage backend " + backendId + " can't be reached, as found since " + status.since() + ": "
+					+ status.error());
+		}
+	}
+
+	/**
+	 * @param backendId a backend's id
+	 * @param fresh how long a finding stays known, as {@link #knownOutage}
+	 * @throws KnownOutageException if the backend is a known outage
+	 */
+	public void refuseKnownOutage(long backendId, Duration fresh) throws KnownOutageException {
+		Optional<Status> outage = knownOutage(backendId, fresh);
+		if (outage.isPresent())
+			throw new KnownOutageException(backendId, outage.get());
 	}
 
 	private static String message(Exception e) {
