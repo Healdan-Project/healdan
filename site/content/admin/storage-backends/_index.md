@@ -70,4 +70,5 @@ so one that stops answering shows Failing once a save, a read, a move or **Test*
 - [When a Backend Fails](when-a-backend-fails/): outages, and the 24-hour alert.
 - [Removing a Backend](removing-a-backend/).
 
-The Install manual's [Backup and Restore](../../install/backup-and-restore/) says what to keep safe.
+The Install manual's [Cloud Storage](../../install/cloud-storage/) says how to set up a bucket at Wasabi, and
+[Backup and Restore](../../install/backup-and-restore/) what to keep safe.

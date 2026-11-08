@@ -1,6 +1,6 @@
 ---
 title: Upgrading
-weight: 8
+weight: 9
 ---
 
 {{< callout type="info" >}}
@@ -40,6 +40,22 @@ fails, because the app's image is built here and can't be pulled.
   running on a half-upgraded database, and the log says which step failed. See
   [Troubleshooting](../troubleshooting/).
 - **LogicalDOC's tables aren't.** See [Known Limitations](../known-limitations/).
+
+## The First Start on Healdan's Storage
+
+The upgrade that brings [storage backends](../../admin/storage-backends/) switches the `store` setting to Healdan's
+own storage, as above. Its first start does a few things once:
+
+- **It records every file already in the repository,** with its size and its document's Store, so that Healdan knows
+  where each file is. This adds to that start's time on a large repository: on the tests' database it recorded about
+  9,450 small files a second, so 100,000 files took about 11 seconds. MariaDB on your server will differ, so take that
+  as a rough guide. A start that's stopped part-way records the rest at the next.
+- **It writes a marker, `.healdan-backend`,** in Original's folder, `/opt/logicaldoc/repository/docs`. If that folder
+  has neither a marker nor any file while the database has documents, as when a [host folder](../host-folders/)
+  didn't mount, the app stops instead of marking an empty folder: see [Troubleshooting](../troubleshooting/).
+- **It hides LogicalDOC's own Stores screen** under **Administration → Settings**, as the **Storage** tab of Healdan
+  Settings takes its place.
+- **Nothing moves.** Every Store stays on Original, the repository's own folder, until you give it another backend.
 
 ## Presentations and Spreadsheets Whose Text Wasn't Read
 

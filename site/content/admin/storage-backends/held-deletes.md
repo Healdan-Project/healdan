@@ -51,5 +51,6 @@ waiting to be uploaded.
 - **On S3,** held objects are stored and billed until they're purged. A matter moved from a Store on S3 to one on
   the server leaves its encrypted copies in the bucket until the holding period ends. Wasabi's pay-as-you-go plan
   bills each object for at least 90 days however soon it's deleted, so holding a copy there costs nothing more while
-  the copy is less than 90 days old: see the Install manual's Cloud Storage page.
+  the copy is less than 90 days old: see the Install manual's
+  [Cloud Storage](../../../install/cloud-storage/#wasabis-90-day-minimum).
 - **Removing a backend** waits until its held copies are purged: see [Removing a Backend](../removing-a-backend/).

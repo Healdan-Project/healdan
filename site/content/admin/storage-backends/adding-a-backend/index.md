@@ -11,7 +11,8 @@ Folder**, and the window shows that kind's settings. A new backend holds nothing
 
 ## An S3 Bucket
 
-Make the bucket, and a user for Healdan that can use only that bucket, at the S3 service first.
+Make the bucket, and a user for Healdan that can use only that bucket, at the S3 service first: for Wasabi, the
+Install manual's [Cloud Storage](../../../install/cloud-storage/) says how.
 
 | Setting | What to enter |
 |---|---|
@@ -33,7 +34,7 @@ backend: so two Healdan servers can't share one place either.
 ## A Local Folder
 
 A folder other than Original's is one you add to the app's container yourself, such as a share on a NAS: see the
-Install manual's [Host Folders Instead of Volumes](../../../install/host-folders/).
+Install manual's [Host Folders Instead of Volumes](../../../install/host-folders/#folders-for-more-storage-backends).
 
 | Setting | What to enter |
 |---|---|

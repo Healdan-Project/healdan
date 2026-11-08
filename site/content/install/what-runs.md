@@ -8,10 +8,11 @@ weight: 2
 | Service | What it is | Where its data lives |
 |---|---|---|
 | `db` | MariaDB 11.4 | the volume `logicaldoc_db-data` |
-| `app` | Tomcat 11 running Healdan | the volumes `logicaldoc_logicaldoc-conf` (configuration: `context.properties`, `log.xml`, `allowed-commands.txt`), `logicaldoc_logicaldoc-repository` (documents, the search index, user data and logs) and `logicaldoc_logicaldoc-cache` (copies of files kept in S3 buckets, so they open faster the next time) |
+| `app` | Tomcat 11 running Healdan | the volumes `logicaldoc_logicaldoc-conf` (configuration: `context.properties`, `log.xml`, `allowed-commands.txt`), `logicaldoc_logicaldoc-repository` (documents, the search index, user data and logs) and `logicaldoc_logicaldoc-cache` (the [read cache](../../admin/storage-backends/the-read-cache/): copies of the files kept in S3 buckets, so they open faster the next time and during an outage, 20 GB at most to begin with) |
 
 [Backup and Restore](../backup-and-restore/) covers the database and the configuration and repository volumes. The
-cache needs no backup, as it holds only copies.
+cache needs no backup, as it holds only copies. A Store whose files are kept in an S3 bucket keeps them there, not in
+these volumes: see [Cloud Storage](../cloud-storage/).
 
 ## Supported Databases
 
