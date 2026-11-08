@@ -19,6 +19,7 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.Random;
+import java.util.zip.GZIPOutputStream;
 
 import org.junit.Test;
 import org.springframework.mock.web.MockFilterChain;
@@ -37,6 +38,7 @@ import com.logicaldoc.util.plugin.PluginException;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -203,7 +205,11 @@ public class DownloadErrorFilterTest extends AbstractStorageTestCase {
 	}
 
 	private static MockHttpServletResponse run(Servlet servlet) throws Exception {
-		MockHttpServletResponse response = new MockHttpServletResponse();
+		return run(servlet, new MockHttpServletResponse());
+	}
+
+	/** Runs the servlet behind the filter, which wraps the response given, the server's own */
+	private static MockHttpServletResponse run(Servlet servlet, MockHttpServletResponse response) throws Exception {
 		FilterChain chain = (request, wrapped) -> new HttpServlet() {
 			private static final long serialVersionUID = 1L;
 
@@ -368,5 +374,211 @@ public class DownloadErrorFilterTest extends AbstractStorageTestCase {
 
 		assertFalse(page, page.contains("<script>"));
 		assertTrue(page, page.contains("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; Co&#39;s"));
+	}
+
+	private static final String BOUNDARY = "MULTIPART_BYTERANGES";
+
+	/** The most bytes the filter holds before the response starts */
+	private static final int HELD = 1024;
+
+	/**
+	 * Repeats ServletUtil.downloadDocument with {@code download.gzip} on: the GZIP stream writes its 10-byte header as
+	 * it is made, before the read, and its trailer as it is closed
+	 */
+	private void serveGzipped(HttpServletResponse response) throws IOException {
+		response.setContentType("application/octet-stream");
+		response.setHeader("Content-Disposition", SENT);
+		try (OutputStream output = new GZIPOutputStream(response.getOutputStream(), 10240)) {
+			response.setHeader("Content-Encoding", "gzip");
+			Store.get().writeToStream(resource, output);
+		}
+	}
+
+	/** Repeats ServletUtil.downloadDocument for several ranges: each one's boundary lines go before its read */
+	private void serveRanges(HttpServletResponse response, long[][] ranges) throws IOException {
+		response.setContentType("application/octet-stream");
+		response.setHeader("Content-Disposition", SENT);
+		try (OutputStream output = response.getOutputStream()) {
+			response.setContentType("multipart/byteranges; boundary=" + BOUNDARY);
+			response.setStatus(HttpServletResponse.SC_PARTIAL_CONTENT);
+			ServletOutputStream sos = (ServletOutputStream) output;
+			for (long[] range : ranges) {
+				sos.println();
+				sos.println("--" + BOUNDARY);
+				sos.println("Content-Type: application/octet-stream");
+				sos.println("Content-Range: bytes " + range[0] + "-" + (range[0] + range[1] - 1) + "/" + content.length);
+				Store.get().writeToStream(resource, sos, range[0], range[1]);
+				sos.println();
+				sos.println("--" + BOUNDARY + "--");
+			}
+		}
+	}
+
+	private static byte[] random(int length, int seed) {
+		byte[] bytes = new byte[length];
+		new Random(seed).nextBytes(bytes);
+		return bytes;
+	}
+
+	@Test
+	public void testGzipHeaderBeforeAnOutageIs503() throws Exception {
+		cloud.s3().unreachable(true);
+
+		MockHttpServletResponse response = run(r -> {
+			try {
+				serveGzipped(r);
+			} catch (IOException e) {
+				sendError(r, HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+			}
+		});
+
+		assertUnreachablePage(response);
+		assertNull("nothing the servlet wrote reaches the client", response.getHeader("Content-Encoding"));
+		assertTrue(response.getContentAsString(StandardCharsets.UTF_8).startsWith("<!DOCTYPE html>"));
+	}
+
+	@Test
+	public void testMultipartBoundariesBeforeAnOutageAre503() throws Exception {
+		cloud.s3().unreachable(true);
+
+		MockHttpServletResponse response = run(r -> {
+			try {
+				serveRanges(r, new long[][] { { 0, 100 }, { 2000, 100 } });
+			} catch (IOException e) {
+				sendError(r, HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+			}
+		});
+
+		assertUnreachablePage(response);
+		String page = response.getContentAsString(StandardCharsets.UTF_8);
+		assertTrue(page, page.startsWith("<!DOCTYPE html>"));
+		assertFalse(page, page.contains(BOUNDARY));
+	}
+
+	@Test
+	public void testSmallFileIsSentIntactWhenTheServletEnds() throws Exception {
+		byte[] small = random(700, 3);
+		Document doc = fx.upload(cloud.folder(), "small.bin", small, fx.admin());
+		moveToBucket(cloud, doc.getId(), "1.0");
+		StoreResource smallFile = resource(doc, "1.0");
+		// A server that sends each byte as it is written
+		MockHttpServletResponse real = new MockHttpServletResponse();
+		real.setBufferSize(1);
+		boolean[] committed = new boolean[1];
+		int[] sent = new int[1];
+
+		run(r -> {
+			r.setContentType("application/octet-stream");
+			r.setHeader("Content-Disposition", SENT);
+			r.setHeader("ETag", "1_1.0_1");
+			try (OutputStream out = r.getOutputStream()) {
+				Store.get().writeToStream(smallFile, out);
+			}
+			committed[0] = real.isCommitted();
+			sent[0] = real.getContentAsByteArray().length;
+		}, real);
+
+		assertFalse("held while the servlet runs", committed[0]);
+		assertEquals(0, sent[0]);
+		assertEquals(200, real.getStatus());
+		assertEquals("application/octet-stream", real.getContentType());
+		assertEquals(SENT, real.getHeader("Content-Disposition"));
+		assertEquals("1_1.0_1", real.getHeader("ETag"));
+		assertArrayEquals(small, real.getContentAsByteArray());
+	}
+
+	@Test
+	public void testWritePastTheHeldBytesSendsThemFirst() throws Exception {
+		byte[] head = random(1000, 4);
+		byte[] singles = random(HELD - head.length, 5);
+		byte[] tail = random(76, 6);
+		MockHttpServletResponse real = new MockHttpServletResponse();
+		real.setBufferSize(1);
+		boolean[] committed = new boolean[2];
+		int[] status = new int[1];
+		String[] range = new String[1];
+		byte[][] sent = new byte[2][];
+
+		run(r -> {
+			r.setStatus(HttpServletResponse.SC_PARTIAL_CONTENT);
+			r.setHeader("Content-Range", "bytes 0-1099/1100");
+			ServletOutputStream out = r.getOutputStream();
+			out.write(head);
+			for (byte b : singles)
+				out.write(b);
+			// 1,024 bytes, the most it holds
+			committed[0] = real.isCommitted();
+			sent[0] = real.getContentAsByteArray();
+			out.write(tail);
+			committed[1] = real.isCommitted();
+			status[0] = real.getStatus();
+			range[0] = real.getHeader("Content-Range");
+			sent[1] = real.getContentAsByteArray();
+			out.close();
+		}, real);
+
+		assertFalse(committed[0]);
+		assertEquals(0, sent[0].length);
+		assertTrue("committed before the servlet ends", committed[1]);
+		assertEquals(206, status[0]);
+		assertEquals("bytes 0-1099/1100", range[0]);
+		byte[] all = new byte[1100];
+		System.arraycopy(head, 0, all, 0, head.length);
+		System.arraycopy(singles, 0, all, head.length, singles.length);
+		System.arraycopy(tail, 0, all, HELD, tail.length);
+		assertArrayEquals("what was held, in order, then the write", all, sent[1]);
+		assertArrayEquals(all, real.getContentAsByteArray());
+	}
+
+	@Test
+	public void testFlushBeforeTheHeldBytesCommitsNothing() throws Exception {
+		byte[] header = random(10, 7);
+		byte[] rest = random(200, 8);
+		MockHttpServletResponse real = new MockHttpServletResponse();
+		boolean[] committed = new boolean[1];
+		int[] sent = new int[1];
+
+		run(r -> {
+			r.setContentType("application/octet-stream");
+			ServletOutputStream out = r.getOutputStream();
+			out.write(header);
+			out.flush();
+			r.flushBuffer();
+			committed[0] = real.isCommitted();
+			sent[0] = real.getContentAsByteArray().length;
+			out.write(rest);
+		}, real);
+
+		assertFalse(committed[0]);
+		assertEquals(0, sent[0]);
+		assertTrue("the flushes are sent with the rest", real.isCommitted());
+		byte[] all = new byte[210];
+		System.arraycopy(header, 0, all, 0, 10);
+		System.arraycopy(rest, 0, all, 10, 200);
+		assertArrayEquals(all, real.getContentAsByteArray());
+	}
+
+	@Test
+	public void testConvertPdfPlaceholderReplacesAnAttemptThatHeldBytes() throws Exception {
+		cloud.s3().unreachable(true);
+
+		// ConvertPdf with download.gzip on: the failed attempt held a GZIP header and trailer
+		MockHttpServletResponse response = run(r -> {
+			try {
+				serveGzipped(r);
+			} catch (Exception e) {
+				try (OutputStream os = r.getOutputStream()) {
+					r.setHeader("Content-Disposition", "inline; filename=\"notavailable.pdf\"");
+					os.write(PLACEHOLDER);
+				} catch (Exception t) {
+					// As ConvertPdf does
+				}
+			}
+		});
+
+		assertEquals(200, response.getStatus());
+		assertArrayEquals(PLACEHOLDER, response.getContentAsByteArray());
+		assertEquals("inline; filename=\"notavailable.pdf\"", response.getHeader("Content-Disposition"));
+		assertNull("not the failed attempt's", response.getHeader("Content-Encoding"));
 	}
 }

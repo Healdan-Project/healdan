@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.storage;
 import static com.logicaldoc.healdan.storage.StorageFixtures.file;
 import static com.logicaldoc.healdan.storage.StorageFixtures.files;
 import static com.logicaldoc.healdan.storage.StorageFixtures.key;
+import static com.logicaldoc.healdan.storage.StorageFixtures.moveToBucket;
 import static com.logicaldoc.healdan.storage.StorageFixtures.resource;
 import static com.logicaldoc.healdan.storage.StorageFixtures.root;
 import static com.logicaldoc.healdan.storage.StorageFixtures.row;
@@ -15,21 +16,25 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Test;
 
@@ -41,11 +46,13 @@ import com.logicaldoc.healdan.storage.BackendHealth.Status;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
 import com.logicaldoc.healdan.storage.backend.GatedBackend;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
+import com.logicaldoc.healdan.storage.backend.MemoryBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.storage.crypto.BackendKeys;
 import com.logicaldoc.healdan.storage.mover.Mover;
 import com.logicaldoc.healdan.storage.mover.StorageStartup;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.util.StorageUnreachableException;
 import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
 
@@ -401,5 +408,140 @@ public class BackendHealthTest extends AbstractStorageTestCase {
 		assertEquals(State.FAILING, status.state());
 		assertFalse(status.unreachable());
 		assertTrue(status.error(), status.error().contains("enter the secret again"));
+	}
+
+	/** @return the backends whose last check failed on their key, which only the bean keeps */
+	@SuppressWarnings("unchecked")
+	private Set<Long> keyFailures() throws ReflectiveOperationException {
+		Field field = BackendHealth.class.getDeclaredField("keyFailures");
+		field.setAccessible(true);
+		return (Set<Long>) field.get(health);
+	}
+
+	@Test
+	public void testReadMeetingAnOutageMakesTheBackendFailing() throws Exception {
+		Document doc = upload(cloud, "read in the outage");
+		moveToBucket(cloud, doc.getId(), "1.0");
+		health.checkAll();
+		assertEquals(State.OK, health.status(cloud.backendId()).state());
+
+		// The bucket goes down after its check passed, while nothing moves: only the read meets it
+		cloud.s3().unreachable(true);
+		IOException read = assertThrows(IOException.class, () -> text(resource(doc, "1.0")));
+		assertNotNull(read.toString(), StorageUnreachableException.in(read));
+
+		Status status = health.status(cloud.backendId());
+		assertEquals(State.FAILING, status.state());
+		assertTrue(status.unreachable());
+		assertNotNull(status.since());
+		// What the alert reads: a backend among the unavailable, failing since a time
+		assertTrue(health.unavailable().contains(cloud.backendId()));
+	}
+
+	@Test
+	public void testSaveRefusedRunsTheBackendsCheck() throws Exception {
+		// A local-kind backend that can refuse one file's write while its own check passes
+		long id = sf.localBackend("refusing", false);
+		MemoryBackend folder = new MemoryBackend(id);
+		GatedBackend counted = new GatedBackend(folder);
+		StorageFixtures.useBackend(id, counted);
+		Side refusing = sf.side("Refusing", id, root(id), null);
+		Document doc = upload(refusing, "saved before");
+		assertEquals(State.OK, health.status(id).state());
+		assertEquals("the first write checked it", 1, counted.checks());
+
+		// Refused as access denied, a plain BackendFailingException: its check runs, passes, and it stays OK
+		folder.denyOps(Op.PUT);
+		assertThrows(IOException.class,
+				() -> Store.get().store(file("refused"), resource(doc.getId(), "1.0-thumb.png")));
+		assertEquals("the refusal ran its check", 2, counted.checks());
+		assertEquals(State.OK, health.status(id).state());
+		assertFalse(health.unavailable().contains(id));
+
+		// An unmounted share after its check passed: the save's refusal runs the check, which fails it
+		Side gone = sf.localSide("Gone", false);
+		Document saved = upload(gone, "saved while mounted");
+		assertEquals(State.OK, health.status(gone.backendId()).state());
+		Files.delete(gone.root().resolve(LocalBackend.MARKER));
+		assertThrows(IOException.class,
+				() -> Store.get().store(file("thumbnail"), resource(saved.getId(), "1.0-thumb.png")));
+
+		Status status = health.status(gone.backendId());
+		assertEquals(State.FAILING, status.state());
+		assertFalse(status.unreachable());
+		assertTrue(status.error(), status.error().contains("marker") && status.error().contains("missing"));
+		assertNotNull(status.since());
+		assertTrue("the alert sees it", health.unavailable().contains(gone.backendId()));
+	}
+
+	@Test
+	public void testFailingBackendIsLeftToItsRetest() throws Exception {
+		Document doc = upload(cloud, "in the bucket");
+		moveToBucket(cloud, doc.getId(), "1.0");
+		GatedBackend bucket = gate(cloud);
+		cloud.s3().failCheck(true);
+		Status failing = health.check(cloud.backendId());
+		assertEquals(State.FAILING, failing.state());
+		assertFalse(failing.unreachable());
+		int checks = bucket.checks();
+
+		// A read refused, then one meeting an outage: neither runs a check, nor changes what the last one found
+		cloud.s3().deny(key(doc.getId(), "1.0"));
+		assertThrows(IOException.class, () -> text(resource(doc, "1.0")));
+		cloud.s3().unreachable(true);
+		assertThrows(IOException.class, () -> text(resource(doc, "1.0")));
+
+		assertEquals("no check ran", checks, bucket.checks());
+		Status after = health.status(cloud.backendId());
+		assertSame("its health is as its check left it", failing, after);
+		assertEquals(failing.since(), after.since());
+		assertEquals(failing.error(), after.error());
+		assertFalse(after.unreachable());
+	}
+
+	@Test
+	public void testRetestForgetsARemovedBackend() throws Exception {
+		long safe = sf.localBackend("safe", true);
+		health.checkAll();
+		Status staging = health.status(Staging.ID);
+		Status original = health.status(StorageBackend.ORIGINAL);
+		assertEquals(State.OK, staging.state());
+		assertEquals(State.OK, original.state());
+		swapKey(safe);
+		assertEquals(State.FAILING, health.check(safe).state());
+		assertTrue(keyFailures().contains(safe));
+
+		// Removed while failing: known to fail, it stays out until a retest
+		StorageBackendDAO.get().remove(safe);
+		assertTrue(health.unavailable().contains(safe));
+		health.retest();
+
+		assertEquals(State.UNCHECKED, health.status(safe).state());
+		assertFalse("nothing alerts on it", health.unavailable().contains(safe));
+		assertFalse(keyFailures().contains(safe));
+		assertSame("Original has a row, and keeps its state", original, health.status(StorageBackend.ORIGINAL));
+		assertSame(staging, health.status(Staging.ID));
+	}
+
+	@Test
+	public void testFirstPassWakesTheMover() throws Exception {
+		AtomicInteger recovered = new AtomicInteger();
+		health.onRecovered(recovered::incrementAndGet);
+		Side fresh = sf.localSide("Fresh", false);
+		assertEquals(State.UNCHECKED, health.status(fresh.backendId()).state());
+
+		// Found OK for the first time: the mover's passes left its files while it was unchecked
+		assertEquals(State.OK, health.check(fresh.backendId()).state());
+		assertEquals(1, recovered.get());
+		health.check(fresh.backendId());
+		assertEquals("checked again while OK, nothing changes", 1, recovered.get());
+
+		// And found OK again after failing
+		Files.delete(fresh.root().resolve(LocalBackend.MARKER));
+		assertEquals(State.FAILING, health.check(fresh.backendId()).state());
+		assertEquals(1, recovered.get());
+		new LocalBackend(fresh.backendId(), StorageSettings.get().installId(), fresh.root(), true);
+		assertEquals(State.OK, health.check(fresh.backendId()).state());
+		assertEquals(2, recovered.get());
 	}
 }

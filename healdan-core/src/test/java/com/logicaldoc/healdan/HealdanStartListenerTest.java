@@ -6,7 +6,10 @@ package com.logicaldoc.healdan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -22,6 +25,7 @@ import com.logicaldoc.healdan.preview.PreviewWorker;
 import com.logicaldoc.healdan.seed.SeedRunner;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.signin.AdminSignInAlert;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -54,6 +58,66 @@ public class HealdanStartListenerTest extends AbstractHealdanTestCase {
 
 	private static Recorder recorder() {
 		return Context.get(Recorder.class);
+	}
+
+	/**
+	 * Throws what a test arms it with, once, and remembers how many calls {@link Recorder} had then. Its name puts it
+	 * before {@link Recorder} in the scan, so the recorder is the next listener. Does nothing unless armed.
+	 */
+	@Component
+	public static class Breaker implements HealdanStartListener {
+
+		static volatile Throwable armed;
+
+		static volatile int recorderCallsBefore = -1;
+
+		@Override
+		public void started() {
+			Throwable failure = armed;
+			if (failure == null)
+				return;
+			armed = null;
+			recorderCallsBefore = recorder().calls().size();
+			if (failure instanceof Error error)
+				throw error;
+			throw (RuntimeException) failure;
+		}
+
+		static void reset() {
+			armed = null;
+			recorderCallsBefore = -1;
+		}
+	}
+
+	@Override
+	public void tearDown() throws IOException {
+		Breaker.reset();
+		super.tearDown();
+	}
+
+	@Test
+	public void testAnErrorIsLoggedAndTheNextListenerStarts() {
+		// A class missing from a plugin's zip
+		Breaker.armed = new NoClassDefFoundError("com/example/Missing");
+
+		try (LogCapture log = LogCapture.of(HealdanStartup.class)) {
+			Context.get(HealdanStartup.class).start();
+
+			assertEquals("the breaker ran first", 0, Breaker.recorderCallsBefore);
+			assertEquals("the next listener started", 1, recorder().calls().size());
+			assertTrue(log.lines().toString(), log.lines().stream()
+					.anyMatch(line -> line.startsWith("ERROR Breaker failed to start: com/example/Missing")));
+		}
+	}
+
+	@Test
+	public void testTheJvmsOwnErrorIsThrown() {
+		Breaker.armed = new InternalError("the JVM failed");
+
+		InternalError thrown = assertThrows(InternalError.class, () -> Context.get(HealdanStartup.class).start());
+
+		assertEquals("the JVM failed", thrown.getMessage());
+		assertEquals(0, Breaker.recorderCallsBefore);
 	}
 
 	@Test

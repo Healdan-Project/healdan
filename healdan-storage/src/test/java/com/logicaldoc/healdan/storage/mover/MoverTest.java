@@ -37,12 +37,14 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import org.junit.Test;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -1286,5 +1288,137 @@ public class MoverTest extends AbstractStorageTestCase {
 		assertEquals(Long.valueOf(cloud.store().getId()), row(id, "1.0").storeId());
 		assertEquals(cloud.backendId(), row(id, "1.0").backendId());
 		assertEquals("a new thumbnail", bytes(cloud, key(id, "1.0-thumb.png")));
+	}
+
+	/** @return how many of the open transaction's synchronizations are this class's */
+	private static long synchronizationsOf(Class<?> owner) {
+		return TransactionSynchronizationManager.getSynchronizations().stream()
+				.filter(s -> s.getClass().getEnclosingClass() == owner).count();
+	}
+
+	@Test
+	public void testATransactionWakesOnceHoweverManyFilesItSaves() throws Exception {
+		Document doc = upload(cloud, "a document");
+		long[] counted = new long[2];
+		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+			// A folder copy's many staged saves, each of which wakes the mover and marks its file
+			for (int i = 1; i <= 5; i++)
+				store("page " + i, doc, "1.0-page" + i + ".png");
+			counted[0] = synchronizationsOf(Mover.class);
+			counted[1] = synchronizationsOf(FileLocks.class);
+		});
+		assertEquals("one wake", 1, counted[0]);
+		assertEquals("one set of file marks", 1, counted[1]);
+		assertEquals(6, mover.runOnce());
+	}
+
+	@Test
+	public void testATransactionOfItsOwnWakesAtItsOwnCommit() throws Exception {
+		StorageSettings.get().setSweepSeconds(3600);
+		Document doc = upload(cloud, "a document");
+		// Its own file is out of the way, so the start's pass moves nothing and only wakes list after it
+		jdbc().update("update hd_storage_file set hd_stuck = 1 where hd_docid = ?", doc.getId());
+		GatedBackend bucket = gate(cloud);
+		Semaphore listed = new Semaphore(0);
+		mover.listing = listed::release;
+		mover.start();
+		assertTrue(listed.tryAcquire(WAIT.toSeconds(), TimeUnit.SECONDS));
+		String inner1 = key(doc.getId(), "1.0-inner1.png");
+		String inner2 = key(doc.getId(), "1.0-inner2.png");
+		String outer = key(doc.getId(), "1.0-outer.png");
+
+		long[] counted = new long[3];
+		TransactionTemplate own = new TransactionTemplate(Context.get(PlatformTransactionManager.class));
+		own.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+			store("outer", doc, "1.0-outer.png");
+			own.executeWithoutResult(inner -> {
+				store("inner 1", doc, "1.0-inner1.png");
+				store("inner 2", doc, "1.0-inner2.png");
+				counted[0] = synchronizationsOf(Mover.class);
+			});
+			try {
+				// The inner transaction's commit woke the mover, while the outer one is still open
+				bucket.awaitStaged(inner1);
+				bucket.awaitStaged(inner2);
+				assertTrue(mover.awaitIdle(WAIT));
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new IllegalStateException(e);
+			}
+			assertFalse("the outer transaction's file waits for it", bucket.stages().contains(outer));
+			counted[1] = synchronizationsOf(Mover.class);
+			store("outer again", doc, "1.0-outer.png");
+			counted[2] = synchronizationsOf(Mover.class);
+		});
+
+		assertEquals("the inner transaction's own wake", 1, counted[0]);
+		assertEquals("the outer transaction's, resumed", 1, counted[1]);
+		assertEquals(1, counted[2]);
+		// The outer transaction's commit wakes it again
+		bucket.awaitStaged(outer);
+		assertTrue(mover.awaitIdle(WAIT));
+		assertEquals("outer again", bytes(cloud, outer));
+		assertEquals("inner 1", bytes(cloud, inner1));
+	}
+
+	@Test
+	public void testNightlyCheckMarksARowLeftWithoutTheMarkAndWakes() throws Exception {
+		StorageSettings.get().setSweepSeconds(3600);
+		Document doc = upload(cloud, "left unmarked");
+		String key = key(doc.getId(), "1.0");
+		// Misplaced, but without the mark, as only a write that skipped StoredFiles leaves a row: no pass lists it
+		jdbc().update("update hd_storage_file set hd_waiting = null where hd_docid = ?", doc.getId());
+		assertEquals(0, mover.runOnce());
+		GatedBackend bucket = gate(cloud);
+		Semaphore listed = new Semaphore(0);
+		mover.listing = listed::release;
+		mover.start();
+		assertTrue(listed.tryAcquire(WAIT.toSeconds(), TimeUnit.SECONDS));
+
+		int[] fixed = new int[1];
+		long[] wakes = new long[1];
+		try (LogCapture log = LogCapture.of(NightlyCheck.class)) {
+			new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+				fixed[0] = NightlyCheck.get().run();
+				wakes[0] = synchronizationsOf(Mover.class);
+			});
+			assertEquals(List.of("INFO The Store check marked 1 files as waiting to move"), log.lines());
+		}
+
+		assertEquals("no Store was wrong", 0, fixed[0]);
+		assertEquals("it woke the mover, once it commits", 1, wakes[0]);
+		assertNotNull(row(doc.getId(), "1.0").waiting());
+		bucket.awaitStaged(key);
+		assertTrue(mover.awaitIdle(WAIT));
+		assertEquals(cloud.backendId(), row(doc.getId(), "1.0").backendId());
+		assertEquals("left unmarked", bytes(cloud, key));
+	}
+
+	@Test
+	public void testCoordinatorOutlivesAnErrorInAPass() throws Exception {
+		StorageSettings.get().setSweepSeconds(3600);
+		GatedBackend bucket = gate(cloud);
+		CountDownLatch failed = new CountDownLatch(1);
+		AtomicInteger listings = new AtomicInteger();
+		mover.listing = () -> {
+			if (listings.incrementAndGet() == 1) {
+				failed.countDown();
+				throw new NoClassDefFoundError("a class missing from a plugin's zip");
+			}
+		};
+
+		try (LogCapture passes = LogCapture.of(Mover.class)) {
+			mover.start();
+			assertTrue(failed.await(WAIT.toSeconds(), TimeUnit.SECONDS));
+
+			// The next wake still finds a coordinator
+			Document saved = upload(cloud, "saved after the error");
+			bucket.awaitStaged(key(saved.getId(), "1.0"));
+			assertTrue(mover.awaitIdle(WAIT));
+			assertEquals(cloud.backendId(), row(saved.getId(), "1.0").backendId());
+			assertTrue(passes.lines().toString(), passes.lines().stream().anyMatch(
+					line -> line.startsWith("WARN The storage mover's pass failed") && line.contains("plugin's zip")));
+		}
 	}
 }

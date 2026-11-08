@@ -22,6 +22,8 @@ import org.junit.Test;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentEvent;
+import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
@@ -190,5 +192,39 @@ public class StoreTrackingTest extends AbstractStorageTestCase {
 		assertEquals(1, StoreTracking.get().checkStore(b.store().getId()));
 		assertStore(a, wrong.getId(), "1.0");
 		assertStore(a, right.getId(), "1.0");
+	}
+
+	/** @return a history of a store that is no arrival, as CE's own updates of a document are */
+	private DocumentHistory changed() throws Exception {
+		DocumentHistory history = fx.documentHistory(fx.admin());
+		history.setEvent(DocumentEvent.CHANGED);
+		return history;
+	}
+
+	@Test
+	public void testStoreThatChangesTheFolderTracksTheStore() throws Exception {
+		Document doc = upload(a, "a.txt");
+		Document loaded = DocumentDAO.get().findById(doc.getId(), true);
+		loaded.setFolder(b.folder());
+
+		DocumentDAO.get().store(loaded, changed());
+
+		assertStore(b, doc.getId(), "1.0");
+		assertNotNull("waiting for the mover", row(doc.getId(), "1.0").waiting());
+		assertEquals(List.of(doc.getId()), misplaced());
+	}
+
+	@Test
+	public void testStoreThatKeepsTheFolderLeavesTheRows() throws Exception {
+		Document doc = upload(a, "a.txt");
+		// The row names another Store, as only a write around the listeners leaves it: the nightly check's to mend
+		StorageFixtures.jdbc().update("update hd_storage_file set hd_storeid = ? where hd_docid = ?",
+				b.store().getId(), doc.getId());
+		Document loaded = DocumentDAO.get().findById(doc.getId(), true);
+		loaded.setComment("indexed, renamed or locked: the folder stays");
+
+		DocumentDAO.get().store(loaded, changed());
+
+		assertStore(b, doc.getId(), "1.0");
 	}
 }
