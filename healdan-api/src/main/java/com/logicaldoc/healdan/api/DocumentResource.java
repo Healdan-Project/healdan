@@ -341,7 +341,7 @@ public class DocumentResource {
 			try {
 				in = Store.get().getStream(resource);
 			} catch (IOException e) {
-				log.warn("The thumbnail of document #{} can't be read: {}", docNumber, e.getClass().getSimpleName());
+				// An outage was warned of by HealdanStorage; clients ask for thumbnails again and again
 				log.debug("The thumbnail of document #{} can't be read", docNumber, e);
 				throw ApiProblem.notFound("Document #%d has no thumbnail yet.".formatted(docNumber));
 			}

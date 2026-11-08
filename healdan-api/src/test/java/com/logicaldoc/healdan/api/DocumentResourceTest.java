@@ -251,6 +251,10 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertEquals(404, get("/api/v1/documents/" + number(d) + "/versions").token(token).send().status());
 	}
 
+	private int downloads(Document d) throws Exception {
+		return DocumentHistoryDAO.get().findByDocIdAndEvent(d.getId(), DocumentEvent.DOWNLOADED).size();
+	}
+
 	@Test
 	public void testUnreadableFileIsNot200() throws Exception {
 		Document d = file("a.txt", "Lease draft");
@@ -266,11 +270,15 @@ public class DocumentResourceTest extends ApiTestCase {
 		java.nio.file.Files.delete(stored);
 		java.nio.file.Files.createDirectory(stored);
 
-		ApiResponse response = get("/api/v1/documents/" + number(d) + "/content").token(signIn(clerk)).send();
+		String token = signIn(clerk);
+		int before = downloads(d);
+
+		ApiResponse response = get("/api/v1/documents/" + number(d) + "/content").token(token).send();
 
 		assertEquals(response.toString(), 500, response.status());
 		assertEquals("server-error", response.code());
 		assertEquals("Something went wrong on the server.", response.json().path("detail").textValue());
+		assertEquals("a download that didn't happen isn't recorded", before, downloads(d));
 	}
 
 	@Test

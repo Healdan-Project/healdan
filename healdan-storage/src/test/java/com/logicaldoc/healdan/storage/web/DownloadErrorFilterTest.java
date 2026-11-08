@@ -15,10 +15,10 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.Random;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
 import org.springframework.mock.web.MockFilterChain;
@@ -46,6 +46,8 @@ import jakarta.servlet.http.HttpServletResponse;
  * {@code HealdanStorage} behind them. The real {@code /download} and its {@code 503} are checked on the stack.
  */
 public class DownloadErrorFilterTest extends AbstractStorageTestCase {
+
+	private static final byte[] PLACEHOLDER = "%PDF- not available".getBytes(StandardCharsets.US_ASCII);
 
 	private static final String SENT = "inline; filename=\"big.bin\"";
 
@@ -82,55 +84,112 @@ public class DownloadErrorFilterTest extends AbstractStorageTestCase {
 		void run(HttpServletResponse response) throws IOException;
 	}
 
-	/** Repeats ServletUtil.downloadDocument's order, then DownloadServlet's sendError(500) */
-	private Servlet downloadLike(boolean outageAfterFirstChunk) {
-		return response -> {
-			boolean failed = false;
-			OutputStream out = response.getOutputStream();
-			response.setStatus(HttpServletResponse.SC_OK);
-			response.setContentType("application/octet-stream");
-			response.setHeader("Content-Disposition", SENT);
-			try (InputStream in = Store.get().getStream(resource)) {
-				byte[] buffer = new byte[64 << 10];
-				for (int n = in.read(buffer); n >= 0; n = in.read(buffer)) {
-					out.write(buffer, 0, n);
-					if (outageAfterFirstChunk)
-						cloud.s3().unreachable(true);
-				}
-			} catch (IOException e) {
-				failed = true;
-			} finally {
-				out.close();
+	/** Flips the backend off after the first chunk reaches the client, to fail the read after its first bytes */
+	private OutputStream outageAfterFirstChunk(OutputStream out) {
+		return new OutputStream() {
+			@Override
+			public void write(int b) throws IOException {
+				out.write(b);
+				cloud.s3().unreachable(true);
 			}
-			if (failed)
-				sendError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+
+			@Override
+			public void write(byte[] b, int off, int len) throws IOException {
+				out.write(b, off, len);
+				cloud.s3().unreachable(true);
+			}
 		};
 	}
 
-	/** Repeats TicketDownload's order: the file's stream, the headers, the response's stream, the read, close in finally */
+	/**
+	 * Repeats ServletUtil.downloadDocument's order (headers, the response's stream in a try-with-resources, then
+	 * CE's ranged or whole copy, with the Content-Range and 206 a Range request sets), which closes the stream
+	 * before its failure leaves.
+	 *
+	 * @param range start and length of the Range asked for, or null for the whole file
+	 */
+	private void serve(HttpServletResponse response, long[] range, boolean outageAfterFirstChunk) throws IOException {
+		response.setContentType("application/octet-stream");
+		response.setHeader("Content-Disposition", SENT);
+		response.setHeader("Accept-Ranges", "bytes");
+		response.setHeader("ETag", "1_1.0_1");
+		response.setHeader("Cache-Control", "no-cache,no-store,must-revalidate");
+		try (OutputStream output = response.getOutputStream()) {
+			OutputStream to = outageAfterFirstChunk ? outageAfterFirstChunk(output) : output;
+			if (range == null)
+				Store.get().writeToStream(resource, to);
+			else {
+				response.setHeader("Content-Range",
+						"bytes " + range[0] + "-" + (range[0] + range[1] - 1) + "/" + content.length);
+				response.setStatus(HttpServletResponse.SC_PARTIAL_CONTENT);
+				Store.get().writeToStream(resource, to, range[0], range[1]);
+			}
+		}
+	}
+
+	/** DownloadServlet: ServletUtil.downloadDocument, then sendError(500) when it fails */
+	private Servlet downloadLike(long[] range, boolean outageAfterFirstChunk) {
+		return response -> {
+			try {
+				serve(response, range, outageAfterFirstChunk);
+			} catch (IOException e) {
+				sendError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+			}
+		};
+	}
+
+	/**
+	 * ConvertPdf: ServletUtil.downloadDocument, and when it fails the placeholder, written to the response's stream
+	 * again after downloadDocument closed it, with a Content-Disposition of its own
+	 */
+	private Servlet convertPdfLike() {
+		return response -> {
+			try {
+				serve(response, null, false);
+			} catch (Exception r) {
+				try (OutputStream os = response.getOutputStream()) {
+					response.setHeader("Content-Disposition", "inline; filename=\"notavailable.pdf\"");
+					os.write(PLACEHOLDER);
+				} catch (Exception e) {
+					// As ConvertPdf does
+				}
+			}
+		};
+	}
+
+	/**
+	 * TicketDownload: the file's stream, the headers, the response's stream, the read byte by byte, flush and close
+	 * in finally; and when it fails the 401 through response.getWriter(), whose failure is swallowed
+	 */
 	private Servlet ticketLike(Runnable afterOpening) {
 		return response -> {
-			InputStream in;
 			try {
-				in = Store.get().getStream(resource);
-			} catch (IOException e) {
-				response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Ticket not authorized");
-				return;
+				OutputStream os = null;
+				try (InputStream is = Store.get().getStream(resource)) {
+					afterOpening.run();
+					response.setContentType("application/octet-stream");
+					response.setHeader("Content-Disposition", SENT);
+					response.setHeader("Accept-Ranges", "bytes");
+					response.setHeader("Content-Length", Long.toString(content.length));
+					os = response.getOutputStream();
+					is.transferTo(os);
+				} finally {
+					try {
+						if (os != null) {
+							os.flush();
+							os.close();
+						}
+					} catch (Exception t) {
+						// Nothing to do
+					}
+				}
+			} catch (Exception e) {
+				try (PrintWriter out = response.getWriter()) {
+					response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Ticket not authorized");
+				} catch (Exception t) {
+					// Nothing to do
+				}
 			}
-			afterOpening.run();
-			response.setContentType("application/octet-stream");
-			response.setHeader("Content-Disposition", SENT);
-			OutputStream out = response.getOutputStream();
-			boolean failed = false;
-			try (in) {
-				in.transferTo(out);
-			} catch (IOException e) {
-				failed = true;
-			} finally {
-				out.close();
-			}
-			if (failed)
-				sendError(response, HttpServletResponse.SC_UNAUTHORIZED);
 		};
 	}
 
@@ -143,32 +202,18 @@ public class DownloadErrorFilterTest extends AbstractStorageTestCase {
 		}
 	}
 
-	private static MockHttpServletResponse run(DownloadErrorFilter filter, Servlet servlet,
-			AtomicReference<jakarta.servlet.ServletResponse> seen) throws Exception {
-		MockHttpServletResponse response = new MockHttpServletResponse();
-		FilterChain chain = (request, wrapped) -> {
-			if (seen != null)
-				seen.set(wrapped);
-			try {
-				new HttpServlet() {
-					private static final long serialVersionUID = 1L;
-
-					@Override
-					protected void service(HttpServletRequest req, HttpServletResponse res)
-							throws ServletException, IOException {
-						servlet.run(res);
-					}
-				}.service(request, wrapped);
-			} catch (ServletException e) {
-				throw e;
-			}
-		};
-		filter.doFilter(new MockHttpServletRequest("GET", "/download"), response, chain);
-		return response;
-	}
-
 	private static MockHttpServletResponse run(Servlet servlet) throws Exception {
-		return run(new DownloadErrorFilter(), servlet, null);
+		MockHttpServletResponse response = new MockHttpServletResponse();
+		FilterChain chain = (request, wrapped) -> new HttpServlet() {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			protected void service(HttpServletRequest req, HttpServletResponse res) throws IOException {
+				servlet.run(res);
+			}
+		}.service(request, wrapped);
+		new DownloadErrorFilter().doFilter(new MockHttpServletRequest("GET", "/download"), response, chain);
+		return response;
 	}
 
 	private void assertUnreachablePage(MockHttpServletResponse response) throws Exception {
@@ -184,24 +229,55 @@ public class DownloadErrorFilterTest extends AbstractStorageTestCase {
 	public void testDownloadFailingBeforeFirstByteIs503() throws Exception {
 		cloud.s3().unreachable(true);
 
-		assertUnreachablePage(run(downloadLike(false)));
+		MockHttpServletResponse response = run(downloadLike(null, false));
+
+		assertUnreachablePage(response);
+		assertNull(response.getHeader("ETag"));
 	}
 
 	@Test
-	public void testTicketFailingBeforeFirstByteIs503() throws Exception {
-		// Failing while its file's stream opens, which the servlet answers 401
+	public void testRangedDownloadFailingBeforeFirstByteIs503() throws Exception {
 		cloud.s3().unreachable(true);
+
+		MockHttpServletResponse response = run(downloadLike(new long[] { 1000, 5000 }, false));
+
+		assertUnreachablePage(response);
+		assertNull("the 206's header is dropped", response.getHeader("Content-Range"));
+	}
+
+	@Test
+	public void testTicketFailingWhileOpeningIs503() throws Exception {
+		// The servlet answers 401 through getWriter()
+		cloud.s3().unreachable(true);
+
 		assertUnreachablePage(run(ticketLike(() -> {
 		})));
-		cloud.s3().unreachable(false);
+	}
 
-		// And failing on the first read, after the stream opened, which the servlet answers after an empty 200
+	@Test
+	public void testTicketFailingOnFirstReadIs503() throws Exception {
+		// After the stream opened: the servlet's own getWriter() is refused, as its stream was taken, and it sends
+		// nothing
 		assertUnreachablePage(run(ticketLike(() -> cloud.s3().unreachable(true))));
 	}
 
 	@Test
+	public void testConvertPdfServesItsPlaceholderDuringAnOutage() throws Exception {
+		cloud.s3().unreachable(true);
+
+		MockHttpServletResponse response = run(convertPdfLike());
+
+		assertEquals(200, response.getStatus());
+		assertArrayEquals(PLACEHOLDER, response.getContentAsByteArray());
+		assertEquals("inline; filename=\"notavailable.pdf\"", response.getHeader("Content-Disposition"));
+		assertEquals("application/octet-stream", response.getContentType());
+		assertNull("not the failed attempt's", response.getHeader("ETag"));
+		assertNull(response.getHeader("Content-Length"));
+	}
+
+	@Test
 	public void testFailingAfterFirstBytesIsCutOff() throws Exception {
-		MockHttpServletResponse response = run(downloadLike(true));
+		MockHttpServletResponse response = run(downloadLike(null, true));
 
 		assertEquals("as before: the 200 it had committed", 200, response.getStatus());
 		assertEquals(SENT, response.getHeader("Content-Disposition"));
@@ -213,19 +289,39 @@ public class DownloadErrorFilterTest extends AbstractStorageTestCase {
 
 	@Test
 	public void testWorkingReadIsUntouched() throws Exception {
-		AtomicReference<jakarta.servlet.ServletResponse> seen = new AtomicReference<>();
-
-		MockHttpServletResponse response = run(new DownloadErrorFilter(), downloadLike(false), seen);
+		MockHttpServletResponse response = run(downloadLike(null, false));
 
 		assertEquals(200, response.getStatus());
 		assertEquals("application/octet-stream", response.getContentType());
 		assertEquals(SENT, response.getHeader("Content-Disposition"));
+		assertEquals("1_1.0_1", response.getHeader("ETag"));
 		assertArrayEquals(content, response.getContentAsByteArray());
 
 		MockHttpServletResponse ticket = run(ticketLike(() -> {
 		}));
 		assertEquals(200, ticket.getStatus());
+		assertEquals(SENT, ticket.getHeader("Content-Disposition"));
+		assertEquals(Integer.toString(content.length), ticket.getHeader("Content-Length"));
 		assertArrayEquals(content, ticket.getContentAsByteArray());
+	}
+
+	@Test
+	public void testWorkingRangedReadIsUntouched() throws Exception {
+		MockHttpServletResponse response = run(downloadLike(new long[] { 1000, 5000 }, false));
+
+		assertEquals(206, response.getStatus());
+		assertEquals("bytes 1000-5999/" + content.length, response.getHeader("Content-Range"));
+		assertEquals(SENT, response.getHeader("Content-Disposition"));
+		assertArrayEquals(java.util.Arrays.copyOfRange(content, 1000, 6000), response.getContentAsByteArray());
+	}
+
+	@Test
+	public void testConvertPdfServesTheFileWhenItReads() throws Exception {
+		MockHttpServletResponse response = run(convertPdfLike());
+
+		assertEquals(200, response.getStatus());
+		assertArrayEquals(content, response.getContentAsByteArray());
+		assertEquals(SENT, response.getHeader("Content-Disposition"));
 	}
 
 	@Test

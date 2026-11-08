@@ -22,6 +22,12 @@ public final class ReadOutages {
 		NOTED.set(new StorageUnreachableException[1]);
 	}
 
+	/** @return the first outage noted since {@link #arm()}, or null; the thread stays armed */
+	public static StorageUnreachableException noted() {
+		StorageUnreachableException[] noted = NOTED.get();
+		return noted == null ? null : noted[0];
+	}
+
 	/**
 	 * Stops noting.
 	 *

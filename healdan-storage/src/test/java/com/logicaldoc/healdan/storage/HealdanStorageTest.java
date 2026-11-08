@@ -580,4 +580,26 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 			cloud.s3().unreachable(false);
 		}
 	}
+
+	@Test
+	public void testUnreachableMidStreamOfAnEncryptedStore() throws Exception {
+		Side vault = sf.s3Side("Vault", true);
+		ReadCache.use(new ReadCache(ReadCache.folder(), () -> 20L << 20));
+		byte[] big = new byte[3 << 20];
+		new java.util.Random(6).nextBytes(big);
+		Document doc = fx.upload(vault.folder(), "big.bin", big, fx.admin());
+		moveToBucket(vault, doc.getId(), "1.0");
+
+		try (InputStream in = store().getStream(resource(doc, "1.0"))) {
+			// The first segment of the ciphertext, which Tink's decrypting stream reads whole
+			assertEquals(1024, in.readNBytes(new byte[1024], 0, 1024));
+			vault.s3().unreachable(true);
+
+			StorageUnreachableException e = assertThrows(StorageUnreachableException.class,
+					() -> in.readNBytes(2 << 20));
+			assertEquals("Vault", e.getStore());
+		} finally {
+			vault.s3().unreachable(false);
+		}
+	}
 }

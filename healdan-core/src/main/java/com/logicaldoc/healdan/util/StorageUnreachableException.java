@@ -36,6 +36,19 @@ public class StorageUnreachableException extends IOException {
 				: "This file is in " + store + "'s cloud storage, which can't be reached right now.";
 	}
 
+	/**
+	 * @param failure what went wrong, possibly null
+	 * @return the first of these in the failure's chain of causes, the failure itself included; null if there is none
+	 */
+	public static StorageUnreachableException in(Throwable failure) {
+		// Bounded, in case of a loop of causes
+		Throwable t = failure;
+		for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause())
+			if (t instanceof StorageUnreachableException outage)
+				return outage;
+		return null;
+	}
+
 	/** @return the name of the file's Store, possibly null */
 	public String getStore() {
 		return store;

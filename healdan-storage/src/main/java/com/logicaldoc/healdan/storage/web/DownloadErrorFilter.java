@@ -59,19 +59,24 @@ public class DownloadErrorFilter implements Filter {
 		}
 
 		HoldingResponse held = new HoldingResponse(http);
+		StorageUnreachableException[] noted = new StorageUnreachableException[1];
 		ReadOutages.arm();
 		try {
-			chain.doFilter(request, held);
+			try {
+				chain.doFilter(request, held);
+			} finally {
+				// Also when the chain throws an Error, so a pooled thread is never left armed
+				noted[0] = ReadOutages.disarm();
+			}
 		} catch (IOException | ServletException | RuntimeException e) {
-			StorageUnreachableException outage = outage(ReadOutages.disarm(), e);
+			StorageUnreachableException outage = noted[0] != null ? noted[0] : StorageUnreachableException.in(e);
 			if (outage == null || held.started())
 				throw e;
 			unreachable(http, held, outage);
 			return;
 		}
-		StorageUnreachableException outage = ReadOutages.disarm();
-		if (outage != null && !held.started())
-			unreachable(http, held, outage);
+		if (noted[0] != null && !held.started())
+			unreachable(http, held, noted[0]);
 		else
 			held.release();
 	}
@@ -79,18 +84,6 @@ public class DownloadErrorFilter implements Filter {
 	/** @return whether the Store is Healdan's; a seam for tests */
 	protected boolean active() {
 		return Store.get() instanceof HealdanStorage;
-	}
-
-	/** @return the outage the read noted, or one the servlet let through */
-	private static StorageUnreachableException outage(StorageUnreachableException noted, Throwable thrown) {
-		if (noted != null)
-			return noted;
-		// Bounded, in case of a loop of causes
-		Throwable t = thrown;
-		for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause())
-			if (t instanceof StorageUnreachableException outage)
-				return outage;
-		return null;
 	}
 
 	private static void unreachable(HttpServletResponse response, HoldingResponse held, StorageUnreachableException outage)
@@ -137,7 +130,7 @@ public class DownloadErrorFilter implements Filter {
 
 		private final HttpServletResponse real;
 
-		private final List<Step> held = new ArrayList<>();
+		private final List<Held> held = new ArrayList<>();
 
 		private boolean started;
 
@@ -154,18 +147,28 @@ public class DownloadErrorFilter implements Filter {
 			void run() throws IOException;
 		}
 
+		/** A held step, with the name of the header it sets, or null */
+		private record Held(String header, Step step) {
+		}
+
+		/** How many steps were held when the servlet closed its stream before any byte, the close among them; else -1 */
+		private int closedAt = -1;
+
+		/** Whether the servlet asked for a writer */
+		private boolean writerTaken;
+
 		boolean started() {
 			return started;
 		}
 
 		/** Sends what is held, in order, as the servlet did it */
 		void release() throws IOException {
-			List<Step> steps = new ArrayList<>(held);
+			List<Held> steps = new ArrayList<>(held);
 			held.clear();
 			started = true;
-			for (Step step : steps)
+			for (Held step : steps)
 				try {
-					step.run();
+					step.step().run();
 				} catch (IllegalStateException e) {
 					// As the servlet would have been told, had the response been committed by then
 					log.debug("Replaying a download's response: {}", e.getMessage());
@@ -175,20 +178,41 @@ public class DownloadErrorFilter implements Filter {
 		/** Forgets what is held */
 		void drop() {
 			held.clear();
+			closedAt = -1;
+		}
+
+		/**
+		 * Forgets what a failed attempt to send the file held up to its close (status, error, headers and the close
+		 * itself) when the servlet goes on to write other bytes, as {@code /convertpdf} does with its placeholder,
+		 * which sets the headers it needs itself after the close. Only the content type stays: the attempt was for a
+		 * file of the type the fallback replaces.
+		 */
+		void dropFailedAttempt() {
+			List<Held> attempt = held.subList(0, closedAt);
+			attempt.removeIf(h -> !"Content-Type".equalsIgnoreCase(h.header()));
+			closedAt = -1;
 		}
 
 		private void hold(Step step) throws IOException {
+			hold(null, step);
+		}
+
+		private void hold(String header, Step step) throws IOException {
 			if (started)
 				step.run();
 			else
-				held.add(step);
+				held.add(new Held(header, step));
 		}
 
 		private void holdQuietly(Runnable step) {
+			holdQuietly(null, step);
+		}
+
+		private void holdQuietly(String header, Runnable step) {
 			if (started)
 				step.run();
 			else
-				held.add(step::run);
+				held.add(new Held(header, step::run));
 		}
 
 		@Override
@@ -214,7 +238,7 @@ public class DownloadErrorFilter implements Filter {
 
 		@Override
 		public void setHeader(String name, String value) {
-			holdQuietly(() -> real.setHeader(name, value));
+			holdQuietly(name, () -> real.setHeader(name, value));
 		}
 
 		@Override
@@ -249,7 +273,7 @@ public class DownloadErrorFilter implements Filter {
 
 		@Override
 		public void setContentType(String type) {
-			holdQuietly(() -> real.setContentType(type));
+			holdQuietly("Content-Type", () -> real.setContentType(type));
 		}
 
 		@Override
@@ -274,6 +298,8 @@ public class DownloadErrorFilter implements Filter {
 
 		@Override
 		public ServletOutputStream getOutputStream() throws IOException {
+			if (writerTaken)
+				throw new IllegalStateException("getWriter() has already been called for this response");
 			if (stream == null)
 				stream = new HoldingStream();
 			return stream;
@@ -281,9 +307,35 @@ public class DownloadErrorFilter implements Filter {
 
 		@Override
 		public PrintWriter getWriter() throws IOException {
-			// A page, not a download: nothing is held from here on
-			release();
-			return real.getWriter();
+			// As Tomcat does: CE's TicketDownload relies on it to find that its stream was taken, and then sends
+			// nothing, where it would send a 401 for a file that is only out of reach
+			if (stream != null)
+				throw new IllegalStateException("getOutputStream() has already been called for this response");
+			writerTaken = true;
+			return new PrintWriter(new HoldingWriter());
+		}
+
+		/** A writer that opens the real one at its first character, and keeps a flush or close before it */
+		private final class HoldingWriter extends java.io.Writer {
+
+			@Override
+			public void write(char[] chars, int off, int len) throws IOException {
+				if (len == 0)
+					return;
+				if (!started)
+					release();
+				real.getWriter().write(chars, off, len);
+			}
+
+			@Override
+			public void flush() throws IOException {
+				hold(() -> real.getWriter().flush());
+			}
+
+			@Override
+			public void close() throws IOException {
+				hold(() -> real.getWriter().close());
+			}
 		}
 
 		/** A stream that opens the real one at its first byte, and keeps a close before it */
@@ -294,8 +346,13 @@ public class DownloadErrorFilter implements Filter {
 			}
 
 			private void start() throws IOException {
-				if (!started)
-					release();
+				if (started)
+					return;
+				if (closedAt >= 0 && ReadOutages.noted() != null)
+					// The file could not be read and the servlet wrote something else (CE's /convertpdf, its
+					// placeholder), to the stream it had closed: that starts the response afresh
+					dropFailedAttempt();
+				release();
 			}
 
 			@Override
@@ -319,6 +376,8 @@ public class DownloadErrorFilter implements Filter {
 
 			@Override
 			public void close() throws IOException {
+				if (!started && closedAt < 0)
+					closedAt = held.size() + 1;
 				hold(() -> out().close());
 			}
 

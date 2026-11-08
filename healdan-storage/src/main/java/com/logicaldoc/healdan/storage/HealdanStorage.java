@@ -430,14 +430,14 @@ public class HealdanStorage extends AbstractStore {
 		StoredFile current = row.get();
 		try {
 			try {
-				return outageAware(open(current, key, ranged), current, ranged);
+				return outageAware(current, key, ranged);
 			} catch (FileNotFoundException e) {
 				Optional<StoredFile> now = files().find(docId, name);
 				if (now.isEmpty() || !moved(current, now.get()))
 					throw e;
 				current = now.get();
 				// The retry is inside the same catch, so its outage is converted too
-				return outageAware(open(current, key, ranged), current, ranged);
+				return outageAware(current, key, ranged);
 			}
 		} catch (BackendUnreachableException e) {
 			throw unreachable(current, e);
@@ -445,12 +445,15 @@ public class HealdanStorage extends AbstractStore {
 	}
 
 	/**
-	 * @return the stream or channel, which also converts the outage its own reads meet, so that none escapes as a
-	 *         {@link BackendUnreachableException}; S3's are the only ones that can meet one
+	 * @return the row's file, opened; an S3 file's stream or channel also converts the outage its own reads meet, so
+	 *         that none escapes as a {@link BackendUnreachableException}. The kind is asked before the file is opened,
+	 *         so a failure there can't leak an opened stream.
 	 */
 	@SuppressWarnings("unchecked")
-	private static <T> T outageAware(T opened, StoredFile row, boolean ranged) throws IOException {
-		if (!backends().isS3(row.backendId()))
+	private static <T> T outageAware(StoredFile row, String key, boolean ranged) throws IOException {
+		boolean s3 = backends().isS3(row.backendId());
+		T opened = open(row, key, ranged);
+		if (!s3)
 			return opened;
 		return (T) (ranged ? UnreachableReads.wrap((SeekableByteChannel) opened, e -> unreachable(row, e))
 				: UnreachableReads.wrap((InputStream) opened, e -> unreachable(row, e)));
