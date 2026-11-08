@@ -29,7 +29,8 @@ Healdan included. The key file is in the configuration volume's backups; keep th
 
 ## Saving the Recovery Key
 
-When you add an encrypted backend, its recovery key shows at once.
+When you add an encrypted backend, its recovery key shows at once. That showing is recorded, as every later one is
+(see [Showing It Again](#showing-it-again)).
 
 ![The Recovery Key of Cloud Storage window: it says Cloud Storage is encrypted and to save its recovery key now, away from the server, that losing both the key file and the recovery key loses its files for good, then shows the key in two lines of four-character groups with a copy icon, and asks for its last group, with Confirm and Later](recovery-key.png)
 
@@ -43,7 +44,8 @@ Until you confirm it, no Store can use the backend: the Stores' drop-down doesn'
 
 ## Showing It Again
 
-Select the backend and press **Show Recovery Key**. Every showing is recorded, with who and when:
+Select the backend and press **Show Recovery Key**. Every showing is recorded, with who and when, the one when the
+backend was added included:
 
 - **Key Last Shown,** on the tab, shows the latest.
 - **Key History,** from the backend's right-click menu, lists every showing and every entering of its recovery key,
@@ -53,8 +55,8 @@ The server's log records each showing too, but never the key.
 
 ## Putting a Lost Key File Back
 
-A backend whose key file is missing or isn't its own fails. Test says "The key file of storage backend … is missing",
-or that the key file "isn't the key it was made with", as after a restore from the wrong backup. To put it back:
+A backend whose key file is missing or isn't its own fails. Test says "The key file of this backend is missing", or
+that the key file "isn't the key it was made with", as after a restore from the wrong backup. To put it back:
 
 1. Select the backend, and press **Enter Recovery Key**.
 2. Type or paste the key in **Recovery Key**, and press **Enter**.

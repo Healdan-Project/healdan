@@ -38,10 +38,16 @@ more copies, each billed.
 ### Clear Incomplete Uploads After 7 Days
 
 Healdan uploads a file over 64 MB in parts, and abandons the upload cleanly when a part fails. An upload cut short by
-a crash or a lost connection leaves its parts in the bucket, billed, until they're cleared: Wasabi clears them after
-31 days by itself. To clear them sooner, open the bucket's settings, and on its **Lifecycle** tab create a rule for
-the whole bucket that deletes incomplete multipart uploads after 7 days. Wasabi applies it to uploads started after
-the rule.
+a crash or a lost connection leaves its parts in the bucket, and Wasabi deletes them after 31 days by itself. It bills
+them as stored for their first 30 days, then as deleted for the rest of the plan's minimum storage duration (see
+Wasabi's page on
+[incomplete multipart uploads](https://docs.wasabi.com/docs/how-does-wasabi-handle-incomplete-multi-part-uploads)).
+
+To clear them sooner, open the bucket's settings, and on its **Lifecycle** tab create a rule for the whole bucket that
+deletes incomplete multipart uploads after 7 days. Wasabi applies it to uploads started after the rule is set (see
+Wasabi's [Lifecycle](https://docs.wasabi.com/docs/lifecycle) page). The rule keeps the bucket tidy, but the plan's
+minimum storage duration still applies to the parts it deletes, as to any object deleted early (see
+[Wasabi's 90-Day Minimum](#wasabis-90-day-minimum)).
 
 ### Make a User for Healdan
 

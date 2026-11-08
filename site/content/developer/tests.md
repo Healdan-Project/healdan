@@ -113,6 +113,9 @@ uploads in parts (create, upload a part, complete, abort).
 - **It records every request,** in `requests()`, and misbehaves on demand until `behave()`: it fails, stalls, delays,
   drops the connection, corrupts or cuts off a body, answers without a body or a length, or denies access. Close it
   in an `@After` method.
+- **It holds a put of one key until the test lets it go** (`holdPut()`, `release()`), then answers it under the rules
+  in force then. `StorageAdminTest` stops a backend's add or save at its marker this way, to check what other writes
+  do meanwhile.
 - **No test needs real DNS.** `FakeDns` answers the endpoint rule's address lookups from a map while it's open, so
   `EndpointsTest` checks which `http://` addresses count as private.
 

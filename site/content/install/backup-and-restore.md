@@ -234,6 +234,9 @@ To restore, get the files back from the offsite copy, into the folder you run th
 docker run --rm --env-file restic.env -v "$PWD":/restore restic/restic:0.18.1 restore latest --target /restore
 ```
 
-They land in a `backup` folder beneath it, as `backup/logicaldoc-db.sql` and `backup/logicaldoc-files.tgz`. For an
+They land in a `backup` folder beneath it, as `backup/logicaldoc-db.sql` and `backup/logicaldoc-files.tgz`. restic
+runs as root in its container, so they come back with the owners they had when they were backed up, by user ID:
+`logicaldoc-files.tgz` belongs to root, as the backup made it, and the rest to the user who ran the backup. On another
+server that ID may be someone else's, or nobody's: make the files yours with `sudo chown -R "$USER" backup`. For an
 older copy, put its ID from `snapshots` in place of `latest`. Then restore them onto a fresh stack as above, from the
 `backup` folder.

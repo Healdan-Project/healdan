@@ -10,7 +10,7 @@ on the server's disk while Client Work goes to the cloud. Backends are set up on
 see. LogicalDOC calls a place for files a *store*, but in Healdan a Store is a top-level container for matters, so
 these pages say *backend*.
 
-![The Storage tab: Original, a local folder at /opt/logicaldoc/repository/docs holding 18 files, and Cloud Storage, an encrypted S3 backend on the demo stack's stand-in S3 server holding 188 files, both OK; the Stores list with Client Work on Cloud Storage and Firm and Templates on Original, nothing waiting or stuck; and the settings, a 30-day holding period, a 20 GB read cache and 4 parallel transfers](storage-tab.png)
+![The Storage tab: Original, a local folder at /opt/logicaldoc/repository/docs holding 18 files, and Cloud Storage, an encrypted S3 backend on the demo stack's stand-in S3 server holding 186 files, both OK, Cloud Storage's recovery key last shown to sokafor when it was added; the Stores list with Client Work on Cloud Storage and Firm and Templates on Original, nothing waiting or stuck; and the settings, a 30-day holding period, a 20 GB read cache and 4 parallel transfers](storage-tab.png)
 
 ## What a Backend Holds
 

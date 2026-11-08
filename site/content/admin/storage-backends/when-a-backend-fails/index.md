@@ -5,7 +5,7 @@ weight: 7
 
 A backend is **failing** when Healdan can't use it. Its **Status**, on the **Storage** tab, says since when and why:
 
-![The Backends list with Original OK and Cloud Storage Failing since 08/11/2026 20:39:41: Backend 4951 can't be reached: The endpoint's host garage can't be found, after the demo stack's stand-in S3 server was stopped](backends-failing.png)
+![The Backends list with Original OK and Cloud Storage Failing since 08/11/2026 22:08:55: This backend can't be reached: The endpoint's host garage can't be found, after the demo stack's stand-in S3 server was stopped](backends-failing.png)
 
 | Why | What the status says, in part | What to do |
 |---|---|---|
@@ -55,6 +55,12 @@ A local backend, Original included, whose marker is missing refuses saves into i
 rather than writing files into an empty mount point where nobody would find them again. Its files can't be read
 either, as they aren't there. Mount the share again: the next check, within a minute, finds the backend, or press
 **Test**.
+
+A folder that can't be read at all, as when a share stops answering, is an outage, as an S3 service's is: its status
+says "can't be reached", and saves into its Stores are refused. Once the outage is found, reads of its files fail at
+once with a message that names the Store, as an S3 backend's does, but doesn't call it cloud storage, such as "This
+file is in Firm's storage, which can't be reached right now." When the share answers again, the next check, within a
+minute, finds the backend.
 
 ## The 24-Hour Alert
 
