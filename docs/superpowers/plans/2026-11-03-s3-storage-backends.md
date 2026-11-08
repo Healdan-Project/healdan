@@ -1184,6 +1184,10 @@ volumes:
 **Carried from PR A's build (2026-11-07):**
 - Say that undoing a Replace File on an S3 Store works only until the mover uploads the new file: the held copy is the object at the same key, which the upload replaces. Local Stores keep the old bytes under `.held/`.
 
+**Carried from PR C's build (2026-11-08):**
+- This task takes the Storage tab's pictures that Task 17's step 2 named, on a demo stack with the Garage overlay, after adding the Garage backend through the tab. Task 19 takes any its own pages need there too.
+- The outage page says that once a backend is known to be unreachable, reads of its uncached files fail at once with the outage message rather than waiting on the network. The next read after five seconds starts an early retest, so a backend that's back is found within seconds of someone asking for a file.
+
 **Files:**
 - Create: `site/content/admin/storage-backends/_index.md` and its pages (§15.3), with a card in `site/content/admin/_index.md`:
   - what a backend is, and Original;
@@ -1211,6 +1215,12 @@ volumes:
 - Task 9 measured the first start's recording at 9,450 files a second, over 100,000 small files on the tests' HSQLDB. MariaDB on a server will differ, so `install/upgrading.md` gives it as a rough figure.
 - A download during an outage gets the `503` page with `download.gzip=true` and for several ranges at once too: the download filter holds the answer's first 1,024 bytes, which cover the gzip header and the ranges' boundaries (owner's review of PR B). Known Limitations needs no line for them.
 - `how-healdan-extends-logicaldoc.md` says that `Held.hold` may build a backend's S3 client while it holds a file's lock, inside CE's transaction. For an `http://` endpoint that's a DNS lookup, and the 30-second memory of a failed build bounds it.
+
+**Carried from PR C's build (2026-11-08):**
+- `install/backup-and-restore.md` names `healdan-storage-keys` and the backends' recovery keys where it says the conf volume holds encrypted settings: without both the key files and the recovery keys, an encrypted backend's files can't be opened.
+- `install/host-folders.md`'s "its two folders" becomes three, with the cache volume.
+- `install/troubleshooting.md`'s failing backend: reads of uncached files fail at once while the outage is known, and the first to meet it waits out the client (about 20 seconds for a stopped server, up to two minutes for one that stalls).
+- A deleted bucket shows first as "can't be reached", and after the next retest as "bucket not found" (Task 16).
 
 **Files:**
 - Create: `site/content/install/cloud-storage.md` (§15.3: the bucket and the region's endpoint; a user limited to the bucket, with the policy; the lifecycle rule for incomplete multipart uploads after 7 days; Wasabi's 90-day minimum, and why the holding period suits it; other S3 services should work, but only Wasabi and Garage are tested), with a card in `site/content/install/_index.md`
@@ -1413,6 +1423,10 @@ Every ruling the build makes that the plan or the spec didn't settle goes here, 
 
 - Task 6's review found that the update-then-insert the Global Constraints named takes a gap lock on MariaDB inside CE's long transactions. Ruling: `recordWrite` and `HeldCopies.hold` read the row under the file's lock, then insert or update — the read-first form is as safe under the lock and takes no gap lock — costs if wrong: none known; running MariaDB at READ COMMITTED would also fix it, but that's a server-wide change for the owner.
 - Ruling: `S3Backend.hold` sends no request and returns the key, reversing the HEAD Task 5 first added to satisfy `BackendContract` — the held row is recorded whatever a HEAD says, and the HEAD held the file's lock for up to two minutes in an outage — costs if wrong: a held row for an object already gone, which the purge drops.
+- Task 16 timed reads during an outage: an uncached read waited 20 s with Garage stopped and 120 s with it paused, every time. Ruling: reads of a backend whose outage is known fail at once with the same `503`. The outage is known while the backend is failing unreachable and was found less than `storage.retestSeconds` ago, or while a check of it is under way, and a retest round marks every backend it will check as under way when it starts. A refused read reports no new failure, and one whose finding is more than 5 s old asks the retest thread for an early retest of that backend. A law firm's users shouldn't wait two minutes per file to be told the bucket is down. Costs if wrong: reads stay refused for a few seconds after a backend comes back.
+- Ruling: step 5f's `/convertpdf` check uses a PDF (file F), not the text file the brief named. CE has no text-to-PDF converter, so `/convertpdf` of a text file serves the placeholder without reading the file, and the check would prove nothing. Costs if wrong: nothing.
+- Task 16 found that a `PUT` into a deleted Garage bucket fails as an `SdkClientException` ("Error writing request body": Garage answers before `100 Continue`), not the bare `404` Task 5 expected. The backend shows as unreachable until its next retest names "bucket not found". Ruling: leave it. The window is at most `retestSeconds`, files lose no tries, and the backend fails rather than its files. Costs if wrong: up to a minute of "can't be reached" before the real reason. The fix is in Follow-Ups.
+- Ruling: Task 17's docs pictures move to Tasks 18 and 19, which write the pages that use them. Costs if wrong: one more stack started.
 - The rest of the build's rulings are in each PR's description.
 
 ## Follow-Ups
@@ -1423,4 +1437,5 @@ Filled in from the build's reviews: each gap in a narrow case, or for later, tha
 - **A crash after the mover stages a local target's copy** leaves a `.healdan-tmp-` file beside the key, which nothing points at. The nightly check could delete those more than a day old. (Task 11)
 - **`If-Match` on `S3Channel`'s ranged reads** (Task 5). A file read by range straight from the bucket (over a tenth of the cache) while the mover rewrites its key could mix two versions; an encrypted backend's AEAD refuses that read, an unencrypted one would serve it. `GetObject`'s `ifMatch` with the ETag from the `HEAD` fixes it, but the trial didn't try it on Garage or Wasabi.
 - **A conditional create of an S3 backend's marker** (Task 5). Two creates of one bucket and prefix at once could both write the marker; `If-None-Match: *` on its `PUT` would stop the second. The tab's overlap check (call 23) makes it unlikely, and the trial didn't try the header.
+- **A `PUT` into a deleted bucket reads as an outage** (Task 16). Garage answers before `100 Continue`, and the client throws an `SdkClientException`, which counts as unreachable. `S3Backend` could probe with a list on such an exception from a `PUT`, as the bare-`404` path does, so the backend shows "bucket not found" at once.
 - **`HibernateVersionDAO.deleteVersion`** (upstream) deletes only a version's own file, never its derived files, so a deleted version's preview and thumbnail stay in the repository, recorded and moved with their Store like any other file. (Seen while planning.)
