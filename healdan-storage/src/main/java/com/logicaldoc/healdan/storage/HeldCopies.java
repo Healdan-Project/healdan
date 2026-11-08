@@ -5,7 +5,9 @@ package com.logicaldoc.healdan.storage;
 
 import java.sql.Timestamp;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import javax.sql.DataSource;
@@ -85,6 +87,27 @@ public class HeldCopies {
 		return jdbc.query("select hd_backendid, hd_location, hd_docid, hd_resource, hd_held, hd_purge "
 				+ "from hd_storage_held where hd_backendid = ? and hd_location = ?", MAPPER, backendId, location)
 				.stream().findFirst();
+	}
+
+	/**
+	 * @param backendId a backend
+	 * @return how many copies are held on it
+	 */
+	public long countOn(long backendId) {
+		Long count = jdbc.queryForObject("select count(*) from hd_storage_held where hd_backendid = ?", Long.class,
+				backendId);
+		return count == null ? 0 : count;
+	}
+
+	/**
+	 * @return how many copies are held on each backend that holds any
+	 */
+	public Map<Long, Long> countByBackend() {
+		Map<Long, Long> counts = new HashMap<>();
+		jdbc.query("select hd_backendid, count(*) from hd_storage_held group by hd_backendid", rs -> {
+			counts.put(rs.getLong(1), rs.getLong(2));
+		});
+		return counts;
 	}
 
 	/**

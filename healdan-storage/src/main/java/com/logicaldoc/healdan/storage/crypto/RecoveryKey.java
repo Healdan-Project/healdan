@@ -43,6 +43,19 @@ public final class RecoveryKey {
 	}
 
 	/**
+	 * @param key the 32 key bytes
+	 * @param typed what an administrator typed back as its last group, read as {@link #parse} reads a key
+	 * @return whether it is the key's last group, which confirms the key was saved
+	 */
+	public static boolean isLastGroup(byte[] key, String typed) {
+		try {
+			return typed != null && bare(typed).equals(lastGroup(key));
+		} catch (IllegalArgumentException e) {
+			return false;
+		}
+	}
+
+	/**
 	 * @param typed a recovery key as typed: any case, with or without spaces and hyphens
 	 * @return the 32 key bytes
 	 * @throws IllegalArgumentException if it isn't 52 characters of Crockford's alphabet, or its last character isn't
@@ -51,19 +64,7 @@ public final class RecoveryKey {
 	public static byte[] parse(String typed) {
 		if (typed == null)
 			throw new IllegalArgumentException("A recovery key is " + CHARACTERS + " characters");
-		StringBuilder bare = new StringBuilder();
-		for (char c : typed.toCharArray()) {
-			if (Character.isWhitespace(c) || Character.isSpaceChar(c) || Character.getType(c) == Character.DASH_PUNCTUATION)
-				continue;
-			char upper = Character.toUpperCase(c);
-			if (upper == 'O')
-				upper = '0';
-			else if (upper == 'I' || upper == 'L')
-				upper = '1';
-			if (ALPHABET.indexOf(upper) < 0)
-				throw new IllegalArgumentException("A recovery key has only Crockford's base32 digits and letters");
-			bare.append(upper);
-		}
+		String bare = bare(typed);
 		if (bare.length() != CHARACTERS)
 			throw new IllegalArgumentException("A recovery key is " + CHARACTERS + " characters, not " + bare.length());
 		char last = bare.charAt(CHARACTERS - 1);
@@ -78,6 +79,28 @@ public final class RecoveryKey {
 		int copy = Math.min(raw.length, KEY_BYTES);
 		System.arraycopy(raw, raw.length - copy, key, KEY_BYTES - copy, copy);
 		return key;
+	}
+
+	/**
+	 * @return the typed text's characters in Crockford's alphabet, upper case, spaces and dashes left out, {@code O}
+	 *         read as {@code 0} and {@code I} and {@code L} as {@code 1}
+	 * @throws IllegalArgumentException if it has a character outside the alphabet
+	 */
+	private static String bare(String typed) {
+		StringBuilder bare = new StringBuilder();
+		for (char c : typed.toCharArray()) {
+			if (Character.isWhitespace(c) || Character.isSpaceChar(c) || Character.getType(c) == Character.DASH_PUNCTUATION)
+				continue;
+			char upper = Character.toUpperCase(c);
+			if (upper == 'O')
+				upper = '0';
+			else if (upper == 'I' || upper == 'L')
+				upper = '1';
+			if (ALPHABET.indexOf(upper) < 0)
+				throw new IllegalArgumentException("A recovery key has only Crockford's base32 digits and letters");
+			bare.append(upper);
+		}
+		return bare.toString();
 	}
 
 	private static String encode(byte[] key) {

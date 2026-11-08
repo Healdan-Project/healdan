@@ -77,14 +77,23 @@ public final class StorageFixtures {
 	}
 
 	/**
+	 * @param name a folder's name under {@code target/storage-local/}
+	 * @return that folder, absolute, made empty
+	 */
+	public static Path freshFolder(String name) throws IOException {
+		Path root = LOCAL_ROOTS.resolve(name).toAbsolutePath().normalize();
+		FileUtils.deleteDirectory(root.toFile());
+		Files.createDirectories(root);
+		return root;
+	}
+
+	/**
 	 * @param name the backend's name, also its folder's under {@code target/storage-local/}
 	 * @param encrypted whether its files are encrypted, with a key made for it
 	 * @return the backend's id; its folder holds its marker
 	 */
 	public long localBackend(String name, boolean encrypted) throws Exception {
-		Path root = LOCAL_ROOTS.resolve(name).toAbsolutePath();
-		FileUtils.deleteDirectory(root.toFile());
-		Files.createDirectories(root);
+		Path root = freshFolder(name);
 		StorageBackend row = new StorageBackend();
 		row.setTenantId(Tenant.DEFAULT_ID);
 		row.setName(name);

@@ -56,6 +56,7 @@ import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.storage.AbstractStorageTestCase;
 import com.logicaldoc.healdan.storage.BackendHealth;
+import com.logicaldoc.healdan.storage.Backends;
 import com.logicaldoc.healdan.storage.FileLocks;
 import com.logicaldoc.healdan.storage.HeldCopy;
 import com.logicaldoc.healdan.storage.NightlyCheck;
@@ -660,6 +661,49 @@ public class MoverTest extends AbstractStorageTestCase {
 		health.retest();
 		assertEquals(BackendHealth.State.OK, health.status(cloud.backendId()).state());
 
+		assertEquals(1, mover.runOnce());
+		assertEquals(cloud.backendId(), row(doc.getId(), "1.0").backendId());
+		assertEquals(0, row(doc.getId(), "1.0").attempts());
+	}
+
+	/**
+	 * Ruling C.3: the Storage tab's save and Test drop a backend's entry ({@link Backends#forget}), which closes its S3
+	 * client under the transfers using it. A transfer that then fails ends as stopped: it spends no try, pauses
+	 * nothing, and the next pass moves the file.
+	 */
+	@Test
+	public void testATransferOnAForgottenBackendStopsWithoutATry() throws Exception {
+		Document doc = upload(cloud, "uploaded across an edit");
+		GatedBackend bucket = gate(cloud);
+		bucket.beforeStage.close();
+		Future<Integer> pass = inBackground(mover::runOnce);
+		bucket.beforeStage.awaitEntered(1);
+
+		// Saved in the Storage tab meanwhile: the request fails, as one on a closed client does
+		Backends.get().forget(cloud.backendId());
+		cloud.s3().refuseNext(1);
+		bucket.beforeStage.open();
+		assertEquals(0, (int) get(pass));
+
+		StoredFile row = row(doc.getId(), "1.0");
+		assertEquals(0L, row.backendId());
+		assertEquals(0, row.attempts());
+		assertNull(row.lastError());
+		assertNull(row.nextTry());
+		assertEquals(BackendHealth.State.OK, health.status(cloud.backendId()).state());
+
+		// Nor does a failure that looks like an outage pause the backend
+		bucket.beforeStage.close();
+		pass = inBackground(mover::runOnce);
+		bucket.beforeStage.awaitEntered(1);
+		Backends.get().forget(cloud.backendId());
+		cloud.s3().unreachable(true);
+		bucket.beforeStage.open();
+		assertEquals(0, (int) get(pass));
+		assertEquals(0, row(doc.getId(), "1.0").attempts());
+		assertEquals(BackendHealth.State.OK, health.status(cloud.backendId()).state());
+
+		cloud.s3().unreachable(false);
 		assertEquals(1, mover.runOnce());
 		assertEquals(cloud.backendId(), row(doc.getId(), "1.0").backendId());
 		assertEquals(0, row(doc.getId(), "1.0").attempts());

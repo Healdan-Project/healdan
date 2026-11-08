@@ -279,6 +279,38 @@ public final class S3Backend implements Backend, Closeable {
 		log.info("Backend {} wrote its marker {} in bucket {}", id, markerKey(), bucket());
 	}
 
+	/**
+	 * Deletes the marker object, so another backend may have the bucket and prefix: for the Storage tab, once a backend
+	 * is removed, or an add is undone. A marker that names another backend or install is left as it is.
+	 *
+	 * @return whether this backend's marker was there, and is gone
+	 * @throws BackendFailingException if it can't be read or deleted
+	 */
+	public boolean removeMarker() throws BackendFailingException {
+		Optional<String> found = readMarker();
+		if (found.isEmpty() || !found.get().equals(marker()))
+			return false;
+		try {
+			client.deleteObject(b -> b.bucket(bucket()).key(markerKey()));
+		} catch (SdkException e) {
+			throw checkFailure(failure("delete its marker", e));
+		}
+		log.info("Backend {} deleted its marker {} in bucket {}", id, markerKey(), bucket());
+		return true;
+	}
+
+	/**
+	 * Applies the endpoint rule ({@link Endpoints}) to settings as a backend built from them is held to it, looking
+	 * the host up as such a backend would: for the Storage tab, before anything is saved.
+	 *
+	 * @param settings a backend's settings
+	 * @throws IllegalArgumentException saying what is wrong; an {@link Endpoints.HostNotFound} if the host has no
+	 *         address to check
+	 */
+	public static void checkEndpoint(S3Settings settings) {
+		Endpoints.check(settings, resolver);
+	}
+
 	@Override
 	public void check() throws BackendFailingException {
 		Optional<String> found = readMarker();

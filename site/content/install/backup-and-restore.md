@@ -4,8 +4,8 @@ weight: 7
 ---
 
 Back up the database and both of the app's volumes together. The configuration volume holds the encryption key,
-the node id and the key that seals the secrets for signing in through a provider, so documents and a database
-restored without their matching configuration lose their encrypted settings.
+the node id and the key that seals the secrets for signing in through a provider and for S3 storage backends, so
+documents and a database restored without their matching configuration lose their encrypted settings.
 
 ## Backing Up
 
@@ -22,13 +22,13 @@ docker compose start app
 That leaves two files: `logicaldoc-db.sql`, the database, and `logicaldoc-files.tgz`, the configuration and the
 documents. Keep them together.
 
-## The Key for Sign-In Secrets
+## The Key for Sealed Secrets
 
-When you set up signing in through a provider, Healdan seals two kinds of secret before it puts them in the
-database: each provider's client secret, and the refresh tokens of the Healdan Helpers that signed in through a
-provider. The key that seals them is `conf/healdan-secret.key` in the configuration volume. Healdan makes it the
-first time it has a secret to seal, and only the app's user can read it. A server that doesn't use a provider never
-makes one.
+Healdan seals three kinds of secret before it puts them in the database: each sign-in provider's client secret, the
+refresh tokens of the Healdan Helpers that signed in through a provider, and the secret of each S3 storage backend's
+access key. The key that seals them is `conf/healdan-secret.key` in the configuration volume. Healdan makes it the
+first time it has a secret to seal, and only the app's user can read it. A server that uses neither a provider nor an
+S3 storage backend never makes one.
 
 A database dump on its own holds no readable secret. The backup above takes the key too, in
 `logicaldoc-files.tgz`, so keep the two files where only administrators can read them.
@@ -38,10 +38,14 @@ A database dump on its own holds no readable secret. The backup above takes the 
 Once secrets are sealed, Healdan never makes another key on its own: a new key would leave every secret sealed with
 the old one unreadable for good, even after the file came back. While the file is missing or empty, each provider
 counts as off, as its client secret can't be read, and the log, `repository/logs/dms.log`, says what to do.
-Helpers already signed in keep working. If someone types a provider's client secret on the Sign-In tab meanwhile,
-Healdan says the key file is missing and asks before it makes a new key: say no, and restore the file.
+Helpers already signed in keep working, and so do S3 storage backends until Healdan restarts or a backend is saved
+or tested on the Storage tab: then a backend whose secret can't be read is failing, and the tab says to enter its
+secret again. If someone types a provider's client secret on the Sign-In tab, or a backend's secret on the Storage
+tab, meanwhile, Healdan says the key file is missing and asks before it makes a new key: say no, and restore the
+file.
 
-Restore the file from the backup, and everything works again at once, with no restart:
+Restore the file from the backup, and everything works again with no restart: providers at once, and an S3 storage
+backend that was failing at its next check, within a minute or two, or when you press Test on the Storage tab:
 
 ```bash
 docker run --rm -v logicaldoc_logicaldoc-conf:/conf -v "$PWD":/backup busybox \
@@ -53,13 +57,17 @@ docker run --rm -v logicaldoc_logicaldoc-conf:/conf -v "$PWD":/backup busybox \
 If there's no copy of the key, or a database is restored without the key that matches it, the sealed secrets read
 as unset and nothing else is lost:
 
-- a provider whose client secret can't be read stays off until you enter the secret again in Healdan Settings. When
-  you save the first, Healdan says the key file is missing and asks whether to make a new key: make one, then enter
-  each other provider's secret;
+- a provider whose client secret can't be read stays off until you enter the secret again on the Sign-In tab of
+  Healdan Settings;
+- an S3 storage backend whose secret can't be read is failing until you enter its secret again on the Storage tab.
+  Meanwhile, saves into its Stores wait in staging, and a file that is only in its bucket can't be opened;
 - each Healdan Helper that signed in through a provider is asked to sign in again.
 
-Accounts, documents and the links between accounts and providers are not affected, and `admin` still signs in with
-its password.
+When you save the first secret, on either tab, Healdan says the key file is missing and asks whether to make a new
+key: make one, then enter each other provider's client secret and each other S3 backend's secret.
+
+Accounts, documents, the files in S3 buckets and the links between accounts and providers are not affected, and
+`admin` still signs in with its password.
 
 ## Restoring onto a Fresh Stack
 

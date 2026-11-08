@@ -281,11 +281,13 @@ public class Mover {
 	/**
 	 * Puts a Store's stuck files back to waiting, for the Storage tab's Retry, and wakes the mover.
 	 *
-	 * @param storeId the Store's folder id
+	 * @param storeId the Store's folder id; 0 for the files with no Store, as a staged file saved before its document
+	 *        had a folder
 	 */
 	public void retry(long storeId) {
-		int count = files.retry(storeId);
-		log.info("Retry: {} stuck files of Store {} wait to move again", count, storeId);
+		int count = files.retry(storeId == 0 ? null : storeId);
+		log.info("Retry: {} stuck files of {} wait to move again", count,
+				storeId == 0 ? "no Store" : "Store " + storeId);
 		wake();
 	}
 

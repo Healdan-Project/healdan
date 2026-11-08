@@ -198,6 +198,43 @@ public class Backends {
 			close(entry);
 	}
 
+	/**
+	 * @param entry a backend as {@link #entry} gave it
+	 * @return whether it is still the one kept for its backend: false once {@link #forget} dropped it, which closed its
+	 *         S3 client, so a transfer that used it and then failed was stopped by the Storage tab, not refused (ruling
+	 *         C.3)
+	 */
+	public boolean current(Entry entry) {
+		return built.get(entry.id()) == entry;
+	}
+
+	/**
+	 * Builds a backend from its row as it is now, without its cipher and without keeping it: for the Storage tab, which
+	 * reads an encrypted backend's check object with a typed recovery key before its key file is written, and clears a
+	 * removed backend's place. Give it back with {@link #release}.
+	 *
+	 * @param id a backend's id
+	 * @return the backend; the one a test gave, if there is one
+	 * @throws BackendFailingException if it can't be built
+	 */
+	public Backend withoutKey(long id) throws BackendFailingException {
+		return mapped(id, () -> {
+			StorageBackend row = row(id);
+			Backend backend = given.get(id);
+			if (backend != null)
+				return backend;
+			return StorageBackend.S3.equals(row.getKind()) ? s3(row) : local(row);
+		});
+	}
+
+	/**
+	 * @param backend a backend {@link #withoutKey} built, which is closed unless a test gave it
+	 */
+	public void release(Backend backend) {
+		if (backend != null && !given.containsValue(backend))
+			close(new Entry(backend.id(), backend, false, null));
+	}
+
 	/** @return the lock a backend's build, kind and forget are taken under */
 	private Object lock(long id) {
 		return building.computeIfAbsent(id, key -> new Object());
@@ -229,8 +266,20 @@ public class Backends {
 	}
 
 	private Entry build(long id) throws BackendFailingException {
+		return mapped(id,
+				() -> id == Staging.ID ? new Entry(id, Staging.backend(settings.installId()), false, null) : fromRow(id));
+	}
+
+	/** A build, which may fail as a backend's settings or folder are refused */
+	@FunctionalInterface
+	private interface Build<T> {
+		T run() throws BackendFailingException;
+	}
+
+	/** @return what the build made; its refusals as a {@link BackendFailingException}, an outage as unreachable */
+	private static <T> T mapped(long id, Build<T> build) throws BackendFailingException {
 		try {
-			return id == Staging.ID ? new Entry(id, Staging.backend(settings.installId()), false, null) : fromRow(id);
+			return build.run();
 		} catch (Endpoints.HostNotFound e) {
 			// DNS may be down: an outage, which the retest recovers
 			throw new BackendUnreachableException("Storage backend " + id + " can't be reached: " + e.getMessage());

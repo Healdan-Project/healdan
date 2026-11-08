@@ -337,6 +337,11 @@ public final class FakeS3 implements AutoCloseable {
 		return rule(r -> r.op() == op, Fault.ANSWER, status, code, null, null);
 	}
 
+	/** Answers every GET of a range with this error until {@link #behave}; whole GETs work */
+	public FakeS3 failRanges(int status, String code) {
+		return rule(r -> r.op() == Op.GET_OBJECT && r.header("range") != null, Fault.ANSWER, status, code, null, null);
+	}
+
 	/** Answers that part's upload with this error until {@link #behave} */
 	public FakeS3 failPart(int number, int status, String code) {
 		return rule(part(number), Fault.ANSWER, status, code, null, null);

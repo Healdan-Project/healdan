@@ -8,7 +8,9 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.IntFunction;
 
@@ -377,15 +379,71 @@ public class StoredFiles {
 
 	/**
 	 * @return for each Store with files, and for the files with no Store (store id null, first), how many files there
-	 *         are, how many wait, how many are stuck, and their total size
+	 *         are, how many wait, how many are stuck, their total size, and the size of those that wait
 	 */
 	public List<StoreStats> statsByStore() {
 		return jdbc.query("select hd_storeid, count(*), sum(case when hd_waiting is not null then 1 else 0 end), "
-				+ "sum(case when hd_stuck = 1 then 1 else 0 end), sum(hd_size) from hd_storage_file "
+				+ "sum(case when hd_stuck = 1 then 1 else 0 end), sum(hd_size), "
+				+ "sum(case when hd_waiting is not null then hd_size else 0 end) from hd_storage_file "
 				+ "group by hd_storeid order by case when hd_storeid is null then 0 else 1 end, hd_storeid", (rs, i) -> {
 					long storeId = rs.getLong(1);
 					Long store = rs.wasNull() ? null : storeId;
-					return new StoreStats(store, rs.getLong(2), rs.getLong(3), rs.getLong(4), rs.getLong(5));
+					return new StoreStats(store, rs.getLong(2), rs.getLong(3), rs.getLong(4), rs.getLong(5),
+							rs.getLong(6));
 				});
+	}
+
+	/**
+	 * What a backend holds.
+	 *
+	 * @param files how many files are on it
+	 * @param size their total size in bytes
+	 */
+	public record Usage(long files, long size) {
+	}
+
+	/**
+	 * @return for each backend with files on it, staging's included, what it holds
+	 */
+	public Map<Long, Usage> usageByBackend() {
+		Map<Long, Usage> usage = new HashMap<>();
+		jdbc.query("select hd_backendid, count(*), coalesce(sum(hd_size), 0) from hd_storage_file group by hd_backendid",
+				rs -> {
+					usage.put(rs.getLong(1), new Usage(rs.getLong(2), rs.getLong(3)));
+				});
+		return usage;
+	}
+
+	/**
+	 * @param backendId a backend
+	 * @return how many files are on it
+	 */
+	public long countOn(long backendId) {
+		Long count = jdbc.queryForObject("select count(*) from hd_storage_file where hd_backendid = ?", Long.class,
+				backendId);
+		return count == null ? 0 : count;
+	}
+
+	/**
+	 * @param storeId a Store
+	 * @param backendId a backend it may switch to
+	 * @return what would move: how many of the Store's files aren't on that backend, and their total size in bytes
+	 */
+	public Usage toMove(long storeId, long backendId) {
+		return jdbc.queryForObject("select count(*), coalesce(sum(hd_size), 0) from hd_storage_file "
+				+ "where hd_storeid = ? and hd_backendid <> ?", (rs, i) -> new Usage(rs.getLong(1), rs.getLong(2)),
+				storeId, backendId);
+	}
+
+	/**
+	 * @param storeId a Store; null for the files with no Store
+	 * @param limit the most rows to list
+	 * @return its files the mover gave up on, the newest documents first
+	 */
+	public List<StoredFile> stuck(Long storeId, int limit) {
+		String sql = "select " + COLUMNS + " from hd_storage_file f where f.hd_stuck = 1 and "
+				+ (storeId == null ? "f.hd_storeid is null" : "f.hd_storeid = ?")
+				+ " order by f.hd_docid desc, f.hd_resource limit ?";
+		return storeId == null ? jdbc.query(sql, MAPPER, limit) : jdbc.query(sql, MAPPER, storeId, limit);
 	}
 }

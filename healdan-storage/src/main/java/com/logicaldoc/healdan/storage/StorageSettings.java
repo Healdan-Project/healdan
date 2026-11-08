@@ -44,6 +44,15 @@ public class StorageSettings {
 
 	public static final int DEFAULT_RETEST_SECONDS = 60;
 
+	/** The longest holding period, in days */
+	public static final int MAX_HOLD_DAYS = 365;
+
+	/** The largest cache, in GB */
+	public static final int MAX_CACHE_GB = 10000;
+
+	/** The most transfers at once */
+	public static final int MAX_TRANSFERS = 16;
+
 	private final HealdanSettings settings;
 
 	@Autowired
@@ -62,33 +71,33 @@ public class StorageSettings {
 	 * @return how many days a deleted or replaced copy is held, 1 to 365
 	 */
 	public int holdDays() {
-		return read(HOLD_DAYS, DEFAULT_HOLD_DAYS, 1, 365);
+		return read(HOLD_DAYS, DEFAULT_HOLD_DAYS, 1, MAX_HOLD_DAYS);
 	}
 
 	public void setHoldDays(int days) {
-		write(HOLD_DAYS, days, 1, 365);
+		write(HOLD_DAYS, days, 1, MAX_HOLD_DAYS);
 	}
 
 	/**
 	 * @return the cache's size in gigabytes, 1 to 10000
 	 */
 	public int cacheGb() {
-		return read(CACHE_GB, DEFAULT_CACHE_GB, 1, 10000);
+		return read(CACHE_GB, DEFAULT_CACHE_GB, 1, MAX_CACHE_GB);
 	}
 
 	public void setCacheGb(int gigabytes) {
-		write(CACHE_GB, gigabytes, 1, 10000);
+		write(CACHE_GB, gigabytes, 1, MAX_CACHE_GB);
 	}
 
 	/**
 	 * @return how many files move at once, 1 to 16
 	 */
 	public int transfers() {
-		return read(TRANSFERS, DEFAULT_TRANSFERS, 1, 16);
+		return read(TRANSFERS, DEFAULT_TRANSFERS, 1, MAX_TRANSFERS);
 	}
 
 	public void setTransfers(int transfers) {
-		write(TRANSFERS, transfers, 1, 16);
+		write(TRANSFERS, transfers, 1, MAX_TRANSFERS);
 	}
 
 	/**

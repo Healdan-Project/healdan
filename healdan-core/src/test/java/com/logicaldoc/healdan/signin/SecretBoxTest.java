@@ -177,6 +177,9 @@ public class SecretBoxTest {
 			assertTrue(line, line.contains("3 stored values are sealed"));
 			assertTrue(line, line.contains("Restore the key file from a backup"));
 			assertTrue(line, line.contains("make a new key when it asks"));
+			// Storage backends' S3 secrets are sealed with it too, and entered again in the Storage tab (question 5)
+			assertTrue(line, line.contains("storage backend's S3 secret"));
+			assertTrue(line, line.contains("Storage tab"));
 			assertFalse(line, line.contains("s3cret-value"));
 		}
 
@@ -231,6 +234,8 @@ public class SecretBoxTest {
 			String said = log.lines().toString();
 			assertTrue(said, said.contains("WARN Made a new secret key file " + keyFile()));
 			assertTrue(said, said.contains("3 stored values were sealed with a key that's missing"));
+			assertTrue(said, said.contains("each storage backend's S3 secret"));
+			assertTrue(said, said.contains("Storage tab"));
 			assertFalse(said, said.contains("new-s3cret-value"));
 		}
 

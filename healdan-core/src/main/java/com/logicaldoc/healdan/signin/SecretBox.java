@@ -42,9 +42,10 @@ import org.springframework.stereotype.Component;
 import com.logicaldoc.util.spring.Context;
 
 /**
- * Seals the secrets Healdan keeps for provider sign-in, a provider's client
- * secret and the refresh tokens of device tokens (M4, spec section 13), with
- * AES-256-GCM under a key in a file of the configuration folder.
+ * Seals the secrets Healdan keeps: for provider sign-in, a provider's client
+ * secret and the refresh tokens of device tokens (M4, spec section 13), and a
+ * storage backend's S3 secret (S3 storage, question 5), with AES-256-GCM under
+ * a key in a file of the configuration folder.
  * <p>
  * The key is 32 random bytes, in a file only the app's user can read. It is
  * made the first time something is sealed on a fresh install, never when one
@@ -56,8 +57,9 @@ import com.logicaldoc.util.spring.Context;
  * Once stored values are sealed, {@link #seal} never makes a key: a key file
  * that went missing, even for a moment, would otherwise be replaced by a new
  * key, and every value sealed with the old one lost for good, helpers' refresh
- * tokens revoked at their next check and every client secret unset, even
- * after the file came back. It fails instead, and logs what to do.
+ * tokens revoked at their next check, every client secret unset and every S3
+ * storage backend failing, even after the file came back. It fails instead,
+ * and logs what to do.
  * <p>
  * A key is made under a lock file beside the key file, so that two servers
  * sharing the configuration folder make one key, and is put in place whole.
@@ -379,8 +381,9 @@ public class SecretBox {
 			log.error("Healdan's secret key file {} is missing or empty, but {} stored {} sealed, so Healdan won't make "
 					+ "a new key, which would leave them unreadable for good. Restore the key file from a backup; "
 					+ "nothing needs restarting. If it's lost for good, enter a sign-in provider's client secret again "
-					+ "on the Sign-In tab of Healdan Settings and make a new key when it asks, then enter each other "
-					+ "provider's client secret again; helpers that signed in through a provider sign in again.",
+					+ "on the Sign-In tab of Healdan Settings, or a storage backend's S3 secret on the Storage tab, and "
+					+ "make a new key when it asks, then enter each other provider's client secret and each other "
+					+ "backend's S3 secret again; helpers that signed in through a provider sign in again.",
 					keyFile, sealed, sealed == 1 ? "value is" : "values are");
 			throw new KeyMissingException(keyFile, sealed);
 		}
@@ -404,10 +407,11 @@ public class SecretBox {
 		}
 
 		if (sealed > 0)
-			log.warn("Made a new secret key file {}, for a client secret an administrator entered, while {} stored {} "
-					+ "sealed with a key that's missing. Those can't be opened: enter each other sign-in provider's "
-					+ "client secret again, and helpers that signed in through a provider sign in again at their next "
-					+ "check.", keyFile, sealed, sealed == 1 ? "value was" : "values were");
+			log.warn("Made a new secret key file {}, for a secret an administrator entered, while {} stored {} sealed "
+					+ "with a key that's missing. Those can't be opened: enter each other sign-in provider's client "
+					+ "secret again on the Sign-In tab of Healdan Settings, and each storage backend's S3 secret on the "
+					+ "Storage tab, as those backends fail until then; helpers that signed in through a provider sign "
+					+ "in again at their next check.", keyFile, sealed, sealed == 1 ? "value was" : "values were");
 		else
 			log.info("Made the secret key file {}. Back it up with the database.", keyFile);
 		return key;

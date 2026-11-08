@@ -396,7 +396,8 @@ public class StorageDataTest extends AbstractStorageTestCase {
 
 		List<StoreStats> stats = files().statsByStore();
 
-		assertEquals(List.of(new StoreStats(null, 2, 0, 0, 7), new StoreStats(10L, 3, 2, 1, 157)), stats);
+		// Store 10's two staged files wait: 100 and 7 bytes
+		assertEquals(List.of(new StoreStats(null, 2, 0, 0, 7, 0), new StoreStats(10L, 3, 2, 1, 157, 107)), stats);
 	}
 
 	@Test
