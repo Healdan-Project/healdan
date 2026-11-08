@@ -66,6 +66,42 @@ learn from.
     every answer against, so a new endpoint goes into it with the code.
   - The rules and data it uses, such as device tokens and where a property's value comes from, stay in
     `healdan-core`, so code outside the API can use them too.
+- **`healdan-storage`** keeps documents' files on [storage backends](../../admin/storage-backends/), and is a plugin
+  of its own that requires `healdan-core`. Its code is under `com.logicaldoc.healdan.storage`, where `healdan-core`'s
+  Spring scan finds its beans.
+  - **It replaces LogicalDOC's storage by configuration.** LogicalDOC makes its one `store` bean from the `store` key
+    in `context.properties` (`<bean id="store" class="${store}"/>` in core's `context-core.xml`), and every class
+    that reads or writes a document's file, LogicalDOC's and Healdan's, goes through that bean. `HealdanStorage`
+    implements LogicalDOC's `Store` interface, and the Docker init tool owns the key: `ConfigPlan.HEALDAN_KEYS` sets
+    `store=com.logicaldoc.healdan.storage.HealdanStorage` on every start, whatever the file holds, and `DockerInit`
+    checks it was stored. So no LogicalDOC Java changes, and the image's defaults, which are upstream's, keep
+    LogicalDOC's `FSStore`. Outside Docker the key is whatever the file says, and on `FSStore` the module's beans and
+    its download filter do nothing, and the Storage tab says storage backends are off.
+  - **`HealdanStorage` is never a Spring component.** Only LogicalDOC's bean definition makes it: a second `Store`
+    bean would break `Store.get()`. Its `init()` reads no table, as Spring calls it before Flyway has run.
+  - **Its plugin pieces.** `plugin.xml` declares two listeners, `StoreTrackingDocumentListener` and
+    `StoreTrackingFolderListener` (position 120, after Healdan's rules), which keep each file's Store current as
+    documents and folders move. `HealdanStoragePlugin` does nothing at install, as the Storage tab's RPC servlet
+    (`/frontend/healdanstorage`) and the download filter register with `@WebServlet` and `@WebFilter`.
+    `assemblyplugin.xml` ships the AWS SDK for Java's S3 client and Tink, which `WarStorageTest` checks on the WAR's
+    own libraries. An `artifactItem` in `logicaldoc-webapp/pom.xml` puts the zip in the WAR. That and the root
+    `pom.xml`'s `<module>` are the only upstream files it edits.
+  - **Its rows** are `healdan-core`'s Flyway tables, `hd_storage_*` (`V9__storage.sql`): the backends, each Store's
+    backend, a row for every file saying which backend holds it, the held copies, and the showings of recovery keys.
+    Its setup steps join `healdan-core`'s `SeedRunner.ORDER` by name, and do nothing unless LogicalDOC's store is
+    `HealdanStorage`.
+  - **Two hooks in `healdan-core`.** At a real start, after the migrations and setup steps, `HealdanStartup.start()`
+    calls each `HealdanStartListener` bean: `healdan-storage`'s `StorageStartup` checks every backend, then starts the
+    mover, the checks of failing backends, the purge, the alert and the nightly check. Tests call
+    `HealdanStartup.run()`, which calls no listener, so they start no thread. And LogicalDOC restores a folder tree
+    from the trash with JDBC, telling no folder listener, so `HealdanHooksImpl.afterFolderRestore` calls each
+    `FolderTreeListener` bean with the tree's documents: `StoreTracking` works their Stores out again, in case the
+    tree came back into another Store.
+  - **A delete may build a backend's S3 client inside LogicalDOC's transaction.** `Held.hold`, which holds a deleted
+    file's copy while holding that file's lock, inside the transaction of LogicalDOC's delete, builds the backend's
+    client if nothing has yet. For an `http://` endpoint that's a DNS lookup, as the endpoint rule checks the host's
+    addresses. A build that failed is remembered for 30 seconds, so while DNS is down, deletes don't each wait on a
+    lookup of their own.
 - **Its own tables.** Flyway owns the tables whose names start `hd_`, and only those. A change ships as a new
   script under `healdan-core/src/main/resources/healdan/db/migration/`, never as an edit to one that has shipped.
   Healdan never changes the structure of LogicalDOC's `ld_` tables.

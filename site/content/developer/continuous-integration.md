@@ -147,6 +147,21 @@ with `docker/tests/test-signin.sh` (see [The Stand-In Sign-In Provider](../tests
   rarely waits for it. Step 1 prints how long it took.
 - **Step 5e** takes under 5 seconds on a Mac, and prints how long it took, so a run's log has CI's times.
 
+### The Stand-In S3 Server in the Image CI
+
+The smoke stack runs a throwaway Garage as a stand-in S3 server, and its step 5f runs storage backends against it with
+`docker/tests/test-storage.sh` (see [The Stand-In S3 Server](../tests/#the-stand-in-s3-server)).
+
+- **Its images,** `dxflrs/garage:v2.5.0` and `busybox:1.37`, which sets Garage up, have amd64 and arm64 builds, so
+  both jobs run them natively. They're small, about 66 MB and 4 MB, and the runners pull them on every run.
+  `docker-image.yml` itself names neither: the overlay does.
+- **Garage starts and is set up in a second or two,** by its setup's own count, and the app's container starts once
+  it is. Step 1 prints how long it took.
+- **Step 5f** takes about 40 seconds on a Mac, and prints how long it took, so a run's log has CI's times. About 20
+  of them are the first read to meet the outage it makes, which waits for the S3 client to give up, as the first
+  read would on a server; the rest is the script's polls for the mover's work. Step 8 runs the script again after
+  the restart.
+
 ### Disk Space on the amd64 Runner
 
 The amd64 runner starts with 14 to 20 GB free, depending on its image's version, and the Maven build, the image, the
