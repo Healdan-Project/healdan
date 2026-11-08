@@ -10,6 +10,7 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.IntFunction;
 
 import javax.sql.DataSource;
 
@@ -277,27 +278,29 @@ public class StoredFiles {
 	 * Records a failed move of a file, only if the row is still the write that failed, so a failed move of an old write
 	 * can't count against a new one. Adds one to the attempts, keeps the error and the next try, and marks the row stuck
 	 * at the {@link #STUCK_AT}th failure. Called holding the file's lock, like the other per-file writes. The caller
-	 * computes the next try, from the retry schedule (1, 2, 4, 8, 16, 32, 60, 60 and 60 minutes); this class only
-	 * stores it.
+	 * gives the next try for the count this writes, from the retry schedule (1, 2, 4, 8, 16, 32, 60, 60 and 60
+	 * minutes); this class only stores it.
 	 *
 	 * @param docId the document
 	 * @param resource its resource
 	 * @param write the write id the failed move was of
 	 * @param error the failure's message, cut to what the column holds
-	 * @param nextTry when the mover may try again
-	 * @return false if the row had changed or gone, and nothing was changed
+	 * @param nextTry given the failures in a row, this one included, when the mover may try again; null for none
+	 * @return the failures in a row it recorded, this one included; 0 if the row had changed or gone, and nothing was
+	 *         changed
 	 */
-	public boolean recordFailure(long docId, String resource, long write, String error, Date nextTry) {
+	public int recordFailure(long docId, String resource, long write, String error, IntFunction<Date> nextTry) {
 		Optional<StoredFile> row = find(docId, resource);
 		if (row.isEmpty() || row.get().write() != write)
-			return false;
+			return 0;
 		int attempts = row.get().attempts() + 1;
 		boolean stuck = attempts >= STUCK_AT;
 		String message = error == null || error.length() <= 4000 ? error : error.substring(0, 4000);
-		return jdbc.update("update hd_storage_file set hd_attempts = ?, hd_lasterror = ?, hd_stuck = ?, "
+		Date next = nextTry.apply(attempts);
+		int updated = jdbc.update("update hd_storage_file set hd_attempts = ?, hd_lasterror = ?, hd_stuck = ?, "
 				+ "hd_nexttry = ? where hd_docid = ? and hd_resource = ? and hd_write = ?", attempts, message,
-				stuck ? 1 : 0, nextTry == null ? null : new Timestamp(nextTry.getTime()), docId, resource,
-				write) == 1;
+				stuck ? 1 : 0, next == null ? null : new Timestamp(next.getTime()), docId, resource, write);
+		return updated == 1 ? attempts : 0;
 	}
 
 	/**

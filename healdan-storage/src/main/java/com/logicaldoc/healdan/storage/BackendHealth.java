@@ -76,6 +76,10 @@ public class BackendHealth {
 	private volatile Runnable recovered = () -> {
 	};
 
+	/** Tests: runs when a write finds its backend unchecked, before it waits for the backend's check lock */
+	volatile Runnable firstWrite = () -> {
+	};
+
 	@Autowired
 	public BackendHealth(Backends backends) {
 		this.backends = backends;
@@ -172,12 +176,14 @@ public class BackendHealth {
 	 */
 	public void beforeWrite(long backendId) throws BackendFailingException {
 		Status status = status(backendId);
-		if (status.state() == State.UNCHECKED)
+		if (status.state() == State.UNCHECKED) {
+			firstWrite.run();
 			synchronized (checkLock(backendId)) {
 				status = status(backendId);
 				if (status.state() == State.UNCHECKED)
 					status = check(backendId);
 			}
+		}
 		if (status.state() != State.FAILING)
 			return;
 		String message = "Storage backend " + backendId + " is failing, so nothing is written to it: " + status.error();

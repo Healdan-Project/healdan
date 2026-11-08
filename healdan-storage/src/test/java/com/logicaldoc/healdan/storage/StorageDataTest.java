@@ -246,22 +246,28 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		Date next = new Date(System.currentTimeMillis() + 60_000);
 
 		// A failure of an old write counts against nothing
-		assertFalse(files().recordFailure(40, "1.0", write + 1, "old", next));
+		assertEquals(0, files().recordFailure(40, "1.0", write + 1, "old", n -> next));
 		assertEquals(0, files().find(40, "1.0").orElseThrow().attempts());
-		assertFalse(files().recordFailure(41, "1.0", write, "none", next));
+		assertEquals(0, files().recordFailure(41, "1.0", write, "none", n -> next));
 
 		for (int attempt = 1; attempt < StoredFiles.STUCK_AT; attempt++) {
-			assertTrue(files().recordFailure(40, "1.0", write, "boom " + attempt, next));
+			int counted = attempt;
+			// The next try is worked out from the count it writes
+			assertEquals(attempt, files().recordFailure(40, "1.0", write, "boom " + attempt, n -> {
+				assertEquals(counted, n);
+				return next;
+			}));
 			StoredFile row = files().find(40, "1.0").orElseThrow();
 			assertEquals(attempt, row.attempts());
 			assertEquals("boom " + attempt, row.lastError());
 			assertFalse(row.stuck());
 			assertEquals(next.getTime() / 1000, row.nextTry().getTime() / 1000);
 		}
-		assertTrue(files().recordFailure(40, "1.0", write, "x".repeat(5000), next));
+		assertEquals(StoredFiles.STUCK_AT, files().recordFailure(40, "1.0", write, "x".repeat(5000), n -> null));
 		StoredFile stuck = files().find(40, "1.0").orElseThrow();
 		assertEquals(StoredFiles.STUCK_AT, stuck.attempts());
 		assertTrue(stuck.stuck());
+		assertNull(stuck.nextTry());
 		assertEquals(4000, stuck.lastError().length());
 
 		// A new write supersedes it all
@@ -281,11 +287,11 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		for (int i = 0; i < 4; i++) {
 			writes[i] = files().recordWrite(50 + i, "1.0", 0, stores[i], 5);
 			for (int n = 0; n < StoredFiles.STUCK_AT; n++)
-				files().recordFailure(50 + i, "1.0", writes[i], "boom", next);
+				files().recordFailure(50 + i, "1.0", writes[i], "boom", f -> next);
 		}
 		// Doc 51 is not stuck, only failing
 		files().recordWrite(51, "1.0", 0, 10L, 5);
-		files().recordFailure(51, "1.0", files().find(51, "1.0").orElseThrow().write(), "boom", next);
+		files().recordFailure(51, "1.0", files().find(51, "1.0").orElseThrow().write(), "boom", f -> next);
 
 		assertEquals(1, files().retry(10L));
 		StoredFile back = files().find(50, "1.0").orElseThrow();
@@ -312,7 +318,7 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		files().recordWrite(62, "1.0", 1, null, 3);
 		files().recordWrite(63, "1.0", 1, null, 4);
 		for (int n = 0; n < StoredFiles.STUCK_AT; n++)
-			files().recordFailure(61, "1.0", w, "boom", new Date());
+			files().recordFailure(61, "1.0", w, "boom", f -> new Date());
 
 		List<StoreStats> stats = files().statsByStore();
 

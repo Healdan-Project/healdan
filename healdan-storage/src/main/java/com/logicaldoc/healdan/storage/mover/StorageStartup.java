@@ -9,6 +9,7 @@ import java.time.ZonedDateTime;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -32,9 +33,12 @@ import jakarta.annotation.PreDestroy;
  * builds the read cache, so the first saves don't walk its folder under their file's lock, and gives the purge the
  * mover's files in transfer (call 22). Then, on a thread of its own, so a backend that doesn't answer never holds up
  * the webapp's start, it checks every backend, before the mover's first pass (call 24), and starts the mover and the
- * retests of backends not OK, every {@code storage.retestSeconds}; the purge runs daily and the nightly Store check at
- * 03:17 server time, neither in the first 10 minutes after the start. Saves meanwhile check the backend they reach
- * themselves ({@link BackendHealth#beforeWrite}). Does nothing unless CE's Store is a {@code HealdanStorage}.
+ * retests of backends not OK, every {@code storage.retestSeconds}, on a thread of their own that a long purge or
+ * nightly check can't hold up; the purge runs daily and the nightly Store check at 03:17 server time, neither in the
+ * first 10 minutes after the start. Each step runs whatever another failed with, and each recurring task schedules its
+ * next run whatever its run failed with, so no one failure, a setting that can't be read among them, stops the rest.
+ * Saves meanwhile check the backend they reach themselves ({@link BackendHealth#beforeWrite}). Does nothing unless
+ * CE's Store is a {@code HealdanStorage}.
  */
 @Component
 public class StorageStartup implements HealdanStartListener {
@@ -59,7 +63,17 @@ public class StorageStartup implements HealdanStartListener {
 
 	private final StorageSettings settings;
 
+	/** Runs the start, the purge and the nightly check */
 	private volatile ScheduledExecutorService scheduler;
+
+	/** Runs the backends' retests, and nothing else */
+	private volatile ScheduledExecutorService retests;
+
+	/** The wait between retests when {@code storage.retestSeconds} can't be read; tests shorten it */
+	volatile Duration retestFallback = Duration.ofSeconds(StorageSettings.DEFAULT_RETEST_SECONDS);
+
+	/** Whether the purge and the nightly check are scheduled */
+	private volatile boolean scheduledDaily;
 
 	@Autowired
 	public StorageStartup(BackendHealth health, Mover mover, Purge purge, NightlyCheck nightly,
@@ -84,23 +98,29 @@ public class StorageStartup implements HealdanStartListener {
 		purge.setInTransfer(mover::moving);
 
 		ZonedDateTime start = ZonedDateTime.now();
-		AtomicInteger number = new AtomicInteger();
-		ScheduledExecutorService running = Executors.newScheduledThreadPool(2, work -> {
-			Thread thread = new Thread(work, "healdan-storage-start-" + number.incrementAndGet());
-			thread.setDaemon(true);
-			return thread;
-		});
+		ScheduledExecutorService running = Executors.newScheduledThreadPool(2, threads("healdan-storage-start-"));
 		scheduler = running;
-		running.execute(() -> safely("start", () -> begin(running, start)));
+		retests = Executors.newSingleThreadScheduledExecutor(threads("healdan-storage-retest-"));
+		running.execute(() -> begin(running, start));
 	}
 
-	/** Checks every backend, then starts the mover and schedules the rest */
+	private static ThreadFactory threads(String name) {
+		AtomicInteger number = new AtomicInteger();
+		return work -> {
+			Thread thread = new Thread(work, name + number.incrementAndGet());
+			thread.setDaemon(true);
+			return thread;
+		};
+	}
+
+	/** Checks every backend, then starts the mover and schedules the rest, each step whatever the one before did */
 	private void begin(ScheduledExecutorService running, ZonedDateTime start) {
-		health.checkAll();
-		if (scheduler != running || Thread.currentThread().isInterrupted())
-			return; // stopped meanwhile
-		mover.start();
-		scheduleRetest();
+		safely("backend checks", health::checkAll);
+		if (stopped(running))
+			return;
+		safely("mover's start", mover::start);
+		if (stopped(running))
+			return;
 		long purgeDelay = Math.max(0, Duration.between(ZonedDateTime.now(), start.plus(AFTER_START)).toMillis());
 		try {
 			running.scheduleAtFixedRate(() -> safely("purge", purge::run), purgeDelay, DAY_MS, TimeUnit.MILLISECONDS);
@@ -108,26 +128,53 @@ public class StorageStartup implements HealdanStartListener {
 			return; // stopped meanwhile
 		}
 		scheduleNightly(nightlyAfter(start.plus(AFTER_START)));
+		scheduledDaily = true;
+		scheduleRetest();
+	}
+
+	private boolean stopped(ScheduledExecutorService running) {
+		return scheduler != running || Thread.currentThread().isInterrupted();
+	}
+
+	/** @return whether the purge and the nightly check are scheduled; for tests */
+	boolean scheduledDaily() {
+		return scheduledDaily;
 	}
 
 	/** Tests each backend that isn't OK, then again after the setting's seconds, read each time */
 	private void scheduleRetest() {
-		schedule(() -> {
-			safely("backend retest", health::retest);
-			scheduleRetest();
-		}, Duration.ofSeconds(settings.retestSeconds()));
+		schedule(retests, () -> {
+			try {
+				safely("backend retest", health::retest);
+			} finally {
+				scheduleRetest();
+			}
+		}, retestDelay());
+	}
+
+	/** @return {@code storage.retestSeconds}; the default if it can't be read, as in a database outage */
+	private Duration retestDelay() {
+		try {
+			return Duration.ofSeconds(settings.retestSeconds());
+		} catch (RuntimeException e) {
+			log.warn("{} can't be read, so the storage backends are tested again in {}: {}",
+					StorageSettings.RETEST_SECONDS, retestFallback, e.getMessage());
+			return retestFallback;
+		}
 	}
 
 	/** Runs the nightly check at a time, then schedules the next night's */
 	private void scheduleNightly(ZonedDateTime at) {
-		schedule(() -> {
-			safely("nightly Store check", nightly::run);
-			scheduleNightly(nightlyAfter(at.plusSeconds(1)));
+		schedule(scheduler, () -> {
+			try {
+				safely("nightly Store check", nightly::run);
+			} finally {
+				scheduleNightly(nightlyAfter(at.plusSeconds(1)));
+			}
 		}, Duration.between(ZonedDateTime.now(), at));
 	}
 
-	private void schedule(Runnable work, Duration delay) {
-		ScheduledExecutorService running = scheduler;
+	private static void schedule(ScheduledExecutorService running, Runnable work, Duration delay) {
 		if (running == null)
 			return;
 		try {
@@ -162,16 +209,20 @@ public class StorageStartup implements HealdanStartListener {
 	@PreDestroy
 	public void stop() {
 		ScheduledExecutorService running;
+		ScheduledExecutorService retesting;
 		synchronized (this) {
 			running = scheduler;
+			retesting = retests;
 			scheduler = null;
+			retests = null;
 		}
-		if (running == null)
-			return;
-		running.shutdownNow();
+		for (ScheduledExecutorService executor : new ScheduledExecutorService[] { running, retesting })
+			if (executor != null)
+				executor.shutdownNow();
 		try {
-			if (!running.awaitTermination(10, TimeUnit.SECONDS))
-				log.warn("The storage's scheduled work didn't stop within 10 seconds");
+			for (ScheduledExecutorService executor : new ScheduledExecutorService[] { running, retesting })
+				if (executor != null && !executor.awaitTermination(10, TimeUnit.SECONDS))
+					log.warn("The storage's scheduled work didn't stop within 10 seconds");
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		}

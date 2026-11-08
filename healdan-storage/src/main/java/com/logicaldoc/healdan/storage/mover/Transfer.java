@@ -52,10 +52,14 @@ import com.logicaldoc.healdan.storage.crypto.FileCipher;
  * which saves never write, and read back with {@code HEAD}; a local target's file waits beside its key under a
  * temporary name, where a save's bytes can't be overwritten;</li>
  * <li>holding the file's lock, in a short transaction of its own: if the row is still that write, on the source, and
- * its Store's backend still the target, the staged copy is committed, the row pointed at the target, and the source
- * held (spec section 8), or, when the source is staging, its copy renamed aside for the read cache (question 9);
- * otherwise the staged copy is discarded, and an S3 object kept only if a hold or a row names it.</li>
+ * its Store's backend still the target, the staged copy is committed and the row pointed at the target; once that
+ * transaction has committed, and still holding the lock, the source is held (spec section 8), or, when the source is
+ * staging, its copy renamed aside for the read cache (question 9), so a commit that fails leaves the source as it
+ * was; otherwise the staged copy is discarded, and an S3 object kept only if a hold or a row names it.</li>
  * </ol>
+ * The transfer takes and releases the file's lock once before it reads the file, as the purge checks and deletes a
+ * held S3 object holding it: a purge that found the file in no transfer finishes its delete before the upload, and
+ * every later one finds the file in transfer (call 22).
  * The file's lock is taken only for the commit, and never while a transaction still open wrote the row: that one's
  * row lock lasts until it ends, and it may want the lock again, so the commit waits for nothing a CE transaction holds.
  * A failure counts an attempt and sets the next try ({@link RetrySchedule}); a backend that can't be reached or used
@@ -118,6 +122,8 @@ final class Transfer {
 	}
 
 	Outcome run() {
+		// The file is in transfer already: wait out a purge's delete under way of the object this may upload again
+		FileLocks.lock(docId, resource).close();
 		StoredFile row = files.find(docId, resource).orElse(null);
 		if (row == null || row.stuck() || row.backendId() == target || files.storeBackend(row.storeId()) != target)
 			return Outcome.CHANGED;
@@ -245,7 +251,9 @@ final class Transfer {
 	}
 
 	/**
-	 * Commits the staged copy holding the file's lock (call 20), in a transaction of its own.
+	 * Commits the staged copy holding the file's lock (call 20), in a transaction of its own, then, once that has
+	 * committed and still holding the lock, lets the source go: a save can't land in between, and a failed commit
+	 * leaves the source where it was.
 	 *
 	 * @param aside set to the staged copy renamed aside, when the source is staging
 	 */
@@ -254,15 +262,23 @@ final class Transfer {
 			mover.atCommit.accept(row);
 			if (FileLocks.writtenByOpenTransaction(docId, resource))
 				return Outcome.PENDING;
+			Outcome outcome;
 			try {
-				return mover.own().execute(status -> commitHolding(row, source, staged, aside));
+				outcome = mover.own().execute(status -> commitHolding(row, source, staged));
 			} catch (UncheckedIOException e) {
 				throw e.getCause();
 			}
+			if (outcome == Outcome.MOVED) {
+				if (source == Staging.ID)
+					aside[0] = setAside();
+				else
+					hold(source);
+			}
+			return outcome;
 		}
 	}
 
-	private Outcome commitHolding(StoredFile row, long source, Staged staged, Path[] aside) {
+	private Outcome commitHolding(StoredFile row, long source, Staged staged) {
 		Optional<StoredFile> now = files.find(docId, resource);
 		if (now.isEmpty() || now.get().write() != row.write() || now.get().backendId() != source
 				|| files.storeBackend(now.get().storeId()) != target)
@@ -275,10 +291,6 @@ final class Transfer {
 			// The row's update rolls back with it
 			throw new UncheckedIOException(e);
 		}
-		if (source == Staging.ID)
-			aside[0] = setAside();
-		else
-			hold(source);
 		return Outcome.MOVED;
 	}
 
@@ -315,14 +327,16 @@ final class Transfer {
 			}
 	}
 
-	/** Holds the source copy (spec section 8). The row points at the target already, so a failure here loses nothing */
+	/**
+	 * Holds the source copy (spec section 8), once the row's move has committed, so a failure here loses nothing: the
+	 * copy stays where it was.
+	 */
 	private void hold(long source) {
 		try {
 			if (!Held.hold(source, key, docId, resource))
 				log.warn("Document {}'s {} is on storage backend {} now, and its copy on storage backend {} couldn't be "
 						+ "held: it stays where it was", docId, resource, target, source);
 		} catch (RuntimeException e) {
-			// Its statements ran in a savepoint, so the commit's transaction is still usable
 			log.error("Document {}'s {} is on storage backend {} now, and its copy on storage backend {} couldn't be "
 					+ "recorded as held ({}): no purge will delete it", docId, resource, target, source,
 					e.getMessage(), e);
@@ -389,15 +403,16 @@ final class Transfer {
 	 */
 	private Outcome failed(StoredFile row, Exception e) {
 		String error = message(e);
-		int failures = row.attempts() + 1;
-		Date next = RetrySchedule.nextTry(failures, new Date());
-		Boolean recorded;
+		Date now = new Date();
+		Integer recorded;
 		try (FileLocks.Held lock = FileLocks.lock(docId, resource)) {
 			if (FileLocks.writtenByOpenTransaction(docId, resource))
 				return Outcome.PENDING;
-			recorded = mover.own().execute(status -> files.recordFailure(docId, resource, row.write(), error, next));
+			recorded = mover.own().execute(status -> files.recordFailure(docId, resource, row.write(), error,
+					failures -> RetrySchedule.nextTry(failures, now)));
 		}
-		if (!Boolean.TRUE.equals(recorded))
+		int failures = recorded == null ? 0 : recorded;
+		if (failures == 0)
 			// A save or delete since the transfer began: the failure was the old write's
 			return Outcome.CHANGED;
 		if (RetrySchedule.stuck(failures))
@@ -405,7 +420,8 @@ final class Transfer {
 					docId, resource, target, failures, error);
 		else
 			log.warn("Moving document {}'s {} to storage backend {} failed ({} of {}), and is tried again from {}: {}",
-					docId, resource, target, failures, RetrySchedule.STUCK_AT, next, error);
+					docId, resource, target, failures, RetrySchedule.STUCK_AT, RetrySchedule.nextTry(failures, now),
+					error);
 		return Outcome.FAILED;
 	}
 

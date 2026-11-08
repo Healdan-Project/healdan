@@ -19,7 +19,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * A backend that passes every call to another, for the tests that race a transfer: each {@link Gate} holds the calls
  * that reach it while it is closed, so a test acts at a known point of a transfer without sleeping. It records its
- * calls in order, and how many stages ran at once and whether one key was ever staged twice at once.
+ * calls in order, how many stages ran at once, whether one key was ever staged twice at once, and how many checks
+ * ended.
  */
 public class GatedBackend implements Backend {
 
@@ -91,6 +92,15 @@ public class GatedBackend implements Backend {
 	/** Holds a check before it runs */
 	public final Gate atCheck = new Gate();
 
+	/** Holds a purge's delete of a held copy before it is sent */
+	public final Gate beforePurge = new Gate();
+
+	/** Runs when a staged copy is committed, before the backend's own commit: inside the mover's transaction */
+	public volatile Runnable onCommit = () -> {
+	};
+
+	private int checked;
+
 	private final List<String> calls = new CopyOnWriteArrayList<>();
 
 	private final Set<String> staging = new HashSet<>();
@@ -113,6 +123,7 @@ public class GatedBackend implements Backend {
 		afterStage.open();
 		beforeGet.open();
 		atCheck.open();
+		beforePurge.open();
 	}
 
 	/** @return every call so far, in order: {@code check}, {@code put <key>}, {@code stage <key>}, {@code get <key>} */
@@ -147,6 +158,17 @@ public class GatedBackend implements Backend {
 	/** @return whether one key was ever staged by two calls at once */
 	public boolean stagedTwiceAtOnce() {
 		return twiceAtOnce;
+	}
+
+	/** Waits until this many checks have returned or thrown */
+	public synchronized void awaitChecked(int checks) throws InterruptedException {
+		long deadline = System.currentTimeMillis() + WAIT_MS;
+		while (checked < checks) {
+			long left = deadline - System.currentTimeMillis();
+			if (left <= 0)
+				throw new AssertionError(checked + " checks ended, not " + checks);
+			wait(left);
+		}
 	}
 
 	/** Waits until a stage of the key has returned */
@@ -187,7 +209,18 @@ public class GatedBackend implements Backend {
 				staged.add(key);
 				notifyAll();
 			}
-			return copy;
+			return new Staged() {
+				@Override
+				public void commit() throws IOException {
+					onCommit.run();
+					copy.commit();
+				}
+
+				@Override
+				public void discard() throws IOException {
+					copy.discard();
+				}
+			};
 		} finally {
 			inStage.decrementAndGet();
 			synchronized (this) {
@@ -230,10 +263,15 @@ public class GatedBackend implements Backend {
 		calls.add("check");
 		try {
 			atCheck.pass();
+			inner.check();
 		} catch (InterruptedIOException e) {
 			throw new BackendFailingException("Stopped at a gate", e);
+		} finally {
+			synchronized (this) {
+				checked++;
+				notifyAll();
+			}
 		}
-		inner.check();
 	}
 
 	@Override
@@ -250,6 +288,7 @@ public class GatedBackend implements Backend {
 	@Override
 	public void purgeHeld(String location) throws IOException {
 		calls.add("purge " + location);
+		beforePurge.pass();
 		inner.purgeHeld(location);
 	}
 }

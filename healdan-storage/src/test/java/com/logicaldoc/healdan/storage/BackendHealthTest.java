@@ -20,14 +20,14 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BooleanSupplier;
 
 import org.junit.Test;
 
@@ -100,13 +100,9 @@ public class BackendHealthTest extends AbstractStorageTestCase {
 		return fx.upload(side.folder(), "a.txt", text, fx.admin());
 	}
 
-	private static void await(String what, BooleanSupplier condition) throws InterruptedException {
-		long deadline = System.currentTimeMillis() + WAIT_MS;
-		while (!condition.getAsBoolean()) {
-			if (System.currentTimeMillis() > deadline)
-				throw new AssertionError("Timed out waiting for " + what);
-			Thread.sleep(10);
-		}
+	/** Waits for the mover to finish what it is moving */
+	private static void awaitMoved() throws InterruptedException {
+		assertTrue(Mover.get().awaitIdle(Duration.ofMillis(WAIT_MS)));
 	}
 
 	private static long rowsOn(long backendId) {
@@ -161,7 +157,8 @@ public class BackendHealthTest extends AbstractStorageTestCase {
 		bucket.awaitStaged(key);
 		assertEquals("checked before its first transfer", List.of("check", "stage " + key),
 				bucket.calls().subList(0, 2));
-		await("the row to move", () -> row(doc.getId(), "1.0").backendId() == cloud.backendId());
+		awaitMoved();
+		assertEquals(cloud.backendId(), row(doc.getId(), "1.0").backendId());
 		for (long id : List.of(Staging.ID, StorageBackend.ORIGINAL, cloud.backendId(), fresh))
 			assertEquals("backend " + id, State.OK, health.status(id).state());
 		assertEquals(State.FAILING, health.status(gone.backendId()).state());
@@ -181,24 +178,20 @@ public class BackendHealthTest extends AbstractStorageTestCase {
 		folder.atCheck.close();
 		gates.add(folder);
 
+		CountDownLatch arrived = new CountDownLatch(2);
+		health.firstWrite = arrived::countDown;
+
 		Future<?> first = threads.submit(() -> {
 			Store.get().store(file("thumbnail one"), resource(one.getId(), "1.0-thumb.png"));
 			return null;
 		});
 		folder.atCheck.awaitEntered(1);
-		Thread[] secondThread = new Thread[1];
 		Future<?> second = threads.submit(() -> {
-			secondThread[0] = Thread.currentThread();
 			Store.get().store(file("thumbnail two"), resource(two.getId(), "1.0-thumb.png"));
 			return null;
 		});
-		// The second write waits for the first's check, inside BackendHealth
-		await("the second write to wait for the check", () -> {
-			Thread thread = secondThread[0];
-			return thread != null && thread.getState() != Thread.State.RUNNABLE
-					&& Arrays.stream(thread.getStackTrace())
-							.anyMatch(frame -> frame.getClassName().equals(BackendHealth.class.getName()));
-		});
+		// The second write found the backend unchecked too, while the first's check runs
+		assertTrue(arrived.await(WAIT_MS, TimeUnit.MILLISECONDS));
 		folder.atCheck.open();
 		first.get(WAIT_MS, TimeUnit.MILLISECONDS);
 		second.get(WAIT_MS, TimeUnit.MILLISECONDS);
@@ -216,8 +209,8 @@ public class BackendHealthTest extends AbstractStorageTestCase {
 		StorageSettings.get().setRetestSeconds(3600);
 		GatedBackend bucket = gate(cloud);
 		cloud.s3().unreachable(true);
+		health.checkAll();
 		Context.get(StorageStartup.class).started();
-		await("the start's checks", () -> health.status(cloud.backendId()).state() != State.UNCHECKED);
 
 		Status status = health.status(cloud.backendId());
 		assertEquals(State.FAILING, status.state());
@@ -236,7 +229,8 @@ public class BackendHealthTest extends AbstractStorageTestCase {
 		health.retest();
 		assertEquals(State.OK, health.status(cloud.backendId()).state());
 		bucket.awaitStaged(key);
-		await("the row to move", () -> row(doc.getId(), "1.0").backendId() == cloud.backendId());
+		awaitMoved();
+		assertEquals(cloud.backendId(), row(doc.getId(), "1.0").backendId());
 		assertEquals(0, row(doc.getId(), "1.0").attempts());
 		assertEquals("waits for the bucket", text(resource(doc, "1.0")));
 	}
@@ -258,7 +252,8 @@ public class BackendHealthTest extends AbstractStorageTestCase {
 
 		bucket.atCheck.open();
 		bucket.awaitStaged(key);
-		await("the row to move", () -> row(doc.getId(), "1.0").backendId() == cloud.backendId());
+		awaitMoved();
+		assertEquals(cloud.backendId(), row(doc.getId(), "1.0").backendId());
 		assertEquals(State.OK, health.status(cloud.backendId()).state());
 	}
 

@@ -38,6 +38,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.healdan.storage.BackendHealth;
 import com.logicaldoc.healdan.storage.Backends;
+import com.logicaldoc.healdan.storage.FileLocks;
 import com.logicaldoc.healdan.storage.Staging;
 import com.logicaldoc.healdan.storage.StorageBackend;
 import com.logicaldoc.healdan.storage.StorageSettings;
@@ -79,6 +80,9 @@ public class Mover {
 
 	/** The most transfers at once the setting allows */
 	private static final int MOST_TRANSFERS = 16;
+
+	/** The most rows a listing reads beyond what it wants, for files that open transactions wrote */
+	private static final int MOST_SKIPPED = 1000;
 
 	private final StoredFiles files;
 
@@ -124,6 +128,10 @@ public class Mover {
 	volatile Consumer<StoredFile> committed = row -> {
 	};
 
+	/** Tests: runs when a pass waits for a free transfer, holding the mover's monitor */
+	volatile Runnable waitingForSlot = () -> {
+	};
+
 	@Autowired
 	public Mover(StoredFiles files, Backends backends, BackendHealth health, StorageSettings settings,
 			StoreOf storeOf, PlatformTransactionManager transactions) {
@@ -151,7 +159,14 @@ public class Mover {
 		if (!StoreTracking.active() || coordinator != null)
 			return;
 		emptyWorkFolder();
-		int transfers = settings.transfers();
+		int transfers;
+		try {
+			transfers = settings.transfers();
+		} catch (RuntimeException e) {
+			log.warn("{} can't be read, so the storage mover runs {} transfers at once: {}", StorageSettings.TRANSFERS,
+					StorageSettings.DEFAULT_TRANSFERS, e.getMessage());
+			transfers = StorageSettings.DEFAULT_TRANSFERS;
+		}
 		synchronized (monitor) {
 			stopping = false;
 			limit = transfers;
@@ -270,7 +285,7 @@ public class Mover {
 	 *
 	 * @return whether none runs
 	 */
-	boolean awaitIdle(Duration timeout) throws InterruptedException {
+	public boolean awaitIdle(Duration timeout) throws InterruptedException {
 		long deadline = System.currentTimeMillis() + timeout.toMillis();
 		synchronized (monitor) {
 			while (running > 0) {
@@ -414,20 +429,24 @@ public class Mover {
 	}
 
 	/**
-	 * Lists the rows to move, leaving out those in transfer and those whose backend or target can't be used. A staged
+	 * Lists the rows to move, leaving out those in transfer, those a transaction still open wrote (which a transfer
+	 * would only leave; the save's wake or the sweep finds them once it ends, and they never fill the free transfers,
+	 * so the coordinator can't list them again and again), and those whose backend or target can't be used. A staged
 	 * row with no Store, saved before its document had a folder, gets its Store worked out again first.
 	 *
 	 * @param wanted the most rows to list
 	 */
 	private List<Candidate> list(int wanted) {
 		Set<Long> unavailable = health.unavailable();
-		List<StoredFile> rows = files.misplaced(wanted + moving.size(), unavailable);
+		int skipped = moving.size() + Math.min(FileLocks.openFiles(), MOST_SKIPPED);
+		List<StoredFile> rows = files.misplaced(wanted + skipped, unavailable);
 		Map<Long, Long> storeBackends = new HashMap<>();
 		List<Candidate> found = new ArrayList<>();
 		for (StoredFile listed : rows) {
 			if (found.size() >= wanted)
 				break;
-			if (moving.contains(key(listed.docId(), listed.resource())))
+			if (moving.contains(key(listed.docId(), listed.resource()))
+					|| FileLocks.writtenByOpenTransaction(listed.docId(), listed.resource()))
 				continue;
 			StoredFile row = withStore(listed);
 			if (row == null)
@@ -461,8 +480,10 @@ public class Mover {
 	private Future<Outcome> dispatch(Candidate candidate, boolean wait) throws InterruptedException {
 		String key = candidate.key();
 		synchronized (monitor) {
-			while (wait && !stopping && running >= limit)
+			while (wait && !stopping && running >= limit) {
+				waitingForSlot.run();
 				monitor.wait();
+			}
 			if (stopping || running >= limit || !moving.add(key))
 				return null;
 			running++;

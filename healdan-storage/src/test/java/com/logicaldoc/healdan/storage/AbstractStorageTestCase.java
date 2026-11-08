@@ -61,4 +61,11 @@ public abstract class AbstractStorageTestCase extends AbstractHealdanTestCase {
 		ReadCache.reset();
 		super.setUp();
 	}
+
+	@Override
+	public void tearDown() throws IOException {
+		// Static, while each test has a database of its own whose ids start again
+		FileLocks.reset();
+		super.tearDown();
+	}
 }

@@ -25,6 +25,10 @@ import jakarta.annotation.PostConstruct;
  * then the listeners that need what the seeds made. A failure throws
  * {@link HealdanStartupException} and stops the startup. At a real start it
  * then starts the workers and tells each {@link HealdanStartListener}.
+ * <p>
+ * A start listener is the exception: one that fails is logged and the start
+ * goes on. The data is migrated and seeded by then, and stopping the webapp
+ * for a background worker would take every Store down.
  */
 /*
  * The seeds reach the DAOs and the config through Context.get(), which is only

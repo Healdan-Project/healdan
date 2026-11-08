@@ -42,6 +42,8 @@ import java.util.stream.Stream;
 
 import org.junit.Test;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.document.Document;
@@ -51,6 +53,7 @@ import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.storage.AbstractStorageTestCase;
 import com.logicaldoc.healdan.storage.BackendHealth;
+import com.logicaldoc.healdan.storage.FileLocks;
 import com.logicaldoc.healdan.storage.HeldCopy;
 import com.logicaldoc.healdan.storage.NightlyCheck;
 import com.logicaldoc.healdan.storage.Purge;
@@ -167,6 +170,45 @@ public class MoverTest extends AbstractStorageTestCase {
 
 	private static Path original() {
 		return Path.of(Context.get().getConfig().getProperty("store.1.dir")).toAbsolutePath().normalize();
+	}
+
+	/**
+	 * Waits until a thread waits for a file's lock. Nothing signals that, so it looks every millisecond; it can't
+	 * pass falsely, as only the transfer in the test can wait for that lock.
+	 */
+	private static void awaitWaitedFor(long docId, String resource) throws InterruptedException {
+		long deadline = System.currentTimeMillis() + WAIT.toMillis();
+		while (!FileLocks.waitedFor(docId, resource)) {
+			if (System.currentTimeMillis() > deadline)
+				throw new AssertionError("Nothing waited for the lock of document " + docId + "'s " + resource);
+			Thread.sleep(1);
+		}
+	}
+
+	/** Makes the transaction it runs in fail at its commit, once its statements have run */
+	private static void failTheCommit() {
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void beforeCommit(boolean readOnly) {
+				throw new IllegalStateException("The commit failed");
+			}
+		});
+	}
+
+	/** Saves a file inside a transaction that stays open until {@code finish} is counted down */
+	private Future<?> saveInOpenTransaction(String text, Document doc, CountDownLatch saved, CountDownLatch finish) {
+		return inBackground(() -> {
+			new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+				store(text, doc, "1.0");
+				saved.countDown();
+				try {
+					assertTrue(finish.await(WAIT.toSeconds(), TimeUnit.SECONDS));
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+			});
+			return null;
+		});
 	}
 
 	private void store(String text, Document doc, String resource) {
@@ -583,19 +625,12 @@ public class MoverTest extends AbstractStorageTestCase {
 		narrower.beforeStage.close();
 		for (int i = 0; i < 4; i++)
 			docs.add(upload(cloud, "more " + i));
-		CountDownLatch dispatching = new CountDownLatch(1);
-		Thread[] pass = new Thread[1];
-		Future<Integer> resized = inBackground(() -> {
-			pass[0] = Thread.currentThread();
-			dispatching.countDown();
-			return mover.runOnce();
-		});
-		assertTrue(dispatching.await(WAIT.toSeconds(), TimeUnit.SECONDS));
+		CountDownLatch waiting = new CountDownLatch(1);
+		mover.waitingForSlot = waiting::countDown;
+		Future<Integer> resized = inBackground(mover::runOnce);
 		narrower.beforeStage.awaitEntered(2);
 		// The pass waits for a free transfer, the third not started
-		long deadline = System.currentTimeMillis() + WAIT.toMillis();
-		while (pass[0].getState() == Thread.State.RUNNABLE && System.currentTimeMillis() < deadline)
-			Thread.onSpinWait();
+		assertTrue(waiting.await(WAIT.toSeconds(), TimeUnit.SECONDS));
 		assertEquals(2, narrower.underWay());
 		narrower.beforeStage.open();
 		assertEquals(4, (int) get(resized));
@@ -797,24 +832,14 @@ public class MoverTest extends AbstractStorageTestCase {
 		// A transaction saves the file, lets its lock go, and stays open, as a folder copy does between its files
 		CountDownLatch saved = new CountDownLatch(1);
 		CountDownLatch finish = new CountDownLatch(1);
-		Future<?> open = inBackground(() -> {
-			new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
-				store("second", doc, "1.0");
-				saved.countDown();
-				try {
-					assertTrue(finish.await(WAIT.toSeconds(), TimeUnit.SECONDS));
-				} catch (InterruptedException e) {
-					Thread.currentThread().interrupt();
-				}
-			});
-			return null;
-		});
+		Future<?> open = saveInOpenTransaction("second", doc, saved, finish);
 		try {
 			assertTrue(saved.await(WAIT.toSeconds(), TimeUnit.SECONDS));
 			bucket.afterStage.open();
 
-			assertEquals("the commit didn't wait for the open transaction", 0,
-					(int) pass.get(5, TimeUnit.SECONDS));
+			// The open transaction ends only once this pass is done: a commit that waited for its row lock would
+			// never return, and the timeout is how this test fails, not a time it relies on
+			assertEquals("the commit didn't wait for the open transaction", 0, (int) get(pass));
 		} finally {
 			finish.countDown();
 		}
@@ -872,5 +897,140 @@ public class MoverTest extends AbstractStorageTestCase {
 		assertEquals(b.backendId(), row(original.getId(), "1.0").backendId());
 		assertEquals(0, cloud.s3().calls(Op.PUT, key(original.getId(), "1.0")));
 		assertArrayEquals("copied".getBytes(StandardCharsets.UTF_8), cloud.s3().bytes(key(copy.getId(), "1.0")));
+	}
+
+	@Test
+	public void testPurgeDeleteInFlightFinishesFirst() throws Exception {
+		Document doc = upload(cloud, "first");
+		long id = doc.getId();
+		String key = key(id, "1.0");
+		assertEquals(1, mover.runOnce());
+		// The save lands in staging and holds the bucket's copy, which the upload will replace at the same key
+		store("second", doc, "1.0");
+		age();
+		Purge.get().setInTransfer(mover::moving);
+		GatedBackend bucket = gate(cloud);
+		bucket.beforePurge.close();
+
+		// The purge finds the file in no transfer, and its delete is under way, holding the file's lock
+		Future<?> purge = inBackground(() -> {
+			Purge.get().run();
+			return null;
+		});
+		bucket.beforePurge.awaitEntered(1);
+		assertFalse(mover.moving(id, "1.0"));
+
+		// The mover takes the file on, and waits for its lock: before its upload, so the delete goes first
+		Future<Integer> pass = inBackground(mover::runOnce);
+		awaitWaitedFor(id, "1.0");
+		bucket.beforePurge.open();
+		get(purge);
+		assertEquals(1, (int) get(pass));
+
+		assertEquals(cloud.backendId(), row(id, "1.0").backendId());
+		assertEquals("the upload came after the purge's delete", "second", bytes(cloud, key));
+		assertTrue(heldRows(id).isEmpty());
+		ReadCache.get().delete(id, "1.0");
+		assertEquals("second", text(resource(doc, "1.0")));
+	}
+
+	@Test
+	public void testFailedCommitKeepsTheSource() throws Exception {
+		// From staging, where the file has its only copy
+		Document doc = upload(cloud, "the only copy");
+		long id = doc.getId();
+		GatedBackend bucket = gate(cloud);
+		bucket.onCommit = MoverTest::failTheCommit;
+
+		assertEquals(0, mover.runOnce());
+
+		StoredFile row = row(id, "1.0");
+		assertEquals(0L, row.backendId());
+		assertEquals(1, row.attempts());
+		assertTrue(row.lastError(), row.lastError().contains("The commit failed"));
+		assertEquals("the staged copy is where it was", "the only copy", Files.readString(staged(id, "1.0")));
+		assertEquals("the only copy", text(resource(doc, "1.0")));
+		assertNull("the upload is discarded", cloud.s3().bytes(key(id, "1.0")));
+
+		// From a local backend: the source stays in its place, with no hold (the staged file isn't due yet)
+		Document home = upload(local, "at home");
+		sf.map(local.store().getId(), cloud.backendId());
+		assertEquals(0, mover.runOnce());
+		assertEquals(local.backendId(), row(home.getId(), "1.0").backendId());
+		assertEquals("at home", Files.readString(local(local.root(), home.getId(), "1.0")));
+		assertFalse(Files.exists(held(local.root(), home.getId(), "1.0")));
+		assertTrue(heldRows(home.getId()).isEmpty());
+
+		// Once commits go through, both move
+		bucket.onCommit = () -> {
+		};
+		due();
+		assertEquals(2, mover.runOnce());
+		assertEquals("the only copy", bytes(cloud, key(id, "1.0")));
+		assertEquals("at home", bytes(cloud, key(home.getId(), "1.0")));
+		assertTrue(Files.exists(held(local.root(), home.getId(), "1.0")));
+	}
+
+	@Test
+	public void testRetestsOutliveAFailedSettingsRead() throws Exception {
+		Document doc = upload(cloud, "waits for the retest");
+		String key = key(doc.getId(), "1.0");
+		StorageStartup startup = Context.get(StorageStartup.class);
+		startup.retestFallback = Duration.ofMillis(50);
+		GatedBackend bucket = gate(cloud);
+		cloud.s3().unreachable(true);
+		health.checkAll();
+		bucket.awaitChecked(1);
+		// No setting can be read: the start's own reads fail, and so does every retest's reschedule
+		jdbc().execute("alter table hd_setting rename to away_hd_setting");
+		try {
+			startup.started();
+
+			// The start's check, a retest, and one more after the first retest's reschedule failed to read
+			bucket.awaitChecked(4);
+			assertTrue("the purge and the nightly check are scheduled all the same", startup.scheduledDaily());
+
+			// A retest finds the bucket back, and the mover resumes
+			cloud.s3().unreachable(false);
+			bucket.awaitStaged(key);
+		} finally {
+			jdbc().execute("alter table away_hd_setting rename to hd_setting");
+		}
+		assertTrue(mover.awaitIdle(WAIT));
+		assertEquals(cloud.backendId(), row(doc.getId(), "1.0").backendId());
+		assertEquals(BackendHealth.State.OK, health.status(cloud.backendId()).state());
+	}
+
+	@Test
+	public void testListingSkipsFilesOfAnOpenTransaction() throws Exception {
+		StorageSettings.get().setTransfers(1);
+		StorageSettings.get().setSweepSeconds(3600);
+		Document movable = upload(cloud, "movable");
+		Document held = upload(cloud, "held");
+		assertTrue("the held file is the newer, listed first", held.getId() > movable.getId());
+		GatedBackend bucket = gate(cloud);
+		CountDownLatch saved = new CountDownLatch(1);
+		CountDownLatch finish = new CountDownLatch(1);
+		Future<?> open = saveInOpenTransaction("held, saved again", held, saved, finish);
+		try {
+			assertTrue(saved.await(WAIT.toSeconds(), TimeUnit.SECONDS));
+
+			// The one transfer isn't spent on the held file: the movable one moves while the other is still held
+			mover.start();
+			bucket.awaitStaged(key(movable.getId(), "1.0"));
+			assertTrue(mover.awaitIdle(WAIT));
+			assertEquals(cloud.backendId(), row(movable.getId(), "1.0").backendId());
+			assertEquals(0L, row(held.getId(), "1.0").backendId());
+			assertEquals(0, cloud.s3().calls(Op.PUT, key(held.getId(), "1.0")));
+		} finally {
+			finish.countDown();
+		}
+		get(open);
+
+		// Its save's wake, once it commits, moves it
+		bucket.awaitStaged(key(held.getId(), "1.0"));
+		assertTrue(mover.awaitIdle(WAIT));
+		assertEquals(cloud.backendId(), row(held.getId(), "1.0").backendId());
+		assertEquals("held, saved again", bytes(cloud, key(held.getId(), "1.0")));
 	}
 }
