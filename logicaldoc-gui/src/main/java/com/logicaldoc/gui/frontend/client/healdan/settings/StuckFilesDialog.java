@@ -9,7 +9,6 @@ import com.logicaldoc.gui.common.client.log.GuiLog;
 import com.logicaldoc.gui.common.client.util.LD;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStuckFile;
 import com.logicaldoc.gui.frontend.client.healdan.services.HealdanStorageService;
-import com.smartgwt.client.types.HeaderControls;
 import com.smartgwt.client.types.ListGridFieldType;
 import com.smartgwt.client.types.SelectionStyle;
 import com.smartgwt.client.widgets.Label;
@@ -65,25 +64,16 @@ public class StuckFilesDialog extends Window {
 		this.name = SafeHtmlUtils.htmlEscape(storeName);
 		this.onChange = onChange;
 
-		setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
-		setTitle("Stuck Files of " + name);
-		setIsModal(true);
-		setShowModalMask(true);
-		setWidth(820);
-		setHeight(460);
-		setCanDragResize(true);
-		centerInPage();
-		addCloseClickHandler(event -> destroy());
+		StorageUi.modal(this, "Stuck Files of " + name, 820, 460);
 
-		VLayout content = new VLayout();
-		content.setMargin(10);
-		content.setMembersMargin(8);
-		content.setWidth100();
+		VLayout content = StorageUi.content();
+		// The grid takes the window's height, which the user can change
 		content.setHeight100();
 
 		Label about = new Label("The mover gave up on these files after ten failures in a row, and leaves them where "
-				+ "they are until you retry them. Retry puts all " + StorageTab.files(stuck)
-				+ " back to waiting, and they move with the others.");
+				+ "they are until you retry them. " + (stuck == 1 ? "Retry puts it back to waiting, and it moves"
+						: "Retry puts all " + StorageUi.files(stuck) + " back to waiting, and they move")
+				+ " with the others.");
 		about.setWidth100();
 		about.setHeight(1);
 		about.setAutoHeight();
@@ -113,8 +103,8 @@ public class StuckFilesDialog extends Window {
 		grid.setEmptyMessage("No stuck files");
 		grid.setFields(docId, fileName, resource, attempts, lastError);
 
-		content.setMembers(about, count, grid, StorageTab.buttons(StorageTab.button("Retry", click -> retry()),
-				StorageTab.button("Close", click -> destroy())));
+		content.setMembers(about, count, grid, StorageUi.buttons(StorageUi.button("Retry", click -> retry()),
+				StorageUi.button("Close", click -> destroy())));
 		addItem(content);
 		load(stuck);
 	}

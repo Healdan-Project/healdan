@@ -13,9 +13,7 @@ import com.logicaldoc.gui.common.client.util.LD;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageBackend;
 import com.logicaldoc.gui.frontend.client.healdan.services.HealdanStorageService;
 import com.logicaldoc.gui.frontend.client.healdan.services.SecretKeyMissingException;
-import com.smartgwt.client.types.HeaderControls;
 import com.smartgwt.client.types.TitleOrientation;
-import com.smartgwt.client.widgets.HTMLFlow;
 import com.smartgwt.client.widgets.Window;
 import com.smartgwt.client.widgets.form.DynamicForm;
 import com.smartgwt.client.widgets.form.fields.CheckboxItem;
@@ -87,27 +85,15 @@ public class BackendDialog extends Window {
 		this.placeFixed = placeFixed;
 		this.onChange = onChange;
 
-		setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
-		setTitle(adding() ? "Add a Storage Backend" : SafeHtmlUtils.htmlEscape(backend.getName()));
-		setIsModal(true);
-		setShowModalMask(true);
-		setWidth(680);
-		setAutoSize(true);
-		centerInPage();
 		// Gone when closed, so a secret typed and not saved doesn't stay in a hidden field
-		addCloseClickHandler(event -> destroy());
+		StorageUi.modal(this, adding() ? "Add a Storage Backend" : SafeHtmlUtils.htmlEscape(backend.getName()), 680);
 
-		VLayout content = new VLayout();
-		content.setMargin(10);
-		content.setMembersMargin(8);
-		content.setWidth100();
-		content.setAutoHeight();
-
+		VLayout content = StorageUi.content();
 		prepareForm();
 		content.addMember(form);
-		content.addMember(StorageTab.buttons(StorageTab.button("Test", click -> test()),
-				StorageTab.button(adding() ? "Add" : "Save", click -> save()),
-				StorageTab.button("Close", click -> destroy())));
+		content.addMember(StorageUi.buttons(StorageUi.button("Test", click -> test()),
+				StorageUi.button(adding() ? "Add" : "Save", click -> save()),
+				StorageUi.button("Close", click -> destroy())));
 		addItem(content);
 	}
 
@@ -187,7 +173,7 @@ public class BackendDialog extends Window {
 			encrypt.setValue(backend.isS3());
 			encrypt.setHint("on for S3 unless you turn it off; it can't change once the backend is added");
 		} else {
-			encrypt.setValue(StorageTab.encrypted(backend));
+			encrypt.setValue(StorageUi.encrypted(backend));
 			encrypt.setDisabled(true);
 			encrypt.setHint("chosen when the backend was added");
 		}
@@ -285,7 +271,7 @@ public class BackendDialog extends Window {
 		HealdanStorageService.Instance.get().testNew(collect(), typedSecret(), new DefaultAsyncCallback<>() {
 			@Override
 			public void handleSuccess(String[] problems) {
-				showTest(displayName(), problems);
+				StorageUi.showTest(displayName(), problems);
 			}
 		});
 	}
@@ -309,7 +295,7 @@ public class BackendDialog extends Window {
 					send(saving, secret);
 					return;
 				}
-				LD.ask("Test Failed", "Test found " + problemsHtml(problems)
+				LD.ask("Test Failed", "Test found " + StorageUi.problemsHtml(problems)
 						+ "Save these settings anyway? The backend fails until they work.", 480, yes -> {
 							if (Boolean.TRUE.equals(yes))
 								send(saving, secret);
@@ -325,7 +311,8 @@ public class BackendDialog extends Window {
 			public void onFailure(Throwable caught) {
 				if (caught instanceof SecretKeyMissingException && secret != null && !saving.isNewKey()) {
 					LD.clearPrompt();
-					NewKeyQuestion.ask("S3 secret", ((SecretKeyMissingException) caught).getSealed(), () -> {
+					long sealed = ((SecretKeyMissingException) caught).getSealed();
+					NewKeyQuestion.ask(NewKeyQuestion.Secret.S3, sealed, () -> {
 						saving.setNewKey(true);
 						send(saving, secret);
 					});
@@ -349,47 +336,5 @@ public class BackendDialog extends Window {
 			HealdanStorageService.Instance.get().addBackend(saving, secret, callback);
 		else
 			HealdanStorageService.Instance.get().saveBackend(saving, secret, callback);
-	}
-
-	/**
-	 * Shows a Test's answer: that it passed, or each problem, as text
-	 *
-	 * @param name the backend's name
-	 * @param problems what Test found; none if it passed
-	 */
-	static void showTest(String name, String[] problems) {
-		Window window = new Window();
-		window.setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
-		window.setTitle("Test of " + SafeHtmlUtils.htmlEscape(name));
-		window.addCloseClickHandler(event -> window.destroy());
-		window.setIsModal(true);
-		window.setShowModalMask(true);
-		window.setWidth(560);
-		window.setAutoSize(true);
-		window.centerInPage();
-
-		VLayout content = new VLayout();
-		content.setMargin(10);
-		content.setMembersMargin(8);
-		content.setWidth100();
-		content.setAutoHeight();
-
-		HTMLFlow result = new HTMLFlow(
-				problems.length == 0 ? "<b>Test passed.</b>" : "Test found " + problemsHtml(problems));
-		result.setWidth100();
-		content.addMember(result);
-		content.addMember(StorageTab.buttons(StorageTab.button("Close", click -> window.destroy())));
-
-		window.addItem(content);
-		window.show();
-	}
-
-	/** "one problem:" or "3 problems:", then each, escaped, in a list */
-	private static String problemsHtml(String[] problems) {
-		StringBuilder html = new StringBuilder();
-		html.append(problems.length == 1 ? "one problem:" : problems.length + " problems:").append("<ul>");
-		for (String problem : problems)
-			html.append("<li>").append(SafeHtmlUtils.htmlEscape(problem)).append("</li>");
-		return html.append("</ul>").toString();
 	}
 }

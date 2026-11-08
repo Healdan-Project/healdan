@@ -26,9 +26,7 @@ import com.smartgwt.client.types.ListGridFieldType;
 import com.smartgwt.client.types.SelectionStyle;
 import com.smartgwt.client.types.TitleOrientation;
 import com.smartgwt.client.util.SC;
-import com.smartgwt.client.widgets.IButton;
 import com.smartgwt.client.widgets.Label;
-import com.smartgwt.client.widgets.events.ClickHandler;
 import com.smartgwt.client.widgets.form.DynamicForm;
 import com.smartgwt.client.widgets.form.fields.SelectItem;
 import com.smartgwt.client.widgets.form.fields.SpinnerItem;
@@ -147,11 +145,13 @@ public class StorageTab extends Tab {
 		Label about = note("Each backend is a place files are kept: a folder on this server, or a bucket at an S3 "
 				+ "service. Each Store keeps its files on one backend. Right-click a backend for its Key History.");
 
-		HLayout backendButtons = buttons(button("Add Backend", click -> add()),
-				button("Edit", click -> withSelected(this::edit)), button("Test", click -> withSelected(this::test)),
-				button("Show Recovery Key", click -> withSelected(this::showKey)),
-				button("Enter Recovery Key", click -> withSelected(this::enterKey)),
-				button("Remove", click -> withSelected(this::remove)), button("Refresh", click -> refresh()));
+		HLayout backendButtons = StorageUi.buttons(StorageUi.button("Add Backend", click -> add()),
+				StorageUi.button("Edit", click -> withSelected(this::edit)),
+				StorageUi.button("Test", click -> withSelected(this::test)),
+				StorageUi.button("Show Recovery Key", click -> withSelected(this::showKey)),
+				StorageUi.button("Enter Recovery Key", click -> withSelected(this::enterKey)),
+				StorageUi.button("Remove", click -> withSelected(this::remove)),
+				StorageUi.button("Refresh", click -> refresh()));
 
 		backends = new ListGrid();
 		backends.setWidth100();
@@ -216,7 +216,8 @@ public class StorageTab extends Tab {
 		settings.setItems(holdDays, cacheGb, transfers);
 
 		pane.setMembers(title("Backends"), about, backendButtons, backends, title("Stores"), storesNote, stores,
-				otherNote, title("Settings"), settings, buttons(button("Save", click -> saveSettings())));
+				otherNote, title("Settings"), settings,
+				StorageUi.buttons(StorageUi.button("Save", click -> saveSettings())));
 	}
 
 	private ListGridField[] prepareBackendFields() {
@@ -260,7 +261,8 @@ public class StorageTab extends Tab {
 		stuck.setCellFormatter((value, rec, rowNum, colNum) -> {
 			long count = rec.getAttributeAsLong(STUCK);
 			// Built from a number only. Not an anchor: a click on one never reaches the grid's cell click
-			return count > 0 ? "<span style='text-decoration: underline; cursor: pointer'>" + files(count) + "</span>"
+			return count > 0
+					? "<span style='text-decoration: underline; cursor: pointer'>" + StorageUi.files(count) + "</span>"
 					: "None";
 		});
 		return new ListGridField[] { name, backend, waiting, stuck };
@@ -304,7 +306,7 @@ public class StorageTab extends Tab {
 			records[i].setAttribute(NAME, backend.getName());
 			records[i].setAttribute(KIND, backend.isS3() ? "S3" : "Local Folder");
 			records[i].setAttribute(WHERE, where(backend));
-			records[i].setAttribute(ENCRYPTED, encrypted(backend));
+			records[i].setAttribute(ENCRYPTED, StorageUi.encrypted(backend));
 			records[i].setAttribute(FILES, backend.getFiles());
 			records[i].setAttribute(SIZE, Util.formatSizeW7((double) backend.getSize()));
 			records[i].setAttribute(STATUS, status(backend));
@@ -367,8 +369,10 @@ public class StorageTab extends Tab {
 					+ (backend.getError() != null ? ": " + backend.getError() : "");
 		else
 			status = "Not Checked Yet";
+		// The server's error may end its own sentence
 		if (!backend.isOffered())
-			status += ". Its recovery key isn't confirmed, so no Store can use it yet.";
+			status += (status.endsWith(".") ? " " : ". ")
+					+ "Its recovery key isn't confirmed, so no Store can use it yet.";
 		return status;
 	}
 
@@ -378,23 +382,13 @@ public class StorageTab extends Tab {
 
 	private static String keyShown(GUIStorageBackend backend) {
 		if (backend.getKeyShown() == null)
-			return encrypted(backend) ? "Never" : "";
+			return StorageUi.encrypted(backend) ? "Never" : "";
 		return I18N.formatDate(backend.getKeyShown()) + " to " + backend.getKeyShownBy();
 	}
 
 	/** "None", or "12 files (3.1 MB)" */
 	private static String waiting(long files, long size) {
-		return files == 0 ? "None" : files(files) + " (" + Util.formatSizeW7((double) size) + ")";
-	}
-
-	/** Whether the backend's files are encrypted: null is the kind's default, on for S3 and off for a local folder */
-	static boolean encrypted(GUIStorageBackend backend) {
-		return backend.getEncrypted() != null ? backend.getEncrypted() : backend.isS3();
-	}
-
-	/** "1 file" or "214 files" */
-	static String files(long count) {
-		return count == 1 ? "1 file" : count + " files";
+		return files == 0 ? "None" : StorageUi.files(files) + " (" + Util.formatSizeW7((double) size) + ")";
 	}
 
 	private GUIStorageBackend selected() {
@@ -457,14 +451,14 @@ public class StorageTab extends Tab {
 		HealdanStorageService.Instance.get().testBackend(backend.getId(), new DefaultAsyncCallback<>() {
 			@Override
 			public void handleSuccess(String[] problems) {
-				BackendDialog.showTest(backend.getName(), problems);
+				StorageUi.showTest(backend.getName(), problems);
 				refresh();
 			}
 		});
 	}
 
 	private void showKey(GUIStorageBackend backend) {
-		if (!encrypted(backend)) {
+		if (!StorageUi.encrypted(backend)) {
 			SC.say(SafeHtmlUtils.htmlEscape(backend.getName()) + " isn't encrypted, so it has no recovery key.");
 			return;
 		}
@@ -480,7 +474,7 @@ public class StorageTab extends Tab {
 	}
 
 	private void enterKey(GUIStorageBackend backend) {
-		if (encrypted(backend))
+		if (StorageUi.encrypted(backend))
 			RecoveryKeyDialog.enter(backend, this::refresh);
 		else
 			SC.say(SafeHtmlUtils.htmlEscape(backend.getName()) + " isn't encrypted, so it has no recovery key.");
@@ -488,6 +482,7 @@ public class StorageTab extends Tab {
 
 	/** Every showing and entering of the backend's recovery key, newest first (question 8) */
 	private void keyHistory(GUIStorageBackend backend) {
+		LD.contactingServer();
 		HealdanStorageService.Instance.get().keyEvents(backend.getId(), new DefaultAsyncCallback<>() {
 			@Override
 			public void handleSuccess(GUIStorageEvent[] events) {
@@ -503,7 +498,7 @@ public class StorageTab extends Tab {
 					+ "backend.");
 			return;
 		}
-		String key = encrypted(backend) ? " Its key file is deleted too." : "";
+		String key = StorageUi.encrypted(backend) ? " Its key file is deleted too." : "";
 		LD.ask("Remove " + name, "Remove " + name + "? Only a backend no Store uses, with no file on it, can be "
 				+ "removed." + key, 440, yes -> {
 					if (!Boolean.TRUE.equals(yes))
@@ -526,13 +521,14 @@ public class StorageTab extends Tab {
 			return;
 		String store = SafeHtmlUtils.htmlEscape(rec.getAttributeAsString(NAME));
 		String backend = SafeHtmlUtils.htmlEscape(String.valueOf(names.get(Long.toString(backendId))));
+		LD.contactingServer();
 		HealdanStorageService.Instance.get().previewStoreSwitch(storeId, backendId, new DefaultAsyncCallback<>() {
 			@Override
 			public void handleSuccess(long[] moving) {
 				String what = moving[0] == 0
-						? "No file needs to move: " + store + "'s files will be kept on " + backend + " from now on."
-						: files(moving[0]) + " (" + Util.formatSizeW7((double) moving[1]) + ") will move to " + backend
-								+ " in the background. Until each has moved, it's read from where it is now.";
+						? "No file needs to move: from now on, " + store + " keeps its files on " + backend + "."
+						: StorageUi.files(moving[0]) + " (" + Util.formatSizeW7((double) moving[1]) + ") will move to "
+								+ backend + " in the background. Until each has moved, it's read from where it is now.";
 				LD.ask("Change the Backend of " + store, what + "<br><br>Give " + store + " this backend?", 440,
 						yes -> {
 							if (Boolean.TRUE.equals(yes))
@@ -581,20 +577,5 @@ public class StorageTab extends Tab {
 		label.setHeight(1);
 		label.setAutoHeight();
 		return label;
-	}
-
-	static IButton button(String title, ClickHandler handler) {
-		IButton button = new IButton(title);
-		button.setAutoFit(true);
-		button.addClickHandler(handler);
-		return button;
-	}
-
-	static HLayout buttons(IButton... members) {
-		HLayout buttons = new HLayout();
-		buttons.setMembersMargin(5);
-		buttons.setHeight(1);
-		buttons.setMembers(members);
-		return buttons;
 	}
 }

@@ -434,7 +434,7 @@ public class ProviderDialog extends Window {
 	 * a new key, which leaves those values unreadable (ruling R37).
 	 */
 	private void askNewKey(GUISignInProvider saving, String secret, long sealed) {
-		NewKeyQuestion.ask("client secret", sealed, () -> {
+		NewKeyQuestion.ask(NewKeyQuestion.Secret.CLIENT, sealed, () -> {
 			saving.setNewKey(true);
 			send(saving, secret);
 		});

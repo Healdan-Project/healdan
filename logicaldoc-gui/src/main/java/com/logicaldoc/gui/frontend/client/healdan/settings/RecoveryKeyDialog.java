@@ -13,7 +13,6 @@ import com.logicaldoc.gui.common.client.widgets.CopyTextFormItemIcon;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageBackend;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageEvent;
 import com.logicaldoc.gui.frontend.client.healdan.services.HealdanStorageService;
-import com.smartgwt.client.types.HeaderControls;
 import com.smartgwt.client.types.SelectionStyle;
 import com.smartgwt.client.types.TitleOrientation;
 import com.smartgwt.client.util.SC;
@@ -70,9 +69,9 @@ public class RecoveryKeyDialog extends Window {
 		this.onChange = onChange;
 		String name = SafeHtmlUtils.htmlEscape(backend.getName());
 
-		prepare(this, "Recovery Key of " + name, 560);
+		StorageUi.modal(this, "Recovery Key of " + name, 560);
 
-		VLayout content = content();
+		VLayout content = StorageUi.content();
 		content.addMember(flow((ask ? "<b>" + name + "</b> is encrypted. This is its recovery key: save it now, away "
 				+ "from this server, in a password manager or on paper kept locked away.<br><br>" : "")
 				+ "The files of " + name + " can be read only with its key file, in this server's configuration "
@@ -92,10 +91,10 @@ public class RecoveryKeyDialog extends Window {
 			lastGroup.setWidth(100);
 			question.setItems(lastGroup);
 			content.addMember(question);
-			content.addMember(StorageTab.buttons(StorageTab.button("Confirm", click -> confirm()),
-					StorageTab.button("Later", click -> destroy())));
+			content.addMember(StorageUi.buttons(StorageUi.button("Confirm", click -> confirm()),
+					StorageUi.button("Later", click -> destroy())));
 		} else {
-			content.addMember(StorageTab.buttons(StorageTab.button("Close", click -> destroy())));
+			content.addMember(StorageUi.buttons(StorageUi.button("Close", click -> destroy())));
 		}
 		addItem(content);
 	}
@@ -147,9 +146,9 @@ public class RecoveryKeyDialog extends Window {
 	static void enter(GUIStorageBackend backend, Runnable onChange) {
 		String name = SafeHtmlUtils.htmlEscape(backend.getName());
 		Window window = new Window();
-		prepare(window, "Enter the Recovery Key of " + name, 560);
+		StorageUi.modal(window, "Enter the Recovery Key of " + name, 560);
 
-		VLayout content = content();
+		VLayout content = StorageUi.content();
 		content.addMember(flow("If the key file of " + name + " was lost or damaged, its recovery key puts it back. "
 				+ "Healdan checks the key against the backend first, and writes nothing if it isn't the backend's."));
 
@@ -166,7 +165,7 @@ public class RecoveryKeyDialog extends Window {
 		form.setItems(key);
 		content.addMember(form);
 
-		content.addMember(StorageTab.buttons(StorageTab.button("Enter", click -> {
+		content.addMember(StorageUi.buttons(StorageUi.button("Enter", click -> {
 			if (!Boolean.TRUE.equals(form.validate()))
 				return;
 			LD.contactingServer();
@@ -179,7 +178,7 @@ public class RecoveryKeyDialog extends Window {
 							onChange.run();
 						}
 					});
-		}), StorageTab.button("Cancel", click -> window.destroy())));
+		}), StorageUi.button("Cancel", click -> window.destroy())));
 
 		window.addItem(content);
 		window.show();
@@ -193,7 +192,7 @@ public class RecoveryKeyDialog extends Window {
 	 */
 	static void history(GUIStorageBackend backend, GUIStorageEvent[] events) {
 		Window window = new Window();
-		prepare(window, "Key History of " + SafeHtmlUtils.htmlEscape(backend.getName()), 520);
+		StorageUi.modal(window, "Key History of " + SafeHtmlUtils.htmlEscape(backend.getName()), 520);
 
 		ListGridField date = new DateListGridField(DATE, "When");
 		date.setWidth(150);
@@ -209,7 +208,7 @@ public class RecoveryKeyDialog extends Window {
 		grid.setWidth100();
 		grid.setHeight(240);
 		grid.setSelectionType(SelectionStyle.NONE);
-		grid.setEmptyMessage(StorageTab.encrypted(backend)
+		grid.setEmptyMessage(StorageUi.encrypted(backend)
 				? "Its recovery key hasn't been shown or entered since it was added"
 				: "It isn't encrypted, so it has no recovery key");
 		grid.setFields(date, event, by);
@@ -224,31 +223,11 @@ public class RecoveryKeyDialog extends Window {
 		}
 		grid.setData(records);
 
-		VLayout content = content();
+		VLayout content = StorageUi.content();
 		content.addMember(grid);
-		content.addMember(StorageTab.buttons(StorageTab.button("Close", click -> window.destroy())));
+		content.addMember(StorageUi.buttons(StorageUi.button("Close", click -> window.destroy())));
 		window.addItem(content);
 		window.show();
-	}
-
-	private static void prepare(Window window, String title, int width) {
-		window.setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
-		window.setTitle(title);
-		window.setIsModal(true);
-		window.setShowModalMask(true);
-		window.setWidth(width);
-		window.setAutoSize(true);
-		window.centerInPage();
-		window.addCloseClickHandler(click -> window.destroy());
-	}
-
-	private static VLayout content() {
-		VLayout content = new VLayout();
-		content.setMargin(10);
-		content.setMembersMargin(8);
-		content.setWidth100();
-		content.setAutoHeight();
-		return content;
 	}
 
 	private static Canvas flow(String html) {
