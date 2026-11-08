@@ -62,7 +62,7 @@ COPY docker/allowed-commands.txt /opt/logicaldoc/defaults/allowed-commands.txt
 
 # context.properties and log.xml must leave WEB-INF/classes: Tomcat's webapp class loader looks there before
 # common.loader, where the live, writable copies in /opt/logicaldoc/conf are found.
-RUN mkdir -p /opt/logicaldoc/defaults /opt/logicaldoc/conf /opt/logicaldoc/repository \
+RUN mkdir -p /opt/logicaldoc/defaults /opt/logicaldoc/conf /opt/logicaldoc/repository /opt/logicaldoc/cache \
  && mv "$CATALINA_HOME/webapps/ROOT/WEB-INF/classes/context.properties" \
        "$CATALINA_HOME/webapps/ROOT/WEB-INF/classes/log.xml" /opt/logicaldoc/defaults/ \
  && sed -i 's|^common.loader=.*|&,"/opt/logicaldoc/conf"|' "$CATALINA_HOME/conf/catalina.properties" \
@@ -80,7 +80,8 @@ LABEL org.opencontainers.image.title="Healdan (LogicalDOC Community fork)" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.licenses="LGPL-3.0-only"
 
-VOLUME ["/opt/logicaldoc/conf", "/opt/logicaldoc/repository"]
+# The cache is healdan-storage's read cache: copies only, so backups leave it out.
+VOLUME ["/opt/logicaldoc/conf", "/opt/logicaldoc/repository", "/opt/logicaldoc/cache"]
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
   CMD curl -fsS -o /dev/null http://localhost:8080/login.jsp || exit 1

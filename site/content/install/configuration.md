@@ -31,8 +31,9 @@ is required. After changing `.env`, run `docker compose up -d`.
 - the database connection: `jdbc.url`, `jdbc.username` and `jdbc.password`;
 - the public address (`server.url`), when `LOGICALDOC_PUBLIC_URL` is set.
 
-Change those in `.env`. Everything else is set in the app's admin screens, and survives restarts, recreating the
-containers and rebuilding the image.
+Change those in `.env`. Healdan also writes one setting of its own on every start, `store`, which makes its storage
+keep the documents' files, so changing `store` yourself does nothing. Everything else is set in the app's admin
+screens, and survives restarts, recreating the containers and rebuilding the image.
 
 ## Settings Without a Screen
 

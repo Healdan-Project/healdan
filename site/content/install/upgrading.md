@@ -22,14 +22,18 @@ fails, because the app's image is built here and can't be pulled.
 
 - **Your data stays.** The volumes are kept.
 - **New default settings are added** to your `context.properties` when the app starts. Values you already have
-  aren't changed, apart from three kinds:
+  aren't changed, apart from four kinds:
   - the release number and copyright years (`product.release` and `product.year`), which the new image updates;
   - a setting still holding an older image's default that the new image replaces. If you changed it yourself, your
     value stays. So far that's `cachecontrol`, which tells browsers how long to keep Healdan's files;
   - non-breaking spaces in the Content-Security-Policy (`security.csp`), which tells browsers what Healdan's pages
     may load. They become ordinary spaces, in a policy you changed too, and the rest of it stays. Until November
     2026 the default had one after `object-src`, so browsers ignored that part of the policy, and their consoles
-    showed "Unrecognized Content-Security-Policy directive".
+    showed "Unrecognized Content-Security-Policy directive";
+  - `store`, which says what keeps the documents' files. Healdan sets it to its own storage on every start, whatever
+    the file holds, so changing it yourself does nothing. Until November 2026 it was LogicalDOC's. The first start
+    after the upgrade that changes it moves nothing: the files stay in the repository volume, where Healdan's
+    storage reads them.
 - **Browsers load the new interface** the next time they open Healdan. A tab left open during the upgrade keeps the
   old one until it's reloaded.
 - **Healdan's own tables are upgraded** when the app starts. If an upgrade step fails, the app stops instead of

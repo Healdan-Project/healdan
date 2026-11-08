@@ -14,13 +14,14 @@ DB=ldtest-image-db
 APP=ldtest-image-app
 CONF=ldtest-image-conf
 REPO=ldtest-image-repo
+CACHE=ldtest-image-cache
 NAS=ldtest-image-nas
 PW='image test pw'
 
 cleanup() {
   docker rm -fv "$APP" "$DB" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
-  docker volume rm -f "$CONF" "$REPO" "$NAS" >/dev/null 2>&1 || true
+  docker volume rm -f "$CONF" "$REPO" "$CACHE" "$NAS" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 cleanup
@@ -36,7 +37,8 @@ start_app() {
   [ $# -gt 0 ] && shift
   docker run -d --name "$APP" --network "$NET" --restart unless-stopped -p 127.0.0.1::8080 \
     -e DB_HOST="$DB" -e DB_PASSWORD="$PW" \
-    -v "$CONF:/opt/logicaldoc/conf" -v "$repo:/opt/logicaldoc/repository" "$@" "$IMAGE" >/dev/null
+    -v "$CONF:/opt/logicaldoc/conf" -v "$repo:/opt/logicaldoc/repository" -v "$CACHE:/opt/logicaldoc/cache" "$@" \
+    "$IMAGE" >/dev/null
 }
 remove_app() { docker rm -f "$APP" >/dev/null; }
 # Not grep -q: it exits at the first match and, under pipefail, the SIGPIPE'd docker logs fails the check.
@@ -66,11 +68,14 @@ docker rm -fv "$APP" >/dev/null
 echo "== volumes owned by root (like a NAS bind mount) are handed to uid 1000"
 docker volume create "$CONF" >/dev/null
 docker volume create "$REPO" >/dev/null
-docker run --rm -v "$CONF:/c" -v "$REPO:/r" busybox sh -c 'touch /r/root-file && chown -R 0:0 /c /r'
+docker volume create "$CACHE" >/dev/null
+docker run --rm -v "$CONF:/c" -v "$REPO:/r" -v "$CACHE:/k" busybox \
+  sh -c 'touch /r/root-file /k/root-file && chown -R 0:0 /c /r /k'
 start_app
 check "becomes healthy" wait_healthy "$APP" 900
 base="http://$(docker port "$APP" 8080/tcp | head -1)"
 check "repository content owned by uid 1000" test "$(docker exec "$APP" stat -c %u /opt/logicaldoc/repository/root-file)" = 1000
+check "cache content owned by uid 1000" test "$(docker exec "$APP" stat -c %u /opt/logicaldoc/cache/root-file)" = 1000
 check "context.properties owned by uid 1000" test "$(docker exec "$APP" stat -c %u /opt/logicaldoc/conf/context.properties)" = 1000
 # uid 1000 must own PID 1, or restart.sh may not signal it. Tomcat is the JVM running Catalina's Bootstrap; the
 # brackets keep the scan from matching its own command line.

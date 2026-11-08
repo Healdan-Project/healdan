@@ -88,10 +88,10 @@ public final class DockerInit {
 
     /**
      * Adds keys the file lacks from the image defaults (upstream adds settings over time, and LogicalDOC fails to
-     * start on an unresolvable one), takes the image-owned keys from them, replaces a default an earlier image
-     * shipped with this image's, makes the non-breaking spaces in the plain-space keys plain, seeds the container's
-     * paths and DB settings the first time (recognised by a missing LDOCHOME, which the shipped defaults lack), then
-     * applies the env-owned keys. Returns true when this call seeded the file.
+     * start on an unresolvable one), takes the image-owned keys from them, sets the keys Healdan owns, replaces a
+     * default an earlier image shipped with this image's, makes the non-breaking spaces in the plain-space keys plain,
+     * seeds the container's paths and DB settings the first time (recognised by a missing LDOCHOME, which the shipped
+     * defaults lack), then applies the env-owned keys. Returns true when this call seeded the file.
      */
     static boolean applyConfig(File file, File defaults, Map<String, String> envKeys) throws IOException {
         ContextProperties config = new ContextProperties(file);
@@ -102,6 +102,9 @@ public final class DockerInit {
         TreeSet<String> updated = applyImageKeys(config, pristine);
         if (!updated.isEmpty())
             log("updated from the image: " + String.join(", ", updated));
+        TreeSet<String> owned = applyHealdanKeys(config);
+        if (!owned.isEmpty())
+            log("set Healdan's own: " + String.join(", ", owned));
         TreeSet<String> replaced = replaceOldDefaults(config, pristine);
         if (!replaced.isEmpty())
             log("replaced an earlier image's default with this image's: " + String.join(", ", replaced));
@@ -117,6 +120,7 @@ public final class DockerInit {
         envKeys.forEach(config::setProperty);
         config.write();
         verifyStored(file, envKeys);
+        verifyHealdanKeys(file);
         return seed;
     }
 
@@ -152,6 +156,21 @@ public final class DockerInit {
             }
         }
         return updated;
+    }
+
+    /**
+     * Sets each key Healdan owns (ConfigPlan.HEALDAN_KEYS) whose value, as written, differs; returns them as key=value.
+     * Whatever the file holds is replaced: a placeholder too, so the value never depends on what it would expand to.
+     */
+    private static TreeSet<String> applyHealdanKeys(ContextProperties config) {
+        TreeSet<String> set = new TreeSet<>();
+        ConfigPlan.HEALDAN_KEYS.forEach((key, value) -> {
+            if (!value.equals(config.get(key))) {
+                config.setProperty(key, value);
+                set.add(key + "=" + value);
+            }
+        });
+        return set;
     }
 
     /** Gives each key still holding a default an earlier image shipped (ConfigPlan.REPLACED_DEFAULTS) the image's. */
@@ -196,6 +215,18 @@ public final class DockerInit {
                     || !key.getValue().equals(stored.getString(key.getKey())))
                 throw new IllegalArgumentException(ConfigPlan.source(key.getKey())
                         + " cannot be stored in context.properties as given: use only Latin-1 characters and no line breaks");
+    }
+
+    /**
+     * Reads the keys Healdan owns back from the written file, as LogicalDOC will: a store read back as anything else
+     * would start LogicalDOC on another store than Healdan's, so the start stops instead.
+     */
+    private static void verifyHealdanKeys(File file) throws IOException {
+        ContextProperties stored = new ContextProperties(file);
+        for (Map.Entry<String, String> key : ConfigPlan.HEALDAN_KEYS.entrySet())
+            if (!key.getValue().equals(stored.getProperty(key.getKey())))
+                throw new IllegalStateException(key.getKey() + " reads back from " + file + " as '"
+                        + stored.getProperty(key.getKey()) + "', not '" + key.getValue() + "'");
     }
 
     private static void createSchema(Db db) throws Exception {

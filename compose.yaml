@@ -51,9 +51,12 @@ services:
     volumes:
       - logicaldoc-conf:/opt/logicaldoc/conf
       - logicaldoc-repository:/opt/logicaldoc/repository
+      # Storage backends' read cache: copies only, so backups leave it out.
+      - logicaldoc-cache:/opt/logicaldoc/cache
     stop_grace_period: 60s
 
 volumes:
   db-data:
   logicaldoc-conf:
   logicaldoc-repository:
+  logicaldoc-cache:

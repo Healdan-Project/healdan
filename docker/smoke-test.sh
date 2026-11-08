@@ -202,6 +202,12 @@ check "smoke-fixture seed recorded" test \
   "$(db_query "select count(*) from hd_setting where name = 'seed.smoke-fixture'")" = 1
 check "smoke-signin seed recorded" test \
   "$(db_query "select count(*) from hd_setting where name = 'seed.smoke-signin'")" = 1
+# The image sets store= to HealdanStorage on every start (ConfigPlan.HEALDAN_KEYS), and healdan-storage's seeds run
+# only when it's CE's store. storage-record-original writes Original's marker, into an empty folder on a fresh stack.
+storage_seeds="'seed.storage-settings', 'seed.storage-record-original', 'seed.storage-hide-stores'"
+check "the storage seeds recorded, so HealdanStorage is CE's store" test \
+  "$(db_query "select count(*) from hd_setting where name in ($storage_seeds)")" = 3
+check "Original's marker in its folder" compose exec -T app test -s /opt/logicaldoc/repository/docs/.healdan-backend
 # doc_ids is "<pdf id> <png id>", uploaded in that order: doc #s 1 and 2
 n=1
 for id in $doc_ids; do

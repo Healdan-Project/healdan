@@ -41,6 +41,16 @@ public final class ConfigPlan {
      */
     public static final List<String> PLAIN_SPACE_KEYS = List.of("security.csp");
 
+    /**
+     * Keys Healdan owns, set on every boot whatever the file holds (S3 storage spec section 12). store names the class of
+     * LogicalDOC's store bean (context-core.xml's {@code <bean id="store" class="${store}"/>}): healdan-storage's
+     * HealdanStorage, which keeps LogicalDOC's layout in Original's folder, store.1.dir, so the files stay where they
+     * are. Setting it here leaves the image's defaults, which are upstream's, holding FSStore, and moves an existing
+     * install over on its first boot on this image.
+     */
+    public static final Map<String, String> HEALDAN_KEYS = Map.of("store",
+            "com.logicaldoc.healdan.storage.HealdanStorage");
+
     private ConfigPlan() {
     }
 

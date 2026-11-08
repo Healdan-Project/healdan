@@ -8,9 +8,10 @@ weight: 2
 | Service | What it is | Where its data lives |
 |---|---|---|
 | `db` | MariaDB 11.4 | the volume `logicaldoc_db-data` |
-| `app` | Tomcat 11 running Healdan | the volumes `logicaldoc_logicaldoc-conf` (configuration: `context.properties`, `log.xml`, `allowed-commands.txt`) and `logicaldoc_logicaldoc-repository` (documents, the search index, user data and logs) |
+| `app` | Tomcat 11 running Healdan | the volumes `logicaldoc_logicaldoc-conf` (configuration: `context.properties`, `log.xml`, `allowed-commands.txt`), `logicaldoc_logicaldoc-repository` (documents, the search index, user data and logs) and `logicaldoc_logicaldoc-cache` (copies of files kept in S3 buckets, so they open faster the next time) |
 
-[Backup and Restore](../backup-and-restore/) covers all three volumes.
+[Backup and Restore](../backup-and-restore/) covers the database and the configuration and repository volumes. The
+cache needs no backup, as it holds only copies.
 
 ## Supported Databases
 
@@ -26,14 +27,15 @@ only MariaDB so far: on any other database it stops when it starts.
 ## What the App Does When It Starts
 
 - **On the first start** it writes `context.properties`, waits for MariaDB, and creates the database schema.
-- **On every later start** it re-applies only the settings that come from `.env` (see
-  [Configuration](../configuration/)).
+- **On every later start** it re-applies the settings that come from `.env` (see
+  [Configuration](../configuration/)), and one of Healdan's own: `store`, which makes Healdan's storage keep the
+  documents' files. Healdan sets it whatever `context.properties` holds, so changing it yourself does nothing.
 - **It adds new default settings.** A setting that's in the image's defaults but missing from your
   `context.properties`, such as one a new release introduces, is added. A value you already have is never changed,
-  except the release number and copyright years (`product.release` and `product.year`), which always come from the
-  image, and an older image's default that the new image replaces (so far only `cachecontrol`), unless you changed
-  it yourself. Non-breaking spaces in the Content-Security-Policy (`security.csp`) also become ordinary ones, in a
-  policy you changed too.
+  except `store` (above), the release number and copyright years (`product.release` and `product.year`), which
+  always come from the image, and an older image's default that the new image replaces (so far only
+  `cachecontrol`), unless you changed it yourself. Non-breaking spaces in the Content-Security-Policy
+  (`security.csp`) also become ordinary ones, in a policy you changed too.
 - **The setup wizard is switched off.** `/setup` answers with HTTP 403, because `.env` configures the database.
 
 ## External Programs

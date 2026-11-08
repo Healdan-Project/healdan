@@ -3,9 +3,10 @@ title: Backup and Restore
 weight: 7
 ---
 
-Back up the database and both of the app's volumes together. The configuration volume holds the encryption key,
-the node id and the key that seals the secrets for signing in through a provider and for S3 storage backends, so
-documents and a database restored without their matching configuration lose their encrypted settings.
+Back up the database and the app's configuration and repository volumes together. The configuration volume holds
+the encryption key, the node id and the key that seals the secrets for signing in through a provider and for S3
+storage backends, so documents and a database restored without their matching configuration lose their encrypted
+settings. The app's third volume, the cache, holds only copies, so it needs no backup.
 
 ## Backing Up
 
