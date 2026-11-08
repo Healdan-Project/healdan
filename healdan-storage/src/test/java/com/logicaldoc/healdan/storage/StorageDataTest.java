@@ -241,27 +241,107 @@ public class StorageDataTest extends AbstractStorageTestCase {
 	}
 
 	@Test
+	public void testMisplacedListsOnlyRowsThatWait() throws Exception {
+		long other = backend("other");
+		useBackend(10, other);
+		files().recordWrite(40, "1.0", 0, 10L, 1);
+		files().recordWrite(41, "1.0", 1, 10L, 1);
+		files().recordWrite(42, "1.0", 1, 10L, 1);
+		// Misplaced, but without the mark, as only a write that skipped StoredFiles leaves a row
+		jdbc().update("update hd_storage_file set hd_waiting = null where hd_docid = 41");
+
+		assertEquals(List.of(40L, 42L), docs(10, Set.of()));
+	}
+
+	@Test
+	public void testMarkWaitingMendsOnlyItsStore() throws Exception {
+		long other = backend("other");
+		useBackend(10, other);
+		useBackend(11, other);
+		Date earlier = new Date(System.currentTimeMillis() - 2 * DAY);
+		files().recordWrite(50, "1.0", 1, 10L, 1);
+		files().recordWrite(51, "1.0", 1, 11L, 1);
+		files().recordWrite(52, "1.0", other, 10L, 1);
+		files().recordWrite(53, "1.0", 1, 10L, 1);
+		files().recordWrite(54, "1.0", 1, null, 1);
+		setWaiting(53, "1.0", earlier);
+		jdbc().update("update hd_storage_file set hd_waiting = null where hd_docid in (50, 51)");
+		assertEquals(List.of(53L), docs(10, Set.of()));
+
+		assertEquals(1, files().markWaiting(10L));
+
+		assertNotNull("Store 10's misplaced row waits", waiting(50, "1.0"));
+		assertNull("Store 11's is left to a check of all", waiting(51, "1.0"));
+		assertNull("one in place doesn't wait", waiting(52, "1.0"));
+		assertEquals("one waiting keeps its time", earlier.getTime(), waiting(53, "1.0").getTime());
+		assertNull("no Store, on Original: in place", waiting(54, "1.0"));
+		assertEquals(List.of(53L, 50L), docs(10, Set.of()));
+
+		assertEquals(1, files().markWaiting(null));
+		assertNotNull(waiting(51, "1.0"));
+		assertEquals(0, files().markWaiting(null));
+	}
+
+	@Test
+	public void testStoreBackendChangedKeepsTheMarks() throws Exception {
+		long one = backend("one");
+		long two = backend("two");
+		useBackend(10, one);
+		useBackend(11, one);
+		Date earlier = new Date(System.currentTimeMillis() - 2 * DAY);
+		files().recordWrite(60, "1.0", one, 10L, 1);
+		files().recordWrite(61, "1.0", two, 10L, 1);
+		files().recordWrite(62, "1.0", 0, 10L, 1);
+		files().recordWrite(63, "1.0", one, 11L, 1);
+		files().recordWrite(64, "1.0", two, 11L, 1);
+		setWaiting(61, "1.0", earlier);
+		setWaiting(62, "1.0", earlier);
+		setWaiting(64, "1.0", earlier);
+		assertNull(waiting(60, "1.0"));
+		assertNull(waiting(63, "1.0"));
+
+		// Store 10 switches to backend two
+		StoreBackend row = StoreBackendDAO.get().findByStore(10).orElseThrow();
+		row.setBackendId(two);
+		StoreBackendDAO.get().store(row);
+		files().storeBackendChanged(10);
+
+		assertNotNull("left on the old backend, it waits now", waiting(60, "1.0"));
+		assertNull("already on the new one, it waits no more", waiting(61, "1.0"));
+		assertEquals("one that waited keeps its time", earlier.getTime(), waiting(62, "1.0").getTime());
+		assertNull("another Store's rows are left alone", waiting(63, "1.0"));
+		assertEquals(earlier.getTime(), waiting(64, "1.0").getTime());
+		assertEquals(List.of(62L, 64L, 60L), docs(10, Set.of()));
+	}
+
+	@Test
 	public void testFailureRecord() throws Exception {
 		long write = files().recordWrite(40, "1.0", 0, null, 5);
 		Date next = new Date(System.currentTimeMillis() + 60_000);
 
 		// A failure of an old write counts against nothing
-		assertFalse(files().recordFailure(40, "1.0", write + 1, "old", next));
+		assertEquals(0, files().recordFailure(40, "1.0", write + 1, "old", n -> next));
 		assertEquals(0, files().find(40, "1.0").orElseThrow().attempts());
-		assertFalse(files().recordFailure(41, "1.0", write, "none", next));
+		assertEquals(0, files().recordFailure(41, "1.0", write, "none", n -> next));
 
 		for (int attempt = 1; attempt < StoredFiles.STUCK_AT; attempt++) {
-			assertTrue(files().recordFailure(40, "1.0", write, "boom " + attempt, next));
+			int counted = attempt;
+			// The next try is worked out from the count it writes
+			assertEquals(attempt, files().recordFailure(40, "1.0", write, "boom " + attempt, n -> {
+				assertEquals(counted, n);
+				return next;
+			}));
 			StoredFile row = files().find(40, "1.0").orElseThrow();
 			assertEquals(attempt, row.attempts());
 			assertEquals("boom " + attempt, row.lastError());
 			assertFalse(row.stuck());
 			assertEquals(next.getTime() / 1000, row.nextTry().getTime() / 1000);
 		}
-		assertTrue(files().recordFailure(40, "1.0", write, "x".repeat(5000), next));
+		assertEquals(StoredFiles.STUCK_AT, files().recordFailure(40, "1.0", write, "x".repeat(5000), n -> null));
 		StoredFile stuck = files().find(40, "1.0").orElseThrow();
 		assertEquals(StoredFiles.STUCK_AT, stuck.attempts());
 		assertTrue(stuck.stuck());
+		assertNull(stuck.nextTry());
 		assertEquals(4000, stuck.lastError().length());
 
 		// A new write supersedes it all
@@ -281,11 +361,11 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		for (int i = 0; i < 4; i++) {
 			writes[i] = files().recordWrite(50 + i, "1.0", 0, stores[i], 5);
 			for (int n = 0; n < StoredFiles.STUCK_AT; n++)
-				files().recordFailure(50 + i, "1.0", writes[i], "boom", next);
+				files().recordFailure(50 + i, "1.0", writes[i], "boom", f -> next);
 		}
 		// Doc 51 is not stuck, only failing
 		files().recordWrite(51, "1.0", 0, 10L, 5);
-		files().recordFailure(51, "1.0", files().find(51, "1.0").orElseThrow().write(), "boom", next);
+		files().recordFailure(51, "1.0", files().find(51, "1.0").orElseThrow().write(), "boom", f -> next);
 
 		assertEquals(1, files().retry(10L));
 		StoredFile back = files().find(50, "1.0").orElseThrow();
@@ -312,7 +392,7 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		files().recordWrite(62, "1.0", 1, null, 3);
 		files().recordWrite(63, "1.0", 1, null, 4);
 		for (int n = 0; n < StoredFiles.STUCK_AT; n++)
-			files().recordFailure(61, "1.0", w, "boom", new Date());
+			files().recordFailure(61, "1.0", w, "boom", f -> new Date());
 
 		List<StoreStats> stats = files().statsByStore();
 

@@ -14,8 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.logicaldoc.core.communication.EMail;
-import com.logicaldoc.core.communication.Recipient;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionListener;
 import com.logicaldoc.core.security.apikey.ApiKey;
@@ -192,22 +190,10 @@ public class AdminSignInAlert implements SessionListener {
 					continue;
 				}
 
-				EMail email = new EMail();
-				email.setTenantId(user.getTenantId());
-				email.setHtml(true);
-				email.setLocale(user.getLocale());
-				email.setAuthor("SYSTEM");
-				Recipient recipient = new Recipient();
-				recipient.setAddress(user.getEmail());
-				recipient.setName(user.getFullName());
-				recipient.setMode(Recipient.Mode.TO);
-				email.getRecipients().add(recipient);
-
 				Map<String, Object> dictionary = new HashMap<>();
 				dictionary.put("ip", ip);
 				dictionary.put("date", date);
-				OutgoingEmail.fill(email, TEMPLATE, dictionary);
-				OutgoingEmail.send(email);
+				OutgoingEmail.sendTemplate(user, TEMPLATE, dictionary);
 			} catch (Exception e) {
 				log.warn("Couldn't send the admin sign-in alert to {}", SignInAccounts.printable(username), e);
 			}

@@ -16,9 +16,10 @@ import com.logicaldoc.healdan.storage.backend.BackendFailingException;
  * Holds a deleted or replaced copy (spec section 8): a local backend's file moves under its {@code .held/}, replacing
  * an earlier held copy of the same key, and an S3 object stays where it is, with nothing sent. Either way a row in
  * {@code hd_storage_held} says where it is and its purge date, {@code storage.holdDays} from now, which {@link Purge}
- * acts on. Every delete and every save that replaces a copy on another backend goes through here.
+ * acts on. Every delete, every save that replaces a copy on another backend, and the mover's source copies go through
+ * here.
  */
-final class Held {
+public final class Held {
 
 	private static final Logger log = LoggerFactory.getLogger(Held.class);
 
@@ -37,7 +38,7 @@ final class Held {
 	 * @return true if the copy is held, or wasn't there to hold; false if it couldn't be held and is still in its
 	 *         place, which loses nothing
 	 */
-	static boolean hold(long backendId, String key, long docId, String resource) {
+	public static boolean hold(long backendId, String key, long docId, String resource) {
 		Backends.Entry entry;
 		try {
 			entry = Backends.get().entry(backendId);

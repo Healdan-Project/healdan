@@ -43,8 +43,11 @@ import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
 import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
+import com.logicaldoc.healdan.storage.crypto.BackendKeys;
 import com.logicaldoc.healdan.storage.crypto.FileCipher;
+import com.logicaldoc.healdan.storage.mover.Mover;
 import com.logicaldoc.healdan.util.StorageUnreachableException;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Healdan's {@code Store}, the one bean CE's {@code <bean id="store" class="${store}"/>} makes, so CE's own document
@@ -52,8 +55,10 @@ import com.logicaldoc.healdan.util.StorageUnreachableException;
  * the document's Store and that Store's backend.
  * <ul>
  * <li>A save into a Store on a local backend is written there, encrypted if the backend is. One into a Store on an S3
- * backend, or whose Store can't be told yet, lands in staging, plain, and its row is left for the mover. Either way the
- * row gets a new write id and the plaintext size, which CE's size check ({@code WRITECHECK}) reads.</li>
+ * backend, or whose Store can't be told yet, lands in staging, plain, its row is left for the mover, and the mover is
+ * woken once the save commits. Either way the row gets a new write id and the plaintext size, which CE's size check
+ * ({@code WRITECHECK}) reads. A backend that is failing refuses the save, and one not yet checked since the start is
+ * checked first ({@link BackendHealth}).</li>
  * <li>A save that replaces a copy on another backend, and every delete, holds the old copy (spec section 8): a local
  * one moves under its backend's {@code .held/}, an S3 one stays where it is, and a row in {@code hd_storage_held}
  * keeps it until its purge date.</li>
@@ -93,7 +98,7 @@ public class HealdanStorage extends AbstractStore {
 	/**
 	 * @return where a document's resource is kept on every backend, in CE's layout: {@code 123/45/doc/1.2}
 	 */
-	String keyOf(long docId, String resource) {
+	public String keyOf(long docId, String resource) {
 		return computeRelativePath(docId, resource);
 	}
 
@@ -167,15 +172,24 @@ public class HealdanStorage extends AbstractStore {
 		// Got first, as one in the wrong folder is refused before anything is written, and outside the file's lock, as
 		// the first one reads the cache's whole folder
 		ReadCache cache = ReadCache.get();
+		long target;
 		try (FileLocks.Held held = FileLocks.lock(docId, name)) {
+			FileLocks.writtenInTransaction(docId, name);
 			Long storeId = StoreOf.get().of(docId).orElse(null);
 			long storeBackend = files().storeBackend(storeId);
-			long target = target(storeId, storeBackend);
+			target = target(storeId, storeBackend);
+			BackendHealth.get().beforeWrite(target);
 			Optional<StoredFile> before = files().find(docId, name);
 			// A file with no row can only be in Original's folder (call 11), and this save replaces it
 			boolean unrecorded = before.isEmpty() && target != StorageBackend.ORIGINAL
 					&& Files.isRegularFile(original(key));
-			put(target, key, plain, docId, name);
+			try {
+				put(target, key, plain, docId, name);
+			} catch (BackendFailingException e) {
+				// The backend's own check refused it, as when its folder was unmounted after its last check passed
+				BackendHealth.get().reportFailure(target, e);
+				throw e;
+			}
 			files().recordWrite(docId, name, target, storeId, size, before.isPresent(), target == storeBackend);
 			cache.delete(docId, name);
 			if (before.isPresent() && before.get().backendId() != target)
@@ -183,6 +197,8 @@ public class HealdanStorage extends AbstractStore {
 			else if (unrecorded)
 				holdReplaced(StorageBackend.ORIGINAL, key, docId, name);
 		}
+		if (target == Staging.ID)
+			Mover.get().wake();
 	}
 
 	/**
@@ -282,6 +298,7 @@ public class HealdanStorage extends AbstractStore {
 		// first one reads the cache's whole folder
 		ReadCache cache = ReadCache.get();
 		try (FileLocks.Held held = FileLocks.lock(docId, name)) {
+			FileLocks.writtenInTransaction(docId, name);
 			Optional<StoredFile> row = files().find(docId, name);
 			if (row.isPresent()) {
 				if (!Held.hold(row.get().backendId(), key, docId, name))
@@ -408,7 +425,7 @@ public class HealdanStorage extends AbstractStore {
 	/**
 	 * @param ranged whether a channel is wanted, else a stream
 	 * @return the file's plain bytes, from its row's place; a file the mover took elsewhere while it was looked up is
-	 *         read from where it went. An S3 backend that can't be reached, at either place, is a
+	 *         read from where it went. A backend that can't be reached, at either place, is a
 	 *         {@link StorageUnreachableException} naming the Store.
 	 */
 	private <T> T open(long docId, String name, boolean ranged) throws IOException {
@@ -419,20 +436,43 @@ public class HealdanStorage extends AbstractStore {
 		StoredFile current = row.get();
 		try {
 			try {
-				return open(current, key, ranged);
+				return outageAware(current, key, ranged);
 			} catch (FileNotFoundException e) {
 				Optional<StoredFile> now = files().find(docId, name);
 				if (now.isEmpty() || !moved(current, now.get()))
 					throw e;
 				current = now.get();
-				return open(current, key, ranged);
+				// The retry is inside the same catch, so its outage is converted too
+				return outageAware(current, key, ranged);
 			}
 		} catch (BackendUnreachableException e) {
 			throw unreachable(current, e);
+		} catch (BackendFailingException e) {
+			// Refused, as by a bucket that is gone or a key revoked: the backend's check tells its failure from the file's
+			BackendHealth.get().reportFailure(current.backendId(), e);
+			throw e;
 		}
 	}
 
-	/** @return the exception for a file whose S3 backend can't be reached, naming its Store (spec section 6.5) */
+	/**
+	 * @return the row's file, opened; an S3 file's stream or channel also converts the outage its own reads meet, so
+	 *         that none escapes as a {@link BackendUnreachableException}. The kind is asked before the file is opened,
+	 *         so a failure there can't leak an opened stream.
+	 */
+	@SuppressWarnings("unchecked")
+	private static <T> T outageAware(StoredFile row, String key, boolean ranged) throws IOException {
+		boolean s3 = backends().isS3(row.backendId());
+		T opened = open(row, key, ranged);
+		if (!s3)
+			return opened;
+		return (T) (ranged ? UnreachableReads.wrap((SeekableByteChannel) opened, e -> unreachable(row, e))
+				: UnreachableReads.wrap((InputStream) opened, e -> unreachable(row, e)));
+	}
+
+	/**
+	 * @return the exception for a file whose backend can't be reached, naming its Store (spec section 6.5), and calling
+	 *         the storage cloud storage only if the backend is S3's
+	 */
 	private static StorageUnreachableException unreachable(StoredFile row, BackendUnreachableException cause) {
 		String store = null;
 		if (row.storeId() != null)
@@ -444,7 +484,20 @@ public class HealdanStorage extends AbstractStore {
 			}
 		log.warn("Document {}'s {} can't be read: storage backend {} is unreachable", row.docId(), row.resource(),
 				row.backendId());
-		return new StorageUnreachableException(store, cause);
+		// So that an outage met by reads, while nothing moves, shows as one and the alert sees it
+		BackendHealth.get().reportFailure(row.backendId(), cause);
+		StorageUnreachableException outage = new StorageUnreachableException(store, cloud(row.backendId()), cause);
+		ReadOutages.note(outage);
+		return outage;
+	}
+
+	/** @return whether the backend is S3's; false if that can't be told, as "storage" is true of either kind */
+	private static boolean cloud(long backendId) {
+		try {
+			return backends().isS3(backendId);
+		} catch (BackendFailingException e) {
+			return false;
+		}
 	}
 
 	private static boolean moved(StoredFile before, StoredFile now) {
@@ -625,7 +678,9 @@ public class HealdanStorage extends AbstractStore {
 	}
 
 	/**
-	 * Runs each backend's check, staging's and Original's included, and records nothing (Task 12 makes this Test).
+	 * Test (spec section 10.1) on each backend, staging's and Original's included: its marker, a test object written,
+	 * read whole and by a range, listed on S3 and deleted, and its key if it is encrypted. Records no row and holds
+	 * nothing.
 	 *
 	 * @return whether every backend passed
 	 */
@@ -642,7 +697,7 @@ public class HealdanStorage extends AbstractStore {
 		boolean ok = true;
 		for (long id : ids)
 			try {
-				backends().entry(id).backend().check();
+				BackendTest.run(backends().entry(id), Context.get(BackendKeys.class), true);
 			} catch (BackendFailingException e) {
 				log.warn("Storage backend {} fails its check: {}", id, e.getMessage());
 				ok = false;

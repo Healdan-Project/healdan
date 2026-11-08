@@ -7,7 +7,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,9 +15,7 @@ import org.apache.commons.io.FileUtils;
 
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.PluginFixtures;
-import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.util.plugin.PluginException;
-import com.logicaldoc.util.spring.Context;
 
 /**
  * Base class of the storage tests: Healdan's test context with the healdan-storage plugin registered and
@@ -63,9 +60,12 @@ public abstract class AbstractStorageTestCase extends AbstractHealdanTestCase {
 				FileUtils.deleteDirectory(new File(folder));
 		ReadCache.reset();
 		super.setUp();
-		// Only the recording seed (Task 9) writes Original's marker, so until it does, every write into Original
-		// would fail its check
-		new LocalBackend(1, StorageSettings.get().installId(),
-				Path.of(Context.get().getConfig().getProperty("store.1.dir")), true);
+	}
+
+	@Override
+	public void tearDown() throws IOException {
+		// Static, while each test has a database of its own whose ids start again
+		FileLocks.reset();
+		super.tearDown();
 	}
 }

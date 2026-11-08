@@ -58,6 +58,13 @@ public class MemoryBackend implements Backend {
 
 	private volatile boolean unreachable;
 
+	private volatile boolean failingCheck;
+
+	private volatile Set<Op> deniedOps = EnumSet.noneOf(Op.class);
+
+	/** The keys the backend refuses as access denied, as S3 does an object a policy forbids */
+	private final Set<String> denied = ConcurrentHashMap.newKeySet();
+
 	private volatile Duration slow = Duration.ZERO;
 
 	private volatile boolean corruptNextPut;
@@ -97,6 +104,32 @@ public class MemoryBackend implements Backend {
 		return this;
 	}
 
+	/**
+	 * Refuses every operation on these keys as access denied, a {@link BackendFailingException}, while the backend's
+	 * own check passes.
+	 */
+	public MemoryBackend deny(String... keys) {
+		denied.addAll(Arrays.asList(keys));
+		return this;
+	}
+
+	/**
+	 * Refuses these operations on every key as access denied, a {@link BackendFailingException}, while the backend's
+	 * own check and its other operations work. No operations clears it.
+	 */
+	public MemoryBackend denyOps(Op... ops) {
+		Set<Op> set = EnumSet.noneOf(Op.class);
+		set.addAll(Arrays.asList(ops));
+		this.deniedOps = set;
+		return this;
+	}
+
+	/** Its {@code check} throws {@link BackendFailingException}, as when its credentials are refused. */
+	public MemoryBackend failCheck(boolean failing) {
+		this.failingCheck = failing;
+		return this;
+	}
+
 	/** Every operation, {@code check} too, throws {@link BackendUnreachableException}. */
 	public MemoryBackend unreachable(boolean unreachable) {
 		this.unreachable = unreachable;
@@ -123,6 +156,9 @@ public class MemoryBackend implements Backend {
 	public MemoryBackend clearFaults() {
 		refuseNext = 0;
 		refused = EnumSet.noneOf(Op.class);
+		denied.clear();
+		deniedOps = EnumSet.noneOf(Op.class);
+		failingCheck = false;
 		failAfterBytes = -1;
 		unreachable = false;
 		slow = Duration.ZERO;
@@ -179,6 +215,8 @@ public class MemoryBackend implements Backend {
 		}
 		if (refused.contains(op))
 			throw new IOException("Backend " + id + " refuses " + op);
+		if (denied.contains(key) || deniedOps.contains(op))
+			throw new BackendFailingException("Backend " + id + ": access denied (403 AccessDenied) to " + op + " " + key);
 	}
 
 	private static byte[] md5(byte[] bytes) {
@@ -266,6 +304,8 @@ public class MemoryBackend implements Backend {
 
 			@Override
 			public int read() throws IOException {
+				if (unreachable)
+					throw new BackendUnreachableException("Backend " + id + " is unreachable");
 				if (limit >= 0 && pos >= limit)
 					throw new IOException("Backend " + id + " failed after " + limit + " bytes");
 				return pos < bytes.length ? bytes[pos++] & 0xff : -1;
@@ -275,6 +315,8 @@ public class MemoryBackend implements Backend {
 			public int read(byte[] b, int off, int len) throws IOException {
 				if (len == 0)
 					return 0;
+				if (unreachable)
+					throw new BackendUnreachableException("Backend " + id + " is unreachable");
 				if (pos >= bytes.length)
 					return -1;
 				if (limit >= 0 && pos >= limit)
@@ -302,6 +344,8 @@ public class MemoryBackend implements Backend {
 
 			@Override
 			public int read(ByteBuffer dst) throws IOException {
+				if (unreachable)
+					throw new BackendUnreachableException("Backend " + id + " is unreachable");
 				if (position >= bytes.length)
 					return -1;
 				if (limit >= 0 && position >= limit)
@@ -377,6 +421,8 @@ public class MemoryBackend implements Backend {
 	public void check() throws BackendFailingException {
 		if (unreachable)
 			throw new BackendUnreachableException("Backend " + id + " is unreachable");
+		if (failingCheck)
+			throw new BackendFailingException("Backend " + id + ": access denied (403 AccessDenied) to its marker");
 	}
 
 	private static final String HELD = LocalBackend.HELD + "/";

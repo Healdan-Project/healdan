@@ -94,4 +94,15 @@
 		<import plugin-id="logicaldoc-core" />
 		<import plugin-id="healdan-core" />
 	</requires>
+
+	<!-- After the rules (100) and the permissions (110); a Store is kept current only once a change is allowed through -->
+	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanStorageDocuments">
+		<parameter id="position" value="120" />
+		<parameter id="class" value="com.logicaldoc.healdan.storage.StoreTrackingDocumentListener" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="FolderListener" id="healdanStorageFolders">
+		<parameter id="position" value="120" />
+		<parameter id="class" value="com.logicaldoc.healdan.storage.StoreTrackingFolderListener" />
+	</extension>
 </plugin>

@@ -26,6 +26,7 @@ import com.logicaldoc.core.document.thumbnail.ThumbnailManager;
 import com.logicaldoc.core.security.TenantDAO;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
+import com.logicaldoc.healdan.util.StorageUnreachableException;
 import com.logicaldoc.util.spring.Context;
 
 import jakarta.annotation.PreDestroy;
@@ -261,6 +262,16 @@ public class PreviewWorker {
 			log.warn("LibreOffice isn't available, Office previews are paused: {}", e.getMessage());
 			postpone(jobs, job, e.getMessage(), resume);
 			return true;
+		}
+		StorageUnreachableException outage = StorageUnreachableException.in(failure);
+		if (outage != null) {
+			// A cloud storage outage says nothing about the file either, and may last longer than the tries do.
+			// Only this job waits: the other jobs' files may be local
+			// HealdanStorage warned for the read itself
+			log.debug("Document {} version {} can't be read, its storage is unreachable; its preview waits",
+					job.docId(), job.fileVersion());
+			postpone(jobs, job, outage.getMessage(), clock.get().plus(UNAVAILABLE_WAIT));
+			return false;
 		}
 		String message = failure.getMessage() != null ? failure.getMessage() : failure.getClass().getName();
 		log.warn("Cannot convert document {} version {}: {}", job.docId(), job.fileVersion(), message);

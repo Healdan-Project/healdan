@@ -26,10 +26,13 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.matter.Matter;
+import com.logicaldoc.healdan.storage.backend.Backend;
+import com.logicaldoc.healdan.storage.backend.GatedBackend;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend;
 import com.logicaldoc.healdan.storage.crypto.BackendKeys;
 import com.logicaldoc.healdan.storage.crypto.FileCipher;
+import com.logicaldoc.healdan.storage.crypto.KeyCheck;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
@@ -38,14 +41,14 @@ import com.logicaldoc.util.spring.Context;
  * Backends, Stores and matters for the tests of {@link HealdanStorage}: local backends in folders under
  * {@code target/}, and S3-kind backends that are {@link MemoryBackend}s registered with {@link Backends#use}.
  */
-final class StorageFixtures {
+public final class StorageFixtures {
 
 	/** Where the local backends' folders go; emptied as each is made */
 	private static final Path LOCAL_ROOTS = Path.of("target/storage-local");
 
 	private static int nextClient = 900;
 
-	final HealdanFixtures fx = new HealdanFixtures();
+	public final HealdanFixtures fx = new HealdanFixtures();
 
 	/**
 	 * Where a Store's documents go, and what keeps them.
@@ -56,9 +59,9 @@ final class StorageFixtures {
 	 * @param root a local backend's folder; null for an S3 one
 	 * @param s3 an S3 backend's fake; null for a local one
 	 */
-	record Side(String name, Folder store, Folder folder, long backendId, Path root, MemoryBackend s3) {
+	public record Side(String name, Folder store, Folder folder, long backendId, Path root, MemoryBackend s3) {
 
-		boolean isS3() {
+		public boolean isS3() {
 			return s3 != null;
 		}
 
@@ -78,7 +81,7 @@ final class StorageFixtures {
 	 * @param encrypted whether its files are encrypted, with a key made for it
 	 * @return the backend's id; its folder holds its marker
 	 */
-	long localBackend(String name, boolean encrypted) throws Exception {
+	public long localBackend(String name, boolean encrypted) throws Exception {
 		Path root = LOCAL_ROOTS.resolve(name).toAbsolutePath();
 		FileUtils.deleteDirectory(root.toFile());
 		Files.createDirectories(root);
@@ -90,9 +93,9 @@ final class StorageFixtures {
 		row.setEncryptedOn(encrypted);
 		row.setKeyConfirmedOn(encrypted);
 		StorageBackendDAO.get().store(row);
-		new LocalBackend(row.getId(), StorageSettings.get().installId(), root, true);
+		LocalBackend backend = new LocalBackend(row.getId(), StorageSettings.get().installId(), root, true);
 		if (encrypted)
-			Context.get(BackendKeys.class).make(row.getId());
+			KeyCheck.write(backend, LocalBackend.CHECK, new FileCipher(Context.get(BackendKeys.class).make(row.getId())));
 		return row.getId();
 	}
 
@@ -101,7 +104,7 @@ final class StorageFixtures {
 	 * @param encrypted whether its files are encrypted, with a key made for it
 	 * @return an S3-kind backend, kept in memory, registered for its row
 	 */
-	MemoryBackend s3Backend(String name, boolean encrypted) throws Exception {
+	public MemoryBackend s3Backend(String name, boolean encrypted) throws Exception {
 		StorageBackend row = new StorageBackend();
 		row.setTenantId(Tenant.DEFAULT_ID);
 		row.setName(name);
@@ -114,9 +117,9 @@ final class StorageFixtures {
 		row.setEncryptedOn(encrypted);
 		row.setKeyConfirmedOn(encrypted);
 		StorageBackendDAO.get().store(row);
-		if (encrypted)
-			Context.get(BackendKeys.class).make(row.getId());
 		MemoryBackend backend = MemoryBackend.s3Like(row.getId());
+		if (encrypted)
+			KeyCheck.write(backend, LocalBackend.CHECK, new FileCipher(Context.get(BackendKeys.class).make(row.getId())));
 		Backends.get().use(row.getId(), backend);
 		return backend;
 	}
@@ -124,7 +127,7 @@ final class StorageFixtures {
 	/**
 	 * @return a new Store on the backend, with a client, a matter and its Documents folder
 	 */
-	Side side(String name, long backendId, Path root, MemoryBackend s3) throws Exception {
+	public Side side(String name, long backendId, Path root, MemoryBackend s3) throws Exception {
 		Folder store = fx.store(name);
 		map(store.getId(), backendId);
 		Matter matter = fx.matter(fx.client(nextClient++, name + " Client"), 1, name + " Matter", store, "Documents");
@@ -135,33 +138,54 @@ final class StorageFixtures {
 	}
 
 	/** @return a Store on a new local backend */
-	Side localSide(String name, boolean encrypted) throws Exception {
+	public Side localSide(String name, boolean encrypted) throws Exception {
 		long id = localBackend(name.toLowerCase(), encrypted);
 		return side(name, id, root(id), null);
 	}
 
 	/** @return a Store on a new S3-kind backend */
-	Side s3Side(String name, boolean encrypted) throws Exception {
+	public Side s3Side(String name, boolean encrypted) throws Exception {
 		MemoryBackend s3 = s3Backend(name.toLowerCase(), encrypted);
 		return side(name, s3.id(), null, s3);
 	}
 
-	/** Gives a Store a backend, or another one */
-	void map(long storeId, long backendId) throws Exception {
+	/**
+	 * Uses a backend in place of the one a backend's row would build ({@link Backends#use}), for the tests of other
+	 * packages.
+	 */
+	public static void useBackend(long backendId, Backend backend) {
+		Backends.get().use(backendId, backend);
+	}
+
+	/**
+	 * @return a {@link GatedBackend} in front of the side's backend, which its files now go through: the S3 fake, or
+	 *         the local folder
+	 */
+	public static GatedBackend gated(Side side) {
+		Backend inner = side.isS3() ? side.s3()
+				: new LocalBackend(side.backendId(), StorageSettings.get().installId(), side.root(), false);
+		GatedBackend gated = new GatedBackend(inner);
+		useBackend(side.backendId(), gated);
+		return gated;
+	}
+
+	/** Gives a Store a backend, or another one, and marks its files that wait as the Store switch does */
+	public void map(long storeId, long backendId) throws Exception {
 		StoreBackend row = StoreBackendDAO.get().findByStore(storeId).orElseGet(StoreBackend::new);
 		row.setTenantId(Tenant.DEFAULT_ID);
 		row.setStoreId(storeId);
 		row.setBackendId(backendId);
 		StoreBackendDAO.get().store(row);
+		StoredFiles.get().storeBackendChanged(storeId);
 	}
 
 	/** @return a local backend's folder */
-	static Path root(long backendId) throws Exception {
+	public static Path root(long backendId) throws Exception {
 		return Path.of(StorageBackendDAO.get().findById(backendId).getPath());
 	}
 
 	/** @return CE's layout for a document's resource: {@code 123/45/doc/1.0} */
-	static String key(long docId, String resource) {
+	public static String key(long docId, String resource) {
 		return storage().keyOf(docId, resource);
 	}
 
@@ -170,43 +194,43 @@ final class StorageFixtures {
 	}
 
 	/** @return where a staged file is */
-	static Path staged(long docId, String resource) {
+	public static Path staged(long docId, String resource) {
 		return Staging.folder().resolve(key(docId, resource));
 	}
 
 	/** @return where a local backend keeps a file */
-	static Path local(Path root, long docId, String resource) {
+	public static Path local(Path root, long docId, String resource) {
 		return root.resolve(key(docId, resource));
 	}
 
 	/** @return where a local backend holds a file */
-	static Path held(Path root, long docId, String resource) {
+	public static Path held(Path root, long docId, String resource) {
 		return root.resolve(LocalBackend.HELD).resolve(key(docId, resource));
 	}
 
-	static StoreResource resource(long docId, String name) {
+	public static StoreResource resource(long docId, String name) {
 		return StoreResource.builder().docId(docId).name(name).build();
 	}
 
-	static StoreResource resource(Document doc, String fileVersion) throws Exception {
+	public static StoreResource resource(Document doc, String fileVersion) throws Exception {
 		return StoreResource.builder().document(doc).fileVersion(fileVersion).build();
 	}
 
-	static StoredFile row(long docId, String resource) {
+	public static StoredFile row(long docId, String resource) {
 		return StoredFiles.get().find(docId, resource)
 				.orElseThrow(() -> new AssertionError("No row for " + docId + "/" + resource));
 	}
 
-	static String text(StoreResource resource) throws IOException {
+	public static String text(StoreResource resource) throws IOException {
 		return new String(Store.get().getBytes(resource), StandardCharsets.UTF_8);
 	}
 
 	/** @return a file holding the text */
-	static File file(String text) throws IOException {
+	public static File file(String text) throws IOException {
 		return file(text.getBytes(StandardCharsets.UTF_8));
 	}
 
-	static File file(byte[] bytes) throws IOException {
+	public static File file(byte[] bytes) throws IOException {
 		File file = Files.createTempFile("storage-test", ".bin").toFile();
 		Files.write(file.toPath(), bytes);
 		return file;
@@ -216,7 +240,7 @@ final class StorageFixtures {
 	 * Does what the mover will (Task 11): puts a staged file on its Store's S3 backend, encrypted if the backend is,
 	 * points its row there and takes it out of staging.
 	 */
-	static void moveToBucket(Side side, long docId, String resource) throws Exception {
+	public static void moveToBucket(Side side, long docId, String resource) throws Exception {
 		StoredFile row = row(docId, resource);
 		assertEquals("only a staged file is uploaded", 0L, row.backendId());
 		Path staged = staged(docId, resource);
@@ -235,7 +259,7 @@ final class StorageFixtures {
 	}
 
 	/** @return the held rows of a document, by location */
-	static List<HeldCopy> heldRows(long docId) {
+	public static List<HeldCopy> heldRows(long docId) {
 		return jdbc().query("select hd_backendid, hd_location, hd_docid, hd_resource, hd_held, hd_purge "
 				+ "from hd_storage_held where hd_docid = ? order by hd_backendid, hd_location", (rs, i) -> new HeldCopy(
 						rs.getLong(1), rs.getString(2), rs.getLong(3), rs.getString(4),
@@ -244,7 +268,7 @@ final class StorageFixtures {
 	}
 
 	/** @return every file under a folder, dot folders left out, relative to it */
-	static List<String> files(Path root) throws IOException {
+	public static List<String> files(Path root) throws IOException {
 		if (root == null || !Files.isDirectory(root))
 			return List.of();
 		try (Stream<Path> walk = Files.walk(root)) {
@@ -262,7 +286,7 @@ final class StorageFixtures {
 		Context.get(CacheEvictor.class).evictDocuments(List.of(doc.getId()));
 	}
 
-	static JdbcTemplate jdbc() {
+	public static JdbcTemplate jdbc() {
 		return new JdbcTemplate(Context.get(DataSource.class));
 	}
 }

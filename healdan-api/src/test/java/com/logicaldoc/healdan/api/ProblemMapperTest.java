@@ -41,6 +41,16 @@ public class ProblemMapperTest extends ApiTestCase {
 
 		@GET
 		@Public
+		@Path("unreachable")
+		public String unreachable() throws Exception {
+			throw new com.logicaldoc.core.PersistenceException("Can't read the file",
+					new java.io.IOException("secret path /srv/x",
+							new com.logicaldoc.healdan.util.StorageUnreachableException("Cloud", true,
+									new java.io.IOException("secret host"))));
+		}
+
+		@GET
+		@Public
 		@Path("crash")
 		public String crash() {
 			throw new RuntimeException("secret");
@@ -101,6 +111,17 @@ public class ProblemMapperTest extends ApiTestCase {
 
 		assertProblem(response, 409, "refused");
 		assertEquals("No.", response.json().path("detail").textValue());
+	}
+
+	@Test
+	public void testStorageUnreachable() {
+		ApiResponse response = get("/api/v1/test/unreachable").send();
+
+		assertProblem(response, 503, "storage-unreachable");
+		assertEquals("This file is in Cloud's cloud storage, which can't be reached right now.",
+				response.json().path("detail").textValue());
+		assertEquals("Storage unreachable", response.json().path("title").textValue());
+		assertFalse(response.text(), response.text().contains("secret"));
 	}
 
 	@Test

@@ -23,6 +23,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,6 +44,7 @@ import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
 import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 import com.logicaldoc.healdan.storage.backend.FakeDns;
+import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
@@ -471,6 +473,22 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 	}
 
 	@Test
+	public void testUnreachableLocalBackendIsNotCalledCloudStorage() throws Exception {
+		Document doc = upload(local, "on a network share");
+		// A share whose folder can't be read, as with a stale NFS handle: the file can't be opened, and its marker is
+		// there but can't be read either
+		Files.delete(local(local.root(), doc.getId(), "1.0"));
+		Path marker = local.root().resolve(LocalBackend.MARKER);
+		Files.delete(marker);
+		Files.createDirectory(marker);
+
+		StorageUnreachableException e = assertThrows(StorageUnreachableException.class,
+				() -> store().getBytes(resource(doc, "1.0")));
+
+		assertEquals("This file is in Local's storage, which can't be reached right now.", e.getMessage());
+	}
+
+	@Test
 	public void testCachedFileReadsWhenItsBackendCantBeBuilt() throws Exception {
 		Document cached = upload(cloud, "read before the outage");
 		moveToBucket(cloud, cached.getId(), "1.0");
@@ -532,5 +550,73 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 		assertEquals(1, cloud.s3().calls(Op.OPEN, key));
 		assertEquals("not downloaded whole", 0, cloud.s3().calls(Op.GET, key));
 		assertFalse(Files.exists(ReadCache.folder()) && Files.walk(ReadCache.folder()).anyMatch(Files::isRegularFile));
+	}
+
+	@Test
+	public void testUnreachableMidStream() throws Exception {
+		// Over a tenth of a 20 MiB cache, so it is read from the bucket as it goes, not downloaded first
+		ReadCache.use(new ReadCache(ReadCache.folder(), () -> 20L << 20));
+		byte[] big = new byte[3 << 20];
+		new java.util.Random(5).nextBytes(big);
+		Document doc = fx.upload(cloud.folder(), "big.bin", big, fx.admin());
+		moveToBucket(cloud, doc.getId(), "1.0");
+		StoreResource resource = resource(doc, "1.0");
+
+		try (LogCapture log = LogCapture.of(HealdanStorage.class);
+				InputStream in = store().getStream(resource)) {
+			byte[] first = new byte[1024];
+			assertEquals(1024, in.readNBytes(first, 0, 1024));
+			cloud.s3().unreachable(true);
+
+			StorageUnreachableException e = assertThrows(StorageUnreachableException.class,
+					() -> in.readNBytes(1 << 20));
+			assertEquals("This file is in Cloud's cloud storage, which can't be reached right now.", e.getMessage());
+			assertEquals("Cloud", e.getStore());
+			assertThrows(StorageUnreachableException.class, () -> in.read());
+			assertEquals(log.lines().toString(), 1,
+					log.lines().stream().filter(l -> l.startsWith("WARN ") && l.contains("unreachable")).count());
+		} finally {
+			cloud.s3().unreachable(false);
+		}
+
+		// A range, which is a channel: the backend goes away after the first chunk reaches the output
+		java.io.OutputStream failing = new java.io.OutputStream() {
+			@Override
+			public void write(int b) {
+				cloud.s3().unreachable(true);
+			}
+
+			@Override
+			public void write(byte[] b, int off, int len) {
+				cloud.s3().unreachable(true);
+			}
+		};
+		try {
+			assertThrows(StorageUnreachableException.class, () -> store().writeToStream(resource, failing, 0, -1));
+		} finally {
+			cloud.s3().unreachable(false);
+		}
+	}
+
+	@Test
+	public void testUnreachableMidStreamOfAnEncryptedStore() throws Exception {
+		Side vault = sf.s3Side("Vault", true);
+		ReadCache.use(new ReadCache(ReadCache.folder(), () -> 20L << 20));
+		byte[] big = new byte[3 << 20];
+		new java.util.Random(6).nextBytes(big);
+		Document doc = fx.upload(vault.folder(), "big.bin", big, fx.admin());
+		moveToBucket(vault, doc.getId(), "1.0");
+
+		try (InputStream in = store().getStream(resource(doc, "1.0"))) {
+			// The first segment of the ciphertext, which Tink's decrypting stream reads whole
+			assertEquals(1024, in.readNBytes(new byte[1024], 0, 1024));
+			vault.s3().unreachable(true);
+
+			StorageUnreachableException e = assertThrows(StorageUnreachableException.class,
+					() -> in.readNBytes(2 << 20));
+			assertEquals("Vault", e.getStore());
+		} finally {
+			vault.s3().unreachable(false);
+		}
 	}
 }

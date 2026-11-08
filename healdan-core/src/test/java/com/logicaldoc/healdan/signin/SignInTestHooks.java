@@ -5,9 +5,12 @@ package com.logicaldoc.healdan.signin;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 import javax.net.ssl.SSLContext;
+
+import com.logicaldoc.core.communication.EMail;
 
 /**
  * Lets a test set what {@link SignInProviders#httpAllowed()} reads, which in
@@ -109,6 +112,16 @@ public final class SignInTestHooks {
 	 */
 	public static Optional<PendingSignIns.Pending> peekPending(String state) {
 		return PendingSignIns.get().peek(state);
+	}
+
+	/**
+	 * Collects the emails Healdan sends instead of handing them to a mail server, until {@link #reset}. Outgoing
+	 * email still counts as set up only when the mail server and sender settings are.
+	 *
+	 * @param emails where each email is added
+	 */
+	public static void captureEmails(List<EMail> emails) {
+		OutgoingEmail.sender = emails::add;
 	}
 
 	/**

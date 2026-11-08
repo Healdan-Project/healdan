@@ -295,10 +295,10 @@ public class Backends {
 			throw new BackendFailingException("Storage backend " + row.getId() + "'s settings are refused: "
 					+ e.getMessage());
 		}
-		// Task 12 words this for the admin: enter the secret again
 		String secret = SecretBox.get().open(row.getSecret());
 		if (secret == null)
-			throw new BackendFailingException("The secret of storage backend " + row.getId() + " doesn't open");
+			throw new BackendFailingException("The secret of storage backend " + row.getId()
+					+ " doesn't open, as after a new secret key: enter the secret again in Edit");
 		return new S3Backend(row.getId(), settings.installId(), s3, secret, false);
 	}
 
