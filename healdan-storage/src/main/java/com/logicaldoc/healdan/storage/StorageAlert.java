@@ -33,12 +33,13 @@ import com.logicaldoc.util.spring.Context;
  * Store switched an hour ago raises nothing however old its files are), or a backend has been failing that long, the
  * members of the {@code admin} group who are enabled, not expired and have an email get the {@code storage.alert}
  * template, through M4's sender, which throws where CE's would drop an email without a word. At most one a day:
- * {@code storage.alert.sent} holds the day it last went, and is written only once every email was taken, so a mail
- * server that was down is tried again at the next hourly run, and the first alert comes within 25 hours of the
- * condition. Nothing goes while outgoing email isn't set up ({@link OutgoingEmail#isSetUp}).
+ * {@code storage.alert.sent} holds the day it last went, and is written once at least one email was taken, so a mail
+ * server that was down is tried again at the next hourly run, and one that refuses an admin's address doesn't make the
+ * other admins get an email every hour. The first alert comes within 25 hours of the condition. Nothing goes while
+ * outgoing email isn't set up ({@link OutgoingEmail#isSetUp}).
  * <p>
- * It names no file, backend or address: the email sends the admin to the Storage tab, and nothing is logged above debug
- * about who was emailed.
+ * It names no file, backend or address: the email sends the admin to the Storage tab, and nothing logged says who was
+ * emailed. A refused email is logged by its exception's class alone, as a mail server's refusal can quote the address.
  */
 @Component
 public class StorageAlert {
@@ -95,20 +96,21 @@ public class StorageAlert {
 			log.warn("Storage needs attention, but no member of the {} group has an email to tell", ADMINS);
 			return false;
 		}
-		boolean allTaken = true;
+		int taken = 0;
 		for (User admin : admins)
 			try {
 				send(admin);
+				taken++;
 			} catch (Exception e) {
-				allTaken = false;
-				log.warn("The storage alert wasn't taken by the mail server, and is tried again at the next run: {}",
+				log.warn("The mail server didn't take the storage alert to one of the admins: {}",
 						e.getClass().getSimpleName());
-				log.debug("The storage alert's failure", e);
 			}
-		if (!allTaken)
+		if (taken == 0) {
+			log.warn("No admin was told that storage needs attention; the alert is tried again at the next run");
 			return false;
+		}
 		settings.set(StorageSettings.ALERT_SENT, today);
-		log.info("Told {} admins that storage needs attention", admins.size());
+		log.info("Told {} of {} admins that storage needs attention", taken, admins.size());
 		return true;
 	}
 

@@ -16,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.SQLException;
+import java.util.List;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Test;
@@ -31,6 +32,7 @@ import com.logicaldoc.healdan.storage.StorageFixtures;
 import com.logicaldoc.healdan.storage.StorageSettings;
 import com.logicaldoc.healdan.storage.StoredFile;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
 
@@ -241,8 +243,39 @@ public class RecordOriginalSeedTest extends AbstractStorageTestCase {
 		for (int i = 0; i < 1203; i++)
 			put(300000 + i, "1.0", "x");
 
-		seed().run();
+		try (LogCapture log = LogCapture.of(RecordOriginalSeed.class)) {
+			seed().run();
+
+			// None of these documents is in the database: one warning, with the count and the first few
+			List<String> warnings = log.lines().stream().filter(line -> line.startsWith("WARN ")).toList();
+			assertEquals(warnings.toString(), 1, warnings.size());
+			assertTrue(warnings.get(0), warnings.get(0).contains("1203 files"));
+			long named = warnings.get(0).split("/doc/", -1).length - 1;
+			assertTrue(warnings.get(0), named >= 1 && named <= 10);
+		}
 
 		assertEquals(1203L, rows());
+	}
+
+	@Test
+	public void testPathsCeWouldNotMakeAreSkipped() throws Exception {
+		forget();
+		// Document 12345's file where CE keeps it, and one whose folders only spell the same digits
+		Path real = original().resolve("123/45/doc/1.0");
+		Path stray = original().resolve("12/345/doc/1.0");
+		for (Path file : List.of(real, stray))
+			Files.createDirectories(file.getParent());
+		Files.writeString(real, "real");
+		Files.writeString(stray, "a stray copy");
+
+		try (LogCapture log = LogCapture.of(RecordOriginalSeed.class)) {
+			seed().run();
+
+			assertTrue(log.lines().toString(),
+					log.lines().stream().anyMatch(line -> line.startsWith("WARN ") && line.contains("12/345/doc/1.0")));
+		}
+
+		assertEquals(1L, rows());
+		assertEquals("the file in CE's place", 4L, StorageFixtures.row(12345, "1.0").size());
 	}
 }

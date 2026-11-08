@@ -28,6 +28,7 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.signin.SignInTestHooks;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
@@ -186,7 +187,7 @@ public class StorageAlertTest extends AbstractStorageTestCase {
 	}
 
 	@Test
-	public void testNotSpentUntilEveryEmailWasTaken() throws Exception {
+	public void testNotSpentUntilAnEmailWasTaken() throws Exception {
 		waitingFile();
 		after(Duration.ofHours(25));
 		// A mail server that is down: the sender throws
@@ -206,6 +207,40 @@ public class StorageAlertTest extends AbstractStorageTestCase {
 		assertTrue(alert.run());
 		assertEquals(1, emails.size());
 		assertEquals(LocalDate.now(alert.clock).toString(), sentDay());
+	}
+
+	@Test
+	public void testOneRefusedAddressDoesNotEmailTheOthersAgain() throws Exception {
+		sf.fx.user("current", "admin");
+		waitingFile();
+		after(Duration.ofHours(25));
+		// The mail server refuses one admin's address, and takes the other's
+		SignInTestHooks.captureEmails(new CopyOnWriteArrayList<>() {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public boolean add(EMail email) {
+				if ("current@example.com".equals(email.getRecipients().iterator().next().getAddress()))
+					throw new IllegalStateException("The recipient is refused");
+				return emails.add(email);
+			}
+		});
+
+		try (LogCapture log = LogCapture.of(StorageAlert.class)) {
+			assertTrue(alert.run());
+
+			assertEquals(1, emails.size());
+			assertEquals("admin@admin.net", emails.get(0).getRecipients().iterator().next().getAddress());
+			assertEquals("the day is spent", LocalDate.now(alert.clock).toString(), sentDay());
+			List<String> warnings = log.lines().stream().filter(line -> line.startsWith("WARN ")).toList();
+			assertEquals(log.lines().toString(), 1, warnings.size());
+			assertTrue(warnings.get(0), warnings.get(0).contains("IllegalStateException"));
+			assertFalse("no address is logged: " + log.lines(), log.lines().toString().contains("@"));
+		}
+
+		// The next hourly run, the same day: the admin who was told isn't told again
+		assertFalse(alert.run());
+		assertEquals(1, emails.size());
 	}
 
 	@Test

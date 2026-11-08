@@ -44,6 +44,7 @@ import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
 import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 import com.logicaldoc.healdan.storage.backend.FakeDns;
+import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
@@ -469,6 +470,22 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 
 		cloud.s3().unreachable(false);
 		assertEquals("never read", text(resource(uncached, "1.0")));
+	}
+
+	@Test
+	public void testUnreachableLocalBackendIsNotCalledCloudStorage() throws Exception {
+		Document doc = upload(local, "on a network share");
+		// A share whose folder can't be read, as with a stale NFS handle: the file can't be opened, and its marker is
+		// there but can't be read either
+		Files.delete(local(local.root(), doc.getId(), "1.0"));
+		Path marker = local.root().resolve(LocalBackend.MARKER);
+		Files.delete(marker);
+		Files.createDirectory(marker);
+
+		StorageUnreachableException e = assertThrows(StorageUnreachableException.class,
+				() -> store().getBytes(resource(doc, "1.0")));
+
+		assertEquals("This file is in Local's storage, which can't be reached right now.", e.getMessage());
 	}
 
 	@Test

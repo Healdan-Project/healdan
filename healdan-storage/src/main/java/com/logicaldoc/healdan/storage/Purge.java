@@ -24,6 +24,9 @@ import com.logicaldoc.util.spring.Context;
  * <p>
  * Each copy is purged holding its file's lock ({@link FileLocks}, call 22), with its checks inside it:
  * <ul>
+ * <li>a file that a transaction still open wrote is left, its hold kept for the next run: that transaction may have
+ * held the location afresh, which the hold's read below wouldn't see until it commits, and dropping the hold would
+ * wait for its row lock holding the file's lock;</li>
  * <li>its hold row is read again, since a save or delete may have held the location afresh after the list of due
  * copies was made;</li>
  * <li>an S3 object that a row points at again, on the same backend, is left, and its hold dropped: the mover uploaded
@@ -34,6 +37,8 @@ import com.logicaldoc.util.spring.Context;
  * The delete itself runs holding the lock too, so that no save or delete holds the location afresh between the checks
  * and it; an S3 backend bounds that delete's whole call ({@code S3Backend.purgeHeld}), so a bucket that stalls holds
  * the lock for seconds, not minutes.
+ * <p>
+ * Each copy purged is logged at debug, and the run's total at info, so a big purge doesn't roll the log away.
  * <p>
  * S3 can't tell a missing bucket from a missing object, and a delete of a missing object succeeds, so each backend is
  * checked once per run first, and one that is failing or unreachable is skipped with its rows kept for the next run. A
@@ -96,13 +101,18 @@ public class Purge {
 		if (entry == null)
 			return false;
 		try (FileLocks.Held lock = FileLocks.lock(copy.docId(), copy.resource())) {
+			if (FileLocks.writtenByOpenTransaction(copy.docId(), copy.resource())) {
+				log.debug("Document {}'s {} was written by a transaction still open: its held copy is purged at the "
+						+ "next run", copy.docId(), copy.resource());
+				return false;
+			}
 			Optional<HeldCopy> current = HeldCopies.get().find(copy.backendId(), copy.location());
 			if (current.isEmpty() || current.get().purge().after(now))
 				return false; // dropped, or held afresh, since the list was made
 			if (entry.s3()) {
 				Optional<StoredFile> row = StoredFiles.get().find(copy.docId(), copy.resource());
 				if (row.isPresent() && row.get().backendId() == copy.backendId()) {
-					log.info("Document {}'s {} on storage backend {} is in use again: it is not purged", copy.docId(),
+					log.debug("Document {}'s {} on storage backend {} is in use again: it is not purged", copy.docId(),
 							copy.resource(), copy.backendId());
 					HeldCopies.get().drop(copy.backendId(), copy.location());
 					return false;
@@ -127,7 +137,7 @@ public class Purge {
 				return false;
 			}
 			HeldCopies.get().drop(copy.backendId(), copy.location());
-			log.info("Purged the held copy of document {}'s {} on storage backend {}", copy.docId(), copy.resource(),
+			log.debug("Purged the held copy of document {}'s {} on storage backend {}", copy.docId(), copy.resource(),
 					copy.backendId());
 			return true;
 		}

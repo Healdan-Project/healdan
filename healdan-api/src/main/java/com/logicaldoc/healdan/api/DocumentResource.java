@@ -46,6 +46,7 @@ import com.logicaldoc.healdan.navigation.RecentDocuments;
 import com.logicaldoc.healdan.navigation.RecentDocuments.RecentDocument;
 import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.token.DeviceHolds;
+import com.logicaldoc.healdan.util.StorageUnreachableException;
 import com.logicaldoc.util.MimeType;
 
 import jakarta.ws.rs.Consumes;
@@ -295,7 +296,7 @@ public class DocumentResource {
 
 	/**
 	 * @return the file's stream
-	 * @throws IllegalStateException if it can't be opened; an unreachable cloud storage is its cause, and answered
+	 * @throws IllegalStateException if it can't be opened; storage that can't be reached is its cause, and answered
 	 *         {@code 503} by {@link ProblemMapper}
 	 */
 	private static InputStream openStream(StoreResource resource) {
@@ -341,7 +342,10 @@ public class DocumentResource {
 			try {
 				in = Store.get().getStream(resource);
 			} catch (IOException e) {
-				// An outage was warned of by HealdanStorage; clients ask for thumbnails again and again
+				// Clients ask for thumbnails again and again: an outage, which HealdanStorage warned of, is logged at
+				// debug, and anything else, such as a thumbnail that won't decrypt, at warn
+				if (StorageUnreachableException.in(e) == null)
+					log.warn("The thumbnail of document #{} can't be read: {}", docNumber, e.toString());
 				log.debug("The thumbnail of document #{} can't be read", docNumber, e);
 				throw ApiProblem.notFound("Document #%d has no thumbnail yet.".formatted(docNumber));
 			}

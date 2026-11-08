@@ -38,6 +38,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import org.junit.Test;
@@ -68,6 +69,7 @@ import com.logicaldoc.healdan.storage.StoredFiles;
 import com.logicaldoc.healdan.storage.backend.GatedBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
 
@@ -197,9 +199,15 @@ public class MoverTest extends AbstractStorageTestCase {
 
 	/** Saves a file inside a transaction that stays open until {@code finish} is counted down */
 	private Future<?> saveInOpenTransaction(String text, Document doc, CountDownLatch saved, CountDownLatch finish) {
+		return saveInOpenTransaction(text, doc, "1.0", saved, finish);
+	}
+
+	/** Saves a resource inside a transaction that stays open until {@code finish} is counted down */
+	private Future<?> saveInOpenTransaction(String text, Document doc, String resource, CountDownLatch saved,
+			CountDownLatch finish) {
 		return inBackground(() -> {
 			new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
-				store(text, doc, "1.0");
+				store(text, doc, resource);
 				saved.countDown();
 				try {
 					assertTrue(finish.await(WAIT.toSeconds(), TimeUnit.SECONDS));
@@ -1092,5 +1100,189 @@ public class MoverTest extends AbstractStorageTestCase {
 		assertTrue(mover.awaitIdle(WAIT));
 		assertEquals(cloud.backendId(), row(held.getId(), "1.0").backendId());
 		assertEquals("held, saved again", bytes(cloud, key(held.getId(), "1.0")));
+	}
+
+	@Test
+	public void testStaleStoreOfARowIsPutRightBeforeTheUpload() throws Exception {
+		// Saved into Cloud: staged, its row in Cloud's Store
+		Document doc = upload(cloud, "moved without telling");
+		long id = doc.getId();
+		String key = key(id, "1.0");
+		// The document is in Local's matter now, and its row wasn't told (a Store update that failed, or a check that
+		// read the folders before the move)
+		jdbc().update("update ld_document set ld_folderid = ? where ld_id = ?", local.folder().getId(), id);
+		assertEquals(Long.valueOf(cloud.store().getId()), row(id, "1.0").storeId());
+
+		assertEquals("not sent to the Store it left", 0, mover.runOnce());
+
+		assertEquals(0, cloud.s3().calls(Op.PUT, key));
+		assertEquals("its row is put right", Long.valueOf(local.store().getId()), row(id, "1.0").storeId());
+		assertEquals(1, mover.runOnce());
+		assertEquals(local.backendId(), row(id, "1.0").backendId());
+		assertNull(cloud.s3().bytes(key));
+		assertEquals("moved without telling", Files.readString(local(local.root(), id, "1.0")));
+	}
+
+	@Test
+	public void testListedAPageAtATime() throws Exception {
+		StorageSettings.get().setTransfers(2);
+		StorageSettings.get().setSweepSeconds(3600);
+		int count = 50;
+		// Fifty staged files: a document's, and 49 more of its resources, which take no upload each
+		Document doc = upload(cloud, "file 0");
+		for (int i = 1; i < count; i++)
+			store("file " + i, doc, "1.0-page" + i + ".png");
+		AtomicInteger listings = new AtomicInteger();
+		CountDownLatch moved = new CountDownLatch(count);
+		mover.listing = listings::incrementAndGet;
+		mover.committed = row -> moved.countDown();
+
+		mover.start();
+
+		assertTrue(moved.await(WAIT.toSeconds(), TimeUnit.SECONDS));
+		assertTrue(mover.awaitIdle(WAIT));
+		assertTrue("far fewer listings than files: " + listings.get(), listings.get() < count / 5);
+		assertTrue(StoredFiles.get().misplaced(count, List.of()).isEmpty());
+	}
+
+	@Test
+	public void testStagedSaveGoesBeforeTheQueuedMoves() throws Exception {
+		StorageSettings.get().setTransfers(1);
+		StorageSettings.get().setSweepSeconds(3600);
+		List<Document> moves = new ArrayList<>();
+		for (int i = 0; i < 3; i++)
+			moves.add(upload(local, "moves " + i));
+		// Local's Store switches to Cloud's backend: its three files are to move, the newest first
+		sf.map(local.store().getId(), cloud.backendId());
+		GatedBackend bucket = gate(cloud);
+		bucket.beforeStage.close();
+		mover.start();
+		bucket.beforeStage.awaitEntered(1);
+
+		// While the first move is under way, and the other two are listed behind it, a save is staged
+		Document saved = upload(cloud, "a staged save");
+		bucket.beforeStage.open();
+
+		bucket.awaitStaged(key(moves.get(0).getId(), "1.0"));
+		assertTrue(mover.awaitIdle(WAIT));
+		assertEquals("the save's wake lists it first", List.of(key(moves.get(2).getId(), "1.0"),
+				key(saved.getId(), "1.0"), key(moves.get(1).getId(), "1.0"), key(moves.get(0).getId(), "1.0")),
+				bucket.stages());
+	}
+
+	@Test
+	public void testMovesAreSummarisedNotLoggedOneByOne() throws Exception {
+		StorageSettings.get().setTransfers(1);
+		StorageSettings.get().setSweepSeconds(3600);
+		mover.summaryEvery = Duration.ofHours(1);
+		upload(cloud, "one");
+		Document two = upload(cloud, "two");
+		Document refused = upload(cloud, "refused");
+		cloud.s3().deny(key(refused.getId(), "1.0"));
+		CountDownLatch moved = new CountDownLatch(1);
+		mover.committed = row -> {
+			// The oldest is the last of the pass
+			if (row.docId() < two.getId())
+				moved.countDown();
+		};
+		CountDownLatch summarised = new CountDownLatch(1);
+		mover.summarised = summarised::countDown;
+
+		try (LogCapture transfers = LogCapture.of(Transfer.class); LogCapture passes = LogCapture.of(Mover.class)) {
+			mover.start();
+			assertTrue(moved.await(WAIT.toSeconds(), TimeUnit.SECONDS));
+			assertTrue(mover.awaitIdle(WAIT));
+
+			// Nothing at info for each file; a failure's warning stays
+			assertEquals(transfers.lines().toString(), List.of(), transfers.lines().stream()
+					.filter(line -> line.startsWith("INFO ")).toList());
+			assertEquals(transfers.lines().toString(), 1, transfers.lines().stream()
+					.filter(line -> line.startsWith("WARN ") && line.contains(String.valueOf(refused.getId()))).count());
+
+			// The pass's summary, once one is due
+			mover.summaryEvery = Duration.ZERO;
+			mover.wake();
+			assertTrue(summarised.await(WAIT.toSeconds(), TimeUnit.SECONDS));
+			List<String> summaries = passes.lines().stream().filter(line -> line.contains(" moved ")).toList();
+			assertEquals(List.of("INFO The storage mover moved 2 files (6 bytes); 1 move failed; 1 file waits to move"),
+					summaries);
+		}
+	}
+
+	@Test
+	public void testStoreChangedAtTheCommitKeepsItWaiting() throws Exception {
+		Document doc = upload(cloud, "its matter moves");
+		long id = doc.getId();
+		String key = key(id, "1.0");
+		// The document moves to Local once the commit has checked its row, and before it updates it
+		mover.beforeMoved = row -> {
+			try {
+				get(inBackground(() -> {
+					DocumentManager.get().moveToFolder(doc, local.folder(), fx.documentHistory(fx.admin())).get();
+					return null;
+				}));
+			} catch (Exception e) {
+				throw new IllegalStateException(e);
+			}
+		};
+
+		mover.runOnce();
+		mover.beforeMoved = row -> {
+		};
+
+		StoredFile row = row(id, "1.0");
+		assertEquals(cloud.backendId(), row.backendId());
+		assertEquals(Long.valueOf(local.store().getId()), row.storeId());
+		assertNotNull("it still waits, as its Store's backend isn't where it went", row.waiting());
+		assertEquals(1, mover.runOnce());
+		assertEquals(local.backendId(), row(id, "1.0").backendId());
+		assertNull(row(id, "1.0").waiting());
+		assertEquals("its matter moves", Files.readString(local(local.root(), id, "1.0")));
+		assertEquals("its copy in the bucket is held", key, heldRows(id).get(0).location());
+	}
+
+	@Test
+	public void testNoTransferStartsOnceStopped() throws Exception {
+		Document doc = upload(cloud, "stays staged");
+		// The mover stops after a pass took a transfer's slot, and before it got a thread for it
+		mover.dispatching = mover::stop;
+
+		assertEquals(0, mover.runOnce());
+
+		mover.dispatching = () -> {
+		};
+		assertEquals(0L, row(doc.getId(), "1.0").backendId());
+		assertEquals(0, cloud.s3().calls(Op.PUT, key(doc.getId(), "1.0")));
+		assertFalse(mover.moving(doc.getId(), "1.0"));
+	}
+
+	@Test
+	public void testListingLeavesADocumentAnOpenTransactionWrote() throws Exception {
+		Document doc = upload(cloud, "no Store when saved");
+		long id = doc.getId();
+		store("a thumbnail", doc, "1.0-thumb.png");
+		// Its file was saved before the document had a folder: staged, with no Store
+		jdbc().update("update hd_storage_file set hd_storeid = null where hd_docid = ? and hd_resource = ?", id, "1.0");
+
+		// A transaction saves the document's thumbnail again, lets its lock go, and stays open
+		CountDownLatch saved = new CountDownLatch(1);
+		CountDownLatch finish = new CountDownLatch(1);
+		Future<?> open = saveInOpenTransaction("a new thumbnail", doc, "1.0-thumb.png", saved, finish);
+		try {
+			assertTrue(saved.await(WAIT.toSeconds(), TimeUnit.SECONDS));
+
+			// Giving the document's rows their Store would wait for the open transaction's row lock: the pass leaves
+			// the document, and the timeout is how this test fails, not a time it relies on
+			assertEquals(0, (int) get(inBackground(mover::runOnce)));
+			assertNull(row(id, "1.0").storeId());
+		} finally {
+			finish.countDown();
+		}
+		get(open);
+
+		assertEquals(2, mover.runOnce());
+		assertEquals(Long.valueOf(cloud.store().getId()), row(id, "1.0").storeId());
+		assertEquals(cloud.backendId(), row(id, "1.0").backendId());
+		assertEquals("a new thumbnail", bytes(cloud, key(id, "1.0-thumb.png")));
 	}
 }

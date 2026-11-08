@@ -12,6 +12,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,11 +77,15 @@ public class StorageStartup implements HealdanStartListener {
 	/** The wait between retests when {@code storage.retestSeconds} can't be read; tests shorten it */
 	volatile Duration retestFallback = Duration.ofSeconds(StorageSettings.DEFAULT_RETEST_SECONDS);
 
-	/** How long after a start the purge and the alert first run; tests shorten it */
+	/** How long after a start the purge, the alert and the nightly check first run; tests change it */
 	volatile Duration afterStart = AFTER_START;
 
 	/** How often the alert runs */
 	volatile Duration alertEvery = Duration.ofHours(1);
+
+	/** Tests: given each time the nightly check is scheduled, with when it will run */
+	volatile Consumer<ZonedDateTime> nightlyScheduled = at -> {
+	};
 
 	/** Whether the purge, the alert and the nightly check are scheduled */
 	private volatile boolean scheduledDaily;
@@ -142,7 +147,7 @@ public class StorageStartup implements HealdanStartListener {
 		} catch (RejectedExecutionException e) {
 			return; // stopped meanwhile
 		}
-		scheduleNightly(nightlyAfter(start.plus(AFTER_START)));
+		scheduleNightly(nightlyAfter(start.plus(afterStart)));
 		scheduledDaily = true;
 		scheduleRetest();
 	}
@@ -180,6 +185,7 @@ public class StorageStartup implements HealdanStartListener {
 
 	/** Runs the nightly check at a time, then schedules the next night's */
 	private void scheduleNightly(ZonedDateTime at) {
+		nightlyScheduled.accept(at);
 		schedule(scheduler, () -> {
 			try {
 				safely("nightly Store check", nightly::run);

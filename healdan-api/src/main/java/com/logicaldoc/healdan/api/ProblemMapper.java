@@ -34,8 +34,8 @@ import jakarta.ws.rs.ext.ExceptionMapper;
  * <li>an {@link ApiProblem} as it is;</li>
  * <li>the once-per-matter rule's refusal as {@code 409 already-filed}, with
  * its message and the copy as {@code document} (M5 spec §6.4);</li>
- * <li>a file that can't be read because its cloud storage can't be reached
- * as {@code 503 storage-unreachable}, with its message, which names the Store
+ * <li>a file that can't be read because its storage can't be reached as
+ * {@code 503 storage-unreachable}, with its message, which names the Store
  * (S3 storage spec §6.5);</li>
  * <li>any other Healdan veto as {@code 409 refused}, with its message;</li>
  * <li>JSON that can't be read as {@code 400 bad-request};</li>

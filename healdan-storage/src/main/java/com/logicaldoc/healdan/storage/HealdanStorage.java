@@ -419,7 +419,7 @@ public class HealdanStorage extends AbstractStore {
 	/**
 	 * @param ranged whether a channel is wanted, else a stream
 	 * @return the file's plain bytes, from its row's place; a file the mover took elsewhere while it was looked up is
-	 *         read from where it went. An S3 backend that can't be reached, at either place, is a
+	 *         read from where it went. A backend that can't be reached, at either place, is a
 	 *         {@link StorageUnreachableException} naming the Store.
 	 */
 	private <T> T open(long docId, String name, boolean ranged) throws IOException {
@@ -459,7 +459,10 @@ public class HealdanStorage extends AbstractStore {
 				: UnreachableReads.wrap((InputStream) opened, e -> unreachable(row, e)));
 	}
 
-	/** @return the exception for a file whose S3 backend can't be reached, naming its Store (spec section 6.5) */
+	/**
+	 * @return the exception for a file whose backend can't be reached, naming its Store (spec section 6.5), and calling
+	 *         the storage cloud storage only if the backend is S3's
+	 */
 	private static StorageUnreachableException unreachable(StoredFile row, BackendUnreachableException cause) {
 		String store = null;
 		if (row.storeId() != null)
@@ -471,9 +474,18 @@ public class HealdanStorage extends AbstractStore {
 			}
 		log.warn("Document {}'s {} can't be read: storage backend {} is unreachable", row.docId(), row.resource(),
 				row.backendId());
-		StorageUnreachableException outage = new StorageUnreachableException(store, cause);
+		StorageUnreachableException outage = new StorageUnreachableException(store, cloud(row.backendId()), cause);
 		ReadOutages.note(outage);
 		return outage;
+	}
+
+	/** @return whether the backend is S3's; false if that can't be told, as "storage" is true of either kind */
+	private static boolean cloud(long backendId) {
+		try {
+			return backends().isS3(backendId);
+		} catch (BackendFailingException e) {
+			return false;
+		}
 	}
 
 	private static boolean moved(StoredFile before, StoredFile now) {

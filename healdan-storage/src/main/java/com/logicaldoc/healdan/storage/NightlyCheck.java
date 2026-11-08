@@ -5,9 +5,12 @@ package com.logicaldoc.healdan.storage;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 
 import javax.sql.DataSource;
 
@@ -23,8 +26,11 @@ import com.logicaldoc.util.spring.Context;
 /**
  * The backstop for {@link StoreTracking} (spec section 5, call 10): works every row's Store out again from the
  * folders' parent ids, read once, and gives the rows that differ the right one, which leaves them misplaced for the
- * mover when their backend isn't their Store's, and wakes it. Each fix is logged. {@code StorageStartup} runs it at
- * 03:17 every night. Does nothing unless CE's Store is a {@link HealdanStorage}.
+ * mover when their backend isn't their Store's, and wakes it. The rows are read after the folders, so a document whose
+ * matter moved in between, and whose rows {@code StoreTracking} then gave the new Store, looks wrong against the
+ * folders as they were read: each fix is checked against the document's Store read again, live ({@link StoreOf#of}),
+ * and made only if it still holds. Each fix is logged at debug, and their count at info. {@code StorageStartup} runs it
+ * at 03:17 every night. Does nothing unless CE's Store is a {@link HealdanStorage}.
  */
 @Component
 public class NightlyCheck {
@@ -38,6 +44,10 @@ public class NightlyCheck {
 	private final StoredFiles files;
 
 	private final Mover mover;
+
+	/** Tests: runs once the folders are read, before the rows are */
+	volatile Runnable afterFolders = () -> {
+	};
 
 	@Autowired
 	public NightlyCheck(DataSource dataSource, StoreOf storeOf, StoredFiles files, Mover mover) {
@@ -71,6 +81,7 @@ public class NightlyCheck {
 	 */
 	int check(Long onlyStore) {
 		StoreOf.Folders folders = storeOf.folders();
+		afterFolders.run();
 		Map<Long, List<Fix>> wrong = new HashMap<>();
 		jdbc.query("select f.hd_docid, f.hd_resource, f.hd_storeid, d.ld_id, d.ld_folderid, d.ld_docref, t.ld_folderid "
 				+ "from hd_storage_file f left join ld_document d on d.ld_id = f.hd_docid "
@@ -98,11 +109,20 @@ public class NightlyCheck {
 				});
 
 		int fixed = 0;
+		Map<Long, Optional<Long>> live = new HashMap<>();
 		for (Map.Entry<Long, List<Fix>> entry : wrong.entrySet()) {
-			for (Fix fix : entry.getValue())
-				log.warn("{}", describe(fix.docId(), fix.resource(), fix.was(), entry.getKey()));
-			files.setStore(entry.getValue().stream().map(Fix::docId).distinct().toList(), entry.getKey());
-			fixed += entry.getValue().size();
+			Long should = entry.getKey();
+			Set<Long> docIds = new LinkedHashSet<>();
+			for (Fix fix : entry.getValue()) {
+				// A fix that no longer holds is a document moved since the folders were read
+				if (!Objects.equals(live.computeIfAbsent(fix.docId(), storeOf::of).orElse(null), should))
+					continue;
+				log.debug("{}", describe(fix.docId(), fix.resource(), fix.was(), should));
+				docIds.add(fix.docId());
+				fixed++;
+			}
+			if (!docIds.isEmpty())
+				files.setStore(docIds, should);
 		}
 		if (fixed > 0) {
 			log.info("The Store check fixed {} files", fixed);

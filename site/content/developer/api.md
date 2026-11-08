@@ -192,7 +192,7 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 422 | `validation` | Some values are wrong. `fields` lists each one, with its own `code` and `detail` |
 | 429 | `too-many-attempts` | Too many failed sign-ins (see below) |
 | 500 | `server-error` | Anything else. The detail never holds a stack trace |
-| 503 | `storage-unreachable` | A file is in cloud storage that can't be reached right now, and isn't among the recently read files the server keeps. `detail` names the Store and can be shown as it is. Nothing is wrong with the file: ask again later |
+| 503 | `storage-unreachable` | A file is in storage that can't be reached right now (cloud storage, or a local backend such as a network share), and isn't among the recently read files the server keeps. `detail` names the Store and can be shown as it is. Nothing is wrong with the file: ask again later |
 
 Other client errors, such as `405` for a method an address doesn't take, keep their status, with the code
 `bad-request`.

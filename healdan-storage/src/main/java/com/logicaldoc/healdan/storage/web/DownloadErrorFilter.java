@@ -31,7 +31,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletResponseWrapper;
 
 /**
- * Answers a download of a file whose cloud storage can't be reached with {@code 503} and a small page that says so
+ * Answers a download of a file whose storage can't be reached with {@code 503} and a small page that says so
  * (spec section 6.5). CE's download servlets open the response's stream and send {@code 200} before they read the file,
  * and when the read fails they log it and send an error of their own, which Tomcat shows as a bare page, or, for
  * shared links, after an empty {@code 200} was committed. So the servlets get a response that commits nothing until
@@ -103,7 +103,7 @@ public class DownloadErrorFilter implements Filter {
 
 	/** @return the 503 page, with the message escaped as HTML */
 	static String page(String message) {
-		String text = escape(message == null ? StorageUnreachableException.message(null) : message);
+		String text = escape(message == null ? StorageUnreachableException.message(null, false) : message);
 		return "<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><title>Storage Unreachable</title></head>"
 				+ "<body><h1>Storage Unreachable</h1><p>" + text + "</p><p>Try again in a few minutes.</p></body></html>\n";
 	}

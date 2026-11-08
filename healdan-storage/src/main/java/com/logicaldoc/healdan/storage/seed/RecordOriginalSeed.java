@@ -33,6 +33,7 @@ import com.logicaldoc.healdan.storage.StorageBackend;
 import com.logicaldoc.healdan.storage.StorageSettings;
 import com.logicaldoc.healdan.storage.StoreOf;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
+import com.logicaldoc.util.StringUtil;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -43,7 +44,10 @@ import com.logicaldoc.util.spring.Context;
  * starts, so no save can run beside it.
  * <p>
  * A folder it can't read is logged and skipped, not thrown: a seed that fails stops every start. Its files get no
- * row and still read, as a file with no row is read from Original.
+ * row and still read, as a file with no row is read from Original. So is a file at a path CE's layout wouldn't make
+ * for its digits ({@code 12/345/doc/1.0} spells document 12345, whose place is {@code 123/45/doc/1.0}), which would
+ * otherwise collide with the real one. The files of documents that aren't in the database are counted in one warning
+ * that names the first few, and each is logged at debug.
  */
 @Component
 public class RecordOriginalSeed implements SeedStep {
@@ -55,6 +59,9 @@ public class RecordOriginalSeed implements SeedStep {
 	private static final int BATCH = 500;
 
 	private static final int PROGRESS = 10_000;
+
+	/** How many files of documents not in the database the warning names */
+	private static final int ORPHANS_NAMED = 5;
 
 	private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -85,8 +92,8 @@ public class RecordOriginalSeed implements SeedStep {
 		return StorageSettingsSeed.enabledFor(store.get());
 	}
 
-	/** One file found in Original: a document's resource and its size */
-	private record Found(long docId, String resource, long size) {
+	/** One file found in Original: a document's resource, its size and its path under Original */
+	private record Found(long docId, String resource, long size, String path) {
 	}
 
 	/** What a walk counted */
@@ -98,6 +105,8 @@ public class RecordOriginalSeed implements SeedStep {
 		long existing;
 
 		long orphans;
+
+		final List<String> orphansNamed = new ArrayList<>();
 
 		final List<Path> unreadable = new ArrayList<>();
 	}
@@ -153,6 +162,9 @@ public class RecordOriginalSeed implements SeedStep {
 		log.info("Recorded Original's files: {} found, {} recorded, {} already had a row, {} of documents that are "
 				+ "not in the database, {} folders skipped", totals.seen, totals.recorded, totals.existing,
 				totals.orphans, totals.unreadable.size());
+		if (totals.orphans > 0)
+			log.warn("{} files in Original's folder are of documents that are not in the database, so they get no "
+					+ "Store; the first: {}", totals.orphans, String.join(", ", totals.orphansNamed));
 		for (Path folder : totals.unreadable)
 			log.warn("Original's folder {} was skipped", folder);
 	}
@@ -165,7 +177,8 @@ public class RecordOriginalSeed implements SeedStep {
 	/**
 	 * @param relative a file's path under Original
 	 * @return the file as CE's layout names it ({@code 123/45/doc/1.0} is document 12345's {@code 1.0}); null if it
-	 *         isn't one, or is CE's own test file, document 0
+	 *         isn't one, or is CE's own test file, document 0. Digits in other folders ({@code 12/345/doc/1.0}) are
+	 *         warned of and skipped, as CE never puts a file there.
 	 */
 	static Found parse(Path relative, long size) {
 		int count = relative.getNameCount();
@@ -179,8 +192,18 @@ public class RecordOriginalSeed implements SeedStep {
 		long docId = Long.parseLong(digits.toString());
 		if (docId == 0)
 			return null;
+		String path = relative.toString().replace('\\', '/');
+		if (!relative.subpath(0, i + 1).toString().replace('\\', '/').equals(folderOf(docId))) {
+			log.warn("{} in Original's folder isn't where CE keeps document {}'s files, so it gets no row", path, docId);
+			return null;
+		}
 		String resource = relative.subpath(i + 1, count).toString().replace('\\', '/');
-		return new Found(docId, resource, size);
+		return new Found(docId, resource, size, path);
+	}
+
+	/** @return the folder CE keeps a document's files in, as {@code AbstractStore.computeRelativePath} makes it */
+	private static String folderOf(long docId) {
+		return StringUtil.split(Long.toString(docId), '/', 3) + "/doc";
 	}
 
 	/**
@@ -251,7 +274,9 @@ public class RecordOriginalSeed implements SeedStep {
 			Long storeId = storeOfDoc.get(f.docId());
 			if (!storeOfDoc.containsKey(f.docId())) {
 				totals.orphans++;
-				log.warn("Document {} is not in the database, so its file {} gets no Store", f.docId(), f.resource());
+				if (totals.orphansNamed.size() < ORPHANS_NAMED)
+					totals.orphansNamed.add(f.path());
+				log.debug("Document {} is not in the database, so its file {} gets no Store", f.docId(), f.resource());
 			}
 			boolean inPlace = backendOfStore.getOrDefault(storeId, ORIGINAL) == ORIGINAL;
 			inserts.add(new Object[] { f.docId(), f.resource(), ORIGINAL, storeId, f.size(), RANDOM.nextLong(), now,

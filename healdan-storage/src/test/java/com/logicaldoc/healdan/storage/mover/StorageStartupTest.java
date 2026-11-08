@@ -4,11 +4,13 @@
 package com.logicaldoc.healdan.storage.mover;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.time.Duration;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -85,6 +87,25 @@ public class StorageStartupTest extends AbstractStorageTestCase {
 		try {
 			startup.started();
 			assertTrue("the alert ran three times, though two runs threw", enough.await(20, TimeUnit.SECONDS));
+		} finally {
+			startup.stop();
+			Mover.get().stop();
+		}
+	}
+
+	@Test
+	public void testNightlyCheckWaitsOutTheStartsDelay() throws Exception {
+		StorageStartup startup = new StorageStartup(BackendHealth.get(), Mover.get(), Purge.get(),
+				NightlyCheck.get(), StorageAlert.get(), StorageSettings.get());
+		startup.afterStart = Duration.ofDays(2);
+		CompletableFuture<ZonedDateTime> first = new CompletableFuture<>();
+		startup.nightlyScheduled = first::complete;
+		ZonedDateTime before = ZonedDateTime.now();
+		try {
+			startup.started();
+
+			ZonedDateTime at = first.get(20, TimeUnit.SECONDS);
+			assertFalse("not within the delay after the start: " + at, at.isBefore(before.plus(startup.afterStart)));
 		} finally {
 			startup.stop();
 			Mover.get().stop();

@@ -6,7 +6,7 @@ package com.logicaldoc.healdan.storage;
 import com.logicaldoc.healdan.util.StorageUnreachableException;
 
 /**
- * Lets a web filter learn that a read on its own thread failed for want of a cloud backend, when the servlet it wraps
+ * Lets a web filter learn that a read on its own thread failed for want of a backend, when the servlet it wraps
  * catches the exception and answers an error of its own. A thread is armed by {@link #arm()}; until then nothing is
  * kept, so the mover's and the preview worker's threads never hold on to an exception.
  */

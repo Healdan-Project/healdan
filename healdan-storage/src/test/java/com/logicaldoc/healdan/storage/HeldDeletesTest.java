@@ -28,9 +28,17 @@ import java.nio.file.Path;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentManager;
@@ -39,7 +47,9 @@ import com.logicaldoc.healdan.storage.StorageFixtures.Side;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.plugin.PluginException;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Deletes held for the holding period on every backend, and the purge that ends the hold (spec section 8).
@@ -121,7 +131,12 @@ public class HeldDeletesTest extends AbstractStorageTestCase {
 		assertEquals(1, heldRows(id).size());
 
 		age();
-		Purge.get().run();
+		try (LogCapture log = LogCapture.of(Purge.class)) {
+			Purge.get().run();
+
+			// Each copy at debug, and the run's total at info
+			assertEquals(List.of("INFO The purge deleted 1 held copies"), log.lines());
+		}
 
 		assertFalse(Files.exists(held(root, id, "1.0")));
 		assertTrue(heldRows(id).isEmpty());
@@ -383,5 +398,61 @@ public class HeldDeletesTest extends AbstractStorageTestCase {
 		assertFalse(Purge.get().purge(stale));
 		assertNotNull(cloud.s3().bytes(key));
 		assertEquals(0, cloud.s3().calls(Op.DELETE, key));
+	}
+
+	@Test
+	public void testPurgeLeavesAHoldAnOpenTransactionMadeAgain() throws Exception {
+		// Reads see what is committed while a transaction is open, as MariaDB's do
+		StorageFixtures.jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		Document doc = upload(local, "first");
+		long id = doc.getId();
+		Path root = local.root();
+		Store.get().delete(resource(doc, "1.0"));
+		age();
+		Store.get().store(file("second"), resource(id, "1.0"));
+
+		ExecutorService threads = Executors.newCachedThreadPool();
+		try {
+			// A transaction deletes the file again, holding the same location afresh, lets the file's lock go and
+			// stays open, as a folder delete does between its files
+			CountDownLatch deleted = new CountDownLatch(1);
+			CountDownLatch finish = new CountDownLatch(1);
+			Future<?> open = threads.submit(() -> {
+				new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+					Store.get().delete(resource(id, "1.0"));
+					deleted.countDown();
+					try {
+						assertTrue(finish.await(20, TimeUnit.SECONDS));
+					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+					}
+				});
+				return null;
+			});
+			try {
+				assertTrue(deleted.await(20, TimeUnit.SECONDS));
+				assertEquals("second", Files.readString(held(root, id, "1.0")));
+
+				// The purge still sees the old hold, due, and leaves the location to its next run; the timeout is how
+				// this test fails, as a purge that dropped the hold would wait for the open transaction's row lock
+				threads.submit(() -> {
+					Purge.get().run();
+					return null;
+				}).get(20, TimeUnit.SECONDS);
+
+				assertEquals("the fresh hold's copy is kept", "second", Files.readString(held(root, id, "1.0")));
+			} finally {
+				finish.countDown();
+			}
+			open.get(20, TimeUnit.SECONDS);
+		} finally {
+			threads.shutdownNow();
+		}
+
+		List<HeldCopy> holds = heldRows(id);
+		assertEquals(1, holds.size());
+		assertTrue("held afresh, for the holding period", holds.get(0).purge().after(new Date()));
+		Purge.get().run();
+		assertEquals("not due", "second", Files.readString(held(root, id, "1.0")));
 	}
 }

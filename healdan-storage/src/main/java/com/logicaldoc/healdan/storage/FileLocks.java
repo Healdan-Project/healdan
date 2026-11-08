@@ -22,10 +22,12 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * for a thread doing the reverse.
  * <p>
  * A file's lock ends before its writer's transaction does (a folder copy stores each file and goes on to the next),
- * and the row locks of what it wrote last until then. So the mover, which writes rows holding a file's lock, never
- * does while a transaction still open wrote that file's rows ({@link #writtenByOpenTransaction}): it would wait for the
- * row lock holding the file's lock, which that transaction may want again, through a shared stripe, until the
- * database's lock-wait timeout.
+ * and the row locks of what it wrote last until then. So the mover and the purge, which write rows holding a file's
+ * lock, never do while a transaction still open wrote that file's rows ({@link #writtenByOpenTransaction}): they would
+ * wait for the row lock holding the file's lock, which that transaction may want again, through a shared stripe, until
+ * the database's lock-wait timeout. The purge would also miss what that transaction did: a hold it made afresh, which
+ * the purge's read doesn't see until it commits. Nor does the mover give a document's rows a Store from its own threads
+ * while an open transaction wrote any of them ({@link #documentWrittenByOpenTransaction}).
  * <p>
  * One cycle remains, through a third transaction rather than a holder of the lock: {@code StoreTracking}'s update of
  * several documents' rows ({@code StoredFiles.setStore}, in a transaction of its own, holding no file's lock) can wait
@@ -44,6 +46,9 @@ public final class FileLocks {
 
 	/** The files open transactions wrote holding their lock, as {@code <docId>/<resource>}: how many transactions */
 	private static final Map<String, Integer> OPEN = new ConcurrentHashMap<>();
+
+	/** The documents of those files: how many of their files' marks there are */
+	private static final Map<Long, Integer> OPEN_DOCUMENTS = new ConcurrentHashMap<>();
 
 	static {
 		for (int i = 0; i < STRIPES; i++)
@@ -86,6 +91,7 @@ public final class FileLocks {
 			return;
 		String file = docId + "/" + resource;
 		OPEN.merge(file, 1, Integer::sum);
+		OPEN_DOCUMENTS.merge(docId, 1, Integer::sum);
 		try {
 			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 				@Override
@@ -96,13 +102,18 @@ public final class FileLocks {
 
 				@Override
 				public void afterCompletion(int status) {
-					OPEN.computeIfPresent(file, (key, count) -> count > 1 ? count - 1 : null);
+					unmark(file, docId);
 				}
 			});
 		} catch (RuntimeException e) {
-			OPEN.computeIfPresent(file, (key, count) -> count > 1 ? count - 1 : null);
+			unmark(file, docId);
 			throw e;
 		}
+	}
+
+	private static void unmark(String file, long docId) {
+		OPEN.computeIfPresent(file, (key, count) -> count > 1 ? count - 1 : null);
+		OPEN_DOCUMENTS.computeIfPresent(docId, (key, count) -> count > 1 ? count - 1 : null);
 	}
 
 	/**
@@ -111,6 +122,13 @@ public final class FileLocks {
 	 */
 	public static boolean writtenByOpenTransaction(long docId, String resource) {
 		return OPEN.containsKey(docId + "/" + resource);
+	}
+
+	/**
+	 * @return whether a transaction still open wrote any of the document's files' rows holding their lock
+	 */
+	public static boolean documentWrittenByOpenTransaction(long docId) {
+		return OPEN_DOCUMENTS.containsKey(docId);
 	}
 
 	/**
@@ -130,6 +148,7 @@ public final class FileLocks {
 	/** Forgets every open transaction's marks, so one a failed test leaked can't reach the next; for tests */
 	static void reset() {
 		OPEN.clear();
+		OPEN_DOCUMENTS.clear();
 	}
 
 	/**

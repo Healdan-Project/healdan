@@ -174,7 +174,10 @@ public class StoredFiles {
 
 	/**
 	 * Records that a file's bytes now sit on another backend, only if the row is still the write the mover read, so a
-	 * save or a delete during the move wins. Clears {@code hd_waiting}, the attempts and the failure.
+	 * save or a delete during the move wins. Clears the attempts and the failure. {@code hd_waiting} is cleared when
+	 * that backend is the one the row's Store uses, as the row has it then, and otherwise kept, or set to now: a Store
+	 * change that committed after the mover checked the row leaves the file misplaced, and still waiting where the
+	 * alert sees it, for its next move.
 	 *
 	 * @param docId the document
 	 * @param resource its resource
@@ -183,9 +186,10 @@ public class StoredFiles {
 	 * @return false if the row had changed or gone, and nothing was changed
 	 */
 	public boolean moved(long docId, String resource, long write, long toBackend) {
-		return jdbc.update("update hd_storage_file set hd_backendid = ?, hd_waiting = null, hd_attempts = 0, "
-				+ "hd_lasterror = null, hd_stuck = 0, hd_nexttry = null "
-				+ "where hd_docid = ? and hd_resource = ? and hd_write = ?", toBackend, docId, resource, write) == 1;
+		return jdbc.update("update hd_storage_file f set hd_backendid = ?, hd_waiting = case when " + TARGET
+				+ " = ? then null else coalesce(hd_waiting, ?) end, hd_attempts = 0, hd_lasterror = null, "
+				+ "hd_stuck = 0, hd_nexttry = null where hd_docid = ? and hd_resource = ? and hd_write = ?", toBackend,
+				toBackend, new Timestamp(System.currentTimeMillis()), docId, resource, write) == 1;
 	}
 
 	/**
@@ -325,6 +329,15 @@ public class StoredFiles {
 		Long count = jdbc.queryForObject(
 				"select count(*) from hd_storage_file where hd_waiting is not null and hd_waiting < ?", Long.class,
 				new Timestamp(cutoff.getTime()));
+		return count == null ? 0 : count;
+	}
+
+	/**
+	 * @return how many files wait to reach their Store's backend
+	 */
+	public long waiting() {
+		Long count = jdbc.queryForObject("select count(*) from hd_storage_file where hd_waiting is not null",
+				Long.class);
 		return count == null ? 0 : count;
 	}
 

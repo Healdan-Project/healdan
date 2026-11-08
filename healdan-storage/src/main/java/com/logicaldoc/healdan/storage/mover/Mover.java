@@ -7,8 +7,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,16 +56,21 @@ import jakarta.annotation.PreDestroy;
 
 /**
  * Moves each file to its Store's backend in the background (spec section 7): a coordinator thread,
- * {@code healdan-storage-mover}, lists the misplaced rows ({@link StoredFiles#misplaced}, staged files first, then
- * moves, newest documents first) and hands each to one of {@code storage.transfers} transfers ({@link Transfer}),
- * listing again as transfers end, when woken, and every {@code storage.sweepSeconds}. No file is in two transfers at
- * once: the files in transfer are kept in a set, which a listing skips and the purge asks of ({@link #moving}, call
- * 22).
+ * {@code healdan-storage-mover}, lists a page of the misplaced rows ({@link StoredFiles#misplaced}, staged files first,
+ * then moves, newest documents first), {@value #QUEUED_PER_TRANSFER} for each of the {@code storage.transfers}
+ * transfers ({@link Transfer}), and hands them out in that order as transfers end. It lists again once the page is
+ * used up, when woken, and every {@code storage.sweepSeconds}: the listing reads the whole table, so a big move lists
+ * once a page, not once a file. A wake lists from the top, so a staged save never waits behind the moves already
+ * listed. No file is in two transfers at once: the files in transfer are kept in a set, which a listing skips and the
+ * purge asks of ({@link #moving}, call 22).
  * <p>
  * It is woken by a staged save, a document or matter changing Store, a nightly fix, a Store switching backend, Retry,
  * and a backend found OK again; a wake inside a transaction comes once it commits, as a pass begun earlier wouldn't see
  * its rows. The rows of a backend that is failing or not yet checked aren't listed ({@link BackendHealth#unavailable}).
- * Does nothing unless CE's Store is a {@code HealdanStorage}.
+ * <p>
+ * Each file's move is logged at debug, and each failure at warn by the transfer. What the transfers did is logged at
+ * info by the coordinator, at most once a minute: the files moved and their size, the failures, and how many files
+ * wait. Does nothing unless CE's Store is a {@code HealdanStorage}.
  */
 @Component
 public class Mover {
@@ -71,6 +79,9 @@ public class Mover {
 
 	/** The most rows a pass of {@link #runOnce} lists */
 	static final int PAGE = 100;
+
+	/** How many rows the coordinator lists at a time for each transfer */
+	static final int QUEUED_PER_TRANSFER = 25;
 
 	/** The folder in staging where transfers keep their copies, which a start empties */
 	static final String WORK_FOLDER = ".healdan-mover";
@@ -116,6 +127,18 @@ public class Mover {
 
 	private boolean stopping;
 
+	/** Files moved since the last summary */
+	private int movedSince;
+
+	/** Their plaintext bytes */
+	private long bytesSince;
+
+	/** Moves that failed since the last summary */
+	private int failedSince;
+
+	/** When the last summary was logged, or the coordinator started */
+	private long summarisedAt;
+
 	private Thread coordinator;
 
 	private ExecutorService threads;
@@ -130,6 +153,25 @@ public class Mover {
 
 	/** Tests: runs when a pass waits for a free transfer, holding the mover's monitor */
 	volatile Runnable waitingForSlot = () -> {
+	};
+
+	/** Tests: runs each time the misplaced rows are listed */
+	volatile Runnable listing = () -> {
+	};
+
+	/** Tests: runs inside a commit's transaction, once the row's checks passed and before the row is updated */
+	volatile Consumer<StoredFile> beforeMoved = row -> {
+	};
+
+	/** Tests: runs once a transfer has its slot, before a thread is got for it */
+	volatile Runnable dispatching = () -> {
+	};
+
+	/** How often, at most, the coordinator logs what the transfers did; tests change it */
+	volatile Duration summaryEvery = Duration.ofMinutes(1);
+
+	/** Tests: runs once the coordinator has logged what the transfers did */
+	volatile Runnable summarised = () -> {
 	};
 
 	@Autowired
@@ -171,6 +213,7 @@ public class Mover {
 			stopping = false;
 			limit = transfers;
 			woken = true;
+			summarisedAt = System.currentTimeMillis();
 		}
 		health.onRecovered(this::wake);
 		coordinator = new Thread(this::loop, "healdan-storage-mover");
@@ -304,6 +347,11 @@ public class Mover {
 	 */
 	@PreDestroy
 	public void stop() {
+		// First, so that a pass that took a transfer's slot can't have a pool made once this one is let go
+		synchronized (monitor) {
+			stopping = true;
+			monitor.notifyAll();
+		}
 		Thread thread;
 		ExecutorService pool;
 		synchronized (this) {
@@ -311,10 +359,6 @@ public class Mover {
 			coordinator = null;
 			pool = threads;
 			threads = null;
-		}
-		synchronized (monitor) {
-			stopping = true;
-			monitor.notifyAll();
 		}
 		try {
 			if (thread != null) {
@@ -349,6 +393,10 @@ public class Mover {
 		return own;
 	}
 
+	StoreOf storeOf() {
+		return storeOf;
+	}
+
 	boolean stopping() {
 		synchronized (monitor) {
 			return stopping;
@@ -378,44 +426,127 @@ public class Mover {
 
 	private void loop() {
 		long listed = 0;
+		Deque<Candidate> queue = new ArrayDeque<>();
 		while (true) {
+			boolean list = false;
 			int free;
+			int page;
+			Summary summary = null;
 			long sweep = sweepMillis();
 			try {
 				synchronized (monitor) {
 					while (true) {
 						if (stopping)
 							return;
-						long due = listed + sweep - System.currentTimeMillis();
-						boolean reason = woken || again || due <= 0;
-						if (reason && running < limit)
+						long now = System.currentTimeMillis();
+						long due = listed + sweep - now;
+						// A wake lists from the top, so a staged save never waits behind the moves already listed
+						list = woken || due <= 0 || (queue.isEmpty() && again);
+						boolean work = list || !queue.isEmpty();
+						if (work && running < limit)
 							break;
-						monitor.wait(reason ? 0 : due);
+						long report = summaryDue(now);
+						if (report <= 0) {
+							summary = takeSummary(now);
+							break;
+						}
+						monitor.wait(Math.max(1, Math.min(work ? Long.MAX_VALUE : due, report)));
 					}
-					woken = false;
-					again = false;
+					if (summary == null && list) {
+						woken = false;
+						again = false;
+					}
 					free = limit - running;
+					page = limit * QUEUED_PER_TRANSFER;
 				}
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				return;
 			}
-			listed = System.currentTimeMillis();
+			if (summary != null) {
+				summarise(summary);
+				continue;
+			}
 			try {
-				List<Candidate> found = list(free);
-				for (Candidate candidate : found)
-					dispatch(candidate, false);
-				if (found.size() >= free)
-					synchronized (monitor) {
-						again = true;
-					}
+				if (list) {
+					listed = System.currentTimeMillis();
+					queue.clear();
+					List<Candidate> found = list(page);
+					queue.addAll(found);
+					if (found.size() >= page)
+						synchronized (monitor) {
+							again = true;
+						}
+				}
+				while (free > 0 && !queue.isEmpty()) {
+					Candidate next = queue.poll();
+					if (!ready(next))
+						continue;
+					// None started: stopping, fewer transfers since a resize, or another pass has the file
+					if (dispatch(next, false) == null)
+						break;
+					free--;
+				}
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				return;
 			} catch (RuntimeException e) {
+				queue.clear();
 				log.warn("The storage mover's pass failed, and runs again at the next sweep: {}", e.getMessage(), e);
 			}
 		}
+	}
+
+	/**
+	 * @return whether a listed row may go to a transfer now: none has it, no transaction still open wrote it, and both
+	 *         its backends work, as when it was listed
+	 */
+	private boolean ready(Candidate candidate) {
+		StoredFile row = candidate.row();
+		return !moving.contains(candidate.key()) && !FileLocks.writtenByOpenTransaction(row.docId(), row.resource())
+				&& health.available(row.backendId()) && health.available(candidate.target());
+	}
+
+	/** What the transfers did between two summaries */
+	private record Summary(int moved, long bytes, int failed) {
+	}
+
+	/**
+	 * @return how long until a summary is due, holding the monitor; never, if no transfer ended since the last
+	 */
+	private long summaryDue(long now) {
+		if (movedSince == 0 && failedSince == 0)
+			return Long.MAX_VALUE;
+		return summarisedAt + summaryEvery.toMillis() - now;
+	}
+
+	/** @return what the transfers did since the last summary, holding the monitor; the counts start again */
+	private Summary takeSummary(long now) {
+		Summary summary = new Summary(movedSince, bytesSince, failedSince);
+		movedSince = 0;
+		bytesSince = 0;
+		failedSince = 0;
+		summarisedAt = now;
+		return summary;
+	}
+
+	/** Logs what the transfers did, and how many files wait still; not holding the monitor, as it reads the table */
+	private void summarise(Summary summary) {
+		String waiting;
+		try {
+			long count = files.waiting();
+			waiting = count == 1 ? "1 file waits to move" : count + " files wait to move";
+		} catch (RuntimeException e) {
+			waiting = "the files that wait can't be counted (" + e.getMessage() + ")";
+		}
+		log.info("The storage mover moved {} ({}); {}; {}", count(summary.moved(), "file", "files"),
+				FileUtils.byteCountToDisplaySize(summary.bytes()), count(summary.failed(), "move failed", "moves failed"),
+				waiting);
+		summarised.run();
+	}
+
+	private static String count(long count, String one, String many) {
+		return count + " " + (count == 1 ? one : many);
 	}
 
 	/** @return {@code storage.sweepSeconds}, read each time so a saved setting applies; its default if it can't be */
@@ -437,6 +568,7 @@ public class Mover {
 	 * @param wanted the most rows to list
 	 */
 	private List<Candidate> list(int wanted) {
+		listing.run();
 		Set<Long> unavailable = health.unavailable();
 		int skipped = moving.size() + Math.min(FileLocks.openFiles(), MOST_SKIPPED);
 		List<StoredFile> rows = files.misplaced(wanted + skipped, unavailable);
@@ -459,15 +591,21 @@ public class Mover {
 		return found;
 	}
 
-	/** @return the row, given its document's Store if it is staged with none and one can be found now */
+	/**
+	 * @return the row, given its document's Store if it is staged with none and one can be found now; null to leave it
+	 *         to a later pass, when a transaction still open wrote any of the document's files, as the update of every
+	 *         row of the document would wait for that transaction's row lock, holding up the coordinator
+	 */
 	private StoredFile withStore(StoredFile row) {
 		if (row.backendId() != Staging.ID || row.storeId() != null)
 			return row;
+		if (FileLocks.documentWrittenByOpenTransaction(row.docId()))
+			return null;
 		Optional<Long> store = storeOf.of(row.docId());
 		if (store.isEmpty())
 			return row;
 		files.setStore(List.of(row.docId()), store.get());
-		log.info("Document {}'s staged files had no Store; they are in Store {}", row.docId(), store.get());
+		log.debug("Document {}'s staged files had no Store; they are in Store {}", row.docId(), store.get());
 		return files.find(row.docId(), row.resource()).orElse(null);
 	}
 
@@ -488,10 +626,11 @@ public class Mover {
 				return null;
 			running++;
 		}
+		dispatching.run();
 		try {
 			return executor().submit(() -> transfer(candidate));
 		} catch (RejectedExecutionException e) {
-			finished(key, Outcome.PAUSED);
+			finished(key, Outcome.PAUSED, 0);
 			return null;
 		}
 	}
@@ -502,29 +641,40 @@ public class Mover {
 	 */
 	private Outcome transfer(Candidate candidate) {
 		Outcome outcome = Outcome.FAILED;
+		Transfer transfer = null;
 		try {
-			outcome = new Transfer(this, candidate.row(), candidate.target()).run();
+			transfer = new Transfer(this, candidate.row(), candidate.target());
+			outcome = transfer.run();
 			return outcome;
 		} catch (RuntimeException | Error e) {
 			log.error("The move of document {}'s {} ended unexpectedly: {}", candidate.row().docId(),
 					candidate.row().resource(), e.toString(), e);
 			throw e;
 		} finally {
-			finished(candidate.key(), outcome);
+			finished(candidate.key(), outcome, transfer == null ? 0 : transfer.moved());
 		}
 	}
 
-	private void finished(String key, Outcome outcome) {
+	/** Frees a transfer's slot, and counts what it did for the next summary */
+	private void finished(String key, Outcome outcome, long bytes) {
 		synchronized (monitor) {
 			running--;
 			moving.remove(key);
 			if (outcome.progress())
 				again = true;
+			if (outcome == Outcome.MOVED) {
+				movedSince++;
+				bytesSince += bytes;
+			} else if (outcome == Outcome.FAILED)
+				failedSince++;
 			monitor.notifyAll();
 		}
 	}
 
+	/** @throws RejectedExecutionException once the mover is stopping, so no pool is made that nothing shuts down */
 	private synchronized ExecutorService executor() {
+		if (stopping())
+			throw new RejectedExecutionException("The storage mover is stopping");
 		if (threads == null) {
 			AtomicInteger number = new AtomicInteger();
 			threads = Executors.newCachedThreadPool(work -> {

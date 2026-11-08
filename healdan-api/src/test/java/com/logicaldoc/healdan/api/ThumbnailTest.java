@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
 
@@ -21,6 +22,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
+import com.logicaldoc.healdan.support.LogCapture;
 
 /**
  * {@code GET /v1/documents/{docNumber}/thumbnail}: the current file's
@@ -105,10 +107,15 @@ public class ThumbnailTest extends ApiTestCase {
 		java.nio.file.Files.delete(stored);
 		java.nio.file.Files.createDirectory(stored);
 
-		ApiResponse response = get(path()).token(signIn(clerk)).send();
+		try (LogCapture log = LogCapture.of(DocumentResource.class)) {
+			ApiResponse response = get(path()).token(signIn(clerk)).send();
 
-		assertEquals(response.toString(), 404, response.status());
-		assertEquals("not-found", response.code());
+			assertEquals(response.toString(), 404, response.status());
+			assertEquals("not-found", response.code());
+			// No outage: something is wrong with the thumbnail, which is warned of
+			assertTrue(log.lines().toString(), log.lines().stream().anyMatch(
+					line -> line.startsWith("WARN ") && line.contains("#" + d.getCustomId())));
+		}
 	}
 
 	@Test

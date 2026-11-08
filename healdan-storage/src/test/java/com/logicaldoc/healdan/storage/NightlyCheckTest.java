@@ -3,6 +3,8 @@
 
 package com.logicaldoc.healdan.storage;
 
+import static com.logicaldoc.healdan.storage.StorageFixtures.key;
+import static com.logicaldoc.healdan.storage.StorageFixtures.local;
 import static com.logicaldoc.healdan.storage.StorageFixtures.row;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -10,14 +12,20 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.sql.SQLException;
 import java.util.List;
 
 import org.junit.Test;
 
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
+import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
+import com.logicaldoc.healdan.storage.mover.Mover;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.plugin.PluginException;
 
 /**
@@ -45,6 +53,14 @@ public class NightlyCheckTest extends AbstractStorageTestCase {
 		} catch (Exception e) {
 			throw new IllegalStateException(e);
 		}
+	}
+
+	@Override
+	public void tearDown() throws IOException {
+		NightlyCheck.get().afterFolders = () -> {
+		};
+		Mover.get().stop();
+		super.tearDown();
 	}
 
 	@Test
@@ -101,6 +117,39 @@ public class NightlyCheckTest extends AbstractStorageTestCase {
 		String line = NightlyCheck.describe(doc.getId(), "1.0", b.store().getId(), a.store().getId());
 		assertTrue(line, line.contains(String.valueOf(doc.getId())) && line.contains("1.0")
 				&& line.contains(String.valueOf(b.store().getId())) && line.contains(String.valueOf(a.store().getId())));
-		assertEquals(1, NightlyCheck.get().run());
+		try (LogCapture log = LogCapture.of(NightlyCheck.class)) {
+			assertEquals(1, NightlyCheck.get().run());
+
+			// Each fix at debug, and their count at info, so a check that fixes many doesn't roll the log away
+			assertEquals(List.of("INFO The Store check fixed 1 files"), log.lines());
+		}
+	}
+
+	@Test
+	public void testMatterMovedDuringTheCheckIsNotMovedBack() throws Exception {
+		BackendHealth.get().checkAll();
+		// Saved into Beta's matter, whose backend is S3: staged, waiting for the mover
+		Document doc = fx.upload(b.folder(), "b.txt", "stays local", fx.admin());
+		String key = key(doc.getId(), "1.0");
+		assertEquals(b.store().getId(), (long) row(doc.getId(), "1.0").storeId());
+
+		// The matter moves to Alpha, a local Store, once the check has read the folders and before it reads the rows
+		Folder matter = FolderDAO.get().findById(b.folder().getParentId());
+		NightlyCheck.get().afterFolders = () -> {
+			try {
+				FolderDAO.get().move(matter, a.store(), fx.folderHistory(fx.admin()));
+			} catch (Exception e) {
+				throw new IllegalStateException(e);
+			}
+		};
+		assertEquals("the folders it read are older than the rows, so nothing is wrong", 0, NightlyCheck.get().run());
+		NightlyCheck.get().afterFolders = () -> {
+		};
+
+		assertEquals("not moved back", a.store().getId(), (long) row(doc.getId(), "1.0").storeId());
+		Mover.get().runOnce();
+		assertEquals("nothing of a local Store's goes to S3", 0, b.s3().calls(Op.PUT, key));
+		assertEquals(a.backendId(), row(doc.getId(), "1.0").backendId());
+		assertEquals("stays local", Files.readString(local(a.root(), doc.getId(), "1.0")));
 	}
 }

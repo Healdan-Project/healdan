@@ -18,6 +18,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,7 +48,9 @@ import com.logicaldoc.healdan.storage.crypto.FileCipher;
  * One file's move to its Store's backend (spec section 7, calls 16, 20 and 21):
  * <ol>
  * <li>the row is read again, and the file is left if it is no longer misplaced toward the target, as when its Store
- * turned local after the pass began;</li>
+ * turned local after the pass began; and its Store is checked against the document's, worked out again from the
+ * folders ({@code StoreOf}), so a row left in a Store its document has left never sends the file to that Store's
+ * backend: such a row is given the document's Store, as {@code StoreTracking} does, and the mover woken;</li>
  * <li>the file is read from where it is, decrypted if that backend is encrypted, into a copy in staging, noting the
  * row's write id;</li>
  * <li>the copy is staged on the target, encrypted if the target is, with its MD5: an S3 target's object is at its key,
@@ -68,6 +71,9 @@ import com.logicaldoc.healdan.storage.crypto.FileCipher;
  * counts none and pauses its transfers until its retest. A refusal of one object ({@code BackendFailingException},
  * as S3's access denied) is checked at once against the backend: if it still passes its check the refusal is the
  * file's and counts an attempt, and otherwise the backend pauses.
+ * <p>
+ * Each move's start and end are logged at debug, and failures and stuck files at warn; the mover logs a summary at
+ * info, so that a Store's move doesn't roll the log away.
  */
 final class Transfer {
 
@@ -112,6 +118,9 @@ final class Transfer {
 
 	private final String key;
 
+	/** The plaintext bytes moved, once the move is committed */
+	private long moved;
+
 	/**
 	 * @param listed the row as the pass listed it
 	 * @param target its Store's backend when the pass listed it
@@ -136,6 +145,9 @@ final class Transfer {
 			return Outcome.PAUSED;
 		if (FileLocks.writtenByOpenTransaction(docId, resource))
 			return Outcome.PENDING;
+		Outcome stale = staleStore(row);
+		if (stale != null)
+			return stale;
 		Backends.Entry from;
 		Backends.Entry to;
 		try {
@@ -149,7 +161,7 @@ final class Transfer {
 			return pause(target, e);
 		}
 
-		log.info("Moving document {}'s {} from storage backend {} to {}", docId, resource, source, target);
+		log.debug("Moving document {}'s {} from storage backend {} to {}", docId, resource, source, target);
 		List<Path> copies = new ArrayList<>();
 		Staged staged = null;
 		long using = source;
@@ -174,12 +186,13 @@ final class Transfer {
 			Outcome outcome = commit(row, source, staged, aside);
 			if (outcome != Outcome.MOVED) {
 				discard(to, staged);
-				log.info("The move of document {}'s {} to storage backend {} was dropped: the file changed meanwhile",
+				log.debug("The move of document {}'s {} to storage backend {} was dropped: the file changed meanwhile",
 						docId, resource, target);
 				return outcome;
 			}
 			staged = null;
-			log.info("Moved document {}'s {} from storage backend {} to {}", docId, resource, source, target);
+			moved = row.size();
+			log.debug("Moved document {}'s {} from storage backend {} to {}", docId, resource, source, target);
 			mover.committed.accept(row);
 			if (aside[0] != null)
 				cache(to, row, aside[0]);
@@ -196,6 +209,32 @@ final class Transfer {
 			for (Path copy : copies)
 				deleteQuietly(copy);
 		}
+	}
+
+	/** @return the plaintext bytes moved; 0 unless the move was committed */
+	long moved() {
+		return moved;
+	}
+
+	/**
+	 * Compares the row's Store with the document's, worked out again from the folders, before anything is read or
+	 * sent. A row whose document left its Store (a Store update that failed, or a nightly check that read the folders
+	 * before a move) is given the document's Store, as {@code StoreTracking} does, and the mover woken, as the file may
+	 * now be misplaced toward another backend.
+	 *
+	 * @return null if the row's Store is the document's; otherwise how the transfer ends
+	 */
+	private Outcome staleStore(StoredFile row) {
+		Long store = mover.storeOf().of(docId).orElse(null);
+		if (Objects.equals(store, row.storeId()))
+			return null;
+		// Every row of the document is updated, and one that a transaction still open wrote would hold this up
+		if (FileLocks.documentWrittenByOpenTransaction(docId))
+			return Outcome.PENDING;
+		files.setStore(List.of(docId), store);
+		log.debug("Document {}'s files were in Store {}, and are in Store {}", docId, row.storeId(), store);
+		mover.wake();
+		return Outcome.CHANGED;
 	}
 
 	/** @return a new file in the mover's folder, to be deleted when the transfer ends */
@@ -287,6 +326,7 @@ final class Transfer {
 		if (now.isEmpty() || now.get().write() != row.write() || now.get().backendId() != source
 				|| files.storeBackend(now.get().storeId()) != target)
 			return Outcome.CHANGED;
+		mover.beforeMoved.accept(now.get());
 		if (!files.moved(docId, resource, row.write(), target))
 			return Outcome.CHANGED;
 		try {
