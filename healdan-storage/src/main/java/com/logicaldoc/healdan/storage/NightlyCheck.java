@@ -29,7 +29,9 @@ import com.logicaldoc.util.spring.Context;
  * mover when their backend isn't their Store's, and wakes it. The rows are read after the folders, so a document whose
  * matter moved in between, and whose rows {@code StoreTracking} then gave the new Store, looks wrong against the
  * folders as they were read: each fix is checked against the document's Store read again, live ({@link StoreOf#of}),
- * and made only if it still holds. Each fix is logged at debug, and their count at info. {@code StorageStartup} runs it
+ * and made only if it still holds. Then a row its backend leaves misplaced but that doesn't wait is marked as waiting
+ * ({@link StoredFiles#markWaiting}), as the mover lists only rows that wait. Each fix is logged at debug, and their
+ * count at info. {@code StorageStartup} runs it
  * at 03:17 every night. Does nothing unless CE's Store is a {@link HealdanStorage}.
  */
 @Component
@@ -124,10 +126,14 @@ public class NightlyCheck {
 			if (!docIds.isEmpty())
 				files.setStore(docIds, should);
 		}
-		if (fixed > 0) {
+		if (fixed > 0)
 			log.info("The Store check fixed {} files", fixed);
+		// The mover lists only rows that wait, so one a write left misplaced without the mark is given it
+		int unmarked = files.markWaiting(onlyStore);
+		if (unmarked > 0)
+			log.info("The Store check marked {} files as waiting to move", unmarked);
+		if (fixed > 0 || unmarked > 0)
 			mover.wake();
-		}
 		return fixed;
 	}
 

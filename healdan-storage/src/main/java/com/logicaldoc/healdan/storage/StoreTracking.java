@@ -117,8 +117,8 @@ public class StoreTracking implements FolderTreeListener {
 
 	/**
 	 * Runs work once CE's transaction has committed, in a transaction of its own; at once when there is none. A
-	 * rollback runs nothing. A failure is logged, not thrown: it comes after CE's commit, and the nightly check
-	 * mends what it missed.
+	 * rollback runs nothing. A failure is logged, not thrown, the own transaction's start and commit included: it
+	 * comes after CE's commit, which Spring would report as failed, and the nightly check mends what it missed.
 	 *
 	 * @param work the work
 	 */
@@ -132,7 +132,7 @@ public class StoreTracking implements FolderTreeListener {
 			public void afterCommit() {
 				TransactionTemplate own = new TransactionTemplate(transactions);
 				own.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
-				own.executeWithoutResult(status -> run(work));
+				run(() -> own.executeWithoutResult(status -> work.run()));
 			}
 		});
 	}

@@ -183,7 +183,13 @@ public class HealdanStorage extends AbstractStore {
 			// A file with no row can only be in Original's folder (call 11), and this save replaces it
 			boolean unrecorded = before.isEmpty() && target != StorageBackend.ORIGINAL
 					&& Files.isRegularFile(original(key));
-			put(target, key, plain, docId, name);
+			try {
+				put(target, key, plain, docId, name);
+			} catch (BackendFailingException e) {
+				// The backend's own check refused it, as when its folder was unmounted after its last check passed
+				BackendHealth.get().reportFailure(target, e);
+				throw e;
+			}
 			files().recordWrite(docId, name, target, storeId, size, before.isPresent(), target == storeBackend);
 			cache.delete(docId, name);
 			if (before.isPresent() && before.get().backendId() != target)
@@ -441,6 +447,10 @@ public class HealdanStorage extends AbstractStore {
 			}
 		} catch (BackendUnreachableException e) {
 			throw unreachable(current, e);
+		} catch (BackendFailingException e) {
+			// Refused, as by a bucket that is gone or a key revoked: the backend's check tells its failure from the file's
+			BackendHealth.get().reportFailure(current.backendId(), e);
+			throw e;
 		}
 	}
 
@@ -474,6 +484,8 @@ public class HealdanStorage extends AbstractStore {
 			}
 		log.warn("Document {}'s {} can't be read: storage backend {} is unreachable", row.docId(), row.resource(),
 				row.backendId());
+		// So that an outage met by reads, while nothing moves, shows as one and the alert sees it
+		BackendHealth.get().reportFailure(row.backendId(), cause);
 		StorageUnreachableException outage = new StorageUnreachableException(store, cloud(row.backendId()), cause);
 		ReadOutages.note(outage);
 		return outage;

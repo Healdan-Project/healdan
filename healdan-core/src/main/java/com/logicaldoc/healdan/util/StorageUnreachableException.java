@@ -5,6 +5,8 @@ package com.logicaldoc.healdan.util;
 
 import java.io.IOException;
 
+import org.apache.commons.lang3.exception.ExceptionUtils;
+
 /**
  * A file that can't be read because the storage of its Store can't be reached (spec section 6.5): an outage, which
  * says nothing about the file. Usually that is cloud storage (an S3 backend), and sometimes a local backend, such as a
@@ -17,14 +19,6 @@ public class StorageUnreachableException extends IOException {
 	private static final long serialVersionUID = 1L;
 
 	private final String store;
-
-	/**
-	 * @param store the name of the file's Store
-	 * @param cause why its cloud storage can't be reached
-	 */
-	public StorageUnreachableException(String store, Throwable cause) {
-		this(store, true, cause);
-	}
 
 	/**
 	 * @param store the name of the file's Store
@@ -56,12 +50,8 @@ public class StorageUnreachableException extends IOException {
 	 * @return the first of these in the failure's chain of causes, the failure itself included; null if there is none
 	 */
 	public static StorageUnreachableException in(Throwable failure) {
-		// Bounded, in case of a loop of causes
-		Throwable t = failure;
-		for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause())
-			if (t instanceof StorageUnreachableException outage)
-				return outage;
-		return null;
+		// Safe from a loop of causes
+		return ExceptionUtils.throwableOfType(failure, StorageUnreachableException.class);
 	}
 
 	/** @return the name of the file's Store, possibly null */

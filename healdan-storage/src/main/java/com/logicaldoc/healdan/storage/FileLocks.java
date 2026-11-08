@@ -3,6 +3,8 @@
 
 package com.logicaldoc.healdan.storage;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -50,6 +52,9 @@ public final class FileLocks {
 	/** The documents of those files: how many of their files' marks there are */
 	private static final Map<Long, Integer> OPEN_DOCUMENTS = new ConcurrentHashMap<>();
 
+	/** What a transaction's marks are bound under, so it registers one synchronization however many files it writes */
+	private static final Object MARKS = new Object();
+
 	static {
 		for (int i = 0; i < STRIPES; i++)
 			LOCKS[i] = new ReentrantLock();
@@ -89,25 +94,55 @@ public final class FileLocks {
 	public static void writtenInTransaction(long docId, String resource) {
 		if (!TransactionSynchronizationManager.isSynchronizationActive())
 			return;
-		String file = docId + "/" + resource;
-		OPEN.merge(file, 1, Integer::sum);
-		OPEN_DOCUMENTS.merge(docId, 1, Integer::sum);
-		try {
-			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-				@Override
-				public int getOrder() {
-					// Before anything the transaction's end wakes, such as the mover
-					return Ordered.HIGHEST_PRECEDENCE;
-				}
+		Marks marks = (Marks) TransactionSynchronizationManager.getResource(MARKS);
+		if (marks == null) {
+			marks = new Marks();
+			TransactionSynchronizationManager.registerSynchronization(marks);
+			TransactionSynchronizationManager.bindResource(MARKS, marks);
+		}
+		marks.mark(docId, resource);
+	}
 
-				@Override
-				public void afterCompletion(int status) {
-					unmark(file, docId);
-				}
-			});
-		} catch (RuntimeException e) {
-			unmark(file, docId);
-			throw e;
+	/**
+	 * A transaction's marks, cleared when it ends. Bound to it while it runs ({@link #MARKS}), and set aside while it is
+	 * suspended, so that a transaction of its own inside it keeps marks of its own; the outer transaction's stay meanwhile,
+	 * as it is still open.
+	 */
+	private static final class Marks implements TransactionSynchronization {
+
+		private final List<String> files = new ArrayList<>();
+
+		private final List<Long> documents = new ArrayList<>();
+
+		void mark(long docId, String resource) {
+			String file = docId + "/" + resource;
+			OPEN.merge(file, 1, Integer::sum);
+			OPEN_DOCUMENTS.merge(docId, 1, Integer::sum);
+			files.add(file);
+			documents.add(docId);
+		}
+
+		@Override
+		public int getOrder() {
+			// Before anything the transaction's end wakes, such as the mover
+			return Ordered.HIGHEST_PRECEDENCE;
+		}
+
+		@Override
+		public void suspend() {
+			TransactionSynchronizationManager.unbindResourceIfPossible(MARKS);
+		}
+
+		@Override
+		public void resume() {
+			TransactionSynchronizationManager.bindResource(MARKS, this);
+		}
+
+		@Override
+		public void afterCompletion(int status) {
+			TransactionSynchronizationManager.unbindResourceIfPossible(MARKS);
+			for (int i = 0; i < files.size(); i++)
+				unmark(files.get(i), documents.get(i));
 		}
 	}
 

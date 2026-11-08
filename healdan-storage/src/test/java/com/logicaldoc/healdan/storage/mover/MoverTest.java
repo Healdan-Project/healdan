@@ -872,8 +872,10 @@ public class MoverTest extends AbstractStorageTestCase {
 		Path staged = staged(toLocal.getId(), "1.0");
 		Files.createDirectories(staged.getParent());
 		Files.move(home, staged);
-		jdbc().update("update hd_storage_file set hd_storeid = null, hd_backendid = 0 where hd_docid in (?, ?)",
-				toCloud.getId(), toLocal.getId());
+		// Waiting, as a staged save leaves it
+		jdbc().update("update hd_storage_file set hd_storeid = null, hd_backendid = 0, "
+				+ "hd_waiting = coalesce(hd_waiting, ?) where hd_docid in (?, ?)",
+				new java.sql.Timestamp(System.currentTimeMillis()), toCloud.getId(), toLocal.getId());
 
 		assertEquals(2, mover.runOnce());
 

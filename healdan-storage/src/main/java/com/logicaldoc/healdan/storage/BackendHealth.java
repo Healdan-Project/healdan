@@ -33,8 +33,11 @@ import com.logicaldoc.util.spring.Context;
  * failing as unreachable, and any other failure failing, with its own wording: the marker missing or another
  * backend's, the bucket not found, the key not the one the backend was made with or its check object missing, a
  * secret that won't open, a backend that can't be built. {@code StorageStartup} checks every backend at start, before
- * the mover's first pass, and each one not OK again every {@code storage.retestSeconds}; one found OK again wakes the
- * mover. The mover also reports a backend it found unreachable or couldn't build.
+ * the mover's first pass, and each one not OK again every {@code storage.retestSeconds}; one found OK, for the first
+ * time or again, wakes the mover. A retest forgets a backend that was removed. The mover reports a backend it found
+ * unreachable or couldn't build, and saves and reads report what they meet on one whose last check passed
+ * ({@link #reportFailure}), so a backend that fails after its check, as an unmounted share or a deleted bucket, shows
+ * as failing and the alert sees it.
  * <p>
  * A failing backend refuses writes (saves into an S3 Store land in staging, so they don't notice), and the mover leaves
  * its files, and an unchecked one's, alone ({@link #unavailable}). A write that reaches a backend still unchecked runs
@@ -79,7 +82,7 @@ public class BackendHealth {
 	/** One lock for each backend's check */
 	private final Map<Long, Object> checking = new ConcurrentHashMap<>();
 
-	/** What a backend found OK again does: wakes the mover */
+	/** What a backend found OK, for the first time or again, does: wakes the mover */
 	private volatile Runnable recovered = () -> {
 	};
 
@@ -100,7 +103,7 @@ public class BackendHealth {
 	}
 
 	/**
-	 * @param recovered run when a failing backend is found OK again
+	 * @param recovered run when a backend is found OK: an unchecked one, or a failing one again
 	 */
 	public void onRecovered(Runnable recovered) {
 		this.recovered = recovered;
@@ -129,7 +132,8 @@ public class BackendHealth {
 		for (long id : known())
 			if (!available(id))
 				unavailable.add(id);
-		// One that is gone from the list but known to fail stays out too
+		// One the list doesn't name, as when the rows can't be read, but known to fail stays out too; a retest
+		// forgets one that was removed
 		states.forEach((id, status) -> {
 			if (status.state() != State.OK)
 				unavailable.add(id);
@@ -146,10 +150,14 @@ public class BackendHealth {
 	}
 
 	/**
-	 * Checks again each backend that isn't OK; every {@code storage.retestSeconds}.
+	 * Checks again each backend that isn't OK; every {@code storage.retestSeconds}. First forgets the backends removed
+	 * since they were checked, so that one removed while failing isn't reported, nor alerted on, for good.
 	 */
 	public void retest() {
-		for (long id : known())
+		List<Long> listed = listed();
+		if (listed != null)
+			forgetRemoved(listed);
+		for (long id : listed != null ? listed : List.of(Staging.ID))
 			if (!available(id)) {
 				// A key file put back by hand is read only by a new entry. The backend fails, so no transfer uses it
 				if (keyFailures.contains(id))
@@ -231,20 +239,53 @@ public class BackendHealth {
 		failing(backendId, error, false);
 	}
 
+	/**
+	 * Records what a save or a read met on a backend, so that one failing since its last check passed shows as failing
+	 * and the alert sees it: an outage makes it failing as unreachable at once, and any other refusal runs its check,
+	 * so that a refusal of one file leaves the backend OK. One already failing is left to its retest.
+	 *
+	 * @param backendId the backend
+	 * @param e what the save or read met
+	 */
+	public void reportFailure(long backendId, BackendFailingException e) {
+		if (status(backendId).state() == State.FAILING)
+			return;
+		if (e instanceof BackendUnreachableException)
+			failing(backendId, message(e), true);
+		else
+			check(backendId);
+	}
+
 	private Object checkLock(long backendId) {
 		return checking.computeIfAbsent(backendId, id -> new Object());
 	}
 
-	/** @return staging, then every backend with a row */
+	/** @return staging, then every backend with a row; staging alone if the rows can't be read */
 	private List<Long> known() {
-		List<Long> ids = new ArrayList<>();
-		ids.add(Staging.ID);
+		List<Long> ids = listed();
+		return ids != null ? ids : List.of(Staging.ID);
+	}
+
+	/** @return staging, then every backend with a row; null if the rows can't be read */
+	private List<Long> listed() {
 		try {
+			List<Long> ids = new ArrayList<>();
+			ids.add(Staging.ID);
 			ids.addAll(backends.ids());
+			return ids;
 		} catch (PersistenceException e) {
 			log.warn("The storage backends can't be listed: {}", e.getMessage());
+			return null;
 		}
-		return ids;
+	}
+
+	/** Forgets what is kept of backends the list no longer names */
+	private void forgetRemoved(List<Long> listed) {
+		Set<Long> ids = new HashSet<>(listed);
+		synchronized (states) {
+			states.keySet().removeIf(id -> !ids.contains(id));
+		}
+		keyFailures.removeIf(id -> !ids.contains(id));
 	}
 
 	private void ok(long backendId) {
@@ -255,11 +296,11 @@ public class BackendHealth {
 				return;
 			states.put(backendId, new Status(State.OK, null, new Date(), false));
 		}
-		if (before.state() == State.UNCHECKED) {
+		if (before.state() == State.UNCHECKED)
 			log.info("Storage backend {} passed its check", backendId);
-			return;
-		}
-		log.info("Storage backend {} works again, after failing since {}", backendId, before.since());
+		else
+			log.info("Storage backend {} works again, after failing since {}", backendId, before.since());
+		// Either way its files may move now: the mover's passes left them while it wasn't OK
 		recovered.run();
 	}
 

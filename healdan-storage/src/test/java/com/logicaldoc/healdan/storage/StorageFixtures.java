@@ -169,13 +169,14 @@ public final class StorageFixtures {
 		return gated;
 	}
 
-	/** Gives a Store a backend, or another one */
+	/** Gives a Store a backend, or another one, and marks its files that wait as the Store switch does */
 	public void map(long storeId, long backendId) throws Exception {
 		StoreBackend row = StoreBackendDAO.get().findByStore(storeId).orElseGet(StoreBackend::new);
 		row.setTenantId(Tenant.DEFAULT_ID);
 		row.setStoreId(storeId);
 		row.setBackendId(backendId);
 		StoreBackendDAO.get().store(row);
+		StoredFiles.get().storeBackendChanged(storeId);
 	}
 
 	/** @return a local backend's folder */

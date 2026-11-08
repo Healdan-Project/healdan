@@ -285,7 +285,7 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 			void convert(Document doc, Version version, String fileVersion) throws Exception {
 				tried.add(doc.getId());
 				if (doc.getId() == a.getId())
-					throw new IllegalStateException("Cannot convert", new com.logicaldoc.healdan.util.StorageUnreachableException("Main", new IOException("down")));
+					throw new IllegalStateException("Cannot convert", new com.logicaldoc.healdan.util.StorageUnreachableException("Main", true, new IOException("down")));
 				super.convert(doc, version, fileVersion);
 			}
 		};

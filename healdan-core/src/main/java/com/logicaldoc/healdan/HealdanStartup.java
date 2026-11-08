@@ -78,12 +78,16 @@ public class HealdanStartup {
 	/**
 	 * Tells a listener that Healdan has started. One that fails is logged and the
 	 * start goes on: its data is migrated and seeded already, and LogicalDOC
-	 * still serves what the listener's work doesn't touch.
+	 * still serves what the listener's work doesn't touch. That holds for an
+	 * Error such as a class missing from a plugin's zip too, but not for the
+	 * JVM's own failures (VirtualMachineError).
 	 */
 	private static void started(HealdanStartListener listener) {
 		try {
 			listener.started();
-		} catch (RuntimeException e) {
+		} catch (VirtualMachineError e) {
+			throw e;
+		} catch (Throwable e) {
 			log.error("{} failed to start: {}", listener.getClass().getSimpleName(), e.getMessage(), e);
 		}
 	}

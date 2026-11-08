@@ -161,22 +161,9 @@ public final class OutgoingEmail {
 	}
 
 	/**
-	 * Fills an email from a message template and hands it to the mail server, on the calling thread, for another
-	 * module's alerts: this sender throws where CE's {@code EMailSender} would drop an email silently.
-	 *
-	 * @param email the email, its locale, tenant and recipients set
-	 * @param template the template's name
-	 * @param dictionary what the template is given; the locale is added
-	 * @throws Exception if the template can't be read or formatted, or the mail server didn't take the email
-	 */
-	public static void sendTemplate(EMail email, String template, Map<String, Object> dictionary) throws Exception {
-		fill(email, template, dictionary);
-		send(email);
-	}
-
-	/**
 	 * Builds an HTML email from the system to a user, in the user's language, fills it from a message template and
-	 * hands it to the mail server, on the calling thread.
+	 * hands it to the mail server, on the calling thread, for this module's alerts and another's: this sender throws
+	 * where CE's {@code EMailSender} would drop an email silently.
 	 *
 	 * @param user the recipient, who has an email address
 	 * @param template the template's name
@@ -194,6 +181,7 @@ public final class OutgoingEmail {
 		recipient.setName(user.getFullName());
 		recipient.setMode(Recipient.Mode.TO);
 		email.getRecipients().add(recipient);
-		sendTemplate(email, template, dictionary);
+		fill(email, template, dictionary);
+		send(email);
 	}
 }

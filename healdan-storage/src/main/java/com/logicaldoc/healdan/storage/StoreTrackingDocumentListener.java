@@ -15,14 +15,18 @@ import com.logicaldoc.core.document.DocumentListener;
 
 /**
  * Tells {@link StoreTracking} when a stored document may be in another Store than its files' rows say: a move or a
- * restore, or any store after which the document's Store differs from its rows'. It never refuses anything, and
- * reads before CE's transaction ends and writes after it commits. CE creates it by reflection, hence the public
- * no-arg constructor.
+ * restore, or any other store that gives it another folder, as only a folder changes a document's Store. Other stores
+ * (indexing, renames, locks, checkouts) cost one read of the document's folder, made before the store
+ * ({@link #beforeStore}). It never refuses anything, and reads before CE's transaction ends and writes after it
+ * commits. CE creates it by reflection, hence the public no-arg constructor.
  */
 public class StoreTrackingDocumentListener implements DocumentListener {
 
 	private static final Set<String> ARRIVALS = Set.of(DocumentEvent.MOVED.toString(),
 			DocumentEvent.RESTORED.toString());
+
+	/** Put in the dictionary, which CE gives both calls, when the store gives the document another folder */
+	private static final String FOLDER_CHANGED = StoreTrackingDocumentListener.class.getName() + ".folderChanged";
 
 	public StoreTrackingDocumentListener() {
 		// Instantiated by CE
@@ -30,7 +34,11 @@ public class StoreTrackingDocumentListener implements DocumentListener {
 
 	@Override
 	public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
-		// Nothing to check
+		if (!StoreTracking.active() || document.getId() == 0L || arrival(transaction) || dictionary == null)
+			return;
+		Long folder = document.getFolder() == null ? null : document.getFolder().getId();
+		if (!Objects.equals(StoreOf.get().folderOf(document.getId()), folder))
+			dictionary.put(FOLDER_CHANGED, Boolean.TRUE);
 	}
 
 	@Override
@@ -40,18 +48,13 @@ public class StoreTrackingDocumentListener implements DocumentListener {
 			return;
 		StoreTracking tracking = StoreTracking.get();
 		long docId = document.getId();
-		if (!(transaction != null && ARRIVALS.contains(transaction.getEvent())) && !differs(docId))
+		if (!arrival(transaction) && (dictionary == null || !Boolean.TRUE.equals(dictionary.get(FOLDER_CHANGED))))
 			return;
 		tracking.afterCommit(() -> tracking.documentChanged(docId));
 	}
 
-	/** @return whether the document has rows and one names another Store than the document's */
-	private static boolean differs(long docId) {
-		var rows = StoredFiles.get().list(docId);
-		if (rows.isEmpty())
-			return false;
-		Long store = StoreOf.get().of(docId).orElse(null);
-		return rows.stream().anyMatch(row -> !Objects.equals(row.storeId(), store));
+	private static boolean arrival(DocumentHistory transaction) {
+		return transaction != null && ARRIVALS.contains(transaction.getEvent());
 	}
 
 	@Override

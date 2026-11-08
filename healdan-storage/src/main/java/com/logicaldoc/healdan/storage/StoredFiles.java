@@ -230,6 +230,37 @@ public class StoredFiles {
 	}
 
 	/**
+	 * Keeps {@code hd_waiting} true to a Store's rows after its backend changed (the Store switch, spec section 5.4):
+	 * set to now on those its backend doesn't hold, if they have none, and cleared on those it does. The mover lists
+	 * only rows that wait ({@link #misplaced}), so a switch that skipped this would leave its files where they are
+	 * until the nightly check.
+	 *
+	 * @param storeId the Store's folder id
+	 */
+	public void storeBackendChanged(long storeId) {
+		long target = storeBackend(storeId);
+		jdbc.update("update hd_storage_file set hd_waiting = coalesce(hd_waiting, ?) where hd_storeid = ? "
+				+ "and hd_backendid <> ?", new Timestamp(System.currentTimeMillis()), storeId, target);
+		jdbc.update("update hd_storage_file set hd_waiting = null where hd_storeid = ? and hd_backendid = ?", storeId,
+				target);
+	}
+
+	/**
+	 * Marks as waiting, from now, each row whose backend isn't its Store's but has no {@code hd_waiting}, which only a
+	 * write that skipped it leaves: the nightly check's backstop, as the mover lists only rows that wait. Reads the
+	 * whole table.
+	 *
+	 * @param onlyStore a Store's folder id, to mend only its rows; null for all
+	 * @return the rows marked
+	 */
+	public int markWaiting(Long onlyStore) {
+		String sql = "update hd_storage_file f set hd_waiting = ? where f.hd_waiting is null and f.hd_backendid <> "
+				+ TARGET;
+		Timestamp now = new Timestamp(System.currentTimeMillis());
+		return onlyStore == null ? jdbc.update(sql, now) : jdbc.update(sql + " and f.hd_storeid = ?", now, onlyStore);
+	}
+
+	/**
 	 * @return the plaintext sizes of every file, summed
 	 */
 	public long totalSize() {
@@ -249,8 +280,11 @@ public class StoredFiles {
 
 	/**
 	 * Lists the rows the mover should move: those whose backend isn't their Store's (Original's for no Store or a
-	 * Store with no row), staged ones first and then the newest documents. Left out, in the SQL so that one paused
-	 * backend's rows can't fill every page and starve the rest: rows whose source or target is in
+	 * Store with no row), staged ones first and then the newest documents. Only rows that wait ({@code hd_waiting}) are
+	 * read, through its index, so a listing never reads the rows in place: every write of a row's backend or Store
+	 * keeps it ({@link #recordWrite}, {@link #moved}, {@link #setStore}, {@link #storeBackendChanged}, the recording
+	 * seed), and the nightly check mends any row that drifted ({@link #markWaiting}). Left out, in the SQL so that one
+	 * paused backend's rows can't fill every page and starve the rest: rows whose source or target is in
 	 * {@code unavailableBackends}, rows marked stuck, and rows not yet due.
 	 *
 	 * @param limit the most rows to list
@@ -261,8 +295,8 @@ public class StoredFiles {
 		List<Object> arguments = new ArrayList<>();
 		arguments.add(new Timestamp(System.currentTimeMillis()));
 		StringBuilder sql = new StringBuilder("select " + COLUMNS + " from hd_storage_file f "
-				+ "where f.hd_stuck = 0 and (f.hd_nexttry is null or f.hd_nexttry <= ?) and f.hd_backendid <> "
-				+ TARGET);
+				+ "where f.hd_waiting is not null and f.hd_stuck = 0 and (f.hd_nexttry is null or f.hd_nexttry <= ?) "
+				+ "and f.hd_backendid <> " + TARGET);
 		if (!unavailableBackends.isEmpty()) {
 			String in = String.join(", ", unavailableBackends.stream().map(id -> "?").toList());
 			sql.append(" and f.hd_backendid not in (").append(in).append(") and ").append(TARGET)

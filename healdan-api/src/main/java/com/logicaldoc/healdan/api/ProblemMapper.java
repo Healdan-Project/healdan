@@ -66,7 +66,7 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 		if (filed != null)
 			return problem(alreadyFiled(filed));
 
-		StorageUnreachableException unreachable = find(exception, StorageUnreachableException.class);
+		StorageUnreachableException unreachable = StorageUnreachableException.in(exception);
 		if (unreachable != null)
 			return problem(new ApiProblem(503, "storage-unreachable", unreachable.getMessage()));
 

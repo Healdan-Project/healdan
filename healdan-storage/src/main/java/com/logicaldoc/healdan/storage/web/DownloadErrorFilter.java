@@ -8,6 +8,7 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -35,10 +36,12 @@ import jakarta.servlet.http.HttpServletResponseWrapper;
  * (spec section 6.5). CE's download servlets open the response's stream and send {@code 200} before they read the file,
  * and when the read fails they log it and send an error of their own, which Tomcat shows as a bare page, or, for
  * shared links, after an empty {@code 200} was committed. So the servlets get a response that commits nothing until
- * its first byte: the status, the headers and the stream's closing are kept in order, and sent when the first byte is
- * written or the servlet is done. If a read failed with a {@link StorageUnreachableException} before the first byte,
- * whatever the servlet then sent is dropped and the {@code 503} is sent; otherwise what the servlet did is sent as it
- * did it, byte for byte. A read that fails after its first bytes is cut off, as before.
+ * more than its first 1,024 bytes are written: the status, the headers, those bytes and the stream's
+ * closing are kept in order, and sent when more is written or the servlet is done. The bytes held cover what CE writes
+ * before it reads the file, a gzip header when {@code download.gzip} is on and a multipart range's boundaries. If a
+ * read failed with a {@link StorageUnreachableException} before anything was sent, whatever the servlet then did is
+ * dropped and the {@code 503} is sent; otherwise what the servlet did is sent as it did it, byte for byte. A read that
+ * fails after the file's first bytes were sent is cut off, as before.
  * <p>
  * Everything passes through untouched unless the Store is a {@link HealdanStorage}, so a WAR still on CE's
  * {@code FSStore} is unchanged. The filter covers the routes that open a document's file and send it ({@code /download},
@@ -49,6 +52,9 @@ import jakarta.servlet.http.HttpServletResponseWrapper;
 public class DownloadErrorFilter implements Filter {
 
 	private static final Logger log = LoggerFactory.getLogger(DownloadErrorFilter.class);
+
+	/** The most bytes a response holds before it starts: more than a gzip header or a multipart range's boundaries */
+	static final int HELD_BYTES = 1024;
 
 	@Override
 	public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
@@ -123,8 +129,9 @@ public class DownloadErrorFilter implements Filter {
 	}
 
 	/**
-	 * A response that sends nothing to the real one until its first byte: what the servlet does before then is kept in
-	 * order, and sent by {@link #release()} or dropped by {@link #drop()}.
+	 * A response that sends nothing to the real one until more than 1,024 bytes are
+	 * written: what the servlet does before then is kept in order, and sent by {@link #release()} or dropped by
+	 * {@link #drop()}.
 	 */
 	private static final class HoldingResponse extends HttpServletResponseWrapper {
 
@@ -157,6 +164,9 @@ public class DownloadErrorFilter implements Filter {
 		/** Whether the servlet asked for a writer */
 		private boolean writerTaken;
 
+		/** The bytes held, which a write that would pass {@link DownloadErrorFilter#HELD_BYTES} sends with the rest */
+		private int heldBytes;
+
 		boolean started() {
 			return started;
 		}
@@ -179,6 +189,7 @@ public class DownloadErrorFilter implements Filter {
 		void drop() {
 			held.clear();
 			closedAt = -1;
+			heldBytes = 0;
 		}
 
 		/**
@@ -338,25 +349,49 @@ public class DownloadErrorFilter implements Filter {
 			}
 		}
 
-		/** A stream that opens the real one at its first byte, and keeps a close before it */
+		/**
+		 * A stream that opens the real one once more than 1,024 bytes are written,
+		 * and keeps the bytes and a close before then
+		 */
 		private final class HoldingStream extends ServletOutputStream {
 
 			private ServletOutputStream out() throws IOException {
 				return real.getOutputStream();
 			}
 
+			/** @return whether the file couldn't be read and the servlet now writes something else after closing */
+			private boolean afterFailedAttempt() {
+				return closedAt >= 0 && ReadOutages.noted() != null;
+			}
+
 			private void start() throws IOException {
 				if (started)
 					return;
-				if (closedAt >= 0 && ReadOutages.noted() != null)
+				if (afterFailedAttempt())
 					// The file could not be read and the servlet wrote something else (CE's /convertpdf, its
 					// placeholder), to the stream it had closed: that starts the response afresh
 					dropFailedAttempt();
 				release();
 			}
 
+			/**
+			 * @return whether these bytes are held, counted: before anything is sent, and up to
+			 *         1,024 bytes; never what the servlet writes after a failed attempt,
+			 *         which starts the response
+			 */
+			private boolean holds(int len) {
+				if (started || heldBytes + len > HELD_BYTES || afterFailedAttempt())
+					return false;
+				heldBytes += len;
+				return true;
+			}
+
 			@Override
 			public void write(int b) throws IOException {
+				if (holds(1)) {
+					held.add(new Held(null, () -> out().write(b)));
+					return;
+				}
 				start();
 				out().write(b);
 			}
@@ -365,6 +400,11 @@ public class DownloadErrorFilter implements Filter {
 			public void write(byte[] b, int off, int len) throws IOException {
 				if (len == 0)
 					return;
+				if (holds(len)) {
+					byte[] bytes = Arrays.copyOfRange(b, off, off + len);
+					held.add(new Held(null, () -> out().write(bytes)));
+					return;
+				}
 				start();
 				out().write(b, off, len);
 			}

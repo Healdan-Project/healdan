@@ -45,7 +45,7 @@ public class ProblemMapperTest extends ApiTestCase {
 		public String unreachable() throws Exception {
 			throw new com.logicaldoc.core.PersistenceException("Can't read the file",
 					new java.io.IOException("secret path /srv/x",
-							new com.logicaldoc.healdan.util.StorageUnreachableException("Cloud",
+							new com.logicaldoc.healdan.util.StorageUnreachableException("Cloud", true,
 									new java.io.IOException("secret host"))));
 		}
 

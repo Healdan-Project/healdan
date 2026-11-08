@@ -107,6 +107,9 @@ public class Mover {
 
 	private final TransactionTemplate own;
 
+	/** What a transaction that asked for a pass is bound under, so it asks once ({@link #wake}) */
+	private final Object wakeKey = new Object();
+
 	/** Guards the fields below it */
 	private final Object monitor = new Object();
 
@@ -223,26 +226,49 @@ public class Mover {
 	}
 
 	/**
-	 * Asks for a pass: at once, or once the caller's transaction commits.
+	 * Asks for a pass: at once, or once the caller's transaction commits. A transaction asks once however many of its
+	 * saves wake the mover, so a folder copy of many files registers one wake.
 	 */
 	public void wake() {
 		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
 			signal();
 			return;
 		}
-		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-			@Override
-			public int getOrder() {
-				// After FileLocks' end of the transaction's writes, so the pass finds the files free
-				return Ordered.LOWEST_PRECEDENCE;
-			}
+		if (TransactionSynchronizationManager.hasResource(wakeKey))
+			return;
+		Wake wake = new Wake();
+		TransactionSynchronizationManager.registerSynchronization(wake);
+		TransactionSynchronizationManager.bindResource(wakeKey, wake);
+	}
 
-			@Override
-			public void afterCompletion(int status) {
-				if (status != STATUS_ROLLED_BACK)
-					signal();
-			}
-		});
+	/**
+	 * A transaction's wake, bound to it while it runs ({@link #wakeKey}), and set aside while it is suspended, so that a
+	 * transaction of its own inside it asks for its own.
+	 */
+	private final class Wake implements TransactionSynchronization {
+
+		@Override
+		public int getOrder() {
+			// After FileLocks' end of the transaction's writes, so the pass finds the files free
+			return Ordered.LOWEST_PRECEDENCE;
+		}
+
+		@Override
+		public void suspend() {
+			TransactionSynchronizationManager.unbindResourceIfPossible(wakeKey);
+		}
+
+		@Override
+		public void resume() {
+			TransactionSynchronizationManager.bindResource(wakeKey, this);
+		}
+
+		@Override
+		public void afterCompletion(int status) {
+			TransactionSynchronizationManager.unbindResourceIfPossible(wakeKey);
+			if (status != STATUS_ROLLED_BACK)
+				signal();
+		}
 	}
 
 	private void signal() {
@@ -490,7 +516,8 @@ public class Mover {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				return;
-			} catch (RuntimeException e) {
+			} catch (RuntimeException | Error e) {
+				// An Error too, such as a missing class: this thread is the only coordinator, and nothing starts another
 				queue.clear();
 				log.warn("The storage mover's pass failed, and runs again at the next sweep: {}", e.getMessage(), e);
 			}
