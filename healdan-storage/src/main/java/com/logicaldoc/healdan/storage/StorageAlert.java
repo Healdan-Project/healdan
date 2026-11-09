@@ -28,7 +28,7 @@ import com.logicaldoc.healdan.signin.OutgoingEmail;
 import com.logicaldoc.util.spring.Context;
 
 /**
- * The alert (spec section 10.3), run hourly by {@code StorageStartup}: when a file has waited more than 24 hours to
+ * The alert (spec section 7), run hourly by {@code StorageStartup}: when a file has waited more than 24 hours to
  * reach its Store's backend (its row's {@code hd_waiting}, set when the backend stopped matching the Store's, so a
  * Store switched an hour ago raises nothing however old its files are), or a backend has been failing that long, the
  * members of the {@code admin} group who are enabled, not expired and have an email get the {@code storage.alert}

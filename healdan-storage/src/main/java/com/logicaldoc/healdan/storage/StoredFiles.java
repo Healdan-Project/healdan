@@ -282,12 +282,13 @@ public class StoredFiles {
 
 	/**
 	 * Lists the rows the mover should move: those whose backend isn't their Store's (Original's for no Store or a
-	 * Store with no row), staged ones first and then the newest documents. Only rows that wait ({@code hd_waiting}) are
-	 * read, through its index, so a listing never reads the rows in place: every write of a row's backend or Store
-	 * keeps it ({@link #recordWrite}, {@link #moved}, {@link #setStore}, {@link #storeBackendChanged}, the recording
-	 * seed), and the nightly check mends any row that drifted ({@link #markWaiting}). Left out, in the SQL so that one
-	 * paused backend's rows can't fill every page and starve the rest: rows whose source or target is in
-	 * {@code unavailableBackends}, rows marked stuck, and rows not yet due.
+	 * Store with no row), staged ones first and then the newest documents. Only rows that wait ({@code hd_waiting} set)
+	 * are asked for, so a row in place is never listed: every write of a row's backend or Store keeps the mark
+	 * ({@link #recordWrite}, {@link #moved}, {@link #setStore}, {@link #storeBackendChanged}, the recording seed), and
+	 * the nightly check mends any row that drifted ({@link #markWaiting}). Which index the database reads them through
+	 * is its own choice, and every waiting row that is due is sorted before the page is cut, so a listing's cost grows
+	 * with the rows that wait. Left out, in the SQL so that one paused backend's rows can't fill every page and starve
+	 * the rest: rows whose source or target is in {@code unavailableBackends}, rows marked stuck, and rows not yet due.
 	 *
 	 * @param limit the most rows to list
 	 * @param unavailableBackends the backends that are paused or not yet checked
