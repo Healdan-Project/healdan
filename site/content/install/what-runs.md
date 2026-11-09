@@ -26,10 +26,10 @@ only MariaDB so far: on any other database it stops when it starts.
 ## What the App Does When It Starts
 
 - **On the first start** it writes `context.properties`, waits for MariaDB, and creates the database schema.
-  Then it installs LogicalDOC's plugins, before the app starts, so the first start doesn't ask for a restart. A
-  plugin a new release adds is installed the same way on the first start after the upgrade.
-- **On every later start** it re-applies only the settings that come from `.env` (see
-  [Configuration](../configuration/)).
+  Then it installs LogicalDOC's plugins, before the app starts, so the first start doesn't ask for a restart.
+- **On every later start** it re-applies the settings that come from `.env` (see
+  [Configuration](../configuration/)). It also installs any plugin a new release adds, which can add that plugin's
+  own settings to `context.properties`.
 - **It adds new default settings.** A setting that's in the image's defaults but missing from your
   `context.properties`, such as one a new release introduces, is added. A value you already have is never changed,
   except the release number and copyright years (`product.release` and `product.year`), which always come from the

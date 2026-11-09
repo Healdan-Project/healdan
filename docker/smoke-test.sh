@@ -138,9 +138,11 @@ check "GET /login.jsp is 200" test "$(http_code "$BASE/login.jsp")" = 200
 # there, so an answer that names no GUIMessage shows none. The phrase itself is no test: the answer's bundle has it.
 login_alerts_none() {
   local policy call reply
-  # A serialisation policy the login module was compiled with, which lets GUIInfo and GUIMessage through.
+  # A serialisation policy the login module was compiled with, which lets GUIInfo and GUIMessage through. With no file
+  # left to search, the outer grep would read its input, which is this script's, so it gets none.
   policy=$(compose exec -T app sh -c 'cd "$CATALINA_HOME/webapps/ROOT/login" &&
-    grep -l "beans\.GUIInfo," $(grep -l "beans\.GUIMessage," *.gwt.rpc) | head -1')
+    grep -l "beans\.GUIInfo," $(grep -l "beans\.GUIMessage," *.gwt.rpc) </dev/null | head -1')
+  if [ -z "$policy" ]; then echo "no .gwt.rpc policy in login/ names both GUIInfo and GUIMessage"; return 1; fi
   # InfoService.getInfo("en", "default", true), as the sign-in page calls it.
   call="7|0|8|$BASE/login/|${policy%.gwt.rpc}|com.logicaldoc.gui.common.client.services.InfoService|getInfo"
   call+="|java.lang.String/2004016611|Z|en|default|1|2|3|4|3|5|5|6|7|8|1|"
