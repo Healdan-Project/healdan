@@ -14,6 +14,7 @@ import static org.junit.Assert.assertTrue;
 import java.sql.Timestamp;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import javax.sql.DataSource;
@@ -535,6 +536,49 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		assertThrows(PersistenceException.class, () -> StorageBackendDAO.get().remove(StorageBackend.ORIGINAL));
 		assertThrows(PersistenceException.class, () -> StorageBackendDAO.get().delete(StorageBackend.ORIGINAL));
 		assertNotNull(StorageBackendDAO.get().findById(StorageBackend.ORIGINAL));
+	}
+
+	/**
+	 * Each backend's last showing of its recovery key, read for every backend at once: its own newest showing not
+	 * deleted, whatever was recorded after it; a backend whose key was never shown has none
+	 */
+	@Test
+	public void testLastShown() throws Exception {
+		long first = backend("first");
+		long second = backend("second");
+		long never = backend("never");
+		event(first, StorageEvent.KEY_SHOWN, "admin-a", 1, false);
+		event(second, StorageEvent.KEY_SHOWN, "admin-b", 2, false);
+		StorageEvent firstShown = event(first, StorageEvent.KEY_SHOWN, "admin-c", 3, false);
+		StorageEvent secondShown = event(second, StorageEvent.KEY_SHOWN, "admin-d", 4, false);
+		for (long backend : List.of(first, second, never))
+			event(backend, StorageEvent.KEY_ENTERED, "admin-e", 5, false);
+		event(first, StorageEvent.KEY_SHOWN, "admin-f", 6, true);
+		event(second, StorageEvent.KEY_SHOWN, "admin-f", 7, true);
+
+		Map<Long, StorageEvent> shown = StorageEventDAO.get().lastShown();
+
+		assertEquals(firstShown.getId(), shown.get(first).getId());
+		assertEquals("admin-c", shown.get(first).getUserName());
+		assertEquals(StorageEvent.KEY_SHOWN, shown.get(first).getEvent());
+		assertEquals(secondShown.getId(), shown.get(second).getId());
+		assertEquals("admin-d", shown.get(second).getUserName());
+		assertFalse("never shown", shown.containsKey(never));
+	}
+
+	/** @return an event recorded {@code seconds} after a fixed time, so each one recorded after it is newer */
+	private StorageEvent event(long backendId, String event, String userName, int seconds, boolean deleted)
+			throws PersistenceException {
+		StorageEvent row = new StorageEvent();
+		row.setTenantId(1);
+		row.setBackendId(backendId);
+		row.setEvent(event);
+		row.setDate(new Date(1_800_000_000_000L + seconds * 1000L));
+		row.setUserId(1);
+		row.setUserName(userName);
+		row.setDeleted(deleted ? 1 : 0);
+		StorageEventDAO.get().store(row);
+		return row;
 	}
 
 	private List<Long> docs(int limit, Set<Long> unavailable) {

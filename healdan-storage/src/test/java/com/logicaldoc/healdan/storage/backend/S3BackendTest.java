@@ -45,6 +45,10 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -583,6 +587,46 @@ public class S3BackendTest extends BackendContract {
 		S3Backend idle = backend(fake, 9, "idle", true);
 		idle.close();
 		assertTrue(idle.isShut());
+	}
+
+	/**
+	 * A backend closed while a put is under way, as {@code Backends.forget} closes one the Storage tab dropped, keeps its
+	 * client until the put has ended, so the upload finishes rather than failing on a shut client
+	 */
+	@Test
+	public void testCloseWaitsForACallUnderWay() throws Exception {
+		// A read timeout longer than any wait here, so only the close could end the held put
+		S3Backend s3 = backend(fake.settings(BUCKET, "held/").withTimeouts(Duration.ofSeconds(1), Duration.ofSeconds(20),
+				Duration.ofSeconds(20), 1), 10, true);
+		byte[] data = bytes(3000);
+		Path file = source(data);
+		byte[] md5 = md5(data);
+		fake.holdPut("held/1/2/doc/4.0");
+		ExecutorService thread = Executors.newSingleThreadExecutor();
+		try {
+			Future<?> put = thread.submit(() -> {
+				s3.put("1/2/doc/4.0", file, md5);
+				return null;
+			});
+			long deadline = System.currentTimeMillis() + 20_000;
+			while (fake.held().isEmpty()) {
+				if (put.isDone())
+					put.get();
+				if (System.currentTimeMillis() > deadline)
+					fail("The put never reached the server");
+				Thread.sleep(5);
+			}
+
+			s3.close();
+			assertFalse("the put under way keeps the client", s3.isShut());
+			fake.release();
+			put.get(20, TimeUnit.SECONDS);
+			assertArrayEquals(data, fake.object(BUCKET, "held/1/2/doc/4.0").orElseThrow());
+			assertTrue("shut once the put has ended", s3.isShut());
+		} finally {
+			fake.release();
+			thread.shutdownNow();
+		}
 	}
 
 	@Test

@@ -11,6 +11,7 @@ import static com.logicaldoc.healdan.storage.web.HealdanStorageServiceTest.local
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
@@ -20,8 +21,11 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.SecureRandom;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -32,6 +36,7 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -72,6 +77,7 @@ import com.logicaldoc.healdan.storage.StoreBackendDAO;
 import com.logicaldoc.healdan.storage.StoreTracking;
 import com.logicaldoc.healdan.storage.StoredFile;
 import com.logicaldoc.healdan.storage.StoredFiles;
+import com.logicaldoc.healdan.storage.backend.Backend;
 import com.logicaldoc.healdan.storage.backend.FakeDns;
 import com.logicaldoc.healdan.storage.backend.FakeS3;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
@@ -248,6 +254,38 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 		assertNotNull(StorageBackendDAO.get().findById(StorageBackend.ORIGINAL));
 	}
 
+	/**
+	 * A key file that can't be deleted once the backend's row is gone doesn't refuse the remove: the row and the
+	 * backend's built entry go, and the log names the backend whose key file is left to delete by hand
+	 */
+	@Test
+	public void testRemoveGoesAheadWhenItsKeyFileCantBeDeleted() throws Exception {
+		Assume.assumeTrue("POSIX permissions", FileSystems.getDefault().supportedFileAttributeViews().contains("posix"));
+		long id = sf.localBackend("kept-key", true);
+		Path keyFile = keys().file(id);
+		assertTrue(Files.exists(keyFile));
+		Backends.Entry entry = Backends.get().entry(id);
+		// BackendKeys gives its folder its owner's mode again before each change, so its lock file is what refuses
+		Path lock = keys().folder().resolve("keys.lock");
+		assertTrue(Files.exists(lock));
+		Set<PosixFilePermission> mode = Files.getPosixFilePermissions(lock);
+		Files.setPosixFilePermissions(lock, PosixFilePermissions.fromString("r--------"));
+		try (LogCapture log = LogCapture.of(StorageAdmin.class)) {
+			Assume.assumeFalse("running as a user whom permissions don't stop", Files.isWritable(lock));
+
+			admin.remove(id, boss);
+
+			assertEquals(0L, (long) jdbc().queryForObject("select count(*) from hd_storage_backend where ld_id = ?",
+					Long.class, id));
+			assertFalse("its built entry is forgotten", Backends.get().current(entry));
+			assertTrue("the key file is left", Files.exists(keyFile));
+			assertTrue(log.lines().toString(), log.lines().stream().anyMatch(
+					l -> l.startsWith("WARN") && l.contains("backend " + id + " ") && l.contains("key file")));
+		} finally {
+			Files.setPosixFilePermissions(lock, mode);
+		}
+	}
+
 	@Test
 	public void testNoSharedPlace() throws Exception {
 		admin.add(s3("First", "vault/"), "secret", boss);
@@ -276,6 +314,31 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 				other, other.resolve("inside"), other.getParent()))
 			refused(place.toString(), "can't be", () -> admin.add(local("Clash", place, null), null, boss));
 		assertEquals(count, backends());
+	}
+
+	/**
+	 * Two S3 servers on one host, on two ports, are two services, each with buckets of its own: one bucket name and
+	 * prefix on each are two places, while the same server's are still one
+	 */
+	@Test
+	public void testTwoServersOnOneHostAreTwoPlaces() throws Exception {
+		admin.add(s3("First", "vault/"), "secret", boss);
+		long count = backends();
+		try (FakeS3 second = FakeS3.start().createBucket(BUCKET)) {
+			assertEquals(fake.endpoint().getHost(), second.endpoint().getHost());
+			assertNotEquals(fake.endpoint().getPort(), second.endpoint().getPort());
+
+			GUIStorageBackend there = s3("Second", "vault/");
+			there.setEndpoint(second.endpoint().toString());
+			assertNotNull(admin.add(there, "secret", boss));
+			assertEquals(count + 1, backends());
+			assertTrue(second.object(BUCKET, "vault/" + LocalBackend.MARKER).isPresent());
+
+			// The first server's bucket and prefix are still the first backend's
+			refused("the first server's place", "share their place",
+					() -> admin.add(s3("Third", "vault/"), "secret", boss));
+			assertEquals(count + 1, backends());
+		}
 	}
 
 	@Test
@@ -392,6 +455,42 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 			assertEquals(List.of(), admin.test(id));
 			assertEquals(BackendHealth.State.OK, BackendHealth.get().status(id).state());
 		}
+	}
+
+	/** Original's new name changes nothing it is built from, so its built entry, and the reads under way on it, stay */
+	@Test
+	public void testRenamingOriginalKeepsItsEntry() throws Exception {
+		Backend before = Backends.get().entry(StorageBackend.ORIGINAL).backend();
+		GUIStorageBackend original = find(admin.overview(), StorageBackend.ORIGINAL);
+		original.setName("Original Renamed");
+
+		admin.save(original, null, boss);
+
+		assertEquals("Original Renamed", StorageBackendDAO.get().findById(StorageBackend.ORIGINAL).getName());
+		assertSame("kept across a rename", before, Backends.get().entry(StorageBackend.ORIGINAL).backend());
+	}
+
+	/**
+	 * The backend a save answers has its own counts, as the overview gives them: a rename of Original, which holds
+	 * recorded files, while another backend holds one too
+	 */
+	@Test
+	public void testASavedBackendsCountsAreItsOwn() throws Exception {
+		recordOn(StorageBackend.ORIGINAL, 999_011L, null);
+		recordOn(StorageBackend.ORIGINAL, 999_012L, null);
+		recordOn(sf.localBackend("elsewhere", false), 999_013L, null);
+		GUIStorageBackend original = find(admin.overview(), StorageBackend.ORIGINAL);
+		assertTrue(original.getFiles() + " files of " + original.getSize() + " bytes",
+				original.getFiles() >= 2 && original.getSize() >= 10);
+		original.setName("Original Counted");
+
+		GUIStorageBackend saved = admin.save(original, null, boss);
+
+		GUIStorageBackend listed = find(admin.overview(), StorageBackend.ORIGINAL);
+		assertEquals("Original Counted", saved.getName());
+		assertEquals(listed.getFiles(), saved.getFiles());
+		assertEquals(listed.getSize(), saved.getSize());
+		assertEquals(listed.isInUse(), saved.isInUse());
 	}
 
 	@Test

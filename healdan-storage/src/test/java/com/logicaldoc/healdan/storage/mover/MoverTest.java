@@ -709,6 +709,41 @@ public class MoverTest extends AbstractStorageTestCase {
 		assertEquals(0, row(doc.getId(), "1.0").attempts());
 	}
 
+	/**
+	 * A backend dropped ({@link Backends#forget}) once the transfer's upload has succeeded, as a save in the Storage tab
+	 * changed its settings meanwhile: nothing failed, but the upload went with the settings as they were, so the
+	 * transfer commits nothing, takes its upload back and ends as stopped, and the next pass moves the file
+	 */
+	@Test
+	public void testATransferWhoseBackendIsForgottenAfterItsUploadCommitsNothing() throws Exception {
+		Document doc = upload(cloud, "uploaded before an edit");
+		String key = key(doc.getId(), "1.0");
+		GatedBackend bucket = gate(cloud);
+		bucket.afterStage.close();
+		Future<Integer> pass = inBackground(mover::runOnce);
+		bucket.afterStage.awaitEntered(1);
+		assertEquals("the upload succeeded", "uploaded before an edit", bytes(cloud, key));
+
+		Backends.get().forget(cloud.backendId());
+		bucket.afterStage.open();
+		assertEquals(0, (int) get(pass));
+
+		StoredFile row = row(doc.getId(), "1.0");
+		assertEquals(0L, row.backendId());
+		assertEquals("uploaded before an edit", Files.readString(staged(doc.getId(), "1.0")));
+		assertNull("its upload is taken back", cloud.s3().bytes(key));
+		assertEquals(1, cloud.s3().calls(Op.PUT, key));
+		assertEquals(0, row.attempts());
+		assertNull(row.lastError());
+		assertNull(row.nextTry());
+		assertEquals(BackendHealth.State.OK, health.status(cloud.backendId()).state());
+
+		assertEquals(1, mover.runOnce());
+		assertEquals(cloud.backendId(), row(doc.getId(), "1.0").backendId());
+		assertEquals("uploaded before an edit", bytes(cloud, key));
+		assertEquals(0, row(doc.getId(), "1.0").attempts());
+	}
+
 	@Test
 	public void testParallelTransfers() throws Exception {
 		StorageSettings.get().setTransfers(4);
