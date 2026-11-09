@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 
 # Container entrypoint: repairs volume ownership, seeds config from the image defaults, runs DockerInit
-# (container-managed config keys, wait for the DB, first-boot schema) and then replaces itself with tini, which
-# runs Tomcat, both as the logicaldoc user.
+# (container-managed config keys, wait for the DB, first-boot schema, LogicalDOC's plugins installed) and then
+# replaces itself with tini, which runs Tomcat, both as the logicaldoc user.
 set -euo pipefail
 
 readonly LDOC_HOME=/opt/logicaldoc
@@ -67,7 +67,8 @@ as_app mkdir -p "$REPO"/docs "$REPO"/index "$REPO"/users "$REPO"/plugins "$REPO"
 # background while bash waits for it.
 init_pid=
 trap 'log "stopping"; [ -z "$init_pid" ] || kill -TERM "$init_pid" 2>/dev/null || true; wait; exit 143' TERM INT
-"${app_prefix[@]}" java -cp "$CATALINA_HOME/webapps/ROOT/WEB-INF/lib/*:$LDOC_HOME/lib/docker-init.jar" DockerInit &
+# The conf folder is on the classpath, as in Tomcat's common.loader, for the plugins DockerInit installs.
+"${app_prefix[@]}" java -cp "$CATALINA_HOME/webapps/ROOT/WEB-INF/lib/*:$LDOC_HOME/lib/docker-init.jar:$CONF" DockerInit &
 init_pid=$!
 wait "$init_pid"
 
