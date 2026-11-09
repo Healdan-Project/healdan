@@ -23,11 +23,13 @@ import org.xml.sax.SAXException;
 
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.dbinit.DBInit;
+import com.logicaldoc.util.plugin.PluginException;
+import com.logicaldoc.util.plugin.PluginRegistry;
 
 /**
  * Container init, run by entrypoint.sh before Tomcat starts: works out the trusted proxies, applies the
- * container-managed context.properties keys, waits for the database and creates the schema on first boot with the
- * setup wizard's own DBInit.
+ * container-managed context.properties keys, waits for the database, creates the schema on first boot with the
+ * setup wizard's own DBInit, and installs LogicalDOC's plugins.
  */
 public final class DockerInit {
 
@@ -84,6 +86,31 @@ public final class DockerInit {
                     + " finish (an earlier first start failed or was interrupted); remove the database volume and"
                     + " start again");
         }
+
+        try {
+            if (installPlugins())
+                log("installed LogicalDOC's plugins, so Tomcat needs no restart for them");
+        } catch (PluginException e) {
+            throw new InitException("cannot install LogicalDOC's plugins: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Starts LogicalDOC's plugins with its own PluginRegistry, as Tomcat does next, so each one not yet installed (on a
+     * new repository volume, all of them) is installed here, before Tomcat starts. A plugin's install edits web.xml and
+     * context.properties, then asks for a restart, since Tomcat has read web.xml by then: the sign-in page says "The
+     * application has to be restarted" until one. Here the edits are in place before Tomcat reads anything, and Tomcat
+     * finds every plugin installed, so nothing asks. The plugins find context.properties and log.xml on the classpath,
+     * which needs the conf folder on it, as Tomcat's common.loader has it. Returns true when a plugin asked for a restart,
+     * which means it was installed now.
+     */
+    static boolean installPlugins() throws PluginException {
+        // The plugins are the WAR's *-plugin.jar files, beside LogicalDOC's util jar on this classpath.
+        File lib = new File(PluginRegistry.class.getProtectionDomain().getCodeSource().getLocation().getPath())
+                .getParentFile();
+        PluginRegistry registry = PluginRegistry.getInstance();
+        registry.init(lib.getPath());
+        return registry.isRestartRequired();
     }
 
     /**

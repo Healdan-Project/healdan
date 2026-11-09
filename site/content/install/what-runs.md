@@ -26,6 +26,8 @@ only MariaDB so far: on any other database it stops when it starts.
 ## What the App Does When It Starts
 
 - **On the first start** it writes `context.properties`, waits for MariaDB, and creates the database schema.
+  Then it installs LogicalDOC's plugins, before the app starts, so the first start doesn't ask for a restart. A
+  plugin a new release adds is installed the same way on the first start after the upgrade.
 - **On every later start** it re-applies only the settings that come from `.env` (see
   [Configuration](../configuration/)).
 - **It adds new default settings.** A setting that's in the image's defaults but missing from your

@@ -26,5 +26,16 @@ run_test ConfigFileTest "$defaults"
 run_test WarParsersTest "$here/test/fixtures"
 run_test WarStorageTest
 
+# PluginInstallTest starts the WAR's plugins twice, as DockerInit and then Tomcat do: with a conf folder on the
+# classpath, as the entrypoint has it, and copies of the WAR's jars and web.xml, which installs edit. Not links: the
+# installs follow them back to the WAR's own web.xml.
+mkdir -p "$work/conf" "$work/webapp/WEB-INF/lib"
+cp "$(dirname "$defaults")/log.xml" "$work/conf/"
+cp "$lib"/*.jar "$work/webapp/WEB-INF/lib/"
+cp "$lib/../web.xml" "$work/webapp/WEB-INF/web.xml"
+run_plugins() { java -cp "$work/test-classes:$work/classes:$work/webapp/WEB-INF/lib/*:$work/conf" PluginInstallTest "$@"; }
+run_plugins first "$defaults" "$work" "$lib/../web.xml"
+run_plugins again
+
 jar cf "$jar" -C "$work/classes" .
 echo "built $jar"

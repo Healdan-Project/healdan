@@ -133,6 +133,27 @@ echo "Keycloak started in ${kc_started%%$'\n'*} s"
 
 echo "== 2. login page and the API"
 check "GET /login.jsp is 200" test "$(http_code "$BASE/login.jsp")" = 200
+# A fresh stack's first start asks for no restart: DockerInit installs LogicalDOC's plugins before Tomcat starts (Docker
+# spec §15). The sign-in page shows the alerts in the GUIInfo that getInfo answers, and GUIInfo holds GUIMessages only
+# there, so an answer that names no GUIMessage shows none. The phrase itself is no test: the answer's bundle has it.
+login_alerts_none() {
+  local policy call reply
+  # A serialisation policy the login module was compiled with, which lets GUIInfo and GUIMessage through.
+  policy=$(compose exec -T app sh -c 'cd "$CATALINA_HOME/webapps/ROOT/login" &&
+    grep -l "beans\.GUIInfo," $(grep -l "beans\.GUIMessage," *.gwt.rpc) | head -1')
+  # InfoService.getInfo("en", "default", true), as the sign-in page calls it.
+  call="7|0|8|$BASE/login/|${policy%.gwt.rpc}|com.logicaldoc.gui.common.client.services.InfoService|getInfo"
+  call+="|java.lang.String/2004016611|Z|en|default|1|2|3|4|3|5|5|6|7|8|1|"
+  reply=$(curl -fsS -X POST "$BASE/login/info" -H 'Content-Type: text/x-gwt-rpc; charset=utf-8' \
+    -H 'X-GWT-Permutation: 0' --data-binary "$call")
+  case $reply in
+    //OK*) ;;
+    *) echo "getInfo failed: ${reply:0:200}"; return 1 ;;
+  esac
+  lacks 'beans\.GUIMessage/' "$reply"
+}
+check "the sign-in page shows no alert, such as the restart notice" login_alerts_none
+check "the first start asks for no restart" lacks 'The application has to be restarted' "$(compose logs app 2>&1)"
 # The healdan-api plugin is in the WAR and /api reaches its servlet, past CE's security chain.
 api_product() { curl -fsS "$BASE/api/v1/server" | jq -er .product; }
 check "GET /api/v1/server answers JSON naming Healdan" test "$(api_product)" = Healdan
