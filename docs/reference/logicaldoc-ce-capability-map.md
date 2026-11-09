@@ -7,6 +7,7 @@
 - **LogicalDOC's servers.** Updated on 2026-10-29: §6's rows after `StatsCollector`'s cover every call CE made to LogicalDOC, and the check that keeps new ones out.
 - **Permission gaps.** Updated on 2026-11-03: §6's rows for the settings RPCs, API keys, SOAP's root guard, folder ACL equality, the Environment tab, CMIS and the Healdan profile's attribute set are **Fixed**, and §6 adds what fixing them found.
 - **Security RPCs.** Updated on 2026-11-03: §6's last rows record `SecurityServiceImpl`'s menu, user settings, blocked sign-in, geolocation, device and avatar RPCs, and `getUser`, all **Fixed**.
+- **Storage backends.** Updated on 2026-11-09, when "S3, and a storage backend per Store" was built: §3.2 records Healdan's `HealdanStorage` in place of `FSStore`, and CE's Stores screen, which a Healdan seed hides. The [plan](../superpowers/plans/2026-11-03-s3-storage-backends.md) has the rulings and follow-ups.
 - **M4.** Updated on 2026-11-02, when M4 was built: §5.4 records Healdan's OpenID Connect sign-in, `UserSource.OIDC`, how a user listener can veto, and what CE's user delete skips. The [M4 plan](../superpowers/plans/2026-11-01-m4-oidc-sign-in.md) has the rulings and follow-ups.
 - **M3.** Updated on 2026-10-25, when M3's first phase was built: §2.3 adds Healdan's Comments property and how it's searched, §2.6 the API's favourites, and §5.1 Open in App and the Healdan Helper. The [M3 plan](../superpowers/plans/2026-10-24-m3-office-integration.md) has the rulings and follow-ups.
 - **M2.** Updated on 2026-10-24, when M2 was built: the sign-in throttle is **Fixed** (§5.4, §6), §4.1 points to Healdan's own API, and §6 adds what the build found.
@@ -200,15 +201,18 @@ Healdan hides Dropbox (80): its GUI shows only with menu `-2070`, which the `hid
 ### 3.2 Storage backends (LogicalDOC `Store`)
 
 - **One bean.** `<bean id="store" class="${store}"/>` in `context-core.xml`, which is `FSStore`.
-  - Keys: `store.write=1`, `store.1.dir`, `store.1.type=fs`, `store.1.encryption`, `store.1.compression`.
-- **The extension point is unused.** A `Store` extension point exists, but CE registers no implementations, so `newStore(id)` returns null. S3, Azure and SMB are EE only.
+  - Keys: `store.write=1`, `store.1.dir`, `store.1.type=fs`, `store.1.encryption`, `store.1.compression`. No CE code reads `store.1.encryption` or `store.1.compression`.
+- **Healdan replaces the bean by configuration** ([S3 spec](../superpowers/specs/2026-11-01-s3-storage-backends-design.md)). In Docker, `ConfigPlan.HEALDAN_KEYS` sets `store=com.logicaldoc.healdan.storage.HealdanStorage` on every start, so `healdan-storage`'s `HealdanStorage` is the one bean every caller reaches through `Store.get()`. It implements CE's `Store` interface, records which backend holds each file in `hd_storage_file`, and sends each call to the file's backend (a local or NFS folder, or an S3 bucket), to staging or to the read cache, with no CE Java edited. `store.1.dir` stays Original's folder, backend 1. Outside Docker the key is what `context.properties` says, `FSStore` by default.
+- **The extension point is unused.** A `Store` extension point exists, but CE registers no implementations, so `newStore(id)` returns null. S3, Azure and SMB are EE only. `HealdanStorage.newStore` returns null too: its backends are Healdan's own.
 - **All reads and writes go to store 1.** `AbstractStore.id` is fixed at 1.
 - **The per-folder mapping exists but isn't used.**
   - `Folder.stores` (`ld_folder_store`, node → storeId).
   - `DocumentManager.getStore(Folder)` resolves it through ancestors, falling back to `store.write`.
   - The only consumer, `enforceFilesIntoFolderStore`, ends in `FSStore.moveResourcesToStore`, which throws `UnsupportedOperationException`.
-- **No backend id is recorded per document or version** (`ld_document`, `ld_version`).
-- **Gating.** GUI 52, 44 and 46. The server-side settings save and remove are ungated.
+  - Healdan doesn't use it either: a Store's backend is a row in `hd_storage_store`, keyed by the Store, not by cluster node, and `HealdanStorage.moveResourcesToStore` returns 0, as Healdan's mover moves the files.
+- **No backend id is recorded per document or version** (`ld_document`, `ld_version`). Healdan records one per file, in `hd_storage_file`.
+- **Gating.** GUI 52, 44 and 46. The server-side settings save and remove need Stores (`105`) since 2026-11-03 (§6).
+- **CE's Stores screen is visible, and Healdan hides it.** Administration → Settings → Stores (menu `105`, `GUI/settings/SettingsMenu.addStores`, which opens `RepositoriesPanel`) lists "Store 1" from `store.1.dir` in `context.properties` (`WEB/data/StoresDataServlet.printStores`), not from the bean, and lets an admin change the path, which moves no files; under `HealdanStorage` the new path would have no marker, and every save into Original would fail. Only 52 hides Add Store. Healdan's `storage-hide-stores` seed, on a server whose store is `HealdanStorage`, deletes the menu's ACL rows and marks it deleted, as `hide-dropbox` does Dropbox's, so the screen and its Folders tab are gone, and `store.1.dir` and the Folders tab's six `conf.*` folders are set only in `context.properties`. `HealdanStorage.getStoreDefinitions` is empty, so CE's hidden Storage screens have nothing to list.
 
 ### 3.3 Tenants
 

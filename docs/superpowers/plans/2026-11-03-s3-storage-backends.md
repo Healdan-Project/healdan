@@ -43,7 +43,7 @@
 
 The jars are already compressed, so the image's pull grows by about the same. Task 1 measures the real figure from the built plugin zip, and states it in PR A.
 
-**Status:** written on 2026-11-03, after the spec's approval on 2026-11-01. The owner answered questions 1 to 9 on 2026-11-03, and the tasks follow the answers. **Approved** by the owner on 2026-11-07, for subagent-driven building. The trial (Task 0) ran the same day and passed on Garage and on Wasabi; its findings and rulings are in the decision log, and Tasks 5, 12 and 16 follow them. A pre-flight scan the same day read every task against the others, the Global Constraints and the code; its rulings are folded into the tasks they change, and listed in the decision log. PR A (Tasks 1 to 8) was built on 2026-11-07, subagent-driven, each task reviewed against its brief before the next began, then the branch as a whole, and opened as [Healdan-Project/healdan#209](https://github.com/Healdan-Project/healdan/pull/209). The owner's code review of it the same day brought one fix commit: the Javadoc that broke the Docker build, the plugin zip's jar names, savepoints around the storage rows' inserts (a file's lock ends before its transaction commits), one read path for streams and channels, and smaller fixes. PR B (Tasks 9 to 13) was built on 2026-11-08 in the same way; what its reviews changed is noted in Task 13 and carried into Tasks 14, 16 and 19. PRs C and D are next.
+**Status:** written on 2026-11-03, after the spec's approval on 2026-11-01. The owner answered questions 1 to 9 on 2026-11-03, and the tasks follow the answers. **Approved** by the owner on 2026-11-07, for subagent-driven building. The trial (Task 0) ran the same day and passed on Garage and on Wasabi; its findings and rulings are in the decision log, and Tasks 5, 12 and 16 follow them. A pre-flight scan the same day read every task against the others, the Global Constraints and the code; its rulings are folded into the tasks they change, and listed in the decision log. PR A (Tasks 1 to 8) was built on 2026-11-07, subagent-driven, each task reviewed against its brief before the next began, then the branch as a whole, and opened as [Healdan-Project/healdan#209](https://github.com/Healdan-Project/healdan/pull/209). The owner's code review of it the same day brought one fix commit: the Javadoc that broke the Docker build, the plugin zip's jar names, savepoints around the storage rows' inserts (a file's lock ends before its transaction commits), one read path for streams and channels, and smaller fixes. PR B (Tasks 9 to 13) was built on 2026-11-08 in the same way; what its reviews changed is noted in Task 13 and carried into Tasks 14, 16 and 19. It was merged as [#211](https://github.com/Healdan-Project/healdan/pull/211) the same day, after the owner's code review (backend health reported by saves and reads, the mover listing only waiting rows, `storeBackendChanged`, and the Store listener's own commit). PR C (Tasks 14 to 20) was built on 2026-11-08 in the same way, and merged as [#212](https://github.com/Healdan-Project/healdan/pull/212) on 2026-11-09, after the owner's code review (an S3 client closed only once nothing uses it, a transfer on a forgotten backend committing nothing, renames keeping a backend's entry, retest rounds, the order of a removal, places compared by S3 service, and V10's index). PR D (Task 21) records the build in the spec, CLAUDE.md, the capability map and the roadmap; Task 22, the owner's walkthrough, is next.
 
 **Spec:** [`docs/superpowers/specs/2026-11-01-s3-storage-backends-design.md`](../specs/2026-11-01-s3-storage-backends-design.md), approved by the owner on 2026-11-01. Every § below points into it.
 - Where the two disagree, the spec wins, except for the owner's answers to the questions and the calls under "Spec corrections and calls this plan makes".
@@ -1023,7 +1023,7 @@ void saveSettings(int holdDays, int cacheGb, int transfers) throws ServerExcepti
   - the secret is sealed with `SecretBox`; a `KeyMissingException` is answered as M4's Sign-In tab answers it (M4 R37), as the GUI's `SecretKeyMissingException` with the count of sealed values, and `BackendDialog` (Task 17) asks the same question, naming the providers' and the storage backends' secrets alike, then saves again with `newKey` true; only a save whose `GUIStorageBackend.newKey` is true calls `sealWithNewKey`;
   - the endpoint rule (Global Constraints).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `HealdanStorageServiceTest` (through the servlet with a session, as `HealdanSettingsSignInTest` does):
     - `testAdminsOnly`: `author` gets a `ServerException` from every method.
     - `testSecretNeverComesBack`: after `addBackend(…, "s3cr3t")`, no answer, serialised, contains `s3cr3t`; `hasSecret` is true; `hd_secret` starts `v1:`.
@@ -1042,10 +1042,10 @@ void saveSettings(int holdDays, int cacheGb, int transfers) throws ServerExcepti
     - `testNewRunsBackendTest`: `testNew` on S3 settings with no marker in the bucket passes (the marker check skipped), and reports the step that failed when `FakeS3` refuses a range or a delete.
     - `testAddOverAnotherInstallsMarker`: adding an S3 backend whose bucket and prefix hold a marker naming another install is refused, and leaves no row, key file or check object.
     - `testEndpointRule`, `testKeyMissingForSecret` (as M4's: a save with `newKey` false is answered with the sealed count and makes no key; the same save with `newKey` true makes one). The settings' ranges are Task 2's `testSettingsRanges`, not repeated here.
-- [ ] **Step 2–3: Run them to see them fail, write the service, run them:** PASS.
+- [x] **Step 2–3: Run them to see them fail, write the service, run them:** PASS.
 
   Run (one reactor, Conventions, as this task changes `logicaldoc-gui` and `healdan-core`'s `SecretBox`): `mvn -B -ntp -pl healdan-storage -am -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dmaven.javadoc.skip=true -Dtest='HealdanStorageServiceTest,StorageAdminTest,SecretBoxTest,SignInProvidersTest' -Dsurefire.failIfNoSpecifiedTests=false package`
-- [ ] **Step 4: Docs, then commit:** "Serve the Storage tab's settings, admins only"
+- [x] **Step 4: Docs, then commit:** "Serve the Storage tab's settings, admins only"
 
 **CI:** the `Tests` shards.
 
@@ -1059,12 +1059,12 @@ void saveSettings(int holdDays, int cacheGb, int transfers) throws ServerExcepti
 - Modify: `docker/tests/test-image.sh` ("cache content owned by uid 1000", beside the repository's check)
 - Docs: `CLAUDE.md` ("Docker": `store` is set on every start whatever the file holds, a third exception beside `IMAGE_KEYS` and `REPLACED_DEFAULTS`; the cache volume and its owner), `site/content/install/what-runs.md`, `upgrading.md` and `configuration.md` (each says a value already in `context.properties` is never changed, or that `.env` owns the only settings re-applied on every start; `store` now is too, and setting it yourself does nothing)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   - `ConfigPlanTest`: `HEALDAN_KEYS` holds `store` and only that; `ConfigFileTest`: a conf file with `store=com.logicaldoc.core.store.FSStore`, and one with any other value, has `HealdanStorage` after a start; the file's other keys are untouched.
   - `test-image.sh`: a file made as root in the cache volume is owned by uid 1000 after the start.
-- [ ] **Step 2: Run them to see them fail.** Run: `docker build --target tools .` and `docker/tests/test-image.sh`. Expected: FAIL.
-- [ ] **Step 3: Write them,** then run both, and `docker/smoke-test.sh`: the stack starts on `HealdanStorage`, the `seed.storage-record-original` row is in `hd_setting` and Original's `.healdan-backend` is in `/opt/logicaldoc/repository/docs/`, and every existing step passes. A fresh smoke stack has no documents when the seed runs (`smoke-fixture`, after it, makes folders only), so there's nothing to record; recording an upgrade's files is `RecordOriginalSeedTest`'s (Task 9) and the owner's upgrade's (Task 22).
-- [ ] **Step 4: Docs, then commit:** "Run the image on HealdanStorage, with a cache volume"
+- [x] **Step 2: Run them to see them fail.** Run: `docker build --target tools .` and `docker/tests/test-image.sh`. Expected: FAIL.
+- [x] **Step 3: Write them,** then run both, and `docker/smoke-test.sh`: the stack starts on `HealdanStorage`, the `seed.storage-record-original` row is in `hd_setting` and Original's `.healdan-backend` is in `/opt/logicaldoc/repository/docs/`, and every existing step passes. A fresh smoke stack has no documents when the seed runs (`smoke-fixture`, after it, makes folders only), so there's nothing to record; recording an upgrade's files is `RecordOriginalSeedTest`'s (Task 9) and the owner's upgrade's (Task 22).
+- [x] **Step 4: Docs, then commit:** "Run the image on HealdanStorage, with a cache volume"
 
 **CI:** `docker-image.yml`: the `tools` target's tests, `test-image.sh`, and the whole smoke test now through `HealdanStorage`, on amd64 and arm64.
 
@@ -1087,7 +1087,7 @@ void saveSettings(int holdDays, int cacheGb, int transfers) throws ServerExcepti
 - Docs: `CLAUDE.md` ("Docker": the storage overlay, `HEALDAN_SMOKE_STORAGE`, and smoke step 5f with what it checks)
 - Test: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/seed/SmokeStorageSeedTest.java`
 
-- [ ] **Step 1: The overlay**
+- [x] **Step 1: The overlay**
 
 ```yaml
 # Smoke test only: Garage as a stand-in S3 server (S3 spec section 16.1), set up with fixed test values before the
@@ -1125,10 +1125,10 @@ volumes:
   - `garage.toml`: one node, `replication_factor = 1`, `db_engine = "sqlite"`, `s3_region = "garage"`, a fixed `rpc_secret` and `admin_token`, the S3 API on 3900 and the admin API on 3903.
   - `setup.sh` (Task 0's calls, listed in the decision log; with `network_mode: "service:garage"` it reaches the admin API at `http://localhost:3903`, with the `admin_token` as a Bearer token): waits for the admin API, then, each only if not done (step 8 runs it again on the kept volume), assigns and applies the one-node layout, imports the fixed key, creates `healdan-smoke` and allows the key on it.
   - Garage's data is a named volume, so step 8's `down` and `up` keep the objects, as the app's volumes keep the rows.
-- [ ] **Step 2: Write the failing seed test, then the seed.** `SmokeStorageSeedTest`, with the variables given through the seed's `Supplier` and `FakeS3` as the endpoint: with `HEALDAN_SMOKE_STORAGE` and `HEALDAN_SMOKE_FIXTURE` both `true`, the step adds an encrypted S3 backend `Smoke Garage` (its marker object written by building `S3Backend` with `create` true, Task 5; key file made, check object written, recovery key confirmed), a Store `Smoke Cloud` readable by Everyone as `Smoke` is, mapped to it, and matters 1.2 and 1.3 (call 19) under client 1 from `Smoke template`; and sets `storage.sweepSeconds` and `storage.retestSeconds` to `5` (call 12). Without either variable, `enabled()` is false. It follows `SmokeFixtureSeed`'s pattern and runs after it (`smoke-storage` follows `smoke-signin` in `ORDER`).
+- [x] **Step 2: Write the failing seed test, then the seed.** `SmokeStorageSeedTest`, with the variables given through the seed's `Supplier` and `FakeS3` as the endpoint: with `HEALDAN_SMOKE_STORAGE` and `HEALDAN_SMOKE_FIXTURE` both `true`, the step adds an encrypted S3 backend `Smoke Garage` (its marker object written by building `S3Backend` with `create` true, Task 5; key file made, check object written, recovery key confirmed), a Store `Smoke Cloud` readable by Everyone as `Smoke` is, mapped to it, and matters 1.2 and 1.3 (call 19) under client 1 from `Smoke template`; and sets `storage.sweepSeconds` and `storage.retestSeconds` to `5` (call 12). Without either variable, `enabled()` is false. It follows `SmokeFixtureSeed`'s pattern and runs after it (`smoke-storage` follows `smoke-signin` in `ORDER`).
 
   Run: `mvn -B -ntp -pl healdan-storage test -Dtest=SmokeStorageSeedTest`. Expected: FAIL, then PASS.
-- [ ] **Step 3: Write `test-storage.sh`.** It needs `curl` 8.0.0 or later (for `--aws-sigv4 "aws:amz:garage:s3"`, which adds the `x-amz-content-sha256` header Garage refuses to do without only from curl 8.0.0; Ubuntu 22.04's 7.81 and Debian 12's 7.88 get a `400`), `jq`, `sha256sum` and `docker`. It takes `GARAGE_CONTAINER`, `APP_CONTAINER` and `DB_CONTAINER`, reads rows with `docker exec "$DB_CONTAINER" mariadb …`, stops and starts Garage with `docker stop` and `docker start "$GARAGE_CONTAINER"`, and polls at most 60 s for each change. Its checks, each a `check` line as in `test-api.sh` (§16.1):
+- [x] **Step 3: Write `test-storage.sh`.** It needs `curl` 8.0.0 or later (for `--aws-sigv4 "aws:amz:garage:s3"`, which adds the `x-amz-content-sha256` header Garage refuses to do without only from curl 8.0.0; Ubuntu 22.04's 7.81 and Debian 12's 7.88 get a `400`), `jq`, `sha256sum` and `docker`. It takes `GARAGE_CONTAINER`, `APP_CONTAINER` and `DB_CONTAINER`, reads rows with `docker exec "$DB_CONTAINER" mariadb …`, stops and starts Garage with `docker stop` and `docker start "$GARAGE_CONTAINER"`, and polls at most 60 s for each change. Its checks, each a `check` line as in `test-api.sh` (§16.1):
   An upload's staged copy becomes its cache entry once it reaches Garage (question 9), so a file read back through Garage has to arrive there by a move instead: the mover reads a moved file from Original, not from staging, and caches nothing.
   1. **Encrypted in Garage.** File A, a text file holding a random token, is uploaded through `/api/v1` into matter 1.2. Within 60 s its row points at the Garage backend and its object is listed in `healdan-smoke`; the object, fetched with SigV4, doesn't contain the token.
   2. **Moved up.** Plain-text files B and C are uploaded into matter 1.1 (Smoke, on Original), then moved into matter 1.3 with CE's `PUT /services/rest/document/move` as `admin`. Within 60 s both rows point at Garage, and neither is in the cache.
@@ -1138,10 +1138,10 @@ volumes:
   6. **Staying in the cloud.** File E uploaded into matter 1.3 reaches Garage, as check 1.
 
   `after-restart` (step 8, with the three containers looked up again): the rows are unchanged; A and D download from Original; C downloads through Garage, its first read since the restart and never cached; then Garage is stopped, and E downloads from the cache, rebuilt from its folder, which with Garage stopped it can only come from; Garage is started again, and the held objects are still listed.
-- [ ] **Step 4: Run the smoke test**
+- [x] **Step 4: Run the smoke test**
 
   Run: `docker/smoke-test.sh`. Expected: every check passes. Record step 5f's seconds, and Garage's start time, in PR C.
-- [ ] **Step 5: Commit:** "Run storage backends against Garage on the smoke stack"
+- [x] **Step 5: Commit:** "Run storage backends against Garage on the smoke stack"
 
 **CI:** `docker-image.yml`'s Test (amd64) and Test (arm64), which pull Garage's and busybox's images for their own architecture. `docker-image.yml` itself doesn't change.
 
@@ -1153,7 +1153,7 @@ volumes:
 - Create: `logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/healdan/settings/StorageTab.java`, `BackendDialog.java`, `RecoveryKeyDialog.java`, `StuckFilesDialog.java`
 - Modify: `logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/healdan/settings/HealdanSettingsPanel.java` (`tabs.addTab(new StorageTab())` after the Sign-In tab, ~74)
 
-- [ ] **Step 1: Write the tab** (§11; its labels are Healdan's own strings, as the Sign-In tab's are, so no message bundle changes):
+- [x] **Step 1: Write the tab** (§11; its labels are Healdan's own strings, as the Sign-In tab's are, so no message bundle changes):
   - **Backends:** a `ListGrid` of name, kind (Local Folder or S3), where (the path, or the endpoint and bucket), encrypted, files and size, and status (OK, or Failing with the last error and since when); Add Backend, Edit, Test, Show Recovery Key, Enter Recovery Key and Remove.
   - **`BackendDialog`:** the kind; for S3 the name, endpoint, region, bucket, prefix, access key, secret (a `PasswordItem`, empty, hinted "set" or "not set"), path style and Encrypt; for a local folder the name, path and Encrypt; Test before Save. Fields that can't change once files are there are read-only then. A save answered with `SecretKeyMissingException` is handled as `ProviderDialog` handles it (~412–445): the dialog asks whether to make a new secret key, with the question `ProviderDialog.askNewKey` asks (Task 14 makes it name the storage backends' secrets too) and the sealed count from the exception, and on yes saves again with `GUIStorageBackend.newKey` set; on no, nothing is saved (Task 14's rule).
   - **`RecoveryKeyDialog`:** shows the key in its groups, says plainly that losing both it and the key file loses the backend's files, and asks for the last group back; Show Recovery Key reuses it without the question.
@@ -1162,7 +1162,7 @@ volumes:
   - **Settings:** the holding period (days), the cache (GB) and parallel transfers, and Save.
   - **Names and messages are text, never HTML:** backend, Store and file names, and S3's error messages in the status and the stuck files' list, which an author's file name or a server can fill. The grids `setEscapeHTML(true)` and the questions escape what they quote (`SafeHtmlUtils.htmlEscape`), as the Sign-In tab does.
   - When `load()` says `HealdanStorage` isn't CE's store bean, the tab says so and shows nothing else.
-- [ ] **Step 2: Build the GUI, and check the tab on a stack.** Run: `mvn -B -ntp -pl logicaldoc-gui -DskipTests install`, then on a smoke stack with the Garage overlay:
+- [x] **Step 2: Build the GUI, and check the tab on a stack.** Run: `mvn -B -ntp -pl logicaldoc-gui -DskipTests install`, then on a smoke stack with the Garage overlay:
   - add a second S3 backend on Garage with prefix `second`, Test passes, save and confirm its recovery key;
   - switch the Smoke Store to it; the confirmation counts its files; the waiting count falls to none;
   - stop Garage: the backend shows Failing with its error; start it: OK again;
@@ -1173,7 +1173,7 @@ volumes:
   - last, as it loses the stack's other sealed secrets: move `/opt/logicaldoc/conf/healdan-secret.key` aside, then enter a backend's secret again in Edit and save: the dialog asks before making a new key, naming the providers' and the storage backends' secrets; No saves nothing; Yes saves.
 
   Take the docs' pictures (Tasks 18 and 19) on a demo stack with the Garage overlay, signed in as the Writing Docs page says, after adding the Garage backend through the tab (the smoke seed needs `HEALDAN_SMOKE_FIXTURE`, so it stays off there).
-- [ ] **Step 3: Commit:** "Set storage backends up in Healdan Settings' Storage tab"
+- [x] **Step 3: Commit:** "Set storage backends up in Healdan Settings' Storage tab"
 
 **CI:** the Docker image's GWT compile; the server side's tests are Task 14's.
 
@@ -1201,9 +1201,9 @@ volumes:
   - removing a backend.
 - Modify: `site/content/admin/healdan-settings/index.md` (the Storage tab), `site/content/admin/stores/index.md` ("Where Files Are Kept" rewritten: a Store's backend, set in the Storage tab; LogicalDOC's own Stores screen is hidden, question 1).
 
-- [ ] **Step 1: Write them,** with Task 17's pictures, in the Writing Docs page's style (Title Case titles and labels, British spelling, Healdan's glossary: *storage backend*, never "store", for a backend).
-- [ ] **Step 2: Check them.** Run: `hugo --source site --panicOnWarning`, `python3 .github/scripts/check-site-sources.py` and `python3 .github/scripts/check-site-links.py`. Expected: PASS.
-- [ ] **Step 3: Commit:** "Docs: storage backends in the Admin Guide"
+- [x] **Step 1: Write them,** with Task 17's pictures, in the Writing Docs page's style (Title Case titles and labels, British spelling, Healdan's glossary: *storage backend*, never "store", for a backend).
+- [x] **Step 2: Check them.** Run: `hugo --source site --panicOnWarning`, `python3 .github/scripts/check-site-sources.py` and `python3 .github/scripts/check-site-links.py`. Expected: PASS.
+- [x] **Step 3: Commit:** "Docs: storage backends in the Admin Guide"
 
 **CI:** the `Docs site` check.
 
@@ -1232,9 +1232,9 @@ volumes:
   - `install/troubleshooting.md` (a failing backend, a missing marker, stuck files, the alert);
   - `install/known-limitations.md` (a backend per Store, not per matter; encryption can't be added to a backend that holds files; a file CE rewrites in place keeps only its newest bytes; a large file read by range straight from the bucket can arrive cut off if the bucket drops mid-read; during an outage, the web page's downloads and shared links show the outage message and Convert to PDF shows CE's "not available" placeholder (Task 13), but three of its routes don't: an email's attachment (`/download-attachment`) gets a bare error page, a ZIP export (`/zip-export`) leaves out the files it can't read and says nothing, and thumbnails (`/thumbnail`) show as broken images; with LogicalDOC's Stores screen hidden, `store.1.dir` and its six folder paths are set only in `context.properties`, question 1).
 
-- [ ] **Step 1: Write them,** and test the restic recipe once against a throwaway bucket on Garage (`restic -r s3:http://127.0.0.1:13900/…`), so its commands are known to run.
-- [ ] **Step 2: Check them,** as Task 18. Expected: PASS.
-- [ ] **Step 3: Commit:** "Docs: cloud storage, backups and limits in the Install manual"
+- [x] **Step 1: Write them,** and test the restic recipe once against a throwaway bucket on Garage (`restic -r s3:http://127.0.0.1:13900/…`), so its commands are known to run.
+- [x] **Step 2: Check them,** as Task 18. Expected: PASS.
+- [x] **Step 3: Commit:** "Docs: cloud storage, backups and limits in the Install manual"
 
 **CI:** the `Docs site` check.
 
@@ -1245,7 +1245,7 @@ volumes:
 **Files:**
 - Modify: `site/content/developer/tests.md` (`healdan-storage`'s tests and their three layers, `FakeS3`, the Garage overlay and step 5f), `site/content/developer/continuous-integration.md` (Garage's and busybox's images in the smoke test, and its time), `site/content/developer/how-healdan-extends-logicaldoc.md` (replacing CE's `store` bean through the `store=` key that `ConfigPlan` owns; the module's four plugin pieces; the start and restore hooks)
 
-- [ ] **Step 1: Write them. Step 2: Check them,** as Task 18. **Step 3: Commit:** "Docs: storage backends in the Developer Guide"
+- [x] **Step 1: Write them. Step 2: Check them,** as Task 18. **Step 3: Commit:** "Docs: storage backends in the Developer Guide"
 
 **CI:** the `Docs site` check.
 
@@ -1265,7 +1265,7 @@ volumes:
 - Modify: `docs/superpowers/specs/2026-11-01-s3-storage-backends-design.md` (each question's answer and each call above, marked "changed in the build"; §3.1's and §17's prefix-match text, question 2; Status).
 - Modify: `docs/ROADMAP.md` (the glossary's Store row, whose "Call" names CE's per-folder mapping, now `hd_storage_store`; the backlog row, or the milestone it became).
 
-- [ ] **Step 1: Write them, run the checks, and commit:** "Record the storage backends' build"
+- [x] **Step 1: Write them, run the checks, and commit:** "Record the storage backends' build"
 
   Run: `python3 -m unittest discover -s .github/scripts/tests && python3 .github/scripts/check-logicaldoc-doc-links.py && python3 .github/scripts/check-logicaldoc-hosts.py`
   Expected: PASS.
@@ -1274,7 +1274,7 @@ volumes:
 
 ### Task 22: The owner's acceptance
 
-- [ ] **Step 1:** Once PRs A to D are merged, the owner backs up (the database and both volumes, as today), upgrades, and checks the first start's log: V9 applied, Original's files recorded, `HealdanStorage` in use.
+- [ ] **Step 1:** Once PRs A to D are merged, the owner backs up (the database and both volumes, as today), upgrades, and checks the first start's log: V9 and V10 applied, Original's files recorded, `HealdanStorage` in use.
 - [ ] **Step 2:** The owner's walkthrough, spec §16.3, rows 1 to 8, against the owner's server and Wasabi bucket, following the Install pages as written. Row 6 shortens the holding period to 1 day. Row 7's fresh stack starts only once the owner's server is stopped (call 23), and the owner's server starts again only once that stack is taken down. Record each row's result and any punch-list item in the spec's §16.3 and this plan's decision log.
 - [ ] **Step 3:** The owner keeps each backend's recovery key in a password manager, and the next backup holds the new key files.
 - [ ] **Step 4: Commit the results** (the spec's §16.3 and the decision log; no hostnames, addresses or names from the owner's server): "Record the storage backends' walkthrough"
