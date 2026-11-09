@@ -67,7 +67,8 @@ public class LoginServiceImpl extends RemoteServiceServlet implements LoginServi
                 throw new ServerException("error");
             }
 
-            if (!user.isPasswordExpired()) {
+            // Healdan: as sign-in works it out, so a password that expired by age counts
+            if (!UserDAO.get().isPasswordExpired(user.getUsername())) {
                 log.warn("User {} tried to change the password but it was not expired", userId);
                 throw new ServerException("error");
             }
