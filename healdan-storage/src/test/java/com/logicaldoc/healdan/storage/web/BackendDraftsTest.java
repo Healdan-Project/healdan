@@ -5,7 +5,10 @@ package com.logicaldoc.healdan.storage.web;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+
+import java.net.URI;
 
 import org.junit.Test;
 
@@ -39,5 +42,19 @@ public class BackendDraftsTest {
 		// What it is and where, to find it in a log
 		assertTrue(text, text.contains("Cloud"));
 		assertTrue(text, text.contains("healdan-tests"));
+	}
+
+	/** Two servers on one host are two S3 services; every host of AWS's is one, as its bucket names are */
+	@Test
+	public void testService() {
+		assertEquals("nas:9000", BackendDrafts.service(URI.create("https://NAS:9000")));
+		assertNotEquals(BackendDrafts.service(URI.create("https://nas:9000")),
+				BackendDrafts.service(URI.create("https://nas:3900")));
+		assertEquals(BackendDrafts.service(URI.create("https://s3.example.com:443")),
+				BackendDrafts.service(URI.create("https://s3.example.com")));
+		assertNotEquals(BackendDrafts.service(URI.create("http://s3.example.com")),
+				BackendDrafts.service(URI.create("https://s3.example.com")));
+		assertEquals(BackendDrafts.service(URI.create("https://s3.amazonaws.com")),
+				BackendDrafts.service(URI.create("https://s3.eu-west-1.amazonaws.com")));
 	}
 }

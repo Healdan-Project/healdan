@@ -3,6 +3,7 @@
 
 package com.logicaldoc.healdan.storage;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -37,5 +38,16 @@ public class HibernateStorageEventDAO extends HibernatePersistentObjectDAO<Stora
 	public List<StorageEvent> findByBackend(long backendId) throws PersistenceException {
 		return findByWhere("_entity.backendId = :backendId and _entity.deleted = 0", Map.of("backendId", backendId),
 				"_entity.date, _entity.id", null);
+	}
+
+	@Override
+	public Map<Long, StorageEvent> lastShown() throws PersistenceException {
+		Map<Long, StorageEvent> shown = new HashMap<>();
+		// Each backend's newest, by id, as two of one second keep the order they were recorded in
+		for (StorageEvent event : findByWhere("_entity.id in (select max(e.id) from StorageEvent e "
+				+ "where e.event = :event and e.deleted = 0 group by e.backendId)",
+				Map.of("event", StorageEvent.KEY_SHOWN), null, null))
+			shown.put(event.getBackendId(), event);
+		return shown;
 	}
 }

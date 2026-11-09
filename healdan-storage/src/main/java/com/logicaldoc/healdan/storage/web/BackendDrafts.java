@@ -12,11 +12,13 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import org.apache.commons.lang3.StringUtils;
 
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageBackend;
 import com.logicaldoc.healdan.HealdanRuleException;
+import com.logicaldoc.healdan.storage.Backends;
 import com.logicaldoc.healdan.storage.ReadCache;
 import com.logicaldoc.healdan.storage.Staging;
 import com.logicaldoc.healdan.storage.StorageBackend;
@@ -44,6 +46,9 @@ final class BackendDrafts {
 
 	/** The longest name, as {@code hd_name} holds */
 	static final int MAX_NAME = 100;
+
+	/** What {@link #changes} calls a new name: the only change that leaves the backend's built entry as it is */
+	static final String NAME = "its name";
 
 	static final int MAX_ENDPOINT = 1000;
 
@@ -249,19 +254,38 @@ final class BackendDrafts {
 		}
 	}
 
-	/** @return whether the settings' place equals or holds the row's, or sits inside it, on the same host */
+	/** @return whether the settings' place equals or holds the row's, or sits inside it, at the same service */
 	private static boolean sharesBucket(S3Settings mine, StorageBackend other) {
-		String host;
+		String theirs;
 		try {
-			host = URI.create(StringUtils.trimToEmpty(other.getEndpoint())).getHost();
+			theirs = service(URI.create(StringUtils.trimToEmpty(other.getEndpoint())));
 		} catch (IllegalArgumentException e) {
 			return false;
 		}
-		if (host == null || !host.equalsIgnoreCase(mine.endpoint().getHost())
+		if (theirs == null || !theirs.equals(service(mine.endpoint()))
 				|| !StringUtils.strip(StringUtils.defaultString(other.getBucket())).equalsIgnoreCase(mine.bucket()))
 			return false;
-		String theirs = S3Settings.prefix(other.getPrefix());
-		return mine.prefix().startsWith(theirs) || theirs.startsWith(mine.prefix());
+		String prefix = S3Settings.prefix(other.getPrefix());
+		return mine.prefix().startsWith(prefix) || prefix.startsWith(mine.prefix());
+	}
+
+	/**
+	 * @param endpoint an S3 endpoint
+	 * @return the S3 service it reaches, within which a bucket's name is one bucket: AWS's for every host of its, as its
+	 *         bucket names are one namespace across its regions; otherwise the host and port, so two servers on one
+	 *         host are two services; null if it has no host
+	 */
+	static String service(URI endpoint) {
+		String host = endpoint.getHost();
+		if (host == null)
+			return null;
+		host = host.toLowerCase(Locale.ROOT);
+		if (host.equals("amazonaws.com") || host.endsWith(".amazonaws.com"))
+			return "amazonaws.com";
+		int port = endpoint.getPort();
+		if (port < 0)
+			port = "http".equalsIgnoreCase(endpoint.getScheme()) ? 80 : 443;
+		return host + ":" + port;
 	}
 
 	/**
@@ -313,15 +337,11 @@ final class BackendDrafts {
 
 	/**
 	 * @param row a local backend's row
-	 * @return its folder, absolute; Original's from the configuration; null for one without
+	 * @return its folder, as {@link Backends#folder} builds it; null for one without, or whose path is no path
 	 */
 	static Path folder(StorageBackend row) {
-		if (row.getId() == StorageBackend.ORIGINAL)
-			return Staging.original();
-		if (StringUtils.isBlank(row.getPath()))
-			return null;
 		try {
-			return Path.of(row.getPath().trim()).toAbsolutePath().normalize();
+			return Backends.folder(row);
 		} catch (InvalidPathException e) {
 			return null;
 		}
@@ -349,7 +369,7 @@ final class BackendDrafts {
 	static List<String> changes(StorageBackend row, Draft draft, boolean secret) {
 		List<String> changes = new ArrayList<>();
 		if (!draft.name().equals(row.getName()))
-			changes.add("its name");
+			changes.add(NAME);
 		if (draft.isS3()) {
 			S3Settings s3 = draft.s3();
 			if (!s3.endpoint().toString().equals(row.getEndpoint()))

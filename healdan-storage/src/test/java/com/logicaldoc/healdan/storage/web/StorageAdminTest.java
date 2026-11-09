@@ -13,6 +13,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -358,6 +359,10 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 		long id = added.getId();
 		S3Backend built = (S3Backend) Backends.get().entry(id).backend();
 		assertEquals(fake.endpoint(), built.settings().endpoint());
+		// A new name alone keeps it, and so the reads and transfers under way on it
+		added.setName("Cloud Renamed");
+		admin.save(added, null, boss);
+		assertSame("kept across a rename", built, Backends.get().entry(id).backend());
 
 		try (FakeS3 renamed = FakeS3.start().createBucket(BUCKET)) {
 			// The provider renamed its endpoint: the same objects at another address
@@ -577,6 +582,13 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 			assertThrows(SecretKeyMissingException.class, () -> service.addBackend(s3("Other", "other/"), "third"));
 			assertEquals(count, backends());
 			assertFalse(Files.exists(keyFile));
+			// Nor does the new key the admin confirmed, for an add that Test then refuses
+			GUIStorageBackend typo = s3("Typo", "typo/");
+			typo.setBucket("no-such-bucket");
+			typo.setNewKey(true);
+			refused("an add Test refuses", "Test failed", () -> admin.add(typo, "third", boss));
+			assertEquals(count, backends());
+			assertFalse(Files.exists(keyFile));
 
 			// The tab asks, and the admin makes a new key
 			added.setNewKey(true);
@@ -701,7 +713,10 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 		vault.setEncrypted(true);
 		GUIStorageBackend added = admin.add(vault, "secret", boss);
 		String key = added.getRecoveryKey();
+		S3Backend vaultBuilt = (S3Backend) Backends.get().entry(added.getId()).backend();
 		admin.confirmRecoveryKey(added.getId(), key.substring(key.length() - 4), boss);
+		// Confirming changes nothing it is built from, so it is kept
+		assertSame(vaultBuilt, Backends.get().entry(added.getId()).backend());
 		Folder cloud = fx.store("Vault Store");
 		admin.setStoreBackend(cloud.getId(), added.getId(), boss);
 

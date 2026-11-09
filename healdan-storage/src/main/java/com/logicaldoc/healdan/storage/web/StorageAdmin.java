@@ -3,7 +3,6 @@
 
 package com.logicaldoc.healdan.storage.web;
 
-import java.io.Closeable;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -85,8 +84,9 @@ import com.logicaldoc.util.spring.Context;
  * isn't offered to Stores until its recovery key's last group is typed back;</li>
  * <li>the bucket, prefix and path can't change once a file is recorded or held on the backend, or while a Store keeps
  * its files there, and encryption is chosen when the backend is added, as its recovery key is shown then;</li>
- * <li>a save, a confirmed or entered recovery key, a removal and Test drop the backend's built entry
- * ({@link Backends#forget}), so the next use builds it from its row and key file as they are then;</li>
+ * <li>a save that changes more than the name, an entered recovery key, a removal and Test drop the backend's built
+ * entry ({@link Backends#forget}), so the next use builds it from its row and key file as they are then, while the
+ * reads and transfers under way finish on the one dropped;</li>
  * <li>a Store switch checks the Store's rows first, writes its row in a short transaction of its own, and wakes the
  * mover once that has committed.</li>
  * </ul>
@@ -214,10 +214,11 @@ public class StorageAdmin {
 		List<StorageBackend> rows = rows();
 		Map<Long, Usage> usage = files.usageByBackend();
 		Map<Long, Long> heldOn = held.countByBackend();
+		Map<Long, StorageEvent> shown = events.lastShown();
 		List<GUIStorageBackend> list = new ArrayList<>();
 		Map<Long, String> names = new HashMap<>();
 		for (StorageBackend row : rows) {
-			list.add(toGUI(row, usage, heldOn));
+			list.add(toGUI(row, usage, heldOn, shown));
 			names.put(row.getId(), row.getName());
 		}
 		overview.setBackends(list.toArray(GUIStorageBackend[]::new));
@@ -312,8 +313,11 @@ public class StorageAdmin {
 		Draft draft = BackendDrafts.draft(backend, secret, null);
 		// Checked now, to refuse at once, and again under the lock
 		checkFree(draft, 0);
-		// Before anything is written: a missing secret key file is the administrator's question
-		String sealed = draft.isS3() ? seal(draft.secret(), backend.isNewKey()) : null;
+		// Before anything is written: a missing secret key file is the administrator's question. The new key they
+		// confirmed is made only once Test passed and the name and place are still free, so a refused add keeps the
+		// key file as it was
+		boolean newKey = draft.isS3() && backend.isNewKey();
+		String sealed = draft.isS3() && !newKey ? seal(draft.secret(), false) : null;
 		List<String> problems = trial(draft, null, false);
 		if (!problems.isEmpty())
 			throw refuse("Test failed, so the backend wasn't added: " + String.join(" ", problems));
@@ -321,10 +325,12 @@ public class StorageAdmin {
 		StorageBackend row = new StorageBackend();
 		row.setTenantId(by.getTenantId());
 		BackendDrafts.apply(row, draft);
-		row.setSecret(sealed);
 		row.setKeyConfirmedOn(false);
 		synchronized (writing) {
 			checkFree(draft, 0);
+			if (newKey)
+				sealed = seal(draft.secret(), true);
+			row.setSecret(sealed);
 			backends.store(row);
 			adding.add(row.getId());
 		}
@@ -413,7 +419,6 @@ public class StorageAdmin {
 				log.info("The recovery key of storage backend {} ({}) was confirmed by {}", backendId, row.getName(),
 						by.getUsername());
 			}
-			built.forget(backendId);
 		}
 	}
 
@@ -445,7 +450,10 @@ public class StorageAdmin {
 
 		Draft draft = BackendDrafts.draft(backend, secret, before);
 		boolean moves = checkSave(before, draft);
-		String sealed = draft.secret() != null ? seal(draft.secret(), backend.isNewKey()) : null;
+		// A missing secret key file is the administrator's question; the new key they confirmed is made only under the
+		// lock, once the checks there pass, so a refused save keeps the key file as it was
+		boolean newKey = draft.secret() != null && backend.isNewKey();
+		String sealed = draft.secret() != null && !newKey ? seal(draft.secret(), false) : null;
 
 		Placed placed = null;
 		Backend was = null;
@@ -478,12 +486,16 @@ public class StorageAdmin {
 				if (!BackendDrafts.Place.of(row).equals(read))
 					throw refuse("The backend was changed meanwhile, so this wasn't saved: open it again.");
 				checkSave(row, draft);
+				if (newKey)
+					sealed = seal(draft.secret(), true);
 				changes = BackendDrafts.changes(row, draft, sealed != null);
 				BackendDrafts.apply(row, draft);
 				if (sealed != null)
 					row.setSecret(sealed);
 				backends.store(row);
-				built.forget(id);
+				// A new name alone changes nothing the backend is built from: the reads and transfers under way go on
+				if (changes.stream().anyMatch(change -> !BackendDrafts.NAME.equals(change)))
+					built.forget(id);
 			}
 		} catch (PersistenceException | RuntimeException e) {
 			if (placed != null)
@@ -540,7 +552,6 @@ public class StorageAdmin {
 				backends.store(row);
 				log.info("Storage backend {} ({}) was renamed {} by {}", row.getId(), was, name, by.getUsername());
 			}
-			built.forget(row.getId());
 		}
 		health.check(row.getId());
 		return toGUI(row);
@@ -686,9 +697,10 @@ public class StorageAdmin {
 	}
 
 	/**
-	 * Removes a backend (spec section 8): only once no Store uses it and no file is recorded or held on it. Its key
-	 * file goes, its row is deleted for good, so its sealed secret leaves the database, and its marker and check object
-	 * are deleted, outside the lock, so another backend may have its place.
+	 * Removes a backend (spec section 8): only once no Store uses it and no file is recorded or held on it. Its row is
+	 * deleted for good, so its sealed secret leaves the database, then its key file goes, so a failed delete of the row
+	 * leaves the backend as it was; and its marker and check object are deleted, outside the lock, so another backend
+	 * may have its place.
 	 *
 	 * @param backendId the backend; never Original
 	 * @param by the administrator
@@ -718,14 +730,14 @@ public class StorageAdmin {
 				if (heldOn > 0)
 					throw refuse(("%s held on this backend until the holding period ends: it can be removed once the "
 							+ "purge has deleted them.").formatted(heldOn == 1 ? "1 copy is" : heldOn + " copies are"));
+				backends.remove(backendId);
+				built.forget(backendId);
 				try {
 					keys.delete(backendId);
 				} catch (IOException e) {
-					throw refuse("The backend's key file couldn't be deleted, so the backend wasn't removed: "
-							+ e.getMessage());
+					log.warn("Storage backend {} was removed, but its key file wasn't deleted: delete it by hand: {}",
+							backendId, e.getMessage());
 				}
-				backends.remove(backendId);
-				built.forget(backendId);
 			}
 		} catch (PersistenceException | RuntimeException e) {
 			built.release(place);
@@ -992,7 +1004,7 @@ public class StorageAdmin {
 	 * A place as an add or a move gave it this backend's marker, and its check object; taken away again if what
 	 * follows fails, so the place is free to try again
 	 */
-	private static final class Placed {
+	private final class Placed {
 
 		private final Backend backend;
 
@@ -1020,7 +1032,7 @@ public class StorageAdmin {
 		}
 
 		void close() {
-			closeQuietly(backend);
+			built.release(backend);
 		}
 	}
 
@@ -1064,15 +1076,6 @@ public class StorageAdmin {
 			log.warn("Storage backend {}'s marker {} stays where it was, so no other backend can have that place until "
 					+ "it is deleted by hand: {}", backend.id(), LocalBackend.MARKER, e.getMessage());
 		}
-	}
-
-	private static void closeQuietly(Backend backend) {
-		if (backend instanceof Closeable closeable)
-			try {
-				closeable.close();
-			} catch (IOException | RuntimeException e) {
-				log.debug("Storage backend {} didn't close: {}", backend.id(), e.getMessage());
-			}
 	}
 
 	// Rows and answers
@@ -1145,12 +1148,14 @@ public class StorageAdmin {
 		events.store(row);
 	}
 
+	/** @return the backend for the tab, from its own counts alone */
 	private GUIStorageBackend toGUI(StorageBackend row) throws PersistenceException {
-		return toGUI(row, files.usageByBackend(), held.countByBackend());
+		long id = row.getId();
+		return toGUI(row, Map.of(id, files.usageOn(id)), Map.of(id, held.countOn(id)), events.lastShown());
 	}
 
-	private GUIStorageBackend toGUI(StorageBackend row, Map<Long, Usage> usage, Map<Long, Long> heldOn)
-			throws PersistenceException {
+	private GUIStorageBackend toGUI(StorageBackend row, Map<Long, Usage> usage, Map<Long, Long> heldOn,
+			Map<Long, StorageEvent> lastShown) {
 		long id = row.getId();
 		GUIStorageBackend gui = new GUIStorageBackend();
 		gui.setId(id);
@@ -1180,10 +1185,7 @@ public class StorageAdmin {
 		gui.setSince(status.since());
 		gui.setUnreachable(status.unreachable());
 
-		StorageEvent shown = null;
-		for (StorageEvent event : events.findByBackend(id))
-			if (StorageEvent.KEY_SHOWN.equals(event.getEvent()))
-				shown = event;
+		StorageEvent shown = lastShown.get(id);
 		if (shown != null) {
 			gui.setKeyShown(shown.getDate());
 			gui.setKeyShownBy(shown.getUserName());
@@ -1192,8 +1194,7 @@ public class StorageAdmin {
 	}
 
 	private static String message(Exception e) {
-		Throwable cause = e instanceof UncheckedIOException && e.getCause() != null ? e.getCause() : e;
-		return cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+		return BackendHealth.message(e instanceof UncheckedIOException && e.getCause() != null ? e.getCause() : e);
 	}
 
 	/** @return the failure's message for the tab, which names the backend without its id ({@link #named}) */

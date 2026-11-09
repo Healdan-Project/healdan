@@ -20,7 +20,6 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -500,18 +499,6 @@ public class HealdanStorage extends AbstractStore {
 		return outage;
 	}
 
-	/**
-	 * @return how long an outage BackendHealth found stays known: {@code storage.retestSeconds}, after which a retest
-	 *         finds it again; the default if the setting can't be read, as in a database outage
-	 */
-	private static Duration knownFor() {
-		try {
-			return Duration.ofSeconds(StorageSettings.get().retestSeconds());
-		} catch (RuntimeException e) {
-			return Duration.ofSeconds(StorageSettings.DEFAULT_RETEST_SECONDS);
-		}
-	}
-
 	/** @return whether the backend is S3's; false if that can't be told, as "storage" is true of either kind */
 	private static boolean cloud(long backendId) {
 		try {
@@ -544,7 +531,7 @@ public class HealdanStorage extends AbstractStore {
 		// Before the backend is built or asked: a read during a known outage would only wait out the client's attempts
 		BackendHealth health = BackendHealth.get();
 		if (health.status(row.backendId()).unreachable())
-			health.refuseKnownOutage(row.backendId(), knownFor());
+			health.refuseKnownOutage(row.backendId(), health.knownFor());
 		Backends.Entry entry = backends().entry(row.backendId());
 		if (entry.s3()) {
 			Optional<T> cached = cached(entry, row, key, ranged);

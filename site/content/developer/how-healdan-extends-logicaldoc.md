@@ -86,8 +86,9 @@ learn from.
     `assemblyplugin.xml` ships the AWS SDK for Java's S3 client and Tink, which `WarStorageTest` checks on the WAR's
     own libraries. An `artifactItem` in `logicaldoc-webapp/pom.xml` puts the zip in the WAR. That and the root
     `pom.xml`'s `<module>` are the only upstream files it edits.
-  - **Its rows** are `healdan-core`'s Flyway tables, `hd_storage_*` (`V9__storage.sql`): the backends, each Store's
-    backend, a row for every file saying which backend holds it, the held copies, and the showings of recovery keys.
+  - **Its rows** are `healdan-core`'s Flyway tables, `hd_storage_*` (`V9__storage.sql`, and
+    `V10__storage_file_backend.sql`'s index on each file's backend): the backends, each Store's backend, a row for
+    every file saying which backend holds it, the held copies, and the showings of recovery keys.
     Its setup steps join `healdan-core`'s `SeedRunner.ORDER` by name, and do nothing unless LogicalDOC's store is
     `HealdanStorage`.
   - **Two hooks in `healdan-core`.** At a real start, after the migrations and setup steps, `HealdanStartup.start()`

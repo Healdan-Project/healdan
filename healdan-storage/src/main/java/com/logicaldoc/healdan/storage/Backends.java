@@ -183,7 +183,8 @@ public class Backends {
 	/**
 	 * Drops a backend, so the next call builds it again from its row and key file as they are then (Task 14). A backend
 	 * a test gave stays given; its kind and cipher are read again. A build under way finishes first, so the entry it
-	 * built from the row as it was is dropped too.
+	 * built from the row as it was is dropped too. The dropped one is closed, which for S3 shuts its client only once
+	 * the calls, downloads and channels under way on it have ended ({@link S3Backend#close}), so they finish.
 	 *
 	 * @param id the backend's id
 	 */
@@ -200,10 +201,9 @@ public class Backends {
 
 	/**
 	 * @param entry a backend as {@link #entry} gave it
-	 * @return whether it is still the one kept for its backend: false once {@link #forget} dropped it, which closed its
-	 *         S3 client. A transfer that used it and then failed was stopped by the Storage tab's save or Test, not
-	 *         refused, so it counts no try and the next pass moves the file; {@code forget} closes at once rather than
-	 *         wait for the transfers
+	 * @return whether it is still the one kept for its backend: false once {@link #forget} dropped it, as the Storage
+	 *         tab's save or Test does. A transfer that used it was begun with the settings as they were, so it commits
+	 *         nothing, and if it failed counts no try: the next pass moves the file with the backend as it is now
 	 */
 	public boolean current(Entry entry) {
 		return built.get(entry.id()) == entry;
@@ -325,13 +325,22 @@ public class Backends {
 		return row;
 	}
 
-	private Backend local(StorageBackend row) throws BackendFailingException {
-		Path root;
+	/**
+	 * @param row a local backend's row
+	 * @return its folder, absolute: Original's from the configuration ({@code store.1.dir}); null for one without
+	 * @throws java.nio.file.InvalidPathException if its path is no path
+	 */
+	public static Path folder(StorageBackend row) {
 		if (row.getId() == StorageBackend.ORIGINAL)
-			root = Staging.original();
-		else if (StringUtils.isNotBlank(row.getPath()))
-			root = Path.of(row.getPath().trim());
-		else
+			return Staging.original();
+		if (StringUtils.isBlank(row.getPath()))
+			return null;
+		return Path.of(row.getPath().trim()).toAbsolutePath().normalize();
+	}
+
+	private Backend local(StorageBackend row) throws BackendFailingException {
+		Path root = folder(row);
+		if (root == null)
 			throw new BackendFailingException("Storage backend " + row.getId() + " has no folder");
 		return new LocalBackend(row.getId(), settings.installId(), root, false);
 	}

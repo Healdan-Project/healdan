@@ -68,10 +68,11 @@ import com.logicaldoc.healdan.storage.crypto.FileCipher;
  * The file's lock is taken only for the commit, and never while a transaction still open wrote the row: that one's
  * row lock lasts until it ends, and it may want the lock again, so the commit waits for nothing a CE transaction holds.
  * A failure counts an attempt and sets the next try ({@link RetrySchedule}); a backend that can't be reached or used
- * counts none and pauses its transfers until its retest; and a failure once the Storage tab dropped a backend the
- * transfer used ({@code Backends.forget}, which closes its client) counts none and pauses nothing. A refusal of one
- * object ({@code BackendFailingException}, as S3's access denied) is checked at once against the backend: if it still
- * passes its check the refusal is the file's and counts an attempt, and otherwise the backend pauses.
+ * counts none and pauses its transfers until its retest; and once the Storage tab dropped a backend the transfer used
+ * ({@code Backends.forget}), as its settings changed, the transfer commits nothing, and a failure counts none and
+ * pauses nothing. A refusal of one object ({@code BackendFailingException}, as S3's access denied) is checked at once
+ * against the backend: if it still passes its check the refusal is the file's and counts an attempt, and otherwise the
+ * backend pauses.
  * <p>
  * Each move's start and end are logged at debug, and failures and stuck files at warn; the mover logs a summary at
  * info, so that a Store's move doesn't roll the log away.
@@ -182,6 +183,11 @@ final class Transfer {
 			staged = to.backend().stage(key, upload, md5);
 			if (to.s3())
 				verify(to, upload);
+			// Sent with the settings as they were: the row mustn't point where the backend no longer is
+			if (forgotten(from, to)) {
+				discard(to, staged);
+				return Outcome.STOPPED;
+			}
 
 			Path[] aside = new Path[1];
 			Outcome outcome = commit(row, source, staged, aside);
@@ -221,8 +227,8 @@ final class Transfer {
 
 	/**
 	 * @return whether the Storage tab dropped either backend the transfer used ({@code Backends.forget}) while it ran,
-	 *         which closed its S3 client under it: the failure is then the edit's, not the file's or the backend's, so
-	 *         it counts no try, pauses nothing, and the next pass tries again
+	 *         as their settings changed: the transfer then commits nothing, a failure is the edit's, not the file's or
+	 *         the backend's, so it counts no try and pauses nothing, and the next pass tries again
 	 */
 	private boolean forgotten(Backends.Entry from, Backends.Entry to) {
 		boolean dropped = !mover.backends().current(from) || !mover.backends().current(to);

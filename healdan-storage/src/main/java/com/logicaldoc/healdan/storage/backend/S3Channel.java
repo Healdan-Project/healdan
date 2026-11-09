@@ -27,6 +27,9 @@ final class S3Channel implements SeekableByteChannel {
 
 	private final Ranges ranges;
 
+	/** Run once, when it is closed */
+	private final Runnable closed;
+
 	private long position;
 
 	private boolean open = true;
@@ -36,8 +39,19 @@ final class S3Channel implements SeekableByteChannel {
 	 * @param ranges fetches its ranges
 	 */
 	S3Channel(long size, Ranges ranges) {
+		this(size, ranges, () -> {
+		});
+	}
+
+	/**
+	 * @param size the object's size
+	 * @param ranges fetches its ranges
+	 * @param closed run once, when the channel is closed
+	 */
+	S3Channel(long size, Ranges ranges, Runnable closed) {
 		this.size = size;
 		this.ranges = ranges;
+		this.closed = closed;
 	}
 
 	@Override
@@ -109,7 +123,10 @@ final class S3Channel implements SeekableByteChannel {
 
 	@Override
 	public void close() {
+		if (!open)
+			return;
 		open = false;
+		closed.run();
 	}
 
 	private void ensureOpen() throws ClosedChannelException {

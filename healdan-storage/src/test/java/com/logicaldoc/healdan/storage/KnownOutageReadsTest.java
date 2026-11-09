@@ -384,7 +384,8 @@ public class KnownOutageReadsTest extends AbstractStorageTestCase {
 
 	/**
 	 * Minor 2: a retest round marks every backend it will check as under way when it starts, so one's finding doesn't
-	 * lapse while another's check stalls; each mark ends with its own check, whatever it found
+	 * lapse while another's check stalls; a mark ends once its own check finds the backend again, and by the round's
+	 * end in any case
 	 */
 	@Test
 	public void testTheRoundKeepsEachBackendUnderWay() throws Exception {
@@ -420,5 +421,41 @@ public class KnownOutageReadsTest extends AbstractStorageTestCase {
 		assertEquals(State.OK, health.status(other.backendId()).state());
 		assertFalse(health.underWay(cloud.backendId()));
 		assertFalse(health.underWay(other.backendId()));
+	}
+
+	/**
+	 * The next round starts {@code storage.retestSeconds} after a round ends: a backend the round found still failing
+	 * stays known while the round's later checks stall, and its finding counts from the round's end, not its own check's
+	 */
+	@Test
+	public void testARoundsFindingLastsUntilTheNextRound() throws Exception {
+		Side other = sf.s3Side("Other", false);
+		assertTrue("checked after Cloud in a round", other.backendId() > cloud.backendId());
+		Document doc = onTheBucket("never read");
+		Document waiting = onTheBucket(other, "never read either");
+		health.checkAll();
+		cloud.s3().unreachable(true);
+		other.s3().unreachable(true);
+		assertThrows(StorageUnreachableException.class, () -> text(resource(doc, "1.0")));
+		assertThrows(StorageUnreachableException.class, () -> text(resource(waiting, "1.0")));
+
+		otherGate = StorageFixtures.gated(other);
+		otherGate.atCheck.close();
+		Future<?> round = threads.submit(health::retest);
+		otherGate.atCheck.awaitEntered(1);
+
+		// Cloud's check found it failing again; Other's stalls for ten minutes
+		later(600);
+		int calls = cloud.s3().calls();
+		assertThrows(StorageUnreachableException.class, () -> text(resource(doc, "1.0")));
+		assertEquals("known while the round's later check stalls", calls, cloud.s3().calls());
+
+		otherGate.atCheck.open();
+		round.get(20, TimeUnit.SECONDS);
+		assertFalse(health.underWay(cloud.backendId()));
+		// 40 seconds after the round's end, and more than ten minutes after Cloud's own check
+		later(640);
+		assertThrows(StorageUnreachableException.class, () -> text(resource(doc, "1.0")));
+		assertEquals("known until the next round", calls, cloud.s3().calls());
 	}
 }

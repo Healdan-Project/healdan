@@ -174,13 +174,16 @@ public class StorageStartup implements HealdanStartListener {
 
 	/** Tests each backend that isn't OK, then again after the setting's seconds, read each time */
 	private void scheduleRetest() {
+		Duration delay = retestDelay();
+		// How long the findings of the round that just ended stay known to reads, which don't ask the database
+		health.retestsEvery(delay);
 		schedule(retests, () -> {
 			try {
 				safely("backend retest", health::retest);
 			} finally {
 				scheduleRetest();
 			}
-		}, retestDelay());
+		}, delay);
 	}
 
 	/** @return {@code storage.retestSeconds}; the default if it can't be read, as in a database outage */

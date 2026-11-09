@@ -7,6 +7,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -48,11 +49,13 @@ import com.logicaldoc.util.spring.Context;
  * by a check or a report younger than {@code storage.retestSeconds}, or with a check of it under way, its reads that
  * the read cache can't serve fail at once ({@link #knownOutage}) rather than each wait out the S3 client's
  * attempts, which hold a Tomcat thread up to two minutes for a server that stalls. A retest round counts as under way
- * for every backend it will check, from its start until that backend's own check ends, and a read refused for a
- * finding more than {@link #EARLY_RETEST_AFTER} old asks the retest thread to check that backend at once, so a backend
- * that is back is found within seconds of the first read that wants it. A write that reaches a backend still
- * unchecked runs its check first, holding the backend's check lock, so that concurrent first writes check once: seeds
- * and tests write before the start's check runs, and nothing is written under a key that wasn't checked.
+ * for every backend it will check, from its start until its own check finds that backend again or, for one still
+ * failing, until the round ends, and the round's findings count from its end, which the next round is scheduled
+ * from; a read refused for a finding more than {@link #EARLY_RETEST_AFTER} old asks the retest thread to check that
+ * backend at once, so a backend that is back is found within seconds of the first read that wants it. A write that
+ * reaches a backend still unchecked runs its check first, holding the backend's check lock, so that concurrent first
+ * writes check once: seeds and tests write before the start's check runs, and nothing is written under a key that
+ * wasn't checked.
  */
 @Component
 public class BackendHealth {
@@ -97,8 +100,8 @@ public class BackendHealth {
 	};
 
 	/**
-	 * When each backend's state was last found, by a check or a report, by {@link #clock}: only ever compared with it,
-	 * for an outage's age, never shown
+	 * When each backend's state was last found, by a check or a report, by {@link #clock}, or when the retest round that
+	 * found it failing ended: only ever compared with it, for an outage's age, never shown
 	 */
 	private final Map<Long, Long> found = new ConcurrentHashMap<>();
 
@@ -134,6 +137,12 @@ public class BackendHealth {
 	/** Runs an early retest on the retest thread; false if it can't. None until the start gives it */
 	private volatile Predicate<Runnable> retestThread;
 
+	/**
+	 * How long after a retest round ends the next one starts, as the retests last read {@code storage.retestSeconds}
+	 * to schedule it: how long the round's findings stay known, read by every refused read without asking the database
+	 */
+	private volatile Duration retestEvery = Duration.ofSeconds(StorageSettings.DEFAULT_RETEST_SECONDS);
+
 	/** Tests: runs when a read is refused for a known outage, before it is told */
 	volatile Runnable refusing = () -> {
 	};
@@ -163,6 +172,21 @@ public class BackendHealth {
 		if (retestThread == null)
 			// What the stopped thread hadn't run yet never will
 			earlyRetests.clear();
+	}
+
+	/**
+	 * @param every how long after the round that just ended the next retest round starts, as it is scheduled
+	 */
+	public void retestsEvery(Duration every) {
+		this.retestEvery = every;
+	}
+
+	/**
+	 * @return how long a finding stays known ({@link #knownOutage}): until the next retest round, as the retests were
+	 *         last scheduled; {@code storage.retestSeconds}' default before they are
+	 */
+	public Duration knownFor() {
+		return retestEvery;
 	}
 
 	/** @return whether a check of the backend is under way, or waiting on the retest thread as an early retest */
@@ -219,14 +243,15 @@ public class BackendHealth {
 
 	/**
 	 * Tells a read whether to fail at once: whether the backend is failing because it can't be reached, and that is
-	 * known, found by a check or a report less than {@code fresh} ago or with a check of it under way. Its first answer
-	 * for an outage is logged as a warning, once for each backend and outage. Only a check or the mover finds an outage
-	 * again: a read reports one only while the backend isn't failing yet ({@link #reportFailure}), and a refusal
-	 * reports nothing, so reads alone never keep it known. A refusal for a finding more than
-	 * {@link #EARLY_RETEST_AFTER} old asks for an early retest of the backend, unless a check of it is under way.
+	 * known, found by a check or a report less than {@code fresh} ago (a retest round's finding counting from the
+	 * round's end) or with a check of it under way. Its first answer for an outage is logged as a warning, once for
+	 * each backend and outage. Only a check or the mover finds an outage again: a read reports one only while the
+	 * backend isn't failing yet ({@link #reportFailure}), and a refusal reports nothing, so reads alone never keep it
+	 * known. A refusal for a finding more than {@link #EARLY_RETEST_AFTER} old asks for an early retest of the backend,
+	 * unless a check of it is under way.
 	 *
 	 * @param backendId a backend's id
-	 * @param fresh how long a finding stays known: {@code storage.retestSeconds}, as a retest then finds it again
+	 * @param fresh how long a finding stays known: {@link #knownFor()}, as the next retest round then finds it again
 	 * @return the backend's health if it is a known outage; empty if a read should try the backend
 	 */
 	public Optional<Status> knownOutage(long backendId, Duration fresh) {
@@ -291,27 +316,30 @@ public class BackendHealth {
 		for (long id : listed != null ? listed : List.of(Staging.ID))
 			if (!available(id))
 				due.add(id);
-		// The round's grace: each is under way from now until its own check ends, so that one's finding doesn't lapse,
-		// and its reads go back to waiting out the client, while another's check stalls
-		for (long id : due)
+		// The round's grace: each is under way from now until its own check finds it again or, still failing, until the
+		// round ends, so that one's finding doesn't lapse, and its reads go back to waiting out the client, while
+		// another's check stalls
+		Set<Long> marked = new LinkedHashSet<>(due);
+		for (long id : marked)
 			markChecking(id);
-		int next = 0;
 		try {
-			for (; next < due.size(); next++) {
-				long id = due.get(next);
-				try {
-					// A key file put back by hand is read only by a new entry. The backend fails, so no transfer uses it
-					if (keyFailures.contains(id))
-						backends.forget(id);
-					check(id);
-				} finally {
+			for (long id : due) {
+				// A key file put back by hand is read only by a new entry. The backend fails, so no transfer uses it
+				if (keyFailures.contains(id))
+					backends.forget(id);
+				check(id);
+				if (available(id) && marked.remove(id))
 					clearChecking(id);
-				}
 			}
+			// The next round starts storage.retestSeconds after this one ends: each backend still failing stays known
+			// until then, however long the checks after its own took
+			long end = clock.getAsLong();
+			for (long id : marked)
+				found.computeIfPresent(id, (key, at) -> end);
 		} finally {
-			// A round cut short leaves no mark behind on the backends it didn't reach
-			for (int i = next + 1; i < due.size(); i++)
-				clearChecking(due.get(i));
+			// Before the marks end, so the findings are fresh first; a round cut short leaves no mark behind either
+			for (long id : marked)
+				clearChecking(id);
 		}
 	}
 
@@ -506,7 +534,8 @@ public class BackendHealth {
 		}
 	}
 
-	private static String message(Exception e) {
+	/** @return a failure's message, or its kind if it has none */
+	public static String message(Throwable e) {
 		return e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
 	}
 }

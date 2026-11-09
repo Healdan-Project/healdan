@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.storage;
 
 import java.util.List;
+import java.util.Map;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.PersistentObjectDAO;
@@ -27,4 +28,11 @@ public interface StorageEventDAO extends PersistentObjectDAO<StorageEvent> {
 	 * @throws PersistenceException error at data layer
 	 */
 	public List<StorageEvent> findByBackend(long backendId) throws PersistenceException;
+
+	/**
+	 * @return each backend's last showing of its recovery key ({@link StorageEvent#KEY_SHOWN}), by backend id; none
+	 *         for one whose key was never shown
+	 * @throws PersistenceException error at data layer
+	 */
+	public Map<Long, StorageEvent> lastShown() throws PersistenceException;
 }

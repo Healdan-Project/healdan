@@ -416,6 +416,15 @@ public class StoredFiles {
 
 	/**
 	 * @param backendId a backend
+	 * @return what it holds
+	 */
+	public Usage usageOn(long backendId) {
+		return jdbc.queryForObject("select count(*), coalesce(sum(hd_size), 0) from hd_storage_file "
+				+ "where hd_backendid = ?", (rs, i) -> new Usage(rs.getLong(1), rs.getLong(2)), backendId);
+	}
+
+	/**
+	 * @param backendId a backend
 	 * @return how many files are on it
 	 */
 	public long countOn(long backendId) {

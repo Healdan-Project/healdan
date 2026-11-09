@@ -667,9 +667,9 @@ public class MoverTest extends AbstractStorageTestCase {
 	}
 
 	/**
-	 * The Storage tab's save and Test drop a backend's entry ({@link Backends#forget}), which closes its S3 client at
-	 * once, under the transfers using it. A transfer that then fails ends as stopped: it spends no try, pauses nothing,
-	 * and the next pass moves the file.
+	 * The Storage tab's save and Test drop a backend's entry ({@link Backends#forget}), as its settings changed, under
+	 * the transfers using it. A transfer that then fails ends as stopped: it spends no try, pauses nothing, and the next
+	 * pass moves the file.
 	 */
 	@Test
 	public void testATransferOnAForgottenBackendStopsWithoutATry() throws Exception {

@@ -553,6 +553,38 @@ public class S3BackendTest extends BackendContract {
 		assertTrue(fake.requests(Op.GET_OBJECT).isEmpty());
 	}
 
+	/**
+	 * A backend closed while a download and a channel are open, as {@code Backends.forget} closes one the Storage tab
+	 * dropped, keeps its client until both are closed, so they read to the end
+	 */
+	@Test
+	public void testCloseWaitsForOpenReads() throws IOException {
+		byte[] data = bytes(3000);
+		backend.put("1/2/doc/3.0", source(data), md5(data));
+		S3Backend s3 = (S3Backend) backend;
+		InputStream stream = s3.get("1/2/doc/3.0");
+		SeekableByteChannel channel = s3.open("1/2/doc/3.0");
+
+		s3.close();
+		assertFalse("open reads keep the client", s3.isShut());
+		ByteBuffer first = ByteBuffer.allocate(1000);
+		assertEquals(1000, channel.read(first));
+		assertArrayEquals(Arrays.copyOfRange(data, 0, 1000), first.array());
+		assertArrayEquals(data, stream.readAllBytes());
+		stream.close();
+		assertFalse("the channel still keeps it", s3.isShut());
+		ByteBuffer rest = ByteBuffer.allocate(2000);
+		assertEquals(2000, channel.read(rest));
+		assertArrayEquals(Arrays.copyOfRange(data, 1000, 3000), rest.array());
+		channel.close();
+		assertTrue("shut once the last read is closed", s3.isShut());
+
+		// With nothing open, at once
+		S3Backend idle = backend(fake, 9, "idle", true);
+		idle.close();
+		assertTrue(idle.isShut());
+	}
+
 	@Test
 	public void testPrefix() throws IOException {
 		S3Backend prefixed = backend(fake, 8, "healdan", true);
