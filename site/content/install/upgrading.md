@@ -8,10 +8,16 @@ These docs describe Healdan as it is on its `master` branch. If your server runs
 describe features or settings it doesn't have yet.
 {{< /callout >}}
 
-[Back up](../backup-and-restore/) first. Then, from the folder you cloned Healdan into:
+[Back up](../backup-and-restore/) first. Then, from the folder you cloned Healdan into, fetch the new version:
 
 ```bash
 git pull
+```
+
+If [Changes to LogicalDOC's Tables](#changes-to-logicaldocs-tables) lists one your database doesn't have yet, make
+it now. Then build and start the new version:
+
+```bash
 docker compose up -d --build
 ```
 
@@ -39,7 +45,49 @@ fails, because the app's image is built here and can't be pulled.
 - **Healdan's own tables are upgraded** when the app starts. If an upgrade step fails, the app stops instead of
   running on a half-upgraded database, and the log says which step failed. See
   [Troubleshooting](../troubleshooting/).
-- **LogicalDOC's tables aren't.** See [Known Limitations](../known-limitations/).
+- **LogicalDOC's tables aren't.** A change to them is made by hand, before the new version's first start: see
+  [Changes to LogicalDOC's Tables](#changes-to-logicaldocs-tables).
+
+## Changes to LogicalDOC's Tables
+
+Healdan upgrades its own tables when it starts, but never LogicalDOC's. So when a new version needs a change to them,
+run its SQL by hand, after the backup and before the new version's first start. A database made by a version that
+already had the change has it, so each change says how to tell.
+
+Run the commands from the folder with Healdan's `compose.yaml`, while the database is running. If `docker compose ps`
+doesn't list `db`, start it with `docker compose up -d db`.
+
+### Quota Thresholds, November 2026
+
+Versions of `master` from 9 November 2026 on have 14 more columns on LogicalDOC's `ld_tenant` table, for quota
+thresholds. Without them, the new version can't read that table, and nobody can sign in.
+
+To see whether your database has them:
+
+```bash
+echo "select count(*) as quota_columns from information_schema.columns where table_schema = database() and table_name = 'ld_tenant' and column_name like '%quotathr'" | docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE"'
+```
+
+It prints `14` when the database has them, as one made since then does, and `0` when it needs them. To add them:
+
+```bash
+docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE"' <<'SQL'
+alter table ld_tenant
+  add column ld_formsquotathr int, add column ld_usersquotathr int, add column ld_sessionsquotathr int,
+  add column ld_documentsquotathr int, add column ld_workflowsquotathr int, add column ld_storagequotathr int,
+  add column ld_rousersquotathr int, add column ld_reportsquotathr int, add column ld_apicallsquotathr int,
+  add column ld_ticketsquotathr int, add column ld_stampsquotathr int, add column ld_importfoldersquotathr int,
+  add column ld_emailaccountsquotathr int, add column ld_pagesquotathr int;
+SQL
+```
+
+If it says `Duplicate column name`, the database had them already, and nothing was changed.
+
+If the new version has already started without them, add them the same way, then restart the app:
+
+```bash
+docker compose restart app
+```
 
 ## The First Start on Healdan's Storage
 
