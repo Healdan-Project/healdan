@@ -59,8 +59,9 @@ import jakarta.annotation.PreDestroy;
  * {@code healdan-storage-mover}, lists a page of the misplaced rows ({@link StoredFiles#misplaced}, staged files first,
  * then moves, newest documents first), {@value #QUEUED_PER_TRANSFER} for each of the {@code storage.transfers}
  * transfers ({@link Transfer}), and hands them out in that order as transfers end. It lists again once the page is
- * used up, when woken, and every {@code storage.sweepSeconds}: the listing reads the whole table, so a big move lists
- * once a page, not once a file. A wake lists from the top, so a staged save never waits behind the moves already
+ * used up, when woken, and every {@code storage.sweepSeconds}: the listing reads only the rows that wait to move
+ * ({@code hd_waiting}, through its index {@code hd_storage_file_waiting}), a page at a time, so a big move lists once a
+ * page, not once a file. A wake lists from the top, so a staged save never waits behind the moves already
  * listed. No file is in two transfers at once: the files in transfer are kept in a set, which a listing skips and the
  * purge asks of ({@link #moving}, call 22).
  * <p>
