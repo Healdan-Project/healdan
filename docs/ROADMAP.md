@@ -119,7 +119,7 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
   - A Store is a top-level classification and also decides where its files are stored.
   - Stores are governed by permissions.
   - Moving items between Stores moves the backing files and folders.
-  - For M1, every Store uses one local or NFS storage backend. S3 is a later goal. (The backlog's "S3, and a storage backend per Store", built on 2026-11-07 to 2026-11-09, gives each Store a backend of its own, local, NFS or S3: §5.)
+  - For M1, every Store used one local or NFS storage backend, and S3 was a later goal. Since the backlog's "S3, and a storage backend per Store" was built, on 2026-11-07 to 2026-11-09, each Store has a backend of its own, local, NFS or S3 (§5).
 - **Matter workspaces from templates.**
   - A template defines predefined folders and virtual search folders.
   - Properties and permissions start at the workspace and propagate to every folder, subfolder and document. A document added to a folder inherits client/matter from the folder, which inherits it from the workspace.

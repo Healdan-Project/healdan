@@ -77,8 +77,10 @@ learn from.
     checks it was stored. So no LogicalDOC Java changes, and the image's defaults, which are upstream's, keep
     LogicalDOC's `FSStore`. Outside Docker the key is whatever the file says, and on `FSStore` the module's beans and
     its download filter do nothing, and the Storage tab says storage backends are off.
-  - **`HealdanStorage` is never a Spring component.** Only LogicalDOC's bean definition makes it: a second `Store`
-    bean would break `Store.get()`. Its `init()` reads no table, as Spring calls it before Flyway has run.
+  - **`HealdanStorage` is never a Spring component.** Only LogicalDOC's bean definition makes it: a component would
+    be a second instance, `healdanStorage`, made on `FSStore` servers too, which `Context.get(HealdanStorage.class)`
+    finds before LogicalDOC's (`Store.get()` looks `store` up by name). Its `init()` reads no table, as Spring calls it
+    before Flyway has run.
   - **Its plugin pieces.** `plugin.xml` declares two listeners, `StoreTrackingDocumentListener` and
     `StoreTrackingFolderListener` (position 120, after Healdan's rules), which keep each file's Store current as
     documents and folders move. `HealdanStoragePlugin` does nothing at install, as the Storage tab's RPC servlet

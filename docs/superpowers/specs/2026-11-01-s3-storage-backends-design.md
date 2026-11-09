@@ -192,7 +192,7 @@ When CE rewrites a file in place (§3.1), the new bytes are written as in §6.1.
 
 - (changed in the build: plan call 11) **A file with no row** is read from Original's folder, where only CE's own store could have put it, and warned of once.
 - **A missing local file:** a local backend looks in its `.held/` folder when a file isn't in its place (§8), so a restored database finds a file deleted after its backup.
-- **`listResources(docId, fileVersion)`** comes from the rows, not from listing a folder or a bucket. It matches the file version exactly: `1.2` lists `1.2` and `1.2-thumb.png`, not `1.20` (§3.1).
+- **`listResources(docId, fileVersion)`** comes from the rows, not from listing a folder or a bucket. It matches the file version exactly: `1.2` lists `1.2` and `1.2-thumb.png`, not `1.20` (§3.1). (changed in the build: plan call 11, it also lists the files in Original's folder that have no row, on every call, as `delete(docId)` does.)
 - **`getTotalSize`** sums the rows.
 - **`moveResourcesToStore`** returns 0, and **`getStoreDefinitions`** returns an empty map, so CE's hidden screens stay empty. (changed in the build: the Stores screen is hidden by the `storage-hide-stores` seed, §2.2.)
 - **`test`** tests every backend with its own test object and records nothing (§10).
@@ -216,7 +216,7 @@ When CE rewrites a file in place (§3.1), the new bytes are written as in §6.1.
 
 ## 7. The mover (owner: in the background; call: the rest)
 
-One background worker with parallel transfers (4 by default, a setting). It's woken by a staged save, a document or matter changing Store, or a Store switching backend, and it also sweeps every 5 minutes. It finds rows whose backend isn't their Store's, and for each: (changed in the build: it's woken by Retry, a nightly fix and a backend found OK again too, and sweeps every `storage.sweepSeconds`. It lists only rows marked as waiting, `hd_waiting`, through that column's index, rather than reading the whole table on every wake; every write, Store change and Store switch keeps the mark, and the nightly check mends it, the owner's review of PR B.)
+One background worker with parallel transfers (4 by default, a setting). It's woken by a staged save, a document or matter changing Store, or a Store switching backend, and it also sweeps every 5 minutes. It finds rows whose backend isn't their Store's, and for each: (changed in the build: it's woken by Retry, a nightly fix and a backend found OK again too, and sweeps every `storage.sweepSeconds`. It lists only rows marked as waiting, `hd_waiting`, never the rows in place, though each listing still sorts every waiting row that's due to return a page (on MariaDB, a 100,000-row switch was measured reading `hd_storage_file_due`'s range, then a filesort, plan Task 14); every write, Store change and Store switch keeps the mark, and the nightly check mends it, the owner's review of PR B.)
 
 1. **Reads** the file from where it is, decrypting if needed. (changed in the build: first it reads the row again, and works the document's Store out again from the folders, so a row left in a Store its document has left never sends the file to that Store's backend. The file is read into a copy in staging, noting the row's write id.)
 2. **Writes** it to the target, encrypting if the target is encrypted.

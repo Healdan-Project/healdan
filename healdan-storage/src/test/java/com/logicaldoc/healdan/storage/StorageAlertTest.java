@@ -34,7 +34,7 @@ import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
 
 /**
- * The daily alert (spec section 10.3, R38): files waiting, or a backend failing, for more than 24 hours email the
+ * The daily alert (spec section 7, R38): files waiting, or a backend failing, for more than 24 hours email the
  * admins once a day, through M4's sender, and only while outgoing email is set up. The clock is moved, so no test waits.
  */
 public class StorageAlertTest extends AbstractStorageTestCase {
