@@ -25,11 +25,13 @@ Install manual's [Cloud Storage](../../../install/cloud-storage/) says how.
 | Path-Style Addressing | puts the bucket in the address's path rather than its host name. Some S3 servers need it, and Healdan was tested with Wasabi with it ticked |
 | Encrypt | ticked for S3 to begin with. It can't change once the backend is added. See [Encryption and Recovery Keys](../encryption-and-recovery-keys/) |
 
-**Two backends can't share a place.** Healdan refuses a bucket that another backend on the same host uses with the
-same prefix, or with a prefix that holds or sits inside this one's (an empty prefix holds every other), as the two
-would write over each other's files. When it adds a backend, it writes a small marker object in its place, `.healdan-backend` under
-the prefix, naming this install and the backend, and it refuses a place whose marker names another install or
-backend: so two Healdan servers can't share one place either.
+**Two backends can't share a place.** Healdan refuses a bucket that another backend at the same S3 service uses with
+the same prefix, or with a prefix that holds or sits inside this one's (an empty prefix holds every other), as the
+two would write over each other's files. Every Amazon S3 endpoint is one service, as Amazon's bucket names are shared
+across its regions; any other service is its endpoint's host and port, so two servers on one host are two. When it
+adds a backend, it writes a small marker object in its place, `.healdan-backend` under the prefix, naming this
+install and the backend, and it refuses a place whose marker names another install or backend: so two Healdan servers
+can't share one place either.
 
 ## A Local Folder
 

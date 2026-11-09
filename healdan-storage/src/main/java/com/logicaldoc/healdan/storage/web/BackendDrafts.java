@@ -227,9 +227,10 @@ final class BackendDrafts {
 	}
 
 	/**
-	 * Backends can't share a place (call 23): an S3 bucket and prefix can't equal or hold another's on the same host
-	 * (an empty prefix holds every other), and a folder can't be, hold or sit inside Original's, staging's, the
-	 * cache's, the configuration folder, the key files' folder, or another backend's.
+	 * Backends can't share a place (call 23): an S3 bucket and prefix can't equal or hold another's at the same S3
+	 * service (as {@code service} tells them apart; an empty prefix holds every other), and a folder can't be, hold or
+	 * sit inside Original's, staging's, the cache's, the configuration folder, the key files' folder, or another
+	 * backend's.
 	 *
 	 * @param id the backend's own id, which isn't compared with itself; 0 for one not added yet
 	 * @param rows every backend's row
