@@ -10,6 +10,7 @@ set -euo pipefail
 readonly LDOC_HOME=/opt/logicaldoc
 readonly CONF=$LDOC_HOME/conf
 readonly REPO=$LDOC_HOME/repository
+readonly CACHE=$LDOC_HOME/cache
 readonly APP_UID=1000
 readonly APP_GID=1000
 
@@ -25,8 +26,8 @@ as_app() { "${app_prefix[@]}" "$@"; }
 
 if [ "$(id -u)" = 0 ]; then
   app_prefix=(setpriv --reuid="$APP_UID" --regid="$APP_GID" --init-groups)
-  # Bind mounts and restored backups can arrive owned by another user; the app must write both volumes.
-  for dir in "$CONF" "$REPO"; do
+  # Bind mounts and restored backups can arrive owned by another user; the app must write all three volumes.
+  for dir in "$CONF" "$REPO" "$CACHE"; do
     mkdir -p "$dir"
     if [ "$(stat -c %u "$dir")" != "$APP_UID" ] || [ -n "$(find "$dir" -maxdepth 1 ! -user "$APP_UID" -print -quit)" ]; then
       log "changing ownership of $dir to uid $APP_UID"

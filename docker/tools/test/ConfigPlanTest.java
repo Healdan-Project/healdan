@@ -20,6 +20,7 @@ public class ConfigPlanTest {
         portMustBeNumeric();
         publicUrlOptionalAndNormalised();
         dbWaitSecondsValidated();
+        healdanKeysAreStoreOnly();
         Check.done("ConfigPlanTest");
     }
 
@@ -111,6 +112,18 @@ public class ConfigPlanTest {
                 ConfigPlan.envKeys(env("DB_PASSWORD", "pw", "LOGICALDOC_PUBLIC_URL", "https://docs.example.org/"))
                         .get("server.url"),
                 "trailing slash kept");
+    }
+
+    private static void healdanKeysAreStoreOnly() {
+        Check.eq(Map.of("store", "com.logicaldoc.healdan.storage.HealdanStorage"), ConfigPlan.HEALDAN_KEYS,
+                "Healdan's own keys: store, as HealdanStorage, and nothing else");
+        // Each key has one owner, or two steps of a start would each set it.
+        Map<String, String> envKeys = ConfigPlan.envKeys(env("DB_PASSWORD", "pw", "LOGICALDOC_PUBLIC_URL",
+                "https://docs.example.org"));
+        for (String key : ConfigPlan.HEALDAN_KEYS.keySet())
+            Check.isTrue(!ConfigPlan.seedKeys("x").containsKey(key) && !envKeys.containsKey(key)
+                    && !ConfigPlan.IMAGE_KEYS.contains(key) && !ConfigPlan.REPLACED_DEFAULTS.containsKey(key)
+                    && !ConfigPlan.PLAIN_SPACE_KEYS.contains(key), key + " is Healdan's alone");
     }
 
     private static void dbWaitSecondsValidated() {

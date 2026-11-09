@@ -197,6 +197,22 @@ public class LocalBackend implements Backend {
 			throw new BackendFailingException("The folder of backend " + id + " belongs to another backend or install");
 	}
 
+	/**
+	 * Deletes the marker, so another backend may have the folder: for the Storage tab, once a backend is removed, or an
+	 * add is undone. A marker that names another backend or install is left as it is.
+	 *
+	 * @return whether this backend's marker was there, and is gone
+	 * @throws IOException if it can't be read or deleted
+	 */
+	public boolean removeMarker() throws IOException {
+		Path marker = root.resolve(MARKER);
+		if (!Files.isRegularFile(marker) || !Files.readString(marker, StandardCharsets.UTF_8).equals(marker()))
+			return false;
+		Files.delete(marker);
+		sync(root);
+		return true;
+	}
+
 	@Override
 	public void put(String key, Path file, byte[] md5) throws IOException {
 		Path target = path(key);

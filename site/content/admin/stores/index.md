@@ -36,5 +36,15 @@ in: "Everyone can read this matter but not its Store".
 
 ## Where Files Are Kept
 
-All Stores share one **storage backend**: the place on the server where file contents are kept, by each file's
-internal number. So moving a matter to another Store changes only the database, and is quick.
+Each Store keeps its documents' files on one **storage backend**: a folder on the server, or a bucket at an S3 service
+such as Wasabi. So Personal can stay on the server's disk while Client Work goes to the cloud. Every Store starts on
+**Original**, the server's own folder, and so does a new Store. To give a Store another backend, choose it in the
+**Stores** list on the **Storage** tab of [Healdan Settings](../healdan-settings/#the-storage-tab): see
+[Storage Backends](../storage-backends/).
+
+- **Moving a matter to another Store** is as quick as before: it changes the database at once. When the other Store
+  keeps its files on another backend, the matter's files then follow it there in the background, and until each has
+  moved it's read from where it is. See
+  [Choosing a Store's Backend](../storage-backends/choosing-a-stores-backend/#matters-moving-between-stores).
+- **LogicalDOC's own Stores screen,** under **Administration → Settings**, is hidden, as Healdan's storage backends
+  take its place. There, a *store* meant a place for files, not a Store.

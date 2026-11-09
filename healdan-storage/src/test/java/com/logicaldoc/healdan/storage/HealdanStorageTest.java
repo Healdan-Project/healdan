@@ -468,7 +468,10 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 		assertEquals("and by range", "before",
 				new String(store().getBytes(resource(cached, "1.0"), 5, 6), StandardCharsets.UTF_8));
 
+		// Back, and read once a retest finds it: until then the outage is known, and reads fail at once
 		cloud.s3().unreachable(false);
+		assertThrows(StorageUnreachableException.class, () -> text(resource(uncached, "1.0")));
+		BackendHealth.get().retest();
 		assertEquals("never read", text(resource(uncached, "1.0")));
 	}
 

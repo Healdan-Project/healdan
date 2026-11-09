@@ -6,10 +6,10 @@ package com.logicaldoc.gui.frontend.client.healdan.services;
 import com.logicaldoc.gui.common.client.ServerException;
 
 /**
- * Refuses a typed client secret while Healdan's secret key file is missing
- * and stored values are sealed with it (ruling R37). Nothing was saved: the
- * Sign-In tab asks the administrator whether to make a new key, and saves
- * again with {@code newKey} if they do.
+ * Refuses a typed client secret or S3 secret while Healdan's secret key file
+ * is missing and stored values are sealed with it (ruling R37). Nothing was
+ * saved: the Sign-In or Storage tab asks the administrator whether to make a
+ * new key, and saves again with {@code newKey} if they do.
  */
 public class SecretKeyMissingException extends ServerException {
 

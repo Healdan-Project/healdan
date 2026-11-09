@@ -183,7 +183,8 @@ public class Backends {
 	/**
 	 * Drops a backend, so the next call builds it again from its row and key file as they are then (Task 14). A backend
 	 * a test gave stays given; its kind and cipher are read again. A build under way finishes first, so the entry it
-	 * built from the row as it was is dropped too.
+	 * built from the row as it was is dropped too. The dropped one is closed, which for S3 shuts its client only once
+	 * the calls, downloads and channels under way on it have ended ({@link S3Backend#close}), so they finish.
 	 *
 	 * @param id the backend's id
 	 */
@@ -196,6 +197,43 @@ public class Backends {
 		}
 		if (entry != null && !given.containsKey(id))
 			close(entry);
+	}
+
+	/**
+	 * @param entry a backend as {@link #entry} gave it
+	 * @return whether it is still the one kept for its backend: false once {@link #forget} dropped it, as the Storage
+	 *         tab's save or Test does. A transfer that used it was begun with the settings as they were, so it commits
+	 *         nothing, and if it failed counts no try: the next pass moves the file with the backend as it is now
+	 */
+	public boolean current(Entry entry) {
+		return built.get(entry.id()) == entry;
+	}
+
+	/**
+	 * Builds a backend from its row as it is now, without its cipher and without keeping it: for the Storage tab, which
+	 * reads an encrypted backend's check object with a typed recovery key before its key file is written, and clears a
+	 * removed backend's place. Give it back with {@link #release}.
+	 *
+	 * @param id a backend's id
+	 * @return the backend; the one a test gave, if there is one
+	 * @throws BackendFailingException if it can't be built
+	 */
+	public Backend withoutKey(long id) throws BackendFailingException {
+		return mapped(id, () -> {
+			StorageBackend row = row(id);
+			Backend backend = given.get(id);
+			if (backend != null)
+				return backend;
+			return StorageBackend.S3.equals(row.getKind()) ? s3(row) : local(row);
+		});
+	}
+
+	/**
+	 * @param backend a backend {@link #withoutKey} built, which is closed unless a test gave it
+	 */
+	public void release(Backend backend) {
+		if (backend != null && !given.containsValue(backend))
+			close(new Entry(backend.id(), backend, false, null));
 	}
 
 	/** @return the lock a backend's build, kind and forget are taken under */
@@ -229,8 +267,20 @@ public class Backends {
 	}
 
 	private Entry build(long id) throws BackendFailingException {
+		return mapped(id,
+				() -> id == Staging.ID ? new Entry(id, Staging.backend(settings.installId()), false, null) : fromRow(id));
+	}
+
+	/** A build, which may fail as a backend's settings or folder are refused */
+	@FunctionalInterface
+	private interface Build<T> {
+		T run() throws BackendFailingException;
+	}
+
+	/** @return what the build made; its refusals as a {@link BackendFailingException}, an outage as unreachable */
+	private static <T> T mapped(long id, Build<T> build) throws BackendFailingException {
 		try {
-			return id == Staging.ID ? new Entry(id, Staging.backend(settings.installId()), false, null) : fromRow(id);
+			return build.run();
 		} catch (Endpoints.HostNotFound e) {
 			// DNS may be down: an outage, which the retest recovers
 			throw new BackendUnreachableException("Storage backend " + id + " can't be reached: " + e.getMessage());
@@ -275,13 +325,22 @@ public class Backends {
 		return row;
 	}
 
-	private Backend local(StorageBackend row) throws BackendFailingException {
-		Path root;
+	/**
+	 * @param row a local backend's row
+	 * @return its folder, absolute: Original's from the configuration ({@code store.1.dir}); null for one without
+	 * @throws java.nio.file.InvalidPathException if its path is no path
+	 */
+	public static Path folder(StorageBackend row) {
 		if (row.getId() == StorageBackend.ORIGINAL)
-			root = Staging.original();
-		else if (StringUtils.isNotBlank(row.getPath()))
-			root = Path.of(row.getPath().trim());
-		else
+			return Staging.original();
+		if (StringUtils.isBlank(row.getPath()))
+			return null;
+		return Path.of(row.getPath().trim()).toAbsolutePath().normalize();
+	}
+
+	private Backend local(StorageBackend row) throws BackendFailingException {
+		Path root = folder(row);
+		if (root == null)
 			throw new BackendFailingException("Storage backend " + row.getId() + " has no folder");
 		return new LocalBackend(row.getId(), settings.installId(), root, false);
 	}

@@ -1,0 +1,30 @@
+# Smoke test only: Garage as a stand-in S3 server (S3 spec section 16.1), set up with fixed test values before the
+# app starts, and the switch that makes Healdan add an encrypted backend on it and a Store that uses it.
+services:
+  garage:
+    image: dxflrs/garage:v2.5.0
+    volumes:
+      - ./docker/tests/garage/garage.toml:/etc/garage.toml:ro
+      - garage-data:/var/lib/garage
+    ports:
+      - "127.0.0.1:${SMOKE_GARAGE_PORT:-13900}:3900"
+  garage-setup:
+    image: busybox:1.37
+    network_mode: "service:garage"
+    depends_on: [garage]
+    volumes:
+      - ./docker/tests/garage/setup.sh:/setup.sh:ro
+    command: ["sh", "/setup.sh"]
+  app:
+    depends_on:
+      garage-setup:
+        condition: service_completed_successfully
+    environment:
+      HEALDAN_SMOKE_STORAGE: "true"
+      HEALDAN_SMOKE_S3_ENDPOINT: http://garage:3900
+      HEALDAN_SMOKE_S3_REGION: garage
+      HEALDAN_SMOKE_S3_BUCKET: healdan-smoke
+      HEALDAN_SMOKE_S3_ACCESS_KEY: GK0123456789abcdef01234567
+      HEALDAN_SMOKE_S3_SECRET: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+volumes:
+  garage-data:

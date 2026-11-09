@@ -68,10 +68,19 @@ public class BackendKeys {
 		String configured = System.getProperty(FOLDER_PROPERTY);
 		if (StringUtils.isNotBlank(configured))
 			return Paths.get(configured.trim());
+		return configurationFolder().resolve("healdan-storage-keys");
+	}
+
+	/**
+	 * @return the configuration folder, absolute: the folder of {@link SecretBox}'s key file, as the system property
+	 *         {@code healdan.secretKey} names it ({@code /opt/logicaldoc/conf/}, the {@code conf} volume, in Docker),
+	 *         or else {@code logicaldoc/conf/} in the user's home folder
+	 */
+	public static Path configurationFolder() {
 		String secret = System.getProperty(SecretBox.KEY_PROPERTY);
 		Path secretFile = StringUtils.isNotBlank(secret) ? Paths.get(secret.trim())
 				: Paths.get(System.getProperty("user.home"), "logicaldoc", "conf", "healdan-secret.key");
-		return secretFile.resolveSibling("healdan-storage-keys");
+		return secretFile.toAbsolutePath().normalize().getParent();
 	}
 
 	/** @return the folder of the key files, which may not exist yet */

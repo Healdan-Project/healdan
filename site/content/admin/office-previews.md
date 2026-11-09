@@ -1,6 +1,6 @@
 ---
 title: Office Previews
-weight: 8
+weight: 9
 ---
 
 Healdan converts Word, Excel, PowerPoint and OpenDocument files, LibreOffice Draw's `.odg` drawings among them, to

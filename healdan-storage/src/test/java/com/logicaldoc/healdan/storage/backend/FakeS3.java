@@ -90,7 +90,8 @@ import com.sun.net.httpserver.HttpsServer;
  * It records every request ({@link #requests}), and misbehaves on demand ({@link #fail}, {@link #stall},
  * {@link #stallBody}, {@link #delay}, {@link #drop}, {@link #corrupt}, {@link #failWithoutBody},
  * {@link #headWithoutLength}, {@link #cutOff}, {@link #refuseSignatures}, {@link #echoSignatures}, {@link #denyAccess})
- * until {@link #behave}. Close it in an {@code @After} method.
+ * until {@link #behave}. It also holds a put of one key until the test lets it go on ({@link #holdPut},
+ * {@link #release}). Close it in an {@code @After} method.
  */
 public final class FakeS3 implements AutoCloseable {
 
@@ -147,7 +148,7 @@ public final class FakeS3 implements AutoCloseable {
 	}
 
 	private enum Fault {
-		ANSWER, BARE, NO_LENGTH, CUT_OFF, STALL, STALL_BODY, DELAY, DROP, CORRUPT, SIGNATURE, ECHO
+		ANSWER, BARE, NO_LENGTH, CUT_OFF, STALL, STALL_BODY, DELAY, DROP, CORRUPT, SIGNATURE, ECHO, HOLD
 	}
 
 
@@ -207,6 +208,12 @@ public final class FakeS3 implements AutoCloseable {
 
 	/** Holds stalled requests until {@link #behave} or {@link #close} */
 	private volatile CountDownLatch stalled = new CountDownLatch(1);
+
+	/** Holds the requests {@link #holdPut} took until {@link #release}, {@link #behave} or {@link #close} */
+	private volatile CountDownLatch holding = new CountDownLatch(1);
+
+	/** The requests {@link #holdPut} is holding now */
+	private final List<Request> held = new CopyOnWriteArrayList<>();
 
 	private boolean trusting;
 
@@ -337,6 +344,11 @@ public final class FakeS3 implements AutoCloseable {
 		return rule(r -> r.op() == op, Fault.ANSWER, status, code, null, null);
 	}
 
+	/** Answers every GET of a range with this error until {@link #behave}; whole GETs work */
+	public FakeS3 failRanges(int status, String code) {
+		return rule(r -> r.op() == Op.GET_OBJECT && r.header("range") != null, Fault.ANSWER, status, code, null, null);
+	}
+
 	/** Answers that part's upload with this error until {@link #behave} */
 	public FakeS3 failPart(int number, int status, String code) {
 		return rule(part(number), Fault.ANSWER, status, code, null, null);
@@ -439,18 +451,45 @@ public final class FakeS3 implements AutoCloseable {
 		return fail(403, "AccessDenied");
 	}
 
-	/** Stops misbehaving, and lets stalled requests go (unanswered) */
+	/**
+	 * Holds every put of that key as it arrives, its body unread, until {@link #release}, {@link #behave} or
+	 * {@link #close}; then handles it under the rules in force at that moment, as if it had just arrived. A client is
+	 * so stopped at that put, with all it did before, until the test lets it go on, or fail.
+	 */
+	public FakeS3 holdPut(String key) {
+		return rule(r -> r.op() == Op.PUT_OBJECT && key.equals(r.key()), Fault.HOLD, 0, null, null, null);
+	}
+
+	/** @return the requests {@link #holdPut} is holding now */
+	public List<Request> held() {
+		return List.copyOf(held);
+	}
+
+	/** Lets the requests {@link #holdPut} holds go on, and holds no more; other rules stay */
+	public FakeS3 release() {
+		rules.removeIf(rule -> rule.fault() == Fault.HOLD);
+		CountDownLatch go = holding;
+		holding = new CountDownLatch(1);
+		go.countDown();
+		return this;
+	}
+
+	/** Stops misbehaving, and lets stalled requests go (unanswered), and held ones on */
 	public FakeS3 behave() {
 		rules.clear();
 		CountDownLatch release = stalled;
 		stalled = new CountDownLatch(1);
 		release.countDown();
+		CountDownLatch go = holding;
+		holding = new CountDownLatch(1);
+		go.countDown();
 		return this;
 	}
 
 	@Override
 	public synchronized void close() {
 		stalled.countDown();
+		holding.countDown();
 		server.stop(0);
 		executor.shutdownNow();
 		if (trusting) {
@@ -482,7 +521,18 @@ public final class FakeS3 implements AutoCloseable {
 		exchange.getResponseHeaders().set("x-amz-request-id", requestId);
 		try {
 			Request request = parse(exchange);
+			// Taken before the rules are read: a release between the two still lets this request go
+			CountDownLatch hold = holding;
 			Rule rule = rule(request);
+			if (rule != null && rule.fault() == Fault.HOLD) {
+				held.add(request);
+				try {
+					hold.await(30, TimeUnit.SECONDS);
+				} finally {
+					held.remove(request);
+				}
+				rule = rule(request);
+			}
 			if (rule != null && rule.fault() == Fault.STALL) {
 				requests.add(request);
 				stalled.await(30, TimeUnit.SECONDS);

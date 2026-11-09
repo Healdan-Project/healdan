@@ -9,7 +9,10 @@ import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
+import java.util.Set;
+import java.util.TreeSet;
 
 import com.logicaldoc.util.config.ContextProperties;
 
@@ -18,6 +21,8 @@ public class ConfigFileTest {
 
     // Leading whitespace is refused by ConfigPlan (the file format cannot keep it); everything else must survive.
     private static final String AWKWARD = "sm0ke,p=a\\ss $x #1 é:! ";
+
+    private static final String HEALDAN_STORAGE = "com.logicaldoc.healdan.storage.HealdanStorage";
 
     public static void main(String[] args) throws Exception {
         File defaults = new File(args[0]);
@@ -44,6 +49,7 @@ public class ConfigFileTest {
         Check.eq("jdbc:mariadb://db:3306/logicaldoc", reread.getProperty("jdbc.url"), "jdbc.url applied");
         Check.eq("https://docs.example.org/", reread.getProperty("server.url"), "server.url applied");
         Check.eq("true", reread.getProperty("webservice.enabled"), "unmanaged key preserved");
+        Check.eq(HEALDAN_STORAGE, reread.getProperty("store"), "store is HealdanStorage after the first start");
 
         // Why ConfigPlan refuses '${' and '_b64_' in the password: no reader of the file sees it raw.
         ContextProperties probe = new ContextProperties(conf);
@@ -121,6 +127,23 @@ public class ConfigFileTest {
         Check.eq(adminCsp, new ContextProperties(conf).getProperty("security.csp"),
                 "admin-set security.csp kept, with its non-breaking space made plain");
 
+        // Healdan's storage is CE's store bean on every start, whatever the file holds: LogicalDOC's own FSStore,
+        // any other class, or none. Nothing else in the file changes.
+        for (String store : Arrays.asList("com.logicaldoc.core.store.FSStore", "com.example.OtherStore", null)) {
+            ContextProperties before = new ContextProperties(conf);
+            if (store == null)
+                before.remove("store");
+            else
+                before.setProperty("store", store);
+            before.write();
+            Properties expected = raw(conf);
+            expected.setProperty("store", HEALDAN_STORAGE);
+            DockerInit.applyConfig(conf, defaults, ConfigPlan.envKeys(Map.of("DB_PASSWORD", "rotated")));
+            Check.eq(HEALDAN_STORAGE, new ContextProperties(conf).getProperty("store"),
+                    "store=" + store + " becomes HealdanStorage");
+            Check.eq(Set.of(), differing(expected, raw(conf)), "store=" + store + ": the other keys that changed");
+        }
+
         // context.properties is written byte-per-char (Latin-1): anything it cannot hold must be refused, not
         // silently corrupted into a value that only fails later when Tomcat logs in.
         Check.throwsWith("DB_PASSWORD", () -> apply(conf, Map.of("DB_PASSWORD", "pa€ss")), "non-Latin-1 password");
@@ -130,6 +153,23 @@ public class ConfigFileTest {
                 () -> apply(conf, Map.of("DB_PASSWORD", "pw", "LOGICALDOC_PUBLIC_URL", "https://bücher.例え.jp")),
                 "non-Latin-1 public URL");
         Check.done("ConfigFileTest");
+    }
+
+    /** @return the keys whose values differ, or that only one of them has */
+    private static Set<String> differing(Properties one, Properties two) {
+        Set<String> keys = new TreeSet<>(one.stringPropertyNames());
+        keys.addAll(two.stringPropertyNames());
+        keys.removeIf(key -> Objects.equals(one.getProperty(key), two.getProperty(key)));
+        return keys;
+    }
+
+    /** The file's keys and values as written, with no ${...} expanded */
+    private static Properties raw(File conf) throws java.io.IOException {
+        Properties properties = new Properties();
+        try (FileInputStream in = new FileInputStream(conf)) {
+            properties.load(in);
+        }
+        return properties;
     }
 
     private static void set(File conf, String key, String value) throws java.io.IOException {

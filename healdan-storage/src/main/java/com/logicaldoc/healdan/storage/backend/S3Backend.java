@@ -24,6 +24,8 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.regex.Pattern;
@@ -80,6 +82,12 @@ import software.amazon.awssdk.services.s3.model.S3Object;
  * message: an answer to a wrong secret can hold the request's signature, and neither the secret nor a signature may
  * reach a log, an answer or the screen.
  * </p>
+ *
+ * <p>
+ * {@link #close()} shuts the client once nothing uses it: each call under way, and each stream or channel still open,
+ * keeps it open, so a backend that {@code Backends.forget} drops, as the Storage tab's save and Test do, finishes the
+ * downloads and uploads it began rather than failing them.
+ * </p>
  */
 public final class S3Backend implements Backend, Closeable {
 
@@ -123,6 +131,14 @@ public final class S3Backend implements Backend, Closeable {
 	private final SdkHttpClient http;
 
 	private final S3Client client;
+
+	/** The calls under way, and the streams and channels open, each of which keeps the client open */
+	private final AtomicInteger users = new AtomicInteger();
+
+	/** Whether {@link #close()} was called, so the last user to end shuts the client */
+	private volatile boolean closing;
+
+	private final AtomicBoolean shut = new AtomicBoolean();
 
 	/**
 	 * @param id the backend's id
@@ -279,15 +295,57 @@ public final class S3Backend implements Backend, Closeable {
 		log.info("Backend {} wrote its marker {} in bucket {}", id, markerKey(), bucket());
 	}
 
+	/**
+	 * Deletes the marker object, so another backend may have the bucket and prefix: for the Storage tab, once a backend
+	 * is removed, or an add is undone. A marker that names another backend or install is left as it is.
+	 *
+	 * @return whether this backend's marker was there, and is gone
+	 * @throws BackendFailingException if it can't be read or deleted
+	 */
+	public boolean removeMarker() throws BackendFailingException {
+		enter();
+		try {
+			Optional<String> found = readMarker();
+			if (found.isEmpty() || !found.get().equals(marker()))
+				return false;
+			try {
+				client.deleteObject(b -> b.bucket(bucket()).key(markerKey()));
+			} catch (SdkException e) {
+				throw checkFailure(failure("delete its marker", e));
+			}
+			log.info("Backend {} deleted its marker {} in bucket {}", id, markerKey(), bucket());
+			return true;
+		} finally {
+			leave();
+		}
+	}
+
+	/**
+	 * Applies the endpoint rule ({@link Endpoints}) to settings as a backend built from them is held to it, looking
+	 * the host up as such a backend would: for the Storage tab, before anything is saved.
+	 *
+	 * @param settings a backend's settings
+	 * @throws IllegalArgumentException saying what is wrong; an {@link Endpoints.HostNotFound} if the host has no
+	 *         address to check
+	 */
+	public static void checkEndpoint(S3Settings settings) {
+		Endpoints.check(settings, resolver);
+	}
+
 	@Override
 	public void check() throws BackendFailingException {
-		Optional<String> found = readMarker();
-		if (found.isEmpty())
-			throw new BackendFailingException("The " + place() + " of backend " + id + " has no marker "
-					+ LocalBackend.MARKER + ": it isn't this backend's, or it was emptied");
-		if (!found.get().equals(marker()))
-			throw new BackendFailingException(
-					"The " + place() + " of backend " + id + " belongs to another backend or install");
+		enter();
+		try {
+			Optional<String> found = readMarker();
+			if (found.isEmpty())
+				throw new BackendFailingException("The " + place() + " of backend " + id + " has no marker "
+						+ LocalBackend.MARKER + ": it isn't this backend's, or it was emptied");
+			if (!found.get().equals(marker()))
+				throw new BackendFailingException(
+						"The " + place() + " of backend " + id + " belongs to another backend or install");
+		} finally {
+			leave();
+		}
 	}
 
 	@Override
@@ -296,10 +354,15 @@ public final class S3Backend implements Backend, Closeable {
 		if (md5 != null && md5.length != 16)
 			throw new IllegalArgumentException("Not an MD5: " + md5.length + " bytes");
 		long size = Files.size(file);
-		if (size > SINGLE_PUT_LIMIT)
-			multipart(key, objectKey, file, size, md5);
-		else
-			single(key, objectKey, file, size, md5);
+		enter();
+		try {
+			if (size > SINGLE_PUT_LIMIT)
+				multipart(key, objectKey, file, size, md5);
+			else
+				single(key, objectKey, file, size, md5);
+		} finally {
+			leave();
+		}
 	}
 
 	/** S3: the object is put at its key, already in place; {@code discard} deletes it (call 20) */
@@ -407,26 +470,36 @@ public final class S3Backend implements Backend, Closeable {
 	@Override
 	public InputStream get(String key) throws IOException {
 		String objectKey = objectKey(key);
-		ResponseInputStream<GetObjectResponse> in;
+		enter();
 		try {
-			in = client.getObject(b -> b.bucket(bucket()).key(objectKey));
+			ResponseInputStream<GetObjectResponse> in = client.getObject(b -> b.bucket(bucket()).key(objectKey));
+			Long length = in.response().contentLength();
+			// Its own user of the client, until it is closed
+			return new Download(in, key, length == null ? -1 : length);
 		} catch (NoSuchKeyException e) {
 			throw missing(key);
 		} catch (SdkException e) {
 			throw failure("read " + key, e);
+		} finally {
+			leave();
 		}
-		Long length = in.response().contentLength();
-		return new Download(in, key, length == null ? -1 : length);
 	}
 
 	/** The size comes from {@code HEAD}; each read is a ranged {@code GET} ({@link S3Channel}) */
 	@Override
 	public SeekableByteChannel open(String key) throws IOException {
 		String objectKey = objectKey(key);
-		long size = head(key, objectKey);
-		if (size < 0)
-			throw missing(key);
-		return new S3Channel(size, (first, last) -> range(key, objectKey, first, last, size));
+		enter();
+		try {
+			long size = head(key, objectKey);
+			if (size < 0)
+				throw missing(key);
+			// The channel's own user of the client, between its ranged reads too, until it is closed
+			enter();
+			return new S3Channel(size, (first, last) -> range(key, objectKey, first, last, size), this::leave);
+		} finally {
+			leave();
+		}
 	}
 
 	/** @return the bytes from first to last, checking they are that range of an object of that size */
@@ -461,7 +534,12 @@ public final class S3Backend implements Backend, Closeable {
 
 	@Override
 	public long size(String key) throws IOException {
-		return head(key, objectKey(key));
+		enter();
+		try {
+			return head(key, objectKey(key));
+		} finally {
+			leave();
+		}
 	}
 
 	/** @return the object's size, -1 when there is none (HEAD can't tell a missing bucket from a missing key) */
@@ -486,12 +564,15 @@ public final class S3Backend implements Backend, Closeable {
 	@Override
 	public void delete(String key) throws IOException {
 		String objectKey = objectKey(key);
+		enter();
 		try {
 			client.deleteObject(b -> b.bucket(bucket()).key(objectKey));
 		} catch (NoSuchKeyException e) {
 			// Missing is fine
 		} catch (SdkException e) {
 			throw failure("delete " + key, e);
+		} finally {
+			leave();
 		}
 	}
 
@@ -503,25 +584,30 @@ public final class S3Backend implements Backend, Closeable {
 		String base = settings.prefix();
 		String full = base + (prefix == null ? "" : prefix);
 		String token = null;
-		do {
-			String next = token;
-			ListObjectsV2Response page;
-			try {
-				page = client.listObjectsV2(
-						b -> b.bucket(bucket()).prefix(full).maxKeys(Math.min(1000, max)).continuationToken(next));
-			} catch (SdkException e) {
-				throw failure("list " + (full.isEmpty() ? "the bucket" : full), e);
-			}
-			for (S3Object object : page.contents()) {
-				// An object named as the prefix itself, as some tools make for a folder, is no key
-				if (!object.key().startsWith(base) || object.key().length() == base.length())
-					continue;
-				keys.add(object.key().substring(base.length()));
-				if (keys.size() >= max)
-					return keys;
-			}
-			token = Boolean.TRUE.equals(page.isTruncated()) ? page.nextContinuationToken() : null;
-		} while (token != null);
+		enter();
+		try {
+			do {
+				String next = token;
+				ListObjectsV2Response page;
+				try {
+					page = client.listObjectsV2(
+							b -> b.bucket(bucket()).prefix(full).maxKeys(Math.min(1000, max)).continuationToken(next));
+				} catch (SdkException e) {
+					throw failure("list " + (full.isEmpty() ? "the bucket" : full), e);
+				}
+				for (S3Object object : page.contents()) {
+					// An object named as the prefix itself, as some tools make for a folder, is no key
+					if (!object.key().startsWith(base) || object.key().length() == base.length())
+						continue;
+					keys.add(object.key().substring(base.length()));
+					if (keys.size() >= max)
+						return keys;
+				}
+				token = Boolean.TRUE.equals(page.isTruncated()) ? page.nextContinuationToken() : null;
+			} while (token != null);
+		} finally {
+			leave();
+		}
 		return keys;
 	}
 
@@ -556,6 +642,7 @@ public final class S3Backend implements Backend, Closeable {
 		} catch (IllegalArgumentException e) {
 			throw new IOException("Not a held location: " + location, e);
 		}
+		enter();
 		try {
 			client.deleteObject(b -> b.bucket(bucket()).key(objectKey)
 					.overrideConfiguration(o -> o.apiCallTimeout(PURGE_TIMEOUT)));
@@ -563,13 +650,42 @@ public final class S3Backend implements Backend, Closeable {
 			// Missing is fine
 		} catch (SdkException e) {
 			throw failure("delete " + location, e);
+		} finally {
+			leave();
 		}
 	}
 
+	/**
+	 * Shuts the client once nothing uses it: at once if nothing does, else when the last call under way ends or the
+	 * last stream or channel open is closed. A call begun after that fails, as on any closed client.
+	 */
 	@Override
 	public void close() {
-		client.close();
-		http.close();
+		closing = true;
+		if (users.get() == 0)
+			shutClient();
+	}
+
+	/** Counts a user of the client, which {@link #leave} ends */
+	private void enter() {
+		users.incrementAndGet();
+	}
+
+	private void leave() {
+		if (users.decrementAndGet() == 0 && closing)
+			shutClient();
+	}
+
+	private void shutClient() {
+		if (shut.compareAndSet(false, true)) {
+			client.close();
+			http.close();
+		}
+	}
+
+	/** @return whether the client is shut; for tests */
+	boolean isShut() {
+		return shut.get();
 	}
 
 	@Override
@@ -839,10 +955,14 @@ public final class S3Backend implements Backend, Closeable {
 
 		private long read;
 
+		/** Whether it still counts as a user of the client */
+		private boolean using = true;
+
 		Download(ResponseInputStream<GetObjectResponse> in, String key, long expected) {
 			this.in = in;
 			this.key = key;
 			this.expected = expected;
+			enter();
 		}
 
 		@Override
@@ -877,9 +997,16 @@ public final class S3Backend implements Backend, Closeable {
 
 		@Override
 		public void close() throws IOException {
-			if (expected < 0 || read < expected)
-				in.abort();
-			in.close();
+			try {
+				if (expected < 0 || read < expected)
+					in.abort();
+				in.close();
+			} finally {
+				if (using) {
+					using = false;
+					leave();
+				}
+			}
 		}
 	}
 }

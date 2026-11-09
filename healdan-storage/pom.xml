@@ -241,13 +241,14 @@
 			</testResource>
 		</testResources>
 		<plugins>
-			<!-- Nothing a test makes may land in the home folder of whoever runs it -->
+			<!-- Nothing a test makes may land in the home folder of whoever runs it. The secret key is in a folder of
+				its own, as in Docker's conf volume, which the Storage tab keeps local backends out of -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
 				<configuration>
 					<systemPropertyVariables>
-						<healdan.secretKey>${project.build.directory}/healdan-secret.key</healdan.secretKey>
+						<healdan.secretKey>${project.build.directory}/conf/healdan-secret.key</healdan.secretKey>
 						<healdan.storageStaging>${project.build.directory}/storage-staging</healdan.storageStaging>
 						<healdan.storageCache>${project.build.directory}/storage-cache</healdan.storageCache>
 						<healdan.storageKeys>${project.build.directory}/storage-keys</healdan.storageKeys>

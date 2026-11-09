@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.storage.mover;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.time.Duration;
@@ -109,6 +110,37 @@ public class StorageStartupTest extends AbstractStorageTestCase {
 		} finally {
 			startup.stop();
 			Mover.get().stop();
+		}
+	}
+
+	/**
+	 * Scheduling the retests tells {@link BackendHealth} how long a round's findings stay known, as reads refused for an
+	 * outage don't ask the database: {@code storage.retestSeconds}, after which the next round finds them again
+	 */
+	@Test
+	public void testRetestsTellHowLongAFindingStaysKnown() throws Exception {
+		BackendHealth health = BackendHealth.get();
+		StorageSettings settings = StorageSettings.get();
+		int seconds = settings.retestSeconds();
+		Duration known = health.knownFor();
+		Duration every = Duration.ofSeconds(45);
+		assertNotEquals("another interval than the one known already", known, every);
+		StorageStartup startup = new StorageStartup(health, Mover.get(), Purge.get(), NightlyCheck.get(),
+				StorageAlert.get(), settings);
+		startup.afterStart = Duration.ofDays(2);
+		try {
+			settings.setRetestSeconds(45);
+			startup.started();
+
+			long deadline = System.currentTimeMillis() + 20_000;
+			while (!every.equals(health.knownFor()) && System.currentTimeMillis() < deadline)
+				Thread.sleep(10);
+			assertEquals(every, health.knownFor());
+		} finally {
+			startup.stop();
+			Mover.get().stop();
+			settings.setRetestSeconds(seconds);
+			health.retestsEvery(known);
 		}
 	}
 }

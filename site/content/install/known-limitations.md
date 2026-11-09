@@ -1,6 +1,6 @@
 ---
 title: Known Limitations
-weight: 11
+weight: 12
 ---
 
 - **LogicalDOC's database schema is never migrated.** Healdan upgrades its own tables on every start, but not
@@ -111,6 +111,32 @@ weight: 11
   already paired with their own helper may be asked to pair again. Their LibreOffice extension and the web page are
   unaffected. Microsoft Office works for the second person once the first has quit their helper or signed out of the
   Mac.
+
+## Storage Backends
+
+- **A backend per Store, not per matter.** Each Store keeps its files on one
+  [storage backend](../../admin/storage-backends/). A matter that needs its files somewhere else moves to a Store
+  that keeps them there.
+- **Encryption is chosen when a backend is added.** It can't be added to a backend that holds files, or taken away,
+  and a backend's key can't be changed in place. Add a new backend and give its Stores the new one instead.
+- **A file rewritten in place keeps only its newest bytes.** When LogicalDOC writes a new file under an old one's
+  name, as **Replace file** does, the old bytes go once the new file reaches the backend, at once on a local one. A
+  backup restored from before then gets the new file, as on a server without storage backends. See
+  [Held Deletes and the Holding Period](../../admin/storage-backends/held-deletes/#replace-file).
+- **A large file can arrive cut short in an outage.** A file larger than a tenth of the
+  [read cache](../../admin/storage-backends/the-read-cache/#large-files) is read straight from its bucket as it's
+  sent. If the bucket stops answering part-way, the download stops short rather than showing the outage message.
+- **Some of LogicalDOC's screens don't show the outage message.** While an S3 backend can't be reached, the web
+  page's downloads and shared links show "This file is in …'s cloud storage, which can't be reached right now.", and
+  a document's preview shows LogicalDOC's "not available" page, for a file that isn't in the read cache. But:
+  - an email's attachment, opened from the email's preview, shows a bare error page;
+  - a ZIP export leaves out the files it can't read, and doesn't say so;
+  - thumbnails show as broken images.
+- **LogicalDOC's Stores screen is hidden,** under **Administration → Settings**, and its Folders tab with it. So
+  Original's folder (`store.1.dir`) and LogicalDOC's six other folders (`conf.dbdir`, `conf.exportdir`,
+  `conf.importdir`, `conf.logdir`, `conf.plugindir` and `conf.userdir`) are set only in the configuration volume's
+  `context.properties`: see [Settings Without a Screen](../configuration/#settings-without-a-screen). In Healdan's
+  Docker image they're paths inside the container, which only break things when changed.
 
 ## Filing Email from Outlook
 

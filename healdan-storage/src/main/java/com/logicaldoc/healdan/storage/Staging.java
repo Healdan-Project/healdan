@@ -51,8 +51,8 @@ public final class Staging {
 		return folder;
 	}
 
-	/** @return Original's folder, {@code store.1.dir} */
-	static Path original() {
+	/** @return Original's folder, {@code store.1.dir}, absolute */
+	public static Path original() {
 		return Paths.get(Context.get().getConfig().getProperty("store.1.dir")).toAbsolutePath().normalize();
 	}
 

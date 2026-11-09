@@ -26,6 +26,7 @@ which Healdan's licence incorporates, set this out. You use Healdan at your own 
   {{< card link="reverse-proxy/" title="Reverse Proxy" icon="globe-alt" >}}
   {{< card link="office-integration/" title="Office Integration" icon="desktop-computer" >}}
   {{< card link="sign-in/" title="Sign-In Providers" icon="login" >}}
+  {{< card link="cloud-storage/" title="Cloud Storage" icon="cloud" >}}
   {{< card link="backup-and-restore/" title="Backup and Restore" icon="archive" >}}
   {{< card link="upgrading/" title="Upgrading" icon="arrow-up" >}}
   {{< card link="host-folders/" title="Host Folders Instead of Volumes" icon="folder" >}}

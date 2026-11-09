@@ -121,6 +121,19 @@ public class BackendHealthTest extends AbstractStorageTestCase {
 				Long.class, backendId);
 	}
 
+	/**
+	 * How long ago an outage was found, which decides whether reads fail at once, is read from the monotonic clock: a
+	 * wall clock set back can't make it negative, nor one set forward make it stale. When it began, which the tab shows,
+	 * stays the wall clock's.
+	 */
+	@Test
+	public void testOutageAgeOnTheMonotonicClock() {
+		long before = System.nanoTime();
+		long read = health.clock.getAsLong();
+		long after = System.nanoTime();
+		assertTrue(before + " <= " + read + " <= " + after, before <= read && read <= after);
+	}
+
 	@Test
 	public void testUncheckedUntilStart() throws Exception {
 		// A save into the S3 Store lands in staging, whose first write checks it; the bucket isn't checked

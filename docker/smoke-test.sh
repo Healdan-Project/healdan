@@ -15,6 +15,8 @@ PORT=${SMOKE_PORT:-18080}
 BASE="http://127.0.0.1:$PORT"
 # The stand-in sign-in provider's host port (docker/tests/compose.signin.yaml), on 127.0.0.1 only.
 KEYCLOAK_PORT=${SMOKE_KEYCLOAK_PORT:-18180}
+# The stand-in S3 server's host port (docker/tests/compose.storage.yaml), on 127.0.0.1 only.
+GARAGE_PORT=${SMOKE_GARAGE_PORT:-13900}
 WORK=$(mktemp -d)
 ENV_FILE=$WORK/smoke.env
 # Awkward on purpose: exercises .env quoting, context.properties escaping and the JDBC login.
@@ -25,9 +27,11 @@ export TZ=UTC
 
 # docker/tests/compose.smoke.yaml makes Healdan seed a Store, template, client and matter to upload into.
 # docker/tests/compose.signin.yaml adds a stand-in sign-in provider, Keycloak, and makes Healdan seed its setup.
+# docker/tests/compose.storage.yaml adds a stand-in S3 server, Garage, and makes Healdan seed a backend and a Store
+# on it.
 compose() {
   docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f compose.yaml -f docker/tests/compose.smoke.yaml \
-    -f docker/tests/compose.signin.yaml "$@"
+    -f docker/tests/compose.signin.yaml -f docker/tests/compose.storage.yaml "$@"
 }
 # The app writes its warnings to dms.log in the repository volume, not to stdout, and step 8 replaces the container
 # but keeps the volume, so the log covers the whole run. docker cp reads it from a stopped container too.
@@ -60,6 +64,9 @@ cleanup() {
     compose logs --no-log-prefix --tail 150 app
     echo "== Keycloak's last 40 lines of output"
     compose logs --no-log-prefix --tail 40 keycloak
+    echo "== Garage's last 40 lines of output, and its setup's"
+    compose logs --no-log-prefix --tail 40 garage
+    compose logs --no-log-prefix --tail 20 garage-setup
     show_server_log
   fi
   compose down -v --remove-orphans >/dev/null 2>&1
@@ -67,7 +74,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-printf "DB_PASSWORD='%s'\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\n" "$PW" "$PORT" "$KEYCLOAK_PORT" > "$ENV_FILE"
+printf "DB_PASSWORD='%s'\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\nSMOKE_GARAGE_PORT=%s\n" "$PW" "$PORT" \
+  "$KEYCLOAK_PORT" "$GARAGE_PORT" > "$ENV_FILE"
 
 # Fixtures: a 16x16 PNG and a one-page PDF with a correct xref table.
 python3 - "$WORK" <<'PY'
@@ -129,6 +137,10 @@ check "Keycloak healthy" wait_healthy "$(compose ps -q keycloak)" 300
 # Not head: under pipefail, the SIGPIPE'd compose logs would fail the line.
 kc_started=$(compose logs --no-log-prefix keycloak 2>&1 | sed -n 's/.* started in \([0-9.]*\)s\..*/\1/p' || true)
 echo "Keycloak started in ${kc_started%%$'\n'*} s"
+# The app starts only once Garage's setup has finished (docker/tests/garage/setup.sh), which times itself.
+garage_started=$(compose logs --no-log-prefix garage-setup 2>&1 \
+  | sed -n 's/^Garage started and set up in \([0-9]*\) s$/\1/p' || true)
+echo "Garage started and set up in ${garage_started%%$'\n'*} s"
 [ "$FAILED" = 0 ] || exit 1
 
 echo "== 2. login page and the API"
@@ -225,6 +237,14 @@ check "smoke-fixture seed recorded" test \
   "$(db_query "select count(*) from hd_setting where name = 'seed.smoke-fixture'")" = 1
 check "smoke-signin seed recorded" test \
   "$(db_query "select count(*) from hd_setting where name = 'seed.smoke-signin'")" = 1
+check "smoke-storage seed recorded" test \
+  "$(db_query "select count(*) from hd_setting where name = 'seed.smoke-storage'")" = 1
+# The image sets store= to HealdanStorage on every start (ConfigPlan.HEALDAN_KEYS), and healdan-storage's seeds run
+# only when it's CE's store. storage-record-original writes Original's marker, into an empty folder on a fresh stack.
+storage_seeds="'seed.storage-settings', 'seed.storage-record-original', 'seed.storage-hide-stores'"
+check "the storage seeds recorded, so HealdanStorage is CE's store" test \
+  "$(db_query "select count(*) from hd_setting where name in ($storage_seeds)")" = 3
+check "Original's marker in its folder" compose exec -T app test -s /opt/logicaldoc/repository/docs/.healdan-backend
 # doc_ids is "<pdf id> <png id>", uploaded in that order: doc #s 1 and 2
 n=1
 for id in $doc_ids; do
@@ -337,6 +357,21 @@ check "provider sign-in through the stand-in" env BASE="$BASE" KEYCLOAK="127.0.0
   bash docker/tests/test-signin.sh
 echo "step 5e took $((SECONDS - signin_started)) s"
 
+echo "== 5f. storage backends against the stand-in Garage (S3 spec section 16.1)"
+# Files text files into the seeded Smoke Cloud, whose encrypted backend is on Garage, and into Smoke, and checks that
+# they reach Garage encrypted, move up and home with their matter, read back from Garage and from the read cache, and
+# that an outage, with Garage stopped, keeps saves in staging and answers 503 for the files that aren't cached; its
+# output carries its own PASS/FAIL lines. It stops and starts Garage itself, and step 8 runs it again after the restart,
+# with what it kept in $WORK/storage.state.
+storage_test() { # [after-restart]
+  env BASE="$BASE" S3="http://127.0.0.1:$GARAGE_PORT" GARAGE_CONTAINER="$(compose ps -q garage)" \
+    APP_CONTAINER="$(compose ps -q app)" DB_CONTAINER="$(compose ps -q db)" STATE="$WORK/storage.state" \
+    bash docker/tests/test-storage.sh "$@"
+}
+storage_started=$SECONDS
+check "storage backends against the stand-in" storage_test
+echo "step 5f took $((SECONDS - storage_started)) s"
+
 echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \
   'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "select 1 from ld_webservicecall where 1=0"'
@@ -368,5 +403,7 @@ check "security.csp's non-breaking space made plain" \
 check "login.nocache.js is revalidated on every load again" test "$(cache_control "$LOADER")" = no-cache
 check "the Content-Security-Policy has object-src 'none' again" \
   grep -qx "object-src 'none'" <(csp_directives "$BASE/login.jsp")
+# The containers are new, so storage_test looks them up again
+check "storage backends after the restart" storage_test after-restart
 
 finish

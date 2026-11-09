@@ -36,11 +36,12 @@ import jakarta.annotation.PreDestroy;
  * mover's files in transfer (call 22). Then, on a thread of its own, so a backend that doesn't answer never holds up
  * the webapp's start, it checks every backend, before the mover's first pass (call 24), and starts the mover and the
  * retests of backends not OK, every {@code storage.retestSeconds}, on a thread of their own that a long purge or
- * nightly check can't hold up; the purge runs daily, the admins' alert ({@link StorageAlert}) hourly, and the nightly
- * Store check at 03:17 server time, none in the first 10 minutes after the start. Each step runs whatever another
- * failed with, and each recurring task schedules its next run whatever its run failed with, an {@link Error} such as
- * a missing class too (but for a {@link VirtualMachineError}), so no one failure, a setting that can't be read among
- * them, stops the rest. Saves meanwhile check the backend they reach themselves
+ * nightly check can't hold up, which also runs the early retests a read refused for an outage asks for
+ * ({@link BackendHealth#onEarlyRetest}); the purge runs daily, the admins' alert ({@link StorageAlert}) hourly, and
+ * the nightly Store check at 03:17 server time, none in the first 10 minutes after the start. Each step runs whatever
+ * another failed with, and each recurring task schedules its next run whatever its run failed with, an {@link Error}
+ * such as a missing class too (but for a {@link VirtualMachineError}), so no one failure, a setting that can't be read
+ * among them, stops the rest. Saves meanwhile check the backend they reach themselves
  * ({@link BackendHealth#beforeWrite}). Does nothing unless CE's Store is a {@code HealdanStorage}.
  */
 @Component
@@ -116,7 +117,17 @@ public class StorageStartup implements HealdanStartListener {
 		ZonedDateTime start = ZonedDateTime.now();
 		ScheduledExecutorService running = Executors.newScheduledThreadPool(2, threads("healdan-storage-start-"));
 		scheduler = running;
-		retests = Executors.newSingleThreadScheduledExecutor(threads("healdan-storage-retest-"));
+		ScheduledExecutorService retesting = Executors
+				.newSingleThreadScheduledExecutor(threads("healdan-storage-retest-"));
+		retests = retesting;
+		health.onEarlyRetest(work -> {
+			try {
+				retesting.execute(() -> safely("early backend retest", work));
+				return true;
+			} catch (RejectedExecutionException e) {
+				return false;
+			}
+		});
 		running.execute(() -> begin(running, start));
 	}
 
@@ -163,13 +174,16 @@ public class StorageStartup implements HealdanStartListener {
 
 	/** Tests each backend that isn't OK, then again after the setting's seconds, read each time */
 	private void scheduleRetest() {
+		Duration delay = retestDelay();
+		// How long the findings of the round that just ended stay known to reads, which don't ask the database
+		health.retestsEvery(delay);
 		schedule(retests, () -> {
 			try {
 				safely("backend retest", health::retest);
 			} finally {
 				scheduleRetest();
 			}
-		}, retestDelay());
+		}, delay);
 	}
 
 	/** @return {@code storage.retestSeconds}; the default if it can't be read, as in a database outage */
@@ -232,6 +246,7 @@ public class StorageStartup implements HealdanStartListener {
 	 */
 	@PreDestroy
 	public void stop() {
+		health.onEarlyRetest(null);
 		ScheduledExecutorService running;
 		ScheduledExecutorService retesting;
 		synchronized (this) {

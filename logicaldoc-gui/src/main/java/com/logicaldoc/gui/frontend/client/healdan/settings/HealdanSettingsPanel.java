@@ -34,7 +34,8 @@ import com.smartgwt.client.widgets.layout.HLayout;
 
 /**
  * Healdan's settings and its client list, under Administration (spec 8.6), with
- * the Sign-In tab beside them (M4 spec section 10.3)
+ * the Sign-In tab beside them (M4 spec section 10.3) and the Storage tab (S3
+ * storage backends spec section 11)
  */
 public class HealdanSettingsPanel extends AdminPanel {
 
@@ -72,6 +73,7 @@ public class HealdanSettingsPanel extends AdminPanel {
 	public HealdanSettingsPanel() {
 		super("Healdan settings");
 		tabs.addTab(new SignInTab());
+		tabs.addTab(new StorageTab());
 	}
 
 	@Override

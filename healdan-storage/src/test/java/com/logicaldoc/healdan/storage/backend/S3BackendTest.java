@@ -45,6 +45,10 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -551,6 +555,78 @@ public class S3BackendTest extends BackendContract {
 			assertEquals(-1, channel.read(ByteBuffer.allocate(10)));
 		}
 		assertTrue(fake.requests(Op.GET_OBJECT).isEmpty());
+	}
+
+	/**
+	 * A backend closed while a download and a channel are open, as {@code Backends.forget} closes one the Storage tab
+	 * dropped, keeps its client until both are closed, so they read to the end
+	 */
+	@Test
+	public void testCloseWaitsForOpenReads() throws IOException {
+		byte[] data = bytes(3000);
+		backend.put("1/2/doc/3.0", source(data), md5(data));
+		S3Backend s3 = (S3Backend) backend;
+		InputStream stream = s3.get("1/2/doc/3.0");
+		SeekableByteChannel channel = s3.open("1/2/doc/3.0");
+
+		s3.close();
+		assertFalse("open reads keep the client", s3.isShut());
+		ByteBuffer first = ByteBuffer.allocate(1000);
+		assertEquals(1000, channel.read(first));
+		assertArrayEquals(Arrays.copyOfRange(data, 0, 1000), first.array());
+		assertArrayEquals(data, stream.readAllBytes());
+		stream.close();
+		assertFalse("the channel still keeps it", s3.isShut());
+		ByteBuffer rest = ByteBuffer.allocate(2000);
+		assertEquals(2000, channel.read(rest));
+		assertArrayEquals(Arrays.copyOfRange(data, 1000, 3000), rest.array());
+		channel.close();
+		assertTrue("shut once the last read is closed", s3.isShut());
+
+		// With nothing open, at once
+		S3Backend idle = backend(fake, 9, "idle", true);
+		idle.close();
+		assertTrue(idle.isShut());
+	}
+
+	/**
+	 * A backend closed while a put is under way, as {@code Backends.forget} closes one the Storage tab dropped, keeps its
+	 * client until the put has ended, so the upload finishes rather than failing on a shut client
+	 */
+	@Test
+	public void testCloseWaitsForACallUnderWay() throws Exception {
+		// A read timeout longer than any wait here, so only the close could end the held put
+		S3Backend s3 = backend(fake.settings(BUCKET, "held/").withTimeouts(Duration.ofSeconds(1), Duration.ofSeconds(20),
+				Duration.ofSeconds(20), 1), 10, true);
+		byte[] data = bytes(3000);
+		Path file = source(data);
+		byte[] md5 = md5(data);
+		fake.holdPut("held/1/2/doc/4.0");
+		ExecutorService thread = Executors.newSingleThreadExecutor();
+		try {
+			Future<?> put = thread.submit(() -> {
+				s3.put("1/2/doc/4.0", file, md5);
+				return null;
+			});
+			long deadline = System.currentTimeMillis() + 20_000;
+			while (fake.held().isEmpty()) {
+				if (put.isDone())
+					put.get();
+				if (System.currentTimeMillis() > deadline)
+					fail("The put never reached the server");
+				Thread.sleep(5);
+			}
+
+			s3.close();
+			assertFalse("the put under way keeps the client", s3.isShut());
+			fake.release();
+			put.get(20, TimeUnit.SECONDS);
+			assertArrayEquals(data, fake.object(BUCKET, "held/1/2/doc/4.0").orElseThrow());
+			assertTrue("shut once the put has ended", s3.isShut());
+		} finally {
+			fake.release();
+			thread.shutdownNow();
+		}
 	}
 
 	@Test

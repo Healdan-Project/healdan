@@ -65,6 +65,60 @@ in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests 
   and a manifest that names the server's own address. `/api/addin/` isn't JSON API, so `Contract` and
   `RouteCoverageTest` leave it out, as they do `/docs`.
 
+### The Storage Tests
+
+`healdan-storage`'s tests extend `AbstractStorageTestCase`, which builds on `healdan-core`'s `AbstractHealdanTestCase`,
+taken from `healdan-core`'s test-jar, as the API's tests do.
+
+- **They run LogicalDOC through Healdan's storage.** The base class takes `healdan-core`'s test `context.properties`,
+  which the build copies in, writes it again as `context-storage.properties` with `store` set to `HealdanStorage`, and
+  registers the module's `plugin.xml` with `PluginFixtures.archive("healdan-storage")`. So `CeFlowsTest` creates,
+  checks in, replaces, deletes, purges and copies documents through LogicalDOC's own code, as a server does.
+  `healdan-core`'s and `healdan-api`'s tests keep LogicalDOC's own store, as neither module can depend on
+  `healdan-storage`.
+- **Their folders are under `target/`.** The build sets `healdan.storageStaging`, `healdan.storageCache` and
+  `healdan.storageKeys` there, as `docker/setenv.sh` does in the image, and `healdan.secretKey` in `target/conf/`, a
+  configuration folder that no local backend may share. Each test starts with them empty.
+- **Tests run the background work themselves.** As a real start never happens in a test, nothing runs on a timer:
+  a test calls `Mover.runOnce()`, the purge's and the nightly check's `run()`, or a backend's check, when it needs
+  one. The tests of the timers themselves, such as `StorageStartupTest`, start them with their waits shortened.
+
+CI's runners have no S3 service, and the test shards don't run Docker, so storage is tested in three layers:
+
+| Layer | Where | What it proves |
+|---|---|---|
+| `MemoryBackend`, and `LocalBackend` under `target/` | most of the module's tests | `HealdanStorage`, the mover, held deletes, the read cache, Store tracking and the Storage tab's server side. `MemoryBackend` keeps bytes in a map and takes faults on demand: a refused call, a failure after so many bytes, an outage, a slow call. `MemoryBackend.s3Like` behaves as a bucket does: a staged copy is at its key at once, and a hold sends nothing. `GatedBackend` wraps another and holds its calls at a gate, so a test acts at a known point of a transfer without sleeping. `LocalBackend` writes real files: the marker, `.held`, syncs and renames, and encryption at rest |
+| `FakeS3`, an S3 server inside the test (below) | `S3BackendTest` | the S3 client's requests as they leave Healdan, and its answers to every failure |
+| Garage, a real S3 server | the smoke test's step 5f (see [The Stand-In S3 Server](#the-stand-in-s3-server)) | the whole flow through the image: uploads, moves, reads, an outage and a restart |
+
+`BackendContract` holds the tests every backend must pass, which `LocalBackendTest`, `MemoryBackendTest`,
+`MemoryBackendS3LikeTest` and `S3BackendTest` each run. `TinkClasspathTest` checks that encryption runs without the
+`gson` and `protobuf` classes Tink brings, which the plugin zip leaves out.
+
+#### The Fake S3 Server
+
+`FakeS3` is a small JDK HTTP server on `127.0.0.1` at a random port, over plain HTTP (`start()`) or HTTPS
+(`startTls()`), that holds its buckets in memory. It takes path-style requests only, as Healdan sends them, and
+answers the calls `S3Backend` makes: putting, getting (with a range), heading, deleting and listing objects, and
+uploads in parts (create, upload a part, complete, abort).
+
+- **It refuses what S3 refuses:** a `Content-MD5` that doesn't match the bytes (`400 BadDigest`), a body whose length
+  or SHA-256 isn't the one the request signed, another access key or region, a missing bucket, key or upload, a part
+  list that doesn't match the parts, and a part under 5 MiB but the last. It doesn't check signatures:
+  `refuseSignatures()` refuses as a wrong secret would.
+- **It sees both shapes of request.** Over plain HTTP the S3 client sends `aws-chunked` bodies in signed chunks, as
+  Garage gets them, which `FakeS3` decodes before any check. Over HTTPS it sends a plain body, as Wasabi gets it.
+  `testContentMd5OnEveryUpload` checks, in both shapes, that every upload and part carries a `Content-MD5` and no
+  `x-amz-checksum-*` header.
+- **It records every request,** in `requests()`, and misbehaves on demand until `behave()`: it fails, stalls, delays,
+  drops the connection, corrupts or cuts off a body, answers without a body or a length, or denies access. Close it
+  in an `@After` method.
+- **It holds a put of one key until the test lets it go** (`holdPut()`, `release()`), then answers it under the rules
+  in force then. `StorageAdminTest` stops a backend's add or save at its marker this way, to check what other writes
+  do meanwhile.
+- **No test needs real DNS.** `FakeDns` answers the endpoint rule's address lookups from a map while it's open, so
+  `EndpointsTest` checks which `http://` addresses count as private.
+
 ## Docker Tests
 
 | Command | What it checks |
@@ -78,7 +132,8 @@ in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests 
 | `docker/tests/test-proxies.sh` | which forwarded addresses Tomcat believes with `LOGICALDOC_TRUSTED_PROXIES` unset: a header from the Docker host, but not a private address in the chain or a header sent from inside the app's container. It reads the sign-in throttle's per-address counters, so it needs a running stack: `BASE=http://127.0.0.1:8080 APP_CONTAINER=<id> DB_CONTAINER=<id> docker/tests/test-proxies.sh` |
 | `docker/tests/test-api.sh` | the API through the image's real filter chain, as the non-admin `apiuser` that the `smoke-api-user` setup step makes: LogicalDOC's SOAP services answering 404, M2's client flow (sign in, find the smoke matter, file a `.docx`, check it out, save twice, download two versions, sign out), the docs page, a session cookie refused without a token, the sign-in throttle, and LogicalDOC's `loginApiKey` refusing the token. Then M3's additions: searching inside the matter, a new folder and a favourite, a stamped `.docx`, a second device refused with `held-elsewhere`, moving the check-out, `ifVersion` and a repeated `saveId`, and the `#1234 v2.1` lookup. Then M5's: an `.eml` inspected, filed with its attachment and found by its Message-ID, and `already-filed` for filing it again and for uploading it into the matter. Run it against a fresh stack with the smoke overlay: `BASE=http://127.0.0.1:8080 docker/tests/test-api.sh` |
 | `docker/tests/test-signin.sh` | provider sign-in through the stand-in Keycloak (see below), with `curl` and a cookie jar: the web page's sign-in ending at `frontend.jsp` signed in, a local account linked by email losing its password and its device token, the gate refusing someone in none of the mapped groups, the helper's sign-in handing a code to a pretend loopback address and the code exchanged for a device token, and a person disabled at Keycloak losing that token at its next re-check. Run it against a fresh stack with the sign-in overlay: `BASE=http://127.0.0.1:8080 KEYCLOAK=127.0.0.1:18180 docker/tests/test-signin.sh` |
-| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache` and a Content-Security-Policy with `object-src 'none'` (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, M2's client flow through the API (`test-api.sh`, step 5c), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one |
+| `docker/tests/test-storage.sh` | storage backends against the stand-in Garage (see below): a file filed in Smoke Cloud reaching Garage encrypted, files moved in from Smoke moving up and not cached, reads through Garage and from the read cache, then with Garage stopped a save waiting in staging, an uncached file answering `503` through the API, `/download` and a shared link, and `/convertpdf` of an uncached PDF serving LogicalDOC's placeholder, and a matter moved to Smoke bringing its files home while Garage keeps them held. With `after-restart` it checks the same rows after a restart, a first read through Garage, and a read from the cache rebuilt from its folder with Garage stopped. It stops and starts Garage itself, and needs curl 8.0.0 or later, jq, sha256sum and docker: `docker/smoke-test.sh` runs it, passing it the stack's containers, as step 5f and again in step 8 |
+| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache` and a Content-Security-Policy with `object-src 'none'` (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the stack running on Healdan's storage (its setup steps recorded and Original's marker written, step 5), M2's client flow through the API (`test-api.sh`, step 5c), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), storage backends against a stand-in S3 server, Garage (`test-storage.sh`, step 5f, and again after step 8's restart), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one |
 
 ### The Stand-In Sign-In Provider
 
@@ -109,6 +164,36 @@ Step 5e times itself, and step 1 prints how long Keycloak took to start, by its 
 `StackProviderSignInTests` signs in through it too, as the helper does (see
 [The Helper's Stack Tests in the Image CI](../continuous-integration/#the-helpers-stack-tests-in-the-image-ci)).
 
+### The Stand-In S3 Server
+
+The smoke stack keeps a Store's files in a real S3 server, a throwaway Garage, as well as in Original's folder.
+`docker/smoke-test.sh` adds the overlay `docker/tests/compose.storage.yaml`, which:
+
+- **runs Garage v2.5.0** (`dxflrs/garage`), a single node set up by `docker/tests/garage/garage.toml`, with fixed test
+  values. Its data is in a volume of its own, so step 8's restart keeps the objects, as the app's volumes keep the
+  rows.
+- **sets it up before the app starts.** A one-shot `busybox:1.37` service, `garage-setup`, shares Garage's network
+  and runs `docker/tests/garage/setup.sh` against Garage's admin API, as Garage's image has no shell: it applies the
+  one-node layout, imports the fixed test key, and makes the bucket `healdan-smoke` and allows the key on it, each
+  only if it isn't done, as step 8 runs it again on the kept volume. The app waits for it to finish, and step 1
+  prints how long Garage took to start and be set up.
+- **publishes Garage's S3 API on `127.0.0.1:13900` only** (`SMOKE_GARAGE_PORT` changes the port), for
+  `test-storage.sh`'s `curl`, which reads the bucket with `--aws-sigv4`. The app reaches Garage at
+  `http://garage:3900` on the stack's network, an address the endpoint rule allows, as it's private.
+- **sets Healdan up to use it.** It sets `HEALDAN_SMOKE_STORAGE=true`, and Garage's endpoint, region, bucket, access
+  key and secret in `HEALDAN_SMOKE_S3_ENDPOINT`, `HEALDAN_SMOKE_S3_REGION`, `HEALDAN_SMOKE_S3_BUCKET`,
+  `HEALDAN_SMOKE_S3_ACCESS_KEY` and `HEALDAN_SMOKE_S3_SECRET`. With them, and the smoke overlay's
+  `HEALDAN_SMOKE_FIXTURE=true`, the `smoke-storage` setup step adds the encrypted S3 backend `Smoke Garage`, with the
+  prefix `healdan/`, through the same add the Storage tab uses, and confirms its recovery key. It then makes the
+  Store `Smoke Cloud` on it, readable by Everyone as `Smoke` is, with matters 1.2 and 1.3, and sets
+  `storage.sweepSeconds` and `storage.retestSeconds`, which have no screen, to 5, so the checks wait seconds, not
+  minutes. Production never sets these variables.
+
+Step 5f runs `test-storage.sh`, which stops and starts Garage itself, and step 8 runs it again with `after-restart`.
+It needs curl 8.0.0 or later: only from 8.0.0 does `--aws-sigv4` send the `x-amz-content-sha256` header, without which
+Garage refuses a request. Step 5f prints how long it took. The first read to meet the outage waits about 20 seconds
+for the S3 client to give up, and later reads fail at once, as they would on a server.
+
 ### When a Smoke Check Fails
 
 The server's warnings go to its own log, `repository/logs/dms.log` in the repository volume, not to the container's
@@ -118,6 +203,7 @@ at the end of the `Smoke test` step of the `Test (amd64)` or `Test (arm64)` job:
 
 - **The app container's last 150 lines of output:** the entrypoint, the init tool and Tomcat's start.
 - **Keycloak's last 40 lines of output,** for the stand-in sign-in provider.
+- **Garage's last 40 lines of output, and its setup's,** for the stand-in S3 server.
 - **The run's warnings and errors from `dms.log`,** the last 200 lines of them. Each keeps its exception's message
   and `Caused by` lines, without the stack frames.
 - **`dms.log`'s last 40 lines.**

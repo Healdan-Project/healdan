@@ -5,7 +5,8 @@ weight: 3
 cascade:
   type: docs
 ---
-How to set Healdan up: Stores, clients and matters, workspace templates, users and permissions.
+How to set Healdan up: Stores, clients and matters, workspace templates, users and permissions, and where files are
+kept.
 
 {{< cards >}}
   {{< card link="stores/" title="Stores" icon="server" >}}
@@ -15,6 +16,7 @@ How to set Healdan up: Stores, clients and matters, workspace templates, users a
   {{< card link="users-and-groups/" title="Users and Groups" icon="user-group" >}}
   {{< card link="permissions/" title="Permissions" icon="shield-check" >}}
   {{< card link="healdan-settings/" title="Healdan Settings" icon="cog" >}}
+  {{< card link="storage-backends/" title="Storage Backends" icon="database" >}}
   {{< card link="office-previews/" title="Office Previews" icon="eye" >}}
   {{< card link="system/" title="System" icon="adjustments" >}}
 {{< /cards >}}

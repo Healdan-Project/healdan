@@ -4,8 +4,9 @@ weight: 7
 ---
 
 Healdan's own settings are under **Administration → Healdan → Settings**. Click **Save** after changing them.
-Clients are saved from their own window, without Save. Signing in through a provider, such as Microsoft Entra ID,
-is set up on the **Sign-In** tab beside them: see [Sign-In Providers](#sign-in-providers).
+Clients are saved from their own window, without Save. Two tabs sit beside them: **Sign-In**, which sets up signing
+in through a provider, such as Microsoft Entra ID (see [Sign-In Providers](#sign-in-providers)), and **Storage**,
+which sets up where each Store keeps its files (see [The Storage Tab](#the-storage-tab)).
 
 ![The Healdan settings panel, with the Sign-In tab beside it: matter labels, numbering, default Class, the Recent Matters window, the next doc #, the two device sign-in limits, API origins allowed (CORS), and the client list with Add client and Edit, holding seven clients from 998 Ashcombe Reeve LLP to 1006 Oliver and Grace Pemberton](healdan-settings.png)
 
@@ -142,7 +143,7 @@ ID, Authentik and others. Entra ID's is experimental, as it hasn't been tried ag
 | Id, Preset | as chosen when the provider was added. The preset fills in the rest to suit the provider |
 | Button Label | the button's words on the sign-in page, such as **Sign In with Microsoft** |
 | Issuer | the provider's issuer address, which starts `https://`: `https://login.microsoftonline.com/<tenant id>/v2.0` for Entra ID, or `https://<authentik>/application/o/<slug>/` for Authentik. It must match the address the provider gives for itself exactly, a slash at the end included. While any account is linked it can't change, but for that slash: a link is the provider's id and the person's identity, so a new issuer would hand the links to whoever its identities are. Unlink everyone first |
-| Client ID, Client Secret | from Healdan's registration at the provider. The secret is never shown again: its field is empty, with **Set** or **Not Set** beside it. Type a new one to replace it, or leave it empty to keep the one stored. A secret has at most 1000 characters, fewer in a script that takes more than one byte a character. If Healdan's secret key file is missing, Save asks before it makes a new key, which leaves every other provider's secret to enter again: see the Install manual's [Backup and Restore](../../install/backup-and-restore/#if-the-key-file-goes-missing) |
+| Client ID, Client Secret | from Healdan's registration at the provider. The secret is never shown again: its field is empty, with **Set** or **Not Set** beside it. Type a new one to replace it, or leave it empty to keep the one stored. A secret has at most 1000 characters, fewer in a script that takes more than one byte a character. If Healdan's secret key file is missing, Save asks before it makes a new key, which leaves every other provider's secret, and each S3 storage backend's, to enter again: see the Install manual's [Backup and Restore](../../install/backup-and-restore/#if-the-key-file-goes-missing) |
 | On | off hides the button and stops the provider's sign-ins. See [Turning a Provider Off](#turning-a-provider-off) |
 | Link by Email | whether a first sign-in links to the account that has the person's email. See [Which Account a Sign-In Is](#which-account-a-sign-in-is) |
 | Redirect Address | the address to register at the provider: Healdan's public address, then `/api/signin/<id>/callback`. The icon beside it copies it |
@@ -364,3 +365,17 @@ also loses their helper. Web page sessions aren't checked again: see
   aren't checked again, and last as a password sign-in's do. Check warns about it.
 - **A provider that issues a new refresh token at each check** and refuses the old one can sign a helper out if its
   answer to a check is lost on the way. The helper then asks the person to sign in again.
+
+## The Storage Tab
+
+The **Storage** tab sets up the storage backends, the places where Healdan keeps documents' files: a folder on the
+server, or a bucket at an S3 service such as Wasabi. It has three parts:
+
+- **Backends,** with **Add Backend**, **Edit**, **Test**, **Show Recovery Key**, **Enter Recovery Key**, **Remove**
+  and **Refresh**: each backend, where it is, whether it's encrypted, what it holds and whether it works.
+- **Stores,** each with its backend, which you change there, and its files waiting to move or stuck.
+- **Settings:** the **Holding Period**, the **Read Cache**'s size and **Parallel Transfers**, with their own
+  **Save**.
+
+Changes take effect at once, with no restart. [Storage Backends](../storage-backends/) describes the tab and what each
+part does.

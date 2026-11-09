@@ -11,6 +11,7 @@ package com.logicaldoc.healdan.storage;
  * @param waiting how many wait for their Store's backend
  * @param stuck how many the mover has given up on
  * @param size their total size in bytes
+ * @param waitingSize the total size in bytes of those that wait
  */
-public record StoreStats(Long storeId, long files, long waiting, long stuck, long size) {
+public record StoreStats(Long storeId, long files, long waiting, long stuck, long size, long waitingSize) {
 }
