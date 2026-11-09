@@ -90,9 +90,6 @@ Each signs in with the password `Demo-Firm-2026`. Remove the stack with `down -v
   inside a built Healdan image: `healdan-demo:local`, which the command above builds, or any other
   built image that `--image` names. It stops and lists any file that LibreOffice didn't write. Commit the sources
   and files together.
-- **Restart once for the sign-in page.** After the first start the sign-in page says "The application has to be
-  restarted", because the plugins ask for a restart on a fresh stack. `docker compose -p healdan-demo restart app`
-  clears it, and doesn't fill the firm a second time.
 - **Browsing adds to it.** Opening a document logs a Viewed event dated then, so a stack someone has browsed
   shows today's date in some documents' History. Take screenshots from a stack that was used as little as you can.
 - **It refuses real data.** The step runs only on a repository with no documents in it and no users besides CE's

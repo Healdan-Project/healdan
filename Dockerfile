@@ -27,7 +27,8 @@ RUN mkdir -p /build/ROOT \
 # ---- tools: build and test the container init tool, and parse Office files, on the WAR's own libraries ----
 FROM build AS tools
 COPY docker/tools /tools
-RUN bash /tools/build.sh /build/ROOT/WEB-INF/lib /build/ROOT/WEB-INF/classes/context.properties /build/docker-init.jar
+RUN bash /tools/build.sh /build/ROOT/WEB-INF/lib /build/ROOT/WEB-INF/classes/context.properties /build/docker-init.jar \
+    /build/web.xml
 
 # ---- runtime: Tomcat 11 serving the exploded WAR at / ----
 FROM ${TOMCAT_IMAGE} AS runtime
@@ -51,6 +52,8 @@ RUN (userdel -r ubuntu 2>/dev/null || true) \
 RUN rm -rf "$CATALINA_HOME"/webapps/* "$CATALINA_HOME"/webapps.dist
 COPY --from=build --chown=1000:1000 /build/ROOT "$CATALINA_HOME/webapps/ROOT"
 COPY --from=tools --chown=1000:1000 /build/docker-init.jar /opt/logicaldoc/lib/docker-init.jar
+# The WAR's web.xml with the plugins' installs' edits (docker/tools/build.sh), which a container made afresh needs.
+COPY --from=tools --chown=1000:1000 /build/web.xml "$CATALINA_HOME/webapps/ROOT/WEB-INF/web.xml"
 COPY docker/server.xml "$CATALINA_HOME/conf/server.xml"
 COPY docker/rewrite.config "$CATALINA_HOME/conf/Catalina/localhost/rewrite.config"
 COPY --chmod=0755 docker/setenv.sh "$CATALINA_HOME/bin/setenv.sh"

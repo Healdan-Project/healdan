@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 
 # Integration test for DockerInit against a throwaway MariaDB: validation, waiting for a late database,
-# schema creation, idempotent re-runs, config-loss warning and credential errors (spec §6, §9).
+# schema creation, LogicalDOC's plugins installed once, idempotent re-runs, config-loss warning and credential errors
+# (spec §6, §9, §15).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 . docker/tests/lib.sh
@@ -12,12 +13,13 @@ TOOLS=logicaldoc-tools:test
 NET=ldtest-init
 DB=ldtest-init-db
 CONF=ldtest-init-conf
+REPO=ldtest-init-repo
 PW='sm0ke,p=a\ss $x #1 é:! '
 
 cleanup() {
   docker rm -f "$DB" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
-  docker volume rm -f "$CONF" >/dev/null 2>&1 || true
+  docker volume rm -f "$CONF" "$REPO" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 cleanup
@@ -25,13 +27,17 @@ cleanup
 docker build --target tools -t "$TOOLS" . >/dev/null
 docker network create "$NET" >/dev/null
 docker volume create "$CONF" >/dev/null
+docker volume create "$REPO" >/dev/null
 
-# init [docker run options...]: runs DockerInit like the entrypoint does (copying defaults on first use).
+# init [docker run options...]: runs DockerInit like the entrypoint does (copying defaults on first use, and with the
+# conf folder on the classpath for the plugins it installs).
 init() {
-  docker run --rm --network "$NET" -v "$CONF:/opt/logicaldoc/conf" \
+  docker run --rm --network "$NET" -v "$CONF:/opt/logicaldoc/conf" -v "$REPO:/opt/logicaldoc/repository" \
     -e DB_HOST="$DB" -e DB_PASSWORD="$PW" "$@" "$TOOLS" bash -c '
-      [ -f /opt/logicaldoc/conf/context.properties ] || cp /build/ROOT/WEB-INF/classes/context.properties /opt/logicaldoc/conf/
-      exec java -cp "/build/ROOT/WEB-INF/lib/*:/build/docker-init.jar" DockerInit'
+      for f in context.properties log.xml; do
+        [ -f /opt/logicaldoc/conf/$f ] || cp /build/ROOT/WEB-INF/classes/$f /opt/logicaldoc/conf/
+      done
+      exec java -cp "/build/ROOT/WEB-INF/lib/*:/build/docker-init.jar:/opt/logicaldoc/conf" DockerInit'
 }
 
 # db_sql <statement>: runs SQL in the test database as the app user and prints the result.
@@ -69,6 +75,9 @@ check "dropbox uses the generic script" grep -q 'plan: 1500 logicaldoc-dropbox -
 check "schema created" grep -q 'schema created' <<<"$out"
 check "ld_webservicecall exists" db_sql "select 1 from ld_webservicecall where 1=0"
 check "completion recorded" test "$(db_sql 'select count(*) from docker_init')" = 1
+check "installed LogicalDOC's plugins" grep -q "installed LogicalDOC's plugins" <<<"$out"
+check "the core plugin's install marker is in the repository" docker run --rm -v "$REPO:/r" "$TOOLS" \
+  sh -c 'ls /r/plugins/logicaldoc-core/install-* >/dev/null'
 [ "$FAILED" = 0 ] || { echo "$out"; }
 
 echo "== 3. second run is a no-op"
@@ -76,6 +85,7 @@ out=$(init 2>&1) && rc=0 || rc=$?
 check "exits 0" test "$rc" = 0
 check "skips initialization" grep -q 'schema present, skipping' <<<"$out"
 check "no config-loss warning" lacks 'WARNING' "$out"
+check "the plugins are installed already" lacks "installed LogicalDOC's plugins" "$out"
 
 echo "== 4. conf volume lost, database kept"
 docker volume rm -f "$CONF" >/dev/null && docker volume create "$CONF" >/dev/null

@@ -5,8 +5,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.Charset;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -19,15 +21,18 @@ import java.util.Properties;
 import java.util.TreeSet;
 import java.util.UUID;
 
+import org.java.plugin.registry.PluginDescriptor;
 import org.xml.sax.SAXException;
 
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.dbinit.DBInit;
+import com.logicaldoc.util.plugin.PluginException;
+import com.logicaldoc.util.plugin.PluginRegistry;
 
 /**
  * Container init, run by entrypoint.sh before Tomcat starts: works out the trusted proxies, applies the
- * container-managed context.properties keys, waits for the database and creates the schema on first boot with the
- * setup wizard's own DBInit.
+ * container-managed context.properties keys, waits for the database, creates the schema on first boot with the
+ * setup wizard's own DBInit, and installs LogicalDOC's plugins.
  */
 public final class DockerInit {
 
@@ -59,6 +64,9 @@ public final class DockerInit {
             e.printStackTrace();
             System.exit(1);
         }
+        // A plugin's start can leave a thread running that isn't a daemon, which would keep this JVM, and so the
+        // entrypoint's wait for it, from ever ending.
+        System.exit(0);
     }
 
     static void run(Map<String, String> env) throws Exception {
@@ -84,6 +92,77 @@ public final class DockerInit {
                     + " finish (an earlier first start failed or was interrupted); remove the database volume and"
                     + " start again");
         }
+
+        PluginStart plugins;
+        try {
+            plugins = installPlugins();
+        } catch (PluginException e) {
+            throw new InitException("cannot install LogicalDOC's plugins: " + withCauses(e));
+        }
+        if (!plugins.installed().isEmpty())
+            log("installed LogicalDOC's plugins " + String.join(", ", plugins.installed()));
+        if (!plugins.failed().isEmpty())
+            System.err.println("[docker-init] WARNING: LogicalDOC's plugins " + String.join(", ", plugins.failed())
+                    + " did not start here (the error is above). Tomcat starts them again, and asks for a restart if"
+                    + " one of them installs then.");
+    }
+
+    /**
+     * What DockerInit's start of the plugins did: the ids of those it installed, of those that failed to start, which
+     * Tomcat then starts again, and whether one asked for a restart.
+     */
+    record PluginStart(List<String> installed, List<String> failed, boolean restartRequired) {
+    }
+
+    /**
+     * Starts LogicalDOC's plugins with its own PluginRegistry, as Tomcat does next, so each one not yet installed (on a
+     * new repository volume, all of them) is installed here, before Tomcat starts. A plugin's install edits web.xml and
+     * context.properties, then asks for a restart, since Tomcat has read web.xml by then: the sign-in page says "The
+     * application has to be restarted" until one. Here the edits are in place before Tomcat reads anything, and Tomcat
+     * finds every plugin installed, so nothing asks. The plugins find context.properties and log.xml on the classpath,
+     * which needs the conf folder on it, as Tomcat's common.loader has it. The registry only logs a plugin that fails to
+     * start, so this checks each one.
+     */
+    static PluginStart installPlugins() throws PluginException, IOException, URISyntaxException {
+        // The plugins are the WAR's *-plugin.jar files, beside LogicalDOC's util jar on this classpath. The jar's URL
+        // escapes a space as %20, which only a URI turns back.
+        File lib = Path.of(PluginRegistry.class.getProtectionDomain().getCodeSource().getLocation().toURI())
+                .getParent().toFile();
+        // LogicalDOCPlugin names a plugin's install marker after the id setting.
+        String marker = "install-" + new ContextProperties().getProperty("id");
+        TreeSet<String> before = installedPlugins(marker);
+        PluginRegistry registry = PluginRegistry.getInstance();
+        registry.init(lib.getPath());
+        // The registry only logs a plugin jar whose manifest it can't address, as on a path with a space in it.
+        if (registry.getPlugins().isEmpty())
+            throw new PluginException("found no plugin LogicalDOC could read in " + lib + " (the errors are above)");
+        TreeSet<String> installed = installedPlugins(marker);
+        installed.removeAll(before);
+        TreeSet<String> failed = new TreeSet<>();
+        for (PluginDescriptor plugin : registry.getPlugins())
+            if (!registry.getManager().isPluginActivated(plugin))
+                failed.add(plugin.getId());
+        return new PluginStart(List.copyOf(installed), List.copyOf(failed), registry.isRestartRequired());
+    }
+
+    /** The ids of the plugins whose folder under conf.plugindir, named after the plugin, holds its install marker. */
+    private static TreeSet<String> installedPlugins(String marker) {
+        TreeSet<String> ids = new TreeSet<>();
+        File[] folders = PluginRegistry.getPluginsDir().listFiles(File::isDirectory);
+        if (folders != null)
+            for (File folder : folders)
+                if (new File(folder, marker).isFile())
+                    ids.add(folder.getName());
+        return ids;
+    }
+
+    /** The exception's message and each of its causes', which a PluginException's own message leaves out. */
+    static String withCauses(Throwable e) {
+        StringBuilder text = new StringBuilder(String.valueOf(e.getMessage()));
+        Throwable cause = e.getCause();
+        for (int depth = 0; cause != null && depth < 10; depth++, cause = cause.getCause())
+            text.append(": ").append(cause);
+        return text.toString();
     }
 
     /**
