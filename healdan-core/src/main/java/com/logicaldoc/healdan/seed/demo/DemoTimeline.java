@@ -144,7 +144,8 @@ import com.logicaldoc.healdan.seed.demo.DemoManifest.Step;
  * <td>{@code doc}, {@code target}</td>
  * <td></td>
  * <td>WRITE on {@code doc}, READ on {@code target}</td>
- * <td>{@code DocumentLinkDAO.store}, type {@code default}</td>
+ * <td>{@code DocumentLinkDAO.store}, type {@code default}, which saves both
+ * documents</td>
  * </tr>
  * <tr>
  * <td>{@code move}</td>
@@ -365,7 +366,7 @@ public final class DemoTimeline {
 		}
 		case "note" -> note(step, actor, when);
 		case "tag" -> tag(step, actor, when);
-		case "link" -> link(step, actor);
+		case "link" -> link(step, actor, when);
 		case "move" -> move(step, actor, when);
 		case "folder" -> folder(step, actor, when);
 		case "delete" -> {
@@ -528,7 +529,7 @@ public final class DemoTimeline {
 	}
 
 	/** As the web page's DocumentServiceImpl.linkDocuments does for one link */
-	private void link(Step step, User actor) throws Exception {
+	private void link(Step step, User actor, Date when) throws Exception {
 		Document from = need(actor, Permission.WRITE, step.doc());
 		Document to = need(actor, Permission.READ, step.target());
 		DocumentLink link = new DocumentLink();
@@ -537,6 +538,9 @@ public final class DemoTimeline {
 		link.setDocument1(from);
 		link.setDocument2(to);
 		DocumentLinkDAO.get().store(link);
+		// Storing a link saves both documents with their new link count, which dates them now
+		backdater.touch(from.getId(), when, false);
+		backdater.touch(to.getId(), when, false);
 	}
 
 	private void move(Step step, User actor, Date when) throws Exception {

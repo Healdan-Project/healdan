@@ -14,6 +14,8 @@ find the other. Both documents show it, and a document with links shows a chain 
 You need the Write permission on the document you paste onto. **Paste as link** is greyed out until you've copied a
 document.
 
+Making a link, or removing one, changes both documents' Last modified date.
+
 ## The Links Tab
 
 Select a document and open its **Links** tab to see its links.
