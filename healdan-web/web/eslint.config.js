@@ -19,4 +19,21 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Screens use @healdan/ui's components; only that package may import React Aria Components.
+    ignores: ['packages/ui/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'react-aria-components',
+              message: "Import components from '@healdan/ui'; only packages/ui wraps React Aria Components.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 )

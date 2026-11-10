@@ -1,0 +1,106 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The Healdan Helper's palette (docs/superpowers/specs/2026-10-27-helper-ui-polish-design.md, section 4.1).
+   Light is the default; dark follows the browser. Muted is for placeholders and disabled text only: it fails AA. */
+:root {
+  color-scheme: light dark;
+
+  --hd-window: #ffffff;
+  --hd-bar: #f6f6f6;
+  --hd-sidebar: #f5f5f7;
+  --hd-line: #e5e5ea;
+  --hd-row-alt: #f4f5f5;
+  --hd-pill: #e1e1e6;
+  --hd-selection-inactive: #dcdcdc;
+
+  --hd-text: #1d1d1f;
+  --hd-text-secondary: #6e6e73;
+  --hd-text-muted: #8e8e93;
+
+  --hd-accent-fill: #0c69c0;
+  --hd-accent-on-fill: #ffffff;
+  --hd-accent-text: #0c69c0;
+  --hd-focus-ring: rgb(34 162 224 / 40%);
+  --hd-focus-edge: #22a2e0;
+
+  --hd-field: #ffffff;
+  --hd-field-line: #c7c7cc;
+  --hd-field-readonly: #f5f5f7;
+  --hd-button-secondary: #ffffff;
+  --hd-button-secondary-line: #c7c7cc;
+
+  --hd-yours: #1e7b34;
+  --hd-theirs: #b3261e;
+  --hd-caution: #c77700;
+  --hd-caution-text: #9a5b00;
+  --hd-required: #d70015;
+  --hd-star: #f59f00;
+
+  --hd-font: -apple-system, blinkmacsystemfont, "Segoe UI", system-ui, sans-serif;
+  --hd-font-size: 13px;
+  --hd-font-size-small: 12px;
+  --hd-font-size-title: 17px;
+  --hd-line-height: 1.4;
+  --hd-weight-medium: 500;
+  --hd-weight-bold: 600;
+
+  --hd-space-1: 2px;
+  --hd-space-2: 4px;
+  --hd-space-3: 8px;
+  --hd-space-4: 12px;
+  --hd-space-5: 16px;
+  --hd-space-6: 24px;
+  --hd-space-7: 32px;
+
+  --hd-radius-small: 4px;
+  --hd-radius: 6px;
+  --hd-radius-large: 10px;
+
+  --hd-shadow-popup: 0 6px 24px rgb(0 0 0 / 18%), 0 0 0 1px var(--hd-line);
+  --hd-scrim: rgb(0 0 0 / 35%);
+
+  --row-height: 34px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hd-window: #1e1e1e;
+    --hd-bar: #2a2a2c;
+    --hd-sidebar: #262628;
+    --hd-line: #38383a;
+    --hd-row-alt: #232325;
+    --hd-pill: #3a3a3c;
+    --hd-selection-inactive: #464646;
+
+    --hd-text: #f2f2f7;
+    --hd-text-secondary: #aeaeb2;
+    --hd-text-muted: #8e8e93;
+
+    --hd-accent-fill: #1a74c4;
+    --hd-accent-text: #5cb3f0;
+
+    --hd-field: #2c2c2e;
+    --hd-field-line: #48484a;
+    --hd-field-readonly: #2a2a2c;
+    --hd-button-secondary: #4a4a4d;
+    --hd-button-secondary-line: #4a4a4d;
+
+    --hd-yours: #69db7c;
+    --hd-theirs: #ff8a80;
+    --hd-caution: #f5a623;
+    --hd-caution-text: #f5a623;
+    --hd-required: #ff6961;
+    --hd-star: #fcc419;
+
+    --hd-shadow-popup: 0 6px 24px rgb(0 0 0 / 55%), 0 0 0 1px var(--hd-line);
+    --hd-scrim: rgb(0 0 0 / 55%);
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--hd-window);
+  color: var(--hd-text);
+  font: var(--hd-font-size) / var(--hd-line-height) var(--hd-font);
+}
