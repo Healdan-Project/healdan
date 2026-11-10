@@ -42,6 +42,11 @@ fails, because the app's image is built here and can't be pulled.
     storage reads them.
 - **Browsers load the new interface** the next time they open Healdan. A tab left open during the upgrade keeps the
   old one until it's reloaded.
+- **The User app arrives,** Healdan's browser app at `/app/`. Signing in lands there from now on, by password or
+  through a provider, and a link into the app followed while signed out comes back to that page after signing in. To
+  keep an install landing in LogicalDOC's screens, an administrator sets **Start In** to **Classic Interface** under
+  **Administration → Healdan → Settings** (see [Healdan Settings](../../admin/healdan-settings/)). The setting is
+  `ui.start`, and anything but `classic` means the app.
 - **Healdan's own tables are upgraded** when the app starts. If an upgrade step fails, the app stops instead of
   running on a half-upgraded database, and the log says which step failed. See
   [Troubleshooting](../troubleshooting/).

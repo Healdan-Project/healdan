@@ -12,6 +12,7 @@ import java.util.Optional;
 import java.util.regex.Pattern;
 
 import com.logicaldoc.core.security.SessionManager;
+import com.logicaldoc.healdan.web.ReturnPath;
 
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
@@ -65,8 +66,8 @@ public class AppServlet extends HttpServlet {
 	}
 
 	/**
-	 * Whether the request's HTTP session holds an open LogicalDOC session (a later task adds the redirect that uses
-	 * it).
+	 * Whether the request's HTTP session holds an open LogicalDOC session, which a page load needs (the app's files
+	 * are public code and need none).
 	 */
 	static boolean hasWebSession(HttpServletRequest request) {
 		HttpSession http = request.getSession(false);
@@ -74,6 +75,11 @@ public class AppServlet extends HttpServlet {
 			return false;
 		Object sid = http.getAttribute(SessionManager.PARAM_SID);
 		return sid instanceof String s && SessionManager.get().isOpen(s);
+	}
+
+	/** Whether a page load may be answered; tests replace it */
+	boolean signedIn(HttpServletRequest request) {
+		return hasWebSession(request);
 	}
 
 	/** The folder of the classpath the built app is read from (tests point it elsewhere). */
@@ -103,6 +109,17 @@ public class AppServlet extends HttpServlet {
 		Optional<String> resource = resource(pathInfo);
 		String last = pathInfo == null ? "" : pathInfo.substring(pathInfo.lastIndexOf('/') + 1);
 		boolean file = resource.isPresent() && last.contains(".");
+
+		if (!file && !signedIn(request)) {
+			// login.jsp brings the browser back to this address after signing in
+			String path = request.getRequestURI().substring(request.getContextPath().length());
+			if (request.getQueryString() != null)
+				path += "?" + request.getQueryString();
+			ReturnPath.remember(request, path);
+			response.setHeader("Cache-Control", "no-store");
+			response.sendRedirect(request.getContextPath() + "/login.jsp");
+			return;
+		}
 
 		String name = file ? resource.get().substring(ROOT.length()) : INDEX;
 		try (InputStream in = open(root() + name)) {

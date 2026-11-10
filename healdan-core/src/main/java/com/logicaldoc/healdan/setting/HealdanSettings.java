@@ -46,6 +46,9 @@ public class HealdanSettings {
 
 	public static final String API_CORS_ORIGINS = "api.cors.origins";
 
+	/** Where a plain sign-in lands: <code>app</code> (the default) or <code>classic</code> */
+	public static final String UI_START = "ui.start";
+
 	public static final int DEFAULT_API_TOKEN_IDLE_DAYS = 30;
 
 	public static final int DEFAULT_API_TOKEN_MAX_DAYS = 365;
@@ -211,6 +214,13 @@ public class HealdanSettings {
 		if (StringUtils.isBlank(value))
 			return List.of();
 		return Arrays.stream(value.split(",")).map(String::trim).filter(o -> !o.isEmpty()).toList();
+	}
+
+	/**
+	 * @return <code>classic</code> only when that's what is stored, else <code>app</code>
+	 */
+	public String uiStart() {
+		return "classic".equals(get(UI_START)) ? "classic" : "app";
 	}
 
 	private String stringValue(String key, String defaultValue) {

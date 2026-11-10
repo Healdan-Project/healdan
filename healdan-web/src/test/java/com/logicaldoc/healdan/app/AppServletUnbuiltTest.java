@@ -19,6 +19,11 @@ public class AppServletUnbuiltTest {
 			private static final long serialVersionUID = 1L;
 
 			@Override
+			boolean signedIn(jakarta.servlet.http.HttpServletRequest request) {
+				return true;
+			}
+
+			@Override
 			String root() {
 				return "healdan/app/nothing/";
 			}

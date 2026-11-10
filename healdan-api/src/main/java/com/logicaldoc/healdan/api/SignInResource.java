@@ -43,6 +43,7 @@ import com.logicaldoc.healdan.signin.SignInProvider;
 import com.logicaldoc.healdan.signin.SignInProviders;
 import com.logicaldoc.healdan.signin.SignIns;
 import com.logicaldoc.healdan.token.ApiTokens;
+import com.logicaldoc.healdan.web.Landing;
 import com.logicaldoc.healdan.web.PublicAddress;
 import com.logicaldoc.healdan.web.PublicAddress.Address;
 
@@ -558,7 +559,7 @@ public class SignInResource {
 		HttpSession httpSession = request.getSession(false);
 		Object requested = httpSession != null ? httpSession.getAttribute(REQUESTED_URL) : null;
 		String page = requested != null ? onThisServer(requested.toString(), address) : null;
-		return page != null ? page : address.base() + "/frontend.jsp";
+		return page != null ? page : address.base() + Landing.page();
 	}
 
 	/**

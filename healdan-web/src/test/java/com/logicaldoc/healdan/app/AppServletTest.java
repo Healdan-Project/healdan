@@ -15,7 +15,16 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 public class AppServletTest {
 
-	private final AppServlet servlet = new AppServlet();
+	private boolean signedIn = true;
+
+	private final AppServlet servlet = new AppServlet() {
+		private static final long serialVersionUID = 1L;
+
+		@Override
+		boolean signedIn(jakarta.servlet.http.HttpServletRequest request) {
+			return signedIn;
+		}
+	};
 
 	private MockHttpServletResponse call(String method, String pathInfo) throws Exception {
 		MockHttpServletRequest request = new MockHttpServletRequest(method, "/app" + pathInfo);
@@ -88,6 +97,43 @@ public class AppServletTest {
 	@Test
 	public void testOnlyGetAndHead() throws Exception {
 		assertEquals(405, call("POST", "/").getStatus());
+	}
+
+	@Test
+	public void testPageWithoutSessionGoesToLogin() throws Exception {
+		signedIn = false;
+		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/healdan/app/doc/10388");
+		request.setContextPath("/healdan");
+		request.setServletPath("/app");
+		request.setPathInfo("/doc/10388");
+		request.setQueryString("sel=1");
+		MockHttpServletResponse response = new MockHttpServletResponse();
+		servlet.service(request, response);
+
+		assertEquals(302, response.getStatus());
+		assertEquals("/healdan/login.jsp", response.getRedirectedUrl());
+		assertEquals("/healdan/app/doc/10388?sel=1", request.getSession().getAttribute("RequestedUrl"));
+	}
+
+	@Test
+	public void testCraftedAddressIsNotRemembered() throws Exception {
+		signedIn = false;
+		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/app/doc/1'+alert(1)+'");
+		request.setContextPath("");
+		request.setServletPath("/app");
+		request.setPathInfo("/doc/1'+alert(1)+'");
+		MockHttpServletResponse response = new MockHttpServletResponse();
+		servlet.service(request, response);
+
+		assertEquals(302, response.getStatus());
+		assertEquals("/app/", request.getSession().getAttribute("RequestedUrl"));
+	}
+
+	@Test
+	public void testFilesNeedNoSession() throws Exception {
+		signedIn = false;
+		assertEquals(200, call("GET", "/assets/app-AbC123xY.js").getStatus());
+		assertEquals(404, call("GET", "/assets/missing.js").getStatus());
 	}
 
 	@Test

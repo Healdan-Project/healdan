@@ -57,6 +57,8 @@ public class HealdanSettingsPanel extends AdminPanel {
 
 	private static final String API_ORIGINS = "apiorigins";
 
+	private static final String START = "uistart";
+
 	private static final String ID = "id";
 
 	private static final String NUMBER = "number";
@@ -149,7 +151,17 @@ public class HealdanSettingsPanel extends AdminPanel {
 		apiOrigins.setHint(
 				"Comma-separated, e.g. https://localhost:3000. Leave empty unless an add-in is served from another address.");
 
-		form.setItems(label, plural, numbering, docClass, recent, next, apiIdle, apiMax, apiOrigins);
+		SelectItem start = ItemFactory.newSelectItem(START, "Start In");
+		LinkedHashMap<String, String> starts = new LinkedHashMap<>();
+		starts.put("app", "User App");
+		starts.put("classic", "Classic Interface");
+		start.setValueMap(starts);
+		start.setValue(settings.getUiStart());
+		start.setWidth(220);
+		start.setRequired(true);
+		start.setHint("Where signing in takes people");
+
+		form.setItems(label, plural, numbering, docClass, recent, next, start, apiIdle, apiMax, apiOrigins);
 
 		Label clientsTitle = new Label("<b>Clients</b>");
 		clientsTitle.setHeight(20);
@@ -236,6 +248,7 @@ public class HealdanSettingsPanel extends AdminPanel {
 		settings.setApiTokenIdleDays(Integer.parseInt(form.getValueAsString(API_IDLE)));
 		settings.setApiTokenMaxDays(Integer.parseInt(form.getValueAsString(API_MAX)));
 		settings.setApiCorsOrigins(form.getValueAsString(API_ORIGINS));
+		settings.setUiStart(form.getValueAsString(START));
 
 		Long next;
 		try {

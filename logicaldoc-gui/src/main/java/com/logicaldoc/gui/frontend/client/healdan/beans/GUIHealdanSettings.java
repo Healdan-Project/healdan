@@ -43,6 +43,9 @@ public class GUIHealdanSettings implements Serializable {
 	/** The origins the API allows across origins, comma-separated; empty for none */
 	private String apiCorsOrigins = "";
 
+	/** Where a plain sign-in lands: app or classic */
+	private String uiStart = "app";
+
 	public String getMatterLabel() {
 		return matterLabel;
 	}
@@ -121,5 +124,13 @@ public class GUIHealdanSettings implements Serializable {
 
 	public void setApiCorsOrigins(String apiCorsOrigins) {
 		this.apiCorsOrigins = apiCorsOrigins;
+	}
+
+	public String getUiStart() {
+		return uiStart;
+	}
+
+	public void setUiStart(String uiStart) {
+		this.uiStart = uiStart;
 	}
 }

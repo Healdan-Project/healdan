@@ -359,6 +359,7 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 		gui.setApiTokenIdleDays(settings.apiTokenIdleDays());
 		gui.setApiTokenMaxDays(settings.apiTokenMaxDays());
 		gui.setApiCorsOrigins(StringUtils.defaultString(settings.get(HealdanSettings.API_CORS_ORIGINS)));
+		gui.setUiStart(settings.uiStart());
 		return gui;
 	}
 
@@ -372,7 +373,8 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 
 	/** The settings to save, each one checked */
 	private record Values(String label, String plural, NumberingMode mode, String docClass, int recentDays,
-			Long nextDocNumber, int apiIdleDays, int apiMaxDays, String apiOrigins) {
+			Long nextDocNumber, int apiIdleDays, int apiMaxDays, String apiOrigins,
+			String uiStart) {
 	}
 
 	/*
@@ -418,7 +420,11 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 			throw new HealdanRuleException("A device sign-in can't last fewer days than it may go unused.");
 		String origins = origins(settings.getApiCorsOrigins());
 
-		return new Values(label, plural, mode, docClass, days, next, idleDays, maxDays, origins);
+		String uiStart = StringUtils.strip(settings.getUiStart());
+		if (!"app".equals(uiStart) && !"classic".equals(uiStart))
+			throw new HealdanRuleException("Start In must be the User App or the Classic Interface.");
+
+		return new Values(label, plural, mode, docClass, days, next, idleDays, maxDays, origins, uiStart);
 	}
 
 	private static String label(String value, String which) throws HealdanRuleException {
@@ -474,6 +480,7 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 		// A lower maximum applies to the device sign-ins already made too
 		ApiTokens.get().capLifetime(values.apiMaxDays());
 		settings.set(HealdanSettings.API_CORS_ORIGINS, values.apiOrigins());
+		settings.set(HealdanSettings.UI_START, values.uiStart());
 		if (values.nextDocNumber() != null && values.nextDocNumber() > DocNumberCounter.get().peekNext())
 			DocNumberCounter.get().raiseNext(values.nextDocNumber());
 	}
