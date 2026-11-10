@@ -8,6 +8,7 @@ This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of Logi
 
 - Upstream is `https://github.com/logicaldoc/community.git`. A fresh clone needs `git remote add upstream <that url>`.
 - Sync upstream by merging `upstream/master` into a dedicated branch and opening a PR to `master`. Merge, never squash or rebase, so the shared history stays intact. Keep sync PRs free of feature work.
+  - Existing databases never get LogicalDOC's schema changes (see "Docker"). When a sync changes LogicalDOC's tables, in a `logicaldoc-*` module's `sql/` scripts or in the columns an entity maps, add the SQL an existing database needs, with a check, to the Install manual's Changes to LogicalDOC's Tables (`site/content/install/upgrading.md`) in the sync PR, a merge fix like the icons.
 - Healdan's own modules (`healdan-*`) follow upstream's version: their POM parent and `plugin.xml` version match the root POM's. A module left behind makes Maven look for stock LogicalDOC jars, which the build no longer fetches: it fails with `Non-resolvable parent POM … Could not find artifact com.logicaldoc:logicaldoc:pom:<old version>`. Bump the module instead.
   - When a clean sync merge brings a LogicalDOC release bump, `.github/scripts/upstream-sync.sh` adds a "Follow upstream to <version>" commit. After a conflicted merge it doesn't, so whoever resolves the conflicts bumps them too.
 - Upstream changes `logicaldoc-core` and `logicaldoc-gui` the most. To keep syncs cheap, put new work in new plugin modules and avoid editing upstream files where possible.
