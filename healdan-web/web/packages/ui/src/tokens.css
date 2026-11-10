@@ -2,7 +2,9 @@
    SPDX-License-Identifier: LGPL-3.0-only */
 
 /* The Healdan Helper's palette (docs/superpowers/specs/2026-10-27-helper-ui-polish-design.md, section 4.1).
-   Light is the default; dark follows the browser. Muted is for placeholders and disabled text only: it fails AA. */
+   Light is the default; dark follows the browser. Muted is for placeholders and disabled text only: it fails AA.
+   Pill, Inactive selection and the secondary button's face are backgrounds for --hd-text only: the other text colours fail AA on them (tokens.test.ts
+   lists what may sit where), so a selected row's secondary text, links and status text take --hd-text there. */
 :root {
   color-scheme: light dark;
 
@@ -22,7 +24,11 @@
   --hd-accent-on-fill: #ffffff;
   --hd-accent-text: #0c69c0;
   --hd-focus-ring: rgb(34 162 224 / 40%);
-  --hd-focus-edge: #22a2e0;
+  --hd-focus-edge: #0a4f94;
+  /* Every focusable control uses this: a solid edge, set off from the control so it shows on a surface and on the accent
+     fill alike (the gap is the surface; the edge is 5.3:1 or better on every surface), plus the helper's soft ring. */
+  --hd-focus-outline: 2px solid var(--hd-focus-edge);
+  --hd-focus-offset: 2px;
 
   --hd-field: #ffffff;
   --hd-field-line: #c7c7cc;
@@ -79,6 +85,7 @@
 
     --hd-accent-fill: #1a74c4;
     --hd-accent-text: #5cb3f0;
+    --hd-focus-edge: #8ccaf5;
 
     --hd-field: #2c2c2e;
     --hd-field-line: #48484a;

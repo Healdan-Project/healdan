@@ -23,24 +23,21 @@ function contrast(a: string, b: string): number {
   return (hi! + 0.05) / (lo! + 0.05)
 }
 
-// Text on a surface, both from the tokens, must reach WCAG AA (4.5:1).
+// Which text colours may sit on which surfaces. Some surfaces hold --hd-text only (documented in tokens.css); the other text colours fail AA there, so they are not allowed and the test doesn't ask them to pass.
+const PLAIN = ['window', 'bar', 'sidebar', 'row-alt', 'field', 'field-readonly']
+const TEXT = ['text', 'text-secondary', 'accent-text', 'yours', 'theirs', 'caution-text', 'required']
+// Pill, Inactive selection and the secondary button's face hold --hd-text only.
+const TEXT_ONLY = ['pill', 'selection-inactive', 'button-secondary']
+
 const PAIRS: [string, string][] = [
-  ['--hd-text', '--hd-window'],
-  ['--hd-text', '--hd-sidebar'],
-  ['--hd-text', '--hd-bar'],
-  ['--hd-text', '--hd-row-alt'],
-  ['--hd-text', '--hd-field'],
-  ['--hd-text', '--hd-button-secondary'],
-  ['--hd-text-secondary', '--hd-window'],
-  ['--hd-text-secondary', '--hd-sidebar'],
+  ...TEXT.flatMap((fg) => PLAIN.map((bg): [string, string] => [`--hd-${fg}`, `--hd-${bg}`])),
+  ...TEXT_ONLY.map((bg): [string, string] => ['--hd-text', `--hd-${bg}`]),
   ['--hd-accent-on-fill', '--hd-accent-fill'],
-  ['--hd-accent-text', '--hd-window'],
-  ['--hd-accent-text', '--hd-sidebar'],
-  ['--hd-yours', '--hd-window'],
-  ['--hd-theirs', '--hd-window'],
-  ['--hd-caution-text', '--hd-window'],
-  ['--hd-required', '--hd-window'],
 ]
+
+// The focus edge shows against every surface the outline can touch (it is set off from the control, so the accent
+// fill never touches it), at the 3:1 that non-text contrast asks for.
+const FOCUS_SURFACES = [...PLAIN, ...TEXT_ONLY]
 
 describe('tokens.css', () => {
   it('defines the row height and the same names for dark as light', () => {
@@ -51,6 +48,10 @@ describe('tokens.css', () => {
   for (const [scheme, tokens] of [['light', light], ['dark', darkAll]] as const) {
     it.each(PAIRS)(`${scheme}: %s on %s reaches AA`, (fg, bg) => {
       expect(contrast(tokens[fg]!, tokens[bg]!)).toBeGreaterThanOrEqual(4.5)
+    })
+
+    it.each(FOCUS_SURFACES)(`${scheme}: the focus edge shows on --hd-%s`, (bg) => {
+      expect(contrast(tokens['--hd-focus-edge']!, tokens[`--hd-${bg}`]!)).toBeGreaterThanOrEqual(3)
     })
   }
 })

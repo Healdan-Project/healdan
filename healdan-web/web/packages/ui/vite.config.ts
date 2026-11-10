@@ -12,6 +12,6 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}'],
     globals: false,
     setupFiles: ['src/test/setup.ts'],
-    css: { include: [/tokens\.css/], modules: { classNameStrategy: 'non-scoped' } },
+    css: { include: [/\.css/], modules: { classNameStrategy: 'non-scoped' } },
   },
 })

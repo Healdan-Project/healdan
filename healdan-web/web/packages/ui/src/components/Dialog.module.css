@@ -18,6 +18,8 @@
   background: var(--hd-window);
   color: var(--hd-text);
   box-shadow: var(--hd-shadow-popup);
+  max-height: calc(100dvh - 2 * var(--hd-space-5));
+  overflow: auto;
 }
 
 .dialog {

@@ -32,7 +32,7 @@
 }
 
 .button[data-focus-visible] {
-  outline: 3px solid var(--hd-focus-ring);
-  outline-offset: 1px;
-  border-color: var(--hd-focus-edge);
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
 }

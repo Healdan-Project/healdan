@@ -26,10 +26,10 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          paths: [
+          patterns: [
             {
-              name: 'react-aria-components',
-              message: "Import components from '@healdan/ui'; only packages/ui wraps React Aria Components.",
+              group: ['react-aria-components', 'react-aria-components/*', 'react-aria', 'react-aria/*', 'react-stately', 'react-stately/*', '@react-aria/*', '@react-stately/*'],
+              message: "Import components from '@healdan/ui'; only packages/ui wraps React Aria.",
             },
           ],
         },

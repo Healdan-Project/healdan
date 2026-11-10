@@ -6,9 +6,11 @@ function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
+// A value that isn't a date shows as nothing rather than breaking the list around it.
 // Today's dates show the time ("9:42 AM"), any other day the date ("Sep 29, 2026").
 export function formatDate(iso: string): string {
   const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
   if (sameDay(date, new Date())) {
     return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date)
   }
@@ -16,5 +18,7 @@ export function formatDate(iso: string): string {
 }
 
 export function formatDateTime(iso: string): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso))
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }

@@ -25,4 +25,11 @@ describe('formatDate', () => {
     expect(text).toContain('2026')
     expect(text).toMatch(/2:05/)
   })
+
+  it('shows nothing for an empty or invalid value', () => {
+    for (const bad of ['', 'not a date']) {
+      expect(formatDate(bad)).toBe('')
+      expect(formatDateTime(bad)).toBe('')
+    }
+  })
 })

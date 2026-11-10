@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
@@ -41,16 +42,24 @@ describe('Dialog', () => {
     expect(dialog.contains(document.activeElement)).toBe(true)
   })
 
-  it('keeps Tab inside, closes on Escape and returns focus', async () => {
+  it('keeps Tab and Shift+Tab inside, wrapping at the ends', async () => {
+    const user = userEvent.setup()
+    render(<Example />)
+    open()
+    const dialog = await screen.findByRole('dialog')
+    const [first, last] = [screen.getByLabelText('Name'), screen.getByRole('button', { name: 'Cancel' })]
+    last.focus()
+    await user.tab()
+    expect(document.activeElement).toBe(first)
+    await user.tab({ shift: true })
+    expect(document.activeElement).toBe(last)
+    expect(dialog.contains(document.activeElement)).toBe(true)
+  })
+
+  it('closes on Escape and returns focus', async () => {
     render(<Example />)
     const trigger = open()
     const dialog = await screen.findByRole('dialog')
-    const inside = dialog.querySelectorAll<HTMLElement>('input, button')
-    expect(inside.length).toBe(2)
-    inside[1]!.focus()
-    fireEvent.keyDown(inside[1]!, { key: 'Tab' })
-    // Whatever Tab does, focus never leaves the dialog.
-    expect(dialog.contains(document.activeElement)).toBe(true)
     fireEvent.keyDown(dialog, { key: 'Escape' })
     fireEvent.keyUp(dialog, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).toBeNull()
