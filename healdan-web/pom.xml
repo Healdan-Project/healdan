@@ -12,6 +12,10 @@
 	<artifactId>healdan-web</artifactId>
 	<name>healdan-web</name>
 	<packaging>jar</packaging>
+	<properties>
+		<!-- -Dhealdan.web.skip=true builds the module without Node: the jar then holds no app, and AppServlet answers 503. -->
+		<healdan.web.skip>false</healdan.web.skip>
+	</properties>
 	<dependencies>
 		<dependency>
 			<groupId>com.logicaldoc</groupId>
@@ -81,6 +85,73 @@
 	</dependencies>
 	<build>
 		<plugins>
+			<!-- Builds the User app (web/, an npm workspace) with a Node that Maven downloads into target/, the version in
+				web/.nvmrc. npm runs no scripts (ignore-scripts): the build tools' binaries come from platform packages. -->
+			<plugin>
+				<groupId>com.github.eirslett</groupId>
+				<artifactId>frontend-maven-plugin</artifactId>
+				<version>2.0.2</version>
+				<configuration>
+					<workingDirectory>web</workingDirectory>
+					<installDirectory>target</installDirectory>
+					<nodeVersion>v24.22.2</nodeVersion>
+					<environmentVariables>
+						<npm_config_cache>${user.home}/.npm</npm_config_cache>
+					</environmentVariables>
+					<skip>${healdan.web.skip}</skip>
+				</configuration>
+				<executions>
+					<execution>
+						<id>install-node-and-npm</id>
+						<phase>generate-resources</phase>
+						<goals>
+							<goal>install-node-and-npm</goal>
+						</goals>
+					</execution>
+					<execution>
+						<id>npm-ci</id>
+						<phase>generate-resources</phase>
+						<goals>
+							<goal>npm</goal>
+						</goals>
+						<configuration>
+							<arguments>ci --ignore-scripts</arguments>
+						</configuration>
+					</execution>
+					<execution>
+						<id>npm-run-build</id>
+						<phase>generate-resources</phase>
+						<goals>
+							<goal>npm</goal>
+						</goals>
+						<configuration>
+							<arguments>run build</arguments>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<!-- Copies the build into the jar, where AppServlet reads it. With the skip flag web/apps/user/dist/ may not
+				exist (or may be a stale build): the copy skips a missing folder and so nothing fails. -->
+			<plugin>
+				<artifactId>maven-resources-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>copy-user-app</id>
+						<phase>process-resources</phase>
+						<goals>
+							<goal>copy-resources</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.outputDirectory}/healdan/app/user</outputDirectory>
+							<resources>
+								<resource>
+									<directory>web/apps/user/dist</directory>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 			<plugin>
 				<artifactId>maven-assembly-plugin</artifactId>
 				<configuration>

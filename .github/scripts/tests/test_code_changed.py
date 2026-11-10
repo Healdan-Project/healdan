@@ -51,7 +51,11 @@ class CodeChangedTest(unittest.TestCase):
         return output.read_text(encoding="utf-8").strip()
 
     def outputs(self, event="pull_request"):
-        return self.code(event).splitlines()
+        """The code and clients outputs; the web output has its own tests."""
+        return [line for line in self.code(event).splitlines() if not line.startswith("web=")]
+
+    def web(self, event="pull_request"):
+        return next(line for line in self.code(event).splitlines() if line.startswith("web="))
 
     def test_site_only_is_docs(self):
         self.change("site/hugo.yaml", "site/static/favicon.svg")
@@ -113,6 +117,29 @@ class CodeChangedTest(unittest.TestCase):
     def test_clients_and_docs_is_not_code(self):
         self.change("clients/helper/x.cs", "docs/x.md")
         self.assertEqual(["code=false", "clients=true"], self.outputs())
+
+    def test_the_web_app_is_code_and_web(self):
+        self.change("healdan-web/web/package.json")
+        self.assertEqual(["code=true", "clients=false"], self.outputs())
+        self.assertEqual("web=true", self.web())
+
+    def test_the_api_contract_runs_the_web_app(self):
+        self.change("healdan-api/src/main/resources/healdan/api/openapi.yaml")
+        self.assertEqual("web=true", self.web())
+
+    def test_the_web_workflow_runs_the_web_app(self):
+        self.change(".github/workflows/web.yml")
+        self.assertEqual("web=true", self.web())
+
+    def test_docs_and_other_code_are_not_web(self):
+        self.change("site/content/x.md")
+        self.assertEqual("web=false", self.web())
+        self.change("healdan-core/src/main/java/A.java")
+        self.assertEqual("web=false", self.web())
+
+    def test_push_is_web(self):
+        self.change("site/content/x.md")
+        self.assertEqual("web=true", self.web(event="push"))
 
 
 if __name__ == "__main__":
