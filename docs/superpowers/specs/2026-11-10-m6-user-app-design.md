@@ -2,7 +2,7 @@
 
 - **Milestone:** M6 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-11-10
-- **Status:** design agreed with the owner on 2026-11-10. The scope and the foundations were settled question by question, the layout through mockups the owner reviewed in the browser (§6, [`2026-11-10-m6-mockups/`](2026-11-10-m6-mockups/README.md)), and the rest section by section. Waiting for the owner's review of this written spec. Implementation plan: to follow.
+- **Status:** design agreed with the owner on 2026-11-10. The scope and the foundations were settled question by question, the layout through mockups the owner reviewed in the browser (§6, [`2026-11-10-m6-mockups/`](2026-11-10-m6-mockups/README.md)), and the rest section by section. The owner approved this written spec the same day. Implementation plan: [`docs/superpowers/plans/2026-11-10-m6-user-app.md`](../plans/2026-11-10-m6-user-app.md); approved the same day, for subagent-driven building; its "Spec corrections and calls this plan makes" lists where it departs from this spec.
 - **Inputs:**
   - the roadmap's M6 section, and its glossary;
   - the [M1 spec](2026-10-17-m1-move-in-design.md) §5 (Stores, matters, templates and search folders), §6 (doc #s, properties and dates) and §7 (the rules on every route);
