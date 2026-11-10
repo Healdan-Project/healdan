@@ -14,6 +14,7 @@ describe('focus style', () => {
       './Dialog.module.css',
       './Menu.module.css',
       './Toast.module.css',
+      './Tree.module.css',
     ])
   })
 

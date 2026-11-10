@@ -3,9 +3,39 @@
 
 // Only the icons the screens use, so the bundle holds only those (tabler's barrel is tree-shaken by name).
 import { createElement, type SVGAttributes } from 'react'
-import { IconCheck, IconChevronDown, IconX } from '@tabler/icons-react'
+import {
+  IconBriefcase,
+  IconBuilding,
+  IconCheck,
+  IconChevronDown,
+  IconChevronRight,
+  IconFileText,
+  IconFolder,
+  IconFolderSearch,
+  IconHelpCircle,
+  IconMail,
+  IconPlus,
+  IconSearch,
+  IconStar,
+  IconX,
+} from '@tabler/icons-react'
 
-export const icons = { check: IconCheck, chevronDown: IconChevronDown, close: IconX }
+export const icons = {
+  briefcase: IconBriefcase,
+  building: IconBuilding,
+  check: IconCheck,
+  chevronDown: IconChevronDown,
+  chevronRight: IconChevronRight,
+  close: IconX,
+  document: IconFileText,
+  email: IconMail,
+  folder: IconFolder,
+  folderSearch: IconFolderSearch,
+  help: IconHelpCircle,
+  plus: IconPlus,
+  search: IconSearch,
+  star: IconStar,
+}
 
 export type IconName = keyof typeof icons
 

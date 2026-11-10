@@ -1,0 +1,9 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.banner {
+  padding: var(--hd-space-3) var(--hd-space-5);
+  border-bottom: 1px solid var(--hd-caution);
+  background: var(--hd-bar);
+  color: var(--hd-text);
+}

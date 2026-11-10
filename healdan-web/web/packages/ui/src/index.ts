@@ -5,6 +5,7 @@ import './tokens.css'
 
 export { Button, type ButtonProps } from './components/Button'
 export { Menu, MenuItem, type MenuProps } from './components/Menu'
+export { Tree, type TreeNode, type TreeProps } from './components/Tree'
 export { Dialog, type DialogProps } from './components/Dialog'
 export { Toast, ToastRegion, clearToasts, toast } from './components/Toast'
 export { Icon, type IconName } from './icons'
