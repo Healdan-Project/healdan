@@ -21,6 +21,7 @@ import com.logicaldoc.core.searchengine.Hit;
 import com.logicaldoc.core.searchengine.Search;
 import com.logicaldoc.core.searchengine.SearchException;
 import com.logicaldoc.core.security.user.Group;
+import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.matter.ClientMatterRef;
 import com.logicaldoc.healdan.matter.MatterDisplay;
@@ -82,18 +83,7 @@ public class MatterSearch extends Search {
 		if (StringUtils.isEmpty(input))
 			return;
 
-		MapSqlParameterSource params = new MapSqlParameterSource("tenant", searchUser.getTenantId())
-				.addValue("user", searchUser.getId());
-		String condition = condition(input, params);
-		// Administrators read every folder
-		String readable = searchUser.isMemberOf(Group.GROUP_ADMIN) ? "" : READABLE;
-		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
-		// One row more than the maximum tells there are more
-		if (options.getMaxHits() > 0)
-			jdbc.setMaxRows(options.getMaxHits() + 1);
-		List<Hit> found = new NamedParameterJdbcTemplate(jdbc).query(QUERY.formatted(condition, readable), params,
-				MatterSearch::toHit);
-
+		List<Hit> found = query(searchUser, input, options.getMaxHits());
 		for (Hit hit : found) {
 			if (options.getMaxHits() > 0 && hits.size() >= options.getMaxHits()) {
 				moreHitsPresent = true;
@@ -102,6 +92,35 @@ public class MatterSearch extends Search {
 			hits.add(hit);
 		}
 		estimatedHitsNumber = moreHitsPresent ? hits.size() + 1L : hits.size();
+	}
+
+	/**
+	 * The Matters scope's lookup, without the search's bookkeeping (no entry
+	 * in the user's history), for callers that look up as the user types
+	 *
+	 * @param user the user, whose tenant and readable workspaces count
+	 * @param input what the user typed, trimmed and not empty
+	 * @param maxHits the most hits wanted; zero or less for all of them
+	 * @return the matters the input means, lowest client and matter number
+	 *         first, one more than {@code maxHits} when there are more
+	 */
+	public static List<Hit> find(User user, String input, int maxHits) {
+		return new MatterSearch().query(user, input, maxHits);
+	}
+
+	/** The query, with this search's reading of the input ({@link #condition}) */
+	private List<Hit> query(User user, String input, int maxHits) {
+		MapSqlParameterSource params = new MapSqlParameterSource("tenant", user.getTenantId()).addValue("user",
+				user.getId());
+		String condition = condition(input, params);
+		// Administrators read every folder
+		String readable = user.isMemberOf(Group.GROUP_ADMIN) ? "" : READABLE;
+		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
+		// One row more than the maximum tells there are more
+		if (maxHits > 0)
+			jdbc.setMaxRows(maxHits + 1);
+		return new NamedParameterJdbcTemplate(jdbc).query(QUERY.formatted(condition, readable), params,
+				MatterSearch::toHit);
 	}
 
 	/**

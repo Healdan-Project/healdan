@@ -292,6 +292,37 @@ paths:
           description: Removed
         default:
           $ref: '#/components/responses/Problem'
+  /v1/me/matters/{folderId}:
+    put:
+      operationId: addMyMatter
+      summary: Add a matter to My Matters
+      description: |
+        Adds the matter whose workspace folder this is. Adding one already in
+        the list is still `204`. A folder that isn't a matter's workspace, one
+        the caller can't read and one that doesn't exist are all `404` with
+        the same answer.
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/FolderIdPath'
+      responses:
+        '204':
+          description: Added
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: removeMyMatter
+      summary: Remove a matter from My Matters
+      description: |
+        Removes the matter whose workspace folder this is. A matter that
+        isn't in the list is still `204`.
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/FolderIdPath'
+      responses:
+        '204':
+          description: Removed
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/users:
     get:
       operationId: findUsers
@@ -691,6 +722,56 @@ paths:
                 $ref: '#/components/schemas/FiledEmail'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/suggest:
+    get:
+      operationId: suggest
+      summary: Suggestions for the search box
+      description: |
+        What to offer as the caller types: up to 5 matters whose number
+        (`998.1` or a bare number) or name matches, as the Matters scope of
+        search finds them, then up to 5 documents whose title has every word
+        typed, the last as the start of a word. Only what the caller can read
+        and what is published to the caller. Fewer than two characters, or
+        none, answers two empty lists. Punctuation in `q` never makes an
+        error: the full-text engine sees only its letters and digits.
+      tags: [Search]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: What has been typed
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/clients/recent:
+    get:
+      operationId: listRecentClients
+      summary: Recent Clients
+      description: |
+        The clients of the caller's Recent Matters and My Matters, each once,
+        by name, then number. Healdan has no list of clients, and a client
+        appears only through a matter the caller can read. A plain array, not
+        a page.
+      tags: [Matters]
+      responses:
+        '200':
+          description: The clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecentClient'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/search:
     get:
       operationId: search
@@ -802,8 +883,17 @@ paths:
         The documents the caller filed, changed, checked in or out, or
         downloaded lately and can still read, newest first. "Lately" is the
         `recentmatters.days` setting, 30 days by default. At most 50, in one
-        page.
+        page. With `kind=email` only emails (`.eml` and `.msg` files) are
+        listed, and the 50 are taken from them.
       tags: [Documents]
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          description: "`email` for the emails alone; every document by default. Any other value is `400`."
+          schema:
+            type: string
+            enum: [email]
       responses:
         '200':
           description: The list
@@ -1587,6 +1677,15 @@ paths:
           $ref: '#/components/responses/Problem'
 components:
   parameters:
+    FolderIdPath:
+      name: folderId
+      in: path
+      required: true
+      description: A matter's workspace folder, which is `folderId` in the matter
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
     FolderId:
       name: id
       in: path
@@ -2307,6 +2406,79 @@ components:
           format: int64
         name:
           type: string
+    RecentClient:
+      type: object
+      description: A client in Recent Clients
+      additionalProperties: false
+      required: [number, name]
+      properties:
+        number:
+          type: integer
+          format: int64
+        name:
+          type: string
+    SuggestView:
+      type: object
+      description: What the search box offers as the caller types
+      additionalProperties: false
+      required: [matters, documents]
+      properties:
+        matters:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, number, name, client]
+            properties:
+              id:
+                type: integer
+                format: int64
+              number:
+                type: integer
+                format: int64
+                description: The matter number within its client
+              name:
+                type: string
+              client:
+                type: object
+                additionalProperties: false
+                required: [number, name]
+                properties:
+                  number:
+                    type: integer
+                    format: int64
+                  name:
+                    type: string
+        documents:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: false
+            required: [docNumber, name, matter]
+            properties:
+              docNumber:
+                type: integer
+                format: int64
+              name:
+                type: string
+                description: The file name
+              matter:
+                type: object
+                additionalProperties: false
+                required: [id, number, display]
+                properties:
+                  id:
+                    type: integer
+                    format: int64
+                  number:
+                    type: integer
+                    format: int64
+                    description: The matter number within its client
+                  display:
+                    type: string
+                    description: The matter as people read it, such as `998.1 - Healdan Demo`, with an en dash
     ClientRef:
       type: object
       description: A client named in another object

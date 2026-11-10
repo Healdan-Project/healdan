@@ -463,4 +463,24 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertThrows(IllegalStateException.class, Caller::current);
 		assertNull(SecurityContextHolder.getContext().getAuthentication());
 	}
+
+	@Test
+	public void testRecentEmails() throws Exception {
+		file("a.docx", "Lease draft");
+		Document mail = file("note.eml", "Subject: hello");
+		Document outlook = file("other.msg", "binary");
+		String token = signIn(boss);
+
+		assertEquals(3, get("/api/v1/documents/recent").token(token).send().json().path("items").size());
+
+		ApiResponse emails = get("/api/v1/documents/recent?kind=email").token(token).send();
+		assertEquals(emails.toString(), 200, emails.status());
+		java.util.Set<Long> numbers = new java.util.HashSet<>();
+		emails.json().path("items").forEach(i -> numbers.add(i.path("docNumber").asLong()));
+		assertEquals(java.util.Set.of(number(mail), number(outlook)), numbers);
+
+		ApiResponse other = get("/api/v1/documents/recent?kind=other").token(token).send();
+		assertEquals(other.toString(), 400, other.status());
+		assertEquals("bad-request", other.code());
+	}
 }

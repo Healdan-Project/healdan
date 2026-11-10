@@ -27,12 +27,14 @@ import com.logicaldoc.healdan.api.model.NewFavorite;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.UserView;
 import com.logicaldoc.healdan.navigation.Favorites;
+import com.logicaldoc.healdan.navigation.MyMatters;
 import com.logicaldoc.healdan.security.AccessChecks;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -43,7 +45,8 @@ import jakarta.ws.rs.core.Response;
  * {@code GET /v1/me}: who the token signs in as (spec section 6.1), and
  * {@code GET /v1/me/checkouts}: the documents the caller has checked out
  * (section 6.4), and the caller's Favorites under {@code /v1/me/favorites}
- * (section 9.3).
+ * (section 9.3), and My Matters' adding and removing under
+ * {@code /v1/me/matters} (M6 spec section 9.1).
  */
 @Component
 @Path("/v1/me")
@@ -165,6 +168,48 @@ public class MeResource {
 			throw ApiProblem.notFound("You have no favorite with this id.");
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't remove the favorite", e);
+		}
+	}
+
+	/**
+	 * Adds a matter to the caller's My Matters; one already there stays as it
+	 * is.
+	 *
+	 * @param folderId the matter's workspace folder
+	 * @return {@code 204}, or {@code 404} if the folder isn't a matter the
+	 *         caller can read
+	 */
+	@PUT
+	@Path("matters/{folderId: [0-9]+}")
+	public Response addMatter(@PathParam("folderId") long folderId) {
+		User caller = Caller.current().user();
+		try {
+			// A folder that is no matter, one the caller can't read and one that isn't there answer alike
+			Optional<Folder> folder = AccessChecks.readableFolder(folderId, caller);
+			Optional<FolderView> view = folder.isPresent() ? ApiViews.folder(folder.get(), caller) : Optional.empty();
+			if (view.isEmpty() || !"matter".equals(view.get().kind()))
+				throw ApiProblem.notFound("No matter " + folderId);
+			MyMatters.get().add(caller.getId(), folderId);
+			return Response.noContent().build();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't add the matter", e);
+		}
+	}
+
+	/**
+	 * Removes a matter from the caller's My Matters.
+	 *
+	 * @param folderId the matter's workspace folder
+	 * @return {@code 204}, also when it wasn't there
+	 */
+	@DELETE
+	@Path("matters/{folderId: [0-9]+}")
+	public Response removeMatter(@PathParam("folderId") long folderId) {
+		try {
+			MyMatters.get().remove(Caller.current().user().getId(), folderId);
+			return Response.noContent().build();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't remove the matter", e);
 		}
 	}
 

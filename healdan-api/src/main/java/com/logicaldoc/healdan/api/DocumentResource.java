@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
@@ -42,6 +43,7 @@ import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.NewDocument;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.docnumber.LegacyDocNumbers;
+import com.logicaldoc.healdan.listing.FileKinds;
 import com.logicaldoc.healdan.navigation.RecentDocuments;
 import com.logicaldoc.healdan.navigation.RecentDocuments.RecentDocument;
 import com.logicaldoc.healdan.security.AccessChecks;
@@ -201,14 +203,20 @@ public class DocumentResource {
 	/**
 	 * @return the documents the caller filed, changed, checked out or
 	 *         downloaded lately and can still read, newest first; at most 50
+	 * @param kind {@code email} for the emails alone; every kind by default
 	 */
 	@GET
 	@Path("recent")
-	public Page<DocumentView> recent() {
+	public Page<DocumentView> recent(@QueryParam("kind") String kind) {
+		if (kind != null && !FileKinds.EMAIL.equals(kind))
+			throw ApiProblem.badRequest("The kind can be email, not %s.".formatted(kind));
 		User caller = Caller.current().user();
 		try {
 			List<DocumentView> views = new ArrayList<>();
-			for (RecentDocument recent : RecentDocuments.get().list(caller.getId(), ApiViews::shows)) {
+			// The kind filters before the cap of 50, so Emails lists as many as there are
+			for (RecentDocument recent : RecentDocuments.get().list(caller.getId(),
+					d -> ApiViews.shows(d) && (kind == null
+							|| FileKinds.EMAIL.equals(FileKinds.of(FilenameUtils.getExtension(d.getFileName())))))) {
 				Document document = DocumentDAO.get().findById(recent.docId());
 				if (document != null)
 					views.add(ApiViews.document(document, caller));

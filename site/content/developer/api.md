@@ -288,10 +288,10 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 |---|---|
 | The server and you | `GET /server`, `GET /me`, `GET /users?q=` for user fields such as Author |
 | Signing in | `POST /auth/tokens`, `GET /auth/tokens`, `DELETE /auth/tokens/current`, `DELETE /auth/tokens/{id}`; `DELETE /session` for the web session |
-| Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
-| Finding | `GET /search?scope=&q=&within=`, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
+| Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /clients/recent`, `PUT` and `DELETE /me/matters/{folderId}`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
+| Finding | `GET /search?scope=&q=&within=`, `GET /suggest?q=` for the search box as someone types, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
-| A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent` |
+| A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone |
 | Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
 | Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
@@ -304,6 +304,12 @@ The sections below say more about the parts a client needs to know before it sta
   `#1234`, `#1234.2`, `#1234v2`, `#1234.2.1`, and the title bar's `#1234 v2.1`, which may have spaces after the
   `#` and before the `v`. Encode the `#` as `%23`. Input that isn't a doc # is `400`; a document the caller can't
   read, or a version it hasn't got, is `404`.
+- **Suggestions as someone types.** `GET /suggest?q=` answers `{ "matters": [...], "documents": [...] }`: up to 5
+  matters whose number or name matches `q` (as the `matters` search scope finds them), then up to 5 documents whose
+  title has every word of `q`, the last as the start of a word. Each matter has `id`, `number`, `name` and its
+  `client` (`number` and `name`); each document has `docNumber`, `name` and its `matter` (`id`, `number` and
+  `display`). It shows only what the caller can read. A `q` of fewer than two characters answers two empty lists.
+  Punctuation never makes an error: only the letters and digits of `q` reach the full-text engine.
 - **Searching inside a folder.** `GET /search` takes `within`, the id of a folder, usually a matter's workspace
   (its `folderId`) or one of its folders. The `documents` and `folders` scopes then return only what is inside it,
   at any depth, and a `#` lookup keeps its document only if it is in there. A Store as `within` is
@@ -361,6 +367,17 @@ The user's bookmarks in LogicalDOC, apart from those on matters' workspaces, whi
 exactly one of `folderId` and `docNumber`, and answers `201`; adding a favorite twice answers `201` with the
 existing one. `DELETE /me/favorites/{id}` takes the bookmark's `id` from the list. A matter's workspace is `400`,
 and what the user can't read is `404`.
+
+## My Matters and Recent Clients
+
+`PUT /me/matters/{folderId}` adds a matter to the caller's My Matters, taking the matter's workspace folder
+(`folderId` in a matter) and answering `204`; adding one already there is `204` too. A folder that isn't a matter's
+workspace, one the caller can't read and one that doesn't exist are all `404`. `DELETE /me/matters/{folderId}`
+removes it, and `204` is the answer when it wasn't there. `GET /matters/mine` lists the result.
+
+`GET /clients/recent` lists the clients of the caller's Recent Matters and My Matters, each once, by name then
+number, as a plain array of `number` and `name`. Healdan has no list of all clients, and a client of a matter the
+caller can no longer read isn't listed.
 
 ## Check-Outs and Devices
 
