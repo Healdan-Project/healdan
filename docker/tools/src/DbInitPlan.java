@@ -33,13 +33,16 @@ public final class DbInitPlan {
     public record Entry(String pluginId, int position, String sqlFile) {
     }
 
-    /** A CREATE TABLE and its table's name, quoted (group 1) or not (group 2). CREATE TEMPORARY TABLE's don't last. */
-    private static final Pattern CREATE_TABLE = Pattern.compile("(?i)\\bcreate\\s+table\\s+(?:if\\s+not\\s+exists\\s+)?"
-            + "(?:[`\"]([^`\"]+)[`\"]|([A-Za-z0-9_$]+))");
+    /**
+     * A CREATE TABLE, whether it's OR REPLACE (group 1), and its table's name, backquoted (group 2) or not (group 3),
+     * after the database's name if it has one. CREATE TEMPORARY TABLE's don't last.
+     */
+    private static final Pattern CREATE_TABLE = Pattern.compile("(?i)\\bcreate\\s+(or\\s+replace\\s+)?table\\s+"
+            + "(?:if\\s+not\\s+exists\\s+)?(?:(?:`[^`]+`|[A-Za-z0-9_$]+)\\s*\\.\\s*)?(?:`([^`]+)`|([A-Za-z0-9_$]+))");
 
     private static final Pattern WORD = Pattern.compile("[A-Za-z0-9_$]+");
 
-    /** The words that start an item of CREATE TABLE's parentheses that isn't a column, unless quoted. */
+    /** The words that start an item of CREATE TABLE's parentheses that isn't a column, unless backquoted. */
     private static final Set<String> NOT_COLUMNS = Set.of("primary", "constraint", "unique", "foreign", "key", "index",
             "check", "fulltext", "spatial", "period", "like");
 
@@ -101,30 +104,30 @@ public final class DbInitPlan {
     /**
      * The tables the scripts create, in order of first appearance, each with the columns its CREATE TABLE defines, in
      * order. Comments and the text of strings create nothing. A table's keys and constraints aren't columns, unless
-     * the name is quoted. A table created twice, in one script or two, is listed once, with the columns of both; names
-     * are matched whatever their case, and the first spelling kept. A table made from another (LIKE, AS SELECT) is
-     * listed with no columns. The scripts create columns only in CREATE TABLE: their ALTER TABLEs add constraints.
+     * the name is backquoted. A table created twice, in one script or two, is listed once, with the columns of its
+     * first CREATE TABLE, as MariaDB keeps that one (a second fails, and IF NOT EXISTS does nothing), unless a later
+     * one is CREATE OR REPLACE, whose columns replace them. Table names are matched as written, as MariaDB on Linux
+     * matches them. A table made from another (LIKE, AS SELECT) is listed with no columns. The scripts create columns
+     * only in CREATE TABLE: their ALTER TABLEs add constraints.
      */
     public static Map<String, List<String>> createdColumns(List<String> scripts) {
-        Map<String, String> spelling = new HashMap<>();
-        Map<String, LinkedHashMap<String, String>> tables = new LinkedHashMap<>();
+        Map<String, List<String>> tables = new LinkedHashMap<>();
         for (String sql : scripts) {
             String text = masked(sql);
             Matcher m = CREATE_TABLE.matcher(text);
             while (m.find()) {
-                String table = m.group(1) != null ? m.group(1) : m.group(2);
-                String key = table.toLowerCase(Locale.ROOT);
-                spelling.putIfAbsent(key, table);
-                LinkedHashMap<String, String> columns = tables.computeIfAbsent(key, k -> new LinkedHashMap<>());
+                String table = m.group(2) != null ? m.group(2) : m.group(3);
+                if (tables.containsKey(table) && m.group(1) == null)
+                    continue;
+                LinkedHashMap<String, String> columns = new LinkedHashMap<>();
                 int open = skipSpace(text, m.end());
                 if (open < text.length() && text.charAt(open) == '(')
                     for (String column : columnNames(sql, text, open))
                         columns.putIfAbsent(column.toLowerCase(Locale.ROOT), column);
+                tables.put(table, List.copyOf(columns.values()));
             }
         }
-        Map<String, List<String>> result = new LinkedHashMap<>();
-        tables.forEach((key, columns) -> result.put(spelling.get(key), List.copyOf(columns.values())));
-        return result;
+        return tables;
     }
 
     /**
@@ -137,7 +140,10 @@ public final class DbInitPlan {
             return tables.isEmpty() && columns.isEmpty();
         }
 
-        /** As "table ld_a lacks columns ld_x, ld_y; table ld_c lacks column ld_z; table ld_b is missing". */
+        /**
+         * As "table ld_a lacks columns ld_x, ld_y; table ld_c lacks column ld_z; table ld_b is missing": the tables that
+         * lack columns, then the missing ones, each in the scripts' order.
+         */
         public String describe() {
             List<String> parts = new ArrayList<>();
             columns.forEach((table, names) -> parts.add("table " + table + " lacks column"
@@ -151,18 +157,19 @@ public final class DbInitPlan {
 
     /**
      * Compares what the scripts create (createdColumns) with the columns of each table the database has, matching
-     * names whatever their case, as MariaDB matches column names.
+     * table names as written, as MariaDB on Linux matches them, and column names whatever their case, as MariaDB
+     * matches those.
      */
     public static Missing missing(Map<String, List<String>> expected, Map<String, Set<String>> actual) {
         Map<String, Set<String>> has = new HashMap<>();
         actual.forEach((table, columns) -> {
-            Set<String> lower = has.computeIfAbsent(table.toLowerCase(Locale.ROOT), t -> new HashSet<>());
+            Set<String> lower = has.computeIfAbsent(table, t -> new HashSet<>());
             columns.forEach(column -> lower.add(column.toLowerCase(Locale.ROOT)));
         });
         List<String> tables = new ArrayList<>();
         Map<String, List<String>> columns = new LinkedHashMap<>();
         expected.forEach((table, names) -> {
-            Set<String> present = has.get(table.toLowerCase(Locale.ROOT));
+            Set<String> present = has.get(table);
             if (present == null) {
                 tables.add(table);
                 return;
@@ -175,27 +182,28 @@ public final class DbInitPlan {
     }
 
     /**
-     * The script with each comment, and the text of each single-quoted string, replaced by spaces, so a parenthesis,
-     * comma or CREATE TABLE in them counts for nothing, and every character keeps its place. A -- comment runs to the
-     * end of its line, and a string's '' or \' doesn't end it. Backquoted and double-quoted names are kept.
+     * The script with each comment, and the text of each string, replaced by spaces, so a parenthesis, comma or CREATE
+     * TABLE in them counts for nothing, and every character keeps its place. A -- or # comment runs to the end of its
+     * line. A string is single- or double-quoted, as MariaDB reads double quotes without ANSI_QUOTES, and its doubled
+     * quote or \ escape doesn't end it. Backquoted names are kept.
      */
     private static String masked(String sql) {
         char[] out = sql.toCharArray();
         int i = 0;
         while (i < out.length) {
             char c = out[i];
-            if (c == '\'') {
+            if (c == '\'' || c == '"') {
                 i++;
                 while (i < out.length) {
                     if (out[i] == '\\' && i + 1 < out.length) {
                         out[i] = ' ';
                         out[i + 1] = ' ';
                         i += 2;
-                    } else if (out[i] == '\'' && i + 1 < out.length && out[i + 1] == '\'') {
+                    } else if (out[i] == c && i + 1 < out.length && out[i + 1] == c) {
                         out[i] = ' ';
                         out[i + 1] = ' ';
                         i += 2;
-                    } else if (out[i] == '\'') {
+                    } else if (out[i] == c) {
                         i++;
                         break;
                     } else {
@@ -204,10 +212,10 @@ public final class DbInitPlan {
                         i++;
                     }
                 }
-            } else if (c == '`' || c == '"') {
+            } else if (c == '`') {
                 int end = sql.indexOf(c, i + 1);
                 i = end < 0 ? out.length : end + 1;
-            } else if (c == '-' && i + 1 < out.length && out[i + 1] == '-') {
+            } else if (c == '#' || (c == '-' && i + 1 < out.length && out[i + 1] == '-')) {
                 while (i < out.length && out[i] != '\n')
                     out[i++] = ' ';
             } else if (c == '/' && i + 1 < out.length && out[i + 1] == '*') {
@@ -234,7 +242,7 @@ public final class DbInitPlan {
         int start = open + 1;
         for (int i = open; i < text.length(); i++) {
             char c = text.charAt(i);
-            if (c == '`' || c == '"') {
+            if (c == '`') {
                 int end = text.indexOf(c, i + 1);
                 i = end < 0 ? text.length() : end;
             } else if (c == '(') {
@@ -258,7 +266,7 @@ public final class DbInitPlan {
         if (from >= to)
             return null;
         char quote = sql.charAt(from);
-        if (quote == '`' || quote == '"') {
+        if (quote == '`') {
             int end = sql.indexOf(quote, from + 1);
             return end < 0 || end > to ? null : sql.substring(from + 1, end);
         }

@@ -341,16 +341,22 @@ public final class DockerInit {
 
     /**
      * The DbInit scripts to run, in order: every plugin's DbInit extensions against logicaldoc-core, as the setup
-     * wizard's PluginDbInit picks them. With verbose, logs each one, and each plugin.xml it can't read.
+     * wizard's PluginDbInit picks them. Each plugin.xml it can't read is logged and left out. For a fresh database,
+     * whose start runs the scripts, it logs the plan, and an extension it can't plan (no position or sqlFile, or a
+     * script that isn't on the classpath) stops the start. A later start runs none of them, so there such an
+     * extension only leaves its tables out of the check, with a warning.
      */
-    private static List<String> plannedScripts(ClassLoader cl, boolean verbose) throws Exception {
+    static List<String> plannedScripts(ClassLoader cl, boolean fresh) throws Exception {
         List<DbInitPlan.Entry> entries = new ArrayList<>();
         for (URL manifest : Collections.list(cl.getResources("plugin.xml"))) {
             try (InputStream in = manifest.openStream()) {
                 entries.addAll(DbInitPlan.parse(in));
             } catch (SAXException e) {
-                if (verbose)
-                    log("ignoring unparseable " + manifest + ": " + e.getMessage());
+                log("ignoring unparseable " + manifest + ": " + e.getMessage());
+            } catch (IllegalArgumentException e) {
+                if (fresh)
+                    throw e;
+                warnUnchecked(manifest + ": " + e.getMessage());
             }
         }
         List<DbInitPlan.Entry> ordered = DbInitPlan.order(entries);
@@ -359,16 +365,30 @@ public final class DockerInit {
 
         List<String> scripts = new ArrayList<>();
         for (DbInitPlan.Entry entry : ordered) {
-            String script = DbInitPlan.resolve(entry, DBMS, name -> cl.getResource(name) != null);
-            if (verbose)
+            String script;
+            try {
+                script = DbInitPlan.resolve(entry, DBMS, name -> cl.getResource(name) != null);
+            } catch (IllegalStateException e) {
+                if (fresh)
+                    throw e;
+                warnUnchecked(e.getMessage());
+                continue;
+            }
+            if (fresh)
                 log("plan: " + entry.position() + " " + entry.pluginId() + " -> " + script);
             scripts.add(script);
         }
         return scripts;
     }
 
+    /** Warns that a DbInit extension that can't be planned leaves its tables out of the check, and why. */
+    private static void warnUnchecked(String why) {
+        System.err.println("[docker-init] WARNING: LogicalDOC's tables are checked without a DbInit extension that"
+                + " can't be planned: " + why);
+    }
+
     /** The tables the scripts create, with their columns (DbInitPlan.createdColumns). */
-    private static Map<String, List<String>> createdColumns(ClassLoader cl, List<String> scripts) throws IOException {
+    static Map<String, List<String>> createdColumns(ClassLoader cl, List<String> scripts) throws IOException {
         List<String> texts = new ArrayList<>();
         for (String script : scripts)
             try (InputStream in = cl.getResourceAsStream(script)) {
