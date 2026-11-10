@@ -29,6 +29,7 @@ import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.searchfolder.SearchFolderRule;
@@ -441,6 +442,15 @@ public class FolderResourceTest extends ApiTestCase {
 		// Only folders asked for: none
 		assertEquals(0, get("/api/v1/folders/" + search.getId() + "/children?type=folder").token(signIn(clerk)).send()
 				.json().path("total").asInt());
+
+		// Sorted, filtered and counted among its own documents
+		String base = "/api/v1/folders/" + search.getId() + "/children";
+		JsonNode sorted = get(base + "?sort=title&order=desc&facets=type").token(signIn(clerk)).send().json();
+		assertEquals("b.docx", sorted.path("items").get(0).path("name").textValue());
+		assertEquals("a.docx", sorted.path("items").get(1).path("name").textValue());
+		assertEquals("word", sorted.path("facets").path("type").get(0).path("value").textValue());
+		assertEquals(2, sorted.path("facets").path("type").get(0).path("count").asInt());
+		assertEquals(0, get(base + "?type=pdf").token(signIn(clerk)).send().json().path("total").asInt());
 	}
 
 	@Test
@@ -456,6 +466,108 @@ public class FolderResourceTest extends ApiTestCase {
 		assertEquals(response.toString(), 200, response.status());
 		assertEquals(1, response.json().path("total").asInt());
 		assertEquals("fine.docx", response.json().path("items").get(0).path("name").textValue());
+	}
+
+	@Test
+	public void testChildrenSortedFilteredAndCounted() throws Exception {
+		fx.folder(documents, "Sub");
+		Document first = fx.upload(documents, "one.pdf", "1", boss);
+		Document second = fx.upload(documents, "two.pdf", "2", clerk);
+		fx.upload(documents, "three.docx", "3", boss);
+		Document hidden = fx.upload(documents, "four.pdf", "4", boss);
+		awaitAsyncWork();
+		hideDocument(hidden);
+		User named = UserDAO.get().findById(clerk.getId());
+		named.setFirstName("Clara");
+		named.setName("Clerk");
+		UserDAO.get().store(named);
+		String token = signIn(clerk);
+		String base = "/api/v1/folders/" + documents.getId() + "/children";
+
+		ApiResponse response = get(base + "?sort=docNumber&order=desc&type=pdf&facets=type,author").token(token)
+				.send();
+
+		assertEquals(response.toString(), 200, response.status());
+		JsonNode page = response.json();
+		// The PDFs Clerk can read, the newest doc # first; a filter leaves the subfolder out
+		assertEquals(2, page.path("total").asInt());
+		assertEquals(2, page.path("items").size());
+		assertEquals(Long.parseLong(second.getCustomId()), page.path("items").get(0).path("docNumber").asLong());
+		assertEquals(Long.parseLong(first.getCustomId()), page.path("items").get(1).path("docNumber").asLong());
+		// File Type ignores its own filter, and never counts the PDF Clerk can't read
+		JsonNode types = page.path("facets").path("type");
+		assertEquals(2, types.size());
+		assertEquals("pdf", types.get(0).path("value").textValue());
+		assertEquals(2, types.get(0).path("count").asInt());
+		assertEquals("word", types.get(1).path("value").textValue());
+		assertEquals(1, types.get(1).path("count").asInt());
+		// Author applies the type filter, and names each Author
+		JsonNode authors = page.path("facets").path("author");
+		assertEquals(2, authors.size());
+		assertEquals("boss", authors.get(0).path("value").textValue());
+		assertEquals("boss boss", authors.get(0).path("displayName").textValue());
+		assertEquals("clerk", authors.get(1).path("value").textValue());
+		assertEquals("Clara Clerk", authors.get(1).path("displayName").textValue());
+		assertEquals(1, authors.get(1).path("count").asInt());
+		assertFalse(page.path("facets").has("class"));
+
+		// Without facets= the answer has none
+		JsonNode plain = get(base).token(token).send().json();
+		assertFalse(plain.has("facets"));
+		assertEquals(4, plain.path("total").asInt());
+		assertEquals("Sub", plain.path("items").get(0).path("name").textValue());
+
+		// Repeated values are alternatives
+		assertEquals(3, get(base + "?type=pdf&type=word").token(token).send().json().path("total").asInt());
+		assertEquals(1, get(base + "?author=clerk").token(token).send().json().path("total").asInt());
+		assertEquals(3, get(base + "?edited=today").token(token).send().json().path("total").asInt());
+		assertEquals(0, get(base + "?to=2000-01-01").token(token).send().json().path("total").asInt());
+
+		// The sort is the documents'; the subfolders still come first
+		JsonNode byTitle = get(base + "?sort=title&order=desc").token(token).send().json();
+		List<String> names = new ArrayList<>();
+		for (JsonNode item : byTitle.path("items"))
+			names.add(item.path("name").textValue());
+		assertEquals(List.of("Sub", "two.pdf", "three.docx", "one.pdf"), names);
+	}
+
+	@Test
+	public void testChildrenRefusals() throws Exception {
+		String token = signIn(clerk);
+		String base = "/api/v1/folders/" + documents.getId() + "/children";
+
+		for (String query : new String[] { "sort=size", "sort=docnumber", "order=up", "type=folder&type=pdf",
+				"type=folder&author=clerk", "type=folder&facets=type", "type=docx", "edited=week",
+				"edited=7d&from=2026-01-01", "from=2026-13-01", "from=2026-06-02&to=2026-06-01", "facets=size",
+				"matter=1", "client=x", "author=" }) {
+			ApiResponse response = get(base + "?" + query).token(token).send();
+			assertEquals(query + ": " + response, 400, response.status());
+			assertEquals(query, "bad-request", response.code());
+		}
+	}
+
+	@Test
+	public void testChildrenPageAcrossFoldersAndDocuments() throws Exception {
+		fx.folder(documents, "b");
+		fx.folder(documents, "a");
+		for (String name : new String[] { "z.docx", "x.docx", "y.docx" })
+			fx.upload(documents, name, name, boss);
+		awaitAsyncWork();
+		String token = signIn(clerk);
+		String base = "/api/v1/folders/" + documents.getId() + "/children?limit=2&offset=";
+
+		List<String> names = new ArrayList<>();
+		for (int offset = 0; offset < 6; offset += 2) {
+			JsonNode page = get(base + offset).token(token).send().json();
+			assertEquals(5, page.path("total").asInt());
+			for (JsonNode item : page.path("items"))
+				names.add(item.path("name").textValue());
+		}
+		assertEquals(List.of("a", "b", "x.docx", "y.docx", "z.docx"), names);
+		// A page that starts among the folders and ends among the documents
+		JsonNode middle = get(base + "1").token(token).send().json();
+		assertEquals("b", middle.path("items").get(0).path("name").textValue());
+		assertEquals("x.docx", middle.path("items").get(1).path("name").textValue());
 	}
 
 	@Test

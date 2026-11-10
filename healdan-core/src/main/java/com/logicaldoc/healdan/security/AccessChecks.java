@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
@@ -44,7 +45,7 @@ public final class AccessChecks {
 	 * Every permission column of {@code ld_document_acl}, as CE's
 	 * {@code getAllowedPermissions} reads them
 	 */
-	private static final String ANY_PERMISSION = String.join(" + ", "ld_read", "ld_write", "ld_security", "ld_immutable",
+	private static final List<String> ANY_PERMISSION = List.of("ld_read", "ld_write", "ld_security", "ld_immutable",
 			"ld_delete", "ld_rename", "ld_sign", "ld_archive", "ld_workflow", "ld_download", "ld_calendar",
 			"ld_subscription", "ld_print", "ld_password", "ld_move", "ld_email", "ld_automation", "ld_readingreq",
 			"ld_preview", "ld_customid", "ld_revision");
@@ -101,7 +102,29 @@ public final class AccessChecks {
 	 *         {@code admin} or {@code publisher} group
 	 */
 	public static boolean visible(Document document, User user) {
-		return document.isPublishing() || user.isMemberOf(Group.GROUP_ADMIN) || user.isMemberOf(PUBLISHER_GROUP);
+		return document.isPublishing() || seesUnpublished(user);
+	}
+
+	/**
+	 * @param user the user, with its groups
+	 * @return true if the user is in the {@code admin} or {@code publisher}
+	 *         group, whom CE shows documents that aren't published now
+	 */
+	public static boolean seesUnpublished(User user) {
+		return user.isMemberOf(Group.GROUP_ADMIN) || user.isMemberOf(PUBLISHER_GROUP);
+	}
+
+	/**
+	 * For SQL that restates {@link #readableDocuments}' rule, as
+	 * {@code FolderListing} does.
+	 *
+	 * @param alias the alias of {@code ld_document_acl} with its dot, such as
+	 *        {@code a.}, or empty for none
+	 * @return the sum of a row's permission columns: more than 0 when the row
+	 *         grants anything
+	 */
+	public static String anyPermission(String alias) {
+		return ANY_PERMISSION.stream().map(column -> alias + column).collect(Collectors.joining(" + "));
 	}
 
 	/**
@@ -148,6 +171,8 @@ public final class AccessChecks {
 	 * As CE decides ({@code getAllowedPermissions}): an administrator reads all;
 	 * a document whose own ACL rows for the user's groups grant anything is
 	 * read if they grant READ; any other document takes its folder's answer.
+	 * {@code FolderListing} restates this rule in SQL, to page a folder in the
+	 * database: a change here changes it there.
 	 *
 	 * @param folder the folder that holds all the documents
 	 * @param documents documents of the folder
@@ -190,7 +215,7 @@ public final class AccessChecks {
 					 where ld_docid in (:ids)
 					   and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = :user)
 					 group by ld_docid
-					""".formatted("(" + ANY_PERMISSION + ")"),
+					""".formatted("(" + anyPermission("") + ")"),
 					Map.of("ids", chunk, "user", userId), rs -> {
 						// Rows that grant nothing at all send the document to its folder
 						if (rs.getInt(3) > 0 && seen.add(rs.getLong(1)))

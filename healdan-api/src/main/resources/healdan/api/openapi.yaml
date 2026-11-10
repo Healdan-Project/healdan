@@ -1382,10 +1382,17 @@ paths:
       description: |
         A matter's workspace or a folder gives the subfolders the caller can
         read (by name, ignoring case), then the documents the caller can read
-        (by name). Hidden folders and aliases are left out, and an alias
-        asked for by its own id is `404`. A search folder
-        gives its documents, newest change first, at most 1000. `total` is
-        the full count.
+        (by title unless `sort` says otherwise). Hidden folders and aliases
+        are left out, and an alias asked for by its own id is `404`. A search
+        folder gives its documents, newest change first unless `sort` says
+        otherwise, at most 1000. `total` is the full count, after the
+        filters.
+
+        The filters keep documents: with any of them, the subfolders are left
+        out. Values of one filter are alternatives (`type=pdf&type=word`),
+        and the filters all apply together. `facets` adds counts of what each
+        option would leave, over the documents the caller can read: each
+        facet applies every filter but its own.
 
         A Store gives `409 not-browsable` and lists nothing: find a matter by
         search, My Matters or Recent Matters.
@@ -1395,10 +1402,26 @@ paths:
         - name: type
           in: query
           required: false
-          description: '`folder` for the subfolders alone. Anything else is `400`.'
+          description: |
+            `folder` for the subfolders alone, which takes no filters or
+            facets; or the file kinds to keep. Anything else is `400`.
+          style: form
+          explode: true
           schema:
-            type: string
-            const: folder
+            type: array
+            items:
+              type: string
+              enum: [folder, word, excel, powerpoint, pdf, email, opendocument, picture, other]
+        - $ref: '#/components/parameters/ListSort'
+        - $ref: '#/components/parameters/ListOrder'
+        - $ref: '#/components/parameters/AuthorFilter'
+        - $ref: '#/components/parameters/ClassFilter'
+        - $ref: '#/components/parameters/ClientFilter'
+        - $ref: '#/components/parameters/MatterFilter'
+        - $ref: '#/components/parameters/EditedFilter'
+        - $ref: '#/components/parameters/EditedFrom'
+        - $ref: '#/components/parameters/EditedTo'
+        - $ref: '#/components/parameters/FacetsWanted'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -1599,6 +1622,111 @@ components:
         type: integer
         minimum: 1
         maximum: 200
+    ListSort:
+      name: sort
+      in: query
+      required: false
+      description: |
+        What to sort the documents by: `title` (the file name, ignoring
+        case), `docNumber` (as a number), `version` (by its major, then its
+        minor number), `author` (by name) or `edited` (the last change). Ties
+        go by the document's age, so pages never overlap, and documents with
+        no value to sort by come last either way. Anything else is `400`.
+      schema:
+        type: string
+        enum: [title, docNumber, version, author, edited]
+    ListOrder:
+      name: order
+      in: query
+      required: false
+      description: '`asc` (the default) or `desc`.'
+      schema:
+        type: string
+        enum: [asc, desc]
+    AuthorFilter:
+      name: author
+      in: query
+      required: false
+      description: The Authors to keep, by username.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+    ClassFilter:
+      name: class
+      in: query
+      required: false
+      description: The classes to keep.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+    ClientFilter:
+      name: client
+      in: query
+      required: false
+      description: The clients to keep, by number, such as `998`.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+          pattern: '^[0-9]{1,18}$'
+    MatterFilter:
+      name: matter
+      in: query
+      required: false
+      description: The matters to keep, by client and matter number, such as `998.1`.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+          pattern: '^[0-9]{1,18}\.[0-9]{1,18}$'
+    EditedFilter:
+      name: edited
+      in: query
+      required: false
+      description: |
+        Documents last changed `today`, in the last 7 days (`7d`, today and
+        the six before), the last 30 (`30d`) or this `year`, in the server's
+        time zone. Not with `from` or `to`.
+      schema:
+        type: string
+        enum: [today, 7d, 30d, year]
+    EditedFrom:
+      name: from
+      in: query
+      required: false
+      description: Documents last changed on this day or later, in the server's time zone.
+      schema:
+        type: string
+        format: date
+    EditedTo:
+      name: to
+      in: query
+      required: false
+      description: Documents last changed on this day or before, in the server's time zone.
+      schema:
+        type: string
+        format: date
+    FacetsWanted:
+      name: facets
+      in: query
+      required: false
+      description: |
+        The counts to add to the answer, as a comma list of `type`, `author`,
+        `class`, `client` and `matter`. Without it the answer has no
+        `facets`.
+      schema:
+        type: string
+        examples: ['type,author,class']
   securitySchemes:
     bearerAuth:
       type: http
@@ -2389,7 +2517,69 @@ components:
                   mapping:
                     folder: '#/components/schemas/FolderView'
                     document: '#/components/schemas/DocumentView'
+            facets:
+              $ref: '#/components/schemas/Facets'
       unevaluatedProperties: false
+    Facets:
+      type: object
+      description: |
+        The counts asked for with `facets`, and only those: for each, the
+        options with documents, most first. Each counts the documents the
+        caller can read that pass every filter but the facet's own.
+      additionalProperties: false
+      properties:
+        type:
+          type: array
+          description: The file kinds.
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        author:
+          type: array
+          description: The Authors.
+          items:
+            $ref: '#/components/schemas/AuthorFacetCount'
+        class:
+          type: array
+          description: The classes.
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        client:
+          type: array
+          description: The client numbers.
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        matter:
+          type: array
+          description: The matters, by client and matter number, such as `998.1`.
+          items:
+            $ref: '#/components/schemas/FacetCount'
+    FacetCount:
+      type: object
+      additionalProperties: false
+      required: [value, count]
+      properties:
+        value:
+          type: string
+          description: What the filter's parameter takes, such as `pdf`.
+        count:
+          type: integer
+          minimum: 1
+          description: How many documents it would leave.
+    AuthorFacetCount:
+      type: object
+      additionalProperties: false
+      required: [value, displayName, count]
+      properties:
+        value:
+          type: string
+          description: The Author's username, which `author` takes.
+        displayName:
+          type: string
+          description: The Author's name, to show; the username when the Author is no longer a user.
+        count:
+          type: integer
+          minimum: 1
+          description: How many documents it would leave.
     ProfileField:
       type: object
       description: |

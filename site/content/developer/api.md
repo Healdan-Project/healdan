@@ -277,8 +277,8 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 - **A document's or folder's `matter` names its client,** as `{ "id", "display", "client": { "id", "number",
   "name" } }`, so a list can show the client beside the matter without asking for each one. An older server sends
   only `id` and `display`, so a client that may meet one reads `client` as optional.
-- **Field names are camelCase.** A field with no value is `null`, never left out. Timestamps are ISO 8601 in UTC,
-  such as `2026-10-23T14:05:00Z`.
+- **Field names are camelCase.** A field with no value is `null`, never left out, but for a list's `facets`,
+  which is there only when asked for. Timestamps are ISO 8601 in UTC, such as `2026-10-23T14:05:00Z`.
 - **A doc ID is `#<doc #> v<version>`,** the form of the title bar and the filed files: `#1234 v2.1`.
 - **Nothing caches the answers:** Healdan sends them with `no-store` in `Cache-Control`.
 
@@ -311,6 +311,40 @@ The sections below say more about the parts a client needs to know before it sta
 - **Comments.** Every document has a Comments property (`comments`), free text of up to 4000 characters that comes
   after Subclass in the form and the properties. The `documents` search scope finds a document by its Comments: it
   matches those whose Comments contain every word of `q`, in any case, along with the full-text hits.
+
+## Listing a Folder
+
+`GET /folders/{id}/children` lists the subfolders the caller can read, by name, then the documents the caller can
+read. A search folder lists its own documents, at most 1,000. The server pages, sorts, filters and counts in the
+database, so a folder of thousands of documents answers as fast as a small one.
+
+- **Sorting.** `sort` is `title` (the file name, ignoring case; the default), `docNumber` (as a number, so #9 comes
+  before #10), `version` (by its major, then its minor number, so 2.9 comes before 2.10), `author` (by the
+  Author's name, not the username) or `edited` (the last change). `order` is `asc` (the default) or `desc`.
+  Documents with nothing to sort by, such as no Author, come last either way, and ties go by the document's age,
+  so no document shows on two pages. Subfolders always come first, by name. A search folder keeps its own order,
+  newest change first, unless `sort` says otherwise.
+- **Filters.** `type` takes file kinds: `word`, `excel`, `powerpoint`, `pdf`, `email`, `opendocument`, `picture`
+  and `other`, for any extension the others don't name. `author` takes usernames, `class` classes, `client` client
+  numbers such as `998`, and `matter` matters such as `998.1`. `edited` is `today`, `7d`, `30d` or `year`; or give
+  `from` and `to`, either or both, as days such as `2026-06-01`, both included. The days are the server's.
+  Repeat a parameter for more than one value, `type=pdf&type=word`: any value passes, and the filters all apply
+  together. With any filter set, the list holds documents alone, and `total` counts the documents that pass.
+- **`type=folder`** still lists the subfolders alone, for a folder tree. It takes no filters or `facets`.
+- **Counts.** `facets=type,author,class,client,matter`, or any of them, adds `facets` to the answer: for each one
+  asked for, its options, most documents first, each with how many documents it would leave. Each facet applies
+  every filter but its own, so ticking Word leaves the File Type counts as they were and narrows the others. They
+  count only documents the caller can read. Without `facets` the answer has none.
+
+```json
+"facets": {
+  "type": [{ "value": "pdf", "count": 12 }, { "value": "word", "count": 7 }],
+  "author": [{ "value": "pnair", "displayName": "Priya Nair", "count": 9 }]
+}
+```
+
+An Author's `value` is the username, which `author` takes, and `displayName` the name to show. A value the
+filters don't take, such as `sort=size` or `type=docx`, is `400 bad-request`.
 
 ## Creating a Folder
 

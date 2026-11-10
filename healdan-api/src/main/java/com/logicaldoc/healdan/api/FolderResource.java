@@ -3,7 +3,9 @@
 
 package com.logicaldoc.healdan.api;
 
+import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -22,10 +24,19 @@ import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.security.user.UserDAO;
+import com.logicaldoc.healdan.api.model.AuthorFacetCount;
+import com.logicaldoc.healdan.api.model.FacetCount;
+import com.logicaldoc.healdan.api.model.FacetsView;
 import com.logicaldoc.healdan.api.model.FieldError;
+import com.logicaldoc.healdan.api.model.FolderChildPage;
 import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.api.model.NewFolder;
 import com.logicaldoc.healdan.api.model.Page;
+import com.logicaldoc.healdan.listing.Facets;
+import com.logicaldoc.healdan.listing.FolderListing;
+import com.logicaldoc.healdan.listing.ListedPage;
+import com.logicaldoc.healdan.listing.ListingQuery;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.navigation.RecentFolders;
@@ -154,20 +165,37 @@ public class FolderResource {
 
 	/**
 	 * @param id the folder's id
-	 * @param type {@code folder} for the subfolders alone; everything by default
+	 * @param type {@code folder} for the subfolders alone; or the file kinds
+	 *        to keep ({@link Filters})
+	 * @param sort what to sort the documents by; by title by default, and a
+	 *        search folder in its own order
+	 * @param order {@code asc} or {@code desc}
+	 * @param author the Authors to keep, by username
+	 * @param docClass the classes to keep
+	 * @param client the clients to keep, by number
+	 * @param matter the matters to keep, such as {@code 998.1}
+	 * @param edited {@code today}, {@code 7d}, {@code 30d} or {@code year}
+	 * @param from the first day of an edit-date range
+	 * @param to the last day of the range
+	 * @param facets the counts to take, as a comma list
 	 * @param offset how many items to skip
 	 * @param limit the most items to return
-	 * @return the subfolders by name, then the documents by name; for a search
-	 *         folder, its documents
+	 * @return the subfolders by name, then the documents; for a search folder,
+	 *         its documents; with a filter, the documents alone
 	 */
 	@GET
 	@Path("{id: [0-9]+}/children")
-	public Page<Object> children(@PathParam("id") long id, @QueryParam("type") String type,
-			@QueryParam("offset") Integer offset, @QueryParam("limit") Integer limit) {
+	public FolderChildPage children(@PathParam("id") long id, @QueryParam("type") List<String> type,
+			@QueryParam("sort") String sort, @QueryParam("order") String order,
+			@QueryParam("author") List<String> author, @QueryParam("class") List<String> docClass,
+			@QueryParam("client") List<String> client, @QueryParam("matter") List<String> matter,
+			@QueryParam("edited") String edited, @QueryParam("from") String from, @QueryParam("to") String to,
+			@QueryParam("facets") String facets, @QueryParam("offset") Integer offset,
+			@QueryParam("limit") Integer limit) {
 		Paging paging = Paging.of(offset, limit);
-		if (type != null && !"folder".equals(type))
-			throw ApiProblem.badRequest("The type can only be folder.");
-		boolean foldersOnly = type != null;
+		Filters filters = Filters.of(type, sort, order, author, docClass, client, matter, edited, from, to, facets,
+				Clock.systemDefaultZone());
+		ListingQuery query = filters.query();
 
 		User caller = Caller.current().user();
 		try {
@@ -177,31 +205,63 @@ public class FolderResource {
 				throw ApiProblem.conflict("not-browsable",
 						"A Store's matters aren't listed here. Search, or use My Matters or Recent Matters.");
 
-			List<Object> all = new ArrayList<>();
 			if ("searchFolder".equals(view.kind())) {
-				if (!foldersOnly)
-					all.addAll(searchDocuments(id, caller));
-			} else {
-				all.addAll(subfolders(folder, caller));
-				if (!foldersOnly)
-					all.addAll(documents(folder, caller));
+				if (filters.foldersOnly())
+					return new FolderChildPage(List.of(), paging.offset(), paging.limit(), 0L, null);
+				return searchFolderChildren(id, caller, filters, paging);
 			}
 
-			Page<Object> slice = paging.slice(all);
-			List<Object> items = new ArrayList<>();
-			// The folder's own view gives what its children share; a search folder's documents are anywhere
-			for (Object item : slice.items()) {
-				if (item instanceof Folder f)
+			// A filter keeps documents; no subfolder has a type, an author or an edit date
+			List<Folder> subfolders = query.filtered() ? List.of() : subfolders(folder, caller);
+			if (filters.foldersOnly()) {
+				Page<Folder> slice = paging.slice(subfolders);
+				List<Object> items = new ArrayList<>();
+				for (Folder f : slice.items())
 					items.add(ApiViews.subfolder(f, view, caller));
-				else if ("searchFolder".equals(view.kind()))
-					items.add(ApiViews.document((Document) item, caller));
-				else
-					items.add(ApiViews.document((Document) item, caller, view.kind(), view.matter()));
+				return new FolderChildPage(items, slice.offset(), slice.limit(), slice.total(), null);
 			}
-			return new Page<>(items, slice.offset(), slice.limit(), slice.total());
+
+			// The subfolders come first, then the documents, each page taking where the last left off
+			int folderFrom = Math.min(paging.offset(), subfolders.size());
+			int folderTo = (int) Math.min((long) paging.offset() + paging.limit(), subfolders.size());
+			List<Object> items = new ArrayList<>();
+			for (Folder f : subfolders.subList(folderFrom, folderTo))
+				items.add(ApiViews.subfolder(f, view, caller));
+			int documentOffset = Math.max(0, paging.offset() - subfolders.size());
+			ListedPage listed = FolderListing.get().page(folder, caller,
+					query.page(documentOffset, paging.limit() - items.size()));
+			for (Document d : documents(listed.docIds()))
+				items.add(ApiViews.document(d, caller, view.kind(), view.matter()));
+
+			FacetsView counts = filters.facets().isEmpty() ? null
+					: facetsView(FolderListing.get().facets(folder, caller, query, filters.facets()));
+			return new FolderChildPage(items, paging.offset(), paging.limit(), subfolders.size() + listed.total(),
+					counts);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list folder #" + id, e);
 		}
+	}
+
+	/**
+	 * A search folder's documents, at most 1000, filtered and sorted among
+	 * themselves
+	 */
+	private static FolderChildPage searchFolderChildren(long id, User caller, Filters filters, Paging paging)
+			throws PersistenceException {
+		List<Document> found = searchDocuments(id, caller);
+		Map<Long, Document> byId = new HashMap<>();
+		for (Document d : found)
+			byId.put(d.getId(), d);
+		List<Long> ids = found.stream().map(Document::getId).toList();
+		ListedPage listed = FolderListing.get().page(ids, filters.query().page(paging.offset(), paging.limit()));
+
+		// A search folder's documents are anywhere, so each finds its own matter
+		List<Object> items = new ArrayList<>();
+		for (Long docId : listed.docIds())
+			items.add(ApiViews.document(byId.get(docId), caller));
+		FacetsView counts = filters.facets().isEmpty() ? null
+				: facetsView(FolderListing.get().facets(ids, filters.query(), filters.facets()));
+		return new FolderChildPage(items, paging.offset(), paging.limit(), listed.total(), counts);
 	}
 
 	/**
@@ -229,14 +289,61 @@ public class FolderResource {
 		return readable;
 	}
 
-	private static List<Document> documents(Folder folder, User caller) throws PersistenceException {
-		// One batched permission check for the folder, not one per document
-		List<Document> readable = new ArrayList<>(AccessChecks.readableDocuments(folder,
-				DocumentDAO.get().findByFolder(folder.getId(), null), caller));
-		readable.removeIf(d -> !ApiViews.hasDocNumber(d));
-		readable.sort(Comparator.comparing(Document::getFileName, String.CASE_INSENSITIVE_ORDER)
-				.thenComparing(Document::getFileName).thenComparingLong(Document::getId));
-		return readable;
+	/**
+	 * @return the documents, in the order of the ids; one deleted meanwhile is
+	 *         left out
+	 */
+	private static List<Document> documents(List<Long> ids) throws PersistenceException {
+		if (ids.isEmpty())
+			return List.of();
+		Map<Long, Document> byId = new HashMap<>();
+		for (Document d : DocumentDAO.get().findByWhere("_entity.id in (:ids)", Map.of("ids", ids), null, null))
+			byId.put(d.getId(), d);
+		List<Document> documents = new ArrayList<>();
+		for (Long docId : ids)
+			if (byId.containsKey(docId))
+				documents.add(byId.get(docId));
+		return documents;
+	}
+
+	/**
+	 * @return the counts as the API shows them, each Author with the name
+	 *         people know them by
+	 */
+	private static FacetsView facetsView(Facets facets) throws PersistenceException {
+		Map<String, Map<String, Long>> counts = facets.counts();
+		List<AuthorFacetCount> authors = null;
+		if (counts.containsKey(Facets.AUTHOR)) {
+			Map<String, String> names = displayNames(counts.get(Facets.AUTHOR).keySet());
+			authors = new ArrayList<>();
+			for (Map.Entry<String, Long> option : counts.get(Facets.AUTHOR).entrySet())
+				authors.add(new AuthorFacetCount(option.getKey(),
+						names.getOrDefault(option.getKey(), option.getKey()), option.getValue()));
+		}
+		return new FacetsView(options(counts.get(Facets.TYPE)), authors, options(counts.get(Facets.CLASS)),
+				options(counts.get(Facets.CLIENT)), options(counts.get(Facets.MATTER)));
+	}
+
+	private static List<FacetCount> options(Map<String, Long> counts) {
+		if (counts == null)
+			return null;
+		List<FacetCount> options = new ArrayList<>();
+		counts.forEach((value, count) -> options.add(new FacetCount(value, count)));
+		return options;
+	}
+
+	/**
+	 * @return each user's name, as {@code User.getFullName} makes it, by
+	 *         username; a username that is no longer a user's isn't there
+	 */
+	private static Map<String, String> displayNames(Collection<String> usernames) throws PersistenceException {
+		Map<String, String> names = new HashMap<>();
+		if (usernames.isEmpty())
+			return names;
+		for (User user : UserDAO.get().findByWhere("_entity.username in (:usernames)",
+				Map.of("usernames", List.copyOf(usernames)), null, null))
+			names.put(user.getUsername(), user.getFullName());
+		return names;
 	}
 
 	/**
