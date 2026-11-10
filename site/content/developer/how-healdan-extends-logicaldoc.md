@@ -105,6 +105,19 @@ learn from.
     client if nothing has yet. For an `http://` endpoint that's a DNS lookup, as the endpoint rule checks the host's
     addresses. A build that failed is remembered for 30 seconds, so while DNS is down, deletes don't each wait on a
     lookup of their own.
+- **`healdan-web`** serves Healdan's User app at `/app/`, and is a plugin of its own that requires `logicaldoc-core`,
+  `healdan-core` and `healdan-api`. Its code is under `com.logicaldoc.healdan.app`.
+  - `AppServlet` registers with `@WebServlet("/app/*")`, so `web.xml` is not edited. The built app sits in the
+    module's jar under `healdan/app/user/`, and the servlet reads it from the class path.
+  - **Its policy.** A path with a file extension is a file: served, or `404` when the jar has none, so a stale page
+    fails loudly. Any other path is an address inside the app, answered with `index.html`, which the app routes in
+    the browser. Hashed files under `assets/` are cached for a year, and everything else is `no-store`. Only `GET`
+    and `HEAD` are allowed. A path that could leave the app's folder is never read: it gets `index.html` or `404`.
+  - **Its headers.** Every answer carries a Content-Security-Policy that allows only the server's own address, with
+    no inline script or style, and `nosniff` and `Referrer-Policy: same-origin`.
+  - A server built without the app answers `503` at `/app/`, saying the User app wasn't built into it.
+  - An `artifactItem` in `logicaldoc-webapp/pom.xml` puts its zip in the WAR. That and the root `pom.xml`'s
+    `<module>` are the only upstream files it edits.
 - **Its own tables.** Flyway owns the tables whose names start `hd_`, and only those. A change ships as a new
   script under `healdan-core/src/main/resources/healdan/db/migration/`, never as an edit to one that has shipped.
   Healdan never changes the structure of LogicalDOC's `ld_` tables.
