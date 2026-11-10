@@ -11,6 +11,7 @@ import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockServletContext;
 
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.setting.HealdanSettings;
@@ -65,5 +66,17 @@ public class LoginLandingFilterTest extends AbstractHealdanTestCase {
 		session.setAttribute(ReturnPath.ATTRIBUTE, "/app/");
 		MockHttpServletRequest request = run(session, null);
 		assertEquals(session, request.getSession(false));
+	}
+
+	@Test
+	public void testContextPathComesFromServer() throws Exception {
+		MockServletContext context = new MockServletContext();
+		context.setContextPath("/healdan");
+		for (String raw : new String[] { "/healdan;'x'", "/heal%64an" }) {
+			MockHttpServletRequest request = new MockHttpServletRequest(context, "GET", "/login.jsp");
+			request.setContextPath(raw);
+			filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
+			assertEquals(raw, "/healdan/app/", request.getSession().getAttribute(ReturnPath.ATTRIBUTE));
+		}
 	}
 }

@@ -39,9 +39,10 @@ public final class ReturnPath {
 	}
 
 	/**
-	 * Stores the context path and {@link #safe(String)} as {@link #ATTRIBUTE} in the HTTP session, creating it.
+	 * Stores the deployed context path (the server's, never the request's spelling of it, which a client controls and login.jsp writes into a script) and {@link #safe(String)} as {@link #ATTRIBUTE} in the HTTP session, creating it.
 	 */
 	public static void remember(HttpServletRequest request, String pathAndQuery) {
-		request.getSession(true).setAttribute(ATTRIBUTE, request.getContextPath() + safe(pathAndQuery));
+		request.getSession(true).setAttribute(ATTRIBUTE,
+				request.getServletContext().getContextPath() + safe(pathAndQuery));
 	}
 }

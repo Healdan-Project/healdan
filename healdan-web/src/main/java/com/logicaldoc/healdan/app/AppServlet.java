@@ -117,7 +117,8 @@ public class AppServlet extends HttpServlet {
 				path += "?" + request.getQueryString();
 			ReturnPath.remember(request, path);
 			response.setHeader("Cache-Control", "no-store");
-			response.sendRedirect(request.getContextPath() + "/login.jsp");
+			// the deployed context path, never the request's spelling: login.jsp writes the stored value into a script
+			response.sendRedirect(request.getServletContext().getContextPath() + "/login.jsp");
 			return;
 		}
 

@@ -7,6 +7,7 @@ import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockServletContext;
 
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.setting.HealdanSettings;
@@ -14,7 +15,9 @@ import com.logicaldoc.healdan.setting.HealdanSettings;
 public class LandingTest extends AbstractHealdanTestCase {
 
 	private static MockHttpServletRequest request() {
-		MockHttpServletRequest request = new MockHttpServletRequest();
+		MockServletContext context = new MockServletContext();
+		context.setContextPath("/healdan");
+		MockHttpServletRequest request = new MockHttpServletRequest(context);
 		request.setContextPath("/healdan");
 		return request;
 	}
@@ -39,6 +42,15 @@ public class LandingTest extends AbstractHealdanTestCase {
 		for (String value : new String[] { "Classic", "other", "", " classic" }) {
 			HealdanSettings.get().set(HealdanSettings.UI_START, value);
 			assertEquals(value, "/app/", Landing.page());
+		}
+	}
+
+	@Test
+	public void testContextPathComesFromServer() throws Exception {
+		for (String raw : new String[] { "/healdan;'x'", "/heal%64an" }) {
+			MockHttpServletRequest request = request();
+			request.setContextPath(raw);
+			assertEquals(raw, "/healdan/app/", Landing.start(request));
 		}
 	}
 }

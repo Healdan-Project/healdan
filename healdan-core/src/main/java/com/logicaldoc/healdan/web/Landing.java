@@ -24,6 +24,6 @@ public final class Landing {
 
 	/** @return the context path and {@link #page()} */
 	public static String start(HttpServletRequest request) {
-		return request.getContextPath() + page();
+		return request.getServletContext().getContextPath() + page();
 	}
 }

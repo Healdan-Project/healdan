@@ -8,6 +8,7 @@ import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockServletContext;
 
 public class ReturnPathTest {
 
@@ -39,7 +40,7 @@ public class ReturnPathTest {
 		ReturnPath.remember(root, "/app/doc/1");
 		assertEquals("/app/doc/1", root.getSession().getAttribute(ReturnPath.ATTRIBUTE));
 
-		MockHttpServletRequest nested = new MockHttpServletRequest();
+		MockHttpServletRequest nested = new MockHttpServletRequest(deployed("/healdan"));
 		nested.setContextPath("/healdan");
 		nested.setSession(new MockHttpSession());
 		ReturnPath.remember(nested, "/app/doc/1");
@@ -47,5 +48,22 @@ public class ReturnPathTest {
 
 		ReturnPath.remember(nested, "/x'");
 		assertEquals("/healdan/app/", nested.getSession().getAttribute(ReturnPath.ATTRIBUTE));
+	}
+
+	private static MockServletContext deployed(String contextPath) {
+		MockServletContext context = new MockServletContext();
+		context.setContextPath(contextPath);
+		return context;
+	}
+
+	@Test
+	public void testRememberTakesContextPathFromServer() {
+		// Tomcat's getContextPath() returns the client's spelling, so it can carry a quote
+		for (String raw : new String[] { "/healdan;'x'", "/heal%64an", "/healdan;'+alert(1)+'" }) {
+			MockHttpServletRequest request = new MockHttpServletRequest(deployed("/healdan"));
+			request.setContextPath(raw);
+			ReturnPath.remember(request, "/app/doc/1");
+			assertEquals(raw, "/healdan/app/doc/1", request.getSession().getAttribute(ReturnPath.ATTRIBUTE));
+		}
 	}
 }

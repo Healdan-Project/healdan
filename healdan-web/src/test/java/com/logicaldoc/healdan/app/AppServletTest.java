@@ -12,6 +12,7 @@ import java.util.Optional;
 import org.junit.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockServletContext;
 
 public class AppServletTest {
 
@@ -100,9 +101,30 @@ public class AppServletTest {
 	}
 
 	@Test
+	public void testContextPathComesFromServer() throws Exception {
+		signedIn = false;
+		MockServletContext context = new MockServletContext();
+		context.setContextPath("/healdan");
+		// Tomcat's getContextPath() returns the client's spelling of the prefix
+		for (String raw : new String[] { "/healdan;'x'", "/heal%64an" }) {
+			MockHttpServletRequest request = new MockHttpServletRequest(context, "GET", raw + "/app/doc/1");
+			request.setContextPath(raw);
+			request.setServletPath("/app");
+			request.setPathInfo("/doc/1");
+			MockHttpServletResponse response = new MockHttpServletResponse();
+			servlet.service(request, response);
+
+			assertEquals(raw, "/healdan/login.jsp", response.getRedirectedUrl());
+			assertEquals(raw, "/healdan/app/doc/1", request.getSession().getAttribute("RequestedUrl"));
+		}
+	}
+
+	@Test
 	public void testPageWithoutSessionGoesToLogin() throws Exception {
 		signedIn = false;
-		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/healdan/app/doc/10388");
+		MockServletContext context = new MockServletContext();
+		context.setContextPath("/healdan");
+		MockHttpServletRequest request = new MockHttpServletRequest(context, "GET", "/healdan/app/doc/10388");
 		request.setContextPath("/healdan");
 		request.setServletPath("/app");
 		request.setPathInfo("/doc/10388");
