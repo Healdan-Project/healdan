@@ -17,6 +17,11 @@ git remote add upstream https://github.com/logicaldoc/community.git
 - **Keep sync pull requests free of feature work.** Fixes the merge needs, such as swapping a Font Awesome Pro icon
   for a Free one, a link to LogicalDOC's docs for one to Healdan's, importing an artifact into Healdan's Maven
   repository, or taking out an Oracle or SQL Server driver or wizard choice, belong in the sync itself.
+- **A change to LogicalDOC's tables gets an entry in Upgrading.** Healdan never changes LogicalDOC's tables on an
+  existing database, so a sync that changes them, in a `logicaldoc-*` module's `sql/` scripts or in the columns an
+  entity maps, adds the SQL an existing database needs, with a check, to the Install manual's
+  [Changes to LogicalDOC's Tables](../../install/upgrading/#changes-to-logicaldocs-tables). That's a fix the merge
+  needs too.
 - **`.github/workflows/upstream-sync.yml`** runs a sync every week. `.github/scripts/upstream-sync.sh` does the
   merge.
 

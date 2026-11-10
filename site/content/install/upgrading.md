@@ -8,10 +8,16 @@ These docs describe Healdan as it is on its `master` branch. If your server runs
 describe features or settings it doesn't have yet.
 {{< /callout >}}
 
-[Back up](../backup-and-restore/) first. Then, from the folder you cloned Healdan into:
+[Back up](../backup-and-restore/) first. Then, from the folder you cloned Healdan into, fetch the new version:
 
 ```bash
 git pull
+```
+
+If [Changes to LogicalDOC's Tables](#changes-to-logicaldocs-tables) lists one your database doesn't have yet, make
+it now. Then build and start the new version:
+
+```bash
 docker compose up -d --build
 ```
 
@@ -39,7 +45,63 @@ fails, because the app's image is built here and can't be pulled.
 - **Healdan's own tables are upgraded** when the app starts. If an upgrade step fails, the app stops instead of
   running on a half-upgraded database, and the log says which step failed. See
   [Troubleshooting](../troubleshooting/).
-- **LogicalDOC's tables aren't.** See [Known Limitations](../known-limitations/).
+- **LogicalDOC's tables aren't.** A change to them is made by hand, before the new version's first start: see
+  [Changes to LogicalDOC's Tables](#changes-to-logicaldocs-tables).
+
+## Changes to LogicalDOC's Tables
+
+Healdan upgrades its own tables when it starts, but never LogicalDOC's. So when a new version needs a change to them,
+run its SQL by hand, after the backup and before the new version's first start. Each change has a check that shows
+whether your database has it, as one made by a version that already had the change does. Its SQL leaves alone what
+the database already has, so it's safe to run again.
+
+Run the commands from the folder with Healdan's `compose.yaml`. Stop the app and start the database first, so a
+change doesn't have to wait for the app to let go of the table:
+
+```bash
+docker compose stop app
+docker compose up -d db
+```
+
+The commands reach the stack's own `db` service. If `DB_HOST` points at a MariaDB of your own (see
+[Supported Databases](../what-runs/#supported-databases)), run each change's SQL there instead, in Healdan's
+database. The stack's `db` then holds none of Healdan's tables, so a check there prints `0`, and a change fails with
+`Table '…ld_tenant' doesn't exist`.
+
+### Quota Thresholds, November 2026
+
+Versions of `master` from 9 November 2026 on have 14 more columns on LogicalDOC's `ld_tenant` table, for quota
+thresholds. Without them, the new version can't read that table, and nobody can sign in.
+
+To see whether your database has them:
+
+```bash
+echo "select count(*) from information_schema.columns where table_schema = database() and table_name = 'ld_tenant' and column_name like '%quotathr'" | docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -N -u"$MARIADB_USER" "$MARIADB_DATABASE"'
+```
+
+It prints `14` when the database has them all, as one made since then does. Anything less means it needs them. To
+add the ones it lacks:
+
+```bash
+docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE"' <<'SQL'
+alter table ld_tenant
+  add column if not exists ld_formsquotathr int, add column if not exists ld_usersquotathr int,
+  add column if not exists ld_sessionsquotathr int, add column if not exists ld_documentsquotathr int,
+  add column if not exists ld_workflowsquotathr int, add column if not exists ld_storagequotathr int,
+  add column if not exists ld_rousersquotathr int, add column if not exists ld_reportsquotathr int,
+  add column if not exists ld_apicallsquotathr int, add column if not exists ld_ticketsquotathr int,
+  add column if not exists ld_stampsquotathr int, add column if not exists ld_importfoldersquotathr int,
+  add column if not exists ld_emailaccountsquotathr int, add column if not exists ld_pagesquotathr int;
+SQL
+```
+
+It prints nothing when it works. The check then prints `14`.
+
+If the new version has already started without them, add them the same way, the app stopped, then start it again:
+
+```bash
+docker compose start app
+```
 
 ## The First Start on Healdan's Storage
 
@@ -88,11 +150,11 @@ theirs in the background:
 - **Emails already filed twice in one matter** stay as they are. Once both are read, a folder move, merge, copy or
   restore that would bring the two copies into a matter together is refused, saying the message is already there.
   Delete one copy, or move it to another matter, first.
-- **To see whether it has finished,** look for `email.index` in Healdan's `hd_setting` table. Run this, and enter
-  the database password when asked (use your `DB_USER` and `DB_NAME` if you changed them):
+- **To see whether it has finished,** look for `email.index` in Healdan's `hd_setting` table. Run this from the
+  folder with Healdan's `compose.yaml`:
 
   ```bash
-  docker compose exec db mariadb -u logicaldoc -p -D logicaldoc -e "select name, value from hd_setting where name like 'email.index%'"
+  echo "select name, value from hd_setting where name like 'email.index%'" | docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE"'
   ```
 
   `email.index` is `done` once every email filed before the upgrade has been read, and `email.index.cursor` is the

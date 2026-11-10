@@ -142,6 +142,12 @@ Wait until `docker compose ps` shows it healthy.
 docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE"' < logicaldoc-db.sql
 ```
 
+### Bring LogicalDOC's Tables Up to Date
+
+A backup made before one of the changes in Upgrading's
+[Changes to LogicalDOC's Tables](../upgrading/#changes-to-logicaldocs-tables) doesn't have it, and the version you
+restore onto may need it. Run each change's check there, and make any change the restored database lacks.
+
 ### Restore the Files
 
 ```bash
