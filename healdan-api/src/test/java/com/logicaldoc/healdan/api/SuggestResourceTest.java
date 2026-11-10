@@ -174,4 +174,40 @@ public class SuggestResourceTest extends ApiTestCase {
 		// The words are still found through the punctuation
 		assertEquals(1, suggest("\"northern\"", clerk).path("documents").size());
 	}
+
+	@Test
+	public void testManyUnreadableMatchesDoNotCrowdOutReadableOnes() throws Exception {
+		// Older, by id, and more than a page of hits: the caller can't read any of them
+		Folder privateStore = fx.store("Private Work");
+		Folder hidden = FolderDAO.get().findByName(
+				FolderDAO.get().findById(fx.matter(client, 9, "Hidden", privateStore, "Documents").getFolderId()),
+				"Documents", Tenant.DEFAULT_ID, true).get(0);
+		for (int i = 0; i < 210; i++) {
+			Document d = fx.upload(hidden, "Northern Secret " + i + ".docx", "x", fx.admin());
+			jdbc().update("update ld_document set ld_startpublishing = ? where ld_id = ?",
+					new java.sql.Timestamp(System.currentTimeMillis() - 24L * 60 * 60 * 1000), d.getId());
+			SearchEngine.get().addHit(DocumentDAO.get().findById(d.getId(), true), "x");
+		}
+		awaitAsyncWork();
+		for (int i = 0; i < 3; i++)
+			file("Northern Own " + i + ".docx");
+
+		JsonNode found = suggest("northern", clerk);
+
+		List<String> names = names(found.path("documents"), "name");
+		assertEquals(names.toString(), 3, names.size());
+		names.forEach(n -> assertTrue(n, n.startsWith("Northern Own")));
+		assertEquals(0, suggest("northern", outsider).path("documents").size());
+	}
+
+	@Test
+	public void testStopsAtFiveWithManyReadableMatches() throws Exception {
+		for (int i = 0; i < 60; i++)
+			file("Northern Report " + i + ".docx");
+
+		List<String> names = names(suggest("northern", clerk).path("documents"), "name");
+
+		assertEquals(names.toString(), 5, names.size());
+		assertEquals(5, names.stream().distinct().count());
+	}
 }

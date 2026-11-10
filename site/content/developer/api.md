@@ -309,7 +309,11 @@ The sections below say more about the parts a client needs to know before it sta
   title has every word of `q`, the last as the start of a word. Each matter has `id`, `number`, `name` and its
   `client` (`number` and `name`); each document has `docNumber`, `name` and its `matter` (`id`, `number` and
   `display`). It shows only what the caller can read. A `q` of fewer than two characters answers two empty lists.
-  Punctuation never makes an error: only the letters and digits of `q` reach the full-text engine.
+  Punctuation never makes an error: only the letters and digits of `q` reach the full-text engine. Documents come
+  in the engine's score order, with a lift for those dated in the last year, and each is checked for the caller
+  until 5 are found, so titles in matters the caller can't read don't crowd out their own. The engine hands back at
+  most 1,000 hits per request: a caller who can read only titles ranked after 1,000 others gets fewer, or none,
+  until the word is longer.
 - **Searching inside a folder.** `GET /search` takes `within`, the id of a folder, usually a matter's workspace
   (its `folderId`) or one of its folders. The `documents` and `folders` scopes then return only what is inside it,
   at any depth, and a `#` lookup keeps its document only if it is in there. A Store as `within` is

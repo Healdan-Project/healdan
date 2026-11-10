@@ -58,11 +58,17 @@ public class SuggestResource {
 	/** Shorter text suggests nothing */
 	static final int MIN_LENGTH = 2;
 
-	/** The index's hits to look at in one go; each one is checked for the caller */
-	private static final int PAGE = 50;
-
-	/** The pages looked at before giving up on finding {@link #MAX_EACH} */
-	private static final int MAX_PAGES = 4;
+	/**
+	 * The most hits read from the index for one request. In a real firm a short
+	 * prefix can match hundreds of titles in matters the caller can't read, so
+	 * the hits are read in the engine's score order, with a boost for documents
+	 * dated in the last year, and each is checked for the caller until
+	 * {@link #MAX_EACH} pass. This is the engine's own cap (CE's search takes
+	 * its rows up to 1,000): a caller who can read only titles ranked after
+	 * 1,000 others that they can't gets fewer suggestions, which a longer word
+	 * fixes.
+	 */
+	static final int MAX_HITS = 1000;
 
 	private static final Pattern NOT_WORD = Pattern.compile("[^\\p{L}\\p{N}]+");
 
@@ -107,19 +113,11 @@ public class SuggestResource {
 		List<SuggestedDocument> documents = new ArrayList<>();
 		if (expression == null)
 			return documents;
-		for (int page = 1; page <= MAX_PAGES && documents.size() < MAX_EACH; page++) {
-			Hits hits = SearchEngine.get().query(expression, page, PAGE);
-			if (hits == null)
-				break;
-			long seen = 0;
-			while (hits.hasNext() && documents.size() < MAX_EACH) {
-				Hit hit = hits.next();
-				seen++;
-				suggested(hit.getId(), user).ifPresent(documents::add);
-			}
-			if (hits.getCount() < PAGE)
-				break;
-		}
+		// Score order, not id order: the oldest documents must not crowd out the rest
+		Hits hits = SearchEngine.get().search(expression, null, StringUtils.defaultIfBlank(user.getLanguage(), "en"),
+				MAX_HITS);
+		while (hits != null && hits.hasNext() && documents.size() < MAX_EACH)
+			suggested(hits.next().getId(), user).ifPresent(documents::add);
 		return documents;
 	}
 
@@ -142,7 +140,8 @@ public class SuggestResource {
 			String word = ClientUtils.escapeQueryChars(words.get(i));
 			clauses.add("title:" + word + (i == words.size() - 1 ? "*" : ""));
 		}
-		return "(" + String.join(" AND ", clauses) + ")";
+		// The recent-date clause only lifts the score: the words are the required part
+		return "+(" + String.join(" AND ", clauses) + ") date:[NOW-1YEAR TO *]^2";
 	}
 
 	private static Optional<SuggestedDocument> suggested(long docId, User user) throws PersistenceException {
