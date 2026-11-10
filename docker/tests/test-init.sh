@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 
 # Integration test for DockerInit against a throwaway MariaDB: validation, waiting for a late database,
-# schema creation, LogicalDOC's plugins installed once, idempotent re-runs, config-loss warning and credential errors
-# (spec §6, §9, §15).
+# schema creation, LogicalDOC's plugins installed once, idempotent re-runs, LogicalDOC's tables lacking a change,
+# config-loss warning and credential errors (spec §6, §9, §15, §16).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 . docker/tests/lib.sh
@@ -86,6 +86,51 @@ check "exits 0" test "$rc" = 0
 check "skips initialization" grep -q 'schema present, skipping' <<<"$out"
 check "no config-loss warning" lacks 'WARNING' "$out"
 check "the plugins are installed already" lacks "installed LogicalDOC's plugins" "$out"
+check "checks LogicalDOC's tables" grep -q "LogicalDOC's tables have every table and column" <<<"$out"
+
+# The 14 quota thresholds upstream sync #215 put on ld_tenant, which a database made before it lacks.
+QUOTA_THRESHOLDS="forms users sessions documents workflows storage rousers reports apicalls tickets stamps
+  importfolders emailaccounts pages"
+quota_thresholds() {
+  db_sql "select count(*) from information_schema.columns where table_schema = database() and table_name = 'ld_tenant' and column_name like '%quotathr'"
+}
+
+echo "== 3b. ld_tenant as before upstream sync #215: the start stops, and changes nothing"
+drops=
+for q in $QUOTA_THRESHOLDS; do drops="${drops:+$drops, }drop column ld_${q}quotathr"; done
+db_sql "alter table ld_tenant $drops"
+check "ld_tenant has no quota thresholds" test "$(quota_thresholds)" = 0
+out=$(init 2>&1) && rc=0 || rc=$?
+check "exits 1" test "$rc" = 1
+check "names ld_tenant and the columns it lacks, in the script's order" \
+  grep -q 'table ld_tenant lacks columns ld_formsquotathr, ld_usersquotathr, .*, ld_emailaccountsquotathr, ld_pagesquotathr\.' <<<"$out"
+check "points to the changes to LogicalDOC's tables" \
+  grep -q 'then start again: https://docs.healdan.com/install/upgrading/#changes-to-logicaldocs-tables$' <<<"$out"
+check "adds no column itself" test "$(quota_thresholds)" = 0
+[ "$FAILED" = 0 ] || { echo "$out"; }
+
+echo "== 3c. Upgrading's SQL adds them, and a column an older version left doesn't count"
+# The SQL as the Install manual's Upgrading page gives it, so the page's own change is what's tested.
+upgrade_sql=$(sed -n '/^alter table ld_tenant$/,/;$/p' site/content/install/upgrading.md)
+check "Upgrading gives the SQL" grep -q 'add column if not exists ld_pagesquotathr int;' <<<"$upgrade_sql"
+db_sql "$upgrade_sql"
+db_sql "alter table ld_tenant add column ld_leftover int"
+check "ld_tenant has its 14 quota thresholds again" test "$(quota_thresholds)" = 14
+out=$(init 2>&1) && rc=0 || rc=$?
+check "exits 0" test "$rc" = 0
+check "checks LogicalDOC's tables" grep -q "LogicalDOC's tables have every table and column" <<<"$out"
+check "the column left stays" test "$(db_sql "select count(*) from information_schema.columns where table_schema = database() and table_name = 'ld_tenant' and column_name = 'ld_leftover'")" = 1
+db_sql "alter table ld_tenant drop column ld_leftover"
+
+echo "== 3d. a table the scripts create is missing"
+db_sql "rename table ld_webservicecall to ld_webservicecall_gone"
+out=$(init 2>&1) && rc=0 || rc=$?
+check "exits 1" test "$rc" = 1
+check "names the table" grep -q 'table ld_webservicecall is missing\.' <<<"$out"
+check "creates no table itself" lacks ld_webservicecall "$(db_sql "show tables like 'ld\_webservicecall'")"
+db_sql "rename table ld_webservicecall_gone to ld_webservicecall"
+out=$(init 2>&1) && rc=0 || rc=$?
+check "starts again once it's back" test "$rc" = 0
 
 echo "== 4. conf volume lost, database kept"
 docker volume rm -f "$CONF" >/dev/null && docker volume create "$CONF" >/dev/null

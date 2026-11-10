@@ -46,12 +46,15 @@ fails, because the app's image is built here and can't be pulled.
   running on a half-upgraded database, and the log says which step failed. See
   [Troubleshooting](../troubleshooting/).
 - **LogicalDOC's tables aren't.** A change to them is made by hand, before the new version's first start: see
-  [Changes to LogicalDOC's Tables](#changes-to-logicaldocs-tables).
+  [Changes to LogicalDOC's Tables](#changes-to-logicaldocs-tables). If one is missing, the app stops as it starts,
+  and its log names the tables and columns the database lacks.
 
 ## Changes to LogicalDOC's Tables
 
 Healdan upgrades its own tables when it starts, but never LogicalDOC's. So when a new version needs a change to them,
-run its SQL by hand, after the backup and before the new version's first start. Each change has a check that shows
+run its SQL by hand, after the backup and before the new version's first start. If you don't, the app stops as it
+starts, before anyone can sign in, and its log says what the database lacks, such as
+`LogicalDOC's tables lack what this version needs: table ld_tenant lacks columns …`. Each change has a check that shows
 whether your database has it, as one made by a version that already had the change does. Its SQL leaves alone what
 the database already has, so it's safe to run again.
 
@@ -71,7 +74,8 @@ database. The stack's `db` then holds none of Healdan's tables, so a check there
 ### Quota Thresholds, November 2026
 
 Versions of `master` from 9 November 2026 on have 14 more columns on LogicalDOC's `ld_tenant` table, for quota
-thresholds. Without them, the new version can't read that table, and nobody can sign in.
+thresholds. Without them, LogicalDOC can't read that table, and nobody could sign in, so the new version stops as
+it starts.
 
 To see whether your database has them:
 
@@ -97,7 +101,9 @@ SQL
 
 It prints nothing when it works. The check then prints `14`.
 
-If the new version has already started without them, add them the same way, the app stopped, then start it again:
+If the new version has already tried to start without them, it stopped, and its log says
+`table ld_tenant lacks columns …`. Docker starts it again and again until they're there. Add them the same way, the
+app stopped first, then start it again:
 
 ```bash
 docker compose start app

@@ -11,13 +11,17 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 
@@ -32,7 +36,8 @@ import com.logicaldoc.util.plugin.PluginRegistry;
 /**
  * Container init, run by entrypoint.sh before Tomcat starts: works out the trusted proxies, applies the
  * container-managed context.properties keys, waits for the database, creates the schema on first boot with the
- * setup wizard's own DBInit, and installs LogicalDOC's plugins.
+ * setup wizard's own DBInit, or on a later one checks that LogicalDOC's tables have what this version's scripts
+ * create, and installs LogicalDOC's plugins.
  */
 public final class DockerInit {
 
@@ -50,6 +55,9 @@ public final class DockerInit {
 
     /** SQLSTATE MariaDB reports for a table that does not exist. */
     private static final String NO_SUCH_TABLE = "42S02";
+
+    /** The Install manual's list of the changes to LogicalDOC's tables an existing database needs, with their SQL. */
+    private static final String TABLE_CHANGES = "https://docs.healdan.com/install/upgrading/#changes-to-logicaldocs-tables";
 
     private DockerInit() {
     }
@@ -85,6 +93,7 @@ public final class DockerInit {
             log("schema present, skipping database initialization");
             if (seeded)
                 warnConfigLoss();
+            checkLogicalDocTables(db);
         } else if (missing.size() == 2) {
             createSchema(db);
         } else {
@@ -308,14 +317,40 @@ public final class DockerInit {
                         + stored.getProperty(key.getKey()) + "', not '" + key.getValue() + "'");
     }
 
-    private static void createSchema(Db db) throws Exception {
+    /**
+     * Stops the start when the database lacks a table or a column that this version's DbInit scripts create.
+     * Healdan never changes LogicalDOC's tables on an existing database, and doesn't here: each change a new version
+     * needs is made by hand, as the Install manual's Upgrading page gives it. Without it, whatever reads the table
+     * fails, as signing in did for everyone when ld_tenant lacked the 14 quota thresholds upstream sync #215 brought,
+     * so the app isn't started at all. A table the scripts create that the database lacks stops it too, as a new
+     * plugin's would: nothing else creates the table, and the plugin's code expects it. Tables and columns the
+     * database has besides, such as one an older version left, don't count, and nor do the columns' types.
+     */
+    private static void checkLogicalDocTables(Db db) throws Exception {
         ClassLoader cl = DockerInit.class.getClassLoader();
+        Map<String, List<String>> expected = createdColumns(cl, plannedScripts(cl, false));
+        DbInitPlan.Missing missing = DbInitPlan.missing(expected, db.columns());
+        if (!missing.isEmpty())
+            throw new InitException("LogicalDOC's tables lack what this version needs: " + missing.describe()
+                    + ". Healdan doesn't change LogicalDOC's tables itself, and the app would fail where it reads them,"
+                    + " so it isn't started. Make each change Upgrading gives for this version, then start again: "
+                    + TABLE_CHANGES);
+        log("LogicalDOC's tables have every table and column this version's scripts create (" + expected.size()
+                + " tables)");
+    }
+
+    /**
+     * The DbInit scripts to run, in order: every plugin's DbInit extensions against logicaldoc-core, as the setup
+     * wizard's PluginDbInit picks them. With verbose, logs each one, and each plugin.xml it can't read.
+     */
+    private static List<String> plannedScripts(ClassLoader cl, boolean verbose) throws Exception {
         List<DbInitPlan.Entry> entries = new ArrayList<>();
         for (URL manifest : Collections.list(cl.getResources("plugin.xml"))) {
             try (InputStream in = manifest.openStream()) {
                 entries.addAll(DbInitPlan.parse(in));
             } catch (SAXException e) {
-                log("ignoring unparseable " + manifest + ": " + e.getMessage());
+                if (verbose)
+                    log("ignoring unparseable " + manifest + ": " + e.getMessage());
             }
         }
         List<DbInitPlan.Entry> ordered = DbInitPlan.order(entries);
@@ -323,16 +358,30 @@ public final class DockerInit {
             throw new InitException("no DbInit extension of logicaldoc-core found on the classpath");
 
         List<String> scripts = new ArrayList<>();
-        List<String> tables = new ArrayList<>();
         for (DbInitPlan.Entry entry : ordered) {
             String script = DbInitPlan.resolve(entry, DBMS, name -> cl.getResource(name) != null);
-            log("plan: " + entry.position() + " " + entry.pluginId() + " -> " + script);
+            if (verbose)
+                log("plan: " + entry.position() + " " + entry.pluginId() + " -> " + script);
             scripts.add(script);
+        }
+        return scripts;
+    }
+
+    /** The tables the scripts create, with their columns (DbInitPlan.createdColumns). */
+    private static Map<String, List<String>> createdColumns(ClassLoader cl, List<String> scripts) throws IOException {
+        List<String> texts = new ArrayList<>();
+        for (String script : scripts)
             try (InputStream in = cl.getResourceAsStream(script)) {
                 // Same encoding upstream's DBInit reads the scripts with.
-                tables.addAll(DbInitPlan.createdTables(new String(in.readAllBytes(), Charset.forName("Cp1252"))));
+                texts.add(new String(in.readAllBytes(), Charset.forName("Cp1252")));
             }
-        }
+        return DbInitPlan.createdColumns(texts);
+    }
+
+    private static void createSchema(Db db) throws Exception {
+        ClassLoader cl = DockerInit.class.getClassLoader();
+        List<String> scripts = plannedScripts(cl, true);
+        Map<String, List<String>> expected = createdColumns(cl, scripts);
 
         log("creating schema");
         DBInit init = new DBInit(scripts);
@@ -342,12 +391,13 @@ public final class DockerInit {
         init.setPassword(db.password);
         init.execute();
 
-        List<String> missing = db.missingTables(tables);
+        // DBInit goes on past a statement that fails, so what it made is checked as a later start checks it.
+        DbInitPlan.Missing missing = DbInitPlan.missing(expected, db.columns());
         if (!missing.isEmpty())
-            throw new InitException("schema initialization incomplete, missing tables " + missing
+            throw new InitException("schema initialization incomplete: " + missing.describe()
                     + "; remove the database volume and start again");
         db.recordCompletion();
-        log("schema created (" + tables.size() + " tables)");
+        log("schema created (" + expected.size() + " tables)");
     }
 
     private static void warnConfigLoss() {
@@ -408,6 +458,18 @@ public final class DockerInit {
                 s.execute("create table " + MARKER + " (completed timestamp not null)");
                 s.execute("insert into " + MARKER + " values (current_timestamp)");
             }
+        }
+
+        /** The columns of each table in the connection's database, by the names the database gives them. */
+        Map<String, Set<String>> columns() throws SQLException {
+            Map<String, Set<String>> columns = new HashMap<>();
+            try (Connection c = connect(); Statement s = c.createStatement();
+                    ResultSet r = s.executeQuery("select table_name, column_name from information_schema.columns"
+                            + " where table_schema = database()")) {
+                while (r.next())
+                    columns.computeIfAbsent(r.getString(1), t -> new HashSet<>()).add(r.getString(2));
+            }
+            return columns;
         }
 
         List<String> missingTables(List<String> tables) throws SQLException {

@@ -33,6 +33,11 @@ only MariaDB so far: on any other database it stops when it starts.
   [Configuration](../configuration/)), and one of Healdan's own: `store`, which makes Healdan's storage keep the
   documents' files. Healdan sets it whatever `context.properties` holds, so changing it yourself does nothing. It
   also installs any plugin a new release adds, which can add that plugin's own settings to `context.properties`.
+- **It checks LogicalDOC's tables.** On every start but the first, it checks that the database has every one of
+  LogicalDOC's tables and columns that a new database would get. If one is missing, the app stops before it starts,
+  and the log names each table and the columns it lacks. Healdan never changes LogicalDOC's tables itself: make the
+  change as Upgrading's [Changes to LogicalDOC's Tables](../upgrading/#changes-to-logicaldocs-tables) says. Tables
+  and columns the database has besides, such as one an older version used, are left alone.
 - **It adds new default settings.** A setting that's in the image's defaults but missing from your
   `context.properties`, such as one a new release introduces, is added. A value you already have is never changed,
   except `store` (above), the release number and copyright years (`product.release` and `product.year`), which

@@ -397,6 +397,7 @@ names=$(api -H 'Accept: application/json' "$BASE/services/rest/document/list?fol
 check "smoke.pdf still listed" grep -qx smoke.pdf <<<"$names"
 check "smoke.png still listed" grep -qx smoke.png <<<"$names"
 check "no re-initialization" app_logs_have 'schema present, skipping'
+check "LogicalDOC's tables have what the scripts create" app_logs_have "LogicalDOC's tables have every table and column"
 check "the old cachecontrol replaced" app_logs_have "replaced an earlier image's default with this image's: cachecontrol"
 check "security.csp's non-breaking space made plain" \
   app_logs_have "replaced non-breaking spaces with plain ones in: security\.csp"
