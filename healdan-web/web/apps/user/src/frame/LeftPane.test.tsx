@@ -75,6 +75,23 @@ describe('LeftPane', () => {
     await renderApp('/folders/110')
     const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
     expect(within(tree).getByRole('row', { name: /1001\.1/ }).getAttribute('data-current')).toBe('true')
+    expect(within(tree).getByRole('row', { name: /1001\.1/ }).getAttribute('aria-current')).toBe('page')
+  })
+
+  it('works from the keyboard: Right opens a matter (asking once), Enter opens a row\'s folder', async () => {
+    const { api, router } = await renderApp('/folders/1')
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    const matterRow = within(tree).getByRole('row', { name: /1001\.1/ })
+    matterRow.focus()
+    expect(document.activeElement).toBe(matterRow)
+    fireEvent.keyDown(matterRow, { key: 'ArrowRight' })
+    const child = await within(tree).findByRole('row', { name: /Correspondence/ })
+    fireEvent.keyDown(matterRow, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(child)
+    fireEvent.keyDown(child, { key: 'Enter' })
+    fireEvent.keyUp(child, { key: 'Enter' })
+    await waitFor(() => expect(router.history.location.pathname).toBe('/app/folders/111'))
+    expect(api.callsTo('GET /v1/folders/*/children')).toHaveLength(1)
   })
 
   it('shows My Favorites: documents and folders', async () => {

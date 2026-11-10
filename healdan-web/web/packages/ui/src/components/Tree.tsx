@@ -35,7 +35,6 @@ const loadingSuffix = '\u0000loading'
 // The caller owns what is expanded and what is loaded, so a node's children can be fetched when it is first expanded.
 export function Tree({ nodes, expanded, onExpandedChange, onAction, current, ...rest }: TreeProps) {
   function item(node: TreeNode): ReactNode {
-    const open = expanded.has(node.id)
     return (
       <AriaTreeItem
         key={node.id}
@@ -44,6 +43,11 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, ...
         hasChildItems={node.expandable || (node.children?.length ?? 0) > 0}
         className={styles.item}
         data-current={current === node.id ? 'true' : undefined}
+        // React Aria's TreeItem doesn't pass aria-current to its row, so it is set on the element.
+        ref={(row) => {
+          if (current === node.id) row?.setAttribute('aria-current', 'page')
+          else row?.removeAttribute('aria-current')
+        }}
       >
         <TreeItemContent>
           {({ hasChildItems, isExpanded }) => (
@@ -60,7 +64,8 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, ...
           )}
         </TreeItemContent>
         {node.children?.map(item)}
-        {open && node.children === undefined && (
+        {/* Present while closed too: Right expands only a row that has a child to show. */}
+        {node.expandable && node.children === undefined && (
           <AriaTreeItem id={node.id + loadingSuffix} textValue={t('common.loading')} isDisabled className={styles.item}>
             <TreeItemContent>
               <span className={styles.row}>

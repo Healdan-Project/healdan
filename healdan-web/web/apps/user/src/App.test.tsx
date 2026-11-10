@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { expectNoAxeViolations } from './test/axe'
 import { problem } from './test/fakeApi'
@@ -25,6 +25,13 @@ describe('the addresses', () => {
   it('reads an unknown Recent kind or address as not found', async () => {
     await renderApp('/recent/bogus')
     expect(await screen.findByText("Not found, or you can't see it.")).toBeTruthy()
+  })
+
+  it.each(['/zzz', '/folders/', '/recent', '/doc'])('keeps the frame around %s, which matches no route', async (path) => {
+    await renderApp(path)
+    expect(screen.getByRole('banner')).toBeTruthy()
+    expect(screen.getByRole('navigation', { name: 'Navigation' })).toBeTruthy()
+    expect(within(screen.getByRole('main')).getByText("Not found, or you can't see it.")).toBeTruthy()
   })
 
   it('keeps the frame around every view', async () => {
