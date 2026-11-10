@@ -141,7 +141,7 @@ setup() {
 step1() {
   JAR=$WORK/user.jar
   sign_in "$BASE/api/signin/smoke" sso-user || return 1
-  if [ "$url" != "$BASE/frontend.jsp" ] || [ "$code" != 200 ]; then
+  if [ "$url" != "$BASE/app/" ] || [ "$code" != 200 ]; then
     echo "  ended at $url with HTTP $code: $(head -c 300 "$OUT")"
     return 1
   fi
@@ -216,7 +216,7 @@ step5() {
 }
 
 check "setup: sso-user signs in with its local password before it's linked" setup
-check "1. the web page's sign-in through Keycloak ends at frontend.jsp, signed in" step1
+check "1. the web page's sign-in through Keycloak ends in the User app, signed in" step1
 check "2. linked by email: sso-user's local password is refused, and its token revoked" step2
 check "3. the gate: sso-outsider ends at login.jsp?signin=no-group" step3
 check "4. the helper's sign-in: a code at the loopback address, exchanged for a token naming sso-helper" step4

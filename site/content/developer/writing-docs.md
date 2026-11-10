@@ -48,6 +48,9 @@ force-reload the page or restart the server.
 - **Healdan's words.** A *Store* is a top-level container. A *workspace* is a matter's workspace, made from a
   workspace template. The *doc #* is a document's number. When a page has to mention what LogicalDOC means by a
   word, it says so.
+- **Labels are quoted as the app shows them.** The User app's labels are in US English ("Color", "Favorites"), so
+  a page that names one quotes it exactly, in bold, as it shows, whatever the prose around it spells. The prose
+  stays British.
 - **Describe Healdan as it is on `master`,** and only what Healdan does. Nothing about features that aren't built,
   and nothing about LogicalDOC Enterprise.
 - **Write every page fresh.** Don't copy text or screenshots from LogicalDOC's docs, and don't link to them:

@@ -13,4 +13,5 @@ How to file, find and work with documents in Healdan, in the web page, in LibreO
   {{< card link="finding-documents/" title="Finding Documents" icon="search" >}}
   {{< card link="documents/" title="Documents" icon="document-text" >}}
   {{< card link="office/" title="Working in Office Apps" icon="desktop-computer" >}}
+  {{< card link="the-classic-interface/" title="The Classic Interface" icon="template" >}}
 {{< /cards >}}

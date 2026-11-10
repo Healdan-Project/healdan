@@ -372,6 +372,15 @@ storage_started=$SECONDS
 check "storage backends against the stand-in" storage_test
 echo "step 5f took $((SECONDS - storage_started)) s"
 
+echo "== 5g. the User app in the browser (M6 spec §15.1)"
+# Signs in as webuser, which the smoke overlay's SmokeWebUserSeed makes, and runs healdan-web's Playwright specs in
+# Chromium and WebKit in Playwright's Docker image: a link into the app, signing in, the way to the Classic Interface and
+# back, Sign Out, and an accessibility scan; then curl checks the web session's forgery refusals. Its output carries its
+# own PASS/FAIL lines.
+web_started=$SECONDS
+check "the User app in the browser" env BASE="$BASE" bash docker/tests/test-web.sh
+echo "step 5g took $((SECONDS - web_started)) s"
+
 echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \
   'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "select 1 from ld_webservicecall where 1=0"'

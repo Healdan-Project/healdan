@@ -17,3 +17,7 @@ healdan-web/web/**/node_modules/
 healdan-web/web/**/dist/
 healdan-web/web/packages/api/src/schema.d.ts
 healdan-web/web/**/*.tsbuildinfo
+
+# The User app's browser tests (docker/tests/test-web.sh)
+healdan-web/web/e2e-results/
+healdan-web/web/playwright-report/
