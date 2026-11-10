@@ -5,7 +5,7 @@
 // the workspace's own), its name, version, licence and the text of its licence and notice files. About shows it.
 // Fails when a shipped package has no such file, so nothing goes out without its notice.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -55,9 +55,10 @@ export function writeNotices(root) {
   writeFileSync(join(out, 'notices.txt'), text)
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// process.argv[1] isn't resolved through symlinks and import.meta.url is, so compare real paths.
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   try {
-    writeNotices(join(fileURLToPath(import.meta.url), '..', '..'))
+    writeNotices(join(realpathSync(fileURLToPath(import.meta.url)), '..', '..'))
   } catch (error) {
     console.error(error.message)
     process.exit(1)

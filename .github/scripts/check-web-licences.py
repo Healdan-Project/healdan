@@ -10,23 +10,30 @@
 # Fails when a package (workspace packages, which are Healdan's own, are skipped):
 #   - ships in the app (no "dev": true in the lockfile) and has a licence outside STRICT, or none;
 #   - is development only and has a licence outside STRICT and DEV_ALSO;
-#   - is neither listed in ALLOWED: reviewed packages, each with its reason. An ALLOWED entry the lockfile no longer
-#     has fails too, so the list stays honest.
-# An SPDX expression passes when any "OR" alternative does, and an "AND" when all its parts do.
+#   - is neither listed in ALLOWED (reviewed packages, each with its reason) nor in ALLOWED_DEV (reviewed packages that
+#     must stay development-only: one the lockfile no longer marks dev fails). An entry of either the lockfile no
+#     longer has fails too, so the lists stay honest.
+# An SPDX expression passes when any "OR" alternative does, and an "AND" when all its parts do; parentheses group, and
+# "X WITH Y" passes only when that whole text is in the list of licences.
 #
 # Usage: check-web-licences.py [lockfile]
 # Exit status: 0 when every package is acceptable, or when there is no lockfile yet, 1 otherwise.
 
 import json
 import pathlib
+import re
 import sys
 
 STRICT = {"MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "0BSD"}
 DEV_ALSO = {"BlueOak-1.0.0", "CC0-1.0", "CC-BY-4.0", "Python-2.0", "Unlicense"}
 ALLOWED = {
     # "node_modules/<name>": "why it's acceptable",
-    "node_modules/axe-core": "MPL-2.0, development only: runs in the accessibility tests and is never bundled or shipped",
     "node_modules/isbot": "Unlicense, a public-domain dedication with no conditions; @tanstack/react-router depends on it, and its notice is listed in notices.txt",
+}
+# Exceptions for packages that must stay development-only: one that loses "dev": true in the lockfile (it entered the
+# app's runtime tree) fails.
+ALLOWED_DEV = {
+    "node_modules/axe-core": "MPL-2.0, development only: runs in the accessibility tests and is never bundled or shipped",
     "node_modules/lightningcss": "MPL-2.0, development only: Vite's CSS minifier (and its platform builds), used at build time and never shipped",
     "node_modules/lightningcss-android-arm64": "MPL-2.0, development only: Vite's CSS minifier (and its platform builds), used at build time and never shipped",
     "node_modules/lightningcss-darwin-arm64": "MPL-2.0, development only: Vite's CSS minifier (and its platform builds), used at build time and never shipped",
@@ -45,24 +52,78 @@ DEFAULT_LOCKFILE = pathlib.Path(__file__).resolve().parents[2] / "healdan-web" /
 
 
 def acceptable(expression, allowed):
-    expression = expression.strip().strip("()")
-    if " OR " in expression:
-        return any(acceptable(part, allowed) for part in expression.split(" OR "))
-    if " AND " in expression:
-        return all(acceptable(part, allowed) for part in expression.split(" AND "))
-    return expression in allowed
+    """Whether an SPDX expression is acceptable. OR binds looser than AND, parentheses group, and a term "X WITH Y" (a
+    licence with an exception) counts only when that whole text is in allowed. Anything malformed is refused."""
+    tokens = re.findall(r"\(|\)|[^\s()]+", expression)
+    position = 0
+
+    def peek():
+        return tokens[position] if position < len(tokens) else None
+
+    def take():
+        nonlocal position
+        position += 1
+        return tokens[position - 1]
+
+    def parse_or():
+        result = parse_and()
+        while peek() == "OR":
+            take()
+            right = parse_and()  # no short circuit: the whole expression must parse
+            result = result or right
+        return result
+
+    def parse_and():
+        result = parse_term()
+        while peek() == "AND":
+            take()
+            right = parse_term()
+            result = result and right
+        return result
+
+    def parse_term():
+        token = peek()
+        if token is None or token in (")", "OR", "AND", "WITH"):
+            raise ValueError(expression)
+        take()
+        if token == "(":
+            result = parse_or()
+            if peek() != ")":
+                raise ValueError(expression)
+            take()
+            return result
+        if peek() == "WITH":
+            take()
+            exception = peek()
+            if exception is None or exception in ("(", ")", "OR", "AND", "WITH"):
+                raise ValueError(expression)
+            take()
+            token = f"{token} WITH {exception}"
+        return token in allowed
+
+    try:
+        result = parse_or()
+    except ValueError:
+        return False
+    return result and position == len(tokens)
 
 
 def problems(lock):
     found = []
-    for key, entry in lock.get("packages", {}).items():
+    packages = lock.get("packages", {})
+    for key, entry in packages.items():
         if "node_modules/" not in key or entry.get("link") or key in ALLOWED:
+            continue
+        if key in ALLOWED_DEV:
+            if not entry.get("dev"):
+                found.append(f"{key}@{entry.get('version')}: allowed as development only, but the lockfile no longer "
+                             f"marks it dev")
             continue
         licence = entry.get("license")
         allowed = STRICT | DEV_ALSO if entry.get("dev") else STRICT
         if not licence or not isinstance(licence, str) or not acceptable(licence, allowed):
             found.append(f"{key}@{entry.get('version')}: {licence or 'no licence'}")
-    stale = [key for key in ALLOWED if key not in lock.get("packages", {})]
+    stale = [key for key in list(ALLOWED) + list(ALLOWED_DEV) if key not in packages]
     return found + [f"{key}: in ALLOWED but not in the lockfile" for key in stale]
 
 

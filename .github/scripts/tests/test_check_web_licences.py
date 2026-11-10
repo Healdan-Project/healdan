@@ -27,9 +27,10 @@ class CheckWebLicencesTest(unittest.TestCase):
 
     def setUp(self):
         # The real ALLOWED names packages these small lockfiles don't have.
-        patcher = mock.patch.object(checker, "ALLOWED", {})
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        for name in ("ALLOWED", "ALLOWED_DEV"):
+            patcher = mock.patch.object(checker, name, {})
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def lock(self, **packages):
         """A lockfile whose package keys are the names given, under node_modules/ (a double underscore is a slash)."""
@@ -63,12 +64,35 @@ class CheckWebLicencesTest(unittest.TestCase):
         self.assertEqual(1, len(checker.problems(self.lock(a=package("MIT AND GPL-3.0")))))
         self.assertEqual([], checker.problems(self.lock(a=package("GPL-3.0 OR MIT"))))
         self.assertEqual([], checker.problems(self.lock(a=package("MIT AND ISC"))))
+        # Parentheses group before OR and AND apply.
+        for licence in ["(MIT OR Apache-2.0) AND GPL-3.0", "GPL-3.0 AND (MIT OR ISC)", "MIT AND GPL-3.0 OR GPL-3.0",
+                        "(MIT", "MIT)", "MIT OR", "MIT AND AND ISC", "MIT ISC", "GPL-3.0 WITH Classpath-exception-2.0",
+                        "MIT WITH GPL-3.0"]:
+            with self.subTest(licence=licence):
+                self.assertEqual(1, len(checker.problems(self.lock(a=package(licence)))))
+        self.assertEqual([], checker.problems(self.lock(a=package("MIT AND (Apache-2.0 OR GPL-3.0)"))))
+        self.assertEqual([], checker.problems(self.lock(a=package("(MIT OR CC0-1.0)", dev=True))))
+        self.assertEqual(1, len(checker.problems(self.lock(a=package("(MIT OR CC0-1.0) AND GPL-3.0", dev=True)))))
+
+    def test_with_passes_only_when_listed_whole(self):
+        self.assertTrue(checker.acceptable("GPL-3.0 WITH Classpath-exception-2.0",
+                                           {"GPL-3.0 WITH Classpath-exception-2.0"}))
+        self.assertFalse(checker.acceptable("GPL-3.0 WITH Classpath-exception-2.0", {"GPL-3.0"}))
 
     def test_allowed_passes_and_stale_fails(self):
         with mock.patch.object(checker, "ALLOWED", {"node_modules/a": "reviewed"}):
             self.assertEqual([], checker.problems(self.lock(a=package("GPL-3.0"))))
             found = checker.problems(self.lock())
             self.assertEqual(["node_modules/a: in ALLOWED but not in the lockfile"], found)
+
+    def test_dev_only_exceptions(self):
+        with mock.patch.object(checker, "ALLOWED_DEV", {"node_modules/a": "reviewed"}):
+            self.assertEqual([], checker.problems(self.lock(a=package("MPL-2.0", dev=True))))
+            found = checker.problems(self.lock(a=package("MPL-2.0")))
+            self.assertEqual(1, len(found))
+            self.assertIn("node_modules/a@1.0.0", found[0])
+            self.assertIn("dev", found[0])
+            self.assertEqual(["node_modules/a: in ALLOWED but not in the lockfile"], checker.problems(self.lock()))
 
     def test_workspace_packages_are_skipped(self):
         lock = self.lock()

@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -63,4 +65,14 @@ test('lists a package that declares MIT but ships no licence file, as the declar
   const text = noticesFor(root)
   assert.match(text, /client-only 0\.0\.1\nLicence: MIT\n/)
   assert.match(text, /ships no licence file/)
+})
+
+test('the command writes notices.txt when run through a symlinked path', () => {
+  const root = project({ a: { version: '1.0.0', license: 'MIT' } }, { 'node_modules/a/LICENSE': 'Licence of a' })
+  mkdirSync(join(root, 'scripts'))
+  copyFileSync(fileURLToPath(new URL('./notices.mjs', import.meta.url)), join(root, 'scripts', 'notices.mjs'))
+  const link = join(mkdtempSync(join(tmpdir(), 'notices-link-')), 'web')
+  symlinkSync(root, link)
+  execFileSync(process.execPath, [join(link, 'scripts', 'notices.mjs')])
+  assert.match(readFileSync(join(root, 'apps/user/dist/notices.txt'), 'utf8'), /Licence of a/)
 })
