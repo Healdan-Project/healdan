@@ -413,7 +413,7 @@ Double-click, Enter, or Open builds the same `healdan:` link as the old UI (`Hea
 - **Email trackers:** blocked unless the person asks (§6.6).
 - **Dependencies:** pinned, without install scripts, and licence-checked (§7.4).
 - **Framing:** `frame-ancestors 'none'` for the app; the email body only inside the app.
-- **Session fixation (found in the build):** CE's `SessionFilter` binds a `sid` from a request into a signed-out browser's HTTP session. It takes one from `?sid=` only while `security.acceptsid` is on, which it isn't as shipped, or from an `ldoc-sid` cookie planted from a sibling subdomain or over plain HTTP. That's login CSRF on CE's pages and, through the HTTP session, on the web-session route: the victim's browser works as the attacker's account, so what the victim files lands where the attacker can read it. The attacker needs an account of their own on the install, and gets no access to the victim's. It predates M6, which doesn't widen it. A follow-up may refuse the web route while `security.acceptsid` is on, or accept only a `sid` that a real sign-in bound.
+- **Session ids from CE's own sign-in (found in the build):** CE's `SessionFilter` can bind a session id it reads from the `ldoc-sid` cookie, or from `?sid=` while `security.acceptsid` is on (off as shipped), into a browser's HTTP session, and the web-session route takes the session it finds there. That predates M6, which doesn't change it. A follow-up makes the route accept only a session id that a real sign-in bound.
 
 ## 12. The trials (call)
 
