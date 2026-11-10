@@ -6,7 +6,8 @@ weight: 12
 - **LogicalDOC's database schema is never migrated.** Healdan upgrades its own tables on every start, but not
   LogicalDOC's. If a new version changes LogicalDOC's tables, that SQL has to be run on an existing database by
   hand, after a backup and before the new version's first start. Upgrading's
-  [Changes to LogicalDOC's Tables](../upgrading/#changes-to-logicaldocs-tables) gives it for each change.
+  [Changes to LogicalDOC's Tables](../upgrading/#changes-to-logicaldocs-tables) gives it for each change. The app
+  checks as it starts, and stops if a table or column is missing.
 - **MariaDB only.** Healdan runs on MariaDB. MySQL, Oracle and SQL Server aren't supported, and PostgreSQL support
   comes later. See [Supported Databases](../what-runs/#supported-databases).
 - **No HTTPS on its own.** The app speaks plain HTTP, so anything beyond the machine running Docker goes through a

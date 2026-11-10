@@ -21,7 +21,8 @@ git remote add upstream https://github.com/logicaldoc/community.git
   existing database, so a sync that changes them, in a `logicaldoc-*` module's `sql/` scripts or in the columns an
   entity maps, adds the SQL an existing database needs, with a check, to the Install manual's
   [Changes to LogicalDOC's Tables](../../install/upgrading/#changes-to-logicaldocs-tables). That's a fix the merge
-  needs too.
+  needs too. Until an existing database has the change, the init tool stops its start, naming each table and column
+  the scripts create that it lacks, so a sync that changes the scripts without an entry leaves admins stuck.
 - **`.github/workflows/upstream-sync.yml`** runs a sync every week. `.github/scripts/upstream-sync.sh` does the
   merge.
 
