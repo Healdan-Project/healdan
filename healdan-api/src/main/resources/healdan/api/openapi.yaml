@@ -10,6 +10,8 @@ info:
     - Paths are under `/api`, so `/v1/server` is `/api/v1/server`.
     - Sign in with `POST /v1/auth/tokens`, then send the token as
       `Authorization: Bearer <token>`. Operations that need no token say so.
+      Healdan's own pages use the browser's web session instead
+      (`cookieAuth`), on a same-origin rule.
     - Field names are camelCase. A field with no value is `null`, never left
       out. Timestamps are ISO 8601 in UTC, such as `2026-10-23T14:05:00Z`.
     - Errors are RFC 9457 problems (`application/problem+json`). Clients
@@ -22,6 +24,7 @@ servers:
   - url: /api
 security:
   - bearerAuth: []
+  - cookieAuth: []
 paths:
   /v1/server:
     get:
@@ -126,7 +129,10 @@ paths:
     get:
       operationId: listTokens
       summary: Your devices that are signed in
-      description: Every usable token of the caller, newest first. Never the tokens themselves.
+      description: |
+        Every usable token of the caller, newest first. Never the tokens
+        themselves. `current` marks the token making the request; on the web
+        session, which has none, no token is `current`.
       tags: [Sign-in]
       responses:
         '200':
@@ -141,8 +147,13 @@ paths:
     delete:
       operationId: signOut
       summary: Sign out
-      description: Revokes the token making the request.
+      description: |
+        Revokes the token making the request. Only a token signs out here:
+        the web session is `403 token-only`, and signs out with
+        `DELETE /v1/session`.
       tags: [Sign-in]
+      security:
+        - bearerAuth: []
       responses:
         '204':
           description: Signed out
@@ -164,6 +175,23 @@ paths:
       responses:
         '204':
           description: Revoked
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/session:
+    delete:
+      operationId: signOutWebSession
+      summary: Sign out of the web session
+      description: |
+        Closes the caller's CE session and ends the HTTP session, for
+        Healdan's own pages. Only the web session signs out here: a device
+        token is `403 web-session-only`, and signs out with
+        `DELETE /v1/auth/tokens/current`.
+      tags: [Sign-in]
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: Signed out
         default:
           $ref: '#/components/responses/Problem'
   /v1/me:
@@ -1576,6 +1604,26 @@ components:
       type: http
       scheme: bearer
       description: A device token from `POST /v1/auth/tokens`.
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+      description: |
+        The browser's web session, for Healdan's own pages, served from the
+        same origin. Used only when a request has no `Authorization` header,
+        and only when all of these hold:
+
+        - `Sec-Fetch-Site: same-origin`. A request without it isn't let in.
+        - An `Origin`, when sent, is the server's public address, or without
+          one the scheme and host the request came to.
+        - A `POST`, `PATCH`, `PUT` or `DELETE` also sends
+          `X-Healdan-Client: web`.
+        - The HTTP session holds an open web-page session. Its id is never
+          taken from a `sid` parameter or header, or from the `ldoc-sid`
+          cookie.
+
+        Anything else is `401 unauthenticated`. A request with an
+        `Authorization` header goes by that header alone.
   responses:
     Problem:
       description: A refusal or an error
@@ -1608,7 +1656,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, server-error]
         fields:
           type: array
           items:

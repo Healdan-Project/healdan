@@ -24,6 +24,51 @@ server you're talking to.
 
 Every path below starts with `/api/v1`.
 
+## Two Ways In
+
+The API signs a request in one of two ways:
+
+- **A device token,** for clients such as the Healdan Helper and the Office add-ins. The client sends it as
+  `Authorization: Bearer`. Most of this page is about tokens.
+- **The browser's web session,** for Healdan's own pages, which the server serves from its own address. The page
+  sends no token: the browser sends its session cookie, and the session is the one the sign-in page opened, the
+  same as the web page's.
+
+A request with an `Authorization` header goes by that header alone, and never by its cookies. The web session is
+let in only when all of these hold:
+
+1. **No `Authorization` header** at all: not an empty one, and not another scheme such as Basic.
+2. **`Sec-Fetch-Site: same-origin`.** Browsers send this Fetch Metadata header with every request, and say
+   `same-origin` only when a page from the same origin made it. A request without the header, from an old browser
+   or from no browser, isn't let in.
+3. **An `Origin`, when there is one, is the server's own.** That's the origin of the public address
+   (`LOGICALDOC_PUBLIC_URL`) when Healdan has one it can use (see [Sign-In Pages](#sign-in-pages)), otherwise the
+   scheme and `Host` the request came to. A port that is the scheme's own, 443 for `https` and 80 for `http`, is the
+   same whether it's written or not. Browsers send `Origin` with every change, so open Healdan's pages at the public
+   address: from another name, such as the server's own name on the office network, changes are refused.
+4. **A change sends `X-Healdan-Client: web`.** That's every `POST`, `PATCH`, `PUT` and `DELETE`. Another site's page
+   can't add a header to a request to Healdan without a CORS preflight, and the API never allows one with cookies
+   (see [Calling the API from Another Origin](#calling-the-api-from-another-origin)). A `GET` needs no header, so
+   downloads, thumbnails and previews work as plain links and images.
+5. **The HTTP session holds an open web-page session.** Tomcat finds the HTTP session by its `JSESSIONID` cookie,
+   which is HttpOnly, and the sign-in page keeps the web-page session's id in it. The API never takes that id from
+   a `sid` parameter or header, or from the `ldoc-sid` cookie, though LogicalDOC's own routes do.
+
+Anything else is `401 unauthenticated`, with no `WWW-Authenticate` challenge. A request with no `Authorization`
+header that isn't a same-origin browser request is answered as a client with no token is, with
+`WWW-Authenticate: Bearer`.
+
+- **The account is checked on every request,** as for a token: one disabled, expired or deleted since the sign-in
+  is `401`, though its session is still open.
+- **Every request renews the session,** so it stays open while the page is in use, and lapses after
+  `session.timeout` without one (30 minutes as shipped). No one signs in on this route, so the
+  [sign-in throttle](#the-sign-in-throttle) doesn't come into it.
+- **There's no token.** `GET /auth/tokens` lists your tokens with none `current`, and
+  `DELETE /auth/tokens/current` is `403 token-only`.
+- **Signing out** is `DELETE /session`: it closes the web-page session and ends the HTTP session, so that browser
+  is signed out of the web page too. A token gets `403 web-session-only` there.
+- **The web session is no device** (see [Check-Outs and Devices](#check-outs-and-devices)).
+
 ## Signing In
 
 A client signs in once with a username and password, and gets a device token. From then on it sends only the
@@ -56,8 +101,9 @@ curl -s "$BASE/api/v1/me" -H "Authorization: Bearer $TOKEN"
 
 - **The token is shown only once,** in that answer. Keep it as you would a password, in the system's keychain for
   example. A client never needs to keep the password.
-- **Only the token signs a request in.** The API ignores cookies, `sid`, Basic authentication and `X-API-KEY`, so a
-  web page can't make your browser call it with your sign-in.
+- **Only the token signs a client's request in.** The API ignores `sid`, Basic authentication and `X-API-KEY`, and
+  takes the browser's session only from Healdan's own pages, on the rule in [Two Ways In](#two-ways-in), so another
+  site's page can't make your browser call it with your sign-in.
 - **The token works only in the API,** under `/api`. LogicalDOC's own services refuse it (see
   [below](#logicaldocs-web-services-and-api-keys)).
 - **`GET /server`** needs no sign-in. A client calls it first, to check that it's talking to Healdan and to see how
@@ -147,7 +193,8 @@ apart; a blank name is "Unnamed device".
   and to end your open sessions.
 - **Signing out** is `DELETE /auth/tokens/current`, which revokes the token making the request.
 - **Your devices:** `GET /auth/tokens` lists your tokens that still work, newest first, never the tokens themselves.
-  `current` marks the one making the request. `DELETE /auth/tokens/{id}` revokes one of them.
+  `current` marks the one making the request, and none on the web session. `DELETE /auth/tokens/{id}` revokes one
+  of them.
 - **A token that no longer works** gets `401 unauthenticated`. Ask for the password and sign in again.
 - **A computer says who it is** with `device` in the sign-in: `{"id": "…"}`, 1 to 64 letters, digits and hyphens,
   such as a random UUID the client keeps. Send the same id on every sign-in from that computer. A bad id is
@@ -174,10 +221,12 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | Status | `code` | When |
 |---|---|---|
 | 400 | `bad-request` | The request is malformed: bad JSON, a field the server doesn't know, a bad `offset` or `limit` |
-| 401 | `unauthenticated` | No token, or one that no longer works |
+| 401 | `unauthenticated` | No token and no web session the API lets in, or a token that no longer works |
 | 401 | `sign-in-failed` | A wrong username or password, or an account that can't sign in |
 | 401 | `password-expired` | The password has to be changed in the web page first |
 | 403 | `forbidden` | You can see the object, but may not do this to it |
+| 403 | `token-only` | `DELETE /auth/tokens/current` on the web session, which has no token |
+| 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current` |
 | 404 | `not-found` | It doesn't exist, **or you can't read it**: the two get the same answer |
 | 409 | `checked-out`, `locked` | Someone else has the document checked out, or anyone has it locked with the web page's Lock action. The problem adds the `hold` |
 | 409 | `held-elsewhere` | You have the document checked out on another of your devices. The problem adds the `hold` and `lastSaved` |
@@ -238,7 +287,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 | Area | Endpoints |
 |---|---|
 | The server and you | `GET /server`, `GET /me`, `GET /users?q=` for user fields such as Author |
-| Signing in | `POST /auth/tokens`, `GET /auth/tokens`, `DELETE /auth/tokens/current`, `DELETE /auth/tokens/{id}` |
+| Signing in | `POST /auth/tokens`, `GET /auth/tokens`, `DELETE /auth/tokens/current`, `DELETE /auth/tokens/{id}`; `DELETE /session` for the web session |
 | Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
 | Finding | `GET /search?scope=&q=&within=`, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
@@ -286,16 +335,19 @@ this, because the same person may have the document open on two computers.
 
 - **The hold names its device.** `hold.device` (`id`, `name`, `app`) is shown only to the user who holds the
   check-out. It is `null` for anyone else, for a lock, and when no device holds it: a check-out from the web page,
-  or from a token that signed in with no device.
+  from Healdan's own pages on the web session, or from a token that signed in with no device.
 - **`POST /documents/{docNumber}/checkout`** takes an optional body: `{"app": "LibreOffice"}` records the app the
   document is opened in, and `{"move": true}` moves your own check-out from another of your devices to this one.
   The move is recorded in the history as a check-out. Edits the other device hasn't saved are not in Healdan.
 - **`409 held-elsewhere`** is the answer, from any of your other devices, to a check-out without `move`, a save, a
   check-in, a release and a change of properties on a document you have checked out on one device. The problem
   carries the `hold` and `lastSaved`, when the content was last stored, so a client can warn that what the other
-  device hasn't sent is not in Healdan. The web page itself is never refused for a device.
-- **A check-out with no device** (from the web page, or from a token that signed in with none) works from any of
-  your devices until a check-out or a save through the API records one.
+  device hasn't sent is not in Healdan. The web page itself, which doesn't go through the API, is never refused for
+  a device.
+- **A check-out with no device** (from the web page, from Healdan's own pages, or from a token that signed in with
+  none) works from any of your devices until a check-out or a save through the API records one.
+- **Healdan's own pages are no device.** On the web session, a document you have checked out on one of your devices
+  is `409 held-elsewhere`, as for a token with no device, and `move` can't bring the check-out to the page.
 - **Filing with `checkOut: true`** holds the new document on the filing token's device, with no `app`, as
   `POST /documents` takes none.
 - **A free document** is checked out for a save, saved and checked in again, so a client needn't check out
@@ -512,7 +564,7 @@ development server, needs its origin in **API origins allowed (CORS)** in
 - **For a listed origin,** the API answers preflight requests and adds the CORS headers. It allows `GET`, `POST`,
   `PATCH` and `DELETE`, the `Authorization` and `Content-Type` request headers, and lets the page read `Location`
   and `Content-Disposition`. Preflights are cached for 10 minutes. No credentials are allowed: tokens aren't
-  cookies.
+  cookies, and the web session works only from Healdan's own origin.
 - **An unlisted origin's preflight** gets `403 forbidden`.
 
 ## Office Add-Ins Need HTTPS

@@ -5,9 +5,9 @@ package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 import java.util.List;
+import java.util.Set;
 
 import org.junit.Test;
 
@@ -34,17 +34,32 @@ public class OpenApiFileTest {
 		assertEquals("/api", result.getOpenAPI().getServers().get(0).getUrl());
 	}
 
+	// A bearer token, or the web session of Healdan's own pages (M6 spec section 8.1)
 	@Test
-	public void testBearerTokensByDefault() {
+	public void testBearerTokensOrTheWebSessionByDefault() {
 		OpenAPI api = parse().getOpenAPI();
 
 		SecurityScheme bearer = api.getComponents().getSecuritySchemes().get("bearerAuth");
 		assertNotNull(bearer);
 		assertEquals(SecurityScheme.Type.HTTP, bearer.getType());
 		assertEquals("bearer", bearer.getScheme());
+		SecurityScheme cookie = api.getComponents().getSecuritySchemes().get("cookieAuth");
+		assertNotNull(cookie);
+		assertEquals(SecurityScheme.Type.APIKEY, cookie.getType());
+		assertEquals(SecurityScheme.In.COOKIE, cookie.getIn());
+		assertEquals("JSESSIONID", cookie.getName());
 		List<SecurityRequirement> security = api.getSecurity();
-		assertEquals(1, security.size());
-		assertTrue(security.get(0).containsKey("bearerAuth"));
+		assertEquals(2, security.size());
+		assertEquals(Set.of("bearerAuth"), security.get(0).keySet());
+		assertEquals(Set.of("cookieAuth"), security.get(1).keySet());
+
+		// Each signs out its own way
+		assertEquals(List.of(Set.of("bearerAuth")), schemes(api, "/v1/auth/tokens/current"));
+		assertEquals(List.of(Set.of("cookieAuth")), schemes(api, "/v1/session"));
+	}
+
+	private static List<Set<String>> schemes(OpenAPI api, String path) {
+		return api.getPaths().get(path).getDelete().getSecurity().stream().map(r -> Set.copyOf(r.keySet())).toList();
 	}
 
 	static SwaggerParseResult parse() {

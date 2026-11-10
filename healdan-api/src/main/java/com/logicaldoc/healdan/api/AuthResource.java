@@ -262,26 +262,34 @@ public class AuthResource {
 	}
 
 	/**
-	 * @return the caller's usable tokens, newest first
+	 * @return the caller's usable tokens, newest first; on the web-session
+	 *         route, which has no token, none is {@code current}
 	 */
 	@GET
 	public Page<TokenView> list() {
 		Caller caller = Caller.current();
-		long currentId = caller.token().getId();
+		ApiToken current = caller.token();
 		return Page.whole(ApiTokens.get().list(caller.user().getId()).stream()
 				.map(t -> new TokenView(t.getId(), t.getName(), t.getCreation(), t.getLastUsed(), t.getExpires(),
-						t.getId() == currentId))
+						current != null && t.getId() == current.getId()))
 				.toList());
 	}
 
 	/**
 	 * Signs out: revokes the token making the request, and closes its
 	 * session.
+	 *
+	 * @return {@code 204}, or {@code 403 token-only} on the web-session route,
+	 *         which signs out with {@code DELETE /v1/session}
 	 */
 	@DELETE
 	@Path("current")
 	public Response signOut() {
-		ApiTokens.get().revoke(Caller.current().token());
+		ApiToken token = Caller.current().token();
+		if (token == null)
+			throw new ApiProblem(403, "token-only",
+					"Only a device token signs out here. Healdan's own pages sign out with DELETE /v1/session.");
+		ApiTokens.get().revoke(token);
 		return Response.noContent().build();
 	}
 

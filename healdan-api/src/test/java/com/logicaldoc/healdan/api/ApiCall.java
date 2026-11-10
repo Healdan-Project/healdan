@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -33,6 +34,15 @@ import jakarta.servlet.ServletException;
 public class ApiCall {
 
 	private static final String SERVLET_PATH = "/api";
+
+	/** The Fetch Metadata header a browser sends with every request */
+	static final String FETCH_SITE = "Sec-Fetch-Site";
+
+	/** The header Healdan's own pages send with a change */
+	static final String CLIENT = "X-Healdan-Client";
+
+	/** The methods that change something, which need {@link #CLIENT} on the web-session route */
+	private static final Set<String> CHANGES = Set.of("POST", "PATCH", "PUT", "DELETE");
 
 	private final ApiServlet servlet;
 
@@ -108,6 +118,23 @@ public class ApiCall {
 	 */
 	public ApiCall session(MockHttpSession session) {
 		this.session = session;
+		return this;
+	}
+
+	/**
+	 * Sends the request as Healdan's own pages do on the web-session route (M6
+	 * spec section 8.1): in the HTTP session, with
+	 * {@code Sec-Fetch-Site: same-origin}, as a browser sends it, and with
+	 * {@code X-Healdan-Client: web} on a change.
+	 *
+	 * @param session the HTTP session, as {@link ApiTestCase#signInWeb}
+	 *        makes it
+	 */
+	public ApiCall webSession(MockHttpSession session) {
+		session(session);
+		header(FETCH_SITE, "same-origin");
+		if (CHANGES.contains(method))
+			header(CLIENT, "web");
 		return this;
 	}
 
@@ -228,6 +255,9 @@ public class ApiCall {
 			}
 		}
 		headers.forEach((name, values) -> values.forEach(value -> request.addHeader(name, value)));
+		// Every HTTP/1.1 request names its host, which Tomcat reads the server's name and port from
+		if (headers.keySet().stream().noneMatch("Host"::equalsIgnoreCase))
+			request.addHeader("Host", host());
 		if (!cookies.isEmpty())
 			request.setCookies(cookies.toArray(new Cookie[0]));
 
@@ -260,5 +290,15 @@ public class ApiCall {
 		ApiResponse result = new ApiResponse(response.getStatus(), responseHeaders, response.getContentAsByteArray());
 		Contract.check(method, path, result);
 		return result;
+	}
+
+	/**
+	 * @return the {@code Host} header a browser sends to the address named by
+	 *         {@link #server}: the host's name, and its port unless it's the
+	 *         scheme's own
+	 */
+	private String host() {
+		boolean usual = "http".equals(scheme) && serverPort == 80 || "https".equals(scheme) && serverPort == 443;
+		return usual ? serverName : serverName + ":" + serverPort;
 	}
 }
