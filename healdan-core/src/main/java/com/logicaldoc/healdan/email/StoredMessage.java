@@ -4,6 +4,8 @@
 package com.logicaldoc.healdan.email;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -25,6 +27,7 @@ import com.logicaldoc.util.MimeType;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.util.SharedFileInputStream;
 
 /**
  * A filed email read for showing (M6 spec §6.6): an {@code eml} through
@@ -37,7 +40,7 @@ import jakarta.mail.internet.MimeMessage;
  * file it finds is an attachment, a logo the HTML shows included, and a
  * {@code cid:} picture in an {@code msg}'s HTML is a placeholder.
  */
-public final class StoredMessage {
+public final class StoredMessage implements AutoCloseable {
 
 	private final MimeMessage eml;
 
@@ -45,10 +48,50 @@ public final class StoredMessage {
 
 	private final List<Part> parts;
 
-	private StoredMessage(MimeMessage eml, EMail msg, List<Part> parts) {
+	/** What an {@code eml} read from a file reads from as it is used; null otherwise */
+	private final InputStream source;
+
+	private StoredMessage(MimeMessage eml, EMail msg, List<Part> parts, InputStream source) {
 		this.eml = eml;
 		this.msg = msg;
 		this.parts = parts;
+		this.source = source;
+	}
+
+	/**
+	 * Reads a message from a file, so that an {@code eml} stays on disk and is read in place as it is used (Jakarta
+	 * Mail's shared stream) instead of being held whole in memory. The file must stay until {@link #close}.
+	 *
+	 * @param file the email's file
+	 * @param extension {@code eml} or {@code msg}
+	 * @param content true when the attachments' content is needed ({@link #write}); an {@code msg} is then read with
+	 *        its attachments, which it holds in memory
+	 * @return the message, to close when done
+	 * @throws IOException if the file can't be read
+	 * @throws MessagingException if it isn't an email
+	 */
+	public static StoredMessage open(File file, String extension, boolean content) throws IOException, MessagingException {
+		if ("msg".equalsIgnoreCase(extension)) {
+			try (InputStream in = new FileInputStream(file)) {
+				return msg(in, content);
+			}
+		}
+		SharedFileInputStream shared = new SharedFileInputStream(file);
+		try {
+			MimeMessage message = MailUtil.readMime(shared);
+			if (message == null || !hasHeaders(message))
+				throw new MessagingException("Not a MIME message");
+			return new StoredMessage(message, null, MessageParts.list(message), shared);
+		} catch (MessagingException | RuntimeException e) {
+			shared.close();
+			throw e;
+		}
+	}
+
+	@Override
+	public void close() throws IOException {
+		if (source != null)
+			source.close();
 	}
 
 	/**
@@ -59,22 +102,25 @@ public final class StoredMessage {
 	 * @throws MessagingException if they aren't an email
 	 */
 	public static StoredMessage open(InputStream content, String extension) throws IOException, MessagingException {
-		if ("msg".equalsIgnoreCase(extension)) {
-			EMail mail;
-			try {
-				mail = MailUtil.msgToMail(content, true);
-			} catch (IOException | MessagingException e) {
-				throw e;
-			} catch (Exception e) {
-				// CE's reader declares CMSException, and a parser may throw anything for a file that isn't one
-				throw new MessagingException("Not an msg", e);
-			}
-			return new StoredMessage(null, mail, msgParts(mail));
-		}
+		if ("msg".equalsIgnoreCase(extension))
+			return msg(content, true);
 		MimeMessage message = MailUtil.readMime(content);
 		if (message == null || !hasHeaders(message))
 			throw new MessagingException("Not a MIME message");
-		return new StoredMessage(message, null, MessageParts.list(message));
+		return new StoredMessage(message, null, MessageParts.list(message), null);
+	}
+
+	private static StoredMessage msg(InputStream content, boolean withContent) throws IOException, MessagingException {
+		EMail mail;
+		try {
+			mail = MailUtil.msgToMail(content, withContent);
+		} catch (IOException | MessagingException e) {
+			throw e;
+		} catch (Exception e) {
+			// CE's reader declares CMSException, and a parser may throw anything for a file that isn't one
+			throw new MessagingException("Not an msg", e);
+		}
+		return new StoredMessage(null, mail, msgParts(mail), null);
 	}
 
 	/**
@@ -147,6 +193,8 @@ public final class StoredMessage {
 		}
 		EMailAttachment attachment = new TreeMap<>(msg.getAttachments()).values().stream().skip(index).findFirst()
 				.orElseThrow(() -> new IllegalArgumentException("The message has no part " + index));
+		if (attachment.getData() == null && attachment.getSize() > 0)
+			throw new IllegalStateException("The message was opened without its attachments' content");
 		if (attachment.getData() != null)
 			new ByteArrayInputStream(attachment.getData()).transferTo(out);
 	}

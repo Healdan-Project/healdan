@@ -88,4 +88,28 @@ public class StoredMessageTest {
 			assertTrue(part.type().contains("/"));
 		}
 	}
+
+	@Test
+	public void testAnEmlReadFromAFileIsReadInPlaceAndGivesTheSameView() throws Exception {
+		java.io.File file = new java.io.File("src/test/resources/email/parts-attached.eml");
+		StoredMessage fromStream = open("parts-attached.eml", "eml");
+		try (StoredMessage fromFile = StoredMessage.open(file, "eml", true)) {
+			assertEquals(fromStream.parts(), fromFile.parts());
+			assertEquals(fromStream.fields(), fromFile.fields());
+			assertEquals(fromStream.body(false), fromFile.body(false));
+			Part pdf = fromFile.parts().stream().filter(p -> "application/pdf".equals(p.type())).findFirst().orElseThrow();
+			ByteArrayOutputStream out = new ByteArrayOutputStream();
+			fromFile.write(pdf.index(), out);
+			assertEquals(pdf.size(), out.size());
+		}
+	}
+
+	@Test
+	public void testAMsgOpenedWithoutContentListsItsPartsAndWritesNone() throws Exception {
+		java.io.File file = new java.io.File("src/test/resources/email/test.msg");
+		try (StoredMessage message = StoredMessage.open(file, "msg", false)) {
+			assertEquals(open("test.msg", "msg").parts(), message.parts());
+			assertThrows(IllegalStateException.class, () -> message.write(0, new ByteArrayOutputStream()));
+		}
+	}
 }

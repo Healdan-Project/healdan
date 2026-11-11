@@ -289,7 +289,7 @@ public final class MessageParts {
 	}
 
 	/** True for opaque-signed S/MIME, which is signed, not encrypted */
-	private static boolean opaqueSigned(jakarta.mail.Part part) throws MessagingException {
+	static boolean opaqueSigned(jakarta.mail.Part part) throws MessagingException {
 		if (!part.isMimeType("application/pkcs7-mime") && !part.isMimeType("application/x-pkcs7-mime"))
 			return false;
 		try {
@@ -305,7 +305,7 @@ public final class MessageParts {
 	 * in place, as the message itself is: its parts, and multiparts nested in
 	 * it, are views of the one copy, not copies of their own at each level.
 	 */
-	private static jakarta.mail.Part signedContent(jakarta.mail.Part part) throws MessagingException, IOException {
+	static jakarta.mail.Part signedContent(jakarta.mail.Part part) throws MessagingException, IOException {
 		byte[] signature;
 		try (InputStream in = part.getInputStream()) {
 			signature = in.readAllBytes();

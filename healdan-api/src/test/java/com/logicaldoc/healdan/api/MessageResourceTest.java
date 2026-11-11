@@ -7,6 +7,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -215,10 +216,11 @@ public class MessageResourceTest extends ApiTestCase {
 	@Test
 	public void testPdfAndPictureShowInPlaceUnderPreviewWithNoHistory() throws Exception {
 		Document email = file("parts-attached.eml");
+		Document pictured = fileBytes("pictured.eml", emailWithPicture());
 		String token = signIn(previewer);
 
 		ApiResponse pdf = get(path(email, "/parts/1?inline=true")).token(token).send();
-		ApiResponse picture = get(path(email, "/parts/0?inline=true")).token(token).send();
+		ApiResponse picture = get(path(pictured, "/parts/0?inline=true")).token(token).send();
 
 		assertEquals(pdf.toString(), 200, pdf.status());
 		assertEquals("application/pdf", pdf.header("Content-Type"));
@@ -230,6 +232,16 @@ public class MessageResourceTest extends ApiTestCase {
 		assertEquals("image/png", picture.header("Content-Type"));
 		assertEquals("sandbox", picture.header("Content-Security-Policy"));
 		assertEquals(0, downloads());
+	}
+
+	/** An email with a PNG attached (not one its body shows) */
+	private static byte[] emailWithPicture() {
+		return ("From: Ann <ann@example.com>\r\nSubject: A picture\r\nMessage-ID: <picture@example.com>\r\n"
+				+ "MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\n"
+				+ "Content-Type: text/plain\r\n\r\nHello\r\n--b\r\nContent-Type: image/png\r\n"
+				+ "Content-Transfer-Encoding: base64\r\nContent-Disposition: attachment; filename=\"dot.png\"\r\n\r\n"
+				+ "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==\r\n"
+				+ "--b--\r\n").getBytes(StandardCharsets.UTF_8);
 	}
 
 	@Test
@@ -369,5 +381,210 @@ public class MessageResourceTest extends ApiTestCase {
 
 		assertEquals(response.toString(), 404, response.status());
 		assertEquals("not-an-email", response.code());
+	}
+
+	// ---- Fix round 1 ----
+
+	/** An email with these attachments, each a text file named and filled as given */
+	private static byte[] emailWith(String... nameAndContent) {
+		StringBuilder eml = new StringBuilder("From: Ann <ann@example.com>\r\nTo: Bob <bob@example.com>\r\n"
+				+ "Subject: Attachments\r\nMessage-ID: <fix1-").append(System.nanoTime()).append("@example.com>\r\n"
+						+ "Date: Tue, 03 Nov 2026 10:00:00 +0000\r\nMIME-Version: 1.0\r\n"
+						+ "Content-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\n"
+						+ "Content-Type: text/plain\r\n\r\nHello\r\n");
+		for (int i = 0; i < nameAndContent.length; i += 2)
+			eml.append("--b\r\nContent-Type: text/plain\r\nContent-Disposition: attachment; filename=\"")
+					.append(nameAndContent[i]).append("\"\r\n\r\n").append(nameAndContent[i + 1]).append("\r\n");
+		return eml.append("--b--\r\n").toString().getBytes(StandardCharsets.UTF_8);
+	}
+
+	private Document fileBytes(String name, byte[] content) throws Exception {
+		Document d = fx.upload(documents, name, content, fx.admin());
+		awaitAsyncWork();
+		return DocumentDAO.get().findById(d.getId(), true);
+	}
+
+	/** The email filed through the API by the clerk with a Comments property, as a person files it */
+	private Document fileWithComments(String comments) throws Exception {
+		ApiResponse filed = post("/api/v1/documents").token(signIn(clerk))
+				.part("document", "{\"folderId\":" + documents.getId() + ",\"properties\":{\"comments\":\"" + comments
+						+ "\"},\"checkOut\":false}")
+				.file("file", "carried.eml", emailWith("Agreement.txt", "the agreement")).send();
+		assertEquals(filed.toString(), 201, filed.status());
+		awaitAsyncWork();
+		return DocumentDAO.get().findByCustomId(filed.json().path("docNumber").asText(), Tenant.DEFAULT_ID);
+	}
+
+	private String propertyOf(long docNumber, String name, String token) {
+		for (JsonNode field : get("/api/v1/documents/" + docNumber + "/properties").token(token).send().json().path("items"))
+			if (name.equals(field.path("name").textValue()))
+				return field.path("value").isNull() ? null : field.path("value").asText();
+		return "no such property";
+	}
+
+	@Test
+	public void testSaveToMatterCarriesThePropertiesTheEmailWasFiledWith() throws Exception {
+		Document email = fileWithComments("From the email");
+		String token = signIn(clerk);
+
+		ApiResponse saved = post(path(email, "/attachments/0/file")).token(token).send();
+
+		assertEquals(saved.toString(), 201, saved.status());
+		assertEquals("From the email", propertyOf(saved.json().path("docNumber").asLong(), "comments", token));
+		// The email's own fields stay the email's
+		assertNull(propertyOf(saved.json().path("docNumber").asLong(), "emailsubject", token));
+	}
+
+	@Test
+	public void testPropertiesSentWinOverTheEmails() throws Exception {
+		Document email = fileWithComments("From the email");
+		String token = signIn(clerk);
+
+		ApiResponse saved = post(path(email, "/attachments/0/file")).token(token)
+				.json("{\"properties\":{\"comments\":\"Sent\"}}").send();
+
+		assertEquals(saved.toString(), 201, saved.status());
+		assertEquals("Sent", propertyOf(saved.json().path("docNumber").asLong(), "comments", token));
+	}
+
+	@Test
+	public void testTwoAttachmentsOfOneNameAndDifferentSizesAreTold() throws Exception {
+		Document email = fileBytes("same.eml", emailWith("Agreement.txt", "short", "Agreement.txt", "a much longer one"));
+		String token = signIn(clerk);
+
+		ApiResponse second = post(path(email, "/attachments/1/file")).token(token).send();
+
+		assertEquals(second.toString(), 201, second.status());
+		JsonNode attachments = get(path(email, "")).token(token).send().json().path("attachments");
+		assertEquals(2, attachments.size());
+		assertTrue(attachments.get(0).path("docNumber").isNull());
+		assertEquals(second.json().path("docNumber").asLong(), attachments.get(1).path("docNumber").asLong());
+		// The other can still be saved, and then both show their own #
+		ApiResponse first = post(path(email, "/attachments/0/file")).token(token).send();
+		assertEquals(first.toString(), 201, first.status());
+		attachments = get(path(email, "")).token(token).send().json().path("attachments");
+		assertEquals(first.json().path("docNumber").asLong(), attachments.get(0).path("docNumber").asLong());
+		assertEquals(second.json().path("docNumber").asLong(), attachments.get(1).path("docNumber").asLong());
+	}
+
+	@Test
+	public void testTwoIdenticalAttachmentsAreToldByOccurrence() throws Exception {
+		Document email = fileBytes("twins.eml", emailWith("Agreement.txt", "same", "Agreement.txt", "same"));
+		String token = signIn(clerk);
+
+		ApiResponse one = post(path(email, "/attachments/0/file")).token(token).send();
+
+		assertEquals(one.toString(), 201, one.status());
+		JsonNode attachments = get(path(email, "")).token(token).send().json().path("attachments");
+		int filed = 0;
+		for (JsonNode attachment : attachments)
+			if (!attachment.path("docNumber").isNull())
+				filed++;
+		assertEquals(1, filed);
+		ApiResponse other = post(path(email, "/attachments/1/file")).token(token).send();
+		assertEquals(other.toString(), 201, other.status());
+		attachments = get(path(email, "")).token(token).send().json().path("attachments");
+		assertFalse(attachments.get(0).path("docNumber").isNull());
+		assertFalse(attachments.get(1).path("docNumber").isNull());
+		assertNotEquals(attachments.get(0).path("docNumber").asLong(), attachments.get(1).path("docNumber").asLong());
+	}
+
+	@Test
+	public void testTheBodyAsksForNoReferrer() throws Exception {
+		Document email = file("body-hostile.eml");
+
+		ApiResponse response = get(path(email, "/body?pictures=true")).token(signIn(clerk)).send();
+
+		assertEquals("no-referrer", response.header("Referrer-Policy"));
+	}
+
+	@Test
+	public void testAnInlinePartIsNotAnAttachmentForAnyRoute() throws Exception {
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+
+		// Part 0 is the logo the body shows: /message doesn't list it, so nothing else serves it
+		assertEquals(404, get(path(email, "/parts/0")).token(token).send().status());
+		assertEquals(404, get(path(email, "/parts/0?inline=true")).token(token).send().status());
+		assertEquals(404, post(path(email, "/attachments/0/file")).token(token).send().status());
+	}
+
+	@Test
+	public void testAReadOnlyUserMayNotReadTheMessageOrItsBody() throws Exception {
+		Document email = file("parts-attached.eml");
+		String token = signIn(reader);
+
+		assertEquals(403, get(path(email, "")).token(token).send().status());
+		assertEquals(403, get(path(email, "/body")).token(token).send().status());
+	}
+
+	@Test
+	public void testAPasswordProtectedEmailIsRefused() throws Exception {
+		Document email = file("parts-attached.eml");
+		com.logicaldoc.core.document.DocumentHistory history = fx.documentHistory(fx.admin());
+		history.setEvent(com.logicaldoc.core.document.DocumentEvent.CHANGED);
+		DocumentDAO.get().setPassword(email.getId(), "S3cret-pw!", history);
+		String token = signIn(clerk);
+
+		assertEquals(403, get(path(email, "")).token(token).send().status());
+		assertEquals(403, get(path(email, "/body")).token(token).send().status());
+		assertEquals(403, get(path(email, "/parts/1")).token(token).send().status());
+	}
+
+	@Test
+	public void testHeadOnAPartRecordsNothingAndSendsNoBody() throws Exception {
+		Document email = file("parts-attached.eml");
+
+		ApiResponse response = head(path(email, "/parts/1")).token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(Integer.toString(PDF.length()), response.header("Content-Length"));
+		assertEquals(0, response.body().length);
+		assertEquals(0, downloads());
+	}
+
+	@Test
+	public void testAPartLeavesNoTemporaryFileBehind() throws Exception {
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+		java.util.List<String> before = uploadFiles();
+
+		assertEquals(200, get(path(email, "/parts/1")).token(token).send().status());
+		assertEquals(201, post(path(email, "/attachments/1/file")).token(token).send().status());
+		assertEquals(200, head(path(email, "/parts/1")).token(token).send().status());
+
+		assertEquals(before, uploadFiles());
+	}
+
+	@Test
+	public void testSaveToMatterOfAnAttachmentOfAMsg() throws Exception {
+		Document email = file("test.msg");
+
+		ApiResponse response = post(path(email, "/attachments/0/file")).token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 201, response.status());
+		assertEquals("Bestellu.pdf", response.json().path("name").textValue());
+	}
+
+	@Test
+	public void testAFailureAfterTheLinkTakesTheFilingBack() throws Exception {
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+		MessageResource.afterLinked = copy -> {
+			throw new IllegalStateException("The answer couldn't be made");
+		};
+		try {
+			ApiResponse response = post(path(email, "/attachments/1/file")).token(token).send();
+			assertEquals(response.toString(), 500, response.status());
+		} finally {
+			MessageResource.afterLinked = null;
+		}
+
+		assertEquals(0, DocumentLinkDAO.get().findByDocId(email.getId(), "attachment").size());
+		JsonNode attachments = get(path(email, "")).token(token).send().json().path("attachments");
+		assertTrue(attachments.get(0).path("docNumber").isNull());
+		assertEquals(0, jdbc().queryForObject(
+				"select count(*) from ld_document where ld_filename = 'Contract.pdf' and ld_deleted = 0", Integer.class)
+				.intValue());
 	}
 }

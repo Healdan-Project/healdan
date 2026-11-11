@@ -19,7 +19,10 @@ import type { PreviewProps, PreviewSource } from './types'
 
 type Attachment = components['schemas']['MessageView']['attachments'][number]
 
-/** What an attachment can be shown as in place (R56): a PDF or a picture; the server says no for anything else */
+/**
+ * What an attachment can be shown as in place (R56): a PDF or a picture; the server says no for anything else. This mirrors the
+ * server's rule (`MediaTypes.isImage`), which the app can't share, and the server has the last word.
+ */
 function shownAs(attachment: Attachment): 'pdf' | 'picture' | undefined {
   if (attachment.type === 'application/pdf') return 'pdf'
   return /^image\/[a-z0-9][a-z0-9.+-]*$/.test(attachment.type) ? 'picture' : undefined
@@ -39,7 +42,7 @@ function Detail({ label, value }: { label: string; value: string | null }) {
  * One attachment: its name and size, which previews a PDF or a picture in place and downloads anything else, and Save to
  * Matter, or the # it was filed as.
  */
-function Chip({ attachment, docNumber, onPreview }: { attachment: Attachment; docNumber: number; onPreview: () => void }) {
+function Chip({ attachment, docNumber, folderId, canOpen, onPreview }: { attachment: Attachment; docNumber: number; folderId: number; canOpen: boolean; onPreview: () => void }) {
   const api = useApi()
   const queryClient = useQueryClient()
   const [saving, setSaving] = useState(false)
@@ -57,6 +60,7 @@ function Chip({ attachment, docNumber, onPreview }: { attachment: Attachment; do
       await api.send('POST', apiPath`/v1/documents/${docNumber}/message/attachments/${attachment.index}/file`)
       // The chip's # comes with the message, and the new document with its folder
       await queryClient.invalidateQueries({ queryKey: keys.document(docNumber) })
+      await queryClient.invalidateQueries({ queryKey: keys.folder(folderId) })
       await queryClient.invalidateQueries({ queryKey: keys.recentDocuments })
     } catch (error) {
       // Filed already is the matter's rule speaking: the message is read again, which shows the copy if it is this email's
@@ -73,6 +77,11 @@ function Chip({ attachment, docNumber, onPreview }: { attachment: Attachment; do
         <button type="button" className={styles.chipMain} aria-label={t('email.previewAttachment', { name: attachment.name })} onClick={onPreview}>
           {label}
         </button>
+      ) : !canOpen ? (
+        // The person may preview the email but not download it, which the server would refuse
+        <button type="button" className={styles.chipMain} disabled aria-label={t('email.downloadAttachment', { name: attachment.name })}>
+          {label}
+        </button>
       ) : (
         // A plain link to the attachment: the web session carries it, and the server records the download
         <a className={styles.chipMain} href={api.url(apiPath`/v1/documents/${docNumber}/message/parts/${attachment.index}`)} download={attachment.name} aria-label={t('email.downloadAttachment', { name: attachment.name })}>
@@ -83,7 +92,7 @@ function Chip({ attachment, docNumber, onPreview }: { attachment: Attachment; do
       {attachment.docNumber !== null ? (
         <span className={styles.saved}>{t('email.saved', { n: attachment.docNumber })}</span>
       ) : (
-        <Button variant="quiet" aria-label={t('email.saveAttachment', { name: attachment.name })} isDisabled={saving} onPress={() => void saveToMatter()}>
+        <Button variant="quiet" aria-label={t('email.saveAttachment', { name: attachment.name })} isDisabled={saving || !canOpen} onPress={() => void saveToMatter()}>
           {t('email.saveToMatter')}
         </Button>
       )}
@@ -120,6 +129,7 @@ export function EmailView({ document, showActions }: PreviewProps) {
     path: apiPath`/v1/documents/${document.docNumber}/message/parts/${viewing.index}`,
     query: { inline: 'true' },
     name: viewing.name,
+    key: document.fileVersion,
   }
 
   return (
@@ -138,7 +148,7 @@ export function EmailView({ document, showActions }: PreviewProps) {
         {attachments.length > 0 && (
           <ul className={styles.chips} aria-label={t('email.attachments')}>
             {attachments.map((attachment) => (
-              <Chip key={attachment.index} attachment={attachment} docNumber={document.docNumber} onPreview={() => setViewing(attachment)} />
+              <Chip key={attachment.index} attachment={attachment} docNumber={document.docNumber} folderId={document.folder.id} canOpen={document.canOpen} onPreview={() => setViewing(attachment)} />
             ))}
           </ul>
         )}

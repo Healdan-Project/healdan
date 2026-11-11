@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { formatDateTime } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
@@ -180,6 +181,35 @@ describe('EmailView', () => {
     renderPreview(<EmailView document={mail} />, { [message]: problem(503, 'storage-unreachable') })
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Try Again' })).toBeTruthy())
+  })
+
+  it('offers no download and no Save to Matter to someone who may not download the email', async () => {
+    renderPreview(<EmailView document={{ ...mail, canOpen: false }} />, { [message]: messageView() })
+
+    await screen.findByRole('list', { name: 'Attachments' })
+    expect(screen.queryByRole('link', { name: 'Download Schedule.xlsx' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Download Schedule.xlsx' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Save to Matter: Contract.pdf' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('reads an attachment again when the email has a new version', async () => {
+    function Versions() {
+      const [version, setVersion] = useState('1.0')
+      return (
+        <>
+          <button onClick={() => setVersion('1.1')}>Next Version</button>
+          <EmailView document={{ ...mail, fileVersion: version }} />
+        </>
+      )
+    }
+    const { api } = renderPreview(<Versions />, { [message]: messageView(), [part]: () => pdfResponse() })
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview Contract.pdf' }))
+    await screen.findByText('Page 1 of 3')
+    expect(api.callsTo(part)).toHaveLength(1)
+
+    // The same attachment, in the next version of the email, is not the bytes kept for the old one
+    fireEvent.click(screen.getByRole('button', { name: 'Next Version' }))
+    await waitFor(() => expect(api.callsTo(part)).toHaveLength(2))
   })
 
   it('passes axe', async () => {

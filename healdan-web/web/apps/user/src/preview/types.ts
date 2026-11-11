@@ -9,6 +9,8 @@ export interface PreviewSource {
   query?: Record<string, string | undefined>
   /** What it is called, for a picture's description; the document's name by default */
   name?: string
+  /** What changes when the same address has other bytes, such as the email's file version for its attachment */
+  key?: string
 }
 
 /** What every view of a document's preview takes */

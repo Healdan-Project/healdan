@@ -642,7 +642,7 @@ password.
 | `GET /documents/{docNumber}/message` | The subject, From, To, Cc, Sent and Received, the attachments (`index`, `name`, `type`, `size`, `message`, and the `docNumber` of a document already filed from it that the caller can read), and the `body` address. Pictures the body shows aren't attachments |
 | `GET /documents/{docNumber}/message/body?pictures=` | The body as a page of its own, `text/html;charset=utf-8` |
 | `GET /documents/{docNumber}/message/parts/{id}` | An attachment, by its `index`, as a download: `Content-Disposition: attachment`, recorded as a download of the email. With `?inline=true`, a PDF or a picture to show in place, under Preview, recorded as nothing; any other type is `404 no-preview` |
-| `POST /documents/{docNumber}/message/attachments/{id}/file` | Save to Matter: files the attachment in the email's folder as a document of its own, linked to the email as `attachment`, as `POST /emails` does. An optional JSON body, `{"properties": {…}}`, as `POST /documents` takes them. `201`; saving it again files another copy, but an attached message the matter holds is `409 already-filed` with the copy |
+| `POST /documents/{docNumber}/message/attachments/{id}/file` | Save to Matter: files the attachment in the email's folder as a document of its own, linked to the email as `attachment`, as `POST /emails` does. It takes the properties the email was filed with (its own values of the properties that can be changed, without the email fields and the legacy doc #), and an optional JSON body, `{"properties": {…}}`, as `POST /documents` takes them, is laid over them. `201`; saving it again files another copy, but an attached message the matter holds is `409 already-filed` with the copy |
 
 The body page is cleaned by the server: no script, event handler, form, `object`, `embed`, `iframe`, `base` or meta
 refresh, no link but `http`, `https` and `mailto` (each opening in a new window, `noopener noreferrer`), and styles
@@ -656,7 +656,7 @@ a frame's address. Every answer that serves stored bytes inline, an attachment w
 `/preview`, carries `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox`, so going to one directly
 runs no script.
 
-An `.msg` is read through CE's reader into the same views. It keeps no Content-IDs, so every file in it is an
+`/message` pairs each attachment with the document filed from it by the name and size it was filed with (CE numbers a second file of one name, `Name(1).ext`), then by order for identical ones, so two attachments of one name are told apart. The body's answer is `Referrer-Policy: no-referrer`. An inline part (one the body shows) isn't an attachment: `/parts` and Save to Matter answer `404` for it, as `/message` doesn't list it. An `.msg` is read through CE's reader into the same views. It keeps no Content-IDs, so every file in it is an
 attachment and a `cid:` picture in its HTML shows as a placeholder.
 
 ## Doc IDs in Word and LibreOffice Files

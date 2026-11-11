@@ -1187,6 +1187,11 @@ paths:
         `GET` that changes nothing, so the web session may ask for it as a
         frame's address.
 
+        The answer is also `Referrer-Policy: no-referrer`, and so is the page's
+        own meta tag, so a picture loaded with `pictures=true` doesn't tell
+        its host which server the message is on. A signed (S/MIME) message
+        shows its content as any other does; an encrypted one has no body.
+
         The checks are those of `getDocumentMessage`.
       tags: [Emails]
       parameters:
@@ -1298,8 +1303,11 @@ paths:
       summary: Save an attachment to the matter
       description: |
         Files an attachment of a filed email as a document of its own: in the
-        email's folder, with its own doc #, taking the properties sent (the
-        folder's are inherited for any left out), and linked to the email as
+        email's folder, with its own doc #, taking the properties the email
+        was filed with (its own values of the properties that can be changed,
+        not its email fields or its legacy doc #), then the properties sent,
+        which win; the folder's are inherited for any left out. It is linked
+        to the email as
         `attachment`, as filing from Outlook does. Filing it again files
         another copy, as any upload does; an attached message the email's
         matter already holds is `409 already-filed` with the copy as
@@ -3455,7 +3463,8 @@ components:
           type: [object, 'null']
           description: |
             Values for the properties, by name, as `NewDocument.properties`
-            takes them. A property left out inherits from the folder.
+            takes them. They are laid over the properties the email was filed
+            with, which the attachment takes unless one is sent.
           additionalProperties:
             $ref: '#/components/schemas/PropertyValue'
     NewEmail:

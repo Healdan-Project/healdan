@@ -24,6 +24,9 @@ An `.msg` file reads the same way, with two differences. Its **Received** is its
 And Healdan can't tell its inline pictures from its attachments, so a picture the message shows shows as
 "[Picture not shown]" in the body, and the file is among the attachments.
 
+A message that is signed shows its body and attachments as any other does. One that is encrypted has no body to show:
+the page says so, and its attachments aren't listed.
+
 ### Pictures from the Internet
 
 Pictures that the message fetches from the internet are blocked: "Pictures from the internet are blocked." is
@@ -36,14 +39,16 @@ Pictures sent inside the message always show, up to 2 MB of them in all. Any mor
 ### Save to Matter
 
 **Save to Matter** on an attachment's chip files it as a document of its own, in the same folder as the email,
-with its own doc #. It takes the folder's properties, as any upload does, and Healdan links it to the email, as it
-does when you file email from Outlook. The chip then says **Saved as # 10412**, as it does when you open an email
+with its own doc #. It takes the properties you filed the email with, so a property you filled in applies to it
+too (the email's own From, To, Subject and dates stay the email's, and so does its legacy doc #), and otherwise the
+folder's, as any upload does. Healdan links it to the email, as it does when you file email from Outlook. The chip then says **Saved as # 10412**, as it does when you open an email
 whose attachment was filed already.
 
 - **You need to be able to write to the folder,** and to download the email.
 - **Saving it again files another copy,** as uploading a file twice does, but a message attached to the email can
   be in the matter only once: saving one the matter holds already is refused, naming the copy it holds.
-- **A message that is encrypted** has no body to show: the page says so, and its attachments aren't listed.
+- **Two attachments with the same name** are told apart by their size, and then by the order they were saved in, so
+  saving one doesn't mark the other as saved.
 
 ## What Healdan Reads from It
 

@@ -263,4 +263,70 @@ public class EmailBodyTest {
 		assertTrue(html, html.contains("Hi"));
 		assertTrue(html, html.contains("Inline"));
 	}
+
+	private static String emlOf(String html) {
+		return "From: a@example.com\nSubject: Styled\nMIME-Version: 1.0\nContent-Type: text/html; charset=utf-8\n\n" + html;
+	}
+
+	@Test
+	public void testAnUnclosedUrlInAStyleAttributeKeepsNoAddress() throws Exception {
+		for (boolean pictures : new boolean[] { false, true }) {
+			String html = EmailBody.clean(parse(emlOf(
+					"<p style=\"color: red; background:url(https://tracker.invalid/p.gif\">Styled</p>").getBytes(
+							StandardCharsets.UTF_8)), pictures);
+			assertFalse(html, html.contains("tracker.invalid"));
+		}
+	}
+
+	@Test
+	public void testAnUnclosedUrlEndingAStyleElementKeepsNoAddress() throws Exception {
+		String html = EmailBody.clean(parse(emlOf(
+				"<html><head><style>p { color: red } div { background: url(https://tracker.invalid/x</style></head>"
+						+ "<body><p>Hi</p></body></html>").getBytes(StandardCharsets.UTF_8)), false);
+
+		assertFalse(html, html.contains("tracker.invalid"));
+	}
+
+	@Test
+	public void testHeadStylesKeepTheirOrder() throws Exception {
+		String html = EmailBody.clean(parse(emlOf("<html><head><style>.a{color:red}</style><style>.b{color:blue}</style>"
+				+ "<style>.c{color:green}</style></head><body><p>Hi</p></body></html>").getBytes(StandardCharsets.UTF_8)),
+				false);
+
+		assertTrue(html, html.indexOf(".a{") < html.indexOf(".b{"));
+		assertTrue(html, html.indexOf(".b{") < html.indexOf(".c{"));
+	}
+
+	@Test
+	public void testAnFtpLinkHasNoHref() throws Exception {
+		Document page = page(EmailBody.clean(parse(emlOf("<a href=\"ftp://files.example.com/a\">ftp</a>"
+				+ "<a href=\"https://example.com/\">web</a>").getBytes(StandardCharsets.UTF_8)), false));
+
+		assertFalse(page.selectFirst("a:containsOwn(ftp)").hasAttr("href"));
+		assertTrue(page.selectFirst("a:containsOwn(web)").hasAttr("href"));
+	}
+
+	@Test
+	public void testThePageSendsNoReferrer() throws Exception {
+		Document page = page(EmailBody.clean(fixture(), true));
+
+		assertEquals("no-referrer", page.selectFirst("meta[name=referrer]").attr("content"));
+	}
+
+	@Test
+	public void testAnOpaqueSignedMessageShowsItsBody() throws Exception {
+		byte[] entity = "Content-Type: text/html; charset=utf-8\r\n\r\n<p>The signed body</p>"
+				.getBytes(StandardCharsets.US_ASCII);
+		byte[] signature = new org.bouncycastle.cms.CMSSignedDataGenerator()
+				.generate(new org.bouncycastle.cms.CMSProcessableByteArray(entity), true).getEncoded();
+		java.io.ByteArrayOutputStream eml = new java.io.ByteArrayOutputStream();
+		eml.writeBytes(("From: a@example.com\r\nSubject: Signed\r\nMIME-Version: 1.0\r\n"
+				+ "Content-Type: application/pkcs7-mime; smime-type=signed-data; name=\"smime.p7m\"\r\n"
+				+ "Content-Transfer-Encoding: binary\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+		eml.writeBytes(signature);
+
+		Document page = page(EmailBody.clean(parse(eml.toByteArray()), false));
+
+		assertEquals("The signed body", page.selectFirst("p").text());
+	}
 }

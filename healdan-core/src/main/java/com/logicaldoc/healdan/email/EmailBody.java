@@ -8,8 +8,10 @@ import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -87,7 +89,7 @@ public final class EmailBody {
 	private static final Pattern CSS_DANGER = Pattern.compile("(?i)expression\\s*\\(|javascript:|-moz-binding"
 			+ "|behavior\\s*:|image-set\\s*\\(|\\bsrc\\s*\\(");
 
-	private static final Pattern IMAGE_TYPE = Pattern.compile("image/[a-z0-9][a-z0-9.+-]*");
+	private static final Pattern CSS_OPEN_URL = Pattern.compile("(?i)url\\s*\\(");
 
 	private EmailBody() {
 	}
@@ -109,7 +111,7 @@ public final class EmailBody {
 	public static String clean(MimeMessage message, boolean pictures) {
 		Bodies bodies = new Bodies();
 		try {
-			bodies.visit(message, 0);
+			bodies.visit(message, 0, 0);
 			if (bodies.html != null)
 				return page(html(text(bodies.html)), bodies.images, pictures);
 			if (bodies.plain != null)
@@ -146,18 +148,24 @@ public final class EmailBody {
 		/** Pictures by Content-ID: lower case, without brackets */
 		final Map<String, jakarta.mail.Part> images = new HashMap<>();
 
-		void visit(jakarta.mail.Part part, int depth) throws MessagingException, IOException {
+		void visit(jakarta.mail.Part part, int depth, int signed) throws MessagingException, IOException {
 			if (depth > MAX_DEPTH)
 				throw new MessagingException("Nested too deeply");
+			if (MessageParts.opaqueSigned(part)) {
+				// Opaque-signed S/MIME wraps the message's content, which the attachments' walk unwraps too
+				if (signed < MessageParts.MAX_SIGNED_LAYERS)
+					visit(MessageParts.signedContent(part), depth + 1, signed + 1);
+				return;
+			}
 			if (part.isMimeType("multipart/signed")) {
 				// The content is the first part, and the signature the second
-				Multipart signed = multipart(part);
-				if (signed.getCount() > 0)
-					visit(signed.getBodyPart(0), depth + 1);
+				Multipart content = multipart(part);
+				if (content.getCount() > 0)
+					visit(content.getBodyPart(0), depth + 1, signed);
 			} else if (part.isMimeType("multipart/*")) {
 				Multipart multipart = multipart(part);
 				for (int i = 0; i < multipart.getCount(); i++)
-					visit(multipart.getBodyPart(i), depth + 1);
+					visit(multipart.getBodyPart(i), depth + 1, signed);
 			} else if (part.isMimeType("message/rfc822")) {
 				// An attached message isn't this one's body
 				return;
@@ -248,10 +256,8 @@ public final class EmailBody {
 			if (part == null)
 				return null;
 			try {
-				String type = part.getContentType();
-				int semicolon = type.indexOf(';');
-				type = (semicolon < 0 ? type : type.substring(0, semicolon)).strip().toLowerCase(Locale.ROOT);
-				if (!IMAGE_TYPE.matcher(type).matches())
+				String type = MediaTypes.base(part.getContentType());
+				if (!MediaTypes.isImage(type))
 					return null;
 				byte[] bytes;
 				try (InputStream in = part.getInputStream()) {
@@ -279,6 +285,8 @@ public final class EmailBody {
 		Document page = Document.createShell("");
 		page.outputSettings().prettyPrint(false);
 		page.head().appendElement("meta").attr("charset", "UTF-8");
+		// So that a picture loaded with Show Pictures doesn't tell its host which server the message is on
+		page.head().appendElement("meta").attr("name", "referrer").attr("content", "no-referrer");
 		page.head().appendElement("style").appendText(PAGE_STYLE);
 		page.body().replaceWith(body);
 		return "<!DOCTYPE html>\n" + page.html();
@@ -287,8 +295,9 @@ public final class EmailBody {
 	private static Element clean(String markup, Embedding embedding) {
 		Document dirty = Jsoup.parse(markup);
 		// The cleaner reads the body alone, and a newsletter's styles are in its head
-		for (Element style : dirty.head().select("style"))
-			dirty.body().prependChild(style);
+		List<Element> heads = new ArrayList<>(dirty.head().select("style"));
+		for (int i = heads.size() - 1; i >= 0; i--)
+			dirty.body().prependChild(heads.get(i));
 		Document cleaned = new Cleaner(safelist()).clean(dirty);
 		Element body = cleaned.body();
 
@@ -319,6 +328,7 @@ public final class EmailBody {
 		safelist.addAttributes("font", "face", "size", "color");
 		safelist.addAttributes("img", "border", "hspace", "vspace");
 		safelist.addProtocols("img", "src", "cid", "data");
+		safelist.removeProtocols("a", "href", "ftp");
 		return safelist;
 	}
 
@@ -367,14 +377,24 @@ public final class EmailBody {
 		String plain = CSS_FETCH.matcher(css.replaceAll("(?s)/\\*.*?\\*/", "")).replaceAll("");
 		if (CSS_DANGER.matcher(plain).find())
 			return "";
+		Matcher open = CSS_OPEN_URL.matcher(plain);
+		int opened = 0;
+		while (open.find())
+			opened++;
 		Matcher url = CSS_URL.matcher(plain);
 		StringBuilder out = new StringBuilder();
+		int closed = 0;
 		while (url.find()) {
+			closed++;
 			String target = url.group(2).strip().toLowerCase(Locale.ROOT);
 			boolean keep = target.startsWith("data:image/") || (pictures && target.startsWith("https://"));
 			url.appendReplacement(out, Matcher.quoteReplacement(keep ? url.group() : "none"));
 		}
 		url.appendTail(out);
+		// A url( the loop didn't match: unclosed, which CSS reads to the end of the text as one address, or one inside
+		// another's. The CSS goes whole
+		if (opened != closed)
+			return "";
 		// No "<": the text sits in a style element, which only a closing tag can end
 		return out.toString().replace("<", "");
 	}

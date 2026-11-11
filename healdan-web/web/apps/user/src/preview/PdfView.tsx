@@ -56,7 +56,7 @@ export function PdfView({ document, version, showActions, source }: PreviewProps
   const preview = useQuery({
     // An address, which includes the version asked for; the document's current file is named by its file version, so a
     // new one is a new key
-    queryKey: ['preview', 'pdf', from.path, from.query ?? null, source ? null : document.fileVersion],
+    queryKey: ['preview', 'pdf', from.path, from.query ?? null, source ? (source.key ?? null) : document.fileVersion],
     queryFn: ({ signal }) => fetchPreview(api, from, signal),
     // A conversion that isn't made yet: asked again as the server said, for as long as this is on screen
     refetchInterval: (query) => (query.state.data?.kind === 'pending' ? query.state.data.retryMs : false),

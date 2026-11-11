@@ -402,9 +402,8 @@ public class DocumentResource {
 					.ok(body, picture ? MimeType.getByFilename(asked.fileName()) : PDF)
 					.header(HttpHeaders.CONTENT_LENGTH, size).header(HttpHeaders.CONTENT_DISPOSITION, "inline");
 			if (picture)
-				// Its own bytes, served inline: a top-level visit to an SVG, say, must run no script
-				response.header("X-Content-Type-Options", "nosniff").header("Content-Security-Policy",
-						MessageResource.SANDBOX);
+				// Its own bytes, served inline
+				InlineHeaders.apply(response);
 			return response.build();
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read the preview of document #" + docNumber, e);

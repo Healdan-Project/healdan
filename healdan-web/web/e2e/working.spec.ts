@@ -12,6 +12,8 @@ const RUN = `wrk${Date.now().toString(36)}`
 const PDF_NAME = `Quick Look ${RUN}.pdf`
 const SUBJECT = `Quick Look email ${RUN}`
 const ATTACHMENT_NAME = `Report ${RUN}.pdf`
+// No spaces: WebKit suggests underscores for them
+const TEXT_NAME = `Schedule-${RUN}.txt`
 // Hosts under .invalid never resolve: the test answers for them, and counts what reaches them
 const TRACKER = 'https://tracker.invalid/pixel.gif'
 const LINK = `https://link.invalid/report-${RUN}`
@@ -40,6 +42,12 @@ function trackingEmail(): Buffer {
     `Content-Disposition: attachment; filename="${ATTACHMENT_NAME}"`,
     '',
     pdf,
+    '',
+    '--=_mixed',
+    'Content-Type: text/plain; charset="utf-8"',
+    `Content-Disposition: attachment; filename="${TEXT_NAME}"`,
+    '',
+    `The schedule of ${RUN}`,
     '',
     '--=_mixed--',
     '',
@@ -178,6 +186,10 @@ test('Quick Look shows an email as a message, with the sender\'s picture blocked
   expect(await popup.evaluate(() => window.opener)).toBeNull()
   expect(links).toContain(LINK)
   await popup.close()
+
+  // A chip that isn't a PDF or a picture downloads, through the web session as a navigation, under its own name
+  const [download] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('link', { name: `Download ${TEXT_NAME}` }).click()])
+  expect(download.suggestedFilename()).toBe(TEXT_NAME)
 
   // The attachment is a chip: Save to Matter files it as a document of its own, whose # the chip then shows
   await expect(dialog.getByRole('button', { name: `Preview ${ATTACHMENT_NAME}` })).toBeVisible()

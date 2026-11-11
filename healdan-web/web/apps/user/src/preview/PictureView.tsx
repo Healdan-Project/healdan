@@ -56,7 +56,7 @@ export function PictureView({ document, version, showActions, source: given }: P
   const api = useApi()
   const from = given ?? previewSource(document, version)
   const picture = useQuery({
-    queryKey: ['preview', 'picture', from.path, from.query ?? null, given ? null : document.fileVersion],
+    queryKey: ['preview', 'picture', from.path, from.query ?? null, given ? (given.key ?? null) : document.fileVersion],
     queryFn: async ({ signal }) => (await api.getResponse(from.path, from.query, { signal })).blob(),
     refetchOnWindowFocus: false,
     staleTime: Infinity,
