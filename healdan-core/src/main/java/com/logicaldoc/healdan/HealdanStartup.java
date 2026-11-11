@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.core.parser.ParserFactory;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.healdan.db.HealdanMigrator;
 import com.logicaldoc.healdan.db.HealdanMigrator.Status;
@@ -24,7 +25,8 @@ import jakarta.annotation.PostConstruct;
  * Prepares Healdan's data when the Spring context starts: first the schema, then the seeds,
  * then the listeners that need what the seeds made. A failure throws
  * {@link HealdanStartupException} and stops the startup. At a real start it
- * then starts the workers and tells each {@link HealdanStartListener}.
+ * then fills LogicalDOC's parsers, starts the workers and tells each
+ * {@link HealdanStartListener}.
  * <p>
  * A start listener is the exception: one that fails is logged and the start
  * goes on. The data is migrated and seeded by then, and stopping the webapp
@@ -63,16 +65,37 @@ public class HealdanStartup {
 	/*
 	 * The workers and the start listeners start only when the migrations and
 	 * seeds ran. Tests build the context before the schema exists, so for them
-	 * run() returns false and no thread starts.
+	 * run() returns false, no thread starts and the parsers fill on first use,
+	 * as in CE.
 	 */
 	@PostConstruct
 	void start() {
 		if (run()) {
+			fillParsers();
 			previewWorker.start();
 			emailIndexWorker.start();
 			for (HealdanStartListener listener : Context.get().getBeansOfType(HealdanStartListener.class))
 				started(listener);
 		}
+	}
+
+	/**
+	 * Fills CE's {@link ParserFactory} once, on the starting thread, before any thread can parse: the
+	 * workers start next, CE's scheduler (and with it the Indexer) once the Spring context has started, and
+	 * requests once Tomcat has deployed the webapp. Every plugin is registered by now, as CE's
+	 * {@code ApplicationListener} loads them before the Spring context starts, so the factory holds
+	 * Healdan's parsers too.
+	 * <p>
+	 * CE fills the factory on first use instead: {@code getParser} calls {@code init()} whenever its plain
+	 * {@code HashMap} is empty. After a start the Indexer's two threads make that first call at the same
+	 * moment, and two {@code init()}s at once can leave the map without some extensions for good. Without
+	 * {@code pdf}, CE's {@code CatchAllParser} converts a PDF to PDF and asks for a parser again, each time
+	 * on a new thread that waits for the next, until the JVM can start no more threads. Once filled, the map
+	 * is never empty again, so CE never calls {@code init()} again and only reads it.
+	 */
+	private static void fillParsers() {
+		ParserFactory.init();
+		log.info("Filled LogicalDOC's parsers for {} extensions", ParserFactory.getExtensions().size());
 	}
 
 	/**

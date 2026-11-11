@@ -150,6 +150,14 @@ learn from.
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a
   new default ships as a new step.
+- **LogicalDOC's parsers are filled at the start.** LogicalDOC fills its `ParserFactory` the first time something
+  parses, and two threads doing that at once, as the Indexer's two do after a start, can leave it without some file
+  types for good. Without `pdf`, its `CatchAllParser` converts a PDF to PDF and asks for a parser again, each time on
+  a new thread that waits for the next, until the server can start no more threads. So at a real start, after the
+  setup steps and before its workers start, `HealdanStartup.start()` fills the factory once, with every plugin's
+  parsers. LogicalDOC's scheduler, and with it the Indexer, starts only once the Spring context has started, and
+  requests come only once Tomcat has deployed the webapp. A filled factory is never empty again, so LogicalDOC never
+  fills it again. `HealdanStartupParsersTest` checks it.
 - **`HealdanHooks`** in `logicaldoc-core` lets the few places in LogicalDOC that write without telling its
   listeners ask Healdan first. Every refusal throws `HealdanVetoException`, which the document and folder DAOs roll
   back on.
