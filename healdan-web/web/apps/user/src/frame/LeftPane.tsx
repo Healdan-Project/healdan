@@ -4,12 +4,12 @@
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useId, useState, type ReactNode } from 'react'
-import { apiPath, type Api, type components } from '@healdan/api'
+import { apiPath, type components } from '@healdan/api'
 import { Button, Icon, Menu, MenuItem, Tree, t, toast, type IconName, type TreeNode } from '@healdan/ui'
-import { placeOf, takesDrag, type Place } from '../filing/dropTargets'
+import { carriesRows, placeOf, takesDrag, type Place } from '../filing/dropTargets'
 import { useFiling } from '../filing/FilingProvider'
-import { idFrom, keys, useFavorites, useFolder, useMyMatters, useRecentMatters } from '../queries'
-import type { PageOf } from '../pages'
+import { useOrganising } from '../organising/OrganisingProvider'
+import { fetchSubfolders, idFrom, keys, useFavorites, useFolder, useMyMatters, useRecentMatters } from '../queries'
 import { useApi } from '../services'
 import { recentKinds } from '../search/scopes'
 import { ErrorPanel } from './ErrorPanel'
@@ -131,23 +131,6 @@ function RecentMattersSection() {
   )
 }
 
-// The API gives at most 200 children at a time (50 unless asked), so a folder with more is read page by page.
-const PAGE = 200
-
-async function subfolders(api: Api, id: string): Promise<S['FolderView'][]> {
-  const all: S['FolderView'][] = []
-  for (let offset = 0; ; ) {
-    const page = await api.get<PageOf<S['FolderView'] | S['DocumentView']>>(`/v1/folders/${encodeURIComponent(id)}/children`, {
-      type: 'folder',
-      limit: PAGE,
-      offset,
-    })
-    all.push(...page.items.filter((item): item is S['FolderView'] => item.type === 'folder'))
-    offset += page.items.length
-    if (page.items.length < PAGE || (page.total != null && offset >= page.total)) return all
-  }
-}
-
 function folderLabel(folder: S['FolderView']): ReactNode {
   const icon: IconName = folder.kind === 'searchFolder' ? 'folderSearch' : 'folder'
   return (
@@ -165,6 +148,7 @@ function MyMattersSection() {
   const mine = useMyMatters()
   const change = useMyMattersChange()
   const filing = useFiling()
+  const organising = useOrganising()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const matters = mine.data?.items ?? []
 
@@ -188,7 +172,7 @@ function MyMattersSection() {
   const loaded = useQueries({
     queries: open.map((id) => ({
       queryKey: keys.subfolders(Number(id)),
-      queryFn: () => subfolders(api, id),
+      queryFn: () => fetchSubfolders(api, id),
     })),
   })
   const answers = new Map(open.map((id, i) => [id, loaded[i]]))
@@ -261,10 +245,13 @@ function MyMattersSection() {
           expanded={expanded}
           onExpandedChange={setExpanded}
           current={currentFolder(pathname)}
-          acceptsDrop={(id, types) => places.has(id) && takesDrag(types)}
+          // Files are filed into the folder, and the list's own rows are moved there; both light the folder up
+          acceptsDrop={(id, types) => places.has(id) && (takesDrag(types) || carriesRows(types))}
           onDrop={(id, event) => {
             const place = places.get(id)
-            if (place) filing.drop(event, place)
+            if (!place) return
+            if (carriesRows(Array.from(event.dataTransfer.types))) organising.dropRows(event, place)
+            else filing.drop(event, place)
           }}
           onAction={(id) => {
             // The ids of a failed node's message aren't folders.

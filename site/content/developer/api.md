@@ -301,7 +301,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 | Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /clients/recent`, `PUT` and `DELETE /me/matters/{folderId}`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
 | Finding | `GET /search?scope=&q=&within=`, with filters and `facets`, `GET /suggest?q=` for the search box as someone types, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
-| A document | `GET /documents/{docNumber}`, `/content`, `/preview`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone |
+| A document | `GET /documents/{docNumber}`, `/content`, `/preview`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone; `PATCH /documents/{docNumber}` to rename, `POST /documents/{docNumber}/move` and `DELETE /documents/{docNumber}` |
 | Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are; `GET /documents/{docNumber}/message` and its `/body`, `/parts/{id}` and `POST /attachments/{id}/file` for reading a filed email |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
 | Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
@@ -428,6 +428,27 @@ and answers `201` with the folder and its address in `Location`. The new folder 
 and permissions. It needs the Add permission on the parent (`403` without it). A Store is `409 not-browsable`, a
 search folder is `409 filing-rule`, and a matter's top level is `409 refused` unless the caller is an
 administrator. A name is cleaned of `/` and markup; one that is empty then is `422 validation`.
+
+## Renaming, Moving and Deleting
+
+These three go through the calls the old web page uses (`DocumentManager`'s rename and move, and the document DAO's
+delete), so Healdan's rules decide as they do on every route: M1's re-stamping when a document moves into another
+matter, once per matter for an email, and the filing rules. Each runs under the document's lock, as a save does, and
+the checks come in this order: `404` for a document the caller can't read; for a move, `404` for a folder the caller
+can't read and `409 filing-rule` for one that can't hold documents (a Store, a matter's top level, a search folder);
+`403` without the permission (Rename, Move on the document and Write on the folder, or Delete) and for a document
+protected by a password; the holds a save is refused for (`409 checked-out`, `locked` and `held-elsewhere`); `409
+refused` for an immutable document, unless the caller is an administrator, as CE allows.
+
+- **`PATCH /documents/{docNumber}`** with `{"name": "Lease"}` answers `200` with the document. A name that doesn't
+  end in the document's extension keeps it, so `Lease` is `Lease.docx` and `Lease v1.2` is `Lease v1.2.docx`; one that
+  ends in another extension (`Lease.pdf`) is `422 validation` with `invalid` for `name`. A name over 255 characters is
+  `too-long`, and a blank one `required`. The same name changes nothing and makes no version.
+- **`POST /documents/{docNumber}/move`** with `{"folderId": 1234}` answers `200` with the document. Into another matter
+  it takes that matter's Client and Matter and the values its folders pass down; a matter that holds the same email
+  already answers `409 already-filed` with the copy as `document`. A move into the folder it's in changes nothing.
+- **`DELETE /documents/{docNumber}`** answers `204`. The document, and any shortcuts to it, go to the trash, which
+  only the Classic Interface restores from, and the document is `404` from then on.
 
 ## Favorites
 

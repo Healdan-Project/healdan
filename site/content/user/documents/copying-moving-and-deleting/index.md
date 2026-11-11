@@ -3,13 +3,78 @@ title: Copying, Moving and Deleting
 weight: 6
 ---
 
-Right-click a document for its menu. **Cut**, **Copy** and **Delete** are there, with everything else you can do to
-it. What you can't do to that document, because of its permissions or because it's locked or checked out, is greyed
-out.
+In the app you can rename, move and delete documents, and make folders. Copying a document, and moving, renaming or
+deleting a folder, are in the [Classic Interface](../../the-classic-interface/). What you can't do to a document, because of
+its permissions or because it's locked or checked out, is refused with a message in the app, and greyed out in the Classic Interface.
+
+## Renaming a Document in the App
+
+Select the document and press **F2**, or choose **More**, in the toolbar above the list, then **Rename**. The title in
+its row becomes a field with the name, not its extension, selected.
+
+- **Enter saves the name,** and so does clicking away from the field after you've changed it. **Esc** leaves the name as
+  it was.
+- **A document keeps its extension.** Type `Lease` and the document, a `.docx`, is `Lease.docx`. Type another extension,
+  such as `Lease.pdf`, and Healdan says "The name has to end in .docx, as the document's does." beside the field, which stays
+  open for you to mend it.
+- **You need the Rename permission,** and the document can't be locked or checked out by someone else, or checked out
+  by you on a computer. The message says who has it and where it's released.
+- **Only one document at a time.** With several selected, **Rename** is greyed out, and **F2** says "Select one
+  document to rename it."
+
+The rename is in the document's [history](../document-history/) and makes its next version.
+
+## Moving Documents in the App
+
+Select the documents, then choose **More**, then **Move To…**. A window opens that starts from your **Recent Matters** and
+**My Matters**. Type in **Find a Matter** to search for another by its number or name.
+
+1. Choose the matter. The window lists its folders.
+2. Open the folders until you're in the one to move into. **Up One Level** goes back a folder, and **Back to Matters**
+   to the matters.
+3. Choose **Move Here**. It's greyed out at the top of a matter, which holds no documents: "Open a folder inside the
+   matter to move the documents into it."
+
+The window never lists Stores, only matters and the folders inside them.
+
+You can also **drag** the selected rows onto a folder in **My Matters** in the left pane. The folder lights up while you're
+over it. Dragging a row that isn't selected moves only that one. A drag can't be done from the keyboard: use **Move To…**.
+
+- **Each document moves on its own.** If Healdan refuses some, a window, "Some Documents Weren't Moved", says which, and
+  why, and the others are moved all the same. The message says, for an email, "Already in this matter as # 10455" when the
+  matter holds it already.
+- **You need the Move permission** on each document and the Write permission on the folder you move it to.
+- **It keeps its doc #,** and the move makes its next version. Within a matter it takes the properties of its new folder,
+  except any set on the document itself. In another matter it also takes that matter's client and matter: see
+  [Properties](../../working-with-matters/properties/).
+
+Dropping documents on a matter's top level, or on a search folder, says "Choose a folder inside the matter" and moves
+nothing. See [Where Documents Can Go](#where-documents-can-go).
+
+## Deleting Documents in the App
+
+Select them and press **Delete** (on a Mac, the delete key), or choose **More**, then **Delete**. Healdan asks "Move 2
+documents to the Trash?" and lists each one's name. Choose **Move to Trash**, or **Cancel**, or press **Esc**.
+
+- **The Trash is in the Classic Interface,** where you can restore what you deleted: "The Trash is in the Classic
+  Interface, where they can be restored." See [The Trash](../the-trash/).
+- **You need the Delete permission.** A document locked, or checked out by someone else, is refused with the reason, and the
+  others are deleted all the same.
+
+## Making a Folder in the App
+
+Open a folder inside a matter and choose **New Folder** in the toolbar. Give it a name and choose **Create**. The new folder
+takes its parent's properties and permissions, and you need the Add permission on the parent.
+
+The button isn't there at the top of a matter, in a search folder or in a Store. Only administrators can add folders to the
+top of a matter's workspace.
+
+## In the Classic Interface
+
+Right-click a document for its menu. **Cut**, **Copy**, **Rename** and **Delete** are there, with everything else you can
+do to it. To act on several documents at once, select them all, then right-click one of them.
 
 ![A letter in matter 1001.1's Correspondence folder, right-clicked: its menu lists Download, Preview, Summary, Open in Folder, Cut, Copy, Rename, Add bookmark, Send by email, Paste as link, Open in App, Checkout, Checkin, Lock, Unlock, More and Delete](document-menu.png)
-
-To act on several documents at once, select them all, then right-click one of them.
 
 ## Copying a Document
 
@@ -24,7 +89,7 @@ To act on several documents at once, select them all, then right-click one of th
   were set on the original document itself. See [Properties](../../working-with-matters/properties/).
 - **Paste is greyed out** in a folder you can't add documents to.
 
-## Moving a Document
+## Moving a Document in the Classic Interface
 
 1. Right-click the document and choose **Cut**.
 2. Right-click the folder to move it to and choose **Paste**. **Copy options** appears here too, but a move ignores
@@ -58,7 +123,7 @@ Only administrators can add, rename, move or delete the folders at the top of a 
 Correspondence and Drafts. Anyone else is told "Only administrators can add, rename, move or delete a matter's
 top-level folders." The folders inside them follow their permissions as usual.
 
-## Deleting
+## Deleting in the Classic Interface
 
 1. Right-click the document and choose **Delete**.
 2. Healdan asks "Do you want to delete the selected elements?" Choose **Yes**.

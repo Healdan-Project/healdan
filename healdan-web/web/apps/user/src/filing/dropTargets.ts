@@ -7,8 +7,8 @@ import type { StringKey } from '@healdan/ui'
 type S = components['schemas']
 
 /**
- * The type a drag of the app's own rows carries (Task 20 moves them). Filing leaves a drop that carries it alone, so
- * that drop is never answered with "no files".
+ * The type a drag of the app's own rows carries, which the tree's folders take as a move (`organising/`). Filing leaves a
+ * drop that carries it alone, so that drop is never answered with "no files".
  */
 export const ROWS_TYPE = 'application/x-healdan-documents'
 
@@ -20,7 +20,7 @@ export function carriesFiles(types: readonly string[]): boolean {
 /**
  * Whether a drag is one the filing takes over, which means cancelling its dragover so the browser drops it here:
  * files, and a link or text, which a drop answers with where to find the file (a browser would otherwise follow
- * the link and leave the page, and its uploads). The app's own rows aren't: Task 20's move takes them.
+ * the link and leave the page, and its uploads). The app's own rows aren't: the move takes them.
  */
 export function takesDrag(types: readonly string[]): boolean {
   return !carriesRows(types) && (carriesFiles(types) || types.includes('text/uri-list') || types.includes('text/plain'))

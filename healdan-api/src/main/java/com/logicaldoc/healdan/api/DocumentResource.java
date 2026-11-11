@@ -22,6 +22,7 @@ import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
@@ -40,8 +41,10 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.api.model.DocumentView;
+import com.logicaldoc.healdan.api.model.MoveRequest;
 import com.logicaldoc.healdan.api.model.NewDocument;
 import com.logicaldoc.healdan.api.model.Page;
+import com.logicaldoc.healdan.api.model.RenameRequest;
 import com.logicaldoc.healdan.docnumber.LegacyDocNumbers;
 import com.logicaldoc.healdan.email.MediaTypes;
 import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
@@ -55,8 +58,10 @@ import com.logicaldoc.healdan.util.StorageUnreachableException;
 import com.logicaldoc.util.MimeType;
 
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HttpMethod;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -95,6 +100,13 @@ public class DocumentResource {
 
 	/** As in {@code ServletUtil.saveHistory}: a download within this many seconds of the last is not recorded again */
 	private static final int DEDUPLICATE_SECONDS = 30;
+
+	private final DocumentChanges changes;
+
+	@Autowired
+	public DocumentResource(DocumentLocks locks) {
+		this.changes = new DocumentChanges(locks);
+	}
 
 	/**
 	 * @param legacy the legacy doc # a document carries from the system it came
@@ -254,6 +266,57 @@ public class DocumentResource {
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read document #" + docNumber, e);
 		}
+	}
+
+	/**
+	 * Renames the document (M6 spec section 6.7) through CE's rename. See
+	 * {@link DocumentChanges#rename}: it needs the Rename permission, and is
+	 * refused for the holds that refuse a save.
+	 *
+	 * @param docNumber the doc #
+	 * @param request the new name; without the document's extension the
+	 *        document keeps it, and another extension is {@code 422 invalid}
+	 * @return the document
+	 */
+	@PATCH
+	@Path("{docNumber: [0-9]+}")
+	@Consumes(MediaType.APPLICATION_JSON)
+	public DocumentView rename(@PathParam("docNumber") long docNumber, RenameRequest request) {
+		return changes.rename(docNumber, request == null ? null : request.name(), Caller.current());
+	}
+
+	/**
+	 * Moves the document into another folder (M6 spec section 6.7) through
+	 * CE's move. It needs the Move permission on the document and Write on the
+	 * folder, which must be able to hold documents ({@code 409
+	 * filing-rule}). Moving into another matter stamps the document with it,
+	 * and a matter that already holds the message of an email refuses it
+	 * ({@code 409 already-filed}).
+	 *
+	 * @param docNumber the doc #
+	 * @param request the folder to move it into
+	 * @return the document
+	 */
+	@POST
+	@Path("{docNumber: [0-9]+}/move")
+	@Consumes(MediaType.APPLICATION_JSON)
+	public DocumentView move(@PathParam("docNumber") long docNumber, MoveRequest request) {
+		return changes.move(docNumber, request == null ? null : request.folderId(), Caller.current());
+	}
+
+	/**
+	 * Moves the document to the trash (M6 spec section 6.7), which the
+	 * Classic Interface empties and restores from. It needs the Delete
+	 * permission.
+	 *
+	 * @param docNumber the doc #
+	 * @return {@code 204}
+	 */
+	@DELETE
+	@Path("{docNumber: [0-9]+}")
+	public Response delete(@PathParam("docNumber") long docNumber) {
+		changes.delete(docNumber, Caller.current());
+		return Response.noContent().build();
 	}
 
 	/**

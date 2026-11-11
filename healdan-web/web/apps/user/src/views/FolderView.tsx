@@ -20,6 +20,8 @@ import { useApi } from '../services'
 import { SelectionActions } from '../actions/SelectionActions'
 import { useOpenKey } from '../actions/useOpenKey'
 import { placeOf } from '../filing/dropTargets'
+import { NewFolderButton } from '../organising/NewFolder'
+import { useOrganisingTable } from '../organising/useOrganisingTable'
 import { useFiling } from '../filing/FilingProvider'
 import { UploadButton } from '../filing/UploadButton'
 import { useDropZone } from '../filing/useDropZone'
@@ -63,6 +65,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const navigate = useNavigate()
   const headingId = useId()
   const { selected, selection, change: changeSelection } = useRowSelection()
+  const organising = useOrganisingTable(listing.rows, selection)
   // What was just filed flashes in the list, and the row the files are over is lit
   const { fresh } = useFiling()
   const place = useMemo(() => (view ? placeOf(view) : { id: folderId, kind: 'store' as const }), [view, folderId])
@@ -152,7 +155,8 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               end={<FiltersButton ref={funnel} open={filtersOpen} active={active} onPress={toggleFilters} />}
             >
               <UploadButton place={place} />
-              <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} />
+              <NewFolderButton place={place} />
+              <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} selected={organising.selected} />
             </Toolbar>
             <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />
             <Table
@@ -166,6 +170,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               onSelectionChange={changeSelection}
               onOpen={open}
               onPreview={preview}
+              {...organising.tableProps}
               loadMore={listing.loadMore}
               isLoadingMore={listing.isLoadingMore}
               total={listing.total}

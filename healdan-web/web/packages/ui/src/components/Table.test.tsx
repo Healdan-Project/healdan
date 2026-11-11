@@ -233,4 +233,44 @@ describe('Table highlights', () => {
     expect(dropping!.getAttribute('data-dropping')).toBe('true')
     expect(tableCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.row\[data-flash\] \{\s*animation: none/)
   })
+
+  it('drags the selected rows with the type and data the caller makes of them, or the one row when it is not selected', () => {
+    const stored = new Map<string, string>()
+    const data = { setData: (type: string, text: string) => void stored.set(type, text), effectAllowed: 'uninitialized' }
+    const make = vi.fn((keys: string[]) => (keys.every((key) => key.startsWith('d')) ? keys.join(',') : undefined))
+    render(<Harness initial={['d1', 'd2']} drag={{ type: 'application/x-test-rows', data: make }} rows={[folderRow, ...items(3)]} />)
+
+    fireEvent.dragStart(row(/Letter 1/), { dataTransfer: data })
+    expect(make).toHaveBeenLastCalledWith(['d1', 'd2'])
+    expect(stored.get('application/x-test-rows')).toBe('d1,d2')
+
+    stored.clear()
+    fireEvent.dragStart(row(/Letter 3/), { dataTransfer: data })
+    expect(make).toHaveBeenLastCalledWith(['d3'])
+    expect(stored.get('application/x-test-rows')).toBe('d3')
+  })
+
+  it('makes the rows that can be selected draggable, and no row without drag', () => {
+    const { unmount } = render(<Harness drag={{ type: 'application/x-test-rows', data: (keys) => keys.join(',') }} rows={[folderRow, ...items(1)]} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('true')
+    expect(row(/Pleadings/).getAttribute('draggable')).toBe('false')
+    unmount()
+    render(<Harness />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('false')
+  })
+
+  it('cancels a drag of rows that carry nothing, and leaves one that starts in a field alone', () => {
+    const data = { setData: vi.fn(), effectAllowed: 'uninitialized' }
+    render(
+      <Harness
+        drag={{ type: 'application/x-test-rows', data: (keys) => (keys.includes('f1') ? undefined : keys.join(',')) }}
+        rows={[folderRow, ...items(1)]}
+        columns={[{ id: 'title', name: 'Title', isRowHeader: true, cell: (item) => (item.id === 'd1' ? <input aria-label="Name" /> : item.name) }]}
+      />,
+    )
+    expect(fireEvent.dragStart(row(/Pleadings/), { dataTransfer: data })).toBe(false)
+    expect(data.setData).not.toHaveBeenCalled()
+    expect(fireEvent.dragStart(screen.getByRole('textbox', { name: 'Name' }), { dataTransfer: data })).toBe(true)
+    expect(data.setData).not.toHaveBeenCalled()
+  })
 })

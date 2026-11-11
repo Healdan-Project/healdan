@@ -174,6 +174,35 @@ Test it with `filing/*.test.tsx`; jsdom has no `DragEvent`, so a test that needs
 `e2e/filing.spec.ts` drops real `File`s in a real browser, which Playwright can only do by dispatching the events itself
 with a `DataTransfer` built in the page.
 
+## Organising
+
+`organising/` is New Folder, rename, move and delete (M6 spec 6.7). `OrganisingProvider` sits in the frame under the
+filing's and owns what outlives a view: which document's title is a field now, and the dialogs that ask (`ConfirmDelete`,
+`MovePicker`, `NewFolderDialog`) and say what was refused (`Refusals`). Views reach it through `useOrganising`, and
+`useOrganisingTable(rows, selection)` gives a list its `onRename` (F2), `onDelete` and `drag` props and the selected documents
+for the toolbar's More menu (`actions/MoreMenu.tsx`).
+
+- **One call each.** `actions/rename.ts`, `move.ts` and `remove.ts` make `PATCH /documents/{n}`, `POST /documents/{n}/move`
+  and `DELETE /documents/{n}`. A change to several documents (`actions/batch.ts`) is a call for each, one after another, which
+  keeps going when one is refused, so what was done stays done; the refusals come back as lines, each the document's name
+  and why, from the catalogue (`filing/refusal.ts`: a hold says who holds it, an `already-filed` names the copy).
+- **Rename in place.** `RenameField` replaces the title in the row. Enter saves, Esc cancels, and leaving the field with a
+  new name saves it. A refusal keeps the field open with the message beside it (`renameRefusal` words another extension
+  as what to do about it), and the focus goes back to the row when the field goes. The field stops its key and pointer
+  events, so the Table's own keys (Space, Delete, the arrows) and a double-click don't reach the row.
+- **The picker.** `MovePicker` starts from Recent Matters and My Matters (the left pane's queries) and the search box's
+  matter suggestions, then lists the chosen matter's folders from `fetchSubfolders` (also the tree's), a level at a time. It
+  never browses Stores, and **Move Here** needs a folder inside the matter.
+- **Dragging rows.** The Table's `drag` prop makes its selectable rows draggable, with the browser's own drag and drop (React
+  Aria's would add some 140 kB to the app's chunk of it), so a drag of a selected row carries every selected row, and of another row only that one. A drag carries `ROWS_TYPE` with the documents as JSON (`rows.ts`);
+  `FilingProvider` leaves it alone and the tree takes it (`acceptsDrop`, `dropRows`): the folder lights up as it does for
+  files, and a place that holds no documents is refused with the filing rule's words before any call. There's no keyboard
+  drag: More › Move To… is the way for a keyboard.
+- **New Folder** is offered inside a matter's folders, and at a matter's top level only to an administrator (`useMe`).
+
+Test it with `organising/*.test.tsx`; `testing.tsx` has routes for a folder that rename, move and delete as the server
+would, and a `DataTransfer` that keeps what a drag writes. `e2e/organising.spec.ts` does it in a real browser.
+
 ## The Search Box and Search Results
 
 `search/SearchBox.tsx` is the top bar's scope picker (`scopes.ts`: the API's six `scope` values, and the four Recent

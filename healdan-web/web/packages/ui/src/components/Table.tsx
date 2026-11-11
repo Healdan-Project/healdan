@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
 import {
   Cell,
   Collection,
@@ -82,6 +82,13 @@ export interface TableProps<T extends TableRow> {
   total?: number
   /** What shows when there are no rows */
   empty?: ReactNode
+  /**
+   * Rows can be dragged out of the Table, by the browser's own drag and drop. A drag of a row carries `type` with what `data`
+   * makes of the keys of the rows being dragged (the selection when the dragged row is in it, else the row), or is cancelled
+   * when `data` gives nothing. A row that isn't `selectable` isn't draggable. It is for a pointer: the keyboard has a menu
+   * for what a drag does.
+   */
+  drag?: { type: string; data: (keys: string[]) => string | undefined }
   /** The rows shown are about to change, as while a new order loads: a screen reader waits for them */
   busy?: boolean
 }
@@ -115,8 +122,13 @@ export function Table<T extends TableRow>({
   total,
   empty,
   busy = false,
+  drag,
   ...labels
 }: TableProps<T>) {
+  // Rows that can be dragged are draggable, which React Aria's Row has no prop for
+  const draggable = (row: T) => (element: HTMLElement | null) => {
+    if (element) element.draggable = drag !== undefined && row.selectable !== false
+  }
   const disabledKeys = rows.filter((row) => row.selectable === false).map((row) => row.id)
   const more = loadMore !== undefined && (total === undefined || rows.length < total)
 
@@ -138,6 +150,19 @@ export function Table<T extends TableRow>({
     }
   }
 
+  // A drag that starts on a row carries the selection when the row is in it, and the row alone when it isn't. The browser's
+  // own drag and drop, so React Aria's drag and drop code, which is some 140 kB, isn't loaded for it.
+  function onDragStart(event: DragEvent<HTMLDivElement>) {
+    const target = event.target instanceof Element ? event.target : null
+    // Text dragged out of a field in a row is the field's
+    if (target?.closest('input, textarea')) return
+    const key = target?.closest('[data-row-key]')?.getAttribute('data-row-key')
+    const data = drag && key ? drag.data(selection.has(key) ? [...selection] : [key]) : undefined
+    if (!drag || data === undefined) return event.preventDefault()
+    event.dataTransfer.setData(drag.type, data)
+    event.dataTransfer.effectAllowed = 'move'
+  }
+
   // React Aria keeps the anchor of a Shift-click range on the selection it hands out, so that one is handed back while
   // the caller's selection still holds the same rows.
   const [given, setGiven] = useState<Selection | null>(null)
@@ -153,7 +178,7 @@ export function Table<T extends TableRow>({
 
   return (
     // The handler only reads keys the rows inside already take; the wrapper isn't a control of its own.
-    <div className={styles.frame} onKeyDownCapture={onKeyDownCapture} aria-busy={busy || undefined}>
+    <div className={styles.frame} onKeyDownCapture={onKeyDownCapture} onDragStart={drag ? onDragStart : undefined} aria-busy={busy || undefined}>
       <Virtualizer layout={TableLayout} layoutOptions={{ rowHeight: ROW_HEIGHT, headingHeight: ROW_HEIGHT, loaderHeight: ROW_HEIGHT }}>
         <AriaTable
           {...labels}
@@ -190,7 +215,7 @@ export function Table<T extends TableRow>({
           <TableBody renderEmptyState={() => <div className={styles.empty}>{empty}</div>}>
             <Collection items={rows} dependencies={[columns]}>
               {(row) => (
-                <Row id={row.id} textValue={row.textValue} columns={columns} dependencies={[columns]} className={styles.row} data-row-key={row.id} data-flash={row.flash || undefined} data-dropping={row.dropping || undefined}>
+                <Row ref={draggable(row)} id={row.id} textValue={row.textValue} columns={columns} dependencies={[columns]} className={styles.row} data-row-key={row.id} data-flash={row.flash || undefined} data-dropping={row.dropping || undefined}>
                   {(column) => <Cell className={`${styles.cell} ${column.align === 'end' ? styles.end : ''}`}>{column.cell(row)}</Cell>}
                 </Row>
               )}

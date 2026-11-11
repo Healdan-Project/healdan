@@ -6,6 +6,7 @@ import { formatDate, formatVersion, Icon, t, type IconName, type TableColumn, ty
 import type { SearchScope } from '../search/scopes'
 import { fileIcon } from '../fileIcon'
 import { matterParts } from '../matterDisplay'
+import { DocumentTitle } from '../organising/RenameField'
 import { childKey, type Hit } from './useListing'
 import styles from './views.module.css'
 
@@ -35,7 +36,7 @@ const title: TableColumn<ListRow> = {
   cell: ({ item }) => (
     <>
       <Icon name={iconOf(item)} />
-      <span className={styles.name}>{item.type === 'matter' ? item.display : item.name}</span>
+      {item.type === 'document' ? <DocumentTitle document={item} className={styles.name} /> : <span className={styles.name}>{item.type === 'matter' ? item.display : item.name}</span>}
     </>
   ),
 }

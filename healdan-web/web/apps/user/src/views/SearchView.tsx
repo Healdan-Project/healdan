@@ -6,6 +6,7 @@ import { useId, useMemo, useRef } from 'react'
 import { t, Table, type TableSort } from '@healdan/ui'
 import { DetailsPanel } from '../details/DetailsPanel'
 import { SelectionActions } from '../actions/SelectionActions'
+import { useOrganisingTable } from '../organising/useOrganisingTable'
 import { useOpenKey } from '../actions/useOpenKey'
 import { QuickLook } from '../preview/QuickLook'
 import { ReadingPane } from '../preview/ReadingPane'
@@ -52,6 +53,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const facets = useSearchFacets({ scope, q: text, filters, enabled: filtersOpen })
   const { selected, selection, change: changeSelection } = useRowSelection()
   const rows = useMemo(() => results.rows.map(rowOf), [results.rows])
+  const organising = useOrganisingTable(results.rows, selection)
   const allColumns = useMemo(() => hitColumns(scope), [scope])
   // The reading pane makes the list narrow: it keeps the columns that fit
   // Only a view that draws the pane narrows for it, as the document scopes do
@@ -109,7 +111,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               count={count}
               end={documents && <FiltersButton ref={funnel} open={filtersOpen} active={active} onPress={() => (filtersOpen ? region.close() : region.open('filters'))} />}
             >
-              {documents && <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} />}
+              {documents && <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} selected={organising.selected} />}
             </Toolbar>
             {documents && <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />}
             <Table
@@ -123,6 +125,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               onSelectionChange={changeSelection}
               onOpen={open}
               onPreview={documents ? preview : undefined}
+              {...(documents ? organising.tableProps : {})}
               loadMore={results.loadMore}
               isLoadingMore={results.isLoadingMore}
               total={results.total}

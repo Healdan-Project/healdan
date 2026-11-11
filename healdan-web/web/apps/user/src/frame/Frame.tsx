@@ -4,6 +4,7 @@
 import { Outlet } from '@tanstack/react-router'
 import { OpenInAppProvider } from '../actions/OpenInAppState'
 import { FilingProvider } from '../filing/FilingProvider'
+import { OrganisingProvider } from '../organising/OrganisingProvider'
 import { QuickLookProvider } from '../preview/QuickLookState'
 import { useSignedOut } from '../services'
 import { LeftPane } from './LeftPane'
@@ -23,14 +24,16 @@ export function Frame() {
       <QuickLookProvider>
         <OpenInAppProvider>
           <FilingProvider>
-            <div className={styles.frame}>
-              <TopBar />
-              <LeftPane />
-              <main className={styles.main}>
-                <StorageBanner />
-                <Outlet />
-              </main>
-            </div>
+            <OrganisingProvider>
+              <div className={styles.frame}>
+                <TopBar />
+                <LeftPane />
+                <main className={styles.main}>
+                  <StorageBanner />
+                  <Outlet />
+                </main>
+              </div>
+            </OrganisingProvider>
           </FilingProvider>
         </OpenInAppProvider>
       </QuickLookProvider>

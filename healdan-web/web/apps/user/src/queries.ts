@@ -3,7 +3,7 @@
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo } from 'react'
-import { apiPath, type components } from '@healdan/api'
+import { apiPath, type Api, type components } from '@healdan/api'
 import type { PageOf } from './pages'
 import { useApi } from './services'
 
@@ -152,4 +152,22 @@ export function useLookup(ref: string) {
     // A missing or unreadable document answers 404 for good, and retrying a 400 only repeats it
     retry: false,
   })
+}
+
+// The API gives at most 200 children at a time (50 unless asked), so a folder with more is read page by page.
+const CHILDREN_PAGE = 200
+
+/** A folder's subfolders, search folders included: the tree's, and the move picker's. */
+export async function fetchSubfolders(api: Api, id: string): Promise<S['FolderView'][]> {
+  const all: S['FolderView'][] = []
+  for (let offset = 0; ; ) {
+    const page = await api.get<PageOf<S['FolderView'] | S['DocumentView']>>(`/v1/folders/${encodeURIComponent(id)}/children`, {
+      type: 'folder',
+      limit: CHILDREN_PAGE,
+      offset,
+    })
+    all.push(...page.items.filter((item): item is S['FolderView'] => item.type === 'folder'))
+    offset += page.items.length
+    if (page.items.length < CHILDREN_PAGE || (page.total != null && offset >= page.total)) return all
+  }
 }
