@@ -3144,7 +3144,7 @@ components:
         client renders any form from these, without knowing the properties
         in advance.
       additionalProperties: false
-      required: [name, label, type, required, editable, value, source, inheritedFrom, options]
+      required: [name, label, type, required, editable, value, source, inheritedFrom, overrides, options]
       properties:
         name:
           type: string
@@ -3193,6 +3193,18 @@ components:
             - $ref: '#/components/schemas/FolderRef'
             - type: 'null'
           description: The folder an inherited value comes from, or null
+        overrides:
+          oneOf:
+            - $ref: '#/components/schemas/FolderRef'
+            - type: 'null'
+          description: |
+            For a `local` value, the folder whose value it takes the place of:
+            the nearest folder that sets the property, which the document
+            would inherit it from if its own value went (`null` sent to
+            `setProperties` makes it so). Null for a `local` value no folder
+            would supply, such as Author, Comments or a value no folder sets,
+            for every value that isn't `local`, and always in the filing form.
+            A client shows a value as overridden only when this isn't null.
         options:
           type: [array, 'null']
           description: The values to pick from, in order; null when the property isn't picked from a list

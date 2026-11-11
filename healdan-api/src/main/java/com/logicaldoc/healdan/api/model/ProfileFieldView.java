@@ -23,9 +23,13 @@ import java.util.List;
  * @param source {@code inherited}, {@code local} or {@code default}; null
  *        when there is no value
  * @param inheritedFrom the folder an inherited value comes from, or null
+ * @param overrides for a {@code local} value, the folder whose value it takes
+ *        the place of, which the property would inherit if the document's
+ *        own value went; null when no folder would supply one, for every
+ *        other source, and in the filing form
  * @param options the values to pick from, or null when the property isn't
  *        picked from a list
  */
 public record ProfileFieldView(String name, String label, String type, boolean required, boolean editable,
-		Object value, String source, FolderRef inheritedFrom, List<OptionView> options) {
+		Object value, String source, FolderRef inheritedFrom, FolderRef overrides, List<OptionView> options) {
 }

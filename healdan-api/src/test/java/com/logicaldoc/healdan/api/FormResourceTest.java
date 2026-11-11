@@ -37,7 +37,7 @@ import com.logicaldoc.healdan.setting.HealdanSettings;
 public class FormResourceTest extends ApiTestCase {
 
 	private static final List<String> MEMBERS = List.of("name", "label", "type", "required", "editable", "value",
-			"source", "inheritedFrom", "options");
+			"source", "inheritedFrom", "overrides", "options");
 
 	private User clerk;
 
@@ -72,8 +72,11 @@ public class FormResourceTest extends ApiTestCase {
 		JsonNode page = response.json();
 		assertEquals(15, page.path("total").asInt());
 		JsonNode items = page.path("items");
-		for (JsonNode field : items)
+		for (JsonNode field : items) {
 			assertEquals(field.toString(), MEMBERS, names(field));
+			// The form is for a document that has no value of its own yet, so nothing is overridden
+			assertTrue(field.toString(), field.path("overrides").isNull());
+		}
 
 		JsonNode client = field(items, "client");
 		assertEquals("Client", client.path("label").textValue());

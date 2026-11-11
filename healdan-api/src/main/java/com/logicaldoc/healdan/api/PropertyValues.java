@@ -247,16 +247,19 @@ public final class PropertyValues {
 		Template template = ProfileSchema.get().template();
 		List<ProfileFieldView> views = new ArrayList<>();
 		for (ProfileField field : fields) {
-			FolderRef from = field.inheritedFromId() == null ? null
-					: new FolderRef(field.inheritedFromId(), field.inheritedFromName(),
-							ApiViews.folderKind(MatterLocator.get().locate(field.inheritedFromId())));
+			FolderRef from = folderRef(field.inheritedFromId(), field.inheritedFromName());
+			FolderRef overrides = folderRef(field.overridesId(), field.overridesName());
 			List<OptionView> options = field.options() == null ? null
 					: field.options().stream().map(o -> new OptionView(o.value(), o.label(), o.docClass())).toList();
 			views.add(new ProfileFieldView(field.name(), field.label(), typeName(field.type()), field.required(),
 					changeable && field.editable(), toJson(template.getAttribute(field.name()), field.value()),
-					field.source() == null ? null : field.source().name().toLowerCase(Locale.ROOT), from, options));
+					field.source() == null ? null : field.source().name().toLowerCase(Locale.ROOT), from, overrides, options));
 		}
 		return views;
+	}
+
+	private static FolderRef folderRef(Long id, String name) throws PersistenceException {
+		return id == null ? null : new FolderRef(id, name, ApiViews.folderKind(MatterLocator.get().locate(id)));
 	}
 
 	/**

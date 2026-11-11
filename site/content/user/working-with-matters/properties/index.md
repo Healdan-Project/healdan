@@ -69,7 +69,8 @@ To give a document or folder a value of its own, set it on that document or fold
 folder for that property, and passes its own value down if it's a folder.
 
 - **To follow the folder again,** set the property back to the value it would inherit, or clear it. In the app,
-  a property with a value of its own is marked **Overridden** while you edit, and **Follow Folder** beside it makes
-  it follow the folder when you save.
+  a property whose own value takes the place of a folder's is marked **Overridden** while you edit, and **Follow
+  Folder** beside it makes it follow the folder when you save. A value of the document's own that no folder would
+  supply is just a value: clear it to remove it.
 - **Client and Matter can't be overridden.** They always come from the matter.
 - **Changing the Class** clears a Subclass that doesn't belong to the new Class.

@@ -102,6 +102,23 @@ public class PropertiesResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testALocalValueNoFolderSuppliesOverridesNothing() throws Exception {
+		// Class is set on no folder here, so the value the document gives it takes the place of none; Legacy doc # is
+		// the document's own and never passes down
+		Document d = file("b.docx");
+		String token = signIn(clerk);
+
+		ApiResponse patched = patch(properties(d)).token(token).json(values(CLASS, "Letters", "legacydocnum", "LEG-9")).send();
+		assertEquals(patched.toString(), 200, patched.status());
+		JsonNode docclass = field(patched, CLASS);
+		assertEquals("local", docclass.path("source").textValue());
+		assertTrue(docclass.toString(), docclass.path("overrides").isNull());
+		JsonNode legacy = field(patched, "legacydocnum");
+		assertEquals("local", legacy.path("source").textValue());
+		assertTrue(legacy.toString(), legacy.path("overrides").isNull());
+	}
+
+	@Test
 	public void testOverrideAndInheritAgain() throws Exception {
 		setFolderValue(documents, CLASS, "Memos");
 		Document d = file("a.docx");
@@ -117,7 +134,12 @@ public class PropertiesResourceTest extends ApiTestCase {
 		assertEquals("Letters", docclass.path("value").textValue());
 		assertEquals("local", docclass.path("source").textValue());
 		assertTrue(docclass.path("inheritedFrom").isNull());
+		// It takes the place of Memos, which Documents sets: the folder is named
+		assertEquals(documents.getId(), docclass.path("overrides").path("id").asLong());
+		assertEquals("Documents", docclass.path("overrides").path("name").textValue());
+		assertEquals("folder", docclass.path("overrides").path("kind").textValue());
 		assertEquals("local", field(get(properties(d)).token(token).send(), CLASS).path("source").textValue());
+		assertEquals(documents.getId(), field(get(properties(d)).token(token).send(), CLASS).path("overrides").path("id").asLong());
 
 		// The inherited value inherits again
 		assertInherited(field(patch(properties(d)).token(token).json(values(CLASS, "Memos")).send(), CLASS), "Memos");
@@ -577,6 +599,8 @@ public class PropertiesResourceTest extends ApiTestCase {
 		assertEquals(documents.getId(), field.path("inheritedFrom").path("id").asLong());
 		assertEquals("Documents", field.path("inheritedFrom").path("name").textValue());
 		assertEquals("folder", field.path("inheritedFrom").path("kind").textValue());
+		// Nothing is overridden by a value that is inherited
+		assertTrue(field.toString(), field.path("overrides").isNull());
 	}
 
 	private void hold(Document d, User as, DocumentStatus status) throws Exception {

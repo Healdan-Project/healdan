@@ -333,6 +333,13 @@ The sections below say more about the parts a client needs to know before it sta
   after Subclass in the form and the properties. The `documents` search scope finds a document by its Comments: it
   matches those whose Comments contain every word of `q`, in any case, along with the full-text hits.
 
+- **Where a property's value comes from.** `GET /documents/{docNumber}/properties` gives each property a `source`:
+  `local` for a value set on the document, `inherited` with `inheritedFrom` naming the folder it comes from, or
+  `default`. A `local` value also has `overrides`, the folder whose value it takes the place of, which the document
+  would inherit if its own value went. It is null for a value no folder would supply (Author, Comments, a value no
+  folder sets), for every value that isn't `local`, and in the filing form. A client shows a value as overridden only
+  when `overrides` isn't null, and `PATCH` with `null` for it makes the property follow that folder again.
+
 ## Searching
 
 `GET /search?q=` searches the `scope` given: `documents` (the default, every file but emails), `emails`, `all`,
