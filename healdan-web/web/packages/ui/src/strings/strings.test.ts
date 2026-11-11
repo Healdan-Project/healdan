@@ -29,6 +29,14 @@ describe('t', () => {
   })
 })
 
+describe('{matterLower}', () => {
+  it('puts the firm\'s word in the middle of a sentence in lower case', () => {
+    expect(t('tray.alreadyFiled', { n: 10455 })).toBe('Already in this matter as # 10455')
+    setLabels({ matter: 'Project', matters: 'Projects' })
+    expect(t('filing.chooseFolder')).toBe('Choose a folder inside the project')
+  })
+})
+
 describe('plural', () => {
   it('picks the form for the count', () => {
     expect(plural('documents', 1)).toBe('1 document')

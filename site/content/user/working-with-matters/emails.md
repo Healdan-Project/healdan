@@ -3,9 +3,21 @@ title: Emails
 weight: 4
 ---
 
-To file an email, save it as an `.eml` or `.msg` file and upload it into a matter's folder like any other document.
-Healdan treats every `.eml` and `.msg` file as an email. From Outlook on your Mac you can file a message without
-saving it first: see [Filing Email from Outlook](../../office/filing-email/).
+To file an email, save it as an `.eml` or `.msg` file and drop it on a matter's folder like any other document, or
+use **Upload**: see [Filing a Document](../filing-a-document/). Healdan treats every `.eml` and `.msg` file as an
+email. From Outlook on your Mac you can file a message without saving it first: see
+[Filing Email from Outlook](../../office/filing-email/).
+
+## Dropping Emails
+
+- **From Finder,** drop the `.eml` or `.msg` files on a folder's list, or on a folder in the tree, as you would any
+  file. Each takes its subject as its title and fills in its email properties itself.
+- **One already in the matter isn't filed again.** The tray says **Already in this matter as # 10455**, with **Show** to
+  open that copy, and the other files you dropped with it are filed. See [Once in Each Matter](#once-in-each-matter).
+- **From the new Outlook for Mac,** dragging a message onto the page works in Safari only, where it arrives as an `.eml`
+  named after the subject. In Chrome nothing arrives. There, drag the message to Finder first and drop the file, or file
+  it from Outlook's Healdan pane. If something that isn't a file arrives (a link or text), Healdan says "Drag the email to
+  Finder first, or file it from Outlook's Healdan pane".
 
 ## Reading an Email
 

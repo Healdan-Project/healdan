@@ -16,6 +16,13 @@ A document's history is a series of **versions**, and each version has **snapsho
 
 So version 2.3 is the third snapshot after version 2 was started, and the next new version will be 3.0.
 
+## Saving a File as a New Version
+
+Drag **one** file from your desktop onto a document's row in the app, and choose **Save as Version 4 of # 10431**, where
+4 is the next version number. The file becomes the document's next version, under the document's own name. It's the same
+as **Save as new version** in the Classic Interface. A document held by someone else, or on a computer, or locked can't
+take it: see [Filing a Document](../../working-with-matters/filing-a-document/#dropping-a-file-on-a-document).
+
 ## Where to See Them
 
 - **In the app,** select a document and look at **Versions** in its details. It lists the whole timeline, newest

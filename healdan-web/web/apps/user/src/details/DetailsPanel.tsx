@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import { Button, formatSize, formatVersion, Icon, t } from '@healdan/ui'
 import { CheckoutControls } from '../actions/CheckoutControls'
@@ -13,6 +13,7 @@ import { ErrorPanel } from '../frame/ErrorPanel'
 import { useQuickLook } from '../preview/QuickLookState'
 import { useDocument, useProperties, useVersions } from '../queries'
 import { useApi } from '../services'
+import { clearEditRequest, useEditRequest } from './editRequest'
 import { Properties, type DetailsContext } from './Properties'
 import { PropertiesForm } from './PropertiesForm'
 import { Section } from './Section'
@@ -43,6 +44,13 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
   const app = useOpenInApp()
   const doc = document.data
   const [editing, setEditing] = useState(false)
+  // The filing tray's Edit: once the properties are here, the form opens if the person may change any of them
+  const asked = useEditRequest(docNumber)
+  const loaded = properties.data?.items
+  if (asked && loaded && !editing && loaded.some((one) => one.editable)) setEditing(true)
+  useEffect(() => {
+    if (asked && loaded) clearEditRequest()
+  }, [asked, loaded])
 
   if (document.isError) return <ErrorPanel error={document.error} onRetry={() => void document.refetch()} />
   if (!doc) return <p className={styles.note}>{t('common.loading')}</p>

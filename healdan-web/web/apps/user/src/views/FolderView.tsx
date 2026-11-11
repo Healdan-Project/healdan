@@ -19,6 +19,11 @@ import { keys, useFavorites, useFolder } from '../queries'
 import { useApi } from '../services'
 import { SelectionActions } from '../actions/SelectionActions'
 import { useOpenKey } from '../actions/useOpenKey'
+import { placeOf } from '../filing/dropTargets'
+import { useFiling } from '../filing/FilingProvider'
+import { UploadButton } from '../filing/UploadButton'
+import { useDropZone } from '../filing/useDropZone'
+import filingStyles from '../filing/filing.module.css'
 import { Breadcrumb } from './Breadcrumb'
 import { DetailsPanel } from '../details/DetailsPanel'
 import { QuickLook } from '../preview/QuickLook'
@@ -58,7 +63,24 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const navigate = useNavigate()
   const headingId = useId()
   const { selected, selection, change: changeSelection } = useRowSelection()
-  const rows = useMemo(() => listing.rows.map(rowOf), [listing.rows])
+  // What was just filed in this folder flashes in the list; the row the files are over is lit
+  const filing = useFiling()
+  const fresh = filing.items.filter((item) => item.status === 'filed' && item.fresh && item.folderId === folderId).map((item) => item.docNumber)
+  const flashing = fresh.join(',')
+  const zone = useDropZone({ id: folderId, kind: view?.kind ?? 'store', canFile: view?.canFile }, (key) => {
+    const found = listing.rows.find((item) => item.type === 'document' && `d${item.docNumber}` === key)
+    return found?.type === 'document' ? found : undefined
+  })
+  const rows = useMemo(
+    () =>
+      listing.rows.map(rowOf).map((row) => {
+        const number = row.item.type === 'document' ? row.item.docNumber : undefined
+        const flash = number !== undefined && flashing.split(',').includes(String(number))
+        const dropping = zone.overRow === row.id
+        return flash || dropping ? { ...row, flash, dropping } : row
+      }),
+    [listing.rows, flashing, zone.overRow],
+  )
   const documents = useMemo(() => documentsOf(listing.rows), [listing.rows])
   const preview = usePreviewKey(changeSelection)
   const openDocument = useOpenKey(documents, changeSelection)
@@ -110,7 +132,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
 
   return (
     <section className={styles.withRegion} aria-labelledby={headingId}>
-      <div className={`${styles.view} ${styles.folder}`}>
+      <div className={`${styles.view} ${styles.folder} ${filingStyles.zone}`} data-dropping={zone.dropping || undefined} {...zone.props}>
         <Breadcrumb folder={view} />
         <div className={styles.heading}>
           <h1 id={headingId} className={styles.title}>
@@ -130,6 +152,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               count={listing.isStale ? undefined : countOf(listing.documents, active > 0, unfiltered)}
               end={<FiltersButton ref={funnel} open={filtersOpen} active={active} onPress={toggleFilters} />}
             >
+              <UploadButton place={placeOf(view)} />
               <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} />
             </Toolbar>
             <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />

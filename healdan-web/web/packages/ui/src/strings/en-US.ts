@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-// US English. Labels are in Title Case. {matter} and {matters} are the firm's own words (setLabels); other {name}s
+// US English. Labels are in Title Case. {matter} and {matters} are the firm's own words (setLabels), {matterLower} the first in lower case; other {name}s
 // are filled from the variables t() is given.
 export const enUS = {
   'common.cancel': 'Cancel',
@@ -124,6 +124,7 @@ export const enUS = {
   'details.version': 'Version {version}',
   'details.save': 'Save',
   'details.cancel': 'Cancel',
+  'details.choose': 'Choose…',
   'details.overridden': 'Overridden',
   'details.followFolder': 'Follow Folder',
   'details.followsFolder': 'Follows the folder.',
@@ -248,7 +249,7 @@ export const enUS = {
   'problems.not-held': "You don't have it checked out.",
   'problems.version-moved': 'Someone saved a newer version.',
   'problems.filing-rule': "That can't be filed there.",
-  'problems.already-filed': "That's already filed in this {matter}.",
+  'problems.already-filed': "That's already filed in this {matterLower}.",
   'problems.filing-in-progress': "That's being filed. Try again in a moment.",
   'problems.refused': 'That was refused.',
   'problems.too-large': 'That file is too large.',
@@ -260,6 +261,30 @@ export const enUS = {
   'problems.no-preview': "There's no preview for this kind of file.",
   'problems.not-an-email': "That isn't an email message.",
   'problems.server-error': 'Something went wrong.',
+  'filing.chooseFolder': 'Choose a folder inside the {matterLower}',
+  'filing.noFiles': "Drag the email to Finder first, or file it from Outlook's Healdan pane",
+  'filing.noWrite': "You can't file into this folder.",
+  'filing.upload': 'Upload',
+  'filing.picker': 'Choose Files to Upload',
+  'filing.formTitle': 'File Documents',
+  'filing.fileTitle': 'Title of {name}',
+  'filing.titles': 'Titles',
+  'filing.versionTitle': 'Save as Version {version} of # {n}, or File as a New Document?',
+  'filing.saveVersion': 'Save as Version {version}',
+  'filing.fileNew': 'File as a New Document',
+  'tray.label': 'Filing',
+  'tray.waiting': 'Waiting',
+  'tray.uploading': 'Uploading…',
+  'tray.filed': 'Filed as # {n}',
+  'tray.versioned': 'Saved as Version {version} of # {n}',
+  'tray.alreadyFiled': 'Already in this {matterLower} as # {n}',
+  'tray.show': 'Show',
+  'tray.showName': 'Show {name}',
+  'tray.edit': 'Edit',
+  'tray.editName': 'Edit {name}',
+  'tray.dismiss': 'Dismiss {name}',
+  'tray.summaryBusy': 'Filing {done} of {n}',
+  'tray.summaryDone': '{done} of {n} Filed',
   'problems.unknown': 'Something went wrong.',
 } as const
 
@@ -272,6 +297,7 @@ export const enUSPlurals = {
   documentsOf: { one: '{shown} of {n} document', other: '{shown} of {n} documents' },
   // A count the server stopped at
   documentsMoreThan: { one: 'More than {n} document', other: 'More than {n} documents' },
+  filingButton: { one: 'File {n} Item', other: 'File {n} Items' },
   folders: { one: '{n} folder', other: '{n} folders' },
   matters: { one: '{n} {matter}', other: '{n} {matters}' },
 } as const

@@ -142,6 +142,35 @@ view.
   `local` value takes the place of, and **Follow Folder** sends `null`; a local value with no folder behind it is a plain
   value. Save compares with the list the form opened with, not the live one, which a refetch can change under it.
 
+## Filing by Drag and Drop
+
+`filing/` is filing in the app (M6 spec 6.5). `FilingProvider` sits in the frame and owns the pieces that outlive a view:
+
+- **The queue.** `uploads.ts` (`createUploads`) runs at most three requests at once, each its own `POST /v1/documents`
+  or, for a drop on a row, `POST /v1/documents/{n}/versions` (the call `actions/checkout.ts`'s `saveVersion` makes, shared with
+  Check In). It lives in memory only, so uploads go on while the person moves between views, and a `beforeunload` handler
+  asks before the page is left while any is running. A finished request asks for the lists again
+  (`invalidateDocumentLists`), and a new document is `fresh` for a few seconds, which flashes its row.
+- **The drop.** `dropTargets.ts` decides what a drag carries and where it may go: `refusalOf` says a matter's top level, a
+  search folder and a Store hold no documents (`filing.chooseFolder`), and a folder the person may not write to takes none.
+  `useDropZone` puts the handlers on a folder's list, and the left pane's tree takes drops through `Tree`'s `acceptsDrop`
+  and `onDrop`. A drop is read at once, as the browser empties its data transfer when the event ends. It handles only
+  drops that carry `Files`; a drop that carries `ROWS_TYPE` (`application/x-healdan-documents`, the app's own rows,
+  which a move takes) is left alone, and a drop of a link or text says to drag the email to Finder first. A dragover of a
+  link or text is cancelled too, or the browser would follow the link and leave the page.
+- **The form.** `GET /v1/folders/{id}/form` says what a new document would have. When a required property has no value, or
+  Option is held, `FilingForm` appears first: a title for each file, and `details/FieldsForm.tsx`, the form of a document's
+  properties (`PropertiesForm` is the same form over `PATCH`), so the two share their rules (required marks, lists, Subclass
+  narrowing, dates, number checks).
+- **The tray.** `FilingTray` over `@healdan/ui`'s `Tray`, marked `data-react-aria-top-layer` so a modal's hiding of the page
+  leaves it for a screen reader. A refusal is said from the catalogue (`refusal.ts`), from the problem's `code`, its
+  `fields` or its `hold`, and an `already-filed` names the copy. **Edit** asks the details panel to open its form
+  (`details/editRequest.ts`).
+
+Test it with `filing/*.test.tsx`; jsdom has no `DragEvent`, so a test that needs Option puts `altKey` on the event by hand.
+`e2e/filing.spec.ts` drops real `File`s in a real browser, which Playwright can only do by dispatching the events itself
+with a `DataTransfer` built in the page.
+
 ## The Search Box and Search Results
 
 `search/SearchBox.tsx` is the top bar's scope picker (`scopes.ts`: the API's six `scope` values, and the four Recent

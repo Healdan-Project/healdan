@@ -223,3 +223,14 @@ describe('Table', () => {
     await expectNoAxeViolations(container)
   })
 })
+
+describe('Table highlights', () => {
+  it('marks a row that was just made and a row something is being dropped on, and the flash stops for reduced motion', () => {
+    render(<Harness rows={[{ ...items(2)[0]!, flash: true }, { ...items(2)[1]!, dropping: true }]} />)
+    const [flash, dropping] = screen.getAllByRole('row').slice(1)
+    expect(flash!.getAttribute('data-flash')).toBe('true')
+    expect(flash!.getAttribute('data-dropping')).toBeNull()
+    expect(dropping!.getAttribute('data-dropping')).toBe('true')
+    expect(tableCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.row\[data-flash\] \{\s*animation: none/)
+  })
+})

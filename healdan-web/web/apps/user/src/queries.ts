@@ -21,6 +21,8 @@ export const keys = {
   myMatters: ['matters', 'mine'] as const,
   favorites: ['favorites'] as const,
   folder: (id: number) => ['folders', id] as const,
+  // The properties a new document filed into the folder would have
+  form: (id: number) => ['folders', id, 'form'] as const,
   subfolders: (id: number) => ['folders', id, 'subfolders'] as const,
   // Which facets, counted over what the filters leave, and how many documents the folder holds without filters
   facets: (id: number, options: Record<string, unknown>) => ['folders', id, 'facets', options] as const,

@@ -35,6 +35,7 @@ import {
   IconSearch,
   IconStar,
   IconStarFilled,
+  IconUpload,
   IconX,
   IconZoomIn,
   IconZoomOut,
@@ -73,6 +74,7 @@ export const icons = {
   spreadsheet: IconFileSpreadsheet,
   star: IconStar,
   starFilled: IconStarFilled,
+  upload: IconUpload,
   zoomIn: IconZoomIn,
   zoomOut: IconZoomOut,
 }

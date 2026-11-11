@@ -29,6 +29,10 @@ export interface TableRow {
   textValue: string
   /** False for a row that opens but can't be selected, such as a folder among documents */
   selectable?: boolean
+  /** A row that was just made: it shows one short highlight (none for a person who asks for less motion) */
+  flash?: boolean
+  /** Something that can be dropped on the row is over it */
+  dropping?: boolean
 }
 
 export interface TableColumn<T extends TableRow> {
@@ -186,7 +190,7 @@ export function Table<T extends TableRow>({
           <TableBody renderEmptyState={() => <div className={styles.empty}>{empty}</div>}>
             <Collection items={rows} dependencies={[columns]}>
               {(row) => (
-                <Row id={row.id} textValue={row.textValue} columns={columns} dependencies={[columns]} className={styles.row} data-row-key={row.id}>
+                <Row id={row.id} textValue={row.textValue} columns={columns} dependencies={[columns]} className={styles.row} data-row-key={row.id} data-flash={row.flash || undefined} data-dropping={row.dropping || undefined}>
                   {(column) => <Cell className={`${styles.cell} ${column.align === 'end' ? styles.end : ''}`}>{column.cell(row)}</Cell>}
                 </Row>
               )}

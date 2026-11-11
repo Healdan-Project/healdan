@@ -6,6 +6,8 @@ import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useId, useState, type ReactNode } from 'react'
 import { apiPath, type Api, type components } from '@healdan/api'
 import { Button, Icon, Menu, MenuItem, Tree, t, toast, type IconName, type TreeNode } from '@healdan/ui'
+import { placeOf, takesDrag, type Place } from '../filing/dropTargets'
+import { useFiling } from '../filing/FilingProvider'
 import { idFrom, keys, useFavorites, useFolder, useMyMatters, useRecentMatters } from '../queries'
 import type { PageOf } from '../pages'
 import { useApi } from '../services'
@@ -162,6 +164,7 @@ function MyMattersSection() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const mine = useMyMatters()
   const change = useMyMattersChange()
+  const filing = useFiling()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const matters = mine.data?.items ?? []
 
@@ -200,8 +203,12 @@ function MyMattersSection() {
     return undefined
   }
 
+  // What each node stands for as a place to drop files: a folder's kind says a search folder refuses, a matter its top level
+  const places = new Map<string, Place>()
+
   function folderNode(folder: S['FolderView']): TreeNode {
     const id = String(folder.id)
+    places.set(id, placeOf(folder))
     return {
       id,
       textValue: folder.name,
@@ -213,6 +220,7 @@ function MyMattersSection() {
 
   const nodes: TreeNode[] = matters.map((matter) => {
     const id = String(matter.folderId)
+    places.set(id, { id: matter.folderId, kind: 'matter' })
     return {
       id,
       textValue: `${matter.display} ${matter.client.name}`,
@@ -253,6 +261,11 @@ function MyMattersSection() {
           expanded={expanded}
           onExpandedChange={setExpanded}
           current={currentFolder(pathname)}
+          acceptsDrop={(id, types) => places.has(id) && takesDrag(types)}
+          onDrop={(id, event) => {
+            const place = places.get(id)
+            if (place) filing.drop(event, place)
+          }}
           onAction={(id) => {
             // The ids of a failed node's message aren't folders.
             if (!id.includes(':')) void navigate({ to: '/folders/$id', params: { id } })

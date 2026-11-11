@@ -1,0 +1,148 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
+import type { Api, components } from '@healdan/api'
+import { saveVersion } from '../actions/checkout'
+import { copyOf } from './refusal'
+
+type S = components['schemas']
+
+/** A file to file, with the title it's filed under (its name, with its extension) */
+export interface FilingFile {
+  file: File
+  name: string
+}
+
+export function named(files: File[]): FilingFile[] {
+  return files.map((file) => ({ file, name: file.name }))
+}
+
+export type UploadStatus = 'waiting' | 'uploading' | 'filed' | 'refused'
+
+export interface UploadItem {
+  id: number
+  /** The title it's filed under, or the name of the document it's saved into */
+  name: string
+  status: UploadStatus
+  /** The folder it's filed into */
+  folderId: number
+  /** Filed, or the version's document, once it's done */
+  docNumber?: number
+  /** The version a save made */
+  version?: string
+  /** Why it was refused */
+  problem?: unknown
+  /** For `already-filed`: the copy the matter holds */
+  existing?: S['DocumentView']
+  /** Just filed: the list flashes it for a few seconds */
+  fresh?: boolean
+}
+
+type Job = { kind: 'new'; file: FilingFile; properties?: Record<string, S['PropertyValue']> } | { kind: 'version'; document: S['DocumentView']; file: File; ifHeld: boolean }
+
+export interface Uploads {
+  /** The items in the order they were made; the same array until something changes */
+  items: () => readonly UploadItem[]
+  subscribe: (listener: () => void) => () => void
+  /** Whether anything is waiting or uploading */
+  busy: () => boolean
+  enqueue: (files: FilingFile[], folderId: number, properties?: Record<string, S['PropertyValue']>) => void
+  /** Saves a file as the next version of a document; `ifHeld` when the document is the person's own web check-out */
+  enqueueVersion: (document: S['DocumentView'], file: File, ifHeld: boolean) => void
+  /** Removes a finished item */
+  dismiss: (id: number) => void
+}
+
+export interface UploadsOptions {
+  /** Called after each item is done, however it went: the lists that show documents are asked for again */
+  onSettled: () => void
+  /** How many run at once; 3 by default */
+  limit?: number
+  /** How long a new document is fresh, in ms */
+  freshFor?: number
+}
+
+/** How many uploads run at once: a person's connection is better used by a few than many */
+const AT_ONCE = 3
+const FRESH_MS = 4000
+
+/**
+ * The queue of filing (spec 6.5): items go in order, at most three at a time, each through the API as its own request,
+ * so a refusal of one never stops the others. It lives in memory for as long as the page does, so uploads go on while
+ * the person moves about the app; it keeps nothing in the browser's storage.
+ */
+export function createUploads(api: Api, options: UploadsOptions): Uploads {
+  const limit = options.limit ?? AT_ONCE
+  let items: readonly UploadItem[] = []
+  const jobs = new Map<number, Job>()
+  const listeners = new Set<() => void>()
+  let nextId = 1
+
+  function change(update: (now: readonly UploadItem[]) => readonly UploadItem[]) {
+    items = update(items)
+    for (const listener of [...listeners]) listener()
+  }
+
+  function patch(id: number, over: Partial<UploadItem>) {
+    change((now) => now.map((item) => (item.id === id ? { ...item, ...over } : item)))
+  }
+
+  async function send(item: UploadItem, job: Job): Promise<S['DocumentView']> {
+    if (job.kind === 'version') return saveVersion(api, job.document, job.file, { kind: 'version', ifHeld: job.ifHeld })
+    const form = new FormData()
+    const document = { folderId: item.folderId, name: job.file.name, properties: job.properties ?? null, checkOut: false }
+    form.append('document', new Blob([JSON.stringify(document)], { type: 'application/json' }))
+    form.append('file', job.file.file, job.file.file.name)
+    return api.send('POST', '/v1/documents', form)
+  }
+
+  async function run(item: UploadItem) {
+    const job = jobs.get(item.id)!
+    patch(item.id, { status: 'uploading' })
+    try {
+      const done = await send(item, job)
+      patch(item.id, { status: 'filed', docNumber: done.docNumber, version: job.kind === 'version' ? done.version : undefined, fresh: true })
+      setTimeout(() => patch(item.id, { fresh: false }), options.freshFor ?? FRESH_MS)
+    } catch (error) {
+      patch(item.id, { status: 'refused', problem: error, existing: copyOf(error) })
+    } finally {
+      jobs.delete(item.id)
+      options.onSettled()
+      pump()
+    }
+  }
+
+  function pump() {
+    let running = items.filter((item) => item.status === 'uploading').length
+    for (const item of items) {
+      if (running >= limit) return
+      if (item.status === 'waiting' && jobs.has(item.id)) {
+        running++
+        void run(item)
+      }
+    }
+  }
+
+  function add(entries: { name: string; folderId: number; job: Job }[]) {
+    const made = entries.map(({ name, folderId, job }) => {
+      const item: UploadItem = { id: nextId++, name, status: 'waiting', folderId }
+      jobs.set(item.id, job)
+      return item
+    })
+    change((now) => [...now, ...made])
+    pump()
+  }
+
+  return {
+    items: () => items,
+    subscribe: (listener) => {
+      listeners.add(listener)
+      return () => void listeners.delete(listener)
+    },
+    busy: () => items.some((item) => item.status === 'waiting' || item.status === 'uploading'),
+    enqueue: (files, folderId, properties) =>
+      add(files.map((file) => ({ name: file.name, folderId, job: { kind: 'new', file, properties } }))),
+    enqueueVersion: (document, file, ifHeld) => add([{ name: document.name, folderId: document.folder.id, job: { kind: 'version', document, file, ifHeld } }]),
+    dismiss: (id) => change((now) => now.filter((item) => item.id !== id || item.status === 'waiting' || item.status === 'uploading')),
+  }
+}

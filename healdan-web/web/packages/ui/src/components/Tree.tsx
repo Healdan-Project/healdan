@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import type { ReactNode } from 'react'
+import { useState, type DragEvent, type ReactNode } from 'react'
 import { Button, Tree as AriaTree, TreeItem as AriaTreeItem, TreeItemContent, type Key } from 'react-aria-components'
 import { Icon } from '../icons'
 import { t } from '../strings'
@@ -30,12 +30,45 @@ export interface TreeProps {
   onAction: (id: string) => void
   /** The node that is open in the main area. */
   current?: string
+  /** Whether a node takes what is being dragged over it, by the types of the data (`DataTransfer.types`): it then lights up */
+  acceptsDrop?: (id: string, types: readonly string[]) => boolean
+  /** Something the node accepts was dropped on it */
+  onDrop?: (id: string, event: DragEvent) => void
 }
 
 const loadingSuffix = '\u0000loading'
 
 // The caller owns what is expanded and what is loaded, so a node's children can be fetched when it is first expanded.
-export function Tree({ nodes, expanded, onExpandedChange, onAction, current, ...rest }: TreeProps) {
+export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acceptsDrop, onDrop, ...rest }: TreeProps) {
+  // The node something is being dragged over, and takes
+  const [over, setOver] = useState<string | undefined>()
+
+  function dropProps(node: TreeNode) {
+    if (!acceptsDrop) return {}
+    const takes = (event: DragEvent) => acceptsDrop(node.id, Array.from(event.dataTransfer.types))
+    return {
+      // Without a cancelled dragover the browser won't drop here
+      onDragOver: (event: DragEvent) => {
+        if (!takes(event)) return
+        event.preventDefault()
+        event.stopPropagation()
+        setOver(node.id)
+      },
+      onDragLeave: (event: DragEvent) => {
+        // Moving onto a child of the row isn't leaving it
+        if (event.currentTarget instanceof Node && event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+        setOver((now) => (now === node.id ? undefined : now))
+      },
+      onDrop: (event: DragEvent) => {
+        setOver(undefined)
+        if (!takes(event)) return
+        event.preventDefault()
+        event.stopPropagation()
+        onDrop?.(node.id, event)
+      },
+    }
+  }
+
   function item(node: TreeNode): ReactNode {
     return (
       <AriaTreeItem
@@ -53,7 +86,7 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, ...
       >
         <TreeItemContent>
           {({ hasChildItems, isExpanded }) => (
-            <span className={styles.row}>
+            <span className={styles.row} data-drop-target={over === node.id ? 'true' : undefined} {...dropProps(node)}>
               {hasChildItems ? (
                 <Button slot="chevron" className={styles.chevron}>
                   <Icon name="chevronRight" size={12} className={isExpanded ? styles.open : undefined} />

@@ -95,6 +95,33 @@
   color: var(--hd-text);
 }
 
+/* A document that was just filed: one short highlight, none under prefers-reduced-motion */
+.row[data-flash] {
+  animation: flash 1.6s ease-out 1;
+}
+
+@keyframes flash {
+  from {
+    background: color-mix(in srgb, var(--hd-accent-fill) 35%, transparent);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row[data-flash] {
+    animation: none;
+  }
+}
+
+/* A file is being dragged over the row: dropping it there saves it as a new version */
+.row[data-dropping] {
+  background: var(--hd-pill);
+  box-shadow: inset 0 0 0 2px var(--hd-accent-fill);
+}
+
 .cell {
   display: flex;
   align-items: center;

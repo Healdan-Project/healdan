@@ -148,6 +148,10 @@ weight: 12
   the **Healdan** button shows there for the people the add-in is deployed to, but the pane only says that it works in
   the new Outlook for Mac for now. Deploy it to the Mac users who'll file email: see
   [Deploying the Outlook Add-in](../office-integration/#deploying-the-outlook-add-in).
+- **Dragging a message into the browser works in Safari only.** Dragged out of the new Outlook for Mac onto the User
+  app's folder list, a message arrives in Safari as an `.eml` file named after its subject, and is filed like any file. In
+  Chrome the page gets no drop at all. Drag the message to Finder first, or file it from the add-in's pane. Other
+  browsers haven't been tried.
 - **The primary mailbox only.** The add-in works in your own mailbox, not in shared or delegated ones: Outlook turns
   its button off there.
 - **Filing is one message at a time for now.** Filing several messages at once isn't available yet: the new Outlook for
