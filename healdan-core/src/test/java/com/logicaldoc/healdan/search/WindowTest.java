@@ -121,10 +121,12 @@ public class WindowTest extends AbstractHealdanTestCase {
 		assertEquals(40, small.getHits().size());
 		assertFalse(small.isComplete());
 
-		// Widened, as the old web page's searches are, the index's hits are all read and then cut
+		// Widened, as the old web page's searches are, the handler's 1,000 rows are read and then cut: no more reach
+		// the index than before Healdan's edit in FulltextSearch
 		ExtensionFilteredSearch widened = filtered(40, true);
 		assertEquals(40, widened.getHits().size());
 		assertFalse(widened.isComplete());
+		assertEquals(1000, widened.engineHits());
 
 		// Lookups find all there is
 		Search lookup = search(HealdanConstants.SEARCH_DOC_NUMBER, 10);

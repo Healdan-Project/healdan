@@ -280,10 +280,6 @@ public class SearchResource {
 						: Optional.empty();
 	}
 
-	private static boolean inside(long folderId, long within) throws PersistenceException {
-		return folderId == within || FolderDAO.get().isInPath(within, folderId);
-	}
-
 	private static Optional<Object> view(Object found, User user) throws PersistenceException {
 		if (found instanceof Matter matter)
 			return Optional.of(ApiViews.matter(matter, null));

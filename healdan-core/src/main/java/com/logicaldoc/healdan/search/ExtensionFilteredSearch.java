@@ -32,11 +32,16 @@ import com.logicaldoc.core.searchengine.SearchOptions;
  */
 public abstract class ExtensionFilteredSearch extends FulltextSearch implements CountableSearch {
 
-	/** How many full-text hits are filtered at least, when there is a maximum */
-	static final int FILTER_WINDOW = 5000;
-
 	/** The rows CE's search handler gives when FulltextSearch asks for none ({@code solrconfig.xml}) */
 	static final int HANDLER_ROWS = 1000;
+
+	/**
+	 * How many full-text hits are filtered at least, when there is a maximum:
+	 * the handler's own rows, which the old web page's searches always had. A
+	 * wider window would reach the index as its rows since Healdan's edit in
+	 * {@code FulltextSearch}, at several times the cost of every search
+	 */
+	static final int FILTER_WINDOW = HANDLER_ROWS;
 
 	/** The most rows FulltextSearch asks the index for, Healdan's cap in its edit */
 	static final int ENGINE_ROWS = 10000;
@@ -44,6 +49,9 @@ public abstract class ExtensionFilteredSearch extends FulltextSearch implements 
 	private boolean widened = true;
 
 	private boolean complete;
+
+	/** Whether a wider window could find more: the index had more than it handed back, or the window cut hits */
+	private boolean windowFull;
 
 	/** The scores of the hits the index handed back in the last run, before CE's checks, highest first */
 	private int[] scores = new int[0];
@@ -71,6 +79,16 @@ public abstract class ExtensionFilteredSearch extends FulltextSearch implements 
 	@Override
 	public boolean isComplete() {
 		return complete;
+	}
+
+	/**
+	 * @return true if a wider window could find more hits in the last run;
+	 *         false when the run is complete, or when only a cap of its own
+	 *         that no window changes (such as the Comments matches') left
+	 *         some out, so that widening would find the same hits again
+	 */
+	public boolean isWindowFull() {
+		return windowFull;
 	}
 
 	/**
@@ -149,18 +167,27 @@ public abstract class ExtensionFilteredSearch extends FulltextSearch implements 
 		boolean cut = maxHits > 0 && kept.size() > maxHits;
 		// A full window may have left matching hits out
 		moreHitsPresent = moreHitsPresent || cut;
-		complete = !engineHadMore && !moreHitsPresent;
+		windowFull = engineHadMore || moreHitsPresent;
+		complete = !windowFull;
 		hits.clear();
 		hits.addAll(cut ? kept.subList(0, maxHits) : kept);
 		estimatedHitsNumber = kept.size();
 	}
 
 	/**
-	 * For a subclass that adds hits of its own after the index's
-	 *
-	 * @param complete whether no hit was left out
+	 * For a subclass that adds hits of its own after the index's: a cap of
+	 * its own, which no window changes, left some out
 	 */
-	protected void setComplete(boolean complete) {
-		this.complete = complete;
+	protected void setIncomplete() {
+		this.complete = false;
+	}
+
+	/**
+	 * For a subclass that adds hits of its own after the index's: the window
+	 * was full before they were all added, so a wider one could find more
+	 */
+	protected void setWindowFull() {
+		this.windowFull = true;
+		this.complete = false;
 	}
 }

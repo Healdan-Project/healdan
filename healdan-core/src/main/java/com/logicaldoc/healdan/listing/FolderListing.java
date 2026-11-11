@@ -98,9 +98,14 @@ public class FolderListing {
 	 * @throws PersistenceException error at data layer
 	 */
 	public ListedPage page(Folder folder, User user, ListingQuery query) throws PersistenceException {
-		Scope scope = readable(folder, user);
-		Sort sort = query.sort() != null ? query.sort() : Sort.TITLE;
+		return pageOf(readable(folder, user), query, query.sort() != null ? query.sort() : Sort.TITLE);
+	}
 
+	/**
+	 * @return the scope's page, sorted and paged in one query, and how many of
+	 *         its documents pass the filters
+	 */
+	private ListedPage pageOf(Scope scope, ListingQuery query, Sort sort) {
 		List<Long> ids = List.of();
 		if (query.limit() > 0) {
 			Select select = new Select(scope, query);
@@ -245,24 +250,7 @@ public class FolderListing {
 			throw new IllegalArgumentException("A sorted page needs a sort");
 		if (docIds.isEmpty())
 			return new ListedPage(List.of(), 0);
-		Scope scope = readable(docIds, reads, MAX_SORTED_IDS);
-
-		List<Long> ids = List.of();
-		if (query.limit() > 0) {
-			Select select = new Select(scope, query);
-			String order = order(select, query.sort(), query.descending());
-			select.params.addValue("limit", query.limit()).addValue("offset", query.offset());
-			ids = jdbc.queryForList("select d.ld_id" + select.from() + order + ListingSql.PAGE, select.params,
-					Long.class);
-		}
-		long total;
-		if (query.limit() > 0 && ids.size() < query.limit() && (!ids.isEmpty() || query.offset() == 0))
-			total = (long) query.offset() + ids.size();
-		else {
-			Select select = new Select(scope, query);
-			total = jdbc.queryForObject("select count(*)" + select.from(), select.params, Long.class);
-		}
-		return new ListedPage(ids, total);
+		return pageOf(readable(docIds, reads, MAX_SORTED_IDS), query, query.sort());
 	}
 
 	/**
@@ -304,16 +292,36 @@ public class FolderListing {
 
 	private Facets facets(Scope scope, ListingQuery query, Set<String> which) {
 		Map<String, Map<String, Long>> counts = new LinkedHashMap<>();
+		Map<String, Long> authorUsers = new HashMap<>();
 		for (String facet : Facets.NAMES)
 			if (which.contains(facet))
-				counts.put(facet, count(scope, query.without(facet), facet));
-		return new Facets(counts);
+				counts.put(facet, count(scope, query.without(facet), facet, authorUsers));
+		return new Facets(counts, authorUsers);
 	}
 
-	private Map<String, Long> count(Scope scope, ListingQuery query, String facet) {
+	/**
+	 * @param authorUsers where the Author facet puts each option's user, by
+	 *        the property's user id, as {@link DocumentAuthors} reads it
+	 */
+	private Map<String, Long> count(Scope scope, ListingQuery query, String facet, Map<String, Long> authorUsers) {
 		Select select = new Select(scope, query);
 		Map<String, Long> counts = new HashMap<>();
-		if (Facets.TYPE.equals(facet)) {
+		if (Facets.AUTHOR.equals(facet)) {
+			// The user by the property's id, as the rows and the sort by Author name them, not by the kept username
+			select.join(AUTHOR, HealdanConstants.ATTR_AUTHOR);
+			select.joinAuthorUser();
+			select.where.add(AUTHOR + ".ld_stringvalue is not null");
+			jdbc.query("select %1$s.ld_stringvalue, max(%2$s.ld_id), count(*)%3$s group by %1$s.ld_stringvalue"
+					.formatted(AUTHOR, AUTHOR_USER, select.from()), select.params, rs -> {
+						String value = rs.getString(1);
+						if (StringUtils.isBlank(value))
+							return;
+						counts.merge(value, rs.getLong(3), Long::sum);
+						long user = rs.getLong(2);
+						if (!rs.wasNull())
+							authorUsers.putIfAbsent(value, user);
+					});
+		} else if (Facets.TYPE.equals(facet)) {
 			// Counted by extension, then added up by kind
 			jdbc.query("select lower(d.ld_type), count(*)" + select.from() + " group by lower(d.ld_type)",
 					select.params, rs -> {
@@ -331,11 +339,8 @@ public class FolderListing {
 							counts.merge(client + "." + matter, rs.getLong(3), Long::sum);
 					});
 		} else {
-			String alias = switch (facet) {
-			case Facets.AUTHOR -> select.join(AUTHOR, HealdanConstants.ATTR_AUTHOR);
-			case Facets.CLASS -> select.join(CLASS, HealdanConstants.ATTR_DOCCLASS);
-			default -> select.join(CLIENT, HealdanConstants.ATTR_CLIENT);
-			};
+			String alias = Facets.CLASS.equals(facet) ? select.join(CLASS, HealdanConstants.ATTR_DOCCLASS)
+					: select.join(CLIENT, HealdanConstants.ATTR_CLIENT);
 			select.where.add(alias + ".ld_stringvalue is not null");
 			jdbc.query("select %1$s.ld_stringvalue, count(*)%2$s group by %1$s.ld_stringvalue".formatted(alias,
 					select.from()), select.params, rs -> {

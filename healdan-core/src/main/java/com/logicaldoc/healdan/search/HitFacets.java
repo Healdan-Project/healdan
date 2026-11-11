@@ -68,17 +68,19 @@ public final class HitFacets {
 			return FolderListing.get().facets(List.of(), reads, query, which);
 
 		Map<String, Map<String, Long>> sums = new LinkedHashMap<>();
+		Map<String, Long> authorUsers = new HashMap<>();
 		for (int from = 0; from < ids.size(); from += FolderListing.MAX_IDS) {
 			List<Long> chunk = ids.subList(from, Math.min(from + FolderListing.MAX_IDS, ids.size()));
 			// The chunks share no id, so each option's counts add up
-			FolderListing.get().facets(chunk, reads, query, which).counts()
-					.forEach((facet, options) -> options.forEach((option, count) -> sums
-							.computeIfAbsent(facet, name -> new HashMap<>()).merge(option, count, Long::sum)));
+			Facets facets = FolderListing.get().facets(chunk, reads, query, which);
+			facets.counts().forEach((facet, options) -> options.forEach((option, count) -> sums
+					.computeIfAbsent(facet, name -> new HashMap<>()).merge(option, count, Long::sum)));
+			facets.authorUsers().forEach(authorUsers::putIfAbsent);
 		}
 		Map<String, Map<String, Long>> counts = new LinkedHashMap<>();
 		for (String facet : Facets.NAMES)
 			if (which.contains(facet))
 				counts.put(facet, sums.getOrDefault(facet, Map.of()));
-		return new Facets(counts);
+		return new Facets(counts, authorUsers);
 	}
 }

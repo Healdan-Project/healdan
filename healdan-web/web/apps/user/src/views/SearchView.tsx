@@ -8,6 +8,7 @@ import { DetailsPanel } from '../details/DetailsPanel'
 import { FilterChips } from '../filters/FilterChips'
 import { FiltersButton } from '../filters/FiltersButton'
 import { FiltersPanel } from '../filters/FiltersPanel'
+import { useAuthorNames } from '../filters/useAuthorNames'
 import { useFilters } from '../filters/useFilters'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { RightRegionView, useRightRegion } from '../frame/RightRegion'
@@ -47,12 +48,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const { selected, selection, change: changeSelection } = useRowSelection()
   const rows = useMemo(() => results.rows.map(rowOf), [results.rows])
   const columns = useMemo(() => hitColumns(scope), [scope])
-  const authors = useMemo(() => {
-    const names = new Map<string, string>()
-    for (const item of results.rows) if (item.type === 'document' && item.author) names.set(item.author.username, item.author.displayName)
-    for (const option of facets.data?.author ?? []) names.set(option.value, option.displayName)
-    return names
-  }, [results.rows, facets.data])
+  const authors = useAuthorNames(results.rows, facets.data)
 
   if (text === '') {
     return (

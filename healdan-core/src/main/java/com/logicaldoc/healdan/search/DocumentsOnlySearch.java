@@ -51,8 +51,8 @@ public class DocumentsOnlySearch extends ExtensionFilteredSearch {
 		if (StringUtils.isBlank(options.getExpression()))
 			return;
 		if (maxHits > 0 && hits.size() >= maxHits) {
-			// The Comments weren't looked at, so there may be more
-			setComplete(false);
+			// The Comments weren't looked at, so there may be more, which a wider window would look at
+			setWindowFull();
 			return;
 		}
 		User user = UserDAO.get().findById(options.getUserId(), true);
@@ -63,8 +63,10 @@ public class DocumentsOnlySearch extends ExtensionFilteredSearch {
 		hits.forEach(hit -> seen.add(hit.getId()));
 		List<Long> matches = CommentsMatch.documentIds(options.getExpression(), user.getTenantId(), COMMENTS_WINDOW,
 				options.getFolderId(), options.isSearchInSubPath());
+		// The Comments may match more than their window, whatever the search's: the total is a floor, but widening
+		// would find the same matches again
 		if (matches.size() >= COMMENTS_WINDOW)
-			setComplete(false);
+			setIncomplete();
 		for (Long id : matches) {
 			if (seen.contains(id))
 				continue;
@@ -74,7 +76,7 @@ public class DocumentsOnlySearch extends ExtensionFilteredSearch {
 				continue;
 			if (maxHits > 0 && hits.size() >= maxHits) {
 				moreHitsPresent = true;
-				setComplete(false);
+				setWindowFull();
 				break;
 			}
 			// A new hit with the document's values, so that nothing done to the hit reaches the document

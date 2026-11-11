@@ -24,8 +24,12 @@ import java.util.Set;
  *        <li>{@link #MATTER}: the client and matter numbers, such as
  *        {@code 998.1}</li>
  *        </ul>
+ * @param authorUsers for each {@link #AUTHOR} option, the user its
+ *        documents' Author property names by id, while that user exists: the
+ *        user {@link DocumentAuthors} names those documents' Author by. An
+ *        option whose user is gone isn't there, and shows as its username.
  */
-public record Facets(Map<String, Map<String, Long>> counts) {
+public record Facets(Map<String, Map<String, Long>> counts, Map<String, Long> authorUsers) {
 
 	public static final String TYPE = "type";
 
@@ -44,6 +48,14 @@ public record Facets(Map<String, Map<String, Long>> counts) {
 		Map<String, Map<String, Long>> copy = new LinkedHashMap<>();
 		counts.forEach((name, options) -> copy.put(name, sorted(options)));
 		counts = Collections.unmodifiableMap(copy);
+		authorUsers = Map.copyOf(authorUsers);
+	}
+
+	/**
+	 * @param counts the counts, with no Author's user known
+	 */
+	public Facets(Map<String, Map<String, Long>> counts) {
+		this(counts, Map.of());
 	}
 
 	/**

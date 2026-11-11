@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -328,11 +329,16 @@ public class FolderResource {
 		Map<String, Map<String, Long>> counts = facets.counts();
 		List<AuthorFacetCount> authors = null;
 		if (counts.containsKey(Facets.AUTHOR)) {
-			Map<String, String> names = displayNames(counts.get(Facets.AUTHOR).keySet());
+			// By the user the documents' property names by id, as their rows show the Author; the kept username
+			// when that user is gone
+			Map<Long, String> names = displayNames(facets.authorUsers().values());
 			authors = new ArrayList<>();
-			for (Map.Entry<String, Long> option : counts.get(Facets.AUTHOR).entrySet())
-				authors.add(new AuthorFacetCount(option.getKey(),
-						names.getOrDefault(option.getKey(), option.getKey()), option.getValue()));
+			for (Map.Entry<String, Long> option : counts.get(Facets.AUTHOR).entrySet()) {
+				Long user = facets.authorUsers().get(option.getKey());
+				String name = user == null ? null : names.get(user);
+				authors.add(new AuthorFacetCount(option.getKey(), name != null ? name : option.getKey(),
+						option.getValue()));
+			}
 		}
 		return new FacetsView(options(counts.get(Facets.TYPE)), authors, options(counts.get(Facets.CLASS)),
 				options(counts.get(Facets.CLIENT)), options(counts.get(Facets.MATTER)), partial ? Boolean.TRUE : null);
@@ -347,16 +353,16 @@ public class FolderResource {
 	}
 
 	/**
-	 * @return each user's name, as {@code User.getFullName} makes it, by
-	 *         username; a username that is no longer a user's isn't there
+	 * @return each user's name, as {@code User.getFullName} makes it, by id;
+	 *         an id that is no longer a user's isn't there
 	 */
-	private static Map<String, String> displayNames(Collection<String> usernames) throws PersistenceException {
-		Map<String, String> names = new HashMap<>();
-		if (usernames.isEmpty())
+	private static Map<Long, String> displayNames(Collection<Long> userIds) throws PersistenceException {
+		Map<Long, String> names = new HashMap<>();
+		if (userIds.isEmpty())
 			return names;
-		for (User user : UserDAO.get().findByWhere("_entity.username in (:usernames)",
-				Map.of("usernames", List.copyOf(usernames)), null, null))
-			names.put(user.getUsername(), user.getFullName());
+		for (User user : UserDAO.get().findByWhere("_entity.id in (:ids)",
+				Map.of("ids", List.copyOf(new HashSet<>(userIds))), null, null))
+			names.put(user.getId(), user.getFullName());
 		return names;
 	}
 

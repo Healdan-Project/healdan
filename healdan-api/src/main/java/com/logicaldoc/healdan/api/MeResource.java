@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.stereotype.Component;
@@ -26,6 +27,8 @@ import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.api.model.NewFavorite;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.UserView;
+import com.logicaldoc.healdan.listing.DocumentAuthors;
+import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.navigation.Favorites;
 import com.logicaldoc.healdan.navigation.MyMatters;
 import com.logicaldoc.healdan.security.AccessChecks;
@@ -68,13 +71,18 @@ public class MeResource {
 		User caller = Caller.current().user();
 		try {
 			// The partial documents the DAO returns are only good for their ids
-			List<DocumentView> views = new ArrayList<>();
+			List<Document> documents = new ArrayList<>();
 			for (Document partial : DocumentDAO.get().findByLockUserAndStatus(caller.getId(),
 					DocumentStatus.CHECKEDOUT)) {
 				Document document = DocumentDAO.get().findById(partial.getId());
 				if (AccessChecks.readableDocument(document, caller).isPresent() && ApiViews.shows(document))
-					views.add(ApiViews.document(document, caller));
+					documents.add(document);
 			}
+			// The Authors in one query, not one a row
+			Map<Long, Author> authors = ApiViews.authors(documents);
+			List<DocumentView> views = new ArrayList<>();
+			for (Document document : documents)
+				views.add(ApiViews.document(document, caller, authors));
 			views.sort(Comparator.comparing(MeResource::since, Comparator.nullsLast(Comparator.reverseOrder()))
 					.thenComparing(Comparator.comparingLong(DocumentView::docNumber).reversed()));
 			return Page.whole(views);
@@ -98,9 +106,13 @@ public class MeResource {
 	public Page<FavoriteView> favorites() {
 		User caller = Caller.current().user();
 		try {
+			List<Bookmark> bookmarks = Favorites.get().list(caller.getId());
+			// The documents' Authors in one query, not one a favorite
+			Map<Long, Author> authors = DocumentAuthors.get().of(bookmarks.stream()
+					.filter(b -> b.getType() != Bookmark.Type.FOLDER).map(Bookmark::getTargetId).toList());
 			List<FavoriteView> views = new ArrayList<>();
-			for (Bookmark bookmark : Favorites.get().list(caller.getId())) {
-				FavoriteView view = view(bookmark, caller);
+			for (Bookmark bookmark : bookmarks) {
+				FavoriteView view = view(bookmark, caller, authors);
 				if (view != null)
 					views.add(view);
 			}
@@ -139,7 +151,9 @@ public class MeResource {
 				Document document = DocumentResource.readable(body.docNumber(), caller);
 				bookmark = Favorites.get().addDocument(caller.getId(), document.getId());
 			}
-			FavoriteView view = view(bookmark, caller);
+			FavoriteView view = view(bookmark, caller,
+					bookmark.getType() == Bookmark.Type.FOLDER ? Map.of()
+							: DocumentAuthors.get().of(List.of(bookmark.getTargetId())));
 			if (view == null)
 				throw new IllegalStateException("The new favorite can't be shown");
 			return Response.status(Response.Status.CREATED).entity(view).build();
@@ -213,8 +227,12 @@ public class MeResource {
 		}
 	}
 
-	/** @return the bookmark's view, or null if its target can't be read or isn't shown */
-	private static FavoriteView view(Bookmark bookmark, User caller) throws PersistenceException {
+	/**
+	 * @param authors the Authors of the favorites' documents, by id, read at once
+	 * @return the bookmark's view, or null if its target can't be read or isn't shown
+	 */
+	private static FavoriteView view(Bookmark bookmark, User caller, Map<Long, Author> authors)
+			throws PersistenceException {
 		if (bookmark.getType() == Bookmark.Type.FOLDER) {
 			Optional<Folder> folder = AccessChecks.readableFolder(bookmark.getTargetId(), caller);
 			if (folder.isEmpty())
@@ -226,7 +244,7 @@ public class MeResource {
 				caller);
 		if (document.isEmpty() || !ApiViews.shows(document.get()))
 			return null;
-		return new FavoriteView(bookmark.getId(), "document", ApiViews.document(document.get(), caller));
+		return new FavoriteView(bookmark.getId(), "document", ApiViews.document(document.get(), caller, authors));
 	}
 
 }

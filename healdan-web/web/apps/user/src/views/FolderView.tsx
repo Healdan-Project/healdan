@@ -9,6 +9,7 @@ import { Button, Icon, t, Table, toast, type TableSort } from '@healdan/ui'
 import { FilterChips } from '../filters/FilterChips'
 import { FiltersButton } from '../filters/FiltersButton'
 import { FiltersPanel } from '../filters/FiltersPanel'
+import { useAuthorNames } from '../filters/useAuthorNames'
 import { useFacets, useUnfilteredDocuments } from '../filters/useFacets'
 import { useFilters } from '../filters/useFilters'
 import { ErrorPanel } from '../frame/ErrorPanel'
@@ -53,13 +54,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const headingId = useId()
   const { selected, selection, change: changeSelection } = useRowSelection()
   const rows = useMemo(() => listing.rows.map(rowOf), [listing.rows])
-  // The Authors' names, from the rows and the options, for the chips (a username shows as itself otherwise)
-  const authors = useMemo(() => {
-    const names = new Map<string, string>()
-    for (const item of listing.rows) if (item.type === 'document' && item.author) names.set(item.author.username, item.author.displayName)
-    for (const option of facets.data?.author ?? []) names.set(option.value, option.displayName)
-    return names
-  }, [listing.rows, facets.data])
+  const authors = useAuthorNames(listing.rows, facets.data)
 
   if (folder.isError) {
     if (folder.error instanceof ApiError && folder.error.status === 404) return <NotFound />

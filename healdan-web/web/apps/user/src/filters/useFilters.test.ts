@@ -27,6 +27,10 @@ describe('readFilters', () => {
     expect(read).toEqual({ ...noFilters, type: ['pdf'], client: ['998'], matter: ['998.1'] })
   })
 
+  it('trims each value as the API does, and leaves out a blank one, which it refuses', () => {
+    expect(readFilters({ author: [' ', ' pnair '], class: '  ' })).toEqual({ ...noFilters, author: ['pnair'] })
+  })
+
   it('lets a range win over a preset, and drops an end that comes before the start', () => {
     const both = readFilters({ edited: 'today', from: '2026-11-01', to: '2026-11-09' })
     expect(both.edited).toBeUndefined()

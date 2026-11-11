@@ -38,9 +38,10 @@ function isDay(value: unknown): value is string {
   return !Number.isNaN(made.getTime()) && made.toISOString().startsWith(value)
 }
 
+// Trimmed, as the API trims them, so a blank value (?author=%20), which it refuses, is left out like an empty one
 function listOf(value: unknown): string[] {
   const all = Array.isArray(value) ? value : [value]
-  return [...new Set(all.filter((one): one is string => typeof one === 'string' && one !== ''))]
+  return [...new Set(all.filter((one): one is string => typeof one === 'string').map((one) => one.trim()).filter((one) => one !== ''))]
 }
 
 // What the API would refuse with a 400 never goes to it: a pasted address with a client that isn't a number just

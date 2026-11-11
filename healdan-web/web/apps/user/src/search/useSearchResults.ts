@@ -75,6 +75,9 @@ export function useSearchResults(options: SearchOptions): SearchResults {
     getNextPageParam: (last, all) => nextOffset(last, all.reduce((n, page) => n + page.items.length, 0)),
     enabled,
     placeholderData: keepPreviousData,
+    // Coming back to the window would ask every loaded page again, one after another, and each page runs the whole
+    // search on the server: a search is asked again when it's run again, not on focus
+    refetchOnWindowFocus: false,
   })
   const pages = query.data?.pages
   const rows = useMemo(() => distinct(pages?.flatMap((page) => page.items) ?? []), [pages])

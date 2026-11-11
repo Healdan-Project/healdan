@@ -42,8 +42,9 @@ import com.logicaldoc.healdan.security.FolderReads;
  * the same order, in every window, so pages neither repeat nor skip a hit. The
  * window starts at {@link SearchResource#FACET_WINDOW}, or the page's end if
  * that is further, and doubles until that cut reaches the page's end, the
- * search is complete, or the window is {@code MAX_WINDOW}, which every page past
- * it reads, the same each time.
+ * search is complete or a wider window would find nothing more
+ * ({@link ExtensionFilteredSearch#isWindowFull}), or the window is
+ * {@code MAX_WINDOW}, which every page past it reads, the same each time.
  * <p>
  * <b>A column's order.</b> With a {@code sort}, the search reads one window of
  * {@code MAX_WINDOW}, and the readable hits that pass the filters are sorted
@@ -82,14 +83,19 @@ final class DocumentSearch {
 			boolean complete = search instanceof CountableSearch countable && countable.isComplete();
 			for (Hit hit : hits)
 				scores.put(hit.getId(), hit.getScore());
+			if (sorted) {
+				// Its SQL applies the read rule, so only the hits' folders are checked here, not 10,000 documents
+				List<Long> placed = checks.placed(hits);
+				return sorted(placed, complete, paging, checks, user, query,
+						counts(fulltext, complete, hits, placed, scores, checks, query, filters));
+			}
 			List<Long> readable = checks.readable(hits);
-			if (sorted)
-				return sorted(readable, complete, paging, checks, user, query,
-						counts(fulltext, complete, hits, readable, scores, checks, query, filters));
 
 			List<Long> passed = checks.passing(readable, query);
-			// The hits that come in this order in every window: all of them, or those above the lowest score
-			boolean whole = complete || window >= SearchResource.MAX_WINDOW || fulltext == null;
+			// The hits that come in this order in every window: all of them, or those above the lowest score. A window
+			// that wasn't full (only a cap of the search's own, such as the Comments', left hits out) is the same wider
+			boolean whole = complete || window >= SearchResource.MAX_WINDOW || fulltext == null
+					|| !fulltext.isWindowFull();
 			int lowest = whole ? 0 : fulltext.lowestScore();
 			List<Long> stable = whole ? passed : passed.stream().filter(id -> scores.get(id) > lowest).toList();
 			if (whole || stable.size() >= pageEnd)
@@ -100,12 +106,13 @@ final class DocumentSearch {
 	}
 
 	/**
-	 * One window, its readable hits that pass the filters sorted and paged in
-	 * SQL
+	 * One window, its hits in Stores ({@link HitChecks#placed}) that the caller
+	 * may read and that pass the filters sorted and paged in SQL, which applies
+	 * the read rule
 	 */
-	private static SearchPage sorted(List<Long> readable, boolean complete, Paging paging, HitChecks checks,
+	private static SearchPage sorted(List<Long> placed, boolean complete, Paging paging, HitChecks checks,
 			User user, ListingQuery query, FacetsView counts) throws PersistenceException {
-		ListedPage listed = FolderListing.get().sortedPage(readable, checks.reads(),
+		ListedPage listed = FolderListing.get().sortedPage(placed, checks.reads(),
 				query.page(paging.offset(), paging.limit()));
 		List<Object> items = views(listed.docIds(), checks, user);
 		return new SearchPage(List.copyOf(items), paging.offset(), paging.limit(), complete ? listed.total() : null,
@@ -114,7 +121,7 @@ final class DocumentSearch {
 
 	/** The page's documents' views, their Authors read in one go */
 	private static List<Object> views(List<Long> ids, HitChecks checks, User user) throws PersistenceException {
-		List<Document> documents = ids.stream().map(checks::document).toList();
+		List<Document> documents = checks.documents(ids);
 		Map<Long, Author> authors = ApiViews.authors(documents);
 		List<Object> items = new ArrayList<>();
 		for (Document d : documents)
@@ -140,7 +147,9 @@ final class DocumentSearch {
 	 *         than half {@code FACET_WINDOW} do, as when most hits score the
 	 *         same; then over the readable hits among the window's first
 	 *         {@code FACET_WINDOW}, in the window's order, which can differ a
-	 *         little from page to page
+	 *         little from page to page. {@code readable} may also be a sorted
+	 *         search's {@link HitChecks#placed} hits: the counts' SQL applies
+	 *         the read rule.
 	 */
 	private static FacetsView counts(ExtensionFilteredSearch fulltext, boolean complete, List<Hit> hits,
 			List<Long> readable, Map<Long, Integer> scores, HitChecks checks, ListingQuery query, Filters filters)

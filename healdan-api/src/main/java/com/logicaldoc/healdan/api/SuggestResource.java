@@ -4,9 +4,11 @@
 package com.logicaldoc.healdan.api;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
+import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
@@ -27,12 +29,14 @@ import com.logicaldoc.healdan.api.model.SuggestView.SuggestedDocumentMatter;
 import com.logicaldoc.healdan.api.model.SuggestView.SuggestedMatter;
 import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.ClientDAO;
+import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.matter.MatterDisplay;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.search.MatterSearch;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.security.FolderReads;
 
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -69,6 +73,9 @@ public class SuggestResource {
 	 * fixes.
 	 */
 	static final int MAX_HITS = 1000;
+
+	/** The most hits checked in one go */
+	private static final int MAX_CHUNK = 200;
 
 	private static final Pattern NOT_WORD = Pattern.compile("[^\\p{L}\\p{N}]+");
 
@@ -116,8 +123,23 @@ public class SuggestResource {
 		// Score order, not id order: the oldest documents must not crowd out the rest
 		Hits hits = SearchEngine.get().search(expression, null, StringUtils.defaultIfBlank(user.getLanguage(), "en"),
 				MAX_HITS);
-		while (hits != null && hits.hasNext() && documents.size() < MAX_EACH)
-			suggested(hits.next().getId(), user).ifPresent(documents::add);
+		// Checked a chunk at a time, as a search's hits are: the first chunk is as many as are wanted, and each one
+		// after it twice the last, up to MAX_CHUNK. A caller who reads the first hits is answered from one chunk, and
+		// one who reads few from a handful, never a query or more for each hit
+		FolderReads reads = new FolderReads(user);
+		Map<Long, FolderPosition> positions = new HashMap<>();
+		List<Long> chunk = new ArrayList<>();
+		int size = MAX_EACH;
+		while (hits != null && hits.hasNext() && documents.size() < MAX_EACH) {
+			chunk.add(hits.next().getId());
+			if (chunk.size() == size || !hits.hasNext()) {
+				for (SuggestedDocument suggested : suggested(chunk, reads, positions))
+					if (documents.size() < MAX_EACH)
+						documents.add(suggested);
+				chunk.clear();
+				size = Math.min(size * 2, MAX_CHUNK);
+			}
+		}
 		return documents;
 	}
 
@@ -144,17 +166,41 @@ public class SuggestResource {
 		return "+(" + String.join(" AND ", clauses) + ") date:[NOW-1YEAR TO *]^2";
 	}
 
-	private static Optional<SuggestedDocument> suggested(long docId, User user) throws PersistenceException {
-		Optional<Document> readable = AccessChecks.readableDocument(DocumentDAO.get().findById(docId), user);
-		if (readable.isEmpty() || !ApiViews.shows(readable.get()))
-			return Optional.empty();
-		Document document = readable.get();
-		Matter matter = MatterLocator.get().locate(document.getFolder().getId()).matter();
-		Client client = matter == null ? null : ClientDAO.get().findById(matter.getClientId());
-		if (matter == null || client == null)
-			return Optional.empty();
-		return Optional.of(new SuggestedDocument(Long.parseLong(document.getCustomId()), document.getFileName(),
-				new SuggestedDocumentMatter(matter.getId(), matter.getNumber(),
-						MatterDisplay.format(client.getNumber(), matter.getNumber(), matter.getName()))));
+	/**
+	 * @param ids hits, in the engine's order
+	 * @param reads who looks, and the folders' READ known so far
+	 * @param positions where each folder sits, as far as known; this chunk's
+	 *        are added
+	 * @return the suggestions among them, in their order: the documents the
+	 *         caller may read and the API shows, in a matter
+	 */
+	private static List<SuggestedDocument> suggested(List<Long> ids, FolderReads reads,
+			Map<Long, FolderPosition> positions) throws PersistenceException {
+		Map<Long, Document> byId = new HashMap<>();
+		for (Document d : DocumentDAO.get().findByWhere("_entity.id in (:ids)", Map.of("ids", List.copyOf(ids)), null,
+				null))
+			byId.put(d.getId(), d);
+		List<Document> ordered = ids.stream().map(byId::get).filter(Objects::nonNull).toList();
+
+		List<SuggestedDocument> suggested = new ArrayList<>();
+		// As AccessChecks.readableDocument answers for each, with one query on their own ACLs
+		for (Document document : AccessChecks.readableDocuments(ordered, reads)) {
+			long folderId = document.getFolder().getId();
+			FolderPosition position = positions.get(folderId);
+			if (position == null) {
+				position = MatterLocator.get().locate(folderId);
+				positions.put(folderId, position);
+			}
+			if (!ApiViews.shows(document, position))
+				continue;
+			Matter matter = position.matter();
+			Client client = matter == null ? null : ClientDAO.get().findById(matter.getClientId());
+			if (matter == null || client == null)
+				continue;
+			suggested.add(new SuggestedDocument(Long.parseLong(document.getCustomId()), document.getFileName(),
+					new SuggestedDocumentMatter(matter.getId(), matter.getNumber(),
+							MatterDisplay.format(client.getNumber(), matter.getNumber(), matter.getName()))));
+		}
+		return suggested;
 	}
 }
