@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useContext, useEffect, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from 'react'
+import { useContext, useEffect, useRef, type KeyboardEvent, type MutableRefObject, type ReactNode, type Ref, type RefObject } from 'react'
 import {
   Collection,
   ComboBox as AriaComboBox,
@@ -53,8 +53,15 @@ export interface ComboBoxProps {
 
 // Enter with no option under the arrow keys is the person's own words, which React Aria would only commit as a custom
 // value and never report; the state says whether an option has the focus.
-function SubmitInput({ onSubmit, value, hasOptions, ...props }: { onSubmit: (text: string) => void; value: string; hasOptions: boolean } & Record<string, unknown>) {
+function SubmitInput({ onSubmit, value, hasOptions, closerRef, ...props }: { onSubmit: (text: string) => void; value: string; hasOptions: boolean; closerRef: MutableRefObject<(() => void) | null> } & Record<string, unknown>) {
   const state = useContext(ComboBoxStateContext)
+  // The caller's pick closes the list from outside the state
+  useEffect(() => {
+    closerRef.current = () => state?.close()
+    return () => {
+      closerRef.current = null
+    }
+  }, [closerRef, state])
   // React Aria opens the list when typing changes the box and options exist at that moment; options that come in the
   // same render as the first character (the caller works them out from it) miss that moment, so it's asked again here.
   // It never opens on its own account: only after the text changed, with the box focused.
@@ -79,6 +86,7 @@ function SubmitInput({ onSubmit, value, hasOptions, ...props }: { onSubmit: (tex
  * arrow keys move through the options.
  */
 export function ComboBox({ value, onValueChange, sections, onSelect, onSubmit, inputRef, anchorRef, className, inputClassName, placeholder, ...labels }: ComboBoxProps) {
+  const closerRef = useRef<(() => void) | null>(null)
   return (
     <AriaComboBox
       {...labels}
@@ -88,11 +96,17 @@ export function ComboBox({ value, onValueChange, sections, onSelect, onSubmit, i
       onInputChange={onValueChange}
       // Nothing is ever the chosen one, so the same option can be picked again
       selectedKey={null}
-      onSelectionChange={(key) => key !== null && onSelect(String(key))}
+      onSelectionChange={(key) => {
+        if (key === null) return
+        onSelect(String(key))
+        // The text stays whatever the caller does with it, and options for it may still be there, so the list is closed
+        // here, after this key's other handlers, which read which option had the focus
+        queueMicrotask(() => closerRef.current?.())
+      }}
       allowsCustomValue
       menuTrigger="input"
     >
-      <SubmitInput ref={inputRef} className={inputClassName} placeholder={placeholder} onSubmit={onSubmit} value={value} hasOptions={sections.length > 0} />
+      <SubmitInput ref={inputRef} className={inputClassName} placeholder={placeholder} onSubmit={onSubmit} value={value} hasOptions={sections.length > 0} closerRef={closerRef} />
       <Popover className={styles.popover} triggerRef={anchorRef} placement="bottom start" offset={4}>
         <ListBox className={styles.list}>
           {(section: ComboBoxSection) => (

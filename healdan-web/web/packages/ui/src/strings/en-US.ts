@@ -131,6 +131,8 @@ export const enUS = {
   'search.suggestions.matters': '{matters}',
   'search.suggestions.documents': 'Documents',
   'search.suggestions.run': 'Search',
+  'search.documentMeta': '# {n} · {matter}',
+  'matter.label': '{number} – {name}',
   'search.for': 'Search {scope} for "{q}"',
   'search.query': '"{q}"',
   'search.in': 'in {scope}',

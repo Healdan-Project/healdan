@@ -5,6 +5,7 @@ import type { components } from '@healdan/api'
 import { formatDate, formatVersion, Icon, t, type IconName, type TableColumn, type TableRow } from '@healdan/ui'
 import type { SearchScope } from '../search/scopes'
 import { fileIcon } from '../fileIcon'
+import { matterParts } from '../matterDisplay'
 import { childKey, type Hit } from './useListing'
 import styles from './views.module.css'
 
@@ -47,16 +48,16 @@ const edited: TableColumn<ListRow> = { id: 'edited', name: t('list.edited'), all
 export const listColumns: TableColumn<ListRow>[] = [title, docNumber, version, author, edited]
 
 /**
- * "1001.1", the client muted after it, and the matter's name as a tooltip. The name is also text a screen reader reads
- * with the cell, as a tooltip alone can't be reached by keyboard.
+ * "1001.1", the client muted after it, and the matter's name as a tooltip. The name is text in the cell too: a screen
+ * reader reads it, and a row that is hovered or has the keyboard's focus shows it in place of the client (views.module.css),
+ * as a tooltip alone can't be reached by keyboard.
  */
 function MatterCell({ matter }: { matter: S['MatterRef'] }) {
-  const parts = /^(\S+)\s+[–-]\s+(.+)$/.exec(matter.display)
-  const name = parts?.[2]
+  const { number, name } = matterParts(matter.display)
   return (
     <span className={styles.matterCell} title={name}>
-      {parts?.[1] ?? matter.display} <span className={styles.muted}>{matter.client.name}</span>
-      {name && <span className={styles.visuallyHidden}>, {name}</span>}
+      {number} <span className={styles.matterClient}>{matter.client.name}</span>
+      {name && <span className={styles.matterName}>{name}</span>}
     </span>
   )
 }

@@ -372,24 +372,6 @@ storage_started=$SECONDS
 check "storage backends against the stand-in" storage_test
 echo "step 5f took $((SECONDS - storage_started)) s"
 
-echo "== 5g. the User app in the browser (M6 spec §15.1)"
-# The Indexer reads new documents into the search index every 30 minutes, which no browser test can wait for. Make it
-# run every 5 seconds (an admin's own change to context.properties, kept across restarts), then restart for the
-# scheduler to read it. The finding spec searches for the words of documents it files.
-fast_indexer() {
-  compose exec -T app sed -i -e 's/^schedule\.delay\.IndexerTask=.*/schedule.delay.IndexerTask=5000/' \
-    -e 's/^schedule\.interval\.IndexerTask=.*/schedule.interval.IndexerTask=5000/' /opt/logicaldoc/conf/context.properties \
-    && compose restart app >/dev/null && wait_healthy "$(compose ps -q app)" 900
-}
-check "the Indexer runs every 5 seconds for the browser's searches" fast_indexer
-# Signs in as webuser, which the smoke overlay's SmokeWebUserSeed makes, and runs healdan-web's Playwright specs in
-# Chromium and WebKit in Playwright's Docker image: a link into the app, signing in, the way to the Classic Interface and
-# back, Sign Out, and an accessibility scan; then curl checks the web session's forgery refusals. Its output carries its
-# own PASS/FAIL lines.
-web_started=$SECONDS
-check "the User app in the browser" env BASE="$BASE" bash docker/tests/test-web.sh
-echo "step 5g took $((SECONDS - web_started)) s"
-
 echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \
   'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "select 1 from ld_webservicecall where 1=0"'
@@ -424,5 +406,25 @@ check "the Content-Security-Policy has object-src 'none' again" \
   grep -qx "object-src 'none'" <(csp_directives "$BASE/login.jsp")
 # The containers are new, so storage_test looks them up again
 check "storage backends after the restart" storage_test after-restart
+
+echo "== 9. the User app in the browser (M6 spec §15.1)"
+# Last, because it makes the Indexer run every 5 seconds: CE's Indexer reads new documents into the search index every 30
+# minutes, which no browser test can wait for. The new setting stays in the conf volume and the app restarts to read it,
+# so anything after this step would run with a fast Indexer, which reads storage document C through Garage and fills the
+# read cache that step 8 checks it never did. Nothing runs after it.
+fast_indexer() {
+  compose exec -T app sed -i -e 's/^schedule\.delay\.IndexerTask=.*/schedule.delay.IndexerTask=5000/' \
+    -e 's/^schedule\.interval\.IndexerTask=.*/schedule.interval.IndexerTask=5000/' /opt/logicaldoc/conf/context.properties \
+    && test "$(compose exec -T app grep -c '^schedule\.\(delay\|interval\)\.IndexerTask=5000$' /opt/logicaldoc/conf/context.properties)" = 2 \
+    && compose restart app >/dev/null && wait_healthy "$(compose ps -q app)" 900
+}
+check "the Indexer runs every 5 seconds for the browser's searches" fast_indexer
+# Signs in as webuser, which the smoke overlay's SmokeWebUserSeed makes, and runs healdan-web's Playwright specs in
+# Chromium and WebKit in Playwright's Docker image: a link into the app, signing in, the way to the Classic Interface and
+# back, Sign Out, an accessibility scan, and the finding flow; then curl checks the web session's forgery refusals. Its
+# output carries its own PASS/FAIL lines.
+web_started=$SECONDS
+check "the User app in the browser" env BASE="$BASE" HEALDAN_INDEXER_FAST=1 bash docker/tests/test-web.sh
+echo "step 9 took $((SECONDS - web_started)) s"
 
 finish

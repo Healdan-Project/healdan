@@ -82,6 +82,15 @@ describe('suggestions', () => {
     await waitFor(() => expect(where(router)).toBe('/app/search?scope=documents&q=charter'))
   })
 
+  it('close once the search is run from the last option', async () => {
+    await renderApp('/', routes)
+    const user = userEvent.setup()
+    await user.type(box(), 'charter')
+    await screen.findByRole('option', { name: 'Search Documents for "charter"' })
+    await user.click(screen.getByRole('option', { name: 'Search Documents for "charter"' }))
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+  })
+
   it('run the search from the last option too, named for the scope', async () => {
     const { router } = await renderApp('/', routes)
     const user = userEvent.setup()
@@ -151,6 +160,8 @@ describe('a # typed in the box', () => {
     ['#10388.2', '/app/doc/10388.2'],
     ['# 10388', '/app/doc/10388'],
     ['#10388v2', '/app/doc/10388v2'],
+    ['#10388V2', '/app/doc/10388v2'],
+    ['#10388 V2.1', '/app/doc/10388v2.1'],
     ['#10388 v2.1', '/app/doc/10388v2.1'],
     ['#10388.2.1', '/app/doc/10388.2.1'],
   ])('%s then Enter goes to %s', async (typed, to) => {
@@ -261,9 +272,12 @@ describe('the / shortcut', () => {
     )
     const dialog = await screen.findByRole('dialog', { name: 'Rename' })
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
+    // fireEvent says false when the page called preventDefault, as it does to take a / for the box
+    let left = false
     act(() => {
-      fireEvent.keyDown(document.activeElement ?? dialog, { key: '/' })
+      left = fireEvent.keyDown(document.activeElement ?? dialog, { key: '/' })
     })
+    expect(left).toBe(true)
     // The dialog hides the page from assistive technology, so the box is found by its markup
     expect(document.activeElement).not.toBe(document.querySelector('input[aria-label="Search"]'))
     expect(dialog.contains(document.activeElement)).toBe(true)

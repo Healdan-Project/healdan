@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import axe from 'axe-core'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
@@ -62,6 +62,15 @@ describe('ComboBox', () => {
     expect(onSubmit).toHaveBeenCalledWith('ch')
     expect(onSelect).not.toHaveBeenCalled()
     expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('closes after an option is picked, whatever the caller does with the text', async () => {
+    render(<Example />)
+    const box = type('ch')
+    await screen.findByRole('listbox')
+    fireEvent.keyDown(box, { key: 'ArrowDown' })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
   })
 
   it('can pick the same option twice in a row', async () => {

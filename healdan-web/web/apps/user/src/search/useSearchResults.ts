@@ -8,7 +8,7 @@ import type { TableSort } from '@healdan/ui'
 import { filterParams, noFilters, type Filters } from '../filters/useFilters'
 import { keys } from '../queries'
 import { useApi } from '../services'
-import { PAGE_SIZE, childKey, type Hit, type SortColumn } from '../views/useListing'
+import { PAGE_SIZE, distinct, pagedState, type Hit, type SortColumn } from '../views/useListing'
 import { searchesDocuments, type SearchScope } from './scopes'
 
 type S = components['schemas']
@@ -36,6 +36,17 @@ function paramsOf({ scope, q, sort, filters = noFilters }: SearchOptions): Recor
   return { ...params, ...filterParams(filters) }
 }
 
+/**
+ * Where the next page starts, or undefined at the end. A counted search ends at its `total`; one the server stopped
+ * counting (`total` null) ends at the first page shorter than the 100 asked, as the server fills pages from the hits
+ * that follow the ones skipped. An empty page ends either.
+ */
+export function nextOffset(last: { items: unknown[]; total?: number | null }, loaded: number): number | undefined {
+  if (last.items.length === 0) return undefined
+  if (last.total !== null && last.total !== undefined) return loaded < last.total ? loaded : undefined
+  return last.items.length >= PAGE_SIZE ? loaded : undefined
+}
+
 export interface SearchResults {
   rows: Hit[]
   /** How many hits there are, when the server counted them all */
@@ -61,41 +72,14 @@ export function useSearchResults(options: SearchOptions): SearchResults {
     queryKey: keys.search(params),
     queryFn: ({ pageParam }) => api.get<SearchPage>('/v1/search', { ...params, offset: pageParam, limit: PAGE_SIZE }),
     initialPageParam: 0,
-    getNextPageParam: (last, all) => {
-      const loaded = all.reduce((n, page) => n + page.items.length, 0)
-      // A counted search ends at its total; otherwise a short page is the last (the server fills pages from the hits
-      // that follow the ones skipped)
-      if (last.total !== null && last.total !== undefined) return last.items.length > 0 && loaded < last.total ? loaded : undefined
-      return last.items.length >= PAGE_SIZE ? loaded : undefined
-    },
+    getNextPageParam: (last, all) => nextOffset(last, all.reduce((n, page) => n + page.items.length, 0)),
     enabled,
     placeholderData: keepPreviousData,
   })
   const pages = query.data?.pages
-  // A page can repeat the last one's end when hits arrive between two asks; the first copy stays
-  const rows = useMemo(() => {
-    const seen = new Set<string>()
-    return (pages?.flatMap((page) => page.items) ?? []).filter((item) => {
-      const key = childKey(item)
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-  }, [pages])
+  const rows = useMemo(() => distinct(pages?.flatMap((page) => page.items) ?? []), [pages])
   const last = pages?.at(-1)
-  const { fetchNextPage, refetch } = query
-  return {
-    rows,
-    total: last?.total ?? undefined,
-    totalAtLeast: last?.totalAtLeast,
-    loadMore: query.hasNextPage && !query.isPlaceholderData ? () => void fetchNextPage({ cancelRefetch: false }) : undefined,
-    isLoadingMore: query.isFetchingNextPage,
-    isStale: query.isPlaceholderData,
-    isPending: enabled && query.isPending,
-    isError: query.isError,
-    error: query.error,
-    refetch: () => void refetch(),
-  }
+  return { rows, total: last?.total ?? undefined, totalAtLeast: last?.totalAtLeast, ...pagedState(query, enabled) }
 }
 
 /**

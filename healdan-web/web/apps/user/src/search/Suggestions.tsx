@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import type { components } from '@healdan/api'
 import { Icon, t, type ComboBoxSection } from '@healdan/ui'
 import { fileIcon } from '../fileIcon'
+import { matterParts } from '../matterDisplay'
 import { keys } from '../queries'
 import { useApi } from '../services'
 import type { SearchScope } from './scopes'
@@ -59,12 +60,7 @@ export function useSuggestions(text: string): S['SuggestView'] | undefined {
 
 /** A matter as the search shows it: `1001.1 – Charter Dispute`, as everywhere in the app. */
 export function matterLabel(matter: S['SuggestView']['matters'][number]): string {
-  return `${matter.client.number}.${matter.number} – ${matter.name}`
-}
-
-// A document's matter number: "1001.1" from "1001.1 – Charter Dispute"
-function matterNumber(display: string): string {
-  return /^\S+/.exec(display)?.[0] ?? display
+  return t('matter.label', { number: `${matter.client.number}.${matter.number}`, name: matter.name })
 }
 
 /** The options of the list: matters, then documents, then the search itself, which Enter runs when nothing is picked. */
@@ -92,7 +88,7 @@ export function suggestionSections(answer: S['SuggestView'] | undefined, scope: 
         textValue: doc.name,
         icon: <Icon name={fileIcon(doc.name)} />,
         label: doc.name,
-        meta: `# ${doc.docNumber} · ${matterNumber(doc.matter.display)}`,
+        meta: t('search.documentMeta', { n: doc.docNumber, matter: matterParts(doc.matter.display).number }),
       })),
     })
   }

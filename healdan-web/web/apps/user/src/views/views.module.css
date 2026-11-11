@@ -182,11 +182,43 @@
   color: inherit;
 }
 
-.visuallyHidden {
+.matterClient {
+  color: var(--hd-text-secondary);
+}
+
+:global([aria-selected='true']) .matterClient {
+  color: inherit;
+}
+
+/* The matter's name is in the cell for a screen reader, drawn away; a hovered row, or one with the keyboard's focus (an
+   arrow key puts it there), swaps the client for it, so a sighted keyboard user sees it too. */
+.matterName {
   position: absolute;
   width: 1px;
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+:global([role='row']:hover) .matterName,
+:global([role='row']:focus-within) .matterName {
+  position: static;
+  width: auto;
+  height: auto;
+  clip-path: none;
+  color: var(--hd-text);
+}
+
+:global([role='row'][aria-selected='true']) .matterName {
+  color: inherit;
+}
+
+:global([role='row']:hover) .matterClient,
+:global([role='row']:focus-within) .matterClient {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }

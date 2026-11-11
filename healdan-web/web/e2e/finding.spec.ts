@@ -14,7 +14,7 @@ const NAMES = { alpha: `Charterparty ${RUN} Alpha.txt`, beta: `Charterparty ${RU
 // One pixel, for the Picture among the documents
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
 
-let api: APIRequestContext
+let api: APIRequestContext | undefined
 let token = ''
 let matterFolder = 0
 let alpha = 0
@@ -27,7 +27,7 @@ async function call<T>(response: Promise<{ ok(): boolean; status(): number; json
 
 async function file(folderId: number, name: string, mimeType: string, buffer: Buffer): Promise<number> {
   const made = await call<{ docNumber: number }>(
-    api.post('/api/v1/documents', {
+    api!.post('/api/v1/documents', {
       headers: { Authorization: `Bearer ${token}` },
       multipart: {
         document: { name: 'document.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ folderId, checkOut: false })) },
@@ -39,7 +39,7 @@ async function file(folderId: number, name: string, mimeType: string, buffer: Bu
   return made.docNumber
 }
 
-const get = <T>(path: string) => call<T>(api.get(`/api/v1${path}`, { headers: { Authorization: `Bearer ${token}` } }), `GET ${path}`)
+const get = <T>(path: string) => call<T>(api!.get(`/api/v1${path}`, { headers: { Authorization: `Bearer ${token}` } }), `GET ${path}`)
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
@@ -49,21 +49,29 @@ test.beforeAll(async ({ playwright }, testInfo) => {
     'a device token',
   )
   token = signedIn.token
-  const matters = await get<{ items: { folderId: number }[] }>('/search?scope=matters&q=1.1')
-  matterFolder = matters.items[0]!.folderId
+  const matters = await get<{ items: { number: number; client: { number: number }; folderId: number }[] }>('/search?scope=matters&q=1.1')
+  // Exactly matter 1 of client 1, not whatever else the search matched first
+  const matter = matters.items.find((one) => one.client.number === 1 && one.number === 1)
+  expect(matter, 'the smoke fixture has matter 1.1').toBeTruthy()
+  matterFolder = matter!.folderId
   const inside = await get<{ items: { id: number; name: string; type: string }[] }>(`/folders/${matterFolder}/children?type=folder`)
   const documents = inside.items.find((item) => item.type === 'folder' && item.name === 'Documents')
   expect(documents, 'matter 1.1 has a Documents folder').toBeTruthy()
-  alpha = await file(documents!.id, NAMES.alpha, 'text/plain', Buffer.from(`Charterparty ${RUN} alpha`))
-  await file(documents!.id, NAMES.beta, 'text/plain', Buffer.from(`Charterparty ${RUN} beta`))
+  // The contents don't hold the run's word, so a hit is the title's: the search looks in both
+  alpha = await file(documents!.id, NAMES.alpha, 'text/plain', Buffer.from('Quarterly note, first'))
+  await file(documents!.id, NAMES.beta, 'text/plain', Buffer.from('Quarterly note, second'))
   await file(documents!.id, NAMES.scan, 'image/png', PNG)
   // The matter starts out of My Matters, whatever the other browser's run left
   await api.delete(`/api/v1/me/matters/${matterFolder}`, { headers: { Authorization: `Bearer ${token}` } })
 })
 
 test.afterAll(async () => {
-  await api.delete(`/api/v1/me/matters/${matterFolder}`, { headers: { Authorization: `Bearer ${token}` } })
-  await api.delete('/api/v1/auth/tokens/current', { headers: { Authorization: `Bearer ${token}` } })
+  // beforeAll may have failed before there was anything to clean up
+  if (!api) return
+  if (token) {
+    if (matterFolder) await api.delete(`/api/v1/me/matters/${matterFolder}`, { headers: { Authorization: `Bearer ${token}` } })
+    await api.delete('/api/v1/auth/tokens/current', { headers: { Authorization: `Bearer ${token}` } })
+  }
   await api.dispose()
 })
 

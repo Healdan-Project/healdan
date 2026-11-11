@@ -13,9 +13,9 @@ import styles from './SearchBox.module.css'
 
 type S = components['schemas']
 
-// `#10388`, `#10388.2`, `#10388v2`, `#10388.2.1` and the doc ID as titles show it, `#10388 v2.1`: what the server's lookup
+// `#10388`, `#10388.2`, `#10388v2`, `#10388.2.1`, a capital V as well, and the doc ID as titles show it, `#10388 v2.1`: what the server's lookup
 // resolves, with the spacing a copied doc ID has. The address takes no spaces, so the reference is made without them.
-const docReference = /^#\s*(\d+)(?:\s*v\s*(\d+(?:\.\d+)?)|((?:\.\d+){1,2}))?$/
+const docReference = /^#\s*(\d+)(?:\s*[vV]\s*(\d+(?:\.\d+)?)|((?:\.\d+){1,2}))?$/
 
 /** The address's reference for a typed `#`, or undefined when it isn't a doc #. */
 function referenceOf(text: string): string | undefined {

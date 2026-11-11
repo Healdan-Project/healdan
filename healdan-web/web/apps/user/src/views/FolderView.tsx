@@ -15,13 +15,13 @@ import { ErrorPanel } from '../frame/ErrorPanel'
 import { messageFor } from '../frame/errors'
 import { RightRegionView, useRightRegion } from '../frame/RightRegion'
 import { keys, useFavorites, useFolder } from '../queries'
-import { useSelection } from '../selection'
 import { useApi } from '../services'
 import { Breadcrumb } from './Breadcrumb'
 import { DetailsPanel } from '../details/DetailsPanel'
 import { NotFound } from './NotFound'
 import { Toolbar, type ListCount } from './Toolbar'
 import { listColumns, rowOf } from './listColumns'
+import { useRowSelection } from './useRowSelection'
 import { isSortColumn, useListing, type ListingOrder, type SortColumn } from './useListing'
 import styles from './views.module.css'
 
@@ -51,10 +51,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const unfiltered = useUnfilteredDocuments({ folderId, enabled: active > 0 && !store })
   const navigate = useNavigate()
   const headingId = useId()
-  const { selected, select } = useSelection()
-  // Several documents selected can't all be in the address, which holds one; the view keeps them while it has none.
-  const [several, setSeveral] = useState<Set<string> | null>(null)
-  const selection = several && selected === undefined ? several : new Set(selected === undefined ? [] : [`d${selected}`])
+  const { selected, selection, change: changeSelection } = useRowSelection()
   const rows = useMemo(() => listing.rows.map(rowOf), [listing.rows])
   // The Authors' names, from the rows and the options, for the chips (a username shows as itself otherwise)
   const authors = useMemo(() => {
@@ -91,14 +88,6 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
       search: (prev) => ({ ...prev, sort: column, order: next.direction === 'descending' ? 'desc' : 'asc' }),
       replace: true,
     })
-  }
-
-  function changeSelection(next: Set<string>) {
-    const documents = [...next].filter((key) => key.startsWith('d'))
-    setSeveral(documents.length > 1 ? new Set(documents) : null)
-    // Clicking a document while Filters are open shows its details, as the owner asked; the funnel brings Filters back.
-    if (documents.length === 1 && region.show === 'filters') region.open('details')
-    select(documents.length === 1 ? Number(documents[0]!.slice(1)) : undefined)
   }
 
   // A folder opens; a document is selected until opening it in its app comes (Tasks 16 and 18).

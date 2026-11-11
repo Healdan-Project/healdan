@@ -11,11 +11,11 @@ is open, and the cursor jumps to the box.
 
 | Scope | Type | Finds |
 |---|---|---|
-| Documents | words | documents containing them, without emails |
+| Documents | words | documents containing them, or whose Comments contain them all, without emails |
 | Emails | words | emails containing them |
 | Docs & Emails | words | documents and emails containing them |
 | Folders | words | folders, inside matters, whose names contain them |
-| Matters | a matter number such as `998.1`, or words | the matter with that number, opened straight away; or the matters whose name matches the words |
+| Matters | a matter number such as `998.1`, or words | the matter with that number, opened straight away; or the matters whose name or description contains the words |
 | Clients | a client number or words | the matters of every client whose number or name matches |
 
 In every scope, `#1234` goes to document 1234 (see [`#` in the Box](#in-the-box)). Your install may call matters
@@ -23,7 +23,8 @@ In every scope, `#1234` goes to document 1234 (see [`#` in the Box](#in-the-box)
 
 Opening an entry under **Recent** in the left pane sets the picker to that scope, as does the start page, and so does
 the address of a search. A choice you make in the picker stands until one of those changes it. Nothing about your
-searches is kept: the box starts empty each time you open the page.
+searches is kept: the box starts empty each time you open the page, except that the address of a search puts its
+words in the box.
 
 ## Suggestions
 
@@ -38,7 +39,9 @@ its doc # result, and the last choice runs the search. With nothing picked, Ente
 the list and leaves your words.
 
 The list waits for a short pause in your typing, so it doesn't ask the server for every key. You only ever see what
-you're allowed to read.
+you're allowed to read. Suggested documents come from the same index as a search (see [Full-Text
+Search](#full-text-search)), so a document filed moments ago may not be suggested until the Indexer has read it, which
+can be up to 30 minutes by default. Matters are suggested at once.
 
 ## `#` in the Box {#in-the-box}
 

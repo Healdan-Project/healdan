@@ -81,19 +81,37 @@ export function useListing({ folderId, sort, filters = noFilters, enabled = true
   const pages = query.data?.pages
   const rows = useMemo(() => distinct(pages?.flatMap((page) => page.items) ?? []), [pages])
   const last = pages?.at(-1)
-  const { fetchNextPage, refetch } = query
   return {
     rows,
     total: last?.total ?? undefined,
     documents: last?.documents,
+    ...pagedState(query, enabled),
+  }
+}
+
+/** What a paged list's query says about itself, which a folder's listing and a search's results both show the same way. */
+export function pagedState(
+  query: {
+    hasNextPage: boolean
+    isPlaceholderData: boolean
+    isFetchingNextPage: boolean
+    isPending: boolean
+    isError: boolean
+    error: unknown
+    fetchNextPage: (options?: { cancelRefetch?: boolean }) => unknown
+    refetch: () => unknown
+  },
+  enabled: boolean,
+) {
+  return {
     // Asked again while a page is coming, it waits for that one rather than asking twice
-    loadMore: query.hasNextPage && !query.isPlaceholderData ? () => void fetchNextPage({ cancelRefetch: false }) : undefined,
+    loadMore: query.hasNextPage && !query.isPlaceholderData ? () => void query.fetchNextPage({ cancelRefetch: false }) : undefined,
     isLoadingMore: query.isFetchingNextPage,
     isStale: query.isPlaceholderData,
     isPending: enabled && query.isPending,
     isError: query.isError,
     error: query.error,
-    refetch: () => void refetch(),
+    refetch: () => void query.refetch(),
   }
 }
 
@@ -108,7 +126,7 @@ export function childKey(item: Hit): string {
  * before the loaded rows), so a page can repeat the last one's end: the first copy stays. One that a deletion skips
  * comes back when the list is next asked for, as when the window regains focus.
  */
-function distinct(items: Child[]): Child[] {
+export function distinct<T extends Hit>(items: T[]): T[] {
   const seen = new Set<string>()
   return items.filter((item) => {
     const key = childKey(item)

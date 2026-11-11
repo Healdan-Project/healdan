@@ -43,7 +43,7 @@ the note.
 
 ## Searching Notes
 
-The search box at the top doesn't look in notes. To find a document by its notes, open the **Search** tab's
+The search box at the top doesn't look in notes. To find a document by its notes, open the [Classic Interface](../../the-classic-interface/)'s **Search** tab's
 **Full-text** section, add **Notes** to **Search in**, type the words in **Expression** and search.
 
 ## Copies

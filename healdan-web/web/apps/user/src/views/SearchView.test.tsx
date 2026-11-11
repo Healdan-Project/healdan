@@ -1,14 +1,16 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
 import { client, document, folder, matter, problem, type Routes } from '../test/fakeApi'
 import { detailsRoutes } from '../test/details'
+import { bringObservedIntoView } from '../test/intersection'
 import { renderApp } from '../test/renderApp'
+import viewsCss from './views.module.css?raw'
 
 type S = components['schemas']
 
@@ -84,8 +86,15 @@ describe('SearchView', () => {
     expect(cell.textContent).toContain('Brightwell')
     // Hover shows the name, and so does the text a screen reader reads with the cell
     expect(cell.querySelector('[title="Commercial Lease"]')).toBeTruthy()
-    expect(cell.textContent).toContain('Commercial Lease')
-    expect(within(cell).getByText('Brightwell').className).toMatch(/muted/)
+    expect(within(cell).getByText('Commercial Lease').className).toMatch(/matterName/)
+    expect(within(cell).getByText('Brightwell').className).toMatch(/matterClient/)
+    // A keyboard user sees the name too: the row's focus (an arrow key puts it there) swaps the client for it, as
+    // hovering does. jsdom draws no style, so the stylesheet is read.
+    expect(viewsCss).toMatch(/\[role='row'\]:focus-within\)\s+\.matterName/)
+    expect(viewsCss).toMatch(/\[role='row'\]:hover\)\s+\.matterName/)
+    const row = second!
+    row.focus()
+    expect(row.matches(':focus-within')).toBe(true)
   })
 
   it('sorts by a header, asking the server, and reverses on a second click', async () => {
@@ -121,8 +130,8 @@ describe('SearchView', () => {
     expect(await within(main()).findByText('More than 10,000 documents')).toBeTruthy()
   })
 
-  it('pages on as the list is scrolled, to the end of what the server counted', async () => {
-    const many = Array.from({ length: 150 }, (_, i) => document({ docNumber: 20000 + i, name: `Doc ${i}.docx` }))
+  it('pages on as the end of the list comes into view, to the end of what the server counted', async () => {
+    const many = Array.from({ length: 150 }, (_, i) => document({ docNumber: 20000 + i, name: `Doc ${String(i).padStart(3, '0')}.docx` }))
     const { api } = await renderApp(
       '/search?scope=documents&q=doc',
       routes({
@@ -132,9 +141,17 @@ describe('SearchView', () => {
         },
       }),
     )
-    await rows()
+    expect(await within(await grid()).findByRole('row', { name: /Doc 000/ })).toBeTruthy()
     expect(await within(main()).findByText('150 documents')).toBeTruthy()
-    expect(api.callsTo('GET /v1/search')[0]?.query?.limit).toBe(100)
+    act(() => {
+      bringObservedIntoView()
+      bringObservedIntoView()
+    })
+    expect(await within(await grid()).findByRole('row', { name: /Doc 120/ })).toBeTruthy()
+    // The second page starts where the first ended, and the 150 counted are all there: nothing more is asked for
+    act(() => bringObservedIntoView())
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(api.callsTo('GET /v1/search').map((call) => call.query?.offset)).toEqual([0, 100])
   })
 
   it('has Filters with Client and Matter besides Edit Date, File Type, Author and Class', async () => {
@@ -236,19 +253,28 @@ describe('SearchView', () => {
     expect(api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope, q: '1001', offset: 0, limit: 100 })
   })
 
-  it('pages a folders search to its last, short page', async () => {
-    const all = Array.from({ length: 120 }, (_, i) => folder({ id: 500 + i, name: `Folder ${i}` }))
+  it('pages an uncounted folders search on while its pages are full, and ends at the first short one', async () => {
+    const all = Array.from({ length: 120 }, (_, i) => folder({ id: 500 + i, name: `Folder ${String(i).padStart(3, '0')}` }))
     const { api } = await renderApp(
       '/search?scope=folders&q=folder',
       routes({
         'GET /v1/search': ({ query }: { query?: Record<string, unknown> }) => {
           const offset = Number(query?.offset ?? 0)
+          // The server counts nothing for a folders search: total is null
           return { items: all.slice(offset, offset + 100), offset, limit: 100, total: null }
         },
       }),
     )
-    await rows()
-    expect(api.callsTo('GET /v1/search')).toHaveLength(1)
+    expect(await within(await grid()).findByRole('row', { name: /Folder 000/ })).toBeTruthy()
+    act(() => {
+      bringObservedIntoView()
+      bringObservedIntoView()
+    })
+    expect(await within(await grid()).findByRole('row', { name: /Folder 110/ })).toBeTruthy()
+    // 20 is a short page, so it was the last
+    act(() => bringObservedIntoView())
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(api.callsTo('GET /v1/search').map((call) => call.query?.offset)).toEqual([0, 100])
   })
 
   it('passes axe, with Filters open', async () => {
