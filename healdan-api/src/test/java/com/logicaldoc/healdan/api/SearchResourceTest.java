@@ -601,7 +601,48 @@ public class SearchResourceTest extends ApiTestCase {
 				"Notes on the kiteapi");
 		List<Long> whole = wholeOrder("kiteapi");
 		assertEquals(SearchResource.FACET_WINDOW + 100, whole.size());
-		assertEquals(whole, paged("q=kiteapi", 100, signIn(clerk)));
+		String token = signIn(clerk);
+		assertEquals(whole, paged("q=kiteapi", 100, token));
+
+		// None scores above the 2,500th, so the counts are of the first 2,500 read: never empty
+		JsonNode facets = page("q=kiteapi&limit=100&facets=type", token).path("facets");
+		assertTrue(facets.path("partial").asBoolean());
+		assertEquals(Map.of("pdf", (long) SearchResource.FACET_WINDOW), counts(facets.path("type")));
+	}
+
+	/**
+	 * Shortcuts (CE's aliases), from before Healdan, to documents that match:
+	 * the API shows none, and CE's rows for them, which it scores 0, don't
+	 * reach its sort, which can't order them among scored hits
+	 */
+	@Test
+	public void testShortcutsAreLeftOut() throws Exception {
+		Document first = source(documents, "first.pdf");
+		BulkHits bulk = new BulkHits();
+		java.util.Random random = new java.util.Random(7);
+		List<Long> targets = bulk.copies(first.getId(), documents, 1500, i -> "r" + random.nextInt(1000000) + ".pdf");
+		bulk.index(targets, i -> banded("petrelapi", i % 12));
+		Document shortcut = fx.legacyShortcut(DocumentDAO.get().findById(targets.get(0)), documents);
+		List<Long> shortcuts = new ArrayList<>(List.of(shortcut.getId()));
+		shortcuts.addAll(bulk.copies(shortcut.getId(), documents, 999, i -> "s" + random.nextInt(1000000) + ".pdf"));
+		for (int i = 1; i < shortcuts.size(); i++)
+			jdbc().update("update ld_document set ld_docref = ? where ld_id = ?", targets.get(i), shortcuts.get(i));
+		jdbc().update("update ld_document set ld_startpublishing = ? where ld_id = ?",
+				new Timestamp(System.currentTimeMillis() - 24L * 60 * 60 * 1000), shortcut.getId());
+		bulk.evict(shortcuts);
+		Set<Long> shortcutNumbers = new HashSet<>(numbers(shortcuts).values());
+		String token = signIn(clerk);
+
+		for (String scope : new String[] { "documents", "all" }) {
+			JsonNode page = page("scope=" + scope + "&q=petrelapi&limit=200&facets=type", token);
+			assertEquals(scope, 1500, page.path("total").asLong());
+			assertTrue(scope, docNumbers(page.path("items")).stream().noneMatch(shortcutNumbers::contains));
+			assertEquals(scope, Map.of("pdf", 1500L), counts(page.path("facets").path("type")));
+		}
+		// Sorted, too
+		JsonNode sorted = page("q=petrelapi&limit=200&sort=title", token);
+		assertEquals(1500, sorted.path("total").asLong());
+		assertTrue(docNumbers(sorted.path("items")).stream().noneMatch(shortcutNumbers::contains));
 	}
 
 	@Test

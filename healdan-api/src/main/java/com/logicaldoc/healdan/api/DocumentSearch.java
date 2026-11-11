@@ -5,8 +5,10 @@ package com.logicaldoc.healdan.api;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.searchengine.Hit;
@@ -48,7 +50,9 @@ import com.logicaldoc.healdan.security.FolderReads;
  * <b>The counts</b> depend on the query alone: they are taken over the
  * readable hits that score above the {@code FACET_WINDOW}-th hit, which every
  * window holds, or over every readable hit when the engine has no more than
- * {@code FACET_WINDOW}.
+ * {@code FACET_WINDOW}. When fewer than half {@code FACET_WINDOW} score above
+ * it, they are taken over the window's first {@code FACET_WINDOW} instead, so
+ * the filters always have options.
  */
 final class DocumentSearch {
 
@@ -79,7 +83,7 @@ final class DocumentSearch {
 			List<Long> readable = checks.readable(hits);
 			if (sorted)
 				return sorted(readable, complete, paging, checks, user, query,
-						counts(fulltext, complete, readable, scores, checks, query, filters));
+						counts(fulltext, complete, hits, readable, scores, checks, query, filters));
 
 			List<Long> passed = checks.passing(readable, query);
 			// The hits that come in this order in every window: all of them, or those above the lowest score
@@ -88,7 +92,7 @@ final class DocumentSearch {
 			List<Long> stable = whole ? passed : passed.stream().filter(id -> scores.get(id) > lowest).toList();
 			if (whole || stable.size() >= pageEnd)
 				return page(stable, passed.size(), complete, paging, checks, user,
-						counts(fulltext, complete, readable, scores, checks, query, filters));
+						counts(fulltext, complete, hits, readable, scores, checks, query, filters));
 			window = Math.min(window * 2, SearchResource.MAX_WINDOW);
 		}
 	}
@@ -121,12 +125,17 @@ final class DocumentSearch {
 	}
 
 	/**
-	 * @return the counts asked for, over the readable hits that score above
-	 *         the {@code FACET_WINDOW}-th hit, or over all of them when the
-	 *         engine has no more; null when none were asked for
+	 * @return the counts asked for, null when none were: over every readable
+	 *         hit when the engine has no more than {@code FACET_WINDOW};
+	 *         otherwise over the readable hits that score above the
+	 *         {@code FACET_WINDOW}-th, the same whatever the page, unless fewer
+	 *         than half {@code FACET_WINDOW} do, as when most hits score the
+	 *         same; then over the readable hits among the window's first
+	 *         {@code FACET_WINDOW}, in the window's order, which can differ a
+	 *         little from page to page
 	 */
-	private static FacetsView counts(ExtensionFilteredSearch fulltext, boolean complete, List<Long> readable,
-			Map<Long, Integer> scores, HitChecks checks, ListingQuery query, Filters filters)
+	private static FacetsView counts(ExtensionFilteredSearch fulltext, boolean complete, List<Hit> hits,
+			List<Long> readable, Map<Long, Integer> scores, HitChecks checks, ListingQuery query, Filters filters)
 			throws PersistenceException {
 		if (filters.facets().isEmpty())
 			return null;
@@ -134,7 +143,14 @@ final class DocumentSearch {
 		List<Long> counted = readable;
 		if (!all) {
 			int floor = fulltext.scoreAt(SearchResource.FACET_WINDOW);
-			counted = readable.stream().filter(id -> scores.get(id) > floor).toList();
+			if (fulltext.engineHitsAbove(floor) >= SearchResource.FACET_WINDOW / 2)
+				counted = readable.stream().filter(id -> scores.get(id) > floor).toList();
+			else {
+				Set<Long> first = new HashSet<>();
+				for (Hit hit : hits.subList(0, Math.min(SearchResource.FACET_WINDOW, hits.size())))
+					first.add(hit.getId());
+				counted = readable.stream().filter(first::contains).toList();
+			}
 		}
 		return FolderResource.facetsView(HitFacets.count(counted, checks.reads(), query, filters.facets()), !all);
 	}

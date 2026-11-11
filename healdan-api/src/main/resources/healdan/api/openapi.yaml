@@ -807,11 +807,14 @@ paths:
         10,000 hits. With `sort`, they read the first 10,000 hits and sort the
         ones the caller can read as a folder's documents are; past 10,000
         hits, the sort is among the 10,000 most relevant, and the answer has
-        `totalAtLeast`. `order` without `sort` is `400`. `facets` adds the
-        counts, taken over the hits the caller can read that rank above the
-        engine's 2,500th hit, whatever the page, and `partial` when the engine
-        has more than 2,500. No count includes a document the caller can't
-        read.
+        `totalAtLeast`. `order` without `sort` is `400`: without `sort`, the
+        best hits come first. `facets` adds the counts, taken over the hits
+        the caller can read that rank above the engine's 2,500th hit,
+        whatever the page, and `partial` when the engine has more than
+        2,500. When fewer than 1,250 rank above it, as when most hits score
+        the same, they're taken over the readable hits among the first 2,500
+        the search read instead, and can then differ slightly from page to
+        page. No count includes a document the caller can't read.
 
         The `folders`, `matters` and `clients` scopes look at the first 10,000
         hits; their `total` is always `null`, and a page with fewer than
@@ -2780,9 +2783,10 @@ components:
           const: true
           description: |
             A search's counts taken over the results the caller can read
-            that rank above the engine's 2,500th, when the engine has more
-            than 2,500. Left out when the counts cover every result, as a
-            folder's always do.
+            that rank above the engine's 2,500th, or, when fewer than 1,250
+            do, among the first 2,500 it read, when the engine has more than
+            2,500. Left out when the counts cover every result, as a folder's
+            always do.
     FacetCount:
       type: object
       additionalProperties: false

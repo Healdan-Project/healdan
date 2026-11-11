@@ -350,7 +350,9 @@ The sections below say more about the parts a client needs to know before it sta
   the database over the hits the caller can read that rank above the engine's 2,500th hit, whatever the page or
   the sort, never by the full-text engine, whose counts would include documents the caller can't read. When the
   engine has more than 2,500 hits, `facets` has `"partial": true`, so a client can say the counts come from the
-  first results; when many hits score the same as the 2,500th, the counts can be of fewer hits, or none.
+  first results. When fewer than 1,250 hits rank above the 2,500th, as when most hits score the same, they're taken
+  over the readable hits among the first 2,500 the search read instead, and then can differ slightly from page to
+  page.
 - **The other scopes,** `folders`, `matters` and `clients`, look at the first 10,000 hits, and their `total` is
   always `null`: a page with fewer than `limit` items is the last. They take no filters, `sort` or `facets`; any
   is `400 bad-request`.

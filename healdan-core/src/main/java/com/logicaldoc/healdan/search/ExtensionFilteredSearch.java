@@ -105,6 +105,18 @@ public abstract class ExtensionFilteredSearch extends FulltextSearch implements 
 		return scores.length;
 	}
 
+	/**
+	 * @param score a score
+	 * @return how many of the hits the index handed back in the last run,
+	 *         including those CE then left out, score above it
+	 */
+	public int engineHitsAbove(int score) {
+		int above = 0;
+		while (above < scores.length && scores[above] > score)
+			above++;
+		return above;
+	}
+
 	@Override
 	protected void enrichAndPopulateHits(SearchOptions opt, Map<Long, Hit> hitsMap, long tenantId,
 			Collection<Long> accessibleFolderIds) throws SearchException {
