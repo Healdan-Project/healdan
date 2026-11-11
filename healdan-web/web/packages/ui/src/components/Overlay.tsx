@@ -23,20 +23,26 @@ export interface OverlayProps {
   children: ReactNode
 }
 
-/** A key's target is something that has the key for itself: a field, or a button that Space presses. */
+/**
+ * A key's target is something that has the key for itself: a field, a button that Space presses, or, for the arrow
+ * keys, a region that scrolls (marked `data-scrolls`), which they scroll as they do any scrollable region.
+ */
 function keepsKey(target: EventTarget | null, key: string): boolean {
   if (!(target instanceof Element)) return false
   if (target.closest('input, textarea, select, [contenteditable="true"]')) return true
+  if (key.startsWith('Arrow') && target.closest('[data-scrolls]')) return true
   return key === ' ' && target.closest('button, a, [role="button"], [role="link"]') !== null
 }
 
 /**
  * Quick Look's frame (spec section 6.4): a large modal over the app, as Finder's is, with Previous and Next for the list
- * behind it. The arrow keys walk the list; Space and Esc close it. Focus stays inside and goes back to where it came
+ * behind it. The arrow keys walk the list, except in a region marked `data-scrolls`, where they scroll it; Space and
+ * Esc close it, and a Space held down doesn't toggle it. Focus stays inside and goes back to where it came
  * from, and nothing behind it moves.
  */
 export function Overlay({ label, isOpen, onClose, onPrevious, onNext, heading, actions, children }: OverlayProps) {
   function onKeyDown(event: KeyboardEvent) {
+    if (event.repeat && event.key === ' ') return
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || keepsKey(event.target, event.key)) return
     let handled = true
     if (event.key === ' ') onClose()

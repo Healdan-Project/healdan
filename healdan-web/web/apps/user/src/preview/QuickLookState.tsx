@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { useRouterState } from '@tanstack/react-router'
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 
 export interface QuickLookState {
@@ -17,18 +18,32 @@ export interface QuickLookState {
 
 const Context = createContext<QuickLookState | null>(null)
 
+/**
+ * The list the address shows: its path and its search without the selection, which Quick Look's walk changes. A new
+ * value is another list, or none.
+ */
+function listOf(location: { pathname: string; searchStr: string }): string {
+  const search = new URLSearchParams(location.searchStr)
+  search.delete('sel')
+  return `${location.pathname}?${search.toString()}`
+}
+
 /** Whether Quick Look is open and on which document, for the views' lists and the buttons that open it. */
 export function QuickLookProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<{ shown: number; from: number }>()
+  const [state, setState] = useState<{ shown: number; from: number; list: string }>()
+  const list = useRouterState({ select: (router) => listOf(router.location) })
+  // Back, a link or a new search while it's open leaves the list it was opened from: it closes, and isn't left set to
+  // open over the next list that mounts. (Adjusting state while rendering is React's way to follow a changed value.)
+  if (state && state.list !== list) setState(undefined)
   const value = useMemo<QuickLookState>(
     () => ({
       shown: state?.shown,
       from: state?.from,
-      open: (docNumber) => setState({ shown: docNumber, from: docNumber }),
+      open: (docNumber) => setState({ shown: docNumber, from: docNumber, list }),
       go: (docNumber) => setState((now) => now && { ...now, shown: docNumber }),
       close: () => setState(undefined),
     }),
-    [state],
+    [state, list],
   )
   return <Context.Provider value={value}>{children}</Context.Provider>
 }

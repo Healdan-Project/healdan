@@ -76,7 +76,7 @@ export const enUS = {
   'preview.zoomOut': 'Zoom Out',
   'preview.zoom': '{percent}%',
   'preview.picture': 'Picture: {name}',
-  'preview.scroll': 'The page, scrollable',
+  'preview.scroll': 'Scrollable Page',
   'details.meta': '# {n} · Version {version} · {size}',
   'details.preview': 'Preview',
   'details.open': 'Open',

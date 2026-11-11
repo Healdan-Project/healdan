@@ -81,6 +81,33 @@ describe('Overlay', () => {
     expect(onNext).not.toHaveBeenCalled()
   })
 
+  it('leaves the arrow keys to a scrollable page, which they scroll, and still takes Space and Esc there', async () => {
+    const onNext = vi.fn()
+    const onClose = vi.fn()
+    render(
+      <Overlay label="Q" isOpen onClose={onClose} onNext={onNext}>
+        <div data-scrolls tabIndex={0} aria-label="The page" role="region">
+          <span>page</span>
+        </div>
+      </Overlay>,
+    )
+    const page = await screen.findByRole('region', { name: 'The page' })
+    for (const key of ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp']) fireEvent.keyDown(page, { key })
+    expect(onNext).not.toHaveBeenCalled()
+    fireEvent.keyDown(page, { key: ' ' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores Space that is held down, so it does not toggle Quick Look', async () => {
+    const onClose = vi.fn()
+    render(<Overlay label="Q" isOpen onClose={onClose}>x</Overlay>)
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.keyDown(dialog, { key: ' ', repeat: true })
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.keyDown(dialog, { key: ' ' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('closes on Escape and on Space, and returns focus', async () => {
     render(<Example />)
     const trigger = show()

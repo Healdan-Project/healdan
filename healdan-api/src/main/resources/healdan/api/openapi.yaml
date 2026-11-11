@@ -1036,24 +1036,25 @@ paths:
       operationId: getDocumentPreview
       summary: A document's preview
       description: |
-        The PDF to draw in a page: a PDF's own file, or the conversion the
-        server makes in the background of any other file (Word, Excel,
-        PowerPoint and OpenDocument files, among others). With `version` it
-        is the file of that version, as for `getDocumentContent`. A
-        `picture` kind needs no preview: it shows from its content.
+        What to show of a file in a page. A PDF's own file; a `picture`'s own
+        bytes, as its own content type (`image/*`); and for any other file
+        (Word, Excel, PowerPoint and OpenDocument files, among others) the
+        PDF the server makes of it in the background. With `version` it is
+        the file of that version, as for `getDocumentContent`.
 
-        It needs the Preview permission on top of reading: without it the
-        answer is `403 forbidden`, and so it is for a document protected by
-        a password (always refused through the API). A document the caller
-        can't read, or a version it doesn't have, is `404 not-found`.
-        Viewing a preview isn't recorded as a download.
+        It needs the Preview permission on top of reading, and not the
+        Download permission: without Preview the answer is `403 forbidden`,
+        and so it is for a document protected by a password (always refused
+        through the API). A document the caller can't read, or a version it
+        doesn't have, is `404 not-found`. Viewing a preview isn't recorded
+        as a download, for a picture as for a PDF.
 
         A conversion that isn't made yet is `202`, with `Retry-After` in
         seconds: ask again after that. A file with no preview, whether its
         type has none or its conversion failed, is `404 no-preview`. A file
         in storage that can't be reached right now is `503
         storage-unreachable`, as for the content, and is answered before any
-        of the PDF is sent.
+        of it is sent. `HEAD` answers with the headers alone.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -1066,10 +1067,10 @@ paths:
             examples: ['1.0']
       responses:
         '200':
-          description: The PDF
+          description: The PDF, or the picture
           headers:
             Content-Length:
-              description: The PDF's size in bytes
+              description: The size in bytes
               required: true
               schema:
                 type: integer
@@ -1079,6 +1080,10 @@ paths:
               schema:
                 type: string
                 contentMediaType: application/pdf
+            image/*:
+              schema:
+                type: string
+                contentMediaType: image/*
         '202':
           description: The preview is still being made
           headers:
@@ -2416,9 +2421,9 @@ components:
           description: |
             The kind of file its extension makes, the one list the File Type
             filter also uses. It says how a client previews it: a `picture`
-            from its content, an `email` as a message, and every other kind
-            from `getDocumentPreview`, which answers `404 no-preview` for a
-            type that has none.
+            as its own bytes from `getDocumentPreview`, an `email` as a
+            message, and every other kind as the PDF `getDocumentPreview`
+            gives, which answers `404 no-preview` for a type that has none.
         size:
           type: integer
           format: int64

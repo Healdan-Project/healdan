@@ -36,9 +36,7 @@ test('Quick Look draws a PDF under the page policy with no violation, and Esc gi
   // The page's policy (AppServlet) allows no eval, no WebAssembly and no inline script or style, which PDF.js must run
   // without: any violation is reported to the page, and logged to its console.
   const logged: string[] = []
-  page.on('console', (message) => {
-    if (message.type() === 'error' || message.type() === 'warning') logged.push(message.text())
-  })
+  page.on('console', (message) => logged.push(message.text()))
   page.on('pageerror', (error) => logged.push(error.message))
   await page.addInitScript(() => {
     const seen: string[] = []
@@ -77,8 +75,13 @@ test('Quick Look draws a PDF under the page policy with no violation, and Esc gi
     .toBe(true)
 
   expect(await page.evaluate(() => (window as unknown as { violations: string[] }).violations)).toEqual([])
-  // CE's own policy header also logs that part of it is ignored, which isn't a violation of anything the page does
+  // CE's own policy header (security.csp) also logs that part of it is ignored, "invalid source http://server:port/",
+  // which is CE's and not a violation of anything the page does; it's matched by neither check below (a follow-up to fix
+  // it in CE's default policy is on the ledger).
   expect(logged.filter((text) => /^refused to|violates the following content security policy/i.test(text))).toEqual([])
+  // PDF.js logs "Warning: …" and falls back when a standard font, a CMap or a decoder it asked for can't be fetched, which
+  // the dark pixels above would not notice: this is the proof that its data files load under the policy
+  expect(logged.filter((text) => /^warning: /i.test(text))).toEqual([])
 
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()

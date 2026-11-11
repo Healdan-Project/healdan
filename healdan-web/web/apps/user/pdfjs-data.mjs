@@ -41,8 +41,8 @@ export function pdfjsData() {
       }
     },
     configureServer(server) {
-      // Vite takes its base off the address before its middleware sees it
-      server.middlewares.use('/pdfjs/', (request, response, next) => {
+      // In Vite 8 this middleware runs before the base is taken off the address, so it's mounted under the base
+      server.middlewares.use(`${server.config.base}pdfjs/`, (request, response, next) => {
         const wanted = decodeURIComponent((request.url ?? '').split('?')[0] ?? '').replace(/^\//, '')
         const found = pdfjsDataFiles().find((one) => one.path === wanted)
         if (!found || !existsSync(found.file)) return next()

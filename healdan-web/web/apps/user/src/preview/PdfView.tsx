@@ -124,7 +124,7 @@ export function PdfView({ document, version, showActions }: PreviewProps) {
 
   return (
     <div className={styles.view}>
-      <div role="toolbar" aria-label={t('preview.toolbar')} className={styles.controls}>
+      <div role="group" aria-label={t('preview.toolbar')} className={styles.controls}>
         <Button variant="quiet" aria-label={t('preview.previousPage')} isDisabled={page <= 1} onPress={() => setPage(page - 1)}>
           <Icon name="chevronUp" size={18} />
         </Button>
@@ -143,8 +143,8 @@ export function PdfView({ document, version, showActions }: PreviewProps) {
           <Icon name="zoomIn" size={18} />
         </Button>
       </div>
-      {/* Focusable, so the keyboard can scroll a page that's bigger than the room */}
-      <div ref={scroller} className={styles.scroller} role="region" aria-label={t('preview.scroll')} tabIndex={0}>
+      {/* Focusable, so the keyboard can scroll a page that's bigger than the room; the arrow keys scroll it there, not walk the list */}
+      <div ref={scroller} className={styles.scroller} role="region" aria-label={t('preview.scroll')} tabIndex={0} data-scrolls>
         <canvas ref={canvas} className={styles.canvas} role="img" aria-label={t('preview.pageLabel', { page })} />
       </div>
     </div>

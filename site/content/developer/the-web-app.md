@@ -143,10 +143,10 @@ a Clients search.
 ## Previews
 
 `preview/PreviewBody.tsx` is the one switch that picks the view of a document by its `kind`, for both places that show
-one: a `picture` is `PictureView` (from `/content`, read through the API client and shown from a `data:` address,
-which the page's policy allows for images), an `email` is `NoPreview` until it has a view of its own, and every other
+one: a `picture` is `PictureView` (the preview's own bytes, `image/*`, read through the API client and shown from a `blob:`
+address that is revoked when it's replaced or unmounted), an `email` is `NoPreview` until it has a view of its own, and every other
 kind is `PdfView`, which asks `GET /documents/{n}/preview`, shows "Preparing a preview…" and asks again after
-`Retry-After` while it's `202`, and shows `NoPreview` for `404 no-preview`. The app has no list of types that convert.
+`Retry-After` while it's `202`, and shows `NoPreview` for `404 no-preview`. The app has no list of types that convert. Neither a picture's nor a PDF's preview is recorded as a download.
 The client's `getResponse` gives the `Response` for such an answer (its bytes, its status and its headers), with the
 sign-out and problem handling `get` has.
 
@@ -175,12 +175,15 @@ when the first PDF is previewed. These are the settings that keep it inside the 
 - **Its data comes from `/app/pdfjs/`**, never a CDN: `cMapUrl` (`cmaps/`, for CJK text whose fonts aren't in the PDF),
   `standardFontDataUrl` (`standard_fonts/`, for the fourteen fonts a PDF may not embed) and `wasmUrl` (`wasm/`, the two
   JavaScript decoders). `apps/user/pdfjs-data.mjs` is a Vite plugin that emits those files into the build, and serves
-  them from `node_modules` in `npm run dev`, so none is committed. `AppServlet` serves them without a long cache, as
-  they have no hash in their names. `scripts/check-dist.mjs` fails the build when the worker or a folder is missing, and
+  them from `node_modules` in `npm run dev`, so none is committed. `AppServlet` treats only what Vite writes under
+  `assets/` as hashed (and so immutable for a year), so these, whose names only sometimes look like hashes, are served
+  `no-store`. `scripts/check-dist.mjs` fails the build when the worker or a folder is missing, and
   `scripts/notices.mjs` adds their licences (Foxit's and Liberation's fonts, OpenJPEG's and JBIG2's decoders) to
   `notices.txt`.
 - **Fonts from the file** are made with the FontFace API from the file's bytes, which `font-src` doesn't govern.
-- **A copy of the bytes** is given to PDF.js, which hands its argument to the worker and leaves the caller's empty.
+- **One worker** is shared by every document opened, for the page's life, and **a copy of the bytes** is given to PDF.js,
+  which hands its argument to the worker and leaves the caller's empty. PDF.js can't run its parsing under jsdom (its
+  main-thread worker times out there), so `pdfEngine.ts` has no unit test: `working.spec.ts` is its test.
 
 ## The Catalogue
 

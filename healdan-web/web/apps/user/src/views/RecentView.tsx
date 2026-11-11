@@ -10,7 +10,7 @@ import { QuickLook } from '../preview/QuickLook'
 import { ReadingPane } from '../preview/ReadingPane'
 import { usePreviewKey } from '../preview/usePreviewKey'
 import { ErrorPanel } from '../frame/ErrorPanel'
-import { RightRegionView, useRightRegion } from '../frame/RightRegion'
+import { RightRegionView, useRegionKind } from '../frame/RightRegion'
 import { useRecentClients, useRecentDocuments, useRecentFolders } from '../queries'
 import { isRecentKind, type RecentKind } from '../search/scopes'
 import { NotFound } from './NotFound'
@@ -81,7 +81,7 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
   const rows = useMemo(() => (items ?? []).map(rowOf), [items])
   const allColumns = useMemo(() => hitColumns('documents'), [])
   // The reading pane makes the list narrow: it keeps the columns that fit
-  const columns = useRightRegion().show === 'preview' ? narrowed(allColumns) : allColumns
+  const columns = useRegionKind({ preview: true, details: selected !== undefined }) === 'preview' ? narrowed(allColumns) : allColumns
   const row = selected === undefined ? undefined : items?.find((doc) => doc.docNumber === selected)
   const preview = usePreviewKey(change)
   return (

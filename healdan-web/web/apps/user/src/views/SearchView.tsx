@@ -15,7 +15,7 @@ import { FiltersPanel } from '../filters/FiltersPanel'
 import { useAuthorNames } from '../filters/useAuthorNames'
 import { useFilters } from '../filters/useFilters'
 import { ErrorPanel } from '../frame/ErrorPanel'
-import { RightRegionView, useRightRegion } from '../frame/RightRegion'
+import { RightRegionView, useRegionKind, useRightRegion } from '../frame/RightRegion'
 import { searchesDocuments, type SearchScope } from '../search/scopes'
 import { useSearchFacets, useSearchResults } from '../search/useSearchResults'
 import { Toolbar, type ListCount } from './Toolbar'
@@ -53,7 +53,8 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const rows = useMemo(() => results.rows.map(rowOf), [results.rows])
   const allColumns = useMemo(() => hitColumns(scope), [scope])
   // The reading pane makes the list narrow: it keeps the columns that fit
-  const columns = region.show === 'preview' ? narrowed(allColumns) : allColumns
+  // Only a view that draws the pane narrows for it, as the document scopes do
+  const columns = useRegionKind({ preview: documents, details: selected !== undefined }) === 'preview' ? narrowed(allColumns) : allColumns
   const hitDocuments = useMemo(() => documentsOf(results.rows), [results.rows])
   const preview = usePreviewKey(changeSelection)
   const authors = useAuthorNames(results.rows, facets.data)

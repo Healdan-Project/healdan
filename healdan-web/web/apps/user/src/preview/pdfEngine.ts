@@ -3,7 +3,7 @@
 
 // The one place that imports PDF.js, and the settings that let it run under AppServlet's Content-Security-Policy
 // (M6 spec section 7.2: no eval, no WebAssembly, scripts, workers and fetches from the app's own address only).
-import { getDocument, GlobalWorkerOptions, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist'
+import { getDocument, GlobalWorkerOptions, PDFWorker, type PDFDocumentProxy, type RenderTask } from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 // The worker is a file of the build, hashed by Vite and served from /app/assets/ (worker-src 'self').
@@ -11,6 +11,15 @@ GlobalWorkerOptions.workerSrc = workerUrl
 
 /** Where vite.config.ts puts PDF.js's data files in the build (and serves them in dev): /app/pdfjs/. */
 const DATA = `${import.meta.env.BASE_URL}pdfjs/`
+
+// One worker for the page's life, shared by every document opened: a worker of its own for each document walked through
+// would start and stop a thread, and parse PDF.js's own code, for each. A loading task that is given a worker doesn't
+// destroy it when the document is closed.
+let shared: PDFWorker | undefined
+function worker(): PDFWorker {
+  if (!shared || shared.destroyed) shared = new PDFWorker()
+  return shared
+}
 
 /** An open PDF, as the preview needs it. */
 export interface PdfFile {
@@ -38,6 +47,7 @@ export interface PdfFile {
  */
 export async function openPdf(bytes: ArrayBuffer): Promise<PdfFile> {
   const task = getDocument({
+    worker: worker(),
     // A copy: PDF.js hands the bytes to its worker, which would leave the cached ones empty
     data: new Uint8Array(bytes.slice(0)),
     useWasm: false,

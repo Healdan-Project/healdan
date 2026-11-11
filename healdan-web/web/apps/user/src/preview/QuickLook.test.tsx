@@ -173,6 +173,36 @@ describe('QuickLook', () => {
     await quickLook('Delta.pdf')
   })
 
+  it('closes when the address changes under it, and does not come back when a list mounts', async () => {
+    const { router } = await renderApp('/folders/7?sel=10391', routes({ 'GET /v1/documents/recent': { items: docs, offset: 0, limit: 50, total: 7 } }))
+    await spaceOn('Delta.pdf')
+    await quickLook('Delta.pdf')
+
+    await router.navigate({ to: '/recent/$kind', params: { kind: 'documents' } })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await screen.findByRole('heading', { name: 'Recent Documents' })
+    await router.navigate({ to: '/folders/$id', params: { id: '7' } })
+    await row('Delta.pdf')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('stays open as the walk changes the selection in the address', async () => {
+    await renderApp('/folders/7?sel=10388', routes())
+    await spaceOn('Alpha.pdf')
+    fireEvent.keyDown(await quickLook('Alpha.pdf'), { key: 'ArrowRight' })
+    await quickLook('Bravo.pdf')
+  })
+
+  it('puts the focus on the selected row after docking from the details panel, whose button the pane replaced', async () => {
+    await renderApp('/folders/7?sel=10391', routes())
+    const panel = await screen.findByRole('region', { name: 'Details' })
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Preview' }))
+    fireEvent.click(within(await quickLook('Delta.pdf')).getByRole('button', { name: 'Open as Reading Pane' }))
+    await screen.findByRole('region', { name: 'Preview' })
+    const target = await row('Delta.pdf')
+    await waitFor(() => expect(target.contains(window.document.activeElement)).toBe(true))
+  })
+
   it('does not open on a folder', async () => {
     await renderApp('/folders/7', routes({ 'GET /v1/folders/7/children': children([folder({ id: 8, name: 'Drafts' }), ...docs]) }))
     const target = await row('Drafts')

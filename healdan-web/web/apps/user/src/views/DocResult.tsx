@@ -9,7 +9,7 @@ import { QuickLook } from '../preview/QuickLook'
 import { ReadingPane } from '../preview/ReadingPane'
 import { usePreviewKey } from '../preview/usePreviewKey'
 import { ErrorPanel } from '../frame/ErrorPanel'
-import { RightRegionView, useRightRegion } from '../frame/RightRegion'
+import { RightRegionView, useRegionKind } from '../frame/RightRegion'
 import { useDocument, useLookup } from '../queries'
 import { NotFound } from './NotFound'
 import { listColumns, narrowed, rowOf } from './listColumns'
@@ -64,7 +64,7 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
   const document = useDocument(docNumber)
   const rows = useMemo(() => (document.data ? [rowOf(document.data)] : []), [document.data])
   const preview = usePreviewKey(() => {})
-  const columns = useRightRegion().show === 'preview' ? narrowed(listColumns) : listColumns
+  const columns = useRegionKind({ preview: true, details: true }) === 'preview' ? narrowed(listColumns) : listColumns
   if (document.isError) {
     // The document went away after the lookup found it: the same words as a lookup that found nothing
     if (document.error instanceof ApiError && document.error.status === 404) return <NotFoundNumber reference={String(docNumber)} />

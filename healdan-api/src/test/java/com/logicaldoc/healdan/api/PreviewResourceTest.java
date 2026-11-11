@@ -114,6 +114,98 @@ public class PreviewResourceTest extends ApiTestCase {
 		assertArrayEquals(second, latest.body());
 	}
 
+	/** A PNG's signature, and a little more */
+	private static final byte[] PNG = { (byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 13, 'I', 'H', 'D',
+			'R' };
+
+	private int downloads() {
+		return jdbc().queryForObject("select count(*) from ld_history where ld_event = 'event.downloaded'",
+				Integer.class).intValue();
+	}
+
+	@Test
+	public void testPictureAnswersItsOwnBytesAndType() throws Exception {
+		Document d = file("a.png", PNG);
+
+		ApiResponse response = get(path(d)).token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("image/png", response.header("Content-Type"));
+		assertEquals(Integer.toString(PNG.length), response.header("Content-Length"));
+		assertArrayEquals(PNG, response.body());
+	}
+
+	@Test
+	public void testPictureOfAskedVersion() throws Exception {
+		Document d = file("a.png", PNG);
+
+		ApiResponse response = get(path(d) + "?version=1.0").token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertArrayEquals(PNG, response.body());
+	}
+
+	@Test
+	public void testPictureWithoutPreviewPermission403() throws Exception {
+		Document d = file("a.png", PNG);
+
+		ApiResponse response = get(path(d)).token(signIn(reader)).send();
+
+		assertEquals(response.toString(), 403, response.status());
+		assertEquals("forbidden", response.code());
+	}
+
+	@Test
+	public void testPreviewIsNotRecordedAsADownload() throws Exception {
+		Document picture = file("a.png", PNG);
+		Document pdf = file("a.pdf", OfficeFiles.pdf(1));
+		String token = signIn(clerk);
+
+		assertEquals(200, get(path(picture)).token(token).send().status());
+		assertEquals(200, get(path(pdf)).token(token).send().status());
+
+		assertEquals(0, downloads());
+	}
+
+	@Test
+	public void testProtectedDocumentIsRefused() throws Exception {
+		Document d = file("a.pdf", OfficeFiles.pdf(1));
+		com.logicaldoc.core.document.DocumentHistory history = fx.documentHistory(fx.admin());
+		history.setEvent(com.logicaldoc.core.document.DocumentEvent.CHANGED);
+		DocumentDAO.get().setPassword(d.getId(), "S3cret-pw!", history);
+
+		ApiResponse response = get(path(d)).token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 403, response.status());
+		assertEquals("forbidden", response.code());
+	}
+
+	@Test
+	public void testHeadOpensNoStream() throws Exception {
+		Document d = file("a.pdf", OfficeFiles.pdf(1));
+		String token = signIn(clerk);
+		int[] opened = { 0 };
+		DefaultListableBeanFactory beans = ((GenericApplicationContext) context).getDefaultListableBeanFactory();
+		String name = beans.getBeanNamesForType(Store.class)[0];
+		FSStore real = (FSStore) beans.getBean(name);
+		FSStore counting = new FSStore() {
+			@Override
+			public InputStream getStream(StoreResource resource) throws IOException {
+				opened[0]++;
+				return super.getStream(resource);
+			}
+		};
+		counting.setId(real.getId());
+		beans.destroySingleton(name);
+		beans.registerSingleton(name, counting);
+
+		ApiResponse head = head(path(d)).token(token).send();
+
+		assertEquals(head.toString(), 200, head.status());
+		assertEquals("application/pdf", head.header("Content-Type"));
+		assertEquals(0, opened[0]);
+	}
+
 	@Test
 	public void testPendingAsksAgainIn5Seconds() throws Exception {
 		Document d = file("a.docx", OfficeFiles.docx(null));

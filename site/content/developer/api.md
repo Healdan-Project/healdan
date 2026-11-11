@@ -653,21 +653,22 @@ document you can't read through the web page doesn't exist through the API eithe
 
 ## Previews
 
-`GET /documents/{docNumber}/preview` answers the PDF to draw in a page: a PDF's own file, or the conversion the server
-makes in the background of any other file (M1.5's queue; asking never makes one). `?version=` asks for a version's, as
+`GET /documents/{docNumber}/preview` answers what to show of a file in a page: a PDF's own file, a picture's own bytes
+(`image/*`), or the PDF conversion the server makes in the background of any other file (M1.5's queue; asking never
+makes one). `HEAD` answers the headers alone. `?version=` asks for a version's, as
 for `/content`. It needs the Preview permission on top of reading (`403` without it, and for a document protected by a
-password), and isn't recorded as a download.
+password), and isn't recorded as a download, for a picture as for a PDF (it needs no Download permission).
 
 | Answer | When |
 |---|---|
-| `200`, `application/pdf` | There is a PDF |
+| `200`, `application/pdf` or `image/*` | There is a PDF, or the file is a picture |
 | `202`, with `Retry-After` in seconds (5) and no body | The conversion is queued: ask again after that |
 | `404 no-preview` | The type has none, the conversion failed (the "not available" PDF CE stores counts), or its job was given up on |
 | `404 not-found` | The document or the version isn't there, or the caller can't read it |
 | `503 storage-unreachable` | The file's storage can't be reached, as for `/content` |
 
 A document's `kind` (the one list the File Type filter uses: `word`, `excel`, `powerpoint`, `pdf`, `email`,
-`opendocument`, `picture` and `other`) says how a client previews it. The app draws a `picture` from `/content` and every
+`opendocument`, `picture` and `other`) says how a client previews it. The app draws a `picture` and every
 other kind from `/preview`, and asks again while it is `202`; it has no list of types that convert.
 
 ## The Sign-In Throttle

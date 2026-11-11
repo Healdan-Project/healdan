@@ -5,7 +5,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import { detailsRoutes } from '../test/details'
-import { children, document, folder, type Routes } from '../test/fakeApi'
+import { children, document, folder, matter, page, type Routes } from '../test/fakeApi'
 import { pdf, resetPdf } from '../test/fakePdf'
 import { pdfResponse } from '../test/renderPreview'
 import { renderApp } from '../test/renderApp'
@@ -100,6 +100,21 @@ describe('ReadingPane', () => {
     await waitFor(() => expect(headers()).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date']))
   })
 
+  it('leaves the list at its full columns where the view has no pane, as in the Matters and Folders scopes', async () => {
+    const { router } = await renderApp('/folders/7?sel=10388', routes({ 'GET /v1/search': page([matter()]) }))
+    const headers = () => screen.getAllByRole('columnheader').map((header) => header.textContent)
+    await dock()
+    expect(headers()).toEqual(['Title', 'Doc #', 'Edit Date'])
+
+    await router.navigate({ to: '/search', search: { scope: 'matters', q: 'charter' } })
+    await screen.findByRole('row', { name: /Charter Dispute/ })
+    expect(headers()).toEqual(['Matter', 'Client'])
+    expect(screen.queryByRole('region', { name: 'Preview' })).toBeNull()
+
+    await router.navigate({ to: '/search', search: { scope: 'folders', q: 'charter' } })
+    await waitFor(() => expect(headers()).toEqual(['Title', 'Matter']))
+  })
+
   it('waits for a click when no document is selected', async () => {
     const { router } = await renderApp('/folders/7?sel=10388', routes())
     await dock()
@@ -112,17 +127,19 @@ describe('ReadingPane', () => {
   })
 
   it('previews a picture from its content', async () => {
+    Object.defineProperty(URL, 'createObjectURL', { value: () => 'blob:scan', configurable: true, writable: true })
+    Object.defineProperty(URL, 'revokeObjectURL', { value: () => {}, configurable: true, writable: true })
     const scan = document({ docNumber: 10400, name: 'Scan.png' })
     await renderApp(
       '/folders/7?sel=10400',
       routes({
         'GET /v1/folders/7/children': children([scan]),
         ...detailsRoutes(scan),
-        'GET /v1/documents/10400/content': () => new Response(new Uint8Array([1]), { headers: { 'Content-Type': 'image/png' } }),
+        'GET /v1/documents/10400/preview': () => new Response(new Uint8Array([1]), { headers: { 'Content-Type': 'image/png' } }),
       }),
     )
     const pane = await dock()
-    expect((await within(pane).findByRole('img', { name: 'Picture: Scan.png' })).getAttribute('src')).toMatch(/^data:image\/png;base64,/)
+    expect((await within(pane).findByRole('img', { name: 'Picture: Scan.png' })).getAttribute('src')).toBe('blob:scan')
   })
 
   it('passes axe', async () => {

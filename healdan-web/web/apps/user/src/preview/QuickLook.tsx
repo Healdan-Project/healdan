@@ -29,6 +29,25 @@ function focusRow(docNumber: number) {
 }
 
 /**
+ * Runs `then` once React Aria has given the focus back to where it was before the dialog opened, which it does a frame
+ * after the dialog goes and which a `focusin` says; or, when there's nothing left to give it to (the details' button
+ * the docked pane replaced, a row that isn't drawn), after a short wait. Either way it's after, so it has the last word.
+ */
+function afterFocusRestored(then: () => void) {
+  let done = false
+  const finish = () => {
+    if (done) return
+    done = true
+    window.document.removeEventListener('focusin', onFocus)
+    clearTimeout(timer)
+    then()
+  }
+  const onFocus = () => queueMicrotask(finish)
+  window.document.addEventListener('focusin', onFocus)
+  const timer = setTimeout(finish, 300)
+}
+
+/**
  * Quick Look (spec section 6.4): the selected document's preview, large over the app. ‹ › and the arrow keys walk the
  * list it was opened from, and the selection walks with them, so the row behind is the one shown; at the end of the
  * loaded rows › loads the next page. Space and Esc close it, and focus is back on the row. Nothing behind it moves.
@@ -67,11 +86,13 @@ function Shown({ documents, total, loadMore, docNumber }: QuickLookProps & { doc
   }
 
   function leave(dock: boolean) {
-    // The focus goes back to the row Quick Look was opened on, which is the shown one unless it was walked away from
+    // The focus goes back to where it was (React Aria does), and then to the row Quick Look ended on if that isn't the
+    // one it began on, or if it docked: the pane replaced the button it was opened from, and the row is where the
+    // arrow keys go on previewing
     const row = docNumber
     close()
     if (dock) region.open('preview')
-    if (row !== from) setTimeout(() => focusRow(row), 80)
+    if (dock || row !== from) afterFocusRestored(() => focusRow(row))
   }
 
   const previous = index > 0 ? documents[index - 1] : undefined

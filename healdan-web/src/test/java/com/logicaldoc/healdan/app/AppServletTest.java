@@ -54,6 +54,17 @@ public class AppServletTest {
 	}
 
 	@Test
+	public void testPdfJsDataFilesAreNotHashedWhateverTheirNames() throws Exception {
+		// Their names are PDF.js's own, and some look like a hash to a pattern: 19 CMaps and a font
+		for (String path : new String[] { "/pdfjs/cmaps/Adobe-Japan1-0.bcmap",
+				"/pdfjs/standard_fonts/LiberationSans-BoldItalic.ttf" }) {
+			MockHttpServletResponse response = call("GET", path);
+			assertEquals(path, 200, response.getStatus());
+			assertEquals(path, "no-store", response.getHeader("Cache-Control"));
+		}
+	}
+
+	@Test
 	public void testAddressesAnswerIndex() throws Exception {
 		for (String path : new String[] { "/", "/doc/10388", "/folders/7" }) {
 			MockHttpServletResponse response = call("GET", path);

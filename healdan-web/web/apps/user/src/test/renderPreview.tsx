@@ -11,9 +11,10 @@ import { fakeApi, type FakeApi, type Routes } from './fakeApi'
 
 /** One part of the app on its own, with the fake API and a query client, for parts that need no router. */
 export function renderPreview(ui: ReactNode, routes: Routes = {}): { api: FakeApi } & ReturnType<typeof render> {
-  const api = fakeApi(routes)
   const signedOut = createSignedOut()
-  const queryClient = createQueryClient({ onSignedOut: signedOut.mark, retry: false })
+  // As main.tsx gives createApi the same
+  const api = fakeApi(routes, signedOut.mark)
+  const queryClient = createQueryClient({ retry: false })
   const view = render(
     <ServicesProvider api={api} signedOut={signedOut}>
       <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>

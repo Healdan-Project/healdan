@@ -14,7 +14,7 @@ import { useFacets, useUnfilteredDocuments } from '../filters/useFacets'
 import { useFilters } from '../filters/useFilters'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { messageFor } from '../frame/errors'
-import { RightRegionView, useRightRegion } from '../frame/RightRegion'
+import { RightRegionView, useRegionKind, useRightRegion } from '../frame/RightRegion'
 import { keys, useFavorites, useFolder } from '../queries'
 import { useApi } from '../services'
 import { Breadcrumb } from './Breadcrumb'
@@ -61,7 +61,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const documents = useMemo(() => documentsOf(listing.rows), [listing.rows])
   const preview = usePreviewKey(changeSelection)
   // The reading pane makes the list narrow: it keeps the columns that fit
-  const columns = region.show === 'preview' ? narrowed(listColumns) : listColumns
+  const columns = useRegionKind({ preview: !store, details: selected !== undefined }) === 'preview' ? narrowed(listColumns) : listColumns
   const authors = useAuthorNames(listing.rows, facets.data)
 
   if (folder.isError) {

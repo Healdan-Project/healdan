@@ -341,14 +341,15 @@ public class DocumentResource {
 	}
 
 	/**
-	 * A document's preview (M6 spec section 9.3): the PDF to draw in the page, of the current file or of the file of
-	 * {@code version}. A PDF is its own preview; any other file's is the conversion Healdan makes in the background
-	 * ({@link PreviewState}). Read through the checks of the old UI's preview: the Preview permission on top of
-	 * reading, and not for a document protected by a password. Not recorded as a download.
+	 * A document's preview (M6 spec section 9.3): what to show of one version's file in a page. A picture is its own
+	 * bytes, as its own content type; a PDF is its own file; any other file's is the PDF conversion Healdan makes in
+	 * the background ({@link PreviewState}). Read through the checks of the old UI's preview: the Preview permission on
+	 * top of reading, and not for a document protected by a password. It is not recorded as a download, and needs no
+	 * Download permission.
 	 *
 	 * @param docNumber the doc #
 	 * @param version a version of the document, such as {@code 1.0}; the current file by default
-	 * @return {@code 200} with the PDF; {@code 202} with {@code Retry-After} while it's being made
+	 * @return {@code 200} with the PDF or the picture; {@code 202} with {@code Retry-After} while a conversion is made
 	 * @throws ApiProblem {@code 404 not-found} for a document the caller can't read or a version it doesn't have,
 	 *         {@code 404 no-preview} for a file with no preview, {@code 403} without the Preview permission, and
 	 *         {@code 503} while the file's storage can't be reached
@@ -356,7 +357,10 @@ public class DocumentResource {
 	@GET
 	@Path("{docNumber: [0-9]+}/preview")
 	@Produces(MediaType.WILDCARD)
-	public Response preview(@PathParam("docNumber") long docNumber, @QueryParam("version") String version) {
+	public Response preview(@PathParam("docNumber") long docNumber, @QueryParam("version") String version,
+			@Context Request request) {
+		// JAX-RS answers HEAD with this method too: the headers alone
+		boolean head = HttpMethod.HEAD.equals(request.getMethod());
 		Caller caller = Caller.current();
 		try {
 			Document document = readable(docNumber, caller.user());
@@ -365,30 +369,38 @@ public class DocumentResource {
 			refuseProtected(document, caller.session(), docNumber);
 
 			FileOfVersion asked = fileOf(document, version, docNumber);
-			PreviewState state = PreviewState.of(document, asked.fileVersion(), asked.fileName());
-			if (state == PreviewState.PENDING)
-				return Response.status(Response.Status.ACCEPTED).header(HttpHeaders.RETRY_AFTER, PREVIEW_RETRY_SECONDS)
-						.build();
-			if (state == PreviewState.NONE)
-				throw new ApiProblem(404, "no-preview", "Document #%d has no preview.".formatted(docNumber));
+			String extension = FilenameUtils.getExtension(asked.fileName());
+			boolean picture = FileKinds.PICTURE.equals(FileKinds.of(extension));
+			boolean pdf = "pdf".equalsIgnoreCase(extension);
+			if (!picture) {
+				PreviewState state = PreviewState.of(document, asked.fileVersion(), asked.fileName());
+				if (state == PreviewState.PENDING)
+					return Response.status(Response.Status.ACCEPTED)
+							.header(HttpHeaders.RETRY_AFTER, PREVIEW_RETRY_SECONDS).build();
+				if (state == PreviewState.NONE)
+					throw new ApiProblem(404, "no-preview", "Document #%d has no preview.".formatted(docNumber));
+			}
 
-			// A PDF is shown as it is; any other file by its conversion
-			boolean pdf = "pdf".equalsIgnoreCase(FilenameUtils.getExtension(asked.fileName()));
-			StoreResource resource = pdf
+			// A picture and a PDF are shown as they are; any other file by its conversion
+			StoreResource resource = picture || pdf
 					? StoreResource.builder().docId(document.getId()).fileVersion(asked.fileVersion()).build()
 					: PreviewState.conversion(document.getId(), asked.fileVersion());
 			if (!Store.get().exists(resource))
 				throw new ApiProblem(500, "server-error", "The document's file is missing from storage.");
 			long size = Store.get().size(resource);
-			// Opened before the answer starts, as the content's is: an outage is a 503, never a 200 that stops short
-			InputStream in = openStream(resource);
-			StreamingOutput body = out -> {
+			// Opened before the answer starts, as the content's is: an outage is a 503, never a 200 that stops short.
+			// A HEAD opens nothing, which would be left unclosed
+			InputStream in = head ? null : openStream(resource);
+			StreamingOutput body = head ? out -> {
+				// No body: CXF would send the file itself, and a missing entity would make it send Content-Length 0
+			} : out -> {
 				try (in) {
 					in.transferTo(out);
 				}
 			};
-			return Response.ok(body, PDF).header(HttpHeaders.CONTENT_LENGTH, size)
-					.header(HttpHeaders.CONTENT_DISPOSITION, "inline").build();
+			return Response.ok(body, picture ? MimeType.getByFilename(asked.fileName()) : PDF)
+					.header(HttpHeaders.CONTENT_LENGTH, size).header(HttpHeaders.CONTENT_DISPOSITION, "inline")
+					.build();
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read the preview of document #" + docNumber, e);
 		}

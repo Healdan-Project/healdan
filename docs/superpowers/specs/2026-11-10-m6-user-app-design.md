@@ -336,7 +336,7 @@ Everything else the app uses exists. Dropping a file on a row uses `POST /docume
 
 ### 9.3 Preview
 
-`GET /documents/{n}/preview?version=` answers M1.5's PDF of that version: `202` with `Retry-After` while it's still converting, `404 no-preview` for a type that has none, and `503 storage-unreachable` when the file can't be reached. A picture previews from `/content`. The app asks again after `Retry-After` while Quick Look stays open.
+`GET /documents/{n}/preview?version=` answers M1.5's PDF of that version: `202` with `Retry-After` while it's still converting, `404 no-preview` for a type that has none, and `503 storage-unreachable` when the file can't be reached. A picture previews from the same endpoint as its own bytes (`200 image/*`, changed in the build: R54, Task 16's review), under the same checks and recorded as no download, where `/content` would record one and need the Download permission. The app asks again after `Retry-After` while Quick Look stays open.
 
 ### 9.4 Emails (refined while writing the spec)
 

@@ -24,6 +24,10 @@ describe('PdfView', () => {
     await waitFor(() => expect(pdf.drawn.map((d) => d.page)).toContain(1))
     expect(pdf.opened).toHaveLength(1)
     expect(screen.getByRole('img', { name: 'Page 1' })).toBeTruthy()
+    // Its controls are a group, not a toolbar, whose arrow keys the page's own would clash with
+    expect(screen.getByRole('group', { name: 'Preview Controls' })).toBeTruthy()
+    expect(screen.queryByRole('toolbar')).toBeNull()
+    expect(screen.getByRole('region', { name: 'Scrollable Page' }).hasAttribute('data-scrolls')).toBe(true)
   })
 
   it('asks for the version it is given', async () => {

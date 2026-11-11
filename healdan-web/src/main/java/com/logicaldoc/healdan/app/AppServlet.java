@@ -45,7 +45,11 @@ public class AppServlet extends HttpServlet {
 
 	private static final Pattern SAFE = Pattern.compile("[A-Za-z0-9._/-]+");
 
-	private static final Pattern HASHED = Pattern.compile(".*-[A-Za-z0-9_-]{8,}\\..*");
+	/**
+	 * Vite's own output, which carries a content hash in its name: only what it writes under {@code assets/}. Files
+	 * elsewhere (PDF.js's data under {@code pdfjs/}, whose names only look like hashes) aren't versioned by name.
+	 */
+	private static final Pattern HASHED = Pattern.compile("assets/.*-[A-Za-z0-9_-]{8,}\\..*");
 
 	private static final Map<String, String> TYPES = Map.ofEntries(Map.entry("html", "text/html;charset=UTF-8"),
 			Map.entry("js", "text/javascript;charset=UTF-8"), Map.entry("mjs", "text/javascript;charset=UTF-8"),

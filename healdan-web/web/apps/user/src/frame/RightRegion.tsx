@@ -56,6 +56,27 @@ export function useRightRegion(): RightRegion {
   return region
 }
 
+/** What a view offers the region: each is whether the view has that to show */
+export interface RegionOffers {
+  filters?: boolean
+  details?: boolean
+  preview?: boolean
+}
+
+/**
+ * What the region draws for a view: what was asked for, or, when the view offers no such thing, the details (when it
+ * has them); none when there's nothing to draw. One decision, for the region itself and for a list that narrows when it
+ * sits beside the reading pane, so a list never narrows for a pane that isn't there.
+ */
+export function regionKind(show: RegionKind | null, offers: RegionOffers): RegionKind | null {
+  return show && offers[show] ? show : show && offers.details ? 'details' : null
+}
+
+/** What the region draws for a view that offers these (see {@link regionKind}) */
+export function useRegionKind(offers: RegionOffers): RegionKind | null {
+  return regionKind(useRightRegion().show, offers)
+}
+
 export interface RightRegionProps {
   filters?: ReactNode
   details?: ReactNode
@@ -65,10 +86,8 @@ export interface RightRegionProps {
 
 /** The region itself, beside a list. It isn't there at all when it has nothing to show, so the list takes its width. */
 export function RightRegionView({ filters, details, preview }: RightRegionProps) {
-  const { show } = useRightRegion()
   const content = { filters, details, preview }
-  // What was asked for may not be something this view offers; the details (when a document is selected) are the default.
-  const kind: RegionKind | null = show && content[show] ? show : show && details ? 'details' : null
+  const kind = useRegionKind({ filters: !!filters, details: !!details, preview: !!preview })
   if (!kind) return null
   return (
     <section className={`${styles.region} ${kind === 'preview' ? styles.wide : ''}`} aria-label={labels[kind]()}>

@@ -15,7 +15,7 @@ over the page, as Finder's Quick Look does. Nothing behind it moves.
 - **The bar across the top** has **‹** and **›**, the document's name, its place in the list (**4 of 7**), its doc #
   (**# 10388**), a button that docks the preview (see [The Reading Pane](#the-reading-pane)), and **Open** and
   **Download**.
-- **Move through the list** with ‹ and ›, or the arrow keys. The row behind Quick Look moves with you, so when you
+- **Move through the list** with ‹ and ›, or the arrow keys, except while the page itself has the focus (see below). The row behind Quick Look moves with you, so when you
   close it, you're on the document you ended on. Past the last document loaded, › loads the next page of the list.
 - **Close it** with Space or **Esc**. The focus goes back to the row.
 - **Other ways in:** the **Preview** button in the toolbar above the list, and the one on the thumbnail in the
@@ -23,7 +23,9 @@ over the page, as Finder's Quick Look does. Nothing behind it moves.
 
 A PDF is shown one page at a time, with **Previous Page** and **Next Page**, and **Zoom In** and **Zoom Out**, in steps
 from 50% to 300% of the width of the room. 100% fits the page to it. To scroll a page that's bigger than the room with the
-keyboard, Tab to it and use Page Up and Page Down: the arrow keys walk the list.
+keyboard, Tab to the page: while it has the focus, the arrow keys scroll it, as they do any scrollable area, and Page
+Up and Page Down scroll it too. Move the focus off it, to the bar or the dialog, and the arrow keys walk the list again.
+Holding Space down doesn't open and close Quick Look over and over.
 
 ## The Reading Pane
 
@@ -43,12 +45,12 @@ keyboard, Tab to it and use Page Up and Page Down: the arrow keys walk the list.
 |---|---|
 | PDF | Its own pages |
 | Word, Excel, PowerPoint, OpenDocument and drawings | The PDF Healdan makes of them (see below) |
-| Pictures | As themselves, from the file. A picture your browser can't draw, such as a TIFF in Chrome, says there's no preview |
+| Pictures | As themselves, the file's own bytes. A picture your browser can't draw, such as a TIFF in Chrome, says there's no preview |
 | Emails | No preview yet: the page says so, with Open and Download |
 | Anything else | "There's no preview for this kind of file.", with **Open** and **Download** |
 
-A preview needs the Preview permission on top of reading the document. A picture's preview is its file, so it also
-needs the Download permission. A document protected by a password has no preview in the new interface. Without the
+A preview needs the Preview permission on top of reading the document, for a picture as for a PDF, and previewing is
+never recorded as a download. A document protected by a password has no preview in the new interface. Without the
 permission, you see the same words as for a type with no preview.
 
 ## Which Files Preview
@@ -88,3 +90,8 @@ with Open and Download. It doesn't hold up anyone else's previews. If a file you
 administrator.
 
 If the files' storage can't be reached for the moment, a banner says so, and the preview offers **Try Again**.
+
+## Printing
+
+The preview doesn't print. To print a document, download it, or open it in the Classic Interface, whose preview has a
+print button, and print from there.
