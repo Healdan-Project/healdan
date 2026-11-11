@@ -332,7 +332,7 @@ public class DocumentResource {
 	 * @throws IllegalStateException if it can't be opened; storage that can't be reached is its cause, and answered
 	 *         {@code 503} by {@link ProblemMapper}
 	 */
-	private static InputStream openStream(StoreResource resource) {
+	static InputStream openStream(StoreResource resource) {
 		try {
 			return Store.get().getStream(resource);
 		} catch (IOException e) {
@@ -398,9 +398,14 @@ public class DocumentResource {
 					in.transferTo(out);
 				}
 			};
-			return Response.ok(body, picture ? MimeType.getByFilename(asked.fileName()) : PDF)
-					.header(HttpHeaders.CONTENT_LENGTH, size).header(HttpHeaders.CONTENT_DISPOSITION, "inline")
-					.build();
+			Response.ResponseBuilder response = Response
+					.ok(body, picture ? MimeType.getByFilename(asked.fileName()) : PDF)
+					.header(HttpHeaders.CONTENT_LENGTH, size).header(HttpHeaders.CONTENT_DISPOSITION, "inline");
+			if (picture)
+				// Its own bytes, served inline: a top-level visit to an SVG, say, must run no script
+				response.header("X-Content-Type-Options", "nosniff").header("Content-Security-Policy",
+						MessageResource.SANDBOX);
+			return response.build();
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read the preview of document #" + docNumber, e);
 		}
@@ -492,7 +497,7 @@ public class DocumentResource {
 	 * the same document and less than 30 seconds old. As there, a failure to
 	 * record it is logged and doesn't stop the download.
 	 */
-	private static void recordDownload(Document document, User user, Session session) {
+	static void recordDownload(Document document, User user, Session session) {
 		try {
 			DocumentHistory history = new DocumentHistory();
 			history.setDocument(document);

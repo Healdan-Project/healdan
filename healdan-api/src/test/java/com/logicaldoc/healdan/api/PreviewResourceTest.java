@@ -136,6 +136,19 @@ public class PreviewResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testPictureRunsNoScriptWhenVisitedDirectly() throws Exception {
+		Document svg = file("a.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"
+				.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+
+		ApiResponse response = get(path(svg)).token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("image/svg+xml", response.header("Content-Type"));
+		assertEquals("nosniff", response.header("X-Content-Type-Options"));
+		assertEquals("sandbox", response.header("Content-Security-Policy"));
+	}
+
+	@Test
 	public void testPictureOfAskedVersion() throws Exception {
 		Document d = file("a.png", PNG);
 

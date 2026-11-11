@@ -3,14 +3,14 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ApiError, apiPath, type Api } from '@healdan/api'
+import { ApiError, type Api } from '@healdan/api'
 import { Button, Icon, t } from '@healdan/ui'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { useApi } from '../services'
 import { NoPreview } from './NoPreview'
 import type { PdfFile } from './pdfEngine'
 import styles from './preview.module.css'
-import type { PreviewProps } from './types'
+import { previewSource, type PreviewProps, type PreviewSource } from './types'
 
 type Preview = { kind: 'ready'; bytes: ArrayBuffer } | { kind: 'pending'; retryMs: number }
 
@@ -20,8 +20,8 @@ const FIT = ZOOMS.indexOf(1)
 /** Room round a page, in CSS pixels */
 const MARGIN = 32
 
-async function fetchPreview(api: Api, docNumber: number, version: string | undefined, signal: AbortSignal): Promise<Preview> {
-  const response = await api.getResponse(apiPath`/v1/documents/${docNumber}/preview`, version ? { version } : undefined, { signal })
+async function fetchPreview(api: Api, from: PreviewSource, signal: AbortSignal): Promise<Preview> {
+  const response = await api.getResponse(from.path, from.query, { signal })
   if (response.status === 202) {
     // Asks again when the server says; it's 5 seconds, and never less than 1 second, which a bad value could make
     const seconds = Number(response.headers.get('Retry-After'))
@@ -47,13 +47,17 @@ function useWidth(): [(element: HTMLElement | null) => void, number] {
 /**
  * A document's preview, M1.5's PDF drawn in the page by PDF.js (spec sections 6.4 and 9.3): one page at a time, with the
  * page and the zoom to move. While the server is still converting, it asks again as it is told. A type with no
- * preview, or one the person may not preview, says so. Give it a `key` of the document, so a new one starts at page 1.
+ * preview, or one the person may not preview, says so. Give it a `key` of the document, so a new one starts at page 1. With a
+ * `source` it draws that address's PDF instead, such as an email's attachment.
  */
-export function PdfView({ document, version, showActions }: PreviewProps) {
+export function PdfView({ document, version, showActions, source }: PreviewProps) {
   const api = useApi()
+  const from = source ?? previewSource(document, version)
   const preview = useQuery({
-    queryKey: ['documents', document.docNumber, 'preview', version ?? document.fileVersion],
-    queryFn: ({ signal }) => fetchPreview(api, document.docNumber, version, signal),
+    // An address, which includes the version asked for; the document's current file is named by its file version, so a
+    // new one is a new key
+    queryKey: ['preview', 'pdf', from.path, from.query ?? null, source ? null : document.fileVersion],
+    queryFn: ({ signal }) => fetchPreview(api, from, signal),
     // A conversion that isn't made yet: asked again as the server said, for as long as this is on screen
     refetchInterval: (query) => (query.state.data?.kind === 'pending' ? query.state.data.retryMs : false),
     // The bytes of a version never change, and a few documents' worth are kept for a short while only

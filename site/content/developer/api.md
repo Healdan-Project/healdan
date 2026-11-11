@@ -230,7 +230,8 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 403 | `token-only` | `DELETE /auth/tokens/current` on the web session, which has no token |
 | 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current` |
 | 404 | `not-found` | It doesn't exist, **or you can't read it**: the two get the same answer |
-| 404 | `no-preview` | `GET /documents/{docNumber}/preview` for a file with no preview: its type has none, or its conversion failed (see [Previews](#previews)) |
+| 404 | `no-preview` | `GET /documents/{docNumber}/preview` for a file with no preview: its type has none, or its conversion failed (see [Previews](#previews)); `GET /documents/{docNumber}/message/parts/{id}?inline=true` for an attachment that isn't a PDF or a picture |
+| 404 | `not-an-email` | A `/documents/{docNumber}/message` route for a document that isn't an email, or whose file can't be read as one (see [Reading a Filed Email](#reading-a-filed-email)) |
 | 409 | `checked-out`, `locked` | Someone else has the document checked out, or anyone has it locked with the web page's Lock action. The problem adds the `hold` |
 | 409 | `held-elsewhere` | You have the document checked out on another of your devices. The problem adds the `hold` and `lastSaved` |
 | 409 | `not-held` | A save with `ifHeld: true` found the document free: its check-out was released |
@@ -301,7 +302,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 | Finding | `GET /search?scope=&q=&within=`, with filters and `facets`, `GET /suggest?q=` for the search box as someone types, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
 | A document | `GET /documents/{docNumber}`, `/content`, `/preview`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone |
-| Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are |
+| Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are; `GET /documents/{docNumber}/message` and its `/body`, `/parts/{id}` and `POST /attachments/{id}/file` for reading a filed email |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
 | Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
 
@@ -627,6 +628,36 @@ The answer is `201`, with the email's address as `Location`.
   this, or files the email if the first try was taken back, and so does a `POST /documents` of the same message.
   One that waits more than 30 seconds is `409 filing-in-progress`: send it again. The same refusal comes from the
   web page and every other way a copy of the message could reach the matter.
+
+### Reading a Filed Email
+
+A filed `.eml` or `.msg` can be read as a message, for a client that shows email without opening a mail program. All
+of these need the Preview permission on top of reading (`/parts/{id}` needs Download unless it is `inline`, and Save
+to Matter needs Download on the email and Write on its folder), and answer `404 not-an-email` for a document that
+isn't an email, `404 not-found` first for one the caller can't read, and `403 forbidden` for one protected by a
+password.
+
+| Route | Answers |
+|---|---|
+| `GET /documents/{docNumber}/message` | The subject, From, To, Cc, Sent and Received, the attachments (`index`, `name`, `type`, `size`, `message`, and the `docNumber` of a document already filed from it that the caller can read), and the `body` address. Pictures the body shows aren't attachments |
+| `GET /documents/{docNumber}/message/body?pictures=` | The body as a page of its own, `text/html;charset=utf-8` |
+| `GET /documents/{docNumber}/message/parts/{id}` | An attachment, by its `index`, as a download: `Content-Disposition: attachment`, recorded as a download of the email. With `?inline=true`, a PDF or a picture to show in place, under Preview, recorded as nothing; any other type is `404 no-preview` |
+| `POST /documents/{docNumber}/message/attachments/{id}/file` | Save to Matter: files the attachment in the email's folder as a document of its own, linked to the email as `attachment`, as `POST /emails` does. An optional JSON body, `{"properties": {…}}`, as `POST /documents` takes them. `201`; saving it again files another copy, but an attached message the matter holds is `409 already-filed` with the copy |
+
+The body page is cleaned by the server: no script, event handler, form, `object`, `embed`, `iframe`, `base` or meta
+refresh, no link but `http`, `https` and `mailto` (each opening in a new window, `noopener noreferrer`), and styles
+with no `url()` or `@import`. Pictures the message carries are embedded as `data:` addresses, up to 2 MiB in all
+(a placeholder past that); pictures from the internet are removed unless `pictures=true`. Its own
+`Content-Security-Policy` sandboxes it (`sandbox allow-popups allow-popups-to-escape-sandbox`), allows no fetch but
+embedded pictures (`default-src 'none'`, `img-src data:`, plus `https:` with `pictures=true`) and lets only the
+same origin frame it, so a client shows it in `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox">`, never
+with `allow-scripts` or `allow-same-origin`. It is a `GET` that changes nothing, so the web session may ask for it as
+a frame's address. Every answer that serves stored bytes inline, an attachment with `inline=true` or a picture from
+`/preview`, carries `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox`, so going to one directly
+runs no script.
+
+An `.msg` is read through CE's reader into the same views. It keeps no Content-IDs, so every file in it is an
+attachment and a `cid:` picture in its HTML shows as a placeholder.
 
 ## Doc IDs in Word and LibreOffice Files
 

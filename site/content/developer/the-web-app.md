@@ -144,11 +144,27 @@ a Clients search.
 
 `preview/PreviewBody.tsx` is the one switch that picks the view of a document by its `kind`, for both places that show
 one: a `picture` is `PictureView` (the preview's own bytes, `image/*`, read through the API client and shown from a `blob:`
-address that is revoked when it's replaced or unmounted), an `email` is `NoPreview` until it has a view of its own, and every other
+address that is revoked when it's replaced or unmounted), an `email` is `EmailView` (below), and every other
 kind is `PdfView`, which asks `GET /documents/{n}/preview`, shows "Preparing a preview…" and asks again after
 `Retry-After` while it's `202`, and shows `NoPreview` for `404 no-preview`. The app has no list of types that convert. Neither a picture's nor a PDF's preview is recorded as a download.
 The client's `getResponse` gives the `Response` for such an answer (its bytes, its status and its headers), with the
-sign-out and problem handling `get` has.
+sign-out and problem handling `get` has. `PdfView` and `PictureView` read a `PreviewSource` (an API path, its query and a
+name) that is the document's own preview by default, so an email's attachment is drawn by the same views, not a second viewer.
+
+### Reading an Email
+
+`preview/EmailView.tsx` shows a filed email as a message from `GET /documents/{n}/message` (see
+[Reading a Filed Email](../api/#reading-a-filed-email)): the subject and the sender, To, Cc, Sent and Received, the
+attachments as chips, then the body. The body is `EmailBodyFrame`, an `<iframe>` of the server's page at
+`/message/body`, with `sandbox="allow-popups allow-popups-to-escape-sandbox"` and never `allow-scripts` or
+`allow-same-origin`: `EmailBodyFrame.test.tsx` asserts both on the element. The server cleans the page and gives it its own
+Content-Security-Policy, so the app's (`AppServlet`'s) stays as it is. Pictures from the internet are removed from it
+until **Show Pictures**, which reloads the frame with `?pictures=true`, for that viewing only (`EmailView` has no
+state that outlives its document: `PreviewBody` keys it on the document). A chip is a button that previews a PDF or a
+picture in place of the body (`/message/parts/{id}?inline=true`, with **Back to Message**) or a plain link that
+downloads anything else; **Save to Matter** posts to `/message/attachments/{id}/file`, and the chip shows the new
+document's # when the message is read again. `working.spec.ts` checks the whole path in both browsers, with a tracking
+picture on a host that never resolves.
 
 `preview/QuickLook.tsx` is the modal over a list, in `@healdan/ui`'s `Overlay` (a React Aria modal with ‹ ›, the arrow
 keys, Space and Esc). A view renders `<QuickLook documents total loadMore />` with the documents of its list, in order,

@@ -3,13 +3,13 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
-import { ApiError, apiPath } from '@healdan/api'
+import { ApiError } from '@healdan/api'
 import { t } from '@healdan/ui'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { useApi } from '../services'
 import { NoPreview } from './NoPreview'
 import styles from './preview.module.css'
-import type { PreviewProps } from './types'
+import { previewSource, type PreviewProps } from './types'
 
 /**
  * A blob: address that exists while something is subscribed to it: made when the first one subscribes and revoked when
@@ -50,13 +50,14 @@ function useObjectUrl(blob: Blob | undefined): string | undefined {
  * A picture previews as itself (spec section 6.4): the preview endpoint answers its own bytes (R54), read through the API
  * client so a failure is an answer this app reads (a storage outage has its banner), and shown from a blob: address. The
  * server records no download for it. A picture the browser can't draw, such as a TIFF or a HEIC in Chrome, says there is
- * no preview.
+ * no preview. With a `source` it shows that address's picture instead, such as an email's attachment.
  */
-export function PictureView({ document, version, showActions }: PreviewProps) {
+export function PictureView({ document, version, showActions, source: given }: PreviewProps) {
   const api = useApi()
+  const from = given ?? previewSource(document, version)
   const picture = useQuery({
-    queryKey: ['documents', document.docNumber, 'preview', 'picture', version ?? document.fileVersion],
-    queryFn: async ({ signal }) => (await api.getResponse(apiPath`/v1/documents/${document.docNumber}/preview`, version ? { version } : undefined, { signal })).blob(),
+    queryKey: ['preview', 'picture', from.path, from.query ?? null, given ? null : document.fileVersion],
+    queryFn: async ({ signal }) => (await api.getResponse(from.path, from.query, { signal })).blob(),
     refetchOnWindowFocus: false,
     staleTime: Infinity,
     gcTime: 30_000,
@@ -72,7 +73,7 @@ export function PictureView({ document, version, showActions }: PreviewProps) {
   if (!source) return <p role="status" className={styles.message}>{t('preview.loading')}</p>
   return (
     <div className={styles.scroller}>
-      <img src={source} alt={t('preview.picture', { name: document.name })} className={styles.picture} onError={() => setBroken(true)} />
+      <img src={source} alt={t('preview.picture', { name: from.name ?? document.name })} className={styles.picture} onError={() => setBroken(true)} />
     </div>
   )
 }

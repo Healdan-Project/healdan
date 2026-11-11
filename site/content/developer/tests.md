@@ -248,7 +248,7 @@ code is laid out.
   PDF into the same folder, and through the page selects it, presses Space and waits for Quick Look to draw page 1 of 1
   (dark pixels in the canvas), then checks that the page saw no `securitypolicyviolation` event and logged no policy
   error, which is how a change to PDF.js's settings or its version is caught under `AppServlet`'s policy, and that Esc
-  gives the focus back to the row. Afterwards the script checks with `curl`
+  gives the focus back to the row. It also files an `.eml` with an HTML body, a tracking picture on a host under `.invalid`, a link and a PDF attached, and through the page opens it in Quick Look: the body renders in its frame, no request reaches the tracker until **Show Pictures** and one does after, the link opens a page of its own with no `opener`, and **Save to Matter** on the attachment makes its chip show the new doc #. Afterwards the script checks with `curl`
   that the web session refuses a cross-site sign-out and one without the `X-Healdan-Client` header, and still
   answers `GET`s.
   - It runs in `docker/smoke-test.sh` as step 9, on amd64 and arm64. On a Mac, Docker Desktop doesn't reach the

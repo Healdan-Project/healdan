@@ -9,13 +9,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.cxf.jaxrs.ext.multipart.Attachment;
@@ -39,6 +37,7 @@ import com.logicaldoc.healdan.email.EmailFields;
 import com.logicaldoc.healdan.email.EmailIndex;
 import com.logicaldoc.healdan.email.MessageIds;
 import com.logicaldoc.healdan.email.MessageParts;
+import com.logicaldoc.healdan.email.StoredMessage;
 import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.web.PublicAddress;
@@ -81,13 +80,6 @@ public class EmailResource {
 
 	/** The code of the {@code 422} for a file that isn't an email */
 	static final String NOT_AN_EMAIL = "not-an-email";
-
-	/**
-	 * A header line: RFC 5322's field name, kept to the characters of an HTTP
-	 * token, which every real one uses, then the colon. JavaMail takes any text
-	 * for headers, so this is what tells a message from a file that isn't one.
-	 */
-	private static final Pattern HEADER = Pattern.compile("^[A-Za-z0-9!#$%&'*+.^_`|~-]+:");
 
 	/** Where the web page opens a document */
 	private static final String DOCUMENT_PAGE = "/frontend.jsp?docId=";
@@ -163,22 +155,10 @@ public class EmailResource {
 		} catch (MessagingException e) {
 			message = null;
 		}
-		if (message == null || !hasHeaders(message))
+		if (message == null || !StoredMessage.hasHeaders(message))
 			throw ApiProblem.validation(List.of(new FieldError(FILE, NOT_AN_EMAIL,
 					"The file isn't an email message. Healdan reads emails saved as .eml.")));
 		return message;
-	}
-
-	private static boolean hasHeaders(MimeMessage message) {
-		try {
-			Enumeration<String> lines = message.getAllHeaderLines();
-			while (lines.hasMoreElements())
-				if (HEADER.matcher(lines.nextElement()).find())
-					return true;
-		} catch (MessagingException e) {
-			// A message whose headers can't be read isn't one
-		}
-		return false;
 	}
 
 	/**

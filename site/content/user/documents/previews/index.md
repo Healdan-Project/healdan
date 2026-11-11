@@ -46,7 +46,7 @@ Holding Space down doesn't open and close Quick Look over and over.
 | PDF | Its own pages |
 | Word, Excel, PowerPoint, OpenDocument and drawings | The PDF Healdan makes of them (see below) |
 | Pictures | As themselves, the file's own bytes. A picture your browser can't draw, such as a TIFF in Chrome, says there's no preview |
-| Emails | No preview yet: the page says so, with Open and Download |
+| Emails | As a message: who sent it, to whom and when, its attachments and its text (see [Reading an Email](../../working-with-matters/emails/#reading-an-email)) |
 | Anything else | "There's no preview for this kind of file.", with **Open** and **Download** |
 
 A preview needs the Preview permission on top of reading the document, for a picture as for a PDF, and previewing is
