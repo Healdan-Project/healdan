@@ -35,8 +35,23 @@ Right-click the task and choose **Execute**. **Progress** shows how far it has g
 3. **Max duration** stops a run that takes longer, in minutes. 0 means no limit.
 4. Click **Save**, which shows once something has changed.
 
+A save takes effect at once, with no restart, and Healdan keeps it when it restarts or is upgraded. With **Simple**,
+the task next runs once the **Initial delay** has passed after the save, then every **Repeat interval**, so
+shortening only the interval still waits out the old delay first.
+
 **Restore defaults** fills in a delay and an interval of 1,800 seconds and a max duration of 30 minutes, whatever
 the task's own were to begin with.
+
+## Finding New Documents Sooner
+
+Full-text search, and the suggestions under the User app's search box, read the search index. So a new document
+isn't found by its words until the Indexer's next run, which is up to 30 minutes away to begin with. Folder lists and
+their filters, and a doc # such as `#1234`, find a new document at once.
+[Searching](../../../user/finding-documents/searching/) in the User Guide describes what each finds.
+
+To find new documents by their words within about a minute, select the **Indexer**, choose the **Simple** policy,
+set both **Initial delay** and **Repeat interval** to 60, and click **Save**. A run with nothing new to read
+finishes quickly.
 
 ## Turning a Task Off
 
