@@ -29,13 +29,20 @@ export function typeLabel(value: string): string {
 }
 
 // The options of one group: what the server counted, then any ticked value it didn't (a filter from the address that
-// nothing offers now), so every filter in use can be unticked here and none hides.
-function choicesFor(offered: { value: string; label: string; count: number }[] | undefined, ticked: string[], label: (value: string) => string): Choice[] {
+// nothing offers now), so every filter in use can be unticked here and none hides. Counts over only the most relevant
+// matches (`partial`) can leave out a value that has matches further down, so one of those is shown with no count
+// rather than a 0 that would be untrue.
+function choicesFor(
+  offered: { value: string; label: string; count: number }[] | undefined,
+  ticked: string[],
+  label: (value: string) => string,
+  partial: boolean,
+): Choice[] {
   const choices: Choice[] = (offered ?? []).map(({ value, label, count }) => ({ value, label, count, name: t('filters.optionName', { label, count }) }))
   for (const value of ticked) {
     if (choices.some((choice) => choice.value === value)) continue
     // With counts known, an option they don't offer would leave none
-    choices.push(offered ? { value, label: label(value), count: 0, name: t('filters.optionName', { label: label(value), count: 0 }) } : { value, label: label(value) })
+    choices.push(offered && !partial ? { value, label: label(value), count: 0, name: t('filters.optionName', { label: label(value), count: 0 }) } : { value, label: label(value) })
   }
   return choices
 }
@@ -87,7 +94,7 @@ export function FiltersPanel({ filters, facets, unavailable, busy, context, onCh
   }
 
   function group(kind: MultiFilter, label: string, offered: { value: string; label: string; count: number }[] | undefined, name: (value: string) => string = (value) => value) {
-    const choices = choicesFor(offered, filters[kind], name)
+    const choices = choicesFor(offered, filters[kind], name, facets?.partial === true)
     if (choices.length === 0) return null
     return <CheckGroup key={kind} label={label} choices={choices} value={filters[kind]} onChange={(value) => onChange({ [kind]: value })} />
   }

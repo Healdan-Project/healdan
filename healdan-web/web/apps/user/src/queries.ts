@@ -14,6 +14,9 @@ type S = components['schemas']
 export const keys = {
   me: ['me'] as const,
   recentDocuments: ['documents', 'recent'] as const,
+  recentEmails: ['documents', 'recent', 'email'] as const,
+  recentFolders: ['folders', 'recent'] as const,
+  recentClients: ['clients', 'recent'] as const,
   recentMatters: ['matters', 'recent'] as const,
   myMatters: ['matters', 'mine'] as const,
   favorites: ['favorites'] as const,
@@ -27,6 +30,10 @@ export const keys = {
   versions: (docNumber: number) => ['documents', docNumber, 'versions'] as const,
   lookup: (ref: string) => ['lookup', ref] as const,
   children: (id: number, options: Record<string, unknown>) => ['folders', id, 'children', options] as const,
+  // A search's pages by what was asked, and the counts of its filters' options apart from them
+  search: (options: Record<string, unknown>) => ['search', options] as const,
+  searchFacets: (options: Record<string, unknown>) => ['search', 'facets', options] as const,
+  suggest: (q: string) => ['suggest', q] as const,
 }
 
 /**
@@ -54,9 +61,24 @@ export function useMe() {
   return useQuery({ queryKey: keys.me, queryFn: () => api.get<S['UserView']>('/v1/me') })
 }
 
-export function useRecentDocuments() {
+/** The documents the person worked on lately, or only the emails among them. */
+export function useRecentDocuments(kind?: 'email') {
   const api = useApi()
-  return useQuery({ queryKey: keys.recentDocuments, queryFn: () => api.get<PageOf<S['DocumentView']>>('/v1/documents/recent') })
+  return useQuery({
+    queryKey: kind ? keys.recentEmails : keys.recentDocuments,
+    queryFn: () => api.get<PageOf<S['DocumentView']>>('/v1/documents/recent', kind ? { kind } : undefined),
+  })
+}
+
+export function useRecentFolders() {
+  const api = useApi()
+  return useQuery({ queryKey: keys.recentFolders, queryFn: () => api.get<PageOf<S['FolderView']>>('/v1/folders/recent') })
+}
+
+/** The clients of the person's recent matters and My Matters: a plain list, not a page. */
+export function useRecentClients() {
+  const api = useApi()
+  return useQuery({ queryKey: keys.recentClients, queryFn: () => api.get<S['RecentClient'][]>('/v1/clients/recent') })
 }
 
 export function useRecentMatters() {

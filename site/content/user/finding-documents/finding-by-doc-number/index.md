@@ -10,8 +10,11 @@ given to another.
 
 ## Going Straight to a Document
 
-Healdan's web app has an address for each doc #, `/app/doc/` and the number. Anyone who can read the document can use
-it, so it makes a good link in an email or a note.
+Type a `#` and a doc # in the app's search box and press Enter, as in `#1234`, and the page for that document opens.
+Any scope will do. See [Searching](../searching/#in-the-box).
+
+Behind that is an address for each doc #, `/app/doc/` and the number. Anyone who can read the document can use it, so
+it makes a good link in an email or a note.
 
 | Address | Opens |
 |---|---|
@@ -32,8 +35,8 @@ and its versions. For a version or snapshot, that version is marked in **Version
 
 `#1234 v2.1` is the doc ID: the form LibreOffice's title bar shows (`Lease agreement #1234 v2.1`) and the [doc ID
 footer](../../office/doc-id-footer/) prints, so you can copy it from either. The Healdan Helper's Save and Open windows
-take the same forms as the table above, with the `#`, and a space after the `#` or before the `v`. In the web app's
-addresses, leave the `#` and the spaces out, as in the table.
+take the same forms as the table above, with the `#`, and a space after the `#` or before the `v`, and so does the web
+app's search box. In the web app's addresses, leave the `#` and the spaces out, as in the table.
 
 ## Copying a Link
 

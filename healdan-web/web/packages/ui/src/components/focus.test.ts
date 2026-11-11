@@ -12,6 +12,7 @@ describe('focus style', () => {
     expect(Object.keys(sheets).sort()).toEqual([
       './Button.module.css',
       './Choices.module.css',
+      './ComboBox.module.css',
       './DatePicker.module.css',
       './Dialog.module.css',
       './Menu.module.css',

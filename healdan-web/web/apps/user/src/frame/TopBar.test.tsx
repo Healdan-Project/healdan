@@ -12,7 +12,7 @@ describe('the top bar', () => {
     const bar = screen.getByRole('banner')
     expect(bar.textContent).toContain('Healdan')
     expect(screen.getByRole('button', { name: /Search In/ })).toBeTruthy()
-    expect(screen.getByRole('searchbox', { name: 'Search' })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Search' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Help' })).toBeTruthy()
     expect(await screen.findByRole('button', { name: 'Priya Nair' })).toBeTruthy()
     expect(bar.textContent).not.toContain('Helper')
@@ -20,7 +20,7 @@ describe('the top bar', () => {
 
   it('jumps to the search box on /, but not while typing elsewhere', async () => {
     await renderApp()
-    const box = screen.getByRole('searchbox', { name: 'Search' })
+    const box = screen.getByRole('combobox', { name: 'Search' })
     fireEvent.keyDown(document.body, { key: '/' })
     expect(document.activeElement).toBe(box)
     const other = document.createElement('input')
@@ -33,12 +33,20 @@ describe('the top bar', () => {
 
   it('searches in the chosen scope at /search, with the words in the address', async () => {
     const { router } = await renderApp()
-    const box = screen.getByRole('searchbox', { name: 'Search' })
+    const box = screen.getByRole('combobox', { name: 'Search' })
     fireEvent.change(box, { target: { value: 'charter 123' } })
-    fireEvent.submit(box.closest('form') as HTMLFormElement)
+    fireEvent.keyDown(box, { key: 'Enter' })
     await waitFor(() => expect(router.history.location.pathname).toBe('/app/search'))
     expect(new URLSearchParams(router.history.location.search).get('q')).toBe('charter 123')
     expect(new URLSearchParams(router.history.location.search).get('scope')).toBe('documents')
+  })
+
+  it('does nothing for a blank search, which the server refuses', async () => {
+    const { router } = await renderApp()
+    const box = screen.getByRole('combobox', { name: 'Search' })
+    fireEvent.change(box, { target: { value: '   ' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(router.history.location.pathname).toBe('/app/')
   })
 
   it('takes its scope from the Recent entry that is open', async () => {

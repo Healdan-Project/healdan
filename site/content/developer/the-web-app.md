@@ -110,6 +110,34 @@ number from the address on this route. A `404` shows "No document # 10388 that y
 document that isn't there and one that can't be read, and says only the number as typed; a `400` shows the not-found
 view.
 
+## The Search Box and Search Results
+
+`search/SearchBox.tsx` is the top bar's scope picker (`scopes.ts`: the API's six `scope` values, and the four Recent
+kinds, which are scopes too) joined to `@healdan/ui`'s `ComboBox`, React Aria's, with the options the caller gives in
+named sections and not filtered by it. Focus stays in the box and the arrow keys move through the options. Enter with
+none under the arrow keys is `onSubmit`, which React Aria itself never reports (it only commits a custom value), so the
+wrapper reads the focused option from the combobox state. The scope follows the address (the start page and Recent's
+entries are Documents or their kind, `/search` names its own), and so do the words, so Back and a reload show them.
+`/` focuses the box unless the target is a field, an editable element, or the box is hidden from assistive technology,
+which React Aria does to everything outside a modal dialog.
+
+Suggestions (`search/Suggestions.tsx`) are `GET /v1/suggest`, asked 150 ms after the typing stops, from two characters,
+never for a `#`, with the first 100 characters. The request gets TanStack Query's `signal`, which the Api client's
+`get(path, query, { signal })` hands to `fetch`, so a newer ask aborts the older one in flight. Enter on words runs
+`/search?scope=…&q=…`; a `#` and a doc # (`#10388`, `#10388.2`, `#10388 v2.1`) goes to `/doc/<reference>`, made without
+spaces; in the Matters scope a `998.1` asks `GET /search?scope=matters` for that number and opens the matter's
+`folderId`, else shows the results.
+
+`views/SearchView.tsx` is `/app/search`: the scope, words, filters (`useFilters`), `sort`, `order` and `sel` are all in the
+address. `search/useSearchResults.ts` is the infinite query over `GET /search` (100 a page) and the twin of
+`useFacets` for the panel's counts (`facets=type,author,class,client,matter`, `limit=1`); only the Documents, Emails and
+Docs & Emails scopes send filters or a sort, as the API refuses them for the others. A page is the last when the
+answer's `total` is reached, or, when it's `null`, when it's shorter than the 100 asked. `totalAtLeast` is the count's
+"More than". `FiltersPanel` shows no made-up `0` for a ticked value no option offers when the counts are `partial`.
+`views/RecentView.tsx` is the start page and `/recent/<kind>`, a Table each, with `useRowSelection` (the selection of
+document rows, shared with search) putting a document in `?sel=` and its details in the region; a recent client opens
+a Clients search.
+
 ## The Catalogue
 
 Every word the app shows is in one typed catalogue, `packages/ui/src/strings/en-US.ts`, and a view gets it with

@@ -237,7 +237,14 @@ code is laid out.
   with the smoke overlay (its password is `SmokeWebUserSeed.PASSWORD`), and do not depend on anything an earlier
   smoke step left. They check that a link into the app, followed signed out, comes back to its page after signing
   in, that signing in lands on **Recent Documents**, the way to the Classic Interface and back, **Sign Out**, and an
-  accessibility scan of the app in a real browser, contrast included. Afterwards the script checks with `curl`
+  accessibility scan of the app in a real browser, contrast included. `finding.spec.ts` files three documents into
+  matter 1.1's **Documents** folder through the API with a device token, under a word unique to the run, and then,
+  through the page: opens the matter by its number in the Matters scope, adds it to My Matters and opens it from the
+  tree, finds a document by that word and by its `#`, filters by **Picture**, and copies a document's link and follows
+  it. The Indexer reads new documents into the index every 30 minutes, so `smoke-test.sh` sets it to every 5 seconds in
+  `context.properties` and restarts the app before step 5g, and the spec asks again until the document shows. WebKit has no
+  permission to read the clipboard, so the spec keeps what the page passes to `navigator.clipboard.writeText` on
+  `window` and reads the link from there; Chromium's real clipboard is read as well. Afterwards the script checks with `curl`
   that the web session refuses a cross-site sign-out and one without the `X-Healdan-Client` header, and still
   answers `GET`s.
   - It runs in `docker/smoke-test.sh` as step 5g, on amd64 and arm64. On a Mac, Docker Desktop doesn't reach the

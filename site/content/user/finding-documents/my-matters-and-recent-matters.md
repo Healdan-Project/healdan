@@ -23,6 +23,26 @@ open it in the main area.
 My Matters are kept as bookmarks, so a matter you add also shows in the Classic Interface's **Bookmarks** section,
 and removing that bookmark there removes it from My Matters.
 
+## Recent
+
+At the top of the left pane, **Recent** has four entries. Each opens a list of what you worked on lately, newest first,
+and sets the scope picker beside the search box to its scope, so your next search looks there.
+
+| Entry | Lists |
+|---|---|
+| **Documents** | the documents you filed, changed, checked in or out, or downloaded in the last 30 days, up to 50, with each one's matter. It's the page you start on |
+| **Emails** | the same, but only emails (`.eml` and `.msg` files), up to 50 of them |
+| **Folders** | the folders in matters where you filed or changed a document in the last 30 days, with each one's matter, up to 20 |
+| **Clients** | the clients of your Recent Matters and My Matters, by name and number |
+
+Healdan has no list of all clients: a client shows here only through a matter you can read.
+
+- **Click a document** to select it, and its **Details** open at the right, with **Location**. Its doc # goes into the
+  page's address. Press Enter or double-click on a document to select it too.
+- **Open a folder** with a click or Enter: it opens as it does anywhere.
+- **Open a client** and Healdan searches the **Clients** scope for it, which lists that client's matters.
+- **The lists keep the server's order,** so no column header sorts them. Your administrator can change the 30 days.
+
 ## Recent Matters
 
 The matters where you filed or changed a document in the last 30 days, newest first, up to 20. Your administrator

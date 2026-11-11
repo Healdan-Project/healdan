@@ -118,6 +118,16 @@ describe('FiltersPanel', () => {
     expect(onChange).toHaveBeenLastCalledWith({ author: [] })
   })
 
+  it('keeps a ticked value that no option offers without a made-up 0 when the counts cover only the most relevant matches', async () => {
+    const onChange = vi.fn()
+    render(<Panel onChange={onChange} facets={{ ...facets, partial: true }} initial={{ ...noFilters, author: ['gone'] }} />)
+    expect(screen.queryByRole('checkbox', { name: 'gone, 0' })).toBeNull()
+    const gone = screen.getByRole('checkbox', { name: 'gone' }) as HTMLInputElement
+    expect(gone.checked).toBe(true)
+    await userEvent.click(gone)
+    expect(onChange).toHaveBeenLastCalledWith({ author: [] })
+  })
+
   it('shows what is ticked, without counts, while the counts are asked for', () => {
     render(<Panel facets={undefined} initial={{ ...noFilters, type: ['pdf'] }} />)
     expect((screen.getByRole('checkbox', { name: 'PDF' }) as HTMLInputElement).checked).toBe(true)

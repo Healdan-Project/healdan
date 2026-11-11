@@ -12,6 +12,8 @@ import { useApi } from '../services'
 type S = components['schemas']
 
 export type Child = S['FolderView'] | S['DocumentView']
+/** What a list can hold: a folder's children, and a search's hits, which can be matters too */
+export type Hit = Child | S['MatterView']
 type ChildPage = Omit<S['FolderChildPage'], 'items'> & { items: Child[] }
 
 /** What the API sorts a folder's documents by (ruling R4) */
@@ -95,8 +97,9 @@ export function useListing({ folderId, sort, filters = noFilters, enabled = true
   }
 }
 
-/** A row's key: a folder's and a document's numbers can be the same, so each says which it is. */
-export function childKey(item: Child): string {
+/** A row's key: a folder's, a matter's and a document's numbers can be the same, so each says which it is. */
+export function childKey(item: Hit): string {
+  if (item.type === 'matter') return `m${item.id}`
   return item.type === 'folder' ? `f${item.id}` : `d${item.docNumber}`
 }
 

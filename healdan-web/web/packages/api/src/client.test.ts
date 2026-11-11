@@ -33,6 +33,15 @@ describe('createApi', () => {
     expect(headersOf(0).has('X-Healdan-Client')).toBe(false)
   })
 
+  it('hands a signal to fetch, so a request nobody waits for any more can be cancelled', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(json({ matters: [], documents: [] })))
+    const controller = new AbortController()
+    await createApi().get('/v1/suggest', { q: 'ch' }, { signal: controller.signal })
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal).toBe(controller.signal)
+    await createApi().get('/v1/me')
+    expect((fetchMock.mock.calls[1]?.[1] as RequestInit).signal).toBeUndefined()
+  })
+
   it('sends JSON with the client header', async () => {
     fetchMock.mockResolvedValue(json({ ok: true }))
     await createApi().send('POST', '/v1/me/favorites', { folderId: 5 })

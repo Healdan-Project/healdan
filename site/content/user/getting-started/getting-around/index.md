@@ -9,6 +9,8 @@ colours follow your browser's light or dark setting.
 ## The Top Bar
 
 - **Healdan's mark and name** on the left take you back to the start page.
+- **The search box,** with the scope picker joined to its left. Press `/` to jump to it. It suggests matters and
+  documents as you type, and `#` and a doc # goes straight to that document. See [Searching](../../finding-documents/searching/).
 - **Help** opens the User Guide, and the notices for the open-source software Healdan uses, each in a new window.
 - **Your menu**, under your initials, shows your name and has Classic Interface and Sign Out. Classic Interface opens
   the older web page, on the same sign-in. Sign Out ends your session.
@@ -17,7 +19,8 @@ colours follow your browser's light or dark setting.
 
 The left pane scrolls on its own when it's longer than the window. From the top it has:
 
-- **Recent:** **Documents** is your recent documents, newest first, and is the page you start on.
+- **Recent:** **Documents**, **Emails**, **Folders** and **Clients**, each a list of what you worked on lately. Each
+  also sets the scope the search box searches in. **Documents** is the page you start on.
 - **Recent Matters:** the matters you've worked in lately, each with its client beside it in smaller, paler type.
 - **My Matters:** the matters you've chosen to keep at hand, as a tree. Open a matter to see its folders and search
   folders, and open a folder to see its own folders. A search folder has its own icon. The tree opens to the folder
@@ -31,15 +34,16 @@ Projects.
 ## The Main Area
 
 When you sign in, the main area shows **Recent Documents**: the documents you filed, changed, checked in or out, or
-downloaded lately, newest first. Click one to select it. Its doc # goes into the page's address, so the link you
-copy takes someone to the same place, and Back and Reload keep it.
+downloaded lately, newest first, as a list with each one's matter. Click one to select it. Its doc # goes into the
+page's address, so the link you copy takes someone to the same place, and Back and Reload keep it. See
+[Recent](../../finding-documents/my-matters-and-recent-matters/#recent).
 
 Open a matter or a folder from the left pane, and the main area lists what's in it: see [Opening a
 Matter](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matter).
 
 ## The Details Panel
 
-Select a document in a folder's list, and its **Details** open at the right, in the same place as
+Select a document in a folder's list, in search results or in a Recent list, and its **Details** open at the right, in the same place as
 [Filters](../../finding-documents/searching/#filters). They show:
 
 - **A thumbnail** of the first page, when the document has one. Without one, a plain icon for the kind of file shows
@@ -48,7 +52,8 @@ Select a document in a folder's list, and its **Details** open at the right, in 
 - **Open, Download and Edit,** which are greyed out until they come to the app, and **Copy Link**, which works now:
   see [Copying a Link](../../finding-documents/finding-by-doc-number/#copying-a-link).
 - **Properties:** Client, Matter, Class, Subclass, Author, Typist and Date Filed, and, for an email, From, To, Sent
-  and Received. You can read them here; to change them, use the Classic Interface for now.
+  and Received. In search results and Recent lists there is also **Location**, the document's folder, which you can
+  click. You can read them here; to change them, use the Classic Interface for now.
 - **Versions:** the document's timeline, newest first, with who saved each and when.
 
 Click another document to see its details instead, or select several and the details close.

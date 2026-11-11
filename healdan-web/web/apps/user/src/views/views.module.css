@@ -168,3 +168,25 @@
 .withRegion > .folder {
   min-width: 0;
 }
+
+/* A hit's matter: the number, then the client, muted. Selected rows keep the text colour, as secondary text fails AA there. */
+.matterCell {
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--hd-text-secondary);
+}
+
+:global([aria-selected='true']) .muted {
+  color: inherit;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

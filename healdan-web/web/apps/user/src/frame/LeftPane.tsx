@@ -9,7 +9,7 @@ import { Button, Icon, Menu, MenuItem, Tree, t, toast, type IconName, type TreeN
 import { idFrom, keys, useFavorites, useFolder, useMyMatters, useRecentMatters } from '../queries'
 import type { PageOf } from '../pages'
 import { useApi } from '../services'
-import { recentKinds } from '../views/RecentKind'
+import { recentKinds } from '../search/scopes'
 import { ErrorPanel } from './ErrorPanel'
 import { messageFor } from './errors'
 import styles from './LeftPane.module.css'

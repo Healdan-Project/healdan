@@ -2,16 +2,15 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { createRootRoute, createRoute, createRouter, type RouterHistory } from '@tanstack/react-router'
-import { t } from '@healdan/ui'
 import { Frame } from './frame/Frame'
 import { filterSearch, multiFilters, type Filters } from './filters/useFilters'
 import { idFrom } from './queries'
 import { DocResult } from './views/DocResult'
 import { FolderView } from './views/FolderView'
 import { NotFound } from './views/NotFound'
-import { NotYet } from './views/NotYet'
-import { RecentDocuments } from './views/RecentDocuments'
-import { RecentKindView } from './views/RecentKind'
+import { RecentView } from './views/RecentView'
+import { SearchView } from './views/SearchView'
+import { isSearchScope } from './search/scopes'
 import { isSortColumn, type ListingOrder, type SortColumn } from './views/useListing'
 
 // Addresses carry plain strings (?sel=10388, not ?sel="10388"), which the default JSON-aware search handling would quote.
@@ -45,13 +44,13 @@ const rootRoute = createRootRoute({
   }),
 })
 
-const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: RecentDocuments })
+const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <RecentView kind="documents" /> })
 
 const recentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'recent/$kind',
   component: function RecentRoute() {
-    return <RecentKindView kind={recentRoute.useParams().kind} />
+    return <RecentView kind={recentRoute.useParams().kind} />
   },
 })
 
@@ -77,12 +76,21 @@ const foldersRoute = createRoute({
 const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'search',
-  validateSearch: (search: Record<string, unknown>): { scope?: string; q?: string } & Partial<Filters> => ({
+  validateSearch: (search: Record<string, unknown>): { scope?: string; q?: string; sort?: SortColumn; order?: ListingOrder } & Partial<Filters> => ({
     scope: text(search.scope),
     q: text(search.q),
+    sort: isSortColumn(search.sort) ? search.sort : undefined,
+    order: search.order === 'asc' || search.order === 'desc' ? search.order : undefined,
     ...filterSearch(search),
   }),
-  component: () => <NotYet title={t('notYet.search')} />,
+  component: function SearchRoute() {
+    const { scope, q, sort, order } = searchRoute.useSearch()
+    // A scope the API doesn't know is the default, Documents, as an address without one is
+    const where = isSearchScope(scope) ? scope : 'documents'
+    // A view of its own for each search, so a selection made in one isn't carried to the next; filters and sorting
+    // change the same search and keep it.
+    return <SearchView key={`${where}\u0000${q ?? ''}`} scope={where} q={q} sort={sort} order={order} />
+  },
 })
 
 // /doc/10388 and /doc/10388.2: the # handle (§10.1).

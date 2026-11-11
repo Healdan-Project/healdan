@@ -12,11 +12,10 @@ describe('the addresses', () => {
     ['/recent/emails', 'Recent Emails'],
     ['/recent/folders', 'Recent Folders'],
     ['/recent/clients', 'Recent Clients'],
-    ['/search?scope=documents&q=charter', 'Search'],
-  ])('%s shows a view that is coming', async (path, title) => {
+    ['/search?scope=documents&q=charter', '"charter"'],
+  ])('%s shows its view', async (path, title) => {
     await renderApp(path)
     expect(await screen.findByRole('heading', { level: 1, name: title })).toBeTruthy()
-    expect(screen.getByText('Coming soon.')).toBeTruthy()
   })
 
   it('reads an unknown Recent kind or address as not found', async () => {
@@ -52,7 +51,7 @@ describe('the addresses', () => {
 
   it('passes axe on the start page, fully loaded', async () => {
     const { view } = await renderApp('/')
-    await screen.findByRole('list', { name: 'Recent Documents' })
+    await within(screen.getByRole('main')).findByRole('grid')
     await screen.findByRole('treegrid', { name: 'My Matters' })
     await screen.findByRole('button', { name: 'Priya Nair' })
     await expectNoAxeViolations(view.container)

@@ -105,9 +105,11 @@ export interface Call {
   method: string
   path: string
   query?: Record<string, unknown>
+  /** The signal a get was given: a request nobody waits for any more has it aborted */
+  signal?: AbortSignal
 }
 
-type Handler = (request: { params: string[]; query?: Record<string, unknown>; body?: unknown }) => unknown
+type Handler = (request: { params: string[]; query?: Record<string, unknown>; body?: unknown; signal?: AbortSignal }) => unknown
 
 export type Routes = Record<string, unknown | Handler>
 
@@ -127,6 +129,9 @@ export function defaultRoutes(): Routes {
       favorite(document({ docNumber: 10500, name: 'Cap Table.xlsx' }), 901),
       favorite(folder({ id: 130, name: 'Due Diligence' }), 902),
     ]),
+    'GET /v1/suggest': { matters: [], documents: [] },
+    'GET /v1/folders/recent': page([folder({ id: 111, name: 'Correspondence' })]),
+    'GET /v1/clients/recent': [{ number: 1001, name: 'Saltmarsh Shipping Ltd' }],
     'GET /v1/folders/*/children': children([
       folder({ id: 111, name: 'Correspondence' }),
       folder({ id: 112, name: 'My Recent Docs Here', kind: 'searchFolder' }),
@@ -151,14 +156,14 @@ export function fakeApi(over: Routes = {}): FakeApi {
   const routes = { ...defaultRoutes(), ...over }
   const calls: Call[] = []
 
-  async function answer<T>(method: string, path: string, query?: Record<string, unknown>, body?: unknown): Promise<T> {
-    calls.push({ method, path, query })
+  async function answer<T>(method: string, path: string, query?: Record<string, unknown>, body?: unknown, signal?: AbortSignal): Promise<T> {
+    calls.push({ method, path, query, signal })
     // The newest override wins, so a test's route comes before a default one it also matches.
     for (const key of Object.keys(routes).reverse()) {
       const match = matcher(key).exec(`${method} ${path}`)
       if (!match) continue
       const value = routes[key]
-      const result = typeof value === 'function' ? (value as Handler)({ params: match.slice(1), query, body }) : value
+      const result = typeof value === 'function' ? (value as Handler)({ params: match.slice(1), query, body, signal }) : value
       if (result instanceof Error) throw result
       return result as T
     }
@@ -168,7 +173,7 @@ export function fakeApi(over: Routes = {}): FakeApi {
   return {
     calls,
     callsTo: (pattern) => calls.filter((c) => matcher(pattern).test(`${c.method} ${c.path}`)),
-    get: (path, query) => answer('GET', path, query),
+    get: (path, query, options) => answer('GET', path, query, undefined, options?.signal),
     send: (method, path, body) => answer(method, path, undefined, body),
     url: (path) => `/api${path}`,
   }

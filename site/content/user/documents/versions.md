@@ -24,5 +24,6 @@ So version 2.3 is the third snapshot after version 2 was started, and the next n
 
 ## Finding a Version by Number
 
-`#1234.2` finds version 2 of document 1234 as it stands, and `#1234.2.1` finds exactly snapshot 2.1. See
+Type `#1234.2` in the search box and press Enter to go to version 2 of document 1234 as it stands, and `#1234.2.1` for
+exactly snapshot 2.1. See
 [Finding a Document by Doc #](../../finding-documents/finding-by-doc-number/).

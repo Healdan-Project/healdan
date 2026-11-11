@@ -6,10 +6,15 @@ import { readProblem } from './problems'
 type Query = Record<string, string | number | string[] | undefined>
 
 export interface Api {
-  get<T>(path: string, query?: Query): Promise<T>
+  /** `signal` cancels the request, as when the answer is no longer wanted. */
+  get<T>(path: string, query?: Query, options?: RequestOptions): Promise<T>
   send<T>(method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown | FormData): Promise<T>
   /** A URL for links, `<img>` and frames, which can't send headers. */
   url(path: string, query?: Record<string, string | number | undefined>): string
+}
+
+export interface RequestOptions {
+  signal?: AbortSignal
 }
 
 export interface ApiOptions {
@@ -41,9 +46,9 @@ export function createApi(options: ApiOptions = {}): Api {
   // cleared by the next successful answer, so a later sign-out calls it again.
   let signedOutReported = false
 
-  async function request<T>(method: string, path: string, query?: Query, body?: unknown): Promise<T> {
+  async function request<T>(method: string, path: string, query?: Query, body?: unknown, signal?: AbortSignal): Promise<T> {
     const headers = new Headers()
-    const init: RequestInit = { method, credentials: 'same-origin', headers }
+    const init: RequestInit = { method, credentials: 'same-origin', headers, signal }
     if (method !== 'GET') headers.set('X-Healdan-Client', 'web')
     if (body instanceof FormData) {
       init.body = body // the browser sets the multipart boundary
@@ -65,7 +70,7 @@ export function createApi(options: ApiOptions = {}): Api {
   }
 
   return {
-    get: (path, query) => request('GET', path, query),
+    get: (path, query, options) => request('GET', path, query, undefined, options?.signal),
     send: (method, path, body) => request(method, path, undefined, body),
     url: (path, query) => `${base}${path}${queryString(query)}`,
   }

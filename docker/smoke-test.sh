@@ -373,6 +373,15 @@ check "storage backends against the stand-in" storage_test
 echo "step 5f took $((SECONDS - storage_started)) s"
 
 echo "== 5g. the User app in the browser (M6 spec §15.1)"
+# The Indexer reads new documents into the search index every 30 minutes, which no browser test can wait for. Make it
+# run every 5 seconds (an admin's own change to context.properties, kept across restarts), then restart for the
+# scheduler to read it. The finding spec searches for the words of documents it files.
+fast_indexer() {
+  compose exec -T app sed -i -e 's/^schedule\.delay\.IndexerTask=.*/schedule.delay.IndexerTask=5000/' \
+    -e 's/^schedule\.interval\.IndexerTask=.*/schedule.interval.IndexerTask=5000/' /opt/logicaldoc/conf/context.properties \
+    && compose restart app >/dev/null && wait_healthy "$(compose ps -q app)" 900
+}
+check "the Indexer runs every 5 seconds for the browser's searches" fast_indexer
 # Signs in as webuser, which the smoke overlay's SmokeWebUserSeed makes, and runs healdan-web's Playwright specs in
 # Chromium and WebKit in Playwright's Docker image: a link into the app, signing in, the way to the Classic Interface and
 # back, Sign Out, and an accessibility scan; then curl checks the web session's forgery refusals. Its output carries its

@@ -1,0 +1,63 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.popover {
+  width: var(--trigger-width);
+  max-height: 60vh;
+  overflow: auto;
+  border-radius: var(--hd-radius);
+  background: var(--hd-window);
+  box-shadow: var(--hd-shadow-popup);
+}
+
+.list {
+  padding: var(--hd-space-2);
+  outline: none;
+}
+
+.heading {
+  padding: var(--hd-space-3) var(--hd-space-4) var(--hd-space-1);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+  padding: var(--hd-space-2) var(--hd-space-4);
+  border-radius: var(--hd-radius-small);
+  color: var(--hd-text);
+  outline: none;
+  cursor: default;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  flex: none;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+/* The arrow keys' choice is a filled bar; secondary text fails AA on it, so it takes the bar's own colour. */
+.option[data-focused] {
+  background: var(--hd-accent-fill);
+  color: var(--hd-accent-on-fill);
+}
+
+.option[data-focused] .meta {
+  color: inherit;
+}
+
+.option[data-focus-visible] {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}

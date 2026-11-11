@@ -4,4 +4,4 @@
 export type { paths, components } from './schema'
 export { ApiError } from './problems'
 export { apiPath, createApi } from './client'
-export type { Api, ApiOptions } from './client'
+export type { Api, ApiOptions, RequestOptions } from './client'
