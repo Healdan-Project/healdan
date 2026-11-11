@@ -116,7 +116,7 @@ public abstract class ApiTestCase extends AbstractHealdanTestCase {
 		return call("OPTIONS", path);
 	}
 
-	private ApiCall call(String method, String path) {
+	protected ApiCall call(String method, String path) {
 		return new ApiCall(servlet, servletContext, method, path);
 	}
 

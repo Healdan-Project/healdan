@@ -50,6 +50,21 @@ public class LoginLandingFilterTest extends AbstractHealdanTestCase {
 		assertEquals("/app/doc/1", session.getAttribute(ReturnPath.ATTRIBUTE));
 	}
 
+	// Nothing clears an earlier landing after its sign-in, so it's set again: the next sign-in lands where ui.start
+	// says now
+	@Test
+	public void testReplacesAnEarlierLanding() throws Exception {
+		MockHttpSession session = new MockHttpSession();
+		session.setAttribute(ReturnPath.ATTRIBUTE, "/frontend.jsp");
+		run(session, null);
+		assertEquals("/app/", session.getAttribute(ReturnPath.ATTRIBUTE));
+
+		HealdanSettings.get().set(HealdanSettings.UI_START, "classic");
+		session.setAttribute(ReturnPath.ATTRIBUTE, "/elsewhere");
+		run(session, null);
+		assertEquals("/frontend.jsp", session.getAttribute(ReturnPath.ATTRIBUTE));
+	}
+
 	@Test
 	public void testSwitchSetsNothing() throws Exception {
 		MockHttpSession session = new MockHttpSession();

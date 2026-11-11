@@ -44,8 +44,8 @@ curl -s -b "$COOKIES" -c "$COOKIES" -o /dev/null -d 'j_username=webuser' --data-
 check "the web session's GET answers 200" test "$(code -H 'Sec-Fetch-Site: same-origin' "$BASE/api/v1/me")" = 200
 check "a cross-site sign-out is refused with 401" \
   test "$(code -H 'Sec-Fetch-Site: cross-site' -H 'X-Healdan-Client: web' -X DELETE "$BASE/api/v1/session")" = 401
-check "a sign-out without the app's header is refused with 401" \
-  test "$(code -H 'Sec-Fetch-Site: same-origin' -X DELETE "$BASE/api/v1/session")" = 401
+check "a sign-out without the app's header is refused with 403" \
+  test "$(code -H 'Sec-Fetch-Site: same-origin' -X DELETE "$BASE/api/v1/session")" = 403
 check "the session is still there after the refusals" test "$(code -H 'Sec-Fetch-Site: same-origin' "$BASE/api/v1/me")" = 200
 
 finish

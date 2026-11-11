@@ -109,10 +109,15 @@ learn from.
   `healdan-core` and `healdan-api`. Its code is under `com.logicaldoc.healdan.app`.
   - `AppServlet` registers with `@WebServlet("/app/*")`, so `web.xml` is not edited. The built app sits in the
     module's jar under `healdan/app/user/`, and the servlet reads it from the class path.
-  - **Its policy.** A path with a file extension is a file: served, or `404` when the jar has none, so a stale page
-    fails loudly. Any other path is an address inside the app, answered with `index.html`, which the app routes in
+  - **Its policy.** A path with a file extension that the jar holds is a file, and so is any under `assets/`, where
+    Vite writes the build's files: served, or `404` when the jar has none, so a stale page fails loudly. Any other
+    path, `/app/doc/10388.2` too, is an address inside the app, answered with `index.html`, which the app routes in
     the browser. Hashed files under `assets/` are cached for a year, and everything else is `no-store`. Only `GET`
     and `HEAD` are allowed. A path that could leave the app's folder is never read: it gets `index.html` or `404`.
+  - **Its sign-in check.** A page load needs the web session the API's route would accept, its user included
+    (`WebSessionRoute`), so a disabled account goes to the sign-in page rather than to an app that can't load
+    anything. Without one, the servlet stores the return path and redirects to `login.jsp`; once a signed-in page
+    loads, it forgets the return path, so a later sign-in lands where Start In says.
   - **Its headers.** Every answer carries a Content-Security-Policy that allows only the server's own address, with
     no inline script or style, and `nosniff` and `Referrer-Policy: same-origin`.
   - A server built without the app answers `503` at `/app/`, saying the User app wasn't built into it.

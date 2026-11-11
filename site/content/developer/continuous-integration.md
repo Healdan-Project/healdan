@@ -55,6 +55,8 @@ downloads only what's missing. Before that step, on 29 October 2026, shards on M
 had saved, downloaded every file again, and failed on SourceForge's 403.
 
 The Docker build keeps its own copy, which the `maven:3.9` image both writes and reads, so it doesn't need the step.
+It keeps npm's cache for the User app's packages beside it, keyed on `healdan-web/web/package-lock.json`, and only
+`master`'s amd64 job saves either.
 
 ## What a Pull Request Runs
 
@@ -102,8 +104,9 @@ or the icons rebuilds it.
 fails there. It reads `healdan-web/web/package-lock.json` and fails on a package the app ships (one the lockfile
 doesn't mark `dev`) with a licence outside MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC and 0BSD, or with none.
 A package used only to build or test may also be BlueOak-1.0.0, CC0-1.0, CC-BY-4.0, Python-2.0 or Unlicense. A
-package with another licence needs an entry in the script's `ALLOWED` list, with the reason it's acceptable, and an
-entry the lockfile no longer has fails too, so the list stays honest.
+package with another licence needs an entry in the script's `ALLOWED` list, with the licence reviewed and the reason
+it's acceptable. An entry whose package the lockfile now gives another licence fails, and so does one the lockfile no
+longer has, so the list stays honest.
 
 ## The Clients Check
 

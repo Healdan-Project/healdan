@@ -126,8 +126,11 @@ function matcher(pattern: string): RegExp {
   return new RegExp(`^${escaped}$`)
 }
 
-/** An Api that answers from `routes` (over the defaults); a value that is an Error is thrown. */
-export function fakeApi(over: Routes = {}): FakeApi {
+/**
+ * An Api that answers from `routes` (over the defaults); a value that is an Error is thrown. A 401 calls onSignedOut
+ * first, as createApi's does.
+ */
+export function fakeApi(over: Routes = {}, onSignedOut?: () => void): FakeApi {
   const routes = { ...defaultRoutes(), ...over }
   const calls: Call[] = []
 
@@ -139,6 +142,7 @@ export function fakeApi(over: Routes = {}): FakeApi {
       if (!match) continue
       const value = routes[key]
       const result = typeof value === 'function' ? (value as Handler)({ params: match.slice(1), query, body }) : value
+      if (result instanceof ApiError && result.status === 401) onSignedOut?.()
       if (result instanceof Error) throw result
       return result as T
     }

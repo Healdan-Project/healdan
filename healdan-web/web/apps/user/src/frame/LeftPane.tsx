@@ -4,7 +4,7 @@
 import { useQueries } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useId, useState, type ReactNode } from 'react'
-import type { components } from '@healdan/api'
+import type { Api, components } from '@healdan/api'
 import { Icon, Tree, t, type IconName, type TreeNode } from '@healdan/ui'
 import { keys, useFavorites, useMyMatters, useRecentMatters } from '../queries'
 import type { PageOf } from '../pages'
@@ -104,6 +104,23 @@ function RecentMattersSection() {
   )
 }
 
+// The API gives at most 200 children at a time (50 unless asked), so a folder with more is read page by page.
+const PAGE = 200
+
+async function subfolders(api: Api, id: string): Promise<S['FolderView'][]> {
+  const all: S['FolderView'][] = []
+  for (let offset = 0; ; ) {
+    const page = await api.get<PageOf<S['FolderView'] | S['DocumentView']>>(`/v1/folders/${encodeURIComponent(id)}/children`, {
+      type: 'folder',
+      limit: PAGE,
+      offset,
+    })
+    all.push(...page.items.filter((item): item is S['FolderView'] => item.type === 'folder'))
+    offset += page.items.length
+    if (page.items.length < PAGE || (page.total != null && offset >= page.total)) return all
+  }
+}
+
 function folderLabel(folder: S['FolderView']): ReactNode {
   const icon: IconName = folder.kind === 'searchFolder' ? 'folderSearch' : 'folder'
   return (
@@ -126,14 +143,14 @@ function MyMattersSection() {
   const loaded = useQueries({
     queries: open.map((id) => ({
       queryKey: keys.subfolders(Number(id)),
-      queryFn: () => api.get<PageOf<S['FolderView'] | S['DocumentView']>>(`/v1/folders/${encodeURIComponent(id)}/children`, { type: 'folder' }),
+      queryFn: () => subfolders(api, id),
     })),
   })
   const answers = new Map(open.map((id, i) => [id, loaded[i]]))
 
   function childrenOf(id: string): TreeNode[] | undefined {
     const answer = answers.get(id)
-    if (answer?.data) return answer.data.items.filter((item): item is S['FolderView'] => item.type === 'folder').map(folderNode)
+    if (answer?.data) return answer.data.map(folderNode)
     if (answer?.isError) {
       const text = messageFor(answer.error)
       return [{ id: `${id}:error`, textValue: text, label: <span className={styles.client}>{text}</span> }]

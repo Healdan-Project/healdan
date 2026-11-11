@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -60,8 +61,9 @@ public final class Contract {
 		boolean head = "HEAD".equals(method);
 		if (head)
 			assertEquals(method + " " + path + " answered with a body", 0, response.body().length);
+		// A method in another case is the same operation, as CXF matches it
 		ValidationReport report = validator().validateResponse(path,
-				Request.Method.valueOf(head ? "GET" : method), toValidatorResponse(response));
+				Request.Method.valueOf(head ? "GET" : method.toUpperCase(Locale.ROOT)), toValidatorResponse(response));
 		if (head)
 			report = ValidationReport.from(report.getMessages().stream()
 					.filter(m -> !"validation.response.body.missing".equals(m.getKey())).toList());

@@ -5,7 +5,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
-import { problem } from '../test/fakeApi'
+import { folder, problem } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
 const pane = () => screen.getByRole('navigation', { name: 'Navigation' })
@@ -44,8 +44,24 @@ describe('LeftPane', () => {
     expect(folder.querySelector('.tabler-icon-folder')).toBeTruthy()
     expect(search.querySelector('.tabler-icon-folder-search')).toBeTruthy()
     expect(api.callsTo('GET /v1/folders/110/children')).toEqual([
-      { method: 'GET', path: '/v1/folders/110/children', query: { type: 'folder' } },
+      { method: 'GET', path: '/v1/folders/110/children', query: { type: 'folder', limit: 200, offset: 0 } },
     ])
+  })
+
+  it('reads a matter with more folders than a page holds page by page', async () => {
+    const many = Array.from({ length: 210 }, (_, i) => folder({ id: 1000 + i, name: `Folder ${String(i).padStart(3, '0')}` }))
+    const { api } = await renderApp('/folders/1', {
+      'GET /v1/folders/*/children': ({ query }: { query?: Record<string, unknown> }) => {
+        const offset = Number(query?.offset ?? 0)
+        const limit = Number(query?.limit ?? 50)
+        return { items: many.slice(offset, offset + limit), offset, limit, total: many.length }
+      },
+    })
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
+    expect(await within(tree).findByRole('row', { name: /Folder 209/ })).toBeTruthy()
+    expect(within(tree).getAllByRole('row', { name: /^Folder / })).toHaveLength(210)
+    expect(api.callsTo('GET /v1/folders/110/children').map((c) => c.query?.offset)).toEqual([0, 200])
   })
 
   it('asks for a matter\'s children only once it is opened, and only once', async () => {

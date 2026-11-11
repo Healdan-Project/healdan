@@ -33,7 +33,16 @@ public final class HealdanAppLink {
 		button.setAutoFit(true);
 		button.setTitle(AwesomeFactory.getIconHtml("arrow-up-right-from-square", LABEL));
 		button.setTooltip(LABEL);
-		button.addClickHandler(event -> WindowUtils.openUrl(Util.contextPath() + "app/"));
+		button.addClickHandler(event -> WindowUtils.openUrl(address(Util.contextPath())));
 		bar.addButton(button);
+	}
+
+	/**
+	 * @param contextPath the web page's address, ending in a slash, as
+	 *        {@link Util#contextPath()} gives it
+	 * @return the User app's address
+	 */
+	static String address(String contextPath) {
+		return contextPath + "app/";
 	}
 }

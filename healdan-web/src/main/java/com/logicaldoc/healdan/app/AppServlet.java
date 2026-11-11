@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
-import com.logicaldoc.core.security.SessionManager;
+import com.logicaldoc.healdan.api.WebSessionRoute;
 import com.logicaldoc.healdan.web.ReturnPath;
 
 import jakarta.servlet.ServletException;
@@ -23,8 +23,9 @@ import jakarta.servlet.http.HttpSession;
 
 /**
  * Serves the built User app, which sits in this jar under {@link #ROOT}, at <code>/app/</code>. A path with a file
- * extension is a file, served or <code>404</code>; any other path is an address of the app, answered with
- * <code>index.html</code>, which routes it in the browser.
+ * extension that the build holds is a file, and so is any under {@link #ASSETS}, served or <code>404</code>; any other
+ * path, such as <code>/doc/10388.2</code>, is an address of the app, answered with <code>index.html</code>, which
+ * routes it in the browser.
  */
 @WebServlet(urlPatterns = "/app/*", loadOnStartup = 3)
 public class AppServlet extends HttpServlet {
@@ -38,6 +39,9 @@ public class AppServlet extends HttpServlet {
 			+ "frame-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
 	private static final String INDEX = "index.html";
+
+	/** Where Vite writes the build's hashed files, the only ones cached for good */
+	private static final String ASSETS = "assets/";
 
 	private static final Pattern SAFE = Pattern.compile("[A-Za-z0-9._/-]+");
 
@@ -66,15 +70,12 @@ public class AppServlet extends HttpServlet {
 	}
 
 	/**
-	 * Whether the request's HTTP session holds an open LogicalDOC session, which a page load needs (the app's files
-	 * are public code and need none).
+	 * Whether the request's HTTP session holds an open LogicalDOC session whose user may still sign in, as the API's
+	 * web-session route asks, which a page load needs (the app's files are public code and need none). A session the
+	 * API would refuse goes to the sign-in page, not to an app that can't load anything.
 	 */
 	static boolean hasWebSession(HttpServletRequest request) {
-		HttpSession http = request.getSession(false);
-		if (http == null)
-			return false;
-		Object sid = http.getAttribute(SessionManager.PARAM_SID);
-		return sid instanceof String s && SessionManager.get().isOpen(s);
+		return WebSessionRoute.session(request).map(WebSessionRoute::user).isPresent();
 	}
 
 	/** Whether a page load may be answered; tests replace it */
@@ -106,9 +107,11 @@ public class AppServlet extends HttpServlet {
 		response.setHeader("Referrer-Policy", "same-origin");
 
 		String pathInfo = request.getPathInfo();
-		Optional<String> resource = resource(pathInfo);
 		String last = pathInfo == null ? "" : pathInfo.substring(pathInfo.lastIndexOf('/') + 1);
-		boolean file = resource.isPresent() && last.contains(".");
+		// A file the build holds, or a missing one where the build writes its files; an address such as /doc/10388.2
+		// has a dot too, and is the app's
+		String asked = last.contains(".") ? resource(pathInfo).map(r -> r.substring(ROOT.length())).orElse(null) : null;
+		boolean file = asked != null && (asked.startsWith(ASSETS) || exists(root() + asked));
 
 		if (!file && !signedIn(request)) {
 			// login.jsp brings the browser back to this address after signing in
@@ -122,7 +125,11 @@ public class AppServlet extends HttpServlet {
 			return;
 		}
 
-		String name = file ? resource.get().substring(ROOT.length()) : INDEX;
+		// Signed in: a return path has been followed, or wasn't needed, so a later sign-in lands where ui.start says
+		if (!file)
+			forgetReturnPath(request);
+
+		String name = file ? asked : INDEX;
 		try (InputStream in = open(root() + name)) {
 			if (in == null) {
 				if (file) {
@@ -138,8 +145,9 @@ public class AppServlet extends HttpServlet {
 
 			String extension = name.substring(name.lastIndexOf('.') + 1);
 			response.setContentType(TYPES.getOrDefault(extension, "application/octet-stream"));
-			response.setHeader("Cache-Control",
-					file && HASHED.matcher(name).matches() ? "public, max-age=31536000, immutable" : "no-store");
+			response.setHeader("Cache-Control", file && name.startsWith(ASSETS) && HASHED.matcher(name).matches()
+					? "public, max-age=31536000, immutable"
+					: "no-store");
 			if ("GET".equals(request.getMethod())) {
 				try (OutputStream out = response.getOutputStream()) {
 					in.transferTo(out);
@@ -150,5 +158,20 @@ public class AppServlet extends HttpServlet {
 
 	private InputStream open(String name) {
 		return AppServlet.class.getClassLoader().getResourceAsStream(name);
+	}
+
+	private static boolean exists(String name) {
+		return AppServlet.class.getClassLoader().getResource(name) != null;
+	}
+
+	private static void forgetReturnPath(HttpServletRequest request) {
+		HttpSession http = request.getSession(false);
+		if (http == null)
+			return;
+		try {
+			http.removeAttribute(ReturnPath.ATTRIBUTE);
+		} catch (IllegalStateException e) {
+			// Invalidated meanwhile, as by signing out on another tab
+		}
 	}
 }

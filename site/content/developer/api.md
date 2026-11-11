@@ -34,19 +34,20 @@ The API signs a request in one of two ways:
   sends no token: the browser sends its session cookie, and the session is the one the sign-in page opened, the
   same as the web page's.
 
-A request with an `Authorization` header goes by that header alone, and never by its cookies. The web session is
+A request with a Bearer `Authorization` header goes by that header alone, and never by its cookies. Another scheme's,
+such as the Basic credentials a browser sends to a proxy in front of Healdan, signs nothing in. The web session is
 let in only when all of these hold:
 
-1. **No `Authorization` header** at all: not an empty one, and not another scheme such as Basic.
+1. **No Bearer `Authorization` header.**
 2. **`Sec-Fetch-Site: same-origin`.** Browsers send this Fetch Metadata header with every request, and say
    `same-origin` only when a page from the same origin made it. A request without the header, from an old browser
    or from no browser, isn't let in.
 3. **An `Origin`, when there is one, is the server's own.** That's the origin of the public address
-   (`LOGICALDOC_PUBLIC_URL`) when Healdan has one it can use (see [Sign-In Pages](#sign-in-pages)), otherwise the
-   scheme and `Host` the request came to. A port that is the scheme's own, 443 for `https` and 80 for `http`, is the
-   same whether it's written or not. Browsers send `Origin` with every change, so open Healdan's pages at the public
-   address: from another name, such as the server's own name on the office network, changes are refused.
-4. **A change sends `X-Healdan-Client: web`.** That's every `POST`, `PATCH`, `PUT` and `DELETE`. Another site's page
+   (`LOGICALDOC_PUBLIC_URL`) when Healdan has one it can use (see [Sign-In Pages](#sign-in-pages)), or the scheme
+   and `Host` the request came to, so another name for the server, such as its address on the office network, works
+   too. A port that is the scheme's own, 443 for `https` and 80 for `http`, is the same whether it's written or not.
+   Behind a proxy that rewrites `Host`, set the public address.
+4. **A change sends `X-Healdan-Client: web`.** That's every `POST`, `PATCH`, `PUT` and `DELETE`, in any case. Another site's page
    can't add a header to a request to Healdan without a CORS preflight, and the API never allows one with cookies
    (see [Calling the API from Another Origin](#calling-the-api-from-another-origin)). A `GET` needs no header, so
    downloads, thumbnails and previews work as plain links and images.
@@ -54,9 +55,10 @@ let in only when all of these hold:
    which is HttpOnly, and the sign-in page keeps the web-page session's id in it. The API never takes that id from
    a `sid` parameter or header, or from the `ldoc-sid` cookie, though LogicalDOC's own routes do.
 
-Anything else is `401 unauthenticated`, with no `WWW-Authenticate` challenge. A request with no `Authorization`
-header that isn't a same-origin browser request is answered as a client with no token is, with
-`WWW-Authenticate: Bearer`.
+A same-origin request that breaks one of these rules is `403 web-session-refused`: signing in again wouldn't mend
+it, so a page mustn't take it for a sign-out. One with no open session is `401 unauthenticated`, with no
+`WWW-Authenticate` challenge. A request with no Bearer `Authorization` header that isn't a same-origin browser
+request is answered as a client with no token is, `401` with `WWW-Authenticate: Bearer`.
 
 - **The account is checked on every request,** as for a token: one disabled, expired or deleted since the sign-in
   is `401`, though its session is still open.

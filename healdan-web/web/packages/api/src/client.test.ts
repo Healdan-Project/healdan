@@ -77,19 +77,19 @@ describe('createApi', () => {
     expect(error).toMatchObject({ status: 502, code: 'server-error' })
   })
 
-  it('calls onSignedOut once for a burst of 401s, and again after a success', async () => {
+  // The app's signed-out state takes the first, so the client needn't count them
+  it('calls onSignedOut on every 401, from reads and changes, and on nothing else', async () => {
     const onSignedOut = vi.fn()
     const api = createApi({ onSignedOut })
-    const problem = () => json({ status: 401, code: 'unauthorized', detail: 'Sign in' }, 401, 'application/problem+json')
-    fetchMock.mockImplementation(() => Promise.resolve(problem()))
-    const results = await Promise.allSettled([api.get('/v1/a'), api.get('/v1/b'), api.get('/v1/c')])
+    const problem = (status: number, code: string) =>
+      json({ status, code, detail: 'x' }, status, 'application/problem+json')
+    fetchMock.mockImplementation(() => Promise.resolve(problem(401, 'unauthenticated')))
+    const results = await Promise.allSettled([api.get('/v1/a'), api.get('/v1/b'), api.send('DELETE', '/v1/session')])
     expect(results.every((r) => r.status === 'rejected')).toBe(true)
-    expect(onSignedOut).toHaveBeenCalledTimes(1)
-    fetchMock.mockImplementation(() => Promise.resolve(json({})))
-    await api.get('/v1/d')
-    fetchMock.mockImplementation(() => Promise.resolve(problem()))
-    await api.get('/v1/e').catch(() => undefined)
-    expect(onSignedOut).toHaveBeenCalledTimes(2)
+    expect(onSignedOut).toHaveBeenCalledTimes(3)
+    fetchMock.mockImplementation(() => Promise.resolve(problem(403, 'web-session-refused')))
+    await api.send('POST', '/v1/me/favorites', {}).catch(() => undefined)
+    expect(onSignedOut).toHaveBeenCalledTimes(3)
   })
 
   it('resolves undefined for 204', async () => {

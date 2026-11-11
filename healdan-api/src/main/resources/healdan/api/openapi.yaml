@@ -1610,20 +1610,24 @@ components:
       name: JSESSIONID
       description: |
         The browser's web session, for Healdan's own pages, served from the
-        same origin. Used only when a request has no `Authorization` header,
-        and only when all of these hold:
+        same origin. Used only when a request has no Bearer `Authorization`
+        header, and only when all of these hold:
 
         - `Sec-Fetch-Site: same-origin`. A request without it isn't let in.
-        - An `Origin`, when sent, is the server's public address, or without
-          one the scheme and host the request came to.
-        - A `POST`, `PATCH`, `PUT` or `DELETE` also sends
+        - An `Origin`, when sent, is the server's public address, or the
+          scheme and host the request came to.
+        - A `POST`, `PATCH`, `PUT` or `DELETE`, in any case, also sends
           `X-Healdan-Client: web`.
         - The HTTP session holds an open web-page session. Its id is never
           taken from a `sid` parameter or header, or from the `ldoc-sid`
           cookie.
 
-        Anything else is `401 unauthenticated`. A request with an
-        `Authorization` header goes by that header alone.
+        A same-origin request that breaks one of these rules is
+        `403 web-session-refused`. One with no open session, or that no
+        browser made from this origin, is `401 unauthenticated`. A request
+        with a Bearer `Authorization` header goes by that header alone;
+        another scheme's, such as the Basic credentials a browser sends to a
+        proxy in front, signs nothing in.
   responses:
     Problem:
       description: A refusal or an error
@@ -1656,7 +1660,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, web-session-refused, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, server-error]
         fields:
           type: array
           items:
