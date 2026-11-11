@@ -252,10 +252,12 @@ public class Filer {
 	/**
 	 * Checks the properties sent for a new document over the form for its
 	 * folder: each required one must have a value once inheritance has run.
+	 * Save to Matter runs it over the email's own values too, to leave out
+	 * those a new document can't take.
 	 *
 	 * @return the values to set
 	 */
-	private static Map<String, Object> checkProperties(Map<String, JsonNode> properties, Folder folder, User user,
+	static Map<String, Object> checkProperties(Map<String, JsonNode> properties, Folder folder, User user,
 			List<FieldError> errors) throws PersistenceException {
 		Map<String, JsonNode> sent = properties != null ? properties : Map.of();
 		List<ProfileField> form = ProfileView.get().forNewDocument(folder.getId(), user);

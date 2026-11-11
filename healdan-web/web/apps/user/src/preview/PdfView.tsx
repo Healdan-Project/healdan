@@ -23,8 +23,10 @@ const MARGIN = 32
 async function fetchPreview(api: Api, from: PreviewSource, signal: AbortSignal): Promise<Preview> {
   const response = await api.getResponse(from.path, from.query, { signal })
   if (response.status === 202) {
-    // Asks again when the server says; it's 5 seconds, and never less than 1 second, which a bad value could make
-    const seconds = Number(response.headers.get('Retry-After'))
+    // Asks again when the server says; it's 5 seconds, and never less than 1 second, which a bad value could make. No
+    // header is 5 seconds too, not the 0 that Number(null) would make it
+    const header = response.headers.get('Retry-After')?.trim()
+    const seconds = header ? Number(header) : Number.NaN
     return { kind: 'pending', retryMs: Math.max(1, Number.isFinite(seconds) ? seconds : 5) * 1000 }
   }
   return { kind: 'ready', bytes: await response.arrayBuffer() }

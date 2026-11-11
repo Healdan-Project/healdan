@@ -1036,10 +1036,12 @@ paths:
       operationId: getDocumentPreview
       summary: A document's preview
       description: |
-        What to show of a file in a page. A PDF's own file; a `picture`'s own
-        bytes, as its own content type (`image/*`); and for any other file
-        (Word, Excel, PowerPoint and OpenDocument files, among others) the
-        PDF the server makes of it in the background. With `version` it is
+        What to show of a file in a page. A PDF's own file; the own bytes of a
+        picture every browser draws (JPEG, PNG, GIF, WebP, BMP or SVG), as its
+        own content type (`image/*`); and for any other file the PDF made of
+        it: Word, Excel, PowerPoint and OpenDocument files, among others, are
+        converted in the background, and a TIFF or a HEIC has the conversion
+        the Classic Interface's preview made, if it made one. With `version` it is
         the file of that version, as for `getDocumentContent`.
 
         It needs the Preview permission on top of reading, and not the
@@ -1154,9 +1156,13 @@ paths:
         not-an-email`; one protected by a password is `403 forbidden`, as for
         the content. A file in storage that can't be reached right now is
         `503 storage-unreachable`.
+
+        With `version` it is that version's message, and the body's address
+        names the version too.
       tags: [Emails]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
+        - $ref: '#/components/parameters/EmailVersion'
       responses:
         '200':
           description: The message
@@ -1203,6 +1209,7 @@ paths:
           schema:
             type: boolean
             default: false
+        - $ref: '#/components/parameters/EmailVersion'
       responses:
         '200':
           description: The page
@@ -1242,10 +1249,12 @@ paths:
         needed, the answer is `Content-Disposition: attachment`, and CE
         records a download of the email, as `getDocumentContent` does.
 
-        With `inline=true` a PDF or a picture (`image/*`) is answered to show
-        in place: the Preview permission is needed instead, the answer is
-        `Content-Disposition: inline`, and nothing is recorded. Any other
-        attachment is `404 no-preview`.
+        With `inline=true` a PDF or a picture every browser draws (JPEG, PNG,
+        GIF, WebP, BMP or SVG), known by its type or, as many mailers send any
+        file as `application/octet-stream`, by its name, is answered to show
+        in place, as that type: the Preview permission is needed instead, the
+        answer is `Content-Disposition: inline`, and nothing is recorded. Any
+        other attachment, a TIFF or a HEIC included, is `404 no-preview`.
 
         Every answer is `X-Content-Type-Options: nosniff`, and an inline one is
         also `Content-Security-Policy: sandbox`, so that going to one directly,
@@ -1271,6 +1280,7 @@ paths:
           schema:
             type: boolean
             default: false
+        - $ref: '#/components/parameters/EmailVersion'
       responses:
         '200':
           description: The attachment
@@ -1305,8 +1315,10 @@ paths:
         Files an attachment of a filed email as a document of its own: in the
         email's folder, with its own doc #, taking the properties the email
         was filed with (its own values of the properties that can be changed,
-        not its email fields or its legacy doc #), then the properties sent,
-        which win; the folder's are inherited for any left out. It is linked
+        not its email fields or its legacy doc #, nor any a new document there
+        can't take now, such as an author whose account was deleted), then the
+        properties sent, which win; the folder's are inherited for any left
+        out. It is linked
         to the email as
         `attachment`, as filing from Outlook does. Filing it again files
         another copy, as any upload does; an attached message the email's
@@ -1326,6 +1338,7 @@ paths:
           schema:
             type: integer
             minimum: 0
+        - $ref: '#/components/parameters/EmailVersion'
       requestBody:
         required: false
         content:
@@ -2031,6 +2044,17 @@ components:
         type: integer
         format: int64
         minimum: 0
+    EmailVersion:
+      name: version
+      in: query
+      required: false
+      description: |
+        A version from the email's timeline, such as `1.0`, whose message to
+        read; a version the document doesn't have is `404 not-found`. The
+        current file by default.
+      schema:
+        type: string
+        examples: ['1.0']
     Offset:
       name: offset
       in: query

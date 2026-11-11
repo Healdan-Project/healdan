@@ -10,6 +10,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -23,11 +24,13 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentLink;
 import com.logicaldoc.core.document.DocumentLinkDAO;
+import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.email.EmailBody;
@@ -586,5 +589,113 @@ public class MessageResourceTest extends ApiTestCase {
 		assertEquals(0, jdbc().queryForObject(
 				"select count(*) from ld_document where ld_filename = 'Contract.pdf' and ld_deleted = 0", Integer.class)
 				.intValue());
+	}
+
+	/** An email with one file attached, as the sender typed it */
+	private static byte[] emailWithFile(String name, String type, String content) {
+		return ("From: Ann <ann@example.com>\r\nSubject: A file\r\nMessage-ID: <file-" + System.nanoTime()
+				+ "@example.com>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\n"
+				+ "Content-Type: text/plain\r\n\r\nHello\r\n--b\r\nContent-Type: " + type + "\r\n"
+				+ "Content-Disposition: attachment; filename=\"" + name + "\"\r\n\r\n" + content + "\r\n--b--\r\n")
+				.getBytes(StandardCharsets.UTF_8);
+	}
+
+	@Test
+	public void testAPdfSentAsAPlainFileShowsInPlaceByItsName() throws Exception {
+		Document email = fileBytes("plain.eml", emailWithFile("Report.pdf", "application/octet-stream", PDF));
+
+		ApiResponse response = get(path(email, "/parts/0?inline=true")).token(signIn(previewer)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("application/pdf", response.header("Content-Type"));
+		assertEquals("sandbox", response.header("Content-Security-Policy"));
+		assertTrue(response.text().startsWith("%PDF"));
+		// Said once, not once by the route and again with the sandbox
+		assertEquals(List.of("nosniff"), response.headers().get("X-Content-Type-Options"));
+	}
+
+	@Test
+	public void testATiffIsNotShownInPlace() throws Exception {
+		// Most browsers can't draw one, and Safari draws only its first page
+		Document email = fileBytes("scan.eml", emailWithFile("Scan.tif", "image/tiff", "II*"));
+
+		ApiResponse response = get(path(email, "/parts/0?inline=true")).token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 404, response.status());
+		assertEquals("no-preview", response.code());
+	}
+
+	@Test
+	public void testADownloadSaysNosniffOnce() throws Exception {
+		Document email = file("parts-attached.eml");
+
+		ApiResponse response = get(path(email, "/parts/1")).token(signIn(clerk)).send();
+
+		assertEquals(List.of("nosniff"), response.headers().get("X-Content-Type-Options"));
+	}
+
+	/** An email about a subject, with its text and a note attached that both name it */
+	private static byte[] emailAbout(String subject) {
+		return ("From: Ann <ann@example.com>\r\nSubject: " + subject + "\r\nMessage-ID: <about-" + System.nanoTime()
+				+ "@example.com>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\n"
+				+ "Content-Type: text/plain\r\n\r\nText of " + subject + "\r\n--b\r\nContent-Type: text/plain\r\n"
+				+ "Content-Disposition: attachment; filename=\"Note.txt\"\r\n\r\nNote of " + subject + "\r\n--b--\r\n")
+				.getBytes(StandardCharsets.UTF_8);
+	}
+
+	@Test
+	public void testAVersionIsReadAsThatVersionsMessage() throws Exception {
+		Document email = fileBytes("drafts.eml", emailAbout("First draft"));
+		DocumentManager.get().checkout(email.getId(), fx.documentHistory(fx.admin()));
+		DocumentManager.get().checkin(email.getId(), new ByteArrayInputStream(emailAbout("Second draft")), "drafts.eml",
+				false, null, fx.documentHistory(fx.admin()));
+		awaitAsyncWork();
+		String token = signIn(clerk);
+
+		JsonNode first = get(path(email, "?version=1.0")).token(token).send().json();
+		JsonNode current = get(path(email, "")).token(token).send().json();
+		ApiResponse firstBody = get(path(email, "/body?version=1.0")).token(token).send();
+		ApiResponse firstNote = get(path(email, "/parts/0?version=1.0")).token(token).send();
+		ApiResponse unknown = get(path(email, "?version=9.9")).token(token).send();
+
+		assertEquals("First draft", first.path("subject").textValue());
+		assertEquals(path(email, "/body?version=1.0"), first.path("body").textValue());
+		assertEquals("Second draft", current.path("subject").textValue());
+		assertEquals(path(email, "/body"), current.path("body").textValue());
+		assertTrue(firstBody.text(), firstBody.text().contains("Text of First draft"));
+		assertTrue(firstNote.text(), firstNote.text().startsWith("Note of First draft"));
+		assertEquals(unknown.toString(), 404, unknown.status());
+		assertEquals("not-found", unknown.code());
+
+		// Save to Matter of a version's attachment files that version's file
+		ApiResponse saved = post(path(email, "/attachments/0/file?version=1.0")).token(token).send();
+		assertEquals(saved.toString(), 201, saved.status());
+		assertTrue(get("/api/v1/documents/" + saved.json().path("docNumber").asLong() + "/content").token(token).send()
+				.text().startsWith("Note of First draft"));
+	}
+
+	@Test
+	public void testSaveToMatterLeavesOutAnAuthorWhoseAccountWasDeleted() throws Exception {
+		User leaver = fx.user("leaver");
+		ApiResponse filed = post("/api/v1/documents").token(signIn(clerk))
+				.part("document", "{\"folderId\":" + documents.getId() + ",\"properties\":{\"comments\":\"Kept\","
+						+ "\"author\":" + leaver.getId() + "},\"checkOut\":false}")
+				.file("file", "leaver.eml", emailWith("Agreement.txt", "the agreement")).send();
+		assertEquals(filed.toString(), 201, filed.status());
+		awaitAsyncWork();
+		Document email = DocumentDAO.get().findByCustomId(filed.json().path("docNumber").asText(), Tenant.DEFAULT_ID);
+		UserDAO.get().delete(leaver.getId(), null);
+		String token = signIn(clerk);
+
+		ApiResponse saved = post(path(email, "/attachments/0/file")).token(token).send();
+
+		// Not refused for a field the person never sent; what else the email has still comes with it
+		assertEquals(saved.toString(), 201, saved.status());
+		long docNumber = saved.json().path("docNumber").asLong();
+		assertEquals("Kept", propertyOf(docNumber, "comments", token));
+		for (JsonNode field : get("/api/v1/documents/" + docNumber + "/properties").token(token).send().json()
+				.path("items"))
+			if ("author".equals(field.path("name").textValue()))
+				assertNotEquals(leaver.getId(), field.path("value").path("id").asLong());
 	}
 }

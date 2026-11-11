@@ -10,6 +10,7 @@ import { messageFor } from '../frame/errors'
 import { fileIcon } from '../fileIcon'
 import { keys } from '../queries'
 import { useApi } from '../services'
+import { attachmentShownAs } from './drawn'
 import { EmailBodyFrame } from './EmailBodyFrame'
 import { NoPreview } from './NoPreview'
 import { PdfView } from './PdfView'
@@ -19,14 +20,11 @@ import type { PreviewProps, PreviewSource } from './types'
 
 type Attachment = components['schemas']['MessageView']['attachments'][number]
 
-/**
- * What an attachment can be shown as in place (R56): a PDF or a picture; the server says no for anything else. This mirrors the
- * server's rule (`MediaTypes.isImage`), which the app can't share, and the server has the last word.
- */
-function shownAs(attachment: Attachment): 'pdf' | 'picture' | undefined {
-  if (attachment.type === 'application/pdf') return 'pdf'
-  return /^image\/[a-z0-9][a-z0-9.+-]*$/.test(attachment.type) ? 'picture' : undefined
-}
+/** What an attachment can be shown as in place (R56), by its type or its name; anything else downloads */
+const shownAs = (attachment: Attachment) => attachmentShownAs(attachment.type, attachment.name)
+
+/** A version's query, or none for the current file */
+const versionQuery = (version?: string) => (version ? { version } : undefined)
 
 function Detail({ label, value }: { label: string; value: string | null }) {
   if (!value) return null
@@ -40,9 +38,9 @@ function Detail({ label, value }: { label: string; value: string | null }) {
 
 /**
  * One attachment: its name and size, which previews a PDF or a picture in place and downloads anything else, and Save to
- * Matter, or the # it was filed as.
+ * Matter, or the # it was filed as. `version` is the email's version it comes from; the current file when there's none.
  */
-function Chip({ attachment, docNumber, folderId, canOpen, onPreview }: { attachment: Attachment; docNumber: number; folderId: number; canOpen: boolean; onPreview: () => void }) {
+function Chip({ attachment, docNumber, version, folderId, canOpen, onPreview }: { attachment: Attachment; docNumber: number; version?: string; folderId: number; canOpen: boolean; onPreview: () => void }) {
   const api = useApi()
   const queryClient = useQueryClient()
   const [saving, setSaving] = useState(false)
@@ -57,7 +55,8 @@ function Chip({ attachment, docNumber, folderId, canOpen, onPreview }: { attachm
   async function saveToMatter(): Promise<void> {
     setSaving(true)
     try {
-      await api.send('POST', apiPath`/v1/documents/${docNumber}/message/attachments/${attachment.index}/file`)
+      const query = version ? `?${new URLSearchParams({ version }).toString()}` : ''
+      await api.send('POST', `${apiPath`/v1/documents/${docNumber}/message/attachments/${attachment.index}/file`}${query}`)
       // The chip's # comes with the message, and the new document with its folder
       await queryClient.invalidateQueries({ queryKey: keys.document(docNumber) })
       await queryClient.invalidateQueries({ queryKey: keys.folder(folderId) })
@@ -84,7 +83,7 @@ function Chip({ attachment, docNumber, folderId, canOpen, onPreview }: { attachm
         </button>
       ) : (
         // A plain link to the attachment: the web session carries it, and the server records the download
-        <a className={styles.chipMain} href={api.url(apiPath`/v1/documents/${docNumber}/message/parts/${attachment.index}`)} download={attachment.name} aria-label={t('email.downloadAttachment', { name: attachment.name })}>
+        <a className={styles.chipMain} href={api.url(apiPath`/v1/documents/${docNumber}/message/parts/${attachment.index}`, versionQuery(version))} download={attachment.name} aria-label={t('email.downloadAttachment', { name: attachment.name })}>
           {label}
         </a>
       )}
@@ -104,13 +103,14 @@ function Chip({ attachment, docNumber, folderId, canOpen, onPreview }: { attachm
  * A filed email as a message (spec section 6.6): the subject, who sent it and to whom, when, its attachments as chips,
  * then the body. The body is the server's cleaned page in a sandboxed frame, so no script runs and the sender's pictures
  * stay blocked until Show Pictures, for this viewing only. A PDF or a picture among the attachments shows in place of the
- * body, with Back to Message. Give it a `key` of the document, so a new one starts without pictures.
+ * body, with Back to Message and Download. With a `version` it is that version's message. Give it a `key` of the document
+ * and the version, so a new one starts without pictures.
  */
-export function EmailView({ document, showActions }: PreviewProps) {
+export function EmailView({ document, version, showActions }: PreviewProps) {
   const api = useApi()
   const message = useQuery({
-    queryKey: [...keys.document(document.docNumber), 'message', document.fileVersion],
-    queryFn: ({ signal }) => api.get<components['schemas']['MessageView']>(apiPath`/v1/documents/${document.docNumber}/message`, undefined, { signal }),
+    queryKey: [...keys.document(document.docNumber), 'message', version ?? document.fileVersion],
+    queryFn: ({ signal }) => api.get<components['schemas']['MessageView']>(apiPath`/v1/documents/${document.docNumber}/message`, versionQuery(version), { signal }),
     refetchOnWindowFocus: false,
     gcTime: 30_000,
   })
@@ -124,13 +124,10 @@ export function EmailView({ document, showActions }: PreviewProps) {
   if (!message.data) return <p role="status" className={styles.message}>{t('email.loading')}</p>
   const { subject, from, to, cc, sent, received, attachments } = message.data
 
-  const body = api.url(apiPath`/v1/documents/${document.docNumber}/message/body`, pictures ? { pictures: 'true' } : undefined)
-  const source: PreviewSource | undefined = viewing && {
-    path: apiPath`/v1/documents/${document.docNumber}/message/parts/${viewing.index}`,
-    query: { inline: 'true' },
-    name: viewing.name,
-    key: document.fileVersion,
-  }
+  const body = api.url(apiPath`/v1/documents/${document.docNumber}/message/body`, { pictures: pictures ? 'true' : undefined, version })
+  const part = viewing ? apiPath`/v1/documents/${document.docNumber}/message/parts/${viewing.index}` : undefined
+  const source: PreviewSource | undefined =
+    viewing && part !== undefined ? { path: part, query: { inline: 'true', version }, name: viewing.name, key: version ?? document.fileVersion } : undefined
 
   return (
     <div className={styles.view}>
@@ -148,18 +145,30 @@ export function EmailView({ document, showActions }: PreviewProps) {
         {attachments.length > 0 && (
           <ul className={styles.chips} aria-label={t('email.attachments')}>
             {attachments.map((attachment) => (
-              <Chip key={attachment.index} attachment={attachment} docNumber={document.docNumber} folderId={document.folder.id} canOpen={document.canOpen} onPreview={() => setViewing(attachment)} />
+              <Chip key={attachment.index} attachment={attachment} docNumber={document.docNumber} version={version} folderId={document.folder.id} canOpen={document.canOpen} onPreview={() => setViewing(attachment)} />
             ))}
           </ul>
         )}
       </header>
-      {viewing && source ? (
+      {viewing && source && part !== undefined ? (
         <section className={styles.attachment} aria-label={t('email.viewing', { name: viewing.name })}>
           <div className={styles.back}>
             <Button variant="quiet" onPress={() => setViewing(undefined)}>
               <Icon name="chevronLeft" size={18} />
               {t('email.backToMessage')}
             </Button>
+            {/* The file itself, as a plain link the server records, whether or not its preview could be drawn */}
+            {document.canOpen ? (
+              <a className={styles.download} href={api.url(part, versionQuery(version))} download={viewing.name} aria-label={t('email.downloadAttachment', { name: viewing.name })}>
+                <Icon name="download" size={18} />
+                {t('details.download')}
+              </a>
+            ) : (
+              <Button variant="quiet" isDisabled aria-label={t('email.downloadAttachment', { name: viewing.name })}>
+                <Icon name="download" size={18} />
+                {t('details.download')}
+              </Button>
+            )}
           </div>
           {shownAs(viewing) === 'pdf' ? (
             <PdfView key={source.path} document={document} source={source} showActions={false} />

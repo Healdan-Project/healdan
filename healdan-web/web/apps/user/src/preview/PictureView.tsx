@@ -49,8 +49,8 @@ function useObjectUrl(blob: Blob | undefined): string | undefined {
 /**
  * A picture previews as itself (spec section 6.4): the preview endpoint answers its own bytes (R54), read through the API
  * client so a failure is an answer this app reads (a storage outage has its banner), and shown from a blob: address. The
- * server records no download for it. A picture the browser can't draw, such as a TIFF or a HEIC in Chrome, says there is
- * no preview. With a `source` it shows that address's picture instead, such as an email's attachment.
+ * server records no download for it. Only pictures every browser draws come here (`isDrawnPicture`); one that still can't
+ * be drawn says there is no preview. With a `source` it shows that address's picture instead, such as an email's attachment.
  */
 export function PictureView({ document, version, showActions, source: given }: PreviewProps) {
   const api = useApi()

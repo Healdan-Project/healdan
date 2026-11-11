@@ -46,6 +46,7 @@ import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.api.model.DocumentView;
+import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.MessageView;
 import com.logicaldoc.healdan.api.model.NewAttachment;
 import com.logicaldoc.healdan.email.EmailBody;
@@ -81,9 +82,13 @@ import jakarta.ws.rs.core.UriInfo;
  * A document the caller can't read is {@code 404 not-found}, as everywhere; one
  * that isn't an email is {@code 404 not-an-email}. The body and an attachment
  * shown in place need the Preview permission, an attachment downloaded the
- * Download permission, as for the document itself.
+ * Download permission, as for the document itself. Each route takes
+ * {@code ?version=}, a version of the email such as {@code 1.0}, as the
+ * document's preview does; the current file by default.
  * <p>
- * Nothing logged here names a subject, an address or a file name.
+ * Nothing logged here names a subject, an address or a file name, and a
+ * message's parser isn't trusted not to: what it throws is logged by its class
+ * only ({@code unreadable}).
  */
 @Component
 @Path("/v1/documents/{docNumber: [0-9]+}/message")
@@ -101,23 +106,23 @@ public class MessageResource {
 	/** The type of the CE link between an email and a document filed from its attachment */
 	private static final String LINK_TYPE = EmailFiling.LINK_TYPE;
 
-	private static final String PDF = "application/pdf";
-
 	/** For tests only: told of the saved attachment once it is linked, before the answer is made; null otherwise */
 	static volatile Consumer<Document> afterLinked;
 
 	/**
 	 * @param docNumber the email's doc #
+	 * @param version a version of the email; the current file by default
 	 * @param uri the request's addresses
 	 * @return its headers, its attachments and the address of its body
 	 * @throws ApiProblem {@code 404 not-found}, {@code 404 not-an-email}, {@code 403} without the Preview permission
 	 */
 	@GET
-	public MessageView message(@PathParam("docNumber") long docNumber, @Context UriInfo uri) {
+	public MessageView message(@PathParam("docNumber") long docNumber, @QueryParam("version") String version,
+			@Context UriInfo uri) {
 		Caller caller = Caller.current();
 		try {
 			Document document = emailDocument(docNumber, caller, Permission.PREVIEW);
-			try (Opened opened = read(document, docNumber, false)) {
+			try (Opened opened = read(document, version, docNumber, false)) {
 				EmailFields fields = opened.message.fields();
 				List<Part> listed = opened.message.parts().stream().filter(p -> !p.inline()).toList();
 				Map<Integer, Long> filed = pair(listed, copies(document, caller.user()));
@@ -125,8 +130,11 @@ public class MessageResource {
 				for (Part part : listed)
 					attachments.add(new MessageView.MessageAttachment(part.index(), part.name(), part.type(),
 							part.size(), part.attachedMessage(), filed.get(part.index())));
-				String body = UriBuilder.fromPath(uri.getBaseUri().getRawPath())
-						.path("v1/documents/{docNumber}/message/body").build(docNumber).toString();
+				UriBuilder address = UriBuilder.fromPath(uri.getBaseUri().getRawPath())
+						.path("v1/documents/{docNumber}/message/body");
+				if (version != null && !version.isBlank())
+					address.queryParam("version", version.strip());
+				String body = address.build(docNumber).toString();
 				return new MessageView(fields.subject(), fields.from(), fields.to(), fields.cc(), fields.sent(),
 						fields.received(), List.copyOf(attachments), body);
 			}
@@ -141,18 +149,19 @@ public class MessageResource {
 	 *
 	 * @param docNumber the email's doc #
 	 * @param pictures true to let pictures from the internet show
+	 * @param version a version of the email; the current file by default
 	 * @return the page
 	 */
 	@GET
 	@Path("body")
 	@Produces("text/html;charset=utf-8")
 	public Response body(@PathParam("docNumber") long docNumber,
-			@QueryParam("pictures") @DefaultValue("false") boolean pictures) {
+			@QueryParam("pictures") @DefaultValue("false") boolean pictures, @QueryParam("version") String version) {
 		Caller caller = Caller.current();
 		try {
 			Document document = emailDocument(docNumber, caller, Permission.PREVIEW);
 			byte[] page;
-			try (Opened opened = read(document, docNumber, false)) {
+			try (Opened opened = read(document, version, docNumber, false)) {
 				page = opened.message.body(pictures).getBytes(StandardCharsets.UTF_8);
 			}
 			// No referrer: a picture loaded with Show Pictures doesn't say which server the message is on
@@ -168,34 +177,38 @@ public class MessageResource {
 	/**
 	 * An attachment: downloaded (Download permission, recorded as CE records a
 	 * download of the email), or with {@code inline=true} a PDF or a picture
-	 * to show in place (Preview permission, recorded as nothing).
+	 * to show in place (Preview permission, recorded as nothing), by the type
+	 * the sender gave it or by its name ({@link MediaTypes#shownAs}).
 	 *
 	 * @param docNumber the email's doc #
 	 * @param id the attachment's index
 	 * @param inline true to show it in place
+	 * @param version a version of the email; the current file by default
 	 * @param request the request
 	 * @return the attachment's bytes
 	 * @throws ApiProblem {@code 404} for an index the email has, and {@code 404 no-preview} for {@code inline} and an
-	 *         attachment that is neither a PDF nor a picture
+	 *         attachment that is neither a PDF nor a picture every browser draws
 	 */
 	@GET
 	@Path("parts/{id: [0-9]+}")
 	@Produces(MediaType.WILDCARD)
 	public Response part(@PathParam("docNumber") long docNumber, @PathParam("id") int id,
-			@QueryParam("inline") @DefaultValue("false") boolean inline, @Context Request request) {
+			@QueryParam("inline") @DefaultValue("false") boolean inline, @QueryParam("version") String version,
+			@Context Request request) {
 		boolean head = HttpMethod.HEAD.equals(request.getMethod());
 		Caller caller = Caller.current();
 		File content = null;
 		try {
 			Document document = emailDocument(docNumber, caller, inline ? Permission.PREVIEW : Permission.DOWNLOAD);
 			Part part;
-			try (Opened opened = read(document, docNumber, true)) {
+			String shown;
+			try (Opened opened = read(document, version, docNumber, true)) {
 				// An inline part isn't listed by /message, so no route serves it
 				part = opened.message.parts().stream().filter(p -> p.index() == id && !p.inline()).findFirst()
 						.orElseThrow(() -> ApiProblem.notFound(
 								"Document #%d has no attachment %d.".formatted(docNumber, id)));
-				String type = MediaTypes.base(part.type());
-				if (inline && !(PDF.equals(type) || MediaTypes.isImage(type)))
+				shown = MediaTypes.shownAs(MediaTypes.base(part.type()), part.name());
+				if (inline && shown == null)
 					throw new ApiProblem(404, "no-preview",
 							"Attachment %d of document #%d can't be shown here.".formatted(id, docNumber));
 				if (!head) {
@@ -220,18 +233,21 @@ public class MessageResource {
 					FileUtils.deleteQuietly(sent);
 				}
 			};
-			String type = MediaTypes.base(part.type());
-			Response.ResponseBuilder response = Response.ok(body, inline ? type : MimeType.getByFilename(part.name()))
+			Response.ResponseBuilder response = Response.ok(body, inline ? shown : MimeType.getByFilename(part.name()))
 					.header(HttpHeaders.CONTENT_LENGTH, size)
-					.header(HttpHeaders.CONTENT_DISPOSITION, inline ? "inline" : DocumentResource.disposition(part.name()))
-					.header("X-Content-Type-Options", "nosniff");
+					.header(HttpHeaders.CONTENT_DISPOSITION, inline ? "inline" : DocumentResource.disposition(part.name()));
+			// nosniff once: shown in place, with the sandbox that comes with it
 			if (inline)
 				InlineHeaders.apply(response);
+			else
+				response.header("X-Content-Type-Options", "nosniff");
 			// Handed to the answer, which deletes it
 			content = null;
 			return response.build();
-		} catch (PersistenceException | IOException | MessagingException e) {
+		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read an attachment of document #" + docNumber, e);
+		} catch (IOException | MessagingException e) {
+			throw unreadable("Can't read an attachment", docNumber, e);
 		} finally {
 			FileUtils.deleteQuietly(content);
 		}
@@ -246,6 +262,7 @@ public class MessageResource {
 	 *
 	 * @param docNumber the email's doc #
 	 * @param id the attachment's index
+	 * @param version a version of the email; the current file by default
 	 * @param body the optional {@link NewAttachment}
 	 * @param uri the request's addresses
 	 * @return {@code 201} with the new document
@@ -253,8 +270,8 @@ public class MessageResource {
 	@POST
 	@Path("attachments/{id: [0-9]+}/file")
 	@Consumes(MediaType.WILDCARD)
-	public Response file(@PathParam("docNumber") long docNumber, @PathParam("id") int id, String body,
-			@Context UriInfo uri) {
+	public Response file(@PathParam("docNumber") long docNumber, @PathParam("id") int id,
+			@QueryParam("version") String version, String body, @Context UriInfo uri) {
 		Caller caller = Caller.current();
 		User user = caller.user();
 		File upload = null;
@@ -268,7 +285,7 @@ public class MessageResource {
 
 			Part part;
 			upload = File.createTempFile(TEMP_PREFIX, ".tmp");
-			try (Opened opened = read(email, docNumber, true)) {
+			try (Opened opened = read(email, version, docNumber, true)) {
 				part = opened.message.parts().stream().filter(p -> p.index() == id && !p.inline()).findFirst()
 						.orElseThrow(() -> ApiProblem.notFound(
 								"Document #%d has no attachment %d.".formatted(docNumber, id)));
@@ -278,7 +295,7 @@ public class MessageResource {
 			}
 
 			// What the email was filed with applies to the attachment too, and what the request sends wins
-			Map<String, JsonNode> properties = new LinkedHashMap<>(emailProperties(email));
+			Map<String, JsonNode> properties = new LinkedHashMap<>(emailProperties(email, folder, user));
 			if (request != null && request.properties() != null)
 				properties.putAll(request.properties());
 			Document filed = Filer.get().file(folder, EmailFiling.filingName(part), properties, upload, caller);
@@ -301,11 +318,29 @@ public class MessageResource {
 				// Filed, linked, and no answer to give: take it back, as a failed filing of an email does
 				throw EmailFiling.undo(e, List.of(filed), List.of(link), caller);
 			}
-		} catch (PersistenceException | MessagingException | IOException e) {
+		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't save an attachment of document #" + docNumber, e);
+		} catch (MessagingException | IOException e) {
+			throw unreadable("Can't save an attachment", docNumber, e);
 		} finally {
 			FileUtils.deleteQuietly(upload);
 		}
+	}
+
+	/**
+	 * A failure reading a message's parts. Jakarta Mail's own words can quote the message's headers, an attachment's
+	 * name or a few characters of its content, so the log gets the class alone above debug, and the answer's
+	 * exception, which the API logs as an error, doesn't carry it.
+	 *
+	 * @param what what couldn't be done
+	 * @param docNumber the email's doc #
+	 * @param e what was thrown
+	 * @return the exception to throw
+	 */
+	private static IllegalStateException unreadable(String what, long docNumber, Exception e) {
+		log.warn("{} of document #{}: {}", what, docNumber, e.getClass().getName());
+		log.debug("{} of document #{}", what, docNumber, e);
+		return new IllegalStateException(what + " of document #" + docNumber);
 	}
 
 	/**
@@ -350,13 +385,17 @@ public class MessageResource {
 	}
 
 	/**
-	 * Reads the document's current file as a message, before any answer starts. The file is copied to a temporary
-	 * file and an {@code eml} is read in place from it, so no more than its parts is held in memory.
+	 * Reads a version's file as a message, before any answer starts. The file is copied to a temporary file and an
+	 * {@code eml} is read in place from it, so no more than its parts is held in memory.
 	 *
+	 * @param version a version of the email; the current file when blank
 	 * @param content true when an attachment's bytes are needed
+	 * @throws ApiProblem {@code 404} for a version the document doesn't have
 	 */
-	private static Opened read(Document document, long docNumber, boolean content) {
-		StoreResource resource = StoreResource.builder().docId(document.getId()).fileVersion(document.getFileVersion())
+	private static Opened read(Document document, String version, long docNumber, boolean content)
+			throws PersistenceException {
+		DocumentResource.FileOfVersion asked = DocumentResource.fileOf(document, version, docNumber);
+		StoreResource resource = StoreResource.builder().docId(document.getId()).fileVersion(asked.fileVersion())
 				.build();
 		if (!Store.get().exists(resource))
 			throw new ApiProblem(500, "server-error", "The document's file is missing from storage.");
@@ -366,8 +405,7 @@ public class MessageResource {
 			try (InputStream in = DocumentResource.openStream(resource); var out = FileUtils.openOutputStream(copy)) {
 				in.transferTo(out);
 			}
-			return new Opened(StoredMessage.open(copy, FilenameUtils.getExtension(document.getFileName()), content),
-					copy);
+			return new Opened(StoredMessage.open(copy, FilenameUtils.getExtension(asked.fileName()), content), copy);
 		} catch (MessagingException e) {
 			FileUtils.deleteQuietly(copy);
 			throw new ApiProblem(404, NOT_AN_EMAIL, "Document #%d can't be read as an email message.".formatted(docNumber));
@@ -440,17 +478,26 @@ public class MessageResource {
 	}
 
 	/**
+	 * @param folder where the attachment is filed
+	 * @param user who files it
 	 * @return the properties the email was filed with, to apply to its attachments: its own values of the properties
 	 *         that can be changed, leaving out the email fields (which the attachment, not being an email, has none
-	 *         of, and which can't be sent) and the legacy doc #
+	 *         of, and which can't be sent), the legacy doc #, and any a new document there can't take now (an author
+	 *         whose account was deleted, say, or an option since taken off its list), which would otherwise refuse the
+	 *         filing for a field the person didn't send
 	 */
-	private static Map<String, JsonNode> emailProperties(Document email) throws PersistenceException {
+	private static Map<String, JsonNode> emailProperties(Document email, Folder folder, User user)
+			throws PersistenceException {
 		Map<String, JsonNode> properties = new LinkedHashMap<>();
 		Document current = DocumentDAO.get().findById(email.getId(), true);
 		for (ProfileFieldView field : PropertyValues.views(ProfileView.get().forDocument(current)))
 			if (field.editable() && "local".equals(field.source()) && field.value() != null
 					&& !HealdanConstants.ATTR_LEGACYDOCNUM.equals(field.name()))
 				properties.put(field.name(), ApiJson.mapper().valueToTree(field.value()));
+		List<FieldError> refused = new ArrayList<>();
+		Filer.checkProperties(properties, folder, user, refused);
+		for (FieldError error : refused)
+			properties.remove(error.field());
 		return properties;
 	}
 }

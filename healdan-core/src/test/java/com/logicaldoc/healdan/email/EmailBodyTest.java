@@ -329,4 +329,19 @@ public class EmailBodyTest {
 
 		assertEquals("The signed body", page.selectFirst("p").text());
 	}
+
+	@Test
+	public void testRtfIsNeverShownAsTheText() {
+		// CE's msg reader puts the RTF before the text, which no one could read
+		EMail mail = new EMail();
+		mail.setHtml(false);
+		mail.setMessageText("\uFEFF {\\rtf1\\ansi\\ansicpg1252\\fromhtml1 Hello}");
+
+		Document page = page(EmailBody.clean(mail, false));
+
+		assertFalse(page.text(), page.text().contains("rtf1"));
+		assertEquals(EmailBody.NO_BODY, page.select("pre").text());
+		assertTrue(page(EmailBody.clean("{\\rtf1 Hello}", true, false)).text().contains("Hello"));
+		assertEquals("A plain {\\rtf1} mention", page(EmailBody.clean("A plain {\\rtf1} mention", false, false)).select("pre").text());
+	}
 }

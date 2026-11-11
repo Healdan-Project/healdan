@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.email;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -110,6 +111,47 @@ public class StoredMessageTest {
 		try (StoredMessage message = StoredMessage.open(file, "msg", false)) {
 			assertEquals(open("test.msg", "msg").parts(), message.parts());
 			assertThrows(IllegalStateException.class, () -> message.write(0, new ByteArrayOutputStream()));
+		}
+	}
+
+	/** An msg as msgparser reads it, with the body parts given; null leaves one out */
+	private static com.auxilii.msgparser.Message parsed(String messageClass, String html, String text) {
+		com.auxilii.msgparser.Message message = new com.auxilii.msgparser.Message();
+		message.setMessageClass(messageClass);
+		if (html != null)
+			message.setBodyHTML(html);
+		if (text != null)
+			message.setBodyText(text);
+		return message;
+	}
+
+	@Test
+	public void testAMsgsHtmlIsItsBodyWhateverItStartsWith() {
+		// CE's reader takes HTML only when it starts with "<html", and falls back on the RTF
+		StoredMessage.MsgBody body = StoredMessage.msgBody(parsed("IPM.Note", "<!DOCTYPE html><html><p>Hi</p></html>", "Hi"));
+
+		assertEquals(new StoredMessage.MsgBody("<!DOCTYPE html><html><p>Hi</p></html>", true), body);
+	}
+
+	@Test
+	public void testAMsgWithoutHtmlIsItsTextNeverItsRtf() {
+		assertEquals(new StoredMessage.MsgBody("Just text", false),
+				StoredMessage.msgBody(parsed("IPM.Note", null, "Just text")));
+		assertEquals(new StoredMessage.MsgBody("", false), StoredMessage.msgBody(parsed("IPM.Note", null, null)));
+	}
+
+	@Test
+	public void testASignedMsgKeepsTheBodyCeReadsFromWhatItWraps() {
+		assertNull(StoredMessage.msgBody(parsed("IPM.Note.SMIME.MultipartSigned", "<p>outer</p>", null)));
+	}
+
+	@Test
+	public void testAMsgsBodyIsTheSameReadFromAFileOrItsBytes() throws Exception {
+		java.io.File file = new java.io.File("src/test/resources/email/test.msg");
+		try (StoredMessage fromFile = StoredMessage.open(file, "msg", false)) {
+			String body = fromFile.body(false);
+			assertEquals(open("test.msg", "msg").body(false), body);
+			assertFalse(body, body.contains("{\\rtf"));
 		}
 	}
 }

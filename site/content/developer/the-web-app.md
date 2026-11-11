@@ -222,8 +222,9 @@ when the first PDF is previewed. These are the settings that keep it inside the 
   `standardFontDataUrl` (`standard_fonts/`, for the fourteen fonts a PDF may not embed) and `wasmUrl` (`wasm/`, the two
   JavaScript decoders). `apps/user/pdfjs-data.mjs` is a Vite plugin that emits those files into the build, and serves
   them from `node_modules` in `npm run dev`, so none is committed. `AppServlet` treats only what Vite writes under
-  `assets/` as hashed (and so immutable for a year), so these, whose names only sometimes look like hashes, are served
-  `no-store`. `scripts/check-dist.mjs` fails the build when the worker or a folder is missing, and
+  `assets/` as hashed (and so immutable for a year). These keep PDF.js's own names, so they're served `no-cache` with
+  an `ETag` of their bytes: the browser keeps each and asks again before using it, and gets a `304` until an upgrade of
+  PDF.js changes it. `scripts/check-dist.mjs` fails the build when the worker or a folder is missing, and
   `scripts/notices.mjs` adds their licences (Foxit's and Liberation's fonts, OpenJPEG's and JBIG2's decoders) to
   `notices.txt`.
 - **Fonts from the file** are made with the FontFace API from the file's bytes, which `font-src` doesn't govern.

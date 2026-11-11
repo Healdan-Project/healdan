@@ -70,6 +70,14 @@ describe('Editing properties', () => {
     await expectNoAxeViolations(panel)
   })
 
+  it('shows a date it may not change as the day the form would edit, not a time in the person\'s zone', async () => {
+    // A day is kept as its UTC midnight, as the form and the helper write it: shown as a time, it would be the day before
+    // anywhere west of UTC
+    await renderApp('/folders/7?sel=10388', routes(profile({ reviewdate: { editable: false } })))
+    const panel = await edit()
+    expect(within(panel).getByText('Nov 2, 2026')).toBeTruthy()
+  })
+
   it('offers a property picked from a list only its options, and a Subclass only its Class\'s', async () => {
     await renderApp('/folders/7?sel=10388', routes(profile()))
     const panel = await edit()

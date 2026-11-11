@@ -22,7 +22,7 @@ const FORM_TYPES = new Set<Field['type']>(['string', 'integer', 'decimal', 'date
 
 const isEditable = (field: Field) => field.editable && !NEVER.has(field.name) && FORM_TYPES.has(field.type)
 
-/** What the form shows for a field, as text: the day of a date, `true` or `false` for a yes or no */
+/** What the form shows for a field, as text: the day of a date (its UTC day, as `textOf` shows it), `true` or `false` for a yes or no */
 function draftOf(field: Field): string {
   const value = field.value
   if (field.type === 'boolean') return value === true ? 'true' : 'false'

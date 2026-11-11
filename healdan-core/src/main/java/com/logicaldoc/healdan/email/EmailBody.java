@@ -91,6 +91,9 @@ public final class EmailBody {
 
 	private static final Pattern CSS_OPEN_URL = Pattern.compile("(?i)url\\s*\\(");
 
+	/** What RTF starts with, after any space or byte-order mark */
+	private static final Pattern RTF = Pattern.compile("[\\s\\uFEFF]*\\{\\\\rtf");
+
 	private EmailBody() {
 	}
 
@@ -132,10 +135,19 @@ public final class EmailBody {
 	 * @return the cleaned page, as {@link #clean(MimeMessage, boolean)}
 	 */
 	public static String clean(EMail mail, boolean pictures) {
-		String text = mail.getMessageText();
-		if (text == null || text.isBlank())
+		return clean(mail.getMessageText(), mail.isHtml(), pictures);
+	}
+
+	/**
+	 * @param text an {@code msg}'s body, which may be blank. RTF is never shown: CE's reader puts it before the text
+	 * @param html true when it is HTML
+	 * @param pictures true to keep pictures from the internet
+	 * @return the cleaned page, as {@link #clean(MimeMessage, boolean)}
+	 */
+	public static String clean(String text, boolean html, boolean pictures) {
+		if (text == null || text.isBlank() || (!html && RTF.matcher(text).lookingAt()))
 			return page(plain(NO_BODY), Map.of(), pictures);
-		return page(mail.isHtml() ? html(text) : plain(text), Map.of(), pictures);
+		return page(html ? html(text) : plain(text), Map.of(), pictures);
 	}
 
 	/** The body parts of a message and the pictures it carries, found in one walk */

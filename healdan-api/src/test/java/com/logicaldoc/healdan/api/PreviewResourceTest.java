@@ -136,6 +136,24 @@ public class PreviewResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testTiffPreviewsByItsConversionNeverItsOwnBytes() throws Exception {
+		// Most browsers can't draw a TIFF, and Safari draws only its first page
+		Document tiff = file("scan.tif", new byte[] { 'I', 'I', 42, 0, 8, 0, 0, 0 });
+		String token = signIn(clerk);
+
+		ApiResponse none = get(path(tiff)).token(token).send();
+		byte[] pdf = OfficeFiles.pdf(3);
+		storeConversion(tiff, tiff.getFileVersion(), pdf);
+		ApiResponse converted = get(path(tiff)).token(token).send();
+
+		assertEquals(none.toString(), 404, none.status());
+		assertEquals("no-preview", none.code());
+		assertEquals(converted.toString(), 200, converted.status());
+		assertEquals("application/pdf", converted.header("Content-Type"));
+		assertArrayEquals(pdf, converted.body());
+	}
+
+	@Test
 	public void testPictureRunsNoScriptWhenVisitedDirectly() throws Exception {
 		Document svg = file("a.svg", "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"
 				.getBytes(java.nio.charset.StandardCharsets.UTF_8));

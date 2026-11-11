@@ -133,9 +133,29 @@
 }
 
 .back {
+  display: flex;
   flex: none;
+  align-items: center;
+  gap: var(--hd-space-2);
   padding: var(--hd-space-2) var(--hd-space-4);
   border-bottom: 1px solid var(--hd-line);
+}
+
+/* A link that looks like the quiet button beside it */
+.download {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-1);
+  min-height: 26px;
+  padding: 0 var(--hd-space-2);
+  border-radius: var(--hd-radius);
+  color: inherit;
+  text-decoration: none;
+}
+
+.download:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
 }
 
 .message {

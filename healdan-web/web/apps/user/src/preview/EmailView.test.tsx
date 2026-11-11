@@ -133,6 +133,59 @@ describe('EmailView', () => {
     expect(api.callsTo(part)).toHaveLength(0)
   })
 
+  it('previews a PDF or a picture by its name when the sender sent it as a plain file, and downloads a TIFF', async () => {
+    const attachments = [
+      { index: 4, name: 'Report.pdf', type: 'application/octet-stream', size: 1_000, message: false, docNumber: null },
+      { index: 5, name: 'Logo.JPG', type: 'application/octet-stream', size: 1_000, message: false, docNumber: null },
+      // Most browsers can't draw a TIFF, and Safari draws only its first page
+      { index: 6, name: 'Fax.tif', type: 'image/tiff', size: 1_000, message: false, docNumber: null },
+    ]
+    renderPreview(<EmailView document={mail} />, { [message]: messageView({ attachments }) })
+
+    expect(await screen.findByRole('button', { name: 'Preview Report.pdf' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Preview Logo.JPG' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Download Fax.tif' }).getAttribute('href')).toBe('/api/v1/documents/10388/message/parts/6')
+    expect(screen.queryByRole('button', { name: 'Preview Fax.tif' })).toBeNull()
+  })
+
+  it('offers Download beside Back to Message for the attachment shown, whether or not it could be drawn', async () => {
+    renderPreview(<EmailView document={mail} />, { [message]: messageView(), [part]: () => problem(404, 'no-preview') })
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview Contract.pdf' }))
+
+    expect(await screen.findByText("There's no preview for this kind of file.")).toBeTruthy()
+    const link = screen.getByRole('link', { name: 'Download Contract.pdf' })
+    expect(link.getAttribute('href')).toBe('/api/v1/documents/10388/message/parts/1')
+    expect(link.getAttribute('download')).toBe('Contract.pdf')
+  })
+
+  it('offers no Download of the attachment shown to someone who may not download the email', async () => {
+    renderPreview(<EmailView document={{ ...mail, canOpen: false }} />, { [message]: messageView(), [part]: () => pdfResponse() })
+    fireEvent.click(await screen.findByRole('button', { name: 'Preview Contract.pdf' }))
+
+    await screen.findByText('Page 1 of 3')
+    expect(screen.queryByRole('link', { name: 'Download Contract.pdf' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Download Contract.pdf' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it("reads a version's message, its body, its attachments and Save to Matter", async () => {
+    const versioned = 'POST /v1/documents/10388/message/attachments/1/file?version=1.0'
+    const { api } = renderPreview(<EmailView document={mail} version="1.0" />, {
+      [message]: messageView(),
+      [part]: () => pdfResponse(),
+      [versioned]: () => document({ docNumber: 10500, name: 'Contract.pdf' }),
+    })
+
+    expect((await screen.findByTitle('Message Body')).getAttribute('src')).toBe('/api/v1/documents/10388/message/body?version=1.0')
+    expect(api.callsTo(message)[0]?.query).toEqual({ version: '1.0' })
+    expect(screen.getByRole('link', { name: 'Download Schedule.xlsx' }).getAttribute('href')).toBe('/api/v1/documents/10388/message/parts/3?version=1.0')
+    fireEvent.click(screen.getByRole('button', { name: 'Save to Matter: Contract.pdf' }))
+    await waitFor(() => expect(api.callsTo(versioned)).toHaveLength(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview Contract.pdf' }))
+    await screen.findByText('Page 1 of 3')
+    expect(api.callsTo(part)[0]?.query).toEqual({ inline: 'true', version: '1.0' })
+  })
+
   it('saves an attachment to the matter, and its chip then shows its #', async () => {
     let filed: number | null = null
     const { api } = renderPreview(<EmailView document={mail} />, {

@@ -57,6 +57,7 @@ export function kindOf(name: string): S['DocumentView']['kind'] {
     png: 'picture',
     jpg: 'picture',
     tif: 'picture',
+    heic: 'picture',
   }
   return kinds[name.slice(name.lastIndexOf('.') + 1).toLowerCase()] ?? 'other'
 }

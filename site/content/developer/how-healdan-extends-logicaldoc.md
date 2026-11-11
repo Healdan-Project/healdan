@@ -112,7 +112,8 @@ learn from.
   - **Its policy.** A path with a file extension that the jar holds is a file, and so is any under `assets/`, where
     Vite writes the build's files: served, or `404` when the jar has none, so a stale page fails loudly. Any other
     path, `/app/doc/10388.2` too, is an address inside the app, answered with `index.html`, which the app routes in
-    the browser. Hashed files under `assets/` are cached for a year, and everything else is `no-store`. Only `GET`
+    the browser. Hashed files under `assets/` are cached for a year, PDF.js's data under `pdfjs/` is `no-cache` with
+    an `ETag`, and everything else is `no-store`. Only `GET`
     and `HEAD` are allowed. A path that could leave the app's folder is never read: it gets `index.html` or `404`.
   - **Its sign-in check.** A page load needs the web session the API's route would accept, its user included
     (`WebSessionRoute`), so a disabled account goes to the sign-in page rather than to an app that can't load

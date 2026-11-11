@@ -43,6 +43,7 @@ import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.NewDocument;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.docnumber.LegacyDocNumbers;
+import com.logicaldoc.healdan.email.MediaTypes;
 import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.listing.FileKinds;
 import com.logicaldoc.healdan.navigation.RecentDocuments;
@@ -314,7 +315,7 @@ public class DocumentResource {
 	 * @return the file version that holds that version's file, and the file's name
 	 * @throws ApiProblem {@code 404} if the document has no such version
 	 */
-	private static FileOfVersion fileOf(Document document, String version, long docNumber) throws PersistenceException {
+	static FileOfVersion fileOf(Document document, String version, long docNumber) throws PersistenceException {
 		if (StringUtils.isBlank(version))
 			return new FileOfVersion(document.getFileVersion(), document.getFileName());
 		Version found = VersionDAO.get().findByVersion(document.getId(), version.strip());
@@ -324,7 +325,7 @@ public class DocumentResource {
 				StringUtils.isNotBlank(found.getFileName()) ? found.getFileName() : document.getFileName());
 	}
 
-	private record FileOfVersion(String fileVersion, String fileName) {
+	record FileOfVersion(String fileVersion, String fileName) {
 	}
 
 	/**
@@ -341,9 +342,9 @@ public class DocumentResource {
 	}
 
 	/**
-	 * A document's preview (M6 spec section 9.3): what to show of one version's file in a page. A picture is its own
-	 * bytes, as its own content type; a PDF is its own file; any other file's is the PDF conversion Healdan makes in
-	 * the background ({@link PreviewState}). Read through the checks of the old UI's preview: the Preview permission on
+	 * A document's preview (M6 spec section 9.3): what to show of one version's file in a page. A picture every browser
+	 * draws is its own bytes, as its own content type; a PDF is its own file; any other file's, a TIFF or a HEIC
+	 * included, is its PDF conversion ({@link PreviewState}), which Healdan makes in the background for Office files. Read through the checks of the old UI's preview: the Preview permission on
 	 * top of reading, and not for a document protected by a password. It is not recorded as a download, and needs no
 	 * Download permission.
 	 *
@@ -370,7 +371,8 @@ public class DocumentResource {
 
 			FileOfVersion asked = fileOf(document, version, docNumber);
 			String extension = FilenameUtils.getExtension(asked.fileName());
-			boolean picture = FileKinds.PICTURE.equals(FileKinds.of(extension));
+			// A TIFF or a HEIC isn't shown as itself: most browsers can't draw it, and Safari draws a TIFF's first page only
+			boolean picture = MediaTypes.isDrawnPicture(extension);
 			boolean pdf = "pdf".equalsIgnoreCase(extension);
 			if (!picture) {
 				PreviewState state = PreviewState.of(document, asked.fileVersion(), asked.fileName());

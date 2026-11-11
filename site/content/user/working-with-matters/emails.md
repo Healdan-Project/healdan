@@ -15,12 +15,15 @@ Select a filed email and press **Space**, or dock the preview as the reading pan
 - **The top of it** is the subject, then **From**, **To**, **Cc**, **Sent** and **Received**. A line the message
   doesn't have is left out.
 - **The attachments** are chips under them, each with its size. Click a PDF's or a picture's to see it in place of the
-  message, with **Back to Message** to return. Any other file downloads when you click its chip.
+  message, with **Back to Message** to return and **Download** to save the file. Healdan knows one by its type or by
+  its name, as some mail programs send every file as a plain file. Any other file, a TIFF or a HEIC included,
+  downloads when you click its chip.
 - **Then the message itself,** as the sender wrote it: their fonts, colours, tables and links. Healdan takes out
   anything that could run or fetch something on its own: scripts, forms, embedded pages and plug-ins. A link opens in
   a new window, and the page it opens can't reach back into Healdan.
 
 An `.msg` file reads the same way, with two differences. Its **Received** is its Sent, as it keeps only one date.
+(Its body is its HTML, or else its text: never the RTF that Outlook keeps beside them.)
 And Healdan can't tell its inline pictures from its attachments, so a picture the message shows shows as
 "[Picture not shown]" in the body, and the file is among the attachments.
 
@@ -41,7 +44,8 @@ Pictures sent inside the message always show, up to 2 MB of them in all. Any mor
 **Save to Matter** on an attachment's chip files it as a document of its own, in the same folder as the email,
 with its own doc #. It takes the properties you filed the email with, so a property you filled in applies to it
 too (the email's own From, To, Subject and dates stay the email's, and so does its legacy doc #), and otherwise the
-folder's, as any upload does. Healdan links it to the email, as it does when you file email from Outlook. The chip then says **Saved as # 10412**, as it does when you open an email
+folder's, as any upload does. A value the email has that a new document can't take now, such as an author whose
+account has since been deleted, is left out rather than refusing the save. Healdan links it to the email, as it does when you file email from Outlook. The chip then says **Saved as # 10412**, as it does when you open an email
 whose attachment was filed already.
 
 - **You need to be able to write to the folder,** and to download the email.
