@@ -105,7 +105,7 @@ export function messageView(over: Partial<S['MessageView']> = {}): S['MessageVie
 
 /** One property of a document, as GET /documents/{n}/properties lists it. */
 export function field(over: Partial<S['ProfileField']> = {}): S['ProfileField'] {
-  return { name: 'docclass', label: 'Class', type: 'string', required: false, editable: false, value: null, source: null, inheritedFrom: null, options: null, ...over }
+  return { name: 'docclass', label: 'Class', type: 'string', required: false, editable: false, value: null, source: null, inheritedFrom: null, overrides: null, options: null, ...over }
 }
 
 /** One row of GET /documents/{n}/versions. */

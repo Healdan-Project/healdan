@@ -64,7 +64,7 @@ describe('Editing properties', () => {
     expect((within(panel).getByRole('combobox', { name: /Class/ }) as HTMLSelectElement).required).toBe(true)
     expect(within(panel).getByText('*')).toBeTruthy()
     expect((within(panel).getByRole('textbox', { name: 'Comments' }) as HTMLInputElement).value).toBe('Chase on Monday')
-    expect((within(panel).getByRole('spinbutton', { name: 'Pages' }) as HTMLInputElement).value).toBe('12')
+    expect((within(panel).getByRole('textbox', { name: 'Pages' }) as HTMLInputElement).value).toBe('12')
     expect((within(panel).getByRole('checkbox', { name: 'Signed' }) as HTMLInputElement).checked).toBe(false)
     expect(within(panel).getByRole('spinbutton', { name: /month/i }).textContent).toBe('11')
     await expectNoAxeViolations(panel)
@@ -127,6 +127,36 @@ describe('Editing properties', () => {
     expect(api.callsTo('PATCH /v1/documents/10388/properties')).toHaveLength(1)
   })
 
+  it("saves against what the form opened with, so a refetch while it's open doesn't send what someone else changed", async () => {
+    let patched: unknown
+    let fields = profile()
+    let doc = letter
+    await renderApp(
+      '/folders/7?sel=10388',
+      routes(profile(), {
+        'GET /v1/documents/10388': () => doc,
+        'GET /v1/documents/10388/properties': () => page(fields),
+        // The check-out asks for the properties again while the form is open
+        'POST /v1/documents/10388/checkout': () => {
+          fields = profile({ legacydocnum: { value: 'LEG-2' }, pages: { value: 99 } })
+          return (doc = document({ ...letter, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: null, device: null } }))
+        },
+        'PATCH /v1/documents/10388/properties': ({ body }: { body?: unknown }) => {
+          patched = body
+          return page(fields)
+        },
+      }),
+    )
+    const panel = await edit()
+    await userEvent.type(within(panel).getByRole('textbox', { name: 'Comments' }), '!')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Check Out' }))
+    await waitFor(() => expect(within(panel).getByText(/Checked out by you/)).toBeTruthy())
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
+
+    // Only Comments, which the person edited: not Legacy Doc # or Pages, which changed under the form
+    await waitFor(() => expect(patched).toEqual({ values: { comments: 'Chase on Monday!' } }))
+  })
+
   it('sends a changed date, number and yes-no as the API takes them, and clears a property that was emptied', async () => {
     let patched: unknown
     await renderApp(
@@ -139,14 +169,54 @@ describe('Editing properties', () => {
       }),
     )
     const panel = await edit()
-    const pages = within(panel).getByRole('spinbutton', { name: 'Pages' })
+    const pages = within(panel).getByRole('textbox', { name: 'Pages' })
     await userEvent.clear(pages)
-    await userEvent.type(pages, '14.5')
+    await userEvent.type(pages, '14')
     await userEvent.click(within(panel).getByRole('checkbox', { name: 'Signed' }))
+    await userEvent.click(within(panel).getByRole('spinbutton', { name: /day/i }))
+    await userEvent.keyboard('05')
     await userEvent.clear(within(panel).getByRole('textbox', { name: 'Legacy Doc #' }))
     await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(patched).toEqual({ values: { pages: 14.5, signed: true, legacydocnum: null } }))
+    await waitFor(() => expect(patched).toEqual({ values: { reviewdate: '2026-11-05T00:00:00Z', pages: 14, signed: true, legacydocnum: null } }))
+  })
+
+  it('shows a number field that is not a number as an error, and sends nothing, instead of clearing it', async () => {
+    const { api } = await renderApp('/folders/7?sel=10388', routes(profile()))
+    const panel = await edit()
+    const pages = within(panel).getByRole('textbox', { name: 'Pages' })
+    await userEvent.clear(pages)
+    await userEvent.type(pages, '12x')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(pages.getAttribute('aria-invalid')).toBe('true'))
+    expect(within(panel).getByText("That isn't the right kind of value.")).toBeTruthy()
+    // An integer isn't a decimal either
+    await userEvent.clear(pages)
+    await userEvent.type(pages, '1.5')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(pages.getAttribute('aria-invalid')).toBe('true'))
+    expect(api.callsTo('PATCH /v1/documents/10388/properties')).toHaveLength(0)
+  })
+
+  it("leaves a property the API says can't be changed as text, even in a form that can change the rest", async () => {
+    await renderApp('/folders/7?sel=10388', routes(profile({ pages: { editable: false }, signed: { editable: false } })))
+    const panel = await edit()
+    expect(within(panel).queryByRole('textbox', { name: 'Pages' })).toBeNull()
+    expect(within(panel).queryByRole('checkbox', { name: 'Signed' })).toBeNull()
+    expect(within(panel).getByText('Pages').nextElementSibling?.textContent).toBe('12')
+    // Comments, which can be changed, is still a field
+    expect(within(panel).getByRole('textbox', { name: 'Comments' })).toBeTruthy()
+  })
+
+  it('marks a required date as the other required fields are, to a screen reader too', async () => {
+    await renderApp('/folders/7?sel=10388', routes(profile({ reviewdate: { required: true }, signed: { required: true } })))
+    const panel = await edit()
+    expect(within(panel).getByRole('group', { name: /Review Date/ }).getAttribute('aria-required') ?? within(panel).getAllByRole('spinbutton', { name: /day/i })[0]!.getAttribute('aria-required')).toBe('true')
+    // A required yes-or-no is answered either way, so No is fine: the box isn't a required one
+    const signed = within(panel).getByRole('checkbox', { name: /Signed/ }) as HTMLInputElement
+    expect(signed.required).toBe(false)
+    expect(signed.closest('label')?.textContent).toContain('*')
   })
 
   it('saves nothing when nothing changed, and Cancel leaves the properties as they were', async () => {
@@ -174,7 +244,7 @@ describe('Editing properties', () => {
     await renderApp('/folders/7?sel=10388', routes(profile(), { 'PATCH /v1/documents/10388/properties': refused }))
     const panel = await edit()
     await userEvent.type(within(panel).getByRole('textbox', { name: 'Comments' }), '!')
-    await userEvent.type(within(panel).getByRole('spinbutton', { name: 'Pages' }), '1')
+    await userEvent.type(within(panel).getByRole('textbox', { name: 'Pages' }), '1')
     await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
 
     const comments = within(panel).getByRole('textbox', { name: 'Comments' })
@@ -195,9 +265,11 @@ describe('Editing properties', () => {
     expect(within(panel).getByRole('button', { name: 'Save' })).toBeTruthy()
   })
 
-  it('shows an override as Overridden with Follow Folder, which sends null for it', async () => {
+  it('shows a value that takes the place of a folder\'s as Overridden with Follow Folder, which sends null for it', async () => {
     let patched: unknown
-    const fields = profile({ docclass: { source: 'local', inheritedFrom: null } })
+    const folderRef = { id: 7, name: 'Correspondence', kind: 'folder' as const }
+    // Class overrides Correspondence's; Comments and Pages are local too, but no folder would supply them
+    const fields = profile({ docclass: { source: 'local', inheritedFrom: null, overrides: folderRef } })
     await renderApp(
       '/folders/7?sel=10388',
       routes(fields, {
@@ -208,9 +280,9 @@ describe('Editing properties', () => {
       }),
     )
     const panel = await edit()
-    // Comments is local too, but it belongs to the one document and doesn't pass down: not an override
-    expect(within(panel).getAllByText('Overridden').length).toBeGreaterThan(0)
+    expect(within(panel).getAllByText('Overridden')).toHaveLength(1)
     expect(within(panel).queryByRole('button', { name: 'Follow Folder: Comments' })).toBeNull()
+    expect(within(panel).queryByRole('button', { name: 'Follow Folder: Pages' })).toBeNull()
     expect(within(panel).queryByRole('button', { name: 'Follow Folder: Subclass' })).toBeNull()
     await userEvent.click(within(panel).getByRole('button', { name: 'Follow Folder: Class' }))
     expect(within(panel).getByText('Follows the folder.')).toBeTruthy()
@@ -218,6 +290,24 @@ describe('Editing properties', () => {
     await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
 
     await waitFor(() => expect(patched).toEqual({ values: { docclass: null } }))
+  })
+
+  it('shows a plain local value as a plain value, which clearing it clears', async () => {
+    let patched: unknown
+    await renderApp(
+      '/folders/7?sel=10388',
+      routes(profile(), {
+        'PATCH /v1/documents/10388/properties': ({ body }: { body?: unknown }) => {
+          patched = body
+          return page(profile())
+        },
+      }),
+    )
+    const panel = await edit()
+    expect(within(panel).queryByText('Overridden')).toBeNull()
+    await userEvent.clear(within(panel).getByRole('textbox', { name: 'Comments' }))
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(patched).toEqual({ values: { comments: null } }))
   })
 
   it('shows no Overridden for a value the document inherits', async () => {
@@ -245,4 +335,3 @@ describe('Editing properties', () => {
   })
 })
 
-void document

@@ -14,7 +14,7 @@ export { CheckField, SelectField, TextField, type CheckFieldProps, type SelectFi
 export { Dialog, type DialogProps } from './components/Dialog'
 export { Overlay, type OverlayProps } from './components/Overlay'
 export { ComboBox, type ComboBoxOption, type ComboBoxProps, type ComboBoxSection } from './components/ComboBox'
-export { Toast, ToastRegion, clearToasts, toast } from './components/Toast'
+export { Toast, ToastRegion, clearToasts, toast, toastWithLink } from './components/Toast'
 export { Icon, type IconName } from './icons'
 export { formatDate, formatDateTime, formatDay, formatList, formatSize, formatVersion } from './format'
 export { plural, setLabels, strings, t } from './strings'

@@ -122,12 +122,15 @@ view.
   cares imports `launch` and reads its calls.
 - **Open** (`openInApp.ts`, ported from the old UI's `HealdanOpenInApp` with the same cases in its test) builds
   `healdan://open/<doc #>?server=<host>` for the kinds the helper opens, and downloads any other. `OpenInAppProvider`,
-  in the frame, shows the notice ("If nothing opened, install the Healdan Helper") and gives `useOpenInApp()` to
+  in the frame, shows the notice ("If nothing opened, install the Healdan Helper") as a toast with a link, for 15
+  seconds (`toastWithLink` in `@healdan/ui`; the Toast region is above Quick Look and outside what its dialog hides), and gives `useOpenInApp()` to
   Open buttons, Quick Look and the lists. Double-click and Enter on a row go through `useOpenKey`, on every list of
   documents, as Space goes through `usePreviewKey`; a document the person can't download (`canOpen`) is only selected.
 - **Download** (`download.ts`) is `launch` on `GET /v1/documents/{n}/content`, with `?version=` for a version. The web
-  session carries it, as it does for an email's attachment chip. A refusal the server makes is a file the browser
-  saves, since no script sees the answer; `canOpen` disables the button for the usual one.
+  session carries it, as it does for an email's attachment chip. A refusal the server makes after the click (a
+  `503 storage-unreachable`, a `500`) is the browser's: it shows a failed download, or some browsers save the small
+  answer as a file, and the app sees none of it. `canOpen` disables the button for the usual refusal, a missing
+  permission or a password.
 - **Check Out, Check In and Release** (`checkout.ts`, `useCheckout.ts`, `CheckoutControls.tsx`) follow the document's
   `hold`. The web session is no device, so the app never takes over a check-out a device holds (`409
   held-elsewhere`): it says who has it and since when, and that it's released on that computer or in the Classic
@@ -135,9 +138,9 @@ view.
   `ifHeld` and `ifVersion`. Every outcome asks for the document and the lists again.
 - **Editing properties** is `details/PropertiesForm.tsx`, made from `GET /v1/documents/{n}/properties` and saved with
   `PATCH`, sending only the fields that changed. `frame/errors.ts`'s `fieldErrors` gives each field a 422 names its
-  message from the catalogue (`fields.<code>`). The API doesn't say whether a `local` value overrides an inherited one,
-  so the form calls a local value **Overridden** unless the property belongs to one document (Author, Typist,
-  Comments, Legacy doc #); **Follow Folder** sends `null`.
+  message from the catalogue (`fields.<code>`). **Overridden** shows only where the API's `overrides` names the folder a
+  `local` value takes the place of, and **Follow Folder** sends `null`; a local value with no folder behind it is a plain
+  value. Save compares with the list the form opened with, not the live one, which a refetch can change under it.
 
 ## The Search Box and Search Results
 

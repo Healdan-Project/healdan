@@ -157,6 +157,25 @@ describe('QuickLook', () => {
     expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10391/content', 'Delta.pdf')
   })
 
+  it('shows the helper notice above Quick Look, outside what the dialog hides, with its link and dismiss reachable', async () => {
+    await renderApp('/folders/7?sel=10391', routes())
+    await spaceOn('Delta.pdf')
+    const dialog = await quickLook('Delta.pdf')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Open' }))
+
+    const link = await screen.findByRole('link', { name: 'install the Healdan Helper' })
+    expect(link.closest('[aria-hidden="true"], [inert]')).toBeNull()
+    expect(link.parentElement?.textContent).toBe('If nothing opened, install the Healdan Helper.')
+    expect(dialog.contains(link)).toBe(false)
+    link.focus()
+    expect(window.document.activeElement).toBe(link)
+    const dismiss = within(screen.getByRole('region', { name: 'Notifications' })).getByRole('button', { name: 'Dismiss' })
+    dismiss.focus()
+    expect(window.document.activeElement).toBe(dismiss)
+    // Each is found by role, so a screen reader reaches them too
+    expect(screen.getByRole('link', { name: 'install the Healdan Helper' })).toBeTruthy()
+  })
+
   it('previews a version from the details, and downloads that version; Open is for the current file only', async () => {
     const { api } = await renderApp('/folders/7?sel=10391', routes())
     await userEvent.click(await screen.findByRole('button', { name: 'Preview Version 2' }))

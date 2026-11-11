@@ -17,12 +17,14 @@ export type HoldState =
   /** The person's own check-out on a computer, which releases it */
   | { kind: 'yourDevice'; hold: S['HoldView'] }
   | { kind: 'theirs'; hold: S['HoldView'] }
-  | { kind: 'locked'; hold: S['HoldView'] }
+  /** `mine` when the person took the lock themselves */
+  | { kind: 'locked'; hold: S['HoldView']; mine: boolean }
 
 export function holdState(hold: S['HoldView'] | null, meId: number | undefined): HoldState {
   if (!hold) return { kind: 'free' }
-  if (hold.kind === 'lock') return { kind: 'locked', hold }
-  if (meId !== undefined && hold.by?.id === meId) return hold.device ? { kind: 'yourDevice', hold } : { kind: 'yours', hold }
+  const mine = meId !== undefined && hold.by?.id === meId
+  if (hold.kind === 'lock') return { kind: 'locked', hold, mine }
+  if (mine) return hold.device ? { kind: 'yourDevice', hold } : { kind: 'yours', hold }
   return { kind: 'theirs', hold }
 }
 
@@ -40,7 +42,7 @@ export function holdSentence(state: HoldState): string | undefined {
     case 'theirs':
       return [since ? t('hold.theirs', { who, since }) : t('hold.theirsUndated', { who }), t('hold.releaseTheirs')].join(' ')
     case 'locked':
-      return [since ? t('hold.locked', { who, since }) : t('hold.lockedUndated', { who }), t('hold.unlock')].join(' ')
+      return [state.mine ? (since ? t('hold.lockedYou', { since }) : t('hold.lockedYouUndated')) : since ? t('hold.locked', { who, since }) : t('hold.lockedUndated', { who }), t('hold.unlock')].join(' ')
   }
 }
 

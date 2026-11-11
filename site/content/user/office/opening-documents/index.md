@@ -19,8 +19,8 @@ on it. The document opens in the app you've chosen for its kind in the helper's 
 - **The first time,** your browser asks whether this page may open Healdan Helper. Allow it, and tick the box to
   remember, if there is one.
 - **A notice appears:** "If nothing opened, install the Healdan Helper", with a link to
-  [Installing the Healdan Helper](../installing-the-helper/). If the document did open, ignore it. It goes after a
-  few seconds, or when you dismiss it.
+  [Installing the Healdan Helper](../installing-the-helper/). If the document did open, ignore it. It stays for 15
+  seconds, or until you dismiss it, and shows over Quick Look too.
 - **Use one address,** as below.
 
 Double-clicking and **Enter** work in every list of documents: a folder, search results, Recent Documents and the

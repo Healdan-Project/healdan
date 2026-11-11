@@ -14,7 +14,7 @@ type S = components['schemas']
 export type DetailsContext = 'folder' | 'search'
 
 // The fields of an email, which the server fills from the message; a document that isn't one has them empty.
-export const emailFields = ['emailfrom', 'emailto', 'emailsent', 'emailreceived']
+const emailFields = ['emailfrom', 'emailto', 'emailsent', 'emailreceived']
 
 export function textOf(field: S['ProfileField'] | undefined): string {
   const value = field?.value

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { launch } from '../actions/launch'
@@ -103,6 +103,26 @@ describe('Check Out, Check In and Release in the details', () => {
     expect(within(panel).queryByRole('button', { name: /Check Out|Check In|Release/ })).toBeNull()
   })
 
+  it('says a lock you took yourself is yours, as the check-out does', async () => {
+    const mine = document({ ...letter, canEdit: false, hold: held({ kind: 'lock' }) })
+    await renderApp('/folders/7?sel=10388', routes(mine))
+    expect(await within(await details()).findByText(/^Locked by you since/)).toBeTruthy()
+    expect(within(await details()).queryByText(/Locked by Priya Nair/)).toBeNull()
+  })
+
+  it('offers only files of the document\'s kind to check in, and says so when the server refuses another', async () => {
+    const mine = document({ ...letter, hold: held() })
+    const refused = problem(422, 'validation')
+    const body = { code: 'validation', fields: [{ field: 'file', code: 'extension', detail: 'English from the server' }] }
+    await renderApp('/folders/7?sel=10388', routes(mine, { 'POST /v1/documents/10388/versions': Object.assign(refused, { body }) }))
+    const input = (await details()).querySelector<HTMLInputElement>('input[type="file"]')!
+    expect(input.accept).toBe('.pdf')
+    await userEvent.upload(input, new File(['x'], 'other.pdf', { type: 'application/pdf' }), { applyAccept: false })
+
+    expect(await screen.findByText('The file has to be the same kind as the document, with the same extension.')).toBeTruthy()
+    expect(screen.queryByText('Some details need fixing.')).toBeNull()
+  })
+
   it('says a lock is undone in the Classic Interface', async () => {
     const locked = document({ ...letter, canEdit: false, hold: held({ kind: 'lock', by: { id: 9, name: 'Alex Marsh' } }) })
     await renderApp('/folders/7?sel=10388', routes(locked))
@@ -121,7 +141,7 @@ describe('Check Out, Check In and Release in the details', () => {
     )
     await userEvent.click(await button('Release'))
 
-    await waitFor(() => expect(within(details_()).queryByText(/Checked out by you/)).toBeNull())
+    await waitFor(async () => expect(within(await details()).queryByText(/Checked out by you/)).toBeNull())
     expect(api.callsTo('DELETE /v1/documents/10388/checkout')).toHaveLength(1)
     expect(await button('Check Out')).toBeTruthy()
   })
@@ -155,6 +175,13 @@ describe('Check Out, Check In and Release in the details', () => {
     await waitFor(() => expect(api.callsTo('GET /v1/documents/10388').length).toBeGreaterThan(1))
   })
 
+  it('keeps Preview on each version for a person who may not download, and disables only its Download', async () => {
+    await renderApp('/folders/7?sel=10388', routes(document({ ...letter, canOpen: false })))
+    const panel = await details()
+    expect(((await within(panel).findByRole('button', { name: 'Preview Version 2.1' })) as HTMLButtonElement).disabled).toBe(false)
+    expect((within(panel).getByRole('button', { name: 'Download Version 2.1' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('disables Check Out when the person may not write the document', async () => {
     await renderApp('/folders/7?sel=10388', routes(document({ ...letter, canEdit: false })))
     expect((await button('Check Out')).hasAttribute('disabled')).toBe(true)
@@ -168,9 +195,3 @@ describe('Check Out, Check In and Release in the details', () => {
   })
 })
 
-// The panel is rendered once; looked up again after a change
-function details_(): HTMLElement {
-  return screen.getByRole('region', { name: 'Details' })
-}
-
-void fireEvent

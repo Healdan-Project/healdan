@@ -29,6 +29,8 @@ export interface DatePickerProps {
   /** The earliest and latest day it takes, as 2026-11-02 */
   min?: string
   max?: string
+  /** A required day has a mark after its label, and says so to a screen reader */
+  required?: boolean
   /** What is wrong with the day, shown under the field and tied to it for a screen reader */
   error?: string
 }
@@ -43,7 +45,7 @@ function day(text?: string) {
 }
 
 /** A day typed in parts (month, day, year in the person's order), or picked from a calendar. Days go in and out as 2026-11-02. */
-export function DatePicker({ label, value, onChange, min, max, error }: DatePickerProps) {
+export function DatePicker({ label, value, onChange, min, max, required, error }: DatePickerProps) {
   // The field keeps what is typed so far, which may not be a day the caller should hear of yet. It's replaced when the
   // caller's value changes (compared with the caller's last value, not with what the field reported, so a caller that
   // keeps its own value while the field is half typed doesn't blank it), adjusted during render, not in an effect.
@@ -64,10 +66,14 @@ export function DatePicker({ label, value, onChange, min, max, error }: DatePick
         onChange(next ? next.toString() : undefined)
       }}
       isInvalid={error ? true : undefined}
+      isRequired={required}
       minValue={day(min)}
       maxValue={day(max)}
     >
-      <Label className={styles.label}>{label}</Label>
+      <Label className={styles.label}>
+        {label}
+        {required && <span aria-hidden> *</span>}
+      </Label>
       <Group className={styles.group}>
         <DateInput className={styles.input}>{(segment) => <DateSegment className={styles.segment} segment={segment} />}</DateInput>
         <AriaButton className={styles.open}>

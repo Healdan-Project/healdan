@@ -6,6 +6,7 @@ import { useState, type FormEvent } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import { Button, CheckField, DatePicker, SelectField, t, TextField, toast } from '@healdan/ui'
 import { fieldErrors, messageFor } from '../frame/errors'
+import { invalidateDocumentLists } from '../actions/refresh'
 import { keys } from '../queries'
 import { useApi } from '../services'
 import { Section } from './Section'
@@ -17,9 +18,6 @@ type Field = S['ProfileField']
 
 // Client and Matter come from the matter, and the email fields from the message: never edited here, whatever `editable` says
 const NEVER = new Set(['client', 'matter', 'emailfrom', 'emailto', 'emailcc', 'emailsubject', 'emailsent', 'emailreceived'])
-// Properties that belong to one document and don't pass down from a folder (the User Guide's Properties Pass Down), so a
-// value of theirs is never an override
-const OWN = new Set(['author', 'typist', 'comments', 'legacydocnum'])
 const FORM_TYPES = new Set<Field['type']>(['string', 'integer', 'decimal', 'date', 'boolean'])
 
 const isEditable = (field: Field) => field.editable && !NEVER.has(field.name) && FORM_TYPES.has(field.type)
@@ -33,15 +31,19 @@ function draftOf(field: Field): string {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : ''
 }
 
+const isNumber = (field: Field) => field.type === 'integer' || field.type === 'decimal'
+
+/** Whether what was typed into a number field is a number of its kind: a whole number for an integer */
+function numberOk(field: Field, draft: string): boolean {
+  const number = Number(draft)
+  return draft.trim() !== '' && Number.isFinite(number) && (field.type !== 'integer' || Number.isInteger(number))
+}
+
 /** What a changed field sends: null to clear it, or to follow the folder again */
 function valueOf(field: Field, draft: string): S['PropertyValue'] {
   if (field.type === 'boolean') return draft === 'true'
-  if (draft === '') return null
-  if (field.type === 'integer' || field.type === 'decimal') {
-    const number = Number(draft)
-    // Not a number: the server says so for this field, in its own words from the catalogue
-    return Number.isFinite(number) ? number : draft
-  }
+  if (draft.trim() === '') return null
+  if (isNumber(field)) return Number(draft)
   return field.type === 'date' ? `${draft}T00:00:00Z` : draft
 }
 
@@ -60,7 +62,10 @@ export interface PropertiesFormProps {
 export function PropertiesForm({ document, fields, onClose }: PropertiesFormProps) {
   const api = useApi()
   const queryClient = useQueryClient()
-  const [drafts, setDrafts] = useState(() => new Map(fields.filter(isEditable).map((field) => [field.name, draftOf(field)])))
+  // What the form opened with: Save compares with it, not with the live list, which a refetch can change under the form
+  // (after a check-out, or on returning to the window) and which would then send a value the person never touched
+  const [opened] = useState(fields)
+  const [drafts, setDrafts] = useState(() => new Map(opened.filter(isEditable).map((field) => [field.name, draftOf(field)])))
   const [following, setFollowing] = useState<Set<string>>(() => new Set())
   const [errors, setErrors] = useState<Map<string, string>>(() => new Map())
   const [busy, setBusy] = useState(false)
@@ -71,7 +76,7 @@ export function PropertiesForm({ document, fields, onClose }: PropertiesFormProp
       const next = new Map(now).set(name, value)
       // A Subclass that doesn't belong to the new Class is cleared, as the server would refuse it
       if (name === 'docclass') {
-        const subclass = fields.find((field) => field.name === 'docsubclass')
+        const subclass = opened.find((field) => field.name === 'docsubclass')
         const own = subclass?.options?.find((option) => option.value === next.get('docsubclass'))
         if (own?.class && own.class !== value) next.set('docsubclass', '')
       }
@@ -92,7 +97,7 @@ export function PropertiesForm({ document, fields, onClose }: PropertiesFormProp
   // Only what changed: the value, or null where the person chose to follow the folder
   function changes(): Record<string, S['PropertyValue']> {
     const values: Record<string, S['PropertyValue']> = {}
-    for (const field of fields.filter(isEditable)) {
+    for (const field of opened.filter(isEditable)) {
       if (following.has(field.name)) values[field.name] = null
       else if (draft(field.name) !== draftOf(field)) values[field.name] = valueOf(field, draft(field.name))
     }
@@ -103,18 +108,24 @@ export function PropertiesForm({ document, fields, onClose }: PropertiesFormProp
     event.preventDefault()
     const values = changes()
     if (Object.keys(values).length === 0) return onClose()
+    // A number field that isn't a number is an error to fix, not a value to clear
+    const notNumbers = opened.filter((field) => isEditable(field) && isNumber(field) && field.name in values && values[field.name] !== null && !numberOk(field, draft(field.name)))
+    if (notNumbers.length > 0) {
+      setErrors(new Map(notNumbers.map((field) => [field.name, t('fields.type')])))
+      return
+    }
     setBusy(true)
     try {
       const saved = await api.send<{ items: Field[] }>('PATCH', apiPath`/v1/documents/${document.docNumber}/properties`, { values })
       queryClient.setQueryData(keys.properties(document.docNumber), saved)
       // The save is a new version, and the lists show its date and number
-      await Promise.all(['documents', 'folders', 'search'].map((root) => queryClient.invalidateQueries({ queryKey: [root] })))
+      await invalidateDocumentLists(queryClient)
       onClose()
     } catch (error) {
       const marked = fieldErrors(error)
       setErrors(marked)
       // A refusal that marks no field of the form (a hold, a permission) is a message of its own
-      if (![...marked.keys()].some((name) => drafts.has(name))) toast(messageFor(error))
+      if (![...marked.keys()].some((name) => drafts.has(name))) toast([...marked.values()][0] ?? messageFor(error))
     } finally {
       setBusy(false)
     }
@@ -146,7 +157,8 @@ export function PropertiesForm({ document, fields, onClose }: PropertiesFormProp
           }
           const name = field.name
           const error = errors.get(name)
-          const overridden = field.source === 'local' && !OWN.has(name) && !following.has(name)
+          // A value takes the place of a folder's only when the API names that folder; any other local value is just a value
+          const overridden = field.source === 'local' && field.overrides !== null && !following.has(name)
           const choices = (field.options ?? []).filter((option) => name !== 'docsubclass' || !option.class || option.class === classDraft || classDraft === '')
           return (
             <div key={name} className={styles.formField}>
@@ -168,9 +180,9 @@ export function PropertiesForm({ document, fields, onClose }: PropertiesFormProp
               ) : field.type === 'boolean' ? (
                 <CheckField label={field.label} required={field.required} error={error} checked={draft(name) === 'true'} onChange={(checked) => change(name, String(checked))} />
               ) : field.type === 'date' ? (
-                <DatePicker label={field.required ? `${field.label} *` : field.label} error={error} value={draft(name) || undefined} onChange={(day) => change(name, day ?? '')} />
+                <DatePicker label={field.label} required={field.required} error={error} value={draft(name) || undefined} onChange={(day) => change(name, day ?? '')} />
               ) : (
-                <TextField label={field.label} required={field.required} error={error} type={field.type === 'string' ? 'text' : 'number'} value={draft(name)} onChange={(value) => change(name, value)} />
+                <TextField label={field.label} required={field.required} error={error} inputMode={isNumber(field) ? 'decimal' : undefined} value={draft(name)} onChange={(value) => change(name, value)} />
               )}
               {overridden && (
                 <p className={styles.override}>

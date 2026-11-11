@@ -15,7 +15,7 @@ export interface VersionsProps {
   /** There while more are to load */
   onShowMore?: () => void
   loading?: boolean
-  /** Each row's Preview opens Quick Look on that version, and its Download saves that version's file; both are disabled without `canOpen` (the Download permission) */
+  /** Each row's Preview opens Quick Look on that version, and its Download saves that version's file; Download is disabled without `canOpen` (the Download permission); Preview needs the Preview permission instead, which the server checks */
   onPreview?: (version: string) => void
   onDownload?: (version: string) => void
   canOpen?: boolean
@@ -38,7 +38,7 @@ export function Versions({ versions, selected, onShowMore, loading = false, onPr
               {(onPreview || onDownload) && (
                 <span className={styles.versionActions}>
                   {onPreview && (
-                    <Button variant="quiet" isDisabled={!canOpen} aria-label={t('details.versionPreview', { version: formatVersion(row.version) })} onPress={() => onPreview(row.version)}>
+                    <Button variant="quiet" aria-label={t('details.versionPreview', { version: formatVersion(row.version) })} onPress={() => onPreview(row.version)}>
                       {t('details.preview')}
                     </Button>
                   )}

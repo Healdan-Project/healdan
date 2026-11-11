@@ -5,9 +5,10 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { components } from '@healdan/api'
 import { toast } from '@healdan/ui'
-import { messageFor } from '../frame/errors'
+import { fieldErrors, messageFor } from '../frame/errors'
 import { keys, useMe } from '../queries'
 import { useApi } from '../services'
+import { invalidateDocumentLists } from './refresh'
 import { checkIn, checkOut, holdState, release, type HoldState } from './checkout'
 
 type DocumentView = components['schemas']['DocumentView']
@@ -37,11 +38,13 @@ export function useCheckout(document: DocumentView): Checkout {
       const updated = await action()
       queryClient.setQueryData(keys.document(document.docNumber), updated)
     } catch (error) {
-      toast(messageFor(error))
+      // A refusal that names a field (a file of another kind than the document) says what is wrong with it
+      const [first] = fieldErrors(error).values()
+      toast(first ?? messageFor(error))
     } finally {
       setBusy(false)
       // The folder's list, search results and Recent show the hold too
-      await Promise.all(['documents', 'folders', 'search'].map((root) => queryClient.invalidateQueries({ queryKey: [root] })))
+      await invalidateDocumentLists(queryClient)
     }
   }
 

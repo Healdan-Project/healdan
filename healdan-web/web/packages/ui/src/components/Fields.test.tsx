@@ -40,6 +40,25 @@ describe('Fields', () => {
     await expectNoAxeViolations(container)
   })
 
+  it('keeps a value the list no longer has, instead of showing the first option in its place', () => {
+    const options = [
+      { value: 'Letters', label: 'Letters' },
+      { value: 'Invoices', label: 'Invoices' },
+    ]
+    render(<SelectField label="Class" value="Old Class" options={options} onChange={() => {}} />)
+    const select = screen.getByRole('combobox', { name: 'Class' }) as HTMLSelectElement
+    expect(select.value).toBe('Old Class')
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Old Class', 'Letters', 'Invoices'])
+  })
+
+  it('shows nothing chosen, not the first option, for a required list with no value yet', () => {
+    const options = [{ value: 'Letters', label: 'Letters' }]
+    render(<SelectField label="Class" value="" options={options} onChange={() => {}} required />)
+    const select = screen.getByRole('combobox', { name: /Class/ }) as HTMLSelectElement
+    expect(select.value).toBe('')
+    expect(select.selectedOptions[0]?.disabled).toBe(true)
+  })
+
   it('is a yes or no', async () => {
     const onChange = vi.fn()
     const { container } = render(<CheckField label="Signed" checked={false} onChange={onChange} />)

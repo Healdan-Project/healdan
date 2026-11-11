@@ -16,8 +16,9 @@ Select the document and choose **Download**, in the toolbar above the list or in
 Your browser saves the file under the document's name, as it does for any link to a file. Healdan doesn't open the
 file in the page or keep a copy of it there.
 
-If the file can't be reached right now, because it's in cloud storage or on a share that's down, the browser saves
-Healdan's answer in its place, a small file that says so. Try again in a few minutes.
+If the file can't be reached right now, because it's in cloud storage or on a share that's down, the download fails.
+Your browser shows that in its list of downloads, and some browsers save a small file saying why instead. The app
+itself says nothing, as it doesn't see the answer. Try again in a few minutes.
 
 **Open** downloads too, for a kind of file the helper doesn't open, such as a picture or a zip file. Double-clicking a
 document, or pressing **Enter** on it, does what **Open** does. See [Opening Documents](../../office/opening-documents/).

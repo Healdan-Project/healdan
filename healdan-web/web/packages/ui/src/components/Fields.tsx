@@ -18,6 +18,8 @@ export interface TextFieldProps extends FieldProps {
   onChange: (value: string) => void
   /** `number` for a whole or decimal number; text by default */
   type?: 'text' | 'number'
+  /** The keyboard a phone shows; `decimal` for a number typed as text, which a form can then check itself */
+  inputMode?: 'decimal' | 'numeric'
 }
 
 function Mark({ required }: { required?: boolean }) {
@@ -29,14 +31,14 @@ function Mark({ required }: { required?: boolean }) {
 }
 
 /** A one-line field with its label above it. */
-export function TextField({ label, value, onChange, type = 'text', required, error }: TextFieldProps) {
+export function TextField({ label, value, onChange, type = 'text', inputMode, required, error }: TextFieldProps) {
   return (
     <AriaTextField className={styles.field} value={value} onChange={onChange} type={type} isRequired={required} validationBehavior="aria" isInvalid={error ? true : undefined}>
       <Label className={styles.label}>
         {label}
         <Mark required={required} />
       </Label>
-      <Input className={styles.input} step={type === 'number' ? 'any' : undefined} />
+      <Input className={styles.input} inputMode={inputMode} step={type === 'number' ? 'any' : undefined} />
       <FieldError className={styles.error}>{error}</FieldError>
     </AriaTextField>
   )
@@ -94,14 +96,14 @@ export interface CheckFieldProps extends FieldProps {
   onChange: (checked: boolean) => void
 }
 
-/** A yes or no. */
+/** A yes or no. `required` marks it as one to answer: either answer is an answer, so it doesn't have to be ticked. */
 export function CheckField({ label, checked, onChange, required, error }: CheckFieldProps) {
   const id = useId()
   const errorId = `${id}-error`
   return (
     <div className={styles.field}>
       <label className={styles.check} htmlFor={id}>
-        <input id={id} type="checkbox" checked={checked} required={required} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} onChange={(event) => onChange(event.target.checked)} />
+        <input id={id} type="checkbox" checked={checked} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} onChange={(event) => onChange(event.target.checked)} />
         <span>
           {label}
           <Mark required={required} />
