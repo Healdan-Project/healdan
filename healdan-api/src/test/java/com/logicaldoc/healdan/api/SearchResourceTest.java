@@ -4,11 +4,19 @@
 package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.IntFunction;
+import java.util.function.Predicate;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -19,17 +27,22 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.searchengine.SearchEngine;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
+import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.support.BulkHits;
 
 /**
  * {@code GET /v1/search} (spec section 6.3): the old search box's scopes, the
- * {@code #} lookup in the Documents scope, and only what the caller may read.
+ * {@code #} lookup in the Documents scope, and only what the caller may read;
+ * paging past a thousand hits, the filters, the totals and the counts (M6
+ * spec sections 9.2 and 9.5).
  */
 public class SearchResourceTest extends ApiTestCase {
 
@@ -388,5 +401,291 @@ public class SearchResourceTest extends ApiTestCase {
 			assertEquals(q + " " + response, 200, response.status());
 		}
 		assertEquals(List.of(number(d)), docNumbers(items("scope=documents&q=*cornapi", clerk)));
+	}
+
+	/**
+	 * @return a document to copy, in the folder, published since yesterday;
+	 *         it isn't indexed, so no search finds it
+	 */
+	private Document source(Folder folder, String name) throws Exception {
+		Document d = fx.upload(folder, name, "source", clerk);
+		awaitAsyncWork();
+		jdbc().update("update ld_document set ld_startpublishing = ? where ld_id = ?",
+				new Timestamp(System.currentTimeMillis() - 24L * 60 * 60 * 1000), d.getId());
+		return d;
+	}
+
+	/** The documents' doc #s, by id */
+	private Map<Long, Long> numbers(List<Long> ids) {
+		Map<Long, Long> numbers = new LinkedHashMap<>();
+		for (long id : ids)
+			numbers.put(id, Long.parseLong(
+					jdbc().queryForObject("select ld_customid from ld_document where ld_id = ?", String.class, id)));
+		return numbers;
+	}
+
+	private JsonNode page(String query, String token) {
+		ApiResponse response = get("/api/v1/search?" + query).token(token).send();
+		assertEquals(response.toString(), 200, response.status());
+		return response.json();
+	}
+
+	@Test
+	public void testPagesToTheEnd() throws Exception {
+		Document first = source(documents, "first.pdf");
+		BulkHits bulk = new BulkHits();
+		List<Long> ids = bulk.copies(first.getId(), documents, 1500, i -> "kestrel-" + i + ".pdf");
+		bulk.index(ids, "Notes on the kestrelapi");
+		Set<Long> expected = new HashSet<>(numbers(ids).values());
+		String token = signIn(clerk);
+
+		Set<Long> seen = new HashSet<>();
+		for (int offset = 0;; offset += 100) {
+			JsonNode page = page("q=kestrelapi&limit=100&offset=" + offset, token);
+			JsonNode items = page.path("items");
+			items.forEach(item -> assertTrue("seen twice", seen.add(item.path("docNumber").asLong())));
+			if (SearchResource.FACET_WINDOW >= 1500 || offset + 100 >= 1500) {
+				assertEquals(page.toString(), 1500, page.path("total").asLong());
+				assertTrue(page.path("totalAtLeast").isMissingNode());
+			} else {
+				assertTrue(page.path("total").isNull());
+				assertTrue(page.path("totalAtLeast").asLong() >= offset + items.size());
+			}
+			if (items.size() < 100)
+				break;
+		}
+		assertEquals(expected, seen);
+	}
+
+	@Test
+	public void testTotalAtLeastPastTheWindow() throws Exception {
+		Document first = source(documents, "first.docx");
+		BulkHits bulk = new BulkHits();
+		bulk.index(bulk.copies(first.getId(), documents, 12000, i -> "falcon-" + i + ".docx"), "A falconapi");
+		String token = signIn(clerk);
+
+		JsonNode last = page("q=falconapi&offset=9900&limit=100", token);
+		assertEquals(100, last.path("items").size());
+		assertTrue(last.path("total").isNull());
+		assertEquals(SearchResource.MAX_WINDOW, last.path("totalAtLeast").asLong());
+
+		JsonNode beyond = page("q=falconapi&offset=10000&limit=100", token);
+		assertEquals(0, beyond.path("items").size());
+		assertEquals(SearchResource.MAX_WINDOW, beyond.path("totalAtLeast").asLong());
+
+		// The first page counts its window of readable hits
+		JsonNode firstPage = page("q=falconapi&limit=100&facets=type", token);
+		assertEquals(100, firstPage.path("items").size());
+		assertTrue(firstPage.path("total").isNull());
+		assertEquals(SearchResource.FACET_WINDOW, firstPage.path("totalAtLeast").asLong());
+		assertTrue(firstPage.path("facets").path("partial").asBoolean());
+		assertEquals(SearchResource.FACET_WINDOW, firstPage.path("facets").path("type").get(0).path("count").asLong());
+	}
+
+	@Test
+	public void testWidensPastHitsTheCallerCantRead() throws Exception {
+		Folder privileged = privileged();
+		Document hidden = source(privileged, "hidden.pdf");
+		Document shown = source(documents, "shown.pdf");
+		BulkHits bulk = new BulkHits();
+		// Found first, as they come first in the index and score the same
+		List<Long> unreadable = bulk.copies(hidden.getId(), privileged, SearchResource.FACET_WINDOW + 500,
+				i -> "hidden-" + i + ".pdf");
+		List<Long> readable = bulk.copies(shown.getId(), documents, 50, i -> "shown-" + i + ".pdf");
+		List<Long> all = new ArrayList<>(unreadable);
+		all.addAll(readable);
+		bulk.index(all, "Notes on the osprey");
+
+		JsonNode page = page("q=osprey&limit=100", signIn(clerk));
+		assertEquals(50, page.path("items").size());
+		assertEquals(50, page.path("total").asLong());
+		// The admin reads them all, and the first window is full of them
+		JsonNode admin = page("q=osprey&limit=100", signInAdmin());
+		assertEquals(100, admin.path("items").size());
+		assertTrue(admin.path("total").isNull());
+		assertEquals(SearchResource.FACET_WINDOW, admin.path("totalAtLeast").asLong());
+	}
+
+	/**
+	 * @return a folder of the Demo matter's Documents with an ACL of its own,
+	 *         which only the admin reads
+	 */
+	private Folder privileged() throws Exception {
+		Folder folder = fx.folder(documents, "Privileged");
+		folder = FolderDAO.get().findById(folder.getId(), true);
+		folder.setSecurityRef(null);
+		FolderDAO.get().store(folder, fx.folderHistory(fx.admin()));
+		fx.grant(folder, fx.admin().getUserGroup(), Permission.READ, Permission.WRITE);
+		return folder;
+	}
+
+	/** A document of the filters' layout, as it was made */
+	private record Made(long docNumber, String author, String docClass, String kind, boolean recent, String matter,
+			boolean privileged) {
+	}
+
+	/**
+	 * Files 22 documents the clerk reads, in matters 998.1 and 998.2, and 3 in
+	 * a privileged folder of 998.1, all holding the word harrierapi
+	 *
+	 * @return what was made
+	 */
+	private List<Made> filtersLayout() throws Exception {
+		User jclarke = fx.user("jclarke");
+		User treeve = fx.user("treeve");
+		Folder privileged = privileged();
+		Document one = source(documents, "one.pdf");
+		Document two = source(otherDocuments, "two.pdf");
+		Document secret = source(privileged, "secret.pdf");
+
+		BulkHits bulk = new BulkHits();
+		List<Made> made = new ArrayList<>();
+		List<Long> indexed = new ArrayList<>();
+		group(bulk, made, indexed, one, documents, 6, i -> "a-" + i + ".pdf", jclarke, "Correspondence", "pdf", true,
+				"1", false);
+		group(bulk, made, indexed, one, documents, 4, i -> "b-" + i + ".docx", jclarke, "Advice", "word", false, "1",
+				false);
+		group(bulk, made, indexed, one, documents, 5, i -> "c-" + i + ".pdf", treeve, "Correspondence", "pdf", false,
+				"1", false);
+		group(bulk, made, indexed, one, documents, 3, i -> "d-" + i + ".xlsx", treeve, null, "excel", true, "1",
+				false);
+		group(bulk, made, indexed, two, otherDocuments, 4, i -> "e-" + i + ".pdf", treeve, "Correspondence", "pdf",
+				true, "2", false);
+		group(bulk, made, indexed, secret, privileged, 3, i -> "p-" + i + ".pdf", treeve, "Correspondence", "pdf",
+				true, "1", true);
+		bulk.evict(indexed);
+		bulk.index(indexed, "Notes on the harrierapi");
+		return made;
+	}
+
+	private void group(BulkHits bulk, List<Made> made, List<Long> indexed, Document source, Folder folder, int count,
+			IntFunction<String> names, User author, String docClass, String kind, boolean recent, String matter,
+			boolean privileged) {
+		List<Long> ids = bulk.copies(source.getId(), folder, count, names);
+		bulk.set(ids, HealdanConstants.ATTR_AUTHOR, Attribute.Type.USER, author.getUsername(), author.getId());
+		bulk.set(ids, HealdanConstants.ATTR_DOCCLASS, Attribute.Type.STRING, docClass, null);
+		bulk.set(ids, HealdanConstants.ATTR_CLIENT, Attribute.Type.STRING, "998", null);
+		bulk.set(ids, HealdanConstants.ATTR_MATTER, Attribute.Type.STRING, matter, null);
+		Timestamp edited = new Timestamp(System.currentTimeMillis() - (recent ? 0L : 60L * 24 * 60 * 60 * 1000));
+		for (long id : ids)
+			jdbc().update("update ld_document set ld_lastmodified = ? where ld_id = ?", edited, id);
+		numbers(ids).values().forEach(number -> made.add(
+				new Made(number, author.getUsername(), docClass, kind, recent, "998." + matter, privileged)));
+		indexed.addAll(ids);
+	}
+
+	/** The doc #s of what the clerk reads that the filter keeps, worked out by hand */
+	private static Set<Long> byHand(List<Made> made, Predicate<Made> filter) {
+		Set<Long> numbers = new HashSet<>();
+		for (Made m : made)
+			if (!m.privileged() && filter.test(m))
+				numbers.add(m.docNumber());
+		return numbers;
+	}
+
+	private static Set<Long> numbersOf(JsonNode page) {
+		Set<Long> numbers = new HashSet<>();
+		page.path("items").forEach(item -> numbers.add(item.path("docNumber").asLong()));
+		return numbers;
+	}
+
+	@Test
+	public void testFilters() throws Exception {
+		List<Made> made = filtersLayout();
+		String token = signIn(clerk);
+
+		Map<String, Predicate<Made>> filters = new LinkedHashMap<>();
+		filters.put("", m -> true);
+		filters.put("&author=jclarke", m -> m.author().equals("jclarke"));
+		filters.put("&class=Correspondence", m -> "Correspondence".equals(m.docClass()));
+		filters.put("&author=jclarke&class=Correspondence",
+				m -> m.author().equals("jclarke") && "Correspondence".equals(m.docClass()));
+		filters.put("&type=pdf", m -> m.kind().equals("pdf"));
+		filters.put("&type=word&type=excel", m -> m.kind().equals("word") || m.kind().equals("excel"));
+		filters.put("&edited=30d", Made::recent);
+		filters.put("&client=998", m -> true);
+		filters.put("&client=999", m -> false);
+		filters.put("&matter=998.2", m -> m.matter().equals("998.2"));
+		filters.put("&matter=998.1", m -> m.matter().equals("998.1"));
+		filters.put("&author=treeve&type=pdf&matter=998.1",
+				m -> m.author().equals("treeve") && m.kind().equals("pdf") && m.matter().equals("998.1"));
+		filters.put("&author=treeve&edited=30d", m -> m.author().equals("treeve") && m.recent());
+		filters.put("&author=jclarke&author=treeve&class=Advice", m -> "Advice".equals(m.docClass()));
+		for (Map.Entry<String, Predicate<Made>> filter : filters.entrySet()) {
+			JsonNode page = page("q=harrierapi&limit=200" + filter.getKey(), token);
+			Set<Long> expected = byHand(made, filter.getValue());
+			assertEquals(filter.getKey(), expected, numbersOf(page));
+			assertEquals(filter.getKey(), expected.size(), page.path("total").asLong());
+			assertTrue(page.path("facets").isMissingNode());
+		}
+		assertEquals(22, byHand(made, m -> true).size());
+
+		// Paged, filtered: the pages hold every match once
+		Set<Long> paged = new HashSet<>();
+		for (int offset = 0; offset < 15; offset += 4)
+			paged.addAll(numbersOf(page("q=harrierapi&type=pdf&limit=4&offset=" + offset, token)));
+		assertEquals(byHand(made, m -> m.kind().equals("pdf")), paged);
+
+		// The other full-text scopes take them too
+		assertEquals(byHand(made, m -> m.author().equals("jclarke")),
+				numbersOf(page("scope=all&q=harrierapi&limit=200&author=jclarke", token)));
+		assertEquals(0, page("scope=emails&q=harrierapi&author=jclarke", token).path("total").asLong());
+	}
+
+	@Test
+	public void testFacetsCountOnlyWhatCanBeRead() throws Exception {
+		filtersLayout();
+
+		JsonNode facets = page("q=harrierapi&limit=1&facets=type,author,class,client,matter", signIn(clerk))
+				.path("facets");
+		assertEquals(Map.of("pdf", 15L, "word", 4L, "excel", 3L), counts(facets.path("type")));
+		// Tom Reeve's 3 privileged documents aren't counted
+		assertEquals(Map.of("treeve", 12L, "jclarke", 10L), counts(facets.path("author")));
+		assertEquals("treeve treeve", facets.path("author").get(0).path("displayName").textValue());
+		assertEquals(Map.of("Correspondence", 15L, "Advice", 4L), counts(facets.path("class")));
+		assertEquals(Map.of("998", 22L), counts(facets.path("client")));
+		assertEquals(Map.of("998.1", 18L, "998.2", 4L), counts(facets.path("matter")));
+		assertTrue(facets.path("partial").isMissingNode());
+
+		// The admin reads the privileged folder
+		JsonNode admin = page("q=harrierapi&limit=1&facets=author", signInAdmin()).path("facets");
+		assertEquals(Map.of("treeve", 15L, "jclarke", 10L), counts(admin.path("author")));
+		assertTrue(admin.path("type").isMissingNode());
+
+		// A facet keeps its own options when one is ticked, and the others narrow
+		JsonNode ticked = page("q=harrierapi&limit=1&author=jclarke&facets=type,author", signIn(clerk));
+		assertEquals(10, ticked.path("total").asLong());
+		assertEquals(Map.of("treeve", 12L, "jclarke", 10L), counts(ticked.path("facets").path("author")));
+		assertEquals(Map.of("pdf", 6L, "word", 4L), counts(ticked.path("facets").path("type")));
+	}
+
+	private static Map<String, Long> counts(JsonNode options) {
+		Map<String, Long> counts = new LinkedHashMap<>();
+		options.forEach(option -> counts.put(option.path("value").textValue(), option.path("count").asLong()));
+		return counts;
+	}
+
+	@Test
+	public void testFiltersAndFacetsRefused() {
+		String token = signIn(clerk);
+		for (String query : new String[] { "scope=folders&q=docu&author=jclarke", "scope=matters&q=998&facets=type",
+				"scope=clients&q=healdan&type=pdf", "q=x&type=folder", "q=x&type=spreadsheet", "q=x&matter=998",
+				"q=x&client=ABC", "q=x&facets=size", "q=x&edited=week", "q=x&edited=7d&from=2026-01-01",
+				"q=x&from=2026-02-01&to=2026-01-01", "q=x&author=" }) {
+			ApiResponse response = get("/api/v1/search?" + query).token(token).send();
+			assertEquals(query + " " + response, 400, response.status());
+			assertEquals("bad-request", response.code());
+		}
+	}
+
+	@Test
+	public void testDocNumberCounts() throws Exception {
+		Document d = file("counted.docx", "Counted");
+
+		JsonNode page = page("q=%23" + number(d) + "&facets=type", signIn(clerk));
+		assertEquals(1, page.path("total").asLong());
+		assertEquals(Map.of("word", 1L), counts(page.path("facets").path("type")));
+		assertEquals(0, page("q=%23" + number(d) + "&type=pdf", signIn(clerk)).path("total").asLong());
+		assertFalse(page.path("facets").has("partial"));
 	}
 }

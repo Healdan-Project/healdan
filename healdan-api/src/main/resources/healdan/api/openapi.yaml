@@ -778,8 +778,7 @@ paths:
       summary: Search, as the search box does
       description: |
         Runs the old web page's searches. The hits are only what the caller
-        can read and what is published to the caller. `total` is always
-        `null`: a page with fewer than `limit` items is the last one.
+        can read and what is published to the caller, best first.
 
         - `documents`: documents, without emails. A `q` like `#1234`, `#1234.2`
           or `#1234v2` returns just that document, as the old web page does.
@@ -797,11 +796,22 @@ paths:
 
         A leading wildcard, such as `*report` or `?ar`, is accepted.
 
-        The full-text scopes (`documents`, `emails`, `all`) get at most about
-        1000 hits from the search engine, which is its own limit; hits the
-        caller can't see are dropped from those, so a page can come up short
-        of the full count. The other scopes look at the first 10,000 hits.
-        Pages are filled from the hits that follow the ones skipped.
+        The `documents`, `emails` and `all` scopes page to the last hit, up to
+        the first 10,000 hits the search engine finds. They read at least the
+        engine's first 2,500 hits, so `total` is the real count when the
+        search found every hit; when it stopped before the last, `total` is
+        `null` and `totalAtLeast` says how many it found, with more to come. They take the filters (`type`, `author`, `class`, `client`,
+        `matter`, `edited`, `from`, `to`), applied in the database after the
+        read check, so a filter finds its matches among those first 10,000
+        hits, and `facets`, the counts. The counts are taken over the hits
+        the caller can read among the first 2,500, and are `partial` when
+        there are more.
+        No count includes a document the caller can't read.
+
+        The `folders`, `matters` and `clients` scopes look at the first 10,000
+        hits; their `total` is always `null`, and a page with fewer than
+        `limit` items is the last one. They take no filters or facets: either
+        is `400`. Pages are filled from the hits that follow the ones skipped.
 
         With `within`, the `folders` and `documents` scopes return only what
         is inside that folder, at any depth. A `#` lookup in the `documents`
@@ -836,6 +846,28 @@ paths:
             type: integer
             format: int64
             minimum: 0
+        - name: type
+          in: query
+          required: false
+          description: |
+            The file kinds to keep. Only for the `documents`, `emails` and
+            `all` scopes, as are the other filters and `facets`; anything else
+            is `400`.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [word, excel, powerpoint, pdf, email, opendocument, picture, other]
+        - $ref: '#/components/parameters/AuthorFilter'
+        - $ref: '#/components/parameters/ClassFilter'
+        - $ref: '#/components/parameters/ClientFilter'
+        - $ref: '#/components/parameters/MatterFilter'
+        - $ref: '#/components/parameters/EditedFilter'
+        - $ref: '#/components/parameters/EditedFrom'
+        - $ref: '#/components/parameters/EditedTo'
+        - $ref: '#/components/parameters/FacetsWanted'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -2673,6 +2705,16 @@ components:
                     document: '#/components/schemas/DocumentView'
                     folder: '#/components/schemas/FolderView'
                     matter: '#/components/schemas/MatterView'
+            totalAtLeast:
+              type: integer
+              minimum: 0
+              description: |
+                For the `documents`, `emails` and `all` scopes, when the search
+                stopped before its last hit: how many it found that pass the
+                filters. There are more; `total` is then `null`. Left out when
+                `total` is the real count.
+            facets:
+              $ref: '#/components/schemas/Facets'
       unevaluatedProperties: false
     FolderChildPage:
       allOf:
@@ -2725,6 +2767,13 @@ components:
           description: The matters, by client and matter number, such as `998.1`.
           items:
             $ref: '#/components/schemas/FacetCount'
+        partial:
+          type: boolean
+          const: true
+          description: |
+            A search's counts taken over the results the caller can read
+            among its first 2,500, when there are more. Left out when the
+            counts cover every result, as a folder's always do.
     FacetCount:
       type: object
       additionalProperties: false

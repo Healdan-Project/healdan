@@ -4,8 +4,8 @@
 
 # Files COUNT small generated documents of mixed types (.docx, .pdf, .xlsx, .eml, .odt) into one folder through
 # POST /api/v1/documents, five at a time, to measure big folders and searches (M6 plan, Tasks 9 and 10, and the
-# owner's walkthrough). Each file has words of its own and each .eml its own Message-ID, as a matter holds a
-# message once. Only for a throwaway or test stack: it fills the folder for good.
+# owner's walkthrough). Each file has words of its own and each .eml its own Message-ID, new on every run, as a
+# matter holds a message once. Only for a throwaway or test stack: it fills the folder for good.
 # Usage: docker/tests/bulk-documents.sh BASE TOKEN FOLDER_ID COUNT [WORD]
 #    or: BASE=http://127.0.0.1:8080 TOKEN=hd_... FOLDER_ID=123 COUNT=2000 docker/tests/bulk-documents.sh
 # TOKEN is a device token (POST /api/v1/auth/tokens) of a user who may file into the folder. WORD, if given, is in
@@ -27,7 +27,7 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir "$WORK/files" "$WORK/out"
 
 python3 - "$WORK/files" "$COUNT" "$WORD" <<'PY'
-import email.message, email.policy, email.utils, pathlib, random, sys, zipfile
+import email.message, email.policy, email.utils, pathlib, random, sys, uuid, zipfile
 
 out, count, word = pathlib.Path(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
 random.seed(20261110)
@@ -129,7 +129,8 @@ def eml(path, words, i, subject):
     mail["To"] = "Healdan <healdan@example.com>"
     mail["Subject"] = subject
     mail["Date"] = email.utils.format_datetime(email.utils.localtime())
-    mail["Message-ID"] = "<bulk-%d-%d@healdan.test>" % (random.getrandbits(48), i)
+    # Not from the seeded random: two runs into one matter would file the same messages, which it refuses
+    mail["Message-ID"] = "<bulk-%s-%d@healdan.test>" % (uuid.uuid4().hex, i)
     mail.set_content(words)
     path.write_bytes(mail.as_bytes(policy=email.policy.SMTP))
 

@@ -311,6 +311,15 @@ public class FolderResource {
 	 *         people know them by
 	 */
 	private static FacetsView facetsView(Facets facets) throws PersistenceException {
+		return facetsView(facets, false);
+	}
+
+	/**
+	 * @param partial whether the counts cover the first results only
+	 * @return the counts as the API shows them, each Author with the name
+	 *         people know them by
+	 */
+	static FacetsView facetsView(Facets facets, boolean partial) throws PersistenceException {
 		Map<String, Map<String, Long>> counts = facets.counts();
 		List<AuthorFacetCount> authors = null;
 		if (counts.containsKey(Facets.AUTHOR)) {
@@ -321,7 +330,7 @@ public class FolderResource {
 						names.getOrDefault(option.getKey(), option.getKey()), option.getValue()));
 		}
 		return new FacetsView(options(counts.get(Facets.TYPE)), authors, options(counts.get(Facets.CLASS)),
-				options(counts.get(Facets.CLIENT)), options(counts.get(Facets.MATTER)));
+				options(counts.get(Facets.CLIENT)), options(counts.get(Facets.MATTER)), partial ? Boolean.TRUE : null);
 	}
 
 	private static List<FacetCount> options(Map<String, Long> counts) {

@@ -97,7 +97,19 @@ public final class ApiViews {
 	 * @throws PersistenceException error at data layer
 	 */
 	public static boolean shows(Document d) throws PersistenceException {
-		return hasDocNumber(d) && MatterLocator.get().locate(d.getFolder().getId()).isUnderAStore();
+		return shows(d, MatterLocator.get().locate(d.getFolder().getId()));
+	}
+
+	/**
+	 * As {@link #shows(Document)}, for a caller that knows where the
+	 * document's folder sits, such as a search checking many hits
+	 *
+	 * @param d a document
+	 * @param folder where the document's folder sits
+	 * @return whether the API shows it
+	 */
+	static boolean shows(Document d, FolderPosition folder) {
+		return hasDocNumber(d) && folder.isUnderAStore();
 	}
 
 	/**

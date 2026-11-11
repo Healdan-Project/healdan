@@ -68,6 +68,9 @@ public class FolderListing {
 	/** The Author's user */
 	private static final String AUTHOR_USER = "au";
 
+	/** An ACL row {@code a} is one of the user's groups' */
+	private static final String USER_GROUPS = "a.ld_groupid in (select g.ld_groupid from ld_usergroup g where g.ld_userid = :user)";
+
 	private final NamedParameterJdbcTemplate jdbc;
 
 	@Autowired
@@ -133,7 +136,9 @@ public class FolderListing {
 
 	/**
 	 * For documents already known to be readable, such as a search folder's.
-	 * They are checked for nothing else but deletion and a doc #.
+	 * They are checked for nothing else but deletion and a doc #: for ids from
+	 * anywhere else, {@link #page(List, User, ListingQuery)} applies the read
+	 * rule.
 	 *
 	 * @param docIds the documents, in their order; at most {@link #MAX_IDS}
 	 * @param query the order, the filters and the page; no sort keeps the
@@ -144,7 +149,11 @@ public class FolderListing {
 	public ListedPage page(List<Long> docIds, ListingQuery query) {
 		if (docIds.isEmpty())
 			return new ListedPage(List.of(), 0);
-		Select select = new Select(ids(docIds), query);
+		return page(ids(docIds), docIds, query);
+	}
+
+	private ListedPage page(Scope scope, List<Long> docIds, ListingQuery query) {
+		Select select = new Select(scope, query);
 		String order = query.sort() == null ? "" : order(select, query.sort(), query.descending());
 		List<Long> passed = jdbc.queryForList("select d.ld_id" + select.from() + order, select.params, Long.class);
 		if (query.sort() == null) {
@@ -160,7 +169,8 @@ public class FolderListing {
 
 	/**
 	 * As {@link #facets(Folder, User, ListingQuery, Set)}, for documents
-	 * already known to be readable.
+	 * already known to be readable; for ids from anywhere else,
+	 * {@link #facets(List, User, ListingQuery, Set)} applies the read rule.
 	 *
 	 * @param docIds the documents; at most {@link #MAX_IDS}
 	 * @param query the filters
@@ -177,6 +187,46 @@ public class FolderListing {
 			return new Facets(none);
 		}
 		return facets(ids(docIds), query, which);
+	}
+
+	/**
+	 * As {@link #page(List, ListingQuery)}, for documents anywhere, applying
+	 * the read rule again: a document the user can't read, or that is deleted
+	 * or not published to the user, is left out, whoever passed it in.
+	 *
+	 * @param docIds the documents, in their order; at most {@link #MAX_IDS}
+	 * @param user who looks, with its groups
+	 * @param query the order, the filters and the page; no sort keeps the
+	 *        order given, reversed when descending
+	 * @return the page of the documents that the user may read and that pass
+	 *         the filters, and how many do
+	 * @throws PersistenceException error at data layer
+	 */
+	public ListedPage page(List<Long> docIds, User user, ListingQuery query) throws PersistenceException {
+		if (docIds.isEmpty())
+			return new ListedPage(List.of(), 0);
+		return page(readable(docIds, user), docIds, query);
+	}
+
+	/**
+	 * As {@link #facets(List, ListingQuery, Set)}, for documents anywhere,
+	 * applying the read rule again, as {@link #page(List, User, ListingQuery)}
+	 * does.
+	 *
+	 * @param docIds the documents; at most {@link #MAX_IDS}
+	 * @param user who looks, with its groups
+	 * @param query the filters
+	 * @param which the facets to count
+	 * @return the counts over the documents the user may read
+	 * @throws PersistenceException error at data layer
+	 * @throws IllegalArgumentException for an unknown facet
+	 */
+	public Facets facets(List<Long> docIds, User user, ListingQuery query, Set<String> which)
+			throws PersistenceException {
+		Facets.check(which);
+		if (docIds.isEmpty())
+			return facets(List.of(), query, which);
+		return facets(readable(docIds, user), query, which);
 	}
 
 	private Facets facets(Scope scope, ListingQuery query, Set<String> which) {
@@ -240,26 +290,71 @@ public class FolderListing {
 			select.where.add("d.ld_deleted = 0");
 			select.where.add(ListingSql.isDocNumber("d"));
 			select.params.addValue("folder", folderId);
-			if (!seesUnpublished) {
-				// Document.isPublishing
-				select.where.add("""
-						d.ld_published = 1
-						and (d.ld_startpublishing is null or d.ld_startpublishing <= :now)
-						and (d.ld_stoppublishing is null or d.ld_stoppublishing > :now)""");
-				select.params.addValue("now", new Timestamp(System.currentTimeMillis()));
-			}
+			if (!seesUnpublished)
+				published(select);
 			if (!admin) {
 				// The user's own ACL rows that grant anything decide, by READ; with none, the folder does
-				String groups = "a.ld_groupid in (select g.ld_groupid from ld_usergroup g where g.ld_userid = :user)";
-				String granting = "exists (select 1 from ld_document_acl a where a.ld_docid = d.ld_id and %s and (%s) > 0)"
-						.formatted(groups, AccessChecks.anyPermission("a."));
-				String reading = "exists (select 1 from ld_document_acl a where a.ld_docid = d.ld_id and %s and a.ld_read > 0)"
-						.formatted(groups);
-				select.where.add(folderRead ? "(%s or not %s)".formatted(reading, granting)
-						: "(%s and %s)".formatted(granting, reading));
+				select.where.add(folderRead ? "(%s or not %s)".formatted(reading(), granting())
+						: "(%s and %s)".formatted(granting(), reading()));
 				select.params.addValue("user", userId);
 			}
 		};
+	}
+
+	/**
+	 * Documents given by id, anywhere, that the user may read: the rule of
+	 * {@link #readable(Folder, User)}, with each document's folder's READ asked
+	 * once per folder. With {@code R} for "a row of the user's groups grants
+	 * READ" and {@code G} for "a row of theirs grants anything", R implies G,
+	 * so that rule, {@code R or not G} in a readable folder and {@code G and R}
+	 * in another, is {@code R or (the folder is readable and not G)}.
+	 */
+	private Scope readable(List<Long> docIds, User user) throws PersistenceException {
+		Scope listed = ids(docIds);
+		boolean admin = user.isAdmin();
+		boolean seesUnpublished = AccessChecks.seesUnpublished(user);
+		List<Long> readFolders = new ArrayList<>();
+		if (!admin) {
+			MapSqlParameterSource params = new MapSqlParameterSource("ids", List.copyOf(new TreeSet<>(docIds)));
+			for (Long folderId : jdbc.queryForList("select distinct ld_folderid from ld_document where ld_id in (:ids)",
+					params, Long.class))
+				if (FolderDAO.get().isReadAllowed(folderId, user.getId()))
+					readFolders.add(folderId);
+		}
+		long userId = user.getId();
+		return select -> {
+			listed.apply(select);
+			if (!seesUnpublished)
+				published(select);
+			if (!admin) {
+				select.where.add(readFolders.isEmpty() ? reading()
+						: "(%s or (d.ld_folderid in (:readfolders) and not %s))".formatted(reading(), granting()));
+				if (!readFolders.isEmpty())
+					select.params.addValue("readfolders", readFolders);
+				select.params.addValue("user", userId);
+			}
+		};
+	}
+
+	/** Document.isPublishing */
+	private static void published(Select select) {
+		select.where.add("""
+				d.ld_published = 1
+				and (d.ld_startpublishing is null or d.ld_startpublishing <= :now)
+				and (d.ld_stoppublishing is null or d.ld_stoppublishing > :now)""");
+		select.params.addValue("now", new Timestamp(System.currentTimeMillis()));
+	}
+
+	/** Some own ACL row of the user's groups grants anything */
+	private static String granting() {
+		return "exists (select 1 from ld_document_acl a where a.ld_docid = d.ld_id and %s and (%s) > 0)"
+				.formatted(USER_GROUPS, AccessChecks.anyPermission("a."));
+	}
+
+	/** Some own ACL row of the user's groups grants READ */
+	private static String reading() {
+		return "exists (select 1 from ld_document_acl a where a.ld_docid = d.ld_id and %s and a.ld_read > 0)"
+				.formatted(USER_GROUPS);
 	}
 
 	/**

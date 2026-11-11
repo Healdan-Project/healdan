@@ -257,7 +257,9 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 { "items": [ … ], "offset": 0, "limit": 50, "total": 123 }
 ```
 
-- `total` is `null` for a search, where counting would be slow. A page with fewer than `limit` items is the last.
+- `total` is `null` for the `folders`, `matters` and `clients` searches, where counting would be slow. A page with
+  fewer than `limit` items is the last. The `documents`, `emails` and `all` searches count, up to a point: see
+  [Searching](#searching).
 - Some lists, such as Recent Matters and your check-outs, come back whole, in the same shape, and take no paging
   parameters. The docs page says which.
 
@@ -278,7 +280,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
   "name" } }`, so a list can show the client beside the matter without asking for each one. An older server sends
   only `id` and `display`, so a client that may meet one reads `client` as optional.
 - **Field names are camelCase.** A field with no value is `null`, never left out, but for a list's `facets`,
-  which is there only when asked for. Timestamps are ISO 8601 in UTC, such as `2026-10-23T14:05:00Z`.
+  which is there only when asked for, and a search's `totalAtLeast`, there only when `total` isn't. Timestamps are ISO 8601 in UTC, such as `2026-10-23T14:05:00Z`.
 - **A doc ID is `#<doc #> v<version>`,** the form of the title bar and the filed files: `#1234 v2.1`.
 - **Nothing caches the answers:** Healdan sends them with `no-store` in `Cache-Control`.
 
@@ -289,7 +291,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 | The server and you | `GET /server`, `GET /me`, `GET /users?q=` for user fields such as Author |
 | Signing in | `POST /auth/tokens`, `GET /auth/tokens`, `DELETE /auth/tokens/current`, `DELETE /auth/tokens/{id}`; `DELETE /session` for the web session |
 | Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /clients/recent`, `PUT` and `DELETE /me/matters/{folderId}`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
-| Finding | `GET /search?scope=&q=&within=`, `GET /suggest?q=` for the search box as someone types, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
+| Finding | `GET /search?scope=&q=&within=`, with filters and `facets`, `GET /suggest?q=` for the search box as someone types, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
 | A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone |
 | Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are |
@@ -321,6 +323,40 @@ The sections below say more about the parts a client needs to know before it sta
 - **Comments.** Every document has a Comments property (`comments`), free text of up to 4000 characters that comes
   after Subclass in the form and the properties. The `documents` search scope finds a document by its Comments: it
   matches those whose Comments contain every word of `q`, in any case, along with the full-text hits.
+
+## Searching
+
+`GET /search?q=` searches the `scope` given: `documents` (the default, every file but emails), `emails`, `all`,
+`folders`, `matters` or `clients`. The hits are what the caller can read, best first.
+
+- **Paging to the end.** The `documents`, `emails` and `all` scopes page through every hit the full-text engine
+  finds, up to its first 10,000. Past those, a page is empty.
+- **How many.** Each of those searches reads at least the engine's first 2,500 hits, more for a page further on.
+  When it has found every hit, `total` says how many there are. When it stopped before the last, `total` is `null`
+  and `totalAtLeast` says how many it found that the caller can read: there are more, so a client shows "more than"
+  that number.
+- **Filters.** The same as a folder's (see [Listing a Folder](#listing-a-folder)): `type` takes file kinds, and
+  `author`, `class`, `client`, `matter`, `edited`, `from` and `to` as there. They're applied in the database, after
+  the read check, to the hits read, so they find their matches among the first 10,000 hits, and `total` and
+  `totalAtLeast` count the hits that pass. `type=folder` is `400`: search the `folders` scope instead.
+- **Counts.** `facets=` adds the counts, as for a folder, each applying every filter but its own. They're taken in
+  the database over the hits the caller can read among the first 2,500, never by the full-text engine, whose counts
+  would include documents the caller can't read. When there are more hits than that, `facets` has
+  `"partial": true`, so a client can say the counts come from the first results.
+- **The other scopes,** `folders`, `matters` and `clients`, look at the first 10,000 hits, and their `total` is
+  always `null`: a page with fewer than `limit` items is the last. They take no filters or `facets`; either is
+  `400 bad-request`.
+
+```json
+{
+  "items": [ … ],
+  "offset": 0, "limit": 100, "total": null, "totalAtLeast": 2500,
+  "facets": {
+    "type": [{ "value": "pdf", "count": 1210 }, { "value": "word", "count": 845 }],
+    "partial": true
+  }
+}
+```
 
 ## Listing a Folder
 
