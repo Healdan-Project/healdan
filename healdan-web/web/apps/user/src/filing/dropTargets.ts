@@ -35,10 +35,23 @@ export interface Place {
   id: number
   kind: S['FolderView']['kind']
   canFile?: boolean
+  /** What the tray calls it */
+  name?: string
 }
 
 export function placeOf(folder: S['FolderView']): Place {
-  return { id: folder.id, kind: folder.kind, canFile: folder.canFile }
+  return { id: folder.id, kind: folder.kind, canFile: folder.canFile, name: folder.name }
+}
+
+const extensionOf = (name: string) => {
+  const dot = name.lastIndexOf('.')
+  return dot > 0 && dot < name.length - 1 ? name.slice(dot + 1).toLowerCase() : undefined
+}
+
+/** Whether a file could be a version of a document: the server keeps a document's extension, compared in any case */
+export function sameExtension(fileName: string, documentName: string): boolean {
+  const ext = extensionOf(fileName)
+  return ext !== undefined && ext === extensionOf(documentName)
 }
 
 /**

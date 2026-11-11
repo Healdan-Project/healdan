@@ -33,6 +33,7 @@ const email = Buffer.from(
 let api: APIRequestContext | undefined
 let token = ''
 let documentsFolder = 0
+let matterFolder = 0
 let emailNumber = 0
 let versionedNumber = 0
 
@@ -40,7 +41,9 @@ test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
   api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
   token = await deviceToken(api, RUN)
-  documentsFolder = (await matterFolders(api, token)).documents
+  const folders = await matterFolders(api, token)
+  documentsFolder = folders.documents
+  matterFolder = folders.matter
   emailNumber = await fileDocument(api, token, documentsFolder, EMAIL, 'message/rfc822', email)
   versionedNumber = await fileDocument(api, token, documentsFolder, VERSIONED, 'text/plain', Buffer.from(`First draft ${RUN}`))
 })
@@ -104,4 +107,25 @@ test('files three dropped files, says an email already in the matter is, and sav
   await expect(tray.getByText(`Saved as Version 2 of # ${versionedNumber}`)).toBeVisible()
   const saved = await call<{ version: string; name: string }>(api!.get(`/api/v1/documents/${versionedNumber}`, authorized(token)), 'the saved document')
   expect(saved).toMatchObject({ version: '2.0', name: VERSIONED })
+})
+
+test('a file dropped on the Documents row of the matter\'s top level is filed into Documents, and one on the top level itself is refused', async ({ page }) => {
+  const NAME = `Row drop ${RUN}.txt`
+  await page.goto('/login.jsp')
+  await signIn(page)
+  await expect(page.getByRole('heading', { name: 'Recent Documents' })).toBeVisible()
+  await page.goto(`/app/folders/${matterFolder}`)
+  const list = main(page).getByRole('grid')
+  const row = list.getByRole('row', { name: /^Documents/ })
+  await expect(row).toBeVisible()
+
+  await dropFiles(list, [{ name: `Top ${RUN}.txt`, type: 'text/plain', text: 'refused' }])
+  await expect(page.getByText('Choose a folder inside the matter')).toBeVisible()
+
+  await dropFiles(row, [{ name: NAME, type: 'text/plain', text: `Into Documents ${RUN}` }])
+  const tray = page.getByRole('region', { name: 'Filing' })
+  await expect(tray.getByText(/^Filed as # \d+$/)).toBeVisible()
+  await expect(tray.getByText('In Documents')).toBeVisible()
+  const inside = await call<{ items: { name: string }[] }>(api!.get(`/api/v1/folders/${documentsFolder}/children?sort=edited&order=desc&limit=20`, authorized(token)), 'Documents')
+  expect(inside.items.map((one) => one.name)).toContain(NAME)
 })

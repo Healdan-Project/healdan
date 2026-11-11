@@ -33,7 +33,7 @@ import { NotFound } from './NotFound'
 import { Toolbar, type ListCount } from './Toolbar'
 import { listColumns, narrowed, rowOf } from './listColumns'
 import { useRowSelection } from './useRowSelection'
-import { isSortColumn, useListing, type ListingOrder, type SortColumn } from './useListing'
+import { childKey, isSortColumn, useListing, type ListingOrder, type SortColumn } from './useListing'
 import styles from './views.module.css'
 
 type S = components['schemas']
@@ -63,23 +63,22 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const navigate = useNavigate()
   const headingId = useId()
   const { selected, selection, change: changeSelection } = useRowSelection()
-  // What was just filed in this folder flashes in the list; the row the files are over is lit
-  const filing = useFiling()
-  const fresh = filing.items.filter((item) => item.status === 'filed' && item.fresh && item.folderId === folderId).map((item) => item.docNumber)
-  const flashing = fresh.join(',')
-  const zone = useDropZone({ id: folderId, kind: view?.kind ?? 'store', canFile: view?.canFile }, (key) => {
-    const found = listing.rows.find((item) => item.type === 'document' && `d${item.docNumber}` === key)
-    return found?.type === 'document' ? found : undefined
+  // What was just filed flashes in the list, and the row the files are over is lit
+  const { fresh } = useFiling()
+  const place = useMemo(() => (view ? placeOf(view) : { id: folderId, kind: 'store' as const }), [view, folderId])
+  const zone = useDropZone(place, (key) => {
+    const found = listing.rows.find((item) => childKey(item) === key)
+    if (found?.type === 'document') return { document: found }
+    return found?.type === 'folder' ? { place: placeOf(found) } : undefined
   })
   const rows = useMemo(
     () =>
       listing.rows.map(rowOf).map((row) => {
-        const number = row.item.type === 'document' ? row.item.docNumber : undefined
-        const flash = number !== undefined && flashing.split(',').includes(String(number))
+        const flash = row.item.type === 'document' && fresh.has(row.item.docNumber)
         const dropping = zone.overRow === row.id
         return flash || dropping ? { ...row, flash, dropping } : row
       }),
-    [listing.rows, flashing, zone.overRow],
+    [listing.rows, fresh, zone.overRow],
   )
   const documents = useMemo(() => documentsOf(listing.rows), [listing.rows])
   const preview = usePreviewKey(changeSelection)
@@ -152,7 +151,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               count={listing.isStale ? undefined : countOf(listing.documents, active > 0, unfiltered)}
               end={<FiltersButton ref={funnel} open={filtersOpen} active={active} onPress={toggleFilters} />}
             >
-              <UploadButton place={placeOf(view)} />
+              <UploadButton place={place} />
               <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} />
             </Toolbar>
             <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />

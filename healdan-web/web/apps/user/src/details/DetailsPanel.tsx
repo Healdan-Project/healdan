@@ -13,6 +13,7 @@ import { ErrorPanel } from '../frame/ErrorPanel'
 import { useQuickLook } from '../preview/QuickLookState'
 import { useDocument, useProperties, useVersions } from '../queries'
 import { useApi } from '../services'
+import { isEditable } from './FieldsForm'
 import { clearEditRequest, useEditRequest } from './editRequest'
 import { Properties, type DetailsContext } from './Properties'
 import { PropertiesForm } from './PropertiesForm'
@@ -47,7 +48,7 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
   // The filing tray's Edit: once the properties are here, the form opens if the person may change any of them
   const asked = useEditRequest(docNumber)
   const loaded = properties.data?.items
-  if (asked && loaded && !editing && loaded.some((one) => one.editable)) setEditing(true)
+  if (asked && loaded && !editing && loaded.some(isEditable)) setEditing(true)
   useEffect(() => {
     if (asked && loaded) clearEditRequest()
   }, [asked, loaded])

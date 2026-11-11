@@ -18,8 +18,9 @@ So version 2.3 is the third snapshot after version 2 was started, and the next n
 
 ## Saving a File as a New Version
 
-Drag **one** file from your desktop onto a document's row in the app, and choose **Save as Version 4 of # 10431**, where
-4 is the next version number. The file becomes the document's next version, under the document's own name. It's the same
+Drag **one** file from your desktop onto a document's row in the app. If it is the same kind of file (the same extension,
+in any case), choose **Save as Version 4 of # 10431**, where 4 is the next version number; a file of another kind is
+filed as a new document instead. The file becomes the document's next version, under the document's own name. It's the same
 as **Save as new version** in the Classic Interface. A document held by someone else, or on a computer, or locked can't
 take it: see [Filing a Document](../../working-with-matters/filing-a-document/#dropping-a-file-on-a-document).
 

@@ -21,7 +21,8 @@ export interface VersionOrNewProps {
 
 /**
  * What one file dropped on a document's row asks (spec 6.5): "Save as Version 4 of # 10431, or File as a New
- * Document?". A document held by someone else, on a computer, or locked can't take a version from this page (the page is
+ * Document?" (asked only when the file's extension is the document's, as the server requires). File as a New Document is the
+ * default, so Enter files a new document. A document held by someone else, on a computer, or locked can't take a version from this page (the page is
  * no device, R14), so the question says who holds it and since when, and where it's released, and offers only the new document.
  */
 export function VersionOrNew({ document, file, onVersion, onNew, onCancel }: VersionOrNewProps) {
@@ -39,7 +40,6 @@ export function VersionOrNew({ document, file, onVersion, onNew, onCancel }: Ver
           {sentence && <p className={styles.hold}>{sentence}</p>}
           <div className={styles.actions}>
             <Button
-              variant="default"
               isDisabled={!may}
               onPress={() => {
                 close()
@@ -48,7 +48,10 @@ export function VersionOrNew({ document, file, onVersion, onNew, onCancel }: Ver
             >
               {t('filing.saveVersion', { version: next })}
             </Button>
+            {/* The default (Enter): a drop that missed the row meant to miss it costs an extra document, not a version */}
             <Button
+              variant="default"
+              autoFocus
               onPress={() => {
                 close()
                 onNew()

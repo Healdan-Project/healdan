@@ -19,7 +19,7 @@ function statusOf(item: UploadItem, meId: number | undefined): string {
     case 'filed':
       return item.version ? t('tray.versioned', { version: formatVersion(item.version), n: item.docNumber ?? 0 }) : t('tray.filed', { n: item.docNumber ?? 0 })
     case 'refused':
-      return refusalText(item.problem, meId)
+      return item.kind === 'version' ? `${refusalText(item.problem, meId, item.labels)} ${t('tray.notSaved')}` : refusalText(item.problem, meId, item.labels)
   }
 }
 
@@ -29,18 +29,20 @@ function statusOf(item: UploadItem, meId: number | undefined): string {
  * the matter has Show, which opens the copy.
  */
 export function FilingTray() {
-  const { items, uploads } = useFiling()
+  const { items, uploads, busy } = useFiling()
   const me = useMe()
   const navigate = useNavigate()
   const region = useRightRegion()
 
-  const done = items.filter((item) => item.status === 'filed' || item.status === 'refused').length
-  const busy = done < items.length
+  const filed = items.filter((item) => item.status === 'filed').length
+  const refused = items.filter((item) => item.status === 'refused').length
+  const summary = busy ? t('tray.summaryBusy', { done: filed + refused, n: items.length }) : refused > 0 ? t('tray.summaryRefused', { filed, refused }) : t('tray.summaryFiled', { filed })
   const rows: TrayItem[] = items.map((item) => ({
     id: item.id,
     name: item.name,
     state: item.status,
     status: statusOf(item, me.data?.id),
+    place: item.folderName ? t('tray.into', { folder: item.folderName }) : undefined,
     actions: (
       <>
         {item.status === 'filed' && item.docNumber !== undefined && (
@@ -67,10 +69,14 @@ export function FilingTray() {
   return (
     <Tray
       label={t('tray.label')}
-      summary={t(busy ? 'tray.summaryBusy' : 'tray.summaryDone', { done: done, n: items.length })}
+      summary={summary}
       items={rows}
       onDismiss={(id) => uploads.dismiss(Number(id))}
       dismissLabel={(name) => t('tray.dismiss', { name })}
+      onClear={() => uploads.clearFinished()}
+      clearLabel={t('tray.clear')}
+      collapseLabel={t('tray.collapse')}
+      expandLabel={t('tray.expand')}
     />
   )
 }

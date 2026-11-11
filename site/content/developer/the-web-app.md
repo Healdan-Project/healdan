@@ -153,8 +153,11 @@ view.
   (`invalidateDocumentLists`), and a new document is `fresh` for a few seconds, which flashes its row.
 - **The drop.** `dropTargets.ts` decides what a drag carries and where it may go: `refusalOf` says a matter's top level, a
   search folder and a Store hold no documents (`filing.chooseFolder`), and a folder the person may not write to takes none.
-  `useDropZone` puts the handlers on a folder's list, and the left pane's tree takes drops through `Tree`'s `acceptsDrop`
-  and `onDrop`. A drop is read at once, as the browser empties its data transfer when the event ends. It handles only
+  `useDropZone` puts the handlers on a folder's list: a folder's row is a drop target for that folder (its kind and `canFile` decide, as for a tree folder),
+  and one file on a document's row asks for a version only when its extension is the document's (`sameExtension`). The left
+  pane's tree takes drops through `Tree`'s `acceptsDrop` and `onDrop`. Both count `dragenter` and `dragleave` rather than trust
+  `relatedTarget`, which WebKit can leave null. A drag outside every target is cancelled by `FilingProvider`'s `window` listeners,
+  so the browser never opens a dropped file in place of the app. A drop is read at once, as the browser empties its data transfer when the event ends. It handles only
   drops that carry `Files`; a drop that carries `ROWS_TYPE` (`application/x-healdan-documents`, the app's own rows,
   which a move takes) is left alone, and a drop of a link or text says to drag the email to Finder first. A dragover of a
   link or text is cancelled too, or the browser would follow the link and leave the page.

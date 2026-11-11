@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import type { Api, components } from '@healdan/api'
+import { ApiError, apiPath, type Api, type components } from '@healdan/api'
 import { saveVersion } from '../actions/checkout'
 import { copyOf } from './refusal'
 
@@ -24,8 +24,12 @@ export interface UploadItem {
   /** The title it's filed under, or the name of the document it's saved into */
   name: string
   status: UploadStatus
-  /** The folder it's filed into */
+  kind: 'new' | 'version'
+  /** The folder it's filed into, and what the tray calls it */
   folderId: number
+  folderName?: string
+  /** The labels of the form's properties, by name, to say which one a refusal is about */
+  labels?: Record<string, string>
   /** Filed, or the version's document, once it's done */
   docNumber?: number
   /** The version a save made */
@@ -46,11 +50,18 @@ export interface Uploads {
   subscribe: (listener: () => void) => () => void
   /** Whether anything is waiting or uploading */
   busy: () => boolean
-  enqueue: (files: FilingFile[], folderId: number, properties?: Record<string, S['PropertyValue']>) => void
+  enqueue: (files: FilingFile[], folderId: number, properties?: Record<string, S['PropertyValue']>, extra?: { folderName?: string; labels?: Record<string, string> }) => void
   /** Saves a file as the next version of a document; `ifHeld` when the document is the person's own web check-out */
   enqueueVersion: (document: S['DocumentView'], file: File, ifHeld: boolean) => void
   /** Removes a finished item */
   dismiss: (id: number) => void
+  /** Removes every finished item and keeps the running ones */
+  clearFinished: () => void
+}
+
+/** Whether any item is waiting or uploading: the one meaning of "busy" */
+export function isBusy(items: readonly UploadItem[]): boolean {
+  return items.some((item) => item.status === 'waiting' || item.status === 'uploading')
 }
 
 export interface UploadsOptions {
@@ -105,6 +116,11 @@ export function createUploads(api: Api, options: UploadsOptions): Uploads {
       setTimeout(() => patch(item.id, { fresh: false }), options.freshFor ?? FRESH_MS)
     } catch (error) {
       patch(item.id, { status: 'refused', problem: error, existing: copyOf(error) })
+      // The server leaves the document checked out to the person when a rule refuses the check-in itself, even if it was
+      // free before. They never asked for that, so it's released, unless it was theirs already; any other refusal changes nothing
+      if (job.kind === 'version' && !job.ifHeld && error instanceof ApiError && (error.code === 'already-filed' || error.code === 'refused')) {
+        await api.send('DELETE', apiPath`/v1/documents/${job.document.docNumber}/checkout`).catch(() => undefined)
+      }
     } finally {
       jobs.delete(item.id)
       options.onSettled()
@@ -123,9 +139,9 @@ export function createUploads(api: Api, options: UploadsOptions): Uploads {
     }
   }
 
-  function add(entries: { name: string; folderId: number; job: Job }[]) {
-    const made = entries.map(({ name, folderId, job }) => {
-      const item: UploadItem = { id: nextId++, name, status: 'waiting', folderId }
+  function add(entries: { name: string; folderId: number; folderName?: string; labels?: Record<string, string>; job: Job }[]) {
+    const made = entries.map(({ name, folderId, folderName, labels, job }) => {
+      const item: UploadItem = { id: nextId++, name, status: 'waiting', kind: job.kind, folderId, folderName, labels }
       jobs.set(item.id, job)
       return item
     })
@@ -139,10 +155,11 @@ export function createUploads(api: Api, options: UploadsOptions): Uploads {
       listeners.add(listener)
       return () => void listeners.delete(listener)
     },
-    busy: () => items.some((item) => item.status === 'waiting' || item.status === 'uploading'),
-    enqueue: (files, folderId, properties) =>
-      add(files.map((file) => ({ name: file.name, folderId, job: { kind: 'new', file, properties } }))),
-    enqueueVersion: (document, file, ifHeld) => add([{ name: document.name, folderId: document.folder.id, job: { kind: 'version', document, file, ifHeld } }]),
-    dismiss: (id) => change((now) => now.filter((item) => item.id !== id || item.status === 'waiting' || item.status === 'uploading')),
+    busy: () => isBusy(items),
+    enqueue: (files, folderId, properties, extra) =>
+      add(files.map((file) => ({ name: file.name, folderId, folderName: extra?.folderName, labels: extra?.labels, job: { kind: 'new', file, properties } }))),
+    enqueueVersion: (document, file, ifHeld) => add([{ name: document.name, folderId: document.folder.id, folderName: document.folder.name, job: { kind: 'version', document, file, ifHeld } }]),
+    dismiss: (id) => change((now) => now.filter((item) => item.id !== id || isBusy([item]))),
+    clearFinished: () => change((now) => now.filter((item) => isBusy([item]))),
   }
 }

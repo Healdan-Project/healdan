@@ -11,7 +11,7 @@
   flex-direction: column;
   gap: var(--hd-space-3);
   width: min(360px, calc(100vw - 2 * var(--hd-space-5)));
-  max-height: 50dvh;
+  max-height: min(240px, 30dvh);
   padding: var(--hd-space-4);
   border-radius: var(--hd-radius-large);
   background: var(--hd-window);
@@ -19,9 +19,20 @@
   box-shadow: var(--hd-shadow-popup);
 }
 
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+}
+
 .summary {
+  flex: 1;
   margin: 0;
   font-weight: var(--hd-weight-bold);
+}
+
+.place {
+  white-space: nowrap;
 }
 
 .list {
@@ -48,6 +59,9 @@
 }
 
 .status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--hd-space-3);
   grid-column: 1;
   color: var(--hd-text-secondary);
   font-size: var(--hd-font-size-small);

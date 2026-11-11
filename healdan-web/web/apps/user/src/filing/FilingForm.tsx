@@ -4,11 +4,15 @@
 import { useState } from 'react'
 import type { components } from '@healdan/api'
 import { Dialog, plural, t, TextField } from '@healdan/ui'
-import { FieldsForm, isEditable } from '../details/FieldsForm'
+import { FieldsForm } from '../details/FieldsForm'
+import { missingRequired } from './required'
 import styles from './filing.module.css'
 import { named, type FilingFile } from './uploads'
 
 type S = components['schemas']
+
+/** An email's title is its subject, which the server takes from the message whatever is sent */
+const isEmail = (name: string) => /\.(eml|msg)$/i.test(name)
 
 export interface FilingFormProps {
   files: File[]
@@ -29,8 +33,8 @@ export function FilingForm({ files, fields, onFile, onCancel }: FilingFormProps)
 
   async function submit(values: Record<string, S['PropertyValue']>): Promise<Map<string, string> | void> {
     // A title can't be empty, and a required property needs a value from the folder's or from the person
-    const empty = new Set(titles.flatMap((title, i) => (title.trim() === '' ? [i] : [])))
-    const missing = fields.filter((field) => isEditable(field) && field.required && !field.value && (values[field.name] ?? null) === null)
+    const empty = new Set(titles.flatMap((title, i) => (title.trim() === '' && !isEmail(files[i]!.name) ? [i] : [])))
+    const missing = missingRequired(fields, values)
     if (empty.size > 0 || missing.length > 0) {
       setErrors(empty)
       return new Map(missing.map((field) => [field.name, t('fields.required')]))
@@ -46,7 +50,12 @@ export function FilingForm({ files, fields, onFile, onCancel }: FilingFormProps)
       <FieldsForm fields={fields} submitLabel={plural('filingButton', files.length)} onSubmit={submit} onCancel={onCancel}>
         <fieldset className={styles.titles}>
           <legend className={styles.legend}>{t('filing.titles')}</legend>
-          {files.map((file, i) => (
+          {files.map((file, i) =>
+            isEmail(file.name) ? (
+              <p key={i} className={styles.file}>
+                <span>{file.name}</span> <span>{t('filing.fromSubject')}</span>
+              </p>
+            ) : (
             <TextField
               key={i}
               label={t('filing.fileTitle', { name: file.name })}
@@ -57,7 +66,8 @@ export function FilingForm({ files, fields, onFile, onCancel }: FilingFormProps)
                 setErrors((now) => new Set([...now].filter((j) => j !== i)))
               }}
             />
-          ))}
+            ),
+          )}
         </fieldset>
       </FieldsForm>
     </Dialog>

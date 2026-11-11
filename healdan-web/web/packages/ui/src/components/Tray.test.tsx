@@ -16,7 +16,7 @@ const items: TrayItem[] = [
 
 describe('Tray', () => {
   it('is a named region that lists each item with its state', () => {
-    render(<Tray label="Filing" summary="1 of 3 Filed" items={items} onDismiss={() => {}} dismissLabel={(name) => `Dismiss ${name}`} />)
+    render(<Tray label="Filing" summary="1 of 3 Filed" items={items} onDismiss={() => {}} dismissLabel={(name) => `Dismiss ${name}`} collapseLabel="Collapse" expandLabel="Expand" />)
     const region = screen.getByRole('region', { name: 'Filing' })
     expect(within(region).getByRole('status').textContent).toBe('1 of 3 Filed')
     const rows = within(region).getAllByRole('listitem')
@@ -25,14 +25,14 @@ describe('Tray', () => {
     expect(within(rows[2]!).getByText('That file is too large.')).toBeTruthy()
   })
 
-  it('stays visible and reachable above a modal: it is marked as a top layer', () => {
-    render(<Tray label="Filing" items={items} onDismiss={() => {}} dismissLabel={(name) => `Dismiss ${name}`} />)
+  it('is marked as a top layer, which a modal\'s hiding of the page leaves out, so its status is still announced', () => {
+    render(<Tray label="Filing" items={items} onDismiss={() => {}} dismissLabel={(name) => `Dismiss ${name}`} collapseLabel="Collapse" expandLabel="Expand" />)
     expect(screen.getByRole('region', { name: 'Filing' }).getAttribute('data-react-aria-top-layer')).toBe('true')
   })
 
   it('dismisses only a finished item, from the keyboard', async () => {
     const dismiss = vi.fn()
-    render(<Tray label="Filing" items={items} onDismiss={dismiss} dismissLabel={(name) => `Dismiss ${name}`} />)
+    render(<Tray label="Filing" items={items} onDismiss={dismiss} dismissLabel={(name) => `Dismiss ${name}`} collapseLabel="Collapse" expandLabel="Expand" />)
     expect(screen.queryByRole('button', { name: 'Dismiss Plan.pdf' })).toBeNull()
     const button = screen.getByRole('button', { name: 'Dismiss Big.zip' })
     button.focus()
@@ -41,12 +41,23 @@ describe('Tray', () => {
   })
 
   it('shows nothing when there are no items', () => {
-    render(<Tray label="Filing" items={[]} onDismiss={() => {}} dismissLabel={(name) => name} />)
+    render(<Tray label="Filing" items={[]} onDismiss={() => {}} dismissLabel={(name) => name} collapseLabel="Collapse" expandLabel="Expand" />)
     expect(screen.queryByRole('region')).toBeNull()
   })
 
   it('passes axe', async () => {
-    const { container } = render(<Tray label="Filing" summary="1 of 3 Filed" items={items} onDismiss={() => {}} dismissLabel={(name) => `Dismiss ${name}`} />)
+    const { container } = render(<Tray label="Filing" summary="1 of 3 Filed" items={items} onDismiss={() => {}} dismissLabel={(name) => `Dismiss ${name}`} collapseLabel="Collapse" expandLabel="Expand" />)
     await expectNoAxeViolations(container)
   })
+
+  it('folds to its summary, and clears the finished items but not the running ones', async () => {
+    const clear = vi.fn()
+    render(<Tray label="Filing" summary="1 of 3 Filed" items={items} onDismiss={() => {}} dismissLabel={(n) => n} onClear={clear} clearLabel="Clear Finished" collapseLabel="Collapse" expandLabel="Expand" />)
+    await userEvent.click(screen.getByRole('button', { name: 'Clear Finished' }))
+    expect(clear).toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse' }))
+    expect(screen.queryByText('Plan.pdf')).toBeNull()
+    expect(screen.getByRole('status').textContent).toBe('1 of 3 Filed')
+  })
 })
+

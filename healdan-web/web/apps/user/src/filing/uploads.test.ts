@@ -123,3 +123,33 @@ describe('uploads', () => {
     expect(uploads.items()[0]!.fresh).toBe(true)
   })
 })
+
+describe('a version the server refuses', () => {
+  const target = document({ docNumber: 10431, name: 'Letter.docx', version: '3.1' })
+  const refusal = () => new ApiError(409, 'already-filed', 'x', { code: 'already-filed' })
+
+  it('releases the check-out the refusal left behind when the person had none before', async () => {
+    const api = fakeApi({ 'POST /v1/documents/10431/versions': refusal(), 'DELETE /v1/documents/10431/checkout': document({ docNumber: 10431 }) })
+    const uploads = createUploads(api, { onSettled: () => {} })
+    uploads.enqueueVersion(target, file('d.docx'), false)
+    await vi.waitFor(() => expect(uploads.busy()).toBe(false))
+    await vi.waitFor(() => expect(api.callsTo('DELETE /v1/documents/10431/checkout')).toHaveLength(1))
+    expect(uploads.items()[0]).toMatchObject({ status: 'refused', kind: 'version' })
+  })
+
+  it('leaves a check-out the person already had', async () => {
+    const api = fakeApi({ 'POST /v1/documents/10431/versions': refusal() })
+    const uploads = createUploads(api, { onSettled: () => {} })
+    uploads.enqueueVersion(target, file('d.docx'), true)
+    await vi.waitFor(() => expect(uploads.busy()).toBe(false))
+    expect(api.callsTo('DELETE /v1/documents/10431/checkout')).toHaveLength(0)
+  })
+
+  it('never releases a check-out that is someone else\'s', async () => {
+    const api = fakeApi({ 'POST /v1/documents/10431/versions': new ApiError(409, 'checked-out', 'x', { code: 'checked-out' }) })
+    const uploads = createUploads(api, { onSettled: () => {} })
+    uploads.enqueueVersion(target, file('d.docx'), false)
+    await vi.waitFor(() => expect(uploads.busy()).toBe(false))
+    expect(api.callsTo('DELETE /v1/documents/10431/checkout')).toHaveLength(0)
+  })
+})

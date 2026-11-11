@@ -162,6 +162,7 @@ describe('Tree drops', () => {
     const onDrop = vi.fn()
     const { container } = render(<Droppable onDrop={onDrop} />)
     const label = screen.getByText('Correspondence')
+    fireEvent.dragEnter(label, types(['Files']))
     expect(fireEvent.dragOver(label, types(['Files']))).toBe(false)
     expect(container.querySelector('[data-drop-target="true"]')).toBeTruthy()
     fireEvent.dragLeave(label, { relatedTarget: document.body })
@@ -178,6 +179,19 @@ describe('Tree drops', () => {
     fireEvent.drop(screen.getByText('My Recent Docs'), types(['Files']))
     expect(container.querySelector('[data-drop-target]')).toBeNull()
     expect(onDrop).not.toHaveBeenCalled()
+  })
+
+  it('keeps the light while the drag moves between a row\'s parts, though dragleave names no element (as WebKit may)', () => {
+    const { container } = render(<Droppable onDrop={vi.fn()} />)
+    const label = screen.getByText('Correspondence')
+    const row = label.closest('[data-drop-target], span') as HTMLElement
+    fireEvent.dragEnter(row, types(['Files']))
+    fireEvent.dragOver(row, types(['Files']))
+    fireEvent.dragEnter(label, types(['Files']))
+    fireEvent.dragLeave(row, { ...types(['Files']), relatedTarget: null })
+    expect(container.querySelector('[data-drop-target="true"]')).toBeTruthy()
+    fireEvent.dragLeave(label, { ...types(['Files']), relatedTarget: null })
+    expect(container.querySelector('[data-drop-target]')).toBeNull()
   })
 })
 

@@ -20,14 +20,19 @@ export function copyOf(error: unknown): S['DocumentView'] | undefined {
 
 /**
  * What the tray says of a refused item, all from the catalogue (the server's own text is never shown): an email already
- * in the matter names its copy; a refusal that names a field says what is wrong with it; one because of a check-out or a
+ * in the matter names its copy; a refusal that names a field says what is wrong with it and which property it is; one because of a check-out or a
  * lock says who holds the document and where it's released (R14, as the details say).
  */
-export function refusalText(error: unknown, meId: number | undefined): string {
+export function refusalText(error: unknown, meId: number | undefined, labels: Record<string, string> = {}): string {
   const copy = copyOf(error)
   if (copy) return t('tray.alreadyFiled', { n: copy.docNumber })
-  const [first] = fieldErrors(error).values()
-  if (first) return first
+  // A refusal that names a field says which property it is about, with the label the form shows
+  const [named] = fieldErrors(error)
+  if (named) {
+    const [field, message] = named
+    const label = labels[field] ?? (field === 'name' ? t('filing.fieldName') : field === 'file' ? t('filing.fieldFile') : undefined)
+    return label ? `${label}: ${message}` : message
+  }
   const message = messageFor(error)
   if (error instanceof ApiError && HOLDS.has(error.code)) {
     const hold = (error.body as { hold?: S['HoldView'] } | null)?.hold

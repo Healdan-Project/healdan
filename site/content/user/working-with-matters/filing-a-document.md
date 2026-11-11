@@ -16,8 +16,11 @@ dropped in the app, uploaded in the browser, saved over WebDAV, sent through the
 
 ## Dropping Files on a Folder
 
-In the app, drag files from your desktop onto the documents list of a folder, or onto a folder in the **My Matters**
-tree, which lights up as the files come over it. Healdan files them at once, as one document each, with:
+In the app, drag files from your desktop onto the documents list of a folder, onto a folder's row in that list, or onto a
+folder in the **My Matters** tree. A folder's row or a tree folder lights up as the files come over it, and a drop on a
+folder's row files into that folder: drop on **Documents** at a matter's top level, and the files go into Documents.
+Anywhere else on the page, a dropped file is ignored, so the browser doesn't open it in place of the app. Healdan files
+the files at once, as one document each, with:
 
 - **the folder's own Class,** if it sets one, otherwise the template's default;
 - **you as Author and Typist,** and the client and matter from the matter;
@@ -31,13 +34,17 @@ An email (`.eml` or `.msg`) takes its subject as its title and fills in its emai
 If a required property has no default, Healdan can't file the files without asking, so a form appears first. It also
 appears when you hold **Option (⌥)** as you drop, if you want to set something. It lists the files, each with a title you
 can edit, and one form of properties for all of them. Its button says how many it will file, such as **File 3 Items**. A
-required property is marked, and a property picked from a list offers only its choices. This is the same form as
+required property is marked, and a property picked from a list offers only its choices. An email has no title to edit:
+it takes its subject, and the form says so. If you drop again while a form is open, the second form opens when the first
+closes. This is the same form as
 **Edit** in a document's details: see [Properties](../properties/).
 
 ### The Tray
 
 A tray in the bottom left corner of the page shows each file as it goes: **Waiting**, **Uploading…**, **Filed as #
-10501**, or why it was refused. At most three upload at a time, and they go on while you move about the app. If you try
+10501**, or why it was refused, with the folder it went into, so a drop that went somewhere you didn't expect can be
+seen. Its heading counts them, such as "2 Filed, 1 Refused". **Collapse** folds the list away to the heading, and **Clear
+Finished** takes the filed and refused items off and keeps the running ones. At most three upload at a time, and they go on while you move about the app. If you try
 to leave the page while any are still uploading, the browser asks first.
 
 - **Edit** on a filed file selects the document and opens its properties form in the details.
@@ -51,9 +58,9 @@ New documents appear in the list with one short highlight, which a browser set t
 One file's refusal doesn't stop the others. The tray gives the reason in Healdan's own words:
 
 - **A folder where documents can't go,** such as a matter's top level or a search folder, files nothing and says
-  **Choose a folder inside the matter**, as does a drop on one in the tree. A folder you can't write to says so too.
+  **Choose a folder inside the matter**, as does a drop on its row or on it in the tree. A folder you can't write to says so too.
 - **A file over the upload limit,** one of a kind your administrator doesn't allow, an empty one, or one whose name
-  isn't allowed.
+  isn't allowed. The tray says which property it is about, such as "Name: …" or "Class: This needs a value.".
 - **A message already in the matter,** which says **Already in this matter as # 10455**.
 - **Files that are unavailable for now,** when the Store's backend can't be reached.
 
@@ -67,15 +74,20 @@ Classic Interface, the upload button on its toolbar still works.
 
 ## Dropping a File on a Document
 
-Drop **one** file on a document's row, and Healdan asks **Save as Version 4 of # 10431, or File as a New Document?**
-The first saves the file as the document's next version, as **Save as new version** does in the Classic Interface (see
-[Versions](../../documents/versions/)), and the tray says **Saved as Version 4 of # 10431**. The second files it as a
-document of its own. More than one file dropped on a row are filed as new documents.
+Drop **one** file on a document's row, and if its extension is the document's (`.docx` on a `.docx`, in any case), Healdan
+asks **Save as Version 4 of # 10431, or File as a New Document?** The first saves the file as the document's next version,
+as **Save as new version** does in the Classic Interface (see [Versions](../../documents/versions/)), and the tray says
+**Saved as Version 4 of # 10431**. The second files it as a document of its own. **File as a New Document** is the
+default, so pressing Enter costs an extra document, not a version, if the drop wasn't meant for the row.
+
+A file of another kind than the document, and any drop of more than one file, is filed as new documents in the open
+folder, without asking: Healdan keeps a document's extension, so the file can't be its version.
 
 A document that is checked out by someone else, checked out on a computer, or locked can't take a version from the
 page, as the page isn't a computer. The question then says who holds it and since when, and that it's released on the
 computer it's checked out on, or in the Classic Interface (**Unlock**), and offers only **File as a New Document**.
-A check-out of your own from the page is checked in by the save.
+A check-out of your own from the page is checked in by the save. If Healdan refuses a version and leaves the document
+checked out to you, which you hadn't done, it releases it again, and the tray says the version wasn't saved.
 
 ## What Happens When You File
 

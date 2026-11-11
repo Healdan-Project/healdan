@@ -220,7 +220,7 @@ function MyMattersSection() {
 
   const nodes: TreeNode[] = matters.map((matter) => {
     const id = String(matter.folderId)
-    places.set(id, { id: matter.folderId, kind: 'matter' })
+    places.set(id, { id: matter.folderId, kind: 'matter', name: matter.display })
     return {
       id,
       textValue: `${matter.display} ${matter.client.name}`,

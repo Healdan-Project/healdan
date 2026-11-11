@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useState, type DragEvent, type ReactNode } from 'react'
+import { useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { Button, Tree as AriaTree, TreeItem as AriaTreeItem, TreeItemContent, type Key } from 'react-aria-components'
 import { Icon } from '../icons'
 import { t } from '../strings'
@@ -42,6 +42,9 @@ const loadingSuffix = '\u0000loading'
 export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acceptsDrop, onDrop, ...rest }: TreeProps) {
   // The node something is being dragged over, and takes
   const [over, setOver] = useState<string | undefined>()
+  // How many elements of the tree the drag is inside: dragenter and dragleave come in pairs for each element it crosses, and
+  // WebKit may name none as dragleave's relatedTarget, which is why they are counted
+  const inside = useRef(0)
 
   function dropProps(node: TreeNode) {
     if (!acceptsDrop) return {}
@@ -54,12 +57,17 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acc
         event.stopPropagation()
         setOver(node.id)
       },
-      onDragLeave: (event: DragEvent) => {
-        // Moving onto a child of the row isn't leaving it
-        if (event.currentTarget instanceof Node && event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
-        setOver((now) => (now === node.id ? undefined : now))
+      onDragEnter: (event: DragEvent) => {
+        if (takes(event)) inside.current++
+      },
+      onDragLeave: () => {
+        // Only a drag that entered was counted in, so its leaving is counted out
+        if (inside.current === 0) return
+        inside.current--
+        if (inside.current === 0) setOver(undefined)
       },
       onDrop: (event: DragEvent) => {
+        inside.current = 0
         setOver(undefined)
         if (!takes(event)) return
         event.preventDefault()
