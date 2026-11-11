@@ -46,7 +46,7 @@ export function formatList(values: string[]): string {
 
 const sizeUnits = ['B', 'KB', 'MB', 'GB', 'TB']
 
-/** A file's size in the units people read: "512 B", "209 KB", "1.4 MB" (1 KB is 1,024 bytes, as file managers count). */
+/** A file's size in the units people read: "512 B", "209 KB", "1.4 MB" (1,024-based: KB, MB and GB, in en-US like the app's counts). */
 export function formatSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return ''
   let value = bytes

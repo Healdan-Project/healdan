@@ -121,3 +121,18 @@
   flex-basis: 100%;
   overflow-wrap: anywhere;
 }
+
+.more {
+  margin-top: var(--hd-space-3);
+}
+
+/* The Location link: the app's link colour and the shared focus outline */
+.property a {
+  border-radius: var(--hd-radius-small);
+  color: var(--hd-accent-text);
+}
+
+.property a:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}

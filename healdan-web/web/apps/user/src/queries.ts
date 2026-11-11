@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import type { PageOf } from './pages'
 import { useApi } from './services'
@@ -91,12 +92,31 @@ export function useProperties(docNumber: number) {
   })
 }
 
-export function useVersions(docNumber: number) {
+/** The versions a request asks for at most: the server's own limit */
+const VERSIONS_PAGE = 200
+
+/**
+ * A document's timeline, 200 rows a page. `wanted` is a version a # named: pages load on until it's among them, so it
+ * shows and is marked however far back it is.
+ */
+export function useVersions(docNumber: number, wanted?: string) {
   const api = useApi()
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: keys.versions(docNumber),
-    queryFn: () => api.get<PageOf<S['VersionView']>>(apiPath`/v1/documents/${docNumber}/versions`),
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => api.get<PageOf<S['VersionView']>>(apiPath`/v1/documents/${docNumber}/versions`, { limit: VERSIONS_PAGE, offset: pageParam }),
+    getNextPageParam: (last, all) => {
+      const loaded = all.reduce((n, page) => n + page.items.length, 0)
+      return last.items.length > 0 && loaded < (last.total ?? 0) ? loaded : undefined
+    },
   })
+  const items = useMemo(() => query.data?.pages.flatMap((page) => page.items), [query.data])
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = query
+  const missing = wanted !== undefined && items !== undefined && !items.some((row) => row.version === wanted)
+  useEffect(() => {
+    if (missing && hasNextPage && !isFetchingNextPage) void fetchNextPage()
+  }, [missing, hasNextPage, isFetchingNextPage, fetchNextPage])
+  return { items, isError: query.isError, hasMore: hasNextPage, isLoadingMore: isFetchingNextPage, loadMore: () => void fetchNextPage() }
 }
 
 /** What a typed # (`10388`, `10388.2`, as the address has it) means: the document and the version it names. */

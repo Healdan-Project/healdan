@@ -3,6 +3,8 @@
 
 package com.logicaldoc.healdan.api;
 
+import java.util.Optional;
+
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
@@ -41,8 +43,18 @@ public class LookupResource {
 		User user = Caller.current().user();
 		try {
 			LookupResult found = DocNumberLookup.lookup(text, user.getId());
-			if (!found.found())
+			if (!found.found()) {
+				// A version that isn't there reads as a missing document when the API doesn't show the document
+				// itself (a legacy shortcut, or one outside the Stores), so no refusal says that one exists
+				Optional<DocNumberQuery> parsed = DocNumberQuery.parse(text);
+				if (parsed.isPresent() && parsed.get().major() != null) {
+					Document there = DocumentDAO.get().findByCustomId(Long.toString(parsed.get().number()),
+							user.getTenantId());
+					if (there != null && !ApiViews.shows(there))
+						throw ApiProblem.notFound("No document #" + parsed.get().number());
+				}
 				throw ApiProblem.notFound(found.message());
+			}
 			// Like GET /documents/{docNumber}: a document the API doesn't show (outside the Stores, or a legacy shortcut)
 			// answers as one that doesn't exist
 			Document document = DocumentDAO.get().findById(found.docId());

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { versionRow } from '../test/fakeApi'
 import { Versions } from './Versions'
 
@@ -32,6 +32,16 @@ describe('Versions', () => {
 
     const last = within(screen.getByRole('group', { name: 'Versions' })).getAllByRole('listitem')[2]!
     expect(last.textContent).toBe('Version 1')
+  })
+
+  it('offers more when there are more, and says it is loading them', () => {
+    const more = vi.fn()
+    const { rerender } = render(<Versions versions={rows} onShowMore={more} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Show More Versions' }))
+    expect(more).toHaveBeenCalledTimes(1)
+
+    rerender(<Versions versions={rows} onShowMore={more} loading />)
+    expect((screen.getByRole('button', { name: 'Show More Versions' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('says so when there is nothing', () => {

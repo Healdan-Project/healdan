@@ -22,7 +22,7 @@ function textOf(field: S['ProfileField'] | undefined): string {
   if (typeof value === 'string') return field?.type === 'date' ? formatDateTime(value) : value
   if (typeof value === 'number') return String(value)
   if (typeof value === 'boolean') return t(value ? 'details.yes' : 'details.no')
-  return value.name ?? ''
+  return value.name ?? t('details.unnamedUser')
 }
 
 interface Entry {
@@ -59,7 +59,7 @@ export function Properties({ document, fields, context }: { document: S['Documen
   entries.push({ label: labelOf('client', t('details.client')), value: matter ? `${matter.client.number} – ${matter.client.name}` : textOf(byName.get('client')) })
   entries.push({ label: labelOf('matter', t('details.matter')), value: matter ? matter.display : textOf(byName.get('matter')) })
   for (const name of ['docclass', 'docsubclass']) add(name)
-  entries.push({ label: labelOf('author', t('filters.author')), value: textOf(byName.get('author')) || document.author?.displayName || '' })
+  entries.push({ label: labelOf('author', t('details.author')), value: document.author?.displayName ?? textOf(byName.get('author')) })
   add('typist')
   entries.push({ label: t('details.dateFiled'), value: formatDate(document.dateFiled) })
   if (emailFields.some((name) => textOf(byName.get(name)) !== '')) for (const name of emailFields) add(name)

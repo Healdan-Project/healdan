@@ -167,6 +167,9 @@ public class LookupTest extends ApiTestCase {
 		}
 		ApiResponse bare = lookup("#" + n);
 		assertEquals("No document #" + n, bare.json().path("detail").textValue());
+		// Every refusal reads like a nonexistent document, a version that isn't there included
+		for (String typed : new String[] { "#" + n + ".1", "#" + n + ".9" })
+			assertEquals(typed, "No document #" + n, lookup(typed).json().path("detail").textValue());
 		assertEquals(missing.json().path("title"), bare.json().path("title"));
 		assertEquals(missing.json().path("type"), bare.json().path("type"));
 

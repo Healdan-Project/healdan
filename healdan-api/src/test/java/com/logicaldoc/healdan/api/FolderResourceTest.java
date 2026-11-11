@@ -386,6 +386,25 @@ public class FolderResourceTest extends ApiTestCase {
 				.path("total").asInt());
 	}
 
+	/** A legacy shortcut is no document the API shows, so a list neither lists, counts nor facets it (R43). */
+	@Test
+	public void testShortcutIsLeftOutOfLists() throws Exception {
+		Document target = fx.upload(documents, "memo.docx", "mm", boss);
+		Document shortcut = fx.legacyShortcut(DocumentDAO.get().findById(target.getId()), documents);
+		awaitAsyncWork();
+		String token = signIn(boss);
+
+		JsonNode page = get("/api/v1/folders/" + documents.getId() + "/children?facets=type,author").token(token).send().json();
+
+		assertEquals(page.toString(), 1, page.path("total").asInt());
+		assertEquals(1, page.path("documents").asInt());
+		assertEquals(1, page.path("items").size());
+		assertEquals(Long.parseLong(target.getCustomId()), page.path("items").get(0).path("docNumber").asLong());
+		assertEquals(1, page.path("facets").path("type").get(0).path("count").asInt());
+		assertEquals(1, page.path("facets").path("author").get(0).path("count").asInt());
+		assertEquals(404, get("/api/v1/documents/" + shortcut.getCustomId()).token(token).send().status());
+	}
+
 	@Test
 	public void testMatterWorkspaceChildren() throws Exception {
 		fx.searchFolder(workspace, "Recent");

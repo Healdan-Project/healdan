@@ -29,12 +29,7 @@ export function DocResult({ reference }: DocResultProps) {
     // Not a doc # at all (400): the router's own not-found view
     if (error instanceof ApiError && error.status === 400) return <NotFound />
     if (error instanceof ApiError && error.status === 404) {
-      // The number as typed, which is all the person knows; nothing the server said
-      return (
-        <section className={styles.view}>
-          <p>{t('doc.notFound', { n: /^\d+/.exec(reference)?.[0] ?? reference })}</p>
-        </section>
-      )
+      return <NotFoundNumber reference={reference} />
     }
     return (
       <section className={styles.view}>
@@ -53,10 +48,21 @@ export function DocResult({ reference }: DocResultProps) {
   return <Found docNumber={lookup.data.docNumber} version={named ? lookup.data.version : undefined} />
 }
 
+// The number as typed, which is all the person knows; nothing the server said
+function NotFoundNumber({ reference }: { reference: string }) {
+  return (
+    <section className={styles.view}>
+      <p>{t('doc.notFound', { n: /^\d+/.exec(reference)?.[0] ?? reference })}</p>
+    </section>
+  )
+}
+
 function Found({ docNumber, version }: { docNumber: number; version?: string }) {
   const document = useDocument(docNumber)
   const rows = useMemo(() => (document.data ? [rowOf(document.data)] : []), [document.data])
   if (document.isError) {
+    // The document went away after the lookup found it: the same words as a lookup that found nothing
+    if (document.error instanceof ApiError && document.error.status === 404) return <NotFoundNumber reference={String(docNumber)} />
     return (
       <section className={styles.view}>
         <ErrorPanel error={document.error} onRetry={() => void document.refetch()} />
@@ -78,7 +84,7 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
           empty={t('common.loading')}
         />
       </div>
-      <RightRegionView details={<DetailsPanel docNumber={docNumber} row={document.data} version={version} />} />
+      <RightRegionView details={<DetailsPanel docNumber={docNumber} row={document.data} version={version} context="search" />} />
     </section>
   )
 }

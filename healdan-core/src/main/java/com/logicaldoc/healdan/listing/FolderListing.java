@@ -361,6 +361,8 @@ public class FolderListing {
 		return select -> {
 			select.where.add("d.ld_folderid = :folder");
 			select.where.add("d.ld_deleted = 0");
+			// A legacy shortcut is no document of its own: the API answers 404 for its doc #
+			select.where.add("d.ld_docref is null");
 			select.where.add(ListingSql.isDocNumber("d"));
 			select.params.addValue("folder", folderId);
 			if (!seesUnpublished)
@@ -449,6 +451,8 @@ public class FolderListing {
 		return select -> {
 			select.where.add("d.ld_id in (:ids)");
 			select.where.add("d.ld_deleted = 0");
+			// A legacy shortcut is no document of its own: the API answers 404 for its doc #
+			select.where.add("d.ld_docref is null");
 			select.where.add(ListingSql.isDocNumber("d"));
 			select.params.addValue("ids", ids);
 		};

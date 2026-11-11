@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import type { components } from '@healdan/api'
-import { formatDateTime, formatVersion, t } from '@healdan/ui'
+import { Button, formatDateTime, formatVersion, t } from '@healdan/ui'
 import { Section } from './Section'
 import styles from './details.module.css'
 
 type S = components['schemas']
 
-/** A document's timeline, newest first as the server gives it. `selected` is the version a # named (`#10388.2`). */
-export function Versions({ versions, selected }: { versions: S['VersionView'][]; selected?: string }) {
+/** A document's timeline, newest first as the server gives it. `selected` is the version a # named (`#10388.2`); `onShowMore` is there while more are to load. */
+export function Versions({ versions, selected, onShowMore, loading = false }: { versions: S['VersionView'][]; selected?: string; onShowMore?: () => void; loading?: boolean }) {
   return (
     <Section title={t('details.versions')}>
       {versions.length === 0 ? (
@@ -25,6 +25,13 @@ export function Versions({ versions, selected }: { versions: S['VersionView'][];
             </li>
           ))}
         </ul>
+      )}
+      {onShowMore && (
+        <div className={styles.more}>
+          <Button isDisabled={loading} onPress={onShowMore}>
+            {t('details.versionsMore')}
+          </Button>
+        </div>
       )}
     </Section>
   )

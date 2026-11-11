@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { letter, propertiesOf } from '../test/details'
 import { document } from '../test/fakeApi'
 import { renderWithRouter } from '../test/renderWithRouter'
+import css from './details.module.css?raw'
 import { Properties } from './Properties'
 
 describe('Properties', () => {
@@ -37,6 +38,22 @@ describe('Properties', () => {
     expect(value('Subclass')).toBe('None')
     expect(value('Author')).toBe('None')
     expect(within(list).queryByText('Typist')).toBeNull()
+  })
+
+  it('shows who a user property is when it has no name, and None only when there is no user', async () => {
+    const bare = document({ docNumber: 1, author: { username: 'jclarke', displayName: 'jclarke' } })
+    await renderWithRouter(<Properties document={bare} fields={propertiesOf({ author: { id: 3, name: null }, typist: { id: 5, name: null } })} context="folder" />)
+
+    const list = await screen.findByRole('group', { name: 'Properties' })
+    const value = (label: string) => within(list).getByText(label).nextElementSibling?.textContent
+    // The Author is the document's, which the server names by its username when it has no name
+    expect(value('Author')).toBe('jclarke')
+    expect(value('Typist')).toBe('Unnamed User')
+  })
+
+  it('styles the Location link as a link with the shared focus outline', () => {
+    expect(css).toMatch(/\.property a\s*{[^}]*color: var\(--hd-accent-text\)/)
+    expect(css).toMatch(/\.property a:focus-visible\s*{[^}]*outline: var\(--hd-focus-outline\)/)
   })
 
   it('shows no email field for a document that has none of them', async () => {

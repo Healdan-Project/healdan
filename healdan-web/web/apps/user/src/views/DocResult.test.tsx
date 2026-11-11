@@ -2,15 +2,16 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import { detailsRoutes, letter } from '../test/details'
-import { problem, type Routes } from '../test/fakeApi'
+import { page, problem, versionRow, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
 function routes(over: Routes = {}): Routes {
   return {
-    'GET /v1/lookup': ({ query }: { query?: Record<string, unknown> }) => ({ docNumber: 10388, version: query?.q === '#10388.2' ? '2.0' : '2.1' }),
+    'GET /v1/lookup': ({ query }: { query?: Record<string, unknown> }) => ({ docNumber: 10388, version: query?.q === '#10388.2' ? '2.1' : '2.1' }),
     ...detailsRoutes(letter),
     ...over,
   }
@@ -47,8 +48,8 @@ describe('DocResult', () => {
     const versions = within(panel).getByRole('group', { name: 'Versions' })
     const marked = within(versions).getAllByRole('listitem').filter((item) => item.getAttribute('aria-current') === 'true')
     expect(marked).toHaveLength(1)
-    expect(marked[0]!.textContent).toContain('Version 2')
-    expect(marked[0]!.textContent).not.toContain('Version 2.1')
+    // The server answers a bare major with its latest snapshot, 2.1 here, not the whole version 2.0
+    expect(marked[0]!.textContent).toContain('Version 2.1')
     expect(api.callsTo('GET /v1/lookup')[0]!.query).toEqual({ q: '#10388.2' })
   })
 
@@ -91,6 +92,59 @@ describe('DocResult', () => {
 
     expect(await within(main()).findByText('Something went wrong.')).toBeTruthy()
     expect(within(main()).getByRole('button', { name: 'Try Again' })).toBeTruthy()
+  })
+
+  it('has Location, linking to the folder, since a pasted link has no breadcrumb', async () => {
+    await renderApp('/doc/10388', routes())
+    const panel = await screen.findByRole('region', { name: 'Details' })
+
+    const link = await within(panel).findByRole('link', { name: 'Correspondence' })
+    expect(link.getAttribute('href')).toBe('/app/folders/111')
+  })
+
+  it('shows the # words when the document goes away after the lookup found it', async () => {
+    await renderApp('/doc/10388', routes({ 'GET /v1/documents/10388': problem(404, 'not-found') }))
+
+    expect(await within(main()).findByText('No document # 10388 that you can see.')).toBeTruthy()
+  })
+
+  describe('a long timeline', () => {
+    // 250 rows, newest first: 250.0 down to 1.0, as the server pages them 200 at a time
+    const timeline = Array.from({ length: 250 }, (_, i) => versionRow({ version: `${250 - i}.0`, fileVersion: `${250 - i}.0` }))
+    const long = (version: string) =>
+      routes({
+        'GET /v1/lookup': { docNumber: 10388, version },
+        'GET /v1/documents/10388/versions': ({ query }: { query?: Record<string, unknown> }) => {
+          const offset = Number(query?.offset ?? 0)
+          const limit = Number(query?.limit ?? 50)
+          return { ...page(timeline.slice(offset, offset + limit)), offset, limit, total: 250 }
+        },
+      })
+
+    it('asks for 200 a page and offers the rest', async () => {
+      const { api } = await renderApp('/doc/10388', long('250.0'))
+      const panel = await screen.findByRole('region', { name: 'Details' })
+
+      await within(panel).findAllByRole('listitem')
+      const versions = within(panel).getByRole('group', { name: 'Versions' })
+      expect(within(versions).getAllByRole('listitem')).toHaveLength(200)
+      expect(api.callsTo('GET /v1/documents/10388/versions')[0]!.query).toMatchObject({ limit: 200 })
+
+      await userEvent.click(within(versions).getByRole('button', { name: 'Show More Versions' }))
+      await waitFor(() => expect(within(versions).getAllByRole('listitem')).toHaveLength(250))
+      expect(within(versions).queryByRole('button', { name: 'Show More Versions' })).toBeNull()
+    })
+
+    it('loads on until the version a # names is shown and marked', async () => {
+      await renderApp('/doc/10388.20', long('20.0'))
+      const panel = await screen.findByRole('region', { name: 'Details' })
+
+      await waitFor(() => {
+        const marked = within(panel).getAllByRole('listitem').filter((item) => item.getAttribute('aria-current') === 'true')
+        expect(marked).toHaveLength(1)
+        expect(marked[0]!.textContent).toContain('Version 20')
+      })
+    })
   })
 
   it('passes axe', async () => {

@@ -28,6 +28,13 @@ and its versions. For a version or snapshot, that version is marked in **Version
   version that doesn't exist, such as `/app/doc/1234.9`.
 - **If what follows `/doc/` isn't a doc #,** the page says "Not found, or you can't see it."
 
+## The Doc ID
+
+`#1234 v2.1` is the doc ID: the form LibreOffice's title bar shows (`Lease agreement #1234 v2.1`) and the [doc ID
+footer](../../office/doc-id-footer/) prints, so you can copy it from either. The Healdan Helper's Save and Open windows
+take the same forms as the table above, with the `#`, and a space after the `#` or before the `v`. In the web app's
+addresses, leave the `#` and the spaces out, as in the table.
+
 ## Copying a Link
 
 Select a document in a folder's list, and choose **Copy Link** in its details. Healdan puts a link such as
@@ -38,6 +45,12 @@ if they may read it.
 Healdan can only copy to your clipboard when the page is on a secure address (`https://`), or on your own computer. If
 it can't, it says "The link couldn't be copied." Type the address by hand instead: it's your page's address up to
 `/app/`, then `doc/` and the number.
+
+## In the Classic Interface
+
+The [Classic Interface](../../the-classic-interface/)'s search box takes the same forms with the `#` in front, with its
+scope on **Documents**: `#1234` lists just that document, and `#1234.2.1` opens a window for that snapshot. Without the
+`#`, `1234` is an ordinary full-text search, because numbers appear inside documents too.
 
 ## Legacy Doc \#
 

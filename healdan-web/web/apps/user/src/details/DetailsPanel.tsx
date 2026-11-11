@@ -33,7 +33,7 @@ export interface DetailsPanelProps {
 export function DetailsPanel({ docNumber, row, version, context = 'folder' }: DetailsPanelProps) {
   const document = useDocument(docNumber, row)
   const properties = useProperties(docNumber)
-  const versions = useVersions(docNumber)
+  const versions = useVersions(docNumber, version)
   const doc = document.data
 
   if (document.isError) return <ErrorPanel error={document.error} onRetry={() => void document.refetch()} />
@@ -65,8 +65,8 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
         <Section title={t('details.versions')}>
           <p className={styles.note}>{t('details.versionsUnavailable')}</p>
         </Section>
-      ) : versions.data ? (
-        <Versions versions={versions.data.items} selected={version} />
+      ) : versions.items ? (
+        <Versions versions={versions.items} selected={version} onShowMore={versions.hasMore ? versions.loadMore : undefined} loading={versions.isLoadingMore} />
       ) : (
         <Section title={t('details.versions')}>
           <p className={styles.note}>{t('common.loading')}</p>
