@@ -4,6 +4,7 @@
 import { Outlet } from '@tanstack/react-router'
 import { useSignedOut } from '../services'
 import { LeftPane } from './LeftPane'
+import { RightRegionProvider } from './RightRegion'
 import { SignedOut } from './SignedOut'
 import { StorageBanner } from './StorageBanner'
 import { TopBar } from './TopBar'
@@ -15,13 +16,15 @@ export function Frame() {
   const signedOut = useSignedOut()
   if (signedOut) return <SignedOut />
   return (
-    <div className={styles.frame}>
-      <TopBar />
-      <LeftPane />
-      <main className={styles.main}>
-        <StorageBanner />
-        <Outlet />
-      </main>
-    </div>
+    <RightRegionProvider>
+      <div className={styles.frame}>
+        <TopBar />
+        <LeftPane />
+        <main className={styles.main}>
+          <StorageBanner />
+          <Outlet />
+        </main>
+      </div>
+    </RightRegionProvider>
   )
 }

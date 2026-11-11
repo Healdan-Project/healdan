@@ -4,6 +4,7 @@
 import { createRootRoute, createRoute, createRouter, type RouterHistory } from '@tanstack/react-router'
 import { t } from '@healdan/ui'
 import { Frame } from './frame/Frame'
+import { filterSearch, multiFilters, type Filters } from './filters/useFilters'
 import { idFrom } from './queries'
 import { FolderView } from './views/FolderView'
 import { NotFound } from './views/NotFound'
@@ -13,14 +14,20 @@ import { RecentKindView } from './views/RecentKind'
 import { isSortColumn, type ListingOrder, type SortColumn } from './views/useListing'
 
 // Addresses carry plain strings (?sel=10388, not ?sel="10388"), which the default JSON-aware search handling would quote.
-function parseSearch(search: string): Record<string, string> {
-  return Object.fromEntries(new URLSearchParams(search))
+// A filter can repeat (?type=pdf&type=word), so those come as lists; anything else repeated keeps its last value.
+function parseSearch(search: string): Record<string, string | string[]> {
+  const params = new URLSearchParams(search)
+  const parsed: Record<string, string | string[]> = Object.fromEntries(params)
+  for (const name of multiFilters) if (params.has(name)) parsed[name] = params.getAll(name)
+  return parsed
 }
 
 function stringifySearch(search: Record<string, unknown>): string {
   const params = new URLSearchParams()
   for (const [name, value] of Object.entries(search)) {
-    if (value !== undefined && value !== null && value !== '') params.set(name, String(value))
+    for (const one of Array.isArray(value) ? value : [value]) {
+      if (one !== undefined && one !== null && one !== '') params.append(name, String(one))
+    }
   }
   const text = params.toString()
   return text ? `?${text}` : ''
@@ -51,9 +58,10 @@ const recentRoute = createRoute({
 const foldersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'folders/$id',
-  validateSearch: (search: Record<string, unknown>): { sort?: SortColumn; order?: ListingOrder } => ({
+  validateSearch: (search: Record<string, unknown>): { sort?: SortColumn; order?: ListingOrder } & Partial<Filters> => ({
     sort: isSortColumn(search.sort) ? search.sort : undefined,
     order: search.order === 'asc' || search.order === 'desc' ? search.order : undefined,
+    ...filterSearch(search),
   }),
   component: function FolderRoute() {
     const { id } = foldersRoute.useParams()
@@ -68,10 +76,10 @@ const foldersRoute = createRoute({
 const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'search',
-  validateSearch: (search: Record<string, unknown>): { scope?: string; q?: string; type?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { scope?: string; q?: string } & Partial<Filters> => ({
     scope: text(search.scope),
     q: text(search.q),
-    type: text(search.type),
+    ...filterSearch(search),
   }),
   component: () => <NotYet title={t('notYet.search')} />,
 })

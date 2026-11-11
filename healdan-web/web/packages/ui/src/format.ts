@@ -17,6 +17,15 @@ export function formatDate(iso: string): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date)
 }
 
+/** A day with no time, as 2026-11-02, shown in the person's style ("Nov 2, 2026") whichever day it is today and in whatever time zone. */
+export function formatDay(day: string): string {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day)
+  if (!parts) return ''
+  // Built from its parts in the local zone, so the zone can't move it to the day before or after
+  const date = new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]))
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date)
+}
+
 export function formatDateTime(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''

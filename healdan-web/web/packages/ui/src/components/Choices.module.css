@@ -1,0 +1,82 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+  margin: 0;
+}
+
+.legend {
+  margin-bottom: var(--hd-space-2);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+  min-height: 24px;
+  border-radius: var(--hd-radius-small);
+  color: var(--hd-text);
+  cursor: default;
+}
+
+.choice[data-focus-visible] {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}
+
+.box {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--hd-field-line);
+  border-radius: var(--hd-radius-small);
+  background: var(--hd-field);
+  color: transparent;
+}
+
+.round {
+  border-radius: 50%;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.choice[data-selected] .box {
+  border-color: var(--hd-accent-fill);
+  background: var(--hd-accent-fill);
+  color: var(--hd-accent-on-fill);
+}
+
+.choice[data-selected] .dot {
+  background: var(--hd-accent-on-fill);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  color: var(--hd-text-secondary);
+  font-variant-numeric: tabular-nums;
+}

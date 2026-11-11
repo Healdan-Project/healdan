@@ -1,0 +1,127 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+}
+
+.label {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 26px;
+  border: 1px solid var(--hd-field-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-field);
+  color: var(--hd-text);
+}
+
+.input {
+  display: flex;
+  flex: 1;
+  padding: 0 var(--hd-space-3);
+}
+
+.segment {
+  padding: 0 1px;
+  border-radius: var(--hd-radius-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.segment[data-placeholder] {
+  color: var(--hd-text-secondary);
+}
+
+.segment[data-focused] {
+  background: var(--hd-accent-fill);
+  color: var(--hd-accent-on-fill);
+  outline: none;
+}
+
+.open,
+.step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  min-height: 24px;
+  border: 0;
+  border-radius: var(--hd-radius-small);
+  background: transparent;
+  color: var(--hd-text);
+  cursor: default;
+}
+
+.open[data-focus-visible],
+.step[data-focus-visible],
+.cell[data-focus-visible] {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}
+
+.popover {
+  border-radius: var(--hd-radius);
+  background: var(--hd-window);
+  box-shadow: var(--hd-shadow-popup);
+}
+
+.dialog {
+  padding: var(--hd-space-4);
+  outline: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--hd-space-3);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--hd-font-size);
+  font-weight: var(--hd-weight-bold);
+}
+
+.grid th {
+  color: var(--hd-text-secondary);
+  font-weight: var(--hd-weight-medium);
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  border-radius: var(--hd-radius-small);
+  color: var(--hd-text);
+  cursor: default;
+  outline: none;
+}
+
+.cell[data-outside-month] {
+  display: none;
+}
+
+.cell[data-hovered] {
+  background: var(--hd-row-alt);
+}
+
+.cell[data-selected] {
+  background: var(--hd-accent-fill);
+  color: var(--hd-accent-on-fill);
+}
+
+.cell[data-disabled],
+.cell[data-unavailable] {
+  color: var(--hd-text-muted);
+}

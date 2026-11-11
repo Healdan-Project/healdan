@@ -42,4 +42,11 @@ describe('Toolbar', () => {
     render(<Toolbar label="Correspondence" />)
     expect(screen.getByRole('status').textContent).toBe('')
   })
+
+  it('puts what it is given for its end after the count, and is then a toolbar', () => {
+    render(<Toolbar label="Folder Actions" count={{ documents: 7 }} end={<button>Filters</button>} />)
+    const bar = screen.getByRole('toolbar', { name: 'Folder Actions' })
+    expect(bar.lastElementChild?.textContent).toBe('Filters')
+    expect(bar.children[0]?.textContent).toBe('7 documents')
+  })
 })

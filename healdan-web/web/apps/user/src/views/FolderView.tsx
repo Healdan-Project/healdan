@@ -3,17 +3,24 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useId, useMemo, useState } from 'react'
+import { useId, useMemo, useRef, useState } from 'react'
 import { ApiError, apiPath, type components } from '@healdan/api'
 import { Button, formatDate, formatVersion, Icon, t, Table, toast, type IconName, type TableColumn, type TableRow, type TableSort } from '@healdan/ui'
+import { FilterChips } from '../filters/FilterChips'
+import { FiltersButton } from '../filters/FiltersButton'
+import { FiltersPanel } from '../filters/FiltersPanel'
+import { useFacets, useUnfilteredDocuments } from '../filters/useFacets'
+import { useFilters } from '../filters/useFilters'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { messageFor } from '../frame/errors'
+import { RightRegionView, useRightRegion } from '../frame/RightRegion'
 import { keys, useFavorites, useFolder } from '../queries'
 import { useSelection } from '../selection'
 import { useApi } from '../services'
 import { Breadcrumb } from './Breadcrumb'
+import { DetailsStub } from './DetailsStub'
 import { NotFound } from './NotFound'
-import { Toolbar } from './Toolbar'
+import { Toolbar, type ListCount } from './Toolbar'
 import { childKey, isSortColumn, useListing, type Child, type ListingOrder, type SortColumn } from './useListing'
 import styles from './views.module.css'
 
@@ -68,15 +75,22 @@ export interface FolderViewProps {
   order?: ListingOrder
 }
 
-// /folders/{id}: a folder, a search folder or a matter's top level (spec section 6.1). Tasks 13, 14, 16 and 19 add the
-// filters, the details, the preview and filing by drop to it.
+// /folders/{id}: a folder, a search folder or a matter's top level (spec section 6.1), with Filters or the selected
+// document's details beside it. Tasks 14, 16 and 19 add the details, the preview and filing by drop to it.
 export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const folder = useFolder(folderId)
   const view = folder.data
   const store = view?.kind === 'store'
   const asked = sort && { column: sort, direction: order === 'desc' ? ('descending' as const) : ('ascending' as const) }
   // The folder and its list are asked for at once: the list doesn't wait for the folder.
-  const listing = useListing({ folderId, sort: asked, enabled: !store })
+  const { filters, active, change, remove, clear } = useFilters()
+  const listing = useListing({ folderId, sort: asked, filters, enabled: !store })
+  const region = useRightRegion()
+  const funnel = useRef<HTMLButtonElement>(null)
+  const filtersOpen = region.show === 'filters'
+  // The options' counts only while the panel shows them; "of 7" only while a filter leaves some out
+  const facets = useFacets({ folderId, filters, enabled: filtersOpen && !store })
+  const unfiltered = useUnfilteredDocuments({ folderId, enabled: active > 0 && !store })
   const navigate = useNavigate()
   const headingId = useId()
   const { selected, select } = useSelection()
@@ -84,6 +98,13 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const [several, setSeveral] = useState<Set<string> | null>(null)
   const selection = several && selected === undefined ? several : new Set(selected === undefined ? [] : [`d${selected}`])
   const rows = useMemo(() => listing.rows.map(rowOf), [listing.rows])
+  // The Authors' names, from the rows and the options, for the chips (a username shows as itself otherwise)
+  const authors = useMemo(() => {
+    const names = new Map<string, string>()
+    for (const item of listing.rows) if (item.type === 'document' && item.author) names.set(item.author.username, item.author.displayName)
+    for (const option of facets.data?.author ?? []) names.set(option.value, option.displayName)
+    return names
+  }, [listing.rows, facets.data])
 
   if (folder.isError) {
     if (folder.error instanceof ApiError && folder.error.status === 404) return <NotFound />
@@ -117,6 +138,8 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   function changeSelection(next: Set<string>) {
     const documents = [...next].filter((key) => key.startsWith('d'))
     setSeveral(documents.length > 1 ? new Set(documents) : null)
+    // Clicking a document while Filters are open shows its details, as the owner asked; the funnel brings Filters back.
+    if (documents.length > 0 && region.show === 'filters') region.open('details')
     select(documents.length === 1 ? Number(documents[0]!.slice(1)) : undefined)
   }
 
@@ -126,43 +149,84 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
     else changeSelection(new Set([key]))
   }
 
+  const selectedRow = selected === undefined ? undefined : listing.rows.find((item) => item.type === 'document' && item.docNumber === selected)
+
+  function toggleFilters() {
+    if (filtersOpen) region.close()
+    else region.open('filters')
+  }
+
   return (
-    <section className={`${styles.view} ${styles.folder}`} aria-labelledby={headingId}>
-      <Breadcrumb folder={view} />
-      <div className={styles.heading}>
-        <h1 id={headingId} className={styles.title}>
-          {view.name}
-        </h1>
-        {/* A matter goes in My Matters (the + in the left pane), not in Favorites */}
-        {view.kind !== 'matter' && !store && <FavoriteStar folderId={folderId} />}
+    <section className={styles.withRegion} aria-labelledby={headingId}>
+      <div className={`${styles.view} ${styles.folder}`}>
+        <Breadcrumb folder={view} />
+        <div className={styles.heading}>
+          <h1 id={headingId} className={styles.title}>
+            {view.name}
+          </h1>
+          {/* A matter goes in My Matters (the + in the left pane), not in Favorites */}
+          {view.kind !== 'matter' && !store && <FavoriteStar folderId={folderId} />}
+        </div>
+        {store ? (
+          <p>{t('problems.not-browsable')}</p>
+        ) : listing.isError ? (
+          <ErrorPanel error={listing.error} onRetry={listing.refetch} />
+        ) : (
+          <>
+            <Toolbar
+              label={t('folder.actions')}
+              count={countOf(listing.documents, active > 0, unfiltered.data)}
+              end={<FiltersButton ref={funnel} open={filtersOpen} active={active} onPress={toggleFilters} />}
+            />
+            <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} />
+            <Table
+              aria-labelledby={headingId}
+              columns={columns}
+              rows={rows}
+              sort={shown}
+              onSort={sortBy}
+              selectionMode="multiple"
+              selection={selection}
+              onSelectionChange={changeSelection}
+              onOpen={open}
+              loadMore={listing.loadMore}
+              isLoadingMore={listing.isLoadingMore}
+              total={listing.total}
+              empty={listing.isPending ? t('common.loading') : active > 0 ? t('filters.empty') : t('folder.empty')}
+              busy={listing.isStale}
+            />
+          </>
+        )}
       </div>
-      {store ? (
-        <p>{t('problems.not-browsable')}</p>
-      ) : listing.isError ? (
-        <ErrorPanel error={listing.error} onRetry={listing.refetch} />
-      ) : (
-        <>
-          <Toolbar label={t('folder.actions')} count={listing.documents === undefined ? undefined : { documents: listing.documents }} />
-          <Table
-            aria-labelledby={headingId}
-            columns={columns}
-            rows={rows}
-            sort={shown}
-            onSort={sortBy}
-            selectionMode="multiple"
-            selection={selection}
-            onSelectionChange={changeSelection}
-            onOpen={open}
-            loadMore={listing.loadMore}
-            isLoadingMore={listing.isLoadingMore}
-            total={listing.total}
-            empty={listing.isPending ? t('common.loading') : t('folder.empty')}
-            busy={listing.isStale}
-          />
-        </>
+      {!store && (
+        <RightRegionView
+          filters={
+            <FiltersPanel
+              filters={filters}
+              facets={facets.data}
+              unavailable={facets.isError}
+              context="folder"
+              onChange={change}
+              onClose={() => {
+                region.close()
+                // The panel's close button goes with it; the funnel is where focus belongs.
+                funnel.current?.focus()
+              }}
+            />
+          }
+          details={selected !== undefined && <DetailsStub docNumber={selected} name={selectedRow?.name} />}
+        />
       )}
     </section>
   )
+}
+
+/** What the count says: all the documents, or, with filters in use, how many pass of how many there are. */
+function countOf(documents: number | undefined, filtered: boolean, all: number | undefined): ListCount | undefined {
+  if (documents === undefined) return undefined
+  if (!filtered) return { documents }
+  // Nothing says "3 of ?" while the other count comes
+  return all === undefined ? undefined : { documents, of: all }
 }
 
 /** The star beside a folder's name: in Favorites or not. */

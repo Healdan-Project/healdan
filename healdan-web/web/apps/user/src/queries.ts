@@ -18,6 +18,9 @@ export const keys = {
   favorites: ['favorites'] as const,
   folder: (id: number) => ['folders', id] as const,
   subfolders: (id: number) => ['folders', id, 'subfolders'] as const,
+  // Which facets, counted over what the filters leave, and how many documents the folder holds without filters
+  facets: (id: number, options: Record<string, unknown>) => ['folders', id, 'facets', options] as const,
+  unfiltered: (id: number) => ['folders', id, 'unfiltered'] as const,
   children: (id: number, options: Record<string, unknown>) => ['folders', id, 'children', options] as const,
 }
 

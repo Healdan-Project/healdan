@@ -5,6 +5,7 @@ import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import type { TableSort } from '@healdan/ui'
+import { filterParams, noFilters, type Filters } from '../filters/useFilters'
 import { keys } from '../queries'
 import { useApi } from '../services'
 
@@ -29,6 +30,8 @@ export interface ListingOptions {
   folderId: number
   /** None keeps the server's own order: by title, or a search folder's newest change first */
   sort?: { column: SortColumn; direction: TableSort['direction'] }
+  /** Only documents that pass them are listed, and counted */
+  filters?: Filters
   /** False asks nothing, as for a Store, which has no list */
   enabled?: boolean
 }
@@ -52,13 +55,16 @@ export interface Listing {
 }
 
 /** A folder's children, paged: TanStack Query's infinite query over GET /folders/{id}/children. */
-export function useListing({ folderId, sort, enabled = true }: ListingOptions): Listing {
+export function useListing({ folderId, sort, filters = noFilters, enabled = true }: ListingOptions): Listing {
   const api = useApi()
-  const order = sort ? { sort: sort.column, order: sort.direction === 'descending' ? 'desc' : 'asc' } : {}
+  const params = {
+    ...(sort ? { sort: sort.column, order: sort.direction === 'descending' ? 'desc' : 'asc' } : {}),
+    ...filterParams(filters),
+  }
   const query = useInfiniteQuery({
-    queryKey: keys.children(folderId, order),
+    queryKey: keys.children(folderId, params),
     queryFn: ({ pageParam }) =>
-      api.get<ChildPage>(apiPath`/v1/folders/${folderId}/children`, { ...order, offset: pageParam, limit: PAGE_SIZE }),
+      api.get<ChildPage>(apiPath`/v1/folders/${folderId}/children`, { ...params, offset: pageParam, limit: PAGE_SIZE }),
     initialPageParam: 0,
     getNextPageParam: (last) => {
       const next = last.offset + last.items.length

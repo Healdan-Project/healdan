@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { describe, expect, it } from 'vitest'
-import { formatDate, formatDateTime, formatVersion } from './format'
+import { formatDate, formatDateTime, formatDay, formatVersion } from './format'
 
 describe('formatDate', () => {
   it("shows today's time", () => {
@@ -41,5 +41,17 @@ describe('formatVersion', () => {
     expect(formatVersion('2.1')).toBe('2.1')
     expect(formatVersion('10.0')).toBe('10')
     expect(formatVersion('10.10')).toBe('10.10')
+  })
+})
+
+describe('formatDay', () => {
+  it('shows a day as the person reads it, never moved by the time zone', () => {
+    expect(formatDay('2026-11-02')).toBe('Nov 2, 2026')
+    expect(formatDay('2026-01-01')).toBe('Jan 1, 2026')
+  })
+
+  it('shows nothing for what is not a day', () => {
+    expect(formatDay('soon')).toBe('')
+    expect(formatDay('')).toBe('')
   })
 })

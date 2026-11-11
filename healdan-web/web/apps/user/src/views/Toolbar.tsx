@@ -21,21 +21,24 @@ export interface ToolbarProps {
   count?: ListCount
   /** The view's controls; later tasks add them (spec section 6.1) */
   children?: ReactNode
+  /** What follows the count, at the bar's right end: the Filters button */
+  end?: ReactNode
 }
 
 // The bar above a list: the view's controls, then the count, at the end. The count is a status, so a screen reader
 // hears it when sorting or filtering changes it.
-export function Toolbar({ label, count, children }: ToolbarProps) {
+export function Toolbar({ label, count, children, end }: ToolbarProps) {
   const status = (
     <span role="status" className={styles.count}>
       {count && countText(count)}
     </span>
   )
-  if (!children) return <div className={styles.toolbar}>{status}</div>
+  if (!children && !end) return <div className={styles.toolbar}>{status}</div>
   return (
     <div role="toolbar" aria-label={label} className={styles.toolbar}>
       {children}
       {status}
+      {end}
     </div>
   )
 }

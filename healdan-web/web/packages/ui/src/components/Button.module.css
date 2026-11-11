@@ -30,6 +30,10 @@
   color: inherit;
 }
 
+.button[aria-pressed='true'] {
+  background: var(--hd-selection-inactive);
+}
+
 .button[data-pressed] {
   filter: brightness(0.92);
 }

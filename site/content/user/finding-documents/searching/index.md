@@ -46,3 +46,32 @@ Results open in the **Search** tab. A document result has the same menu and deta
 properties, versions, history, security and preview. Double-click a matter result to open it.
 
 You only ever see what you're allowed to read.
+
+## Filters
+
+In Healdan's app, **Filters** narrow the documents a folder lists. Press the **Filters** button, a funnel at the right
+end of the list's toolbar, and the filters open at the right of the list. Press the button again, or **Close
+Filters** in the panel, to put them away.
+
+| Filter | Options |
+|---|---|
+| **Edit Date** | Any Time, Today, Last 7 Days, Last 30 Days, This Year, or Between… with a **From** day and a **To** day (either can be left empty) |
+| **File Type** | Word, Excel, PowerPoint, PDF, Email, OpenDocument, Picture, Other |
+| **Author** | the people who are an Author of documents in the folder |
+| **Class** | the classes of documents in the folder |
+
+Today and the date ranges follow the server's time zone.
+
+- **Each option shows a count:** how many documents ticking it would leave, among those you can read that pass the
+  other filters. Options that would leave none aren't listed, apart from any you've already ticked.
+- **Ticking several options in one list** keeps documents that match any of them, such as Word or PDF. Filters of
+  different lists apply together, such as Word or PDF *and* by Priya Nair.
+- **Chips** above the list name every filter in use, such as "File Type: Word, PDF", each with a **×** that drops it,
+  and **Clear All** drops them all. A filter that no option in the panel offers any more still has its chip, so a
+  filter can never leave a document out of sight without saying so.
+- **The button's badge** counts the filters in use, even while the panel is closed. The count above the list then
+  reads "3 of 7 documents": the documents that pass, of all the folder's documents you can read.
+- **Filters list documents, not folders,** so a folder's own folders are left out while a filter is in use.
+- **Clicking a document** while the filters are open puts the panel away to make room for that document's. The
+  filters stay set, and the button brings the panel back.
+- **The filters are in the page's address,** so Back, bookmarks and a copied link keep them.

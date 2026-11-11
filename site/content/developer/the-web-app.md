@@ -71,6 +71,24 @@ The virtualiser places the rows itself, so the Table needs a height: it fills a 
 jsdom has no IntersectionObserver, which notices the end of a list, so the tests' setup installs one that sees
 nothing until a test calls `bringObservedIntoView()` from `test/intersection.ts`, as scrolling to the end would.
 
+## Filters and the Right Region
+
+A folder's filters are `?type=pdf&type=word&author=pnair&class=…&edited=7d` (or `from` and `to` as `2026-11-02`) in the
+address: `filters/useFilters.ts` reads them (`readFilters` leaves out what the API would refuse, so a pasted address
+never makes the list an error), counts them for the funnel's badge, and writes them back with `navigate`, replacing the
+entry. The router's `parseSearch` and `stringifySearch` carry the repeated ones as lists, and each route that takes
+filters adds `filterSearch` to its `validateSearch`. `useListing` sends them with every page; `filters/useFacets.ts`
+asks for the counts on their own (`GET /folders/{id}/children` with `facets`, `limit=1`) only while the panel is open,
+and for the folder's count with no filters only while one is in use, which is the "7" of "3 of 7 documents".
+
+The right of a list is one region (`frame/RightRegion.tsx`): `useRightRegion()` gives `show` (`'filters'`, `'details'`,
+`'preview'` or null), `open(kind)` and `close()`. Details are the default while a document is selected; the funnel
+opens Filters over them, and a view opens the details again when a row is clicked with Filters showing. A view renders
+`RightRegionView` beside its list with what each kind shows, and the region isn't in the page at all when there's
+nothing to show. The panel's groups are `@healdan/ui`'s `CheckGroup` and `RadioChoices`, and its dates `DatePicker`
+(React Aria's, taking and giving days as `2026-11-02`). A search view offers the panel with `context="search"`, which
+adds Client and Matter.
+
 ## The Catalogue
 
 Every word the app shows is in one typed catalogue, `packages/ui/src/strings/en-US.ts`, and a view gets it with

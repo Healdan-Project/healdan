@@ -11,6 +11,8 @@ describe('focus style', () => {
   it('finds the components stylesheets', () => {
     expect(Object.keys(sheets).sort()).toEqual([
       './Button.module.css',
+      './Choices.module.css',
+      './DatePicker.module.css',
       './Dialog.module.css',
       './Menu.module.css',
       './Table.module.css',
