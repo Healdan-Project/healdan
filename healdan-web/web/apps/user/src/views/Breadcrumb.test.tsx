@@ -4,7 +4,7 @@
 import { screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
-import { client, folder } from '../test/fakeApi'
+import { children, client, folder } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
 type S = components['schemas']
@@ -51,5 +51,14 @@ describe('Breadcrumb', () => {
     )
     expect(crumbs.getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Brightwell', '1002.1 – Commercial Lease'])
     expect(crumbs.queryAllByRole('link')).toHaveLength(0)
+  })
+
+  it('has nothing to show for a Store, which is no client or matter', async () => {
+    await renderApp('/folders/2', {
+      'GET /v1/folders/2': folder({ id: 2, name: 'Smoke', kind: 'store', matter: null, path: [store] }),
+      'GET /v1/folders/2/children': children([]),
+    })
+    expect(await screen.findByRole('heading', { level: 1, name: 'Smoke' })).toBeTruthy()
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
   })
 })

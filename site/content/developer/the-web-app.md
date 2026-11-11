@@ -58,10 +58,14 @@ segment: `` apiPath`/v1/folders/${id}/children` ``.
 
 A list of documents is `@healdan/ui`'s `Table`: React Aria's Table, virtualised so only the rows on screen are drawn,
 with sortable headings and single or multiple selection. It passes Enter (or a double-click) out as `onOpen`, Space as
-`onPreview`, F2 as `onRename` and Delete as `onDelete`, for the view to act on; a row whose `selectable` is false,
-such as a folder among documents, opens on a click instead. Give it `loadMore` and `total`, and it calls `loadMore`
+`onPreview`, F2 as `onRename`, and Delete or Backspace (the Mac's delete key) as `onDelete`, for the view to act on.
+It takes those keys only from a row or its cells, so a field inside a row keeps them, and leaves them to the browser
+with ⌘, Ctrl or Option held. A row whose `selectable` is false, such as a folder among documents, opens on a click
+instead. Pass `busy` while the rows shown are about to change, as `useListing`'s `isStale` says while a new order
+loads: the old rows stay, and a screen reader waits for the new ones. Give it `loadMore` and `total`, and it calls `loadMore`
 when the end of the loaded rows comes into view while fewer than `total` are loaded. A folder's list takes its rows
-from `views/useListing.ts`, TanStack Query's infinite query over `GET /folders/{id}/children`, 100 at a time.
+from `views/useListing.ts`, TanStack Query's infinite query over `GET /folders/{id}/children`, 100 at a time. Offset
+pages shift when the folder changes between them, so it keeps one copy of a row a later page repeats.
 
 The virtualiser places the rows itself, so the Table needs a height: it fills a flex column, as the folder view's is.
 jsdom has no IntersectionObserver, which notices the end of a list, so the tests' setup installs one that sees
@@ -97,3 +101,5 @@ And the build checks these:
   app ships into `apps/user/dist/notices.txt`.
 - **The page's Content-Security-Policy** allows no inline style, so a library that injects one is a problem:
   `scripts/check-dist.mjs` checks the one React Aria would inject, for pressed states, is a linked file.
+- **The libraries are chunks of their own** (`vite.config.ts`): React Aria in one, the rest in another, each named
+  with its hash, which `AppServlet` serves as immutable, so a browser keeps them across the app's updates.

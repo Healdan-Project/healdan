@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import type { TableSort } from '@healdan/ui'
@@ -40,9 +40,11 @@ export interface Listing {
   total?: number
   /** How many of them are documents */
   documents?: number
-  /** Loads the next page; undefined once every row is loaded */
+  /** Loads the next page; undefined once every row is loaded, and while the rows are stale */
   loadMore?: () => void
   isLoadingMore: boolean
+  /** The rows are the last order's, kept while a new one loads, so the list doesn't blank */
+  isStale: boolean
   isPending: boolean
   isError: boolean
   error: unknown
@@ -64,10 +66,12 @@ export function useListing({ folderId, sort, enabled = true }: ListingOptions): 
       return last.items.length > 0 && next < (last.total ?? 0) ? next : undefined
     },
     enabled,
+    // A new order keeps the old rows on screen until its first page comes
+    placeholderData: keepPreviousData,
   })
 
   const pages = query.data?.pages
-  const rows = useMemo(() => pages?.flatMap((page) => page.items) ?? [], [pages])
+  const rows = useMemo(() => distinct(pages?.flatMap((page) => page.items) ?? []), [pages])
   const last = pages?.at(-1)
   const { fetchNextPage, refetch } = query
   return {
@@ -75,11 +79,32 @@ export function useListing({ folderId, sort, enabled = true }: ListingOptions): 
     total: last?.total ?? undefined,
     documents: last?.documents,
     // Asked again while a page is coming, it waits for that one rather than asking twice
-    loadMore: query.hasNextPage ? () => void fetchNextPage({ cancelRefetch: false }) : undefined,
+    loadMore: query.hasNextPage && !query.isPlaceholderData ? () => void fetchNextPage({ cancelRefetch: false }) : undefined,
     isLoadingMore: query.isFetchingNextPage,
+    isStale: query.isPlaceholderData,
     isPending: enabled && query.isPending,
     isError: query.isError,
     error: query.error,
     refetch: () => void refetch(),
   }
+}
+
+/** A row's key: a folder's and a document's numbers can be the same, so each says which it is. */
+export function childKey(item: Child): string {
+  return item.type === 'folder' ? `f${item.id}` : `d${item.docNumber}`
+}
+
+/**
+ * The rows, each once. Offset pages shift when the folder changes between them (a document filed meanwhile that sorts
+ * before the loaded rows), so a page can repeat the last one's end: the first copy stays. One that a deletion skips
+ * comes back when the list is next asked for, as when the window regains focus.
+ */
+function distinct(items: Child[]): Child[] {
+  const seen = new Set<string>()
+  return items.filter((item) => {
+    const key = childKey(item)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }

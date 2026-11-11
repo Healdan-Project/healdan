@@ -21,6 +21,16 @@ export const keys = {
   children: (id: number, options: Record<string, unknown>) => ['folders', id, 'children', options] as const,
 }
 
+/**
+ * An id or doc # from an address, or undefined when it isn't one: digits only, and no bigger than a number keeps
+ * exactly (2^53 - 1), as a bigger one would turn into another number.
+ */
+export function idFrom(text: string | undefined): number | undefined {
+  if (text === undefined || !/^\d{1,16}$/.test(text)) return undefined
+  const id = Number(text)
+  return Number.isSafeInteger(id) ? id : undefined
+}
+
 /** A folder, with its matter and its path from the Store; nothing is asked without an id. */
 export function useFolder(id: number | undefined) {
   const api = useApi()

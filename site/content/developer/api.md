@@ -281,8 +281,8 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
   only `id` and `display`, so a client that may meet one reads `client` as optional.
 - **A document's `author`** is its Author property, as `{ "username": "pnair", "displayName": "Priya Nair" }`: the
   name to show, and the username the `author` filter takes. An Author who is no longer a user shows by the username
-  kept with the property, as the Author counts do. It's `null` for a document with no Author. Every list reads its
-  page's Authors in one query.
+  kept with the property, as the Author counts do. It's `null` for a document with no Author. A folder's list and
+  the search results read their page's Authors in one query.
 - **Field names are camelCase.** A field with no value is `null`, never left out, but for a list's `facets`,
   which is there only when asked for, and a search's `totalAtLeast`, there only when `total` isn't. Timestamps are ISO 8601 in UTC, such as `2026-10-23T14:05:00Z`.
 - **A doc ID is `#<doc #> v<version>`,** the form of the title bar and the filed files: `#1234 v2.1`.
@@ -379,7 +379,8 @@ read. A search folder lists its own documents, at most 1,000. The server pages, 
 database, so a folder of thousands of documents answers as fast as a small one.
 
 - **Sorting.** `sort` is `title` (the file name, ignoring case; the default), `docNumber` (as a number, so #9 comes
-  before #10), `version` (by its major, then its minor number, so 2.9 comes before 2.10), `author` (by the
+  before #10), `version` (the file version, `fileVersion`, as the list shows it: by its major, then its minor
+  number, so 2.9 comes before 2.10), `author` (by the
   Author's name as `author.displayName` shows it, not the username) or `edited` (the last change). `order` is `asc` (the default) or `desc`.
   Documents with nothing to sort by, such as no Author, come last either way, and ties go by the document's age,
   so no document shows on two pages. Subfolders always come first, by name. A search folder keeps its own order,

@@ -46,22 +46,20 @@ public final class ListingSql {
 	}
 
 	/**
-	 * @param alias the alias of {@code ld_document}
-	 * @return the major number of CE's version ({@code 10} of {@code 10.2}),
-	 *         or null if it isn't a number
+	 * @param version a version column, such as {@code d.ld_fileversion}
+	 * @return its major number ({@code 10} of {@code 10.2}), or null if it
+	 *         isn't a number
 	 */
-	public static String versionMajor(String alias) {
-		String version = alias + ".ld_version";
+	public static String versionMajor(String version) {
 		return versionPart(version, "substring(%1$s from 1 for position('.' in %1$s) - 1)".formatted(version));
 	}
 
 	/**
-	 * @param alias the alias of {@code ld_document}
-	 * @return the minor number of CE's version ({@code 2} of {@code 10.2}),
-	 *         or null if it isn't a number
+	 * @param version a version column, such as {@code d.ld_fileversion}
+	 * @return its minor number ({@code 2} of {@code 10.2}), or null if it
+	 *         isn't a number
 	 */
-	public static String versionMinor(String alias) {
-		String version = alias + ".ld_version";
+	public static String versionMinor(String version) {
 		return versionPart(version, "substring(%1$s from position('.' in %1$s) + 1)".formatted(version));
 	}
 

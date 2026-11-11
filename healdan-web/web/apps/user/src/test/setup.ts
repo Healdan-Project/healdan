@@ -7,6 +7,8 @@ import { afterEach } from 'vitest'
 import { installIntersectionObserver } from './intersection'
 
 installIntersectionObserver()
+// The router scrolls to the top on each address, which jsdom doesn't do and says so on every test.
+window.scrollTo = () => {}
 
 // Vitest has no globals here, so Testing Library can't register its own cleanup.
 afterEach(() => {

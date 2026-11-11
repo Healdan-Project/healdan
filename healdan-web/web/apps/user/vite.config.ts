@@ -20,7 +20,22 @@ export default defineConfig(({ mode }) => {
       fs: { allow: ['../../../..'] },
       proxy: { '/api': toStack, '/login.jsp': toStack, '/j_spring_security_check': toStack },
     },
-    build: { outDir: 'dist', sourcemap: false },
+    build: {
+      outDir: 'dist',
+      sourcemap: false,
+      // The libraries change less often than the app, so they're chunks of their own, which a browser keeps across the
+      // app's updates (AppServlet serves every hashed file as immutable). React Aria is the biggest, so it's apart.
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              { name: 'react-aria', test: /node_modules[\\/](react-aria|react-aria-components|react-stately|@react-aria|@react-stately|@react-types|@internationalized)[\\/]/ },
+              { name: 'vendor', test: /node_modules[\\/]/ },
+            ],
+          },
+        },
+      },
+    },
     test: {
       environment: 'jsdom',
       include: ['src/**/*.test.{ts,tsx}'],

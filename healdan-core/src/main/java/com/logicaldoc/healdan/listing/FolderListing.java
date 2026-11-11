@@ -543,7 +543,8 @@ public class FolderListing {
 		List<String> keys = switch (sort) {
 		case TITLE -> List.of("lower(d.ld_filename)");
 		case DOC_NUMBER -> List.of(ListingSql.docNumberOrder("d"));
-		case VERSION -> List.of(ListingSql.versionMajor("d"), ListingSql.versionMinor("d"));
+		// The file's version, which a list shows; CE's own version moves on every change of properties too
+		case VERSION -> List.of(ListingSql.versionMajor("d.ld_fileversion"), ListingSql.versionMinor("d.ld_fileversion"));
 		case AUTHOR -> List.of(authorName(select));
 		case EDITED -> List.of("d.ld_lastmodified");
 		};

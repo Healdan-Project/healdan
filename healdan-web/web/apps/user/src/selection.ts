@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useNavigate, useSearch } from '@tanstack/react-router'
+import { idFrom } from './queries'
 
 /** The selected document's number, which lives in the address as ?sel= so Back, bookmarks and pasted links keep it. */
 export function useSelection(): { selected: number | undefined; select: (docNumber: number | undefined) => void } {
   // Every route has the root's ?sel= (router.tsx), so its search is read from wherever this is used.
   const { sel } = useSearch({ strict: false })
   const navigate = useNavigate()
-  const selected = sel !== undefined && /^\d+$/.test(sel) ? Number(sel) : undefined
+  const selected = idFrom(sel)
   return {
     selected,
     // Replacing keeps a click on each row out of the history: Back leaves the view, not the last row.

@@ -62,6 +62,45 @@ describe('useListing', () => {
     expect(result.current.rows[249]?.type).toBe('document')
   })
 
+  it('keeps one copy of a row a later page repeats, as one does when the folder changes between pages', async () => {
+    // A document filed meanwhile sorts before the loaded window, so the next page starts one row early
+    const api = fakeApi({
+      'GET /v1/folders/*/children': ({ query }: { query?: Record<string, unknown> }) => {
+        const offset = Number(query?.offset)
+        const from = offset === 0 ? 0 : offset - 1
+        return children(all.slice(from, from + Number(query?.limit)), { offset, total: 251, documents: 250 })
+      },
+    })
+    const { result } = hook(api, { folderId: 7 })
+    await waitFor(() => expect(result.current.rows).toHaveLength(100))
+    act(() => result.current.loadMore?.())
+    await waitFor(() => expect(api.calls).toHaveLength(2))
+    await waitFor(() => expect(result.current.rows).toHaveLength(199))
+    const keys = result.current.rows.map((row) => (row.type === 'folder' ? `f${row.id}` : `d${row.docNumber}`))
+    expect(new Set(keys).size).toBe(keys.length)
+    expect(result.current.rows[99]).toBe(all[99])
+  })
+
+  it('keeps the rows it has while a new order loads, saying they are about to change', async () => {
+    let release = () => {}
+    const api = fakeApi({
+      'GET /v1/folders/*/children': ({ query }: { query?: Record<string, unknown> }) => {
+        const answer = children(all.slice(0, 100), { total: 250, documents: 249 })
+        return query?.sort ? new Promise((resolve) => (release = () => resolve(answer))) : answer
+      },
+    })
+    const { result, rerender } = hook(api, { folderId: 7 })
+    await waitFor(() => expect(result.current.rows).toHaveLength(100))
+    rerender({ folderId: 7, sort: { column: 'title', direction: 'descending' } })
+    await waitFor(() => expect(api.calls).toHaveLength(2))
+    expect(result.current.rows).toHaveLength(100)
+    expect(result.current.documents).toBe(249)
+    expect(result.current.isStale).toBe(true)
+    expect(result.current.loadMore).toBeUndefined()
+    act(() => release())
+    await waitFor(() => expect(result.current.isStale).toBe(false))
+  })
+
   it('starts again from the first page when the order changes', async () => {
     const api = serve()
     const { result, rerender } = hook(api, { folderId: 7 })

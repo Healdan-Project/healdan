@@ -1770,8 +1770,9 @@ components:
       required: false
       description: |
         What to sort the documents by: `title` (the file name, ignoring
-        case), `docNumber` (as a number), `version` (by its major, then its
-        minor number), `author` (by name) or `edited` (the last change). Ties
+        case), `docNumber` (as a number), `version` (the file version,
+        `fileVersion`, as a list shows it: by its major, then its minor
+        number), `author` (by name) or `edited` (the last change). Ties
         go by the document's age, so pages never overlap, and documents with
         no value to sort by come last either way. Anything else is `400`.
       schema:

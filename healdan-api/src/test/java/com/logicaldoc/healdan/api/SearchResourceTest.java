@@ -730,9 +730,10 @@ public class SearchResourceTest extends ApiTestCase {
 		bulk.set(ids, HealdanConstants.ATTR_CLIENT, Attribute.Type.STRING, "998", null);
 		bulk.set(ids, HealdanConstants.ATTR_MATTER, Attribute.Type.STRING, matter, null);
 		Timestamp edited = new Timestamp(System.currentTimeMillis() - (recent ? 0L : 60L * 24 * 60 * 60 * 1000));
+		// The list shows and sorts the file version; CE's own version is moved on, as property edits move it
 		for (long id : ids)
-			jdbc().update("update ld_document set ld_lastmodified = ?, ld_version = ? where ld_id = ?", edited,
-					version, id);
+			jdbc().update("update ld_document set ld_lastmodified = ?, ld_fileversion = ?, ld_version = '50.0' where ld_id = ?",
+					edited, version, id);
 		List<Long> numbers = List.copyOf(numbers(ids).values());
 		for (int i = 0; i < count; i++)
 			made.add(new Made(numbers.get(i), names.apply(i), version, edited, author.getUsername(), docClass, kind,

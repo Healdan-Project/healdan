@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import { bringObservedIntoView } from '../test/intersection'
 import { Table, type TableColumn, type TableProps, type TableRow, type TableSort } from './Table'
+import tableCss from './Table.module.css?raw'
 
 interface Item extends TableRow {
   name: string
@@ -174,6 +175,39 @@ describe('Table', () => {
     loadMore.mockClear()
     act(() => bringObservedIntoView())
     expect(loadMore).not.toHaveBeenCalled()
+  })
+
+  it('takes the focus itself when it has no rows, and shows the ring there', async () => {
+    const user = userEvent.setup()
+    render(<Harness rows={[]} empty="This folder is empty." />)
+    await user.tab()
+    const grid = screen.getByRole('grid')
+    expect(document.activeElement).toBe(grid)
+    expect(grid.getAttribute('data-focus-visible')).toBe('true')
+    // jsdom draws nothing, so the rule that draws the ring is read instead
+    expect(tableCss).toMatch(/\.table\[data-focus-visible\]\)::after\s*\{[^}]*box-shadow:\s*var\(--hd-focus-inset\)/)
+  })
+
+  it('leaves the keys of a control inside a row to the control', () => {
+    const onPreview = vi.fn()
+    const onRename = vi.fn()
+    const onDelete = vi.fn()
+    const withField: TableColumn<Item>[] = [
+      ...columns,
+      { id: 'edit', name: 'Edit', cell: (item) => <input aria-label={`Name of ${item.name}`} defaultValue={item.name} /> },
+    ]
+    render(<Harness columns={withField} initial={['d1']} onPreview={onPreview} onRename={onRename} onDelete={onDelete} />)
+    const field = screen.getByRole('textbox', { name: 'Name of Letter 1' })
+    act(() => field.focus())
+    for (const key of [' ', 'F2', 'Delete', 'Backspace']) press(field, key)
+    expect(onPreview).not.toHaveBeenCalled()
+    expect(onRename).not.toHaveBeenCalled()
+    expect(onDelete).not.toHaveBeenCalled()
+  })
+
+  it('marks itself busy while the rows it shows are about to change', () => {
+    render(<Harness busy />)
+    expect(screen.getByRole('grid').closest('[aria-busy="true"]')).toBeTruthy()
   })
 
   it('shows what it is given when there are no rows', () => {

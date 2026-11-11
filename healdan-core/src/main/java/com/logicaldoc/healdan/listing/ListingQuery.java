@@ -37,7 +37,7 @@ public record ListingQuery(Sort sort, boolean descending, Set<String> kinds, Set
 		TITLE,
 		/** The doc #, as a number */
 		DOC_NUMBER,
-		/** CE's version, by its major then its minor number */
+		/** The file's version, as a list shows it, by its major then its minor number */
 		VERSION,
 		/** The Author's name, as it shows */
 		AUTHOR,

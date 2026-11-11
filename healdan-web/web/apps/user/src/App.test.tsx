@@ -32,7 +32,7 @@ describe('the addresses', () => {
     expect(await within(screen.getByRole('main')).findByRole('grid')).toBeTruthy()
   })
 
-  it.each(['/folders/abc', '/folders/1e3', '/folders/1234567890123456789'])('reads %s, which is no folder id, as not found without asking', async (path) => {
+  it.each(['/folders/abc', '/folders/1e3', '/folders/1234567890123456789', '/folders/9007199254740993'])('reads %s, which is no folder id, as not found without asking', async (path) => {
     const { api } = await renderApp(path)
     expect(within(screen.getByRole('main')).getByText("Not found, or you can't see it.")).toBeTruthy()
     expect(api.callsTo('GET /v1/folders/*')).toEqual([])

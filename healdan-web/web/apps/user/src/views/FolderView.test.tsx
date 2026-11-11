@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
 import { children, document, favorite, folder, page, problem, type Routes } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
 import { renderApp } from '../test/renderApp'
+import viewsCss from './views.module.css?raw'
 
 type S = components['schemas']
 
@@ -108,6 +110,26 @@ describe('FolderView', () => {
     expect(router.history.location.search).toBe('?sort=docNumber&order=desc')
   })
 
+  it('keeps the rows and the count while a new order loads, marking the list busy', async () => {
+    let release = () => {}
+    await renderApp(
+      '/folders/7',
+      routes({
+        'GET /v1/folders/7/children': ({ query }: { query?: Record<string, unknown> }) => {
+          const answer = children([drafts, ...[...seven].reverse()])
+          return query?.sort ? new Promise((resolve) => (release = () => resolve(answer))) : children([drafts, ...seven])
+        },
+      }),
+    )
+    await findRow(/Drafts/)
+    fireEvent.click(within(list()).getByRole('columnheader', { name: /Doc #/ }))
+    await waitFor(() => expect(list().closest('[aria-busy="true"]')).toBeTruthy())
+    expect(within(list()).getByRole('row', { name: /Letter from Dunmere Pryce/ })).toBeTruthy()
+    expect(within(main()).getByText('7 documents')).toBeTruthy()
+    act(() => release())
+    await waitFor(() => expect(list().closest('[aria-busy="true"]')).toBeNull())
+  })
+
   it('keeps a sort from the address', async () => {
     const { api } = await renderApp('/folders/7?sort=edited&order=desc', routes())
     await findRow(/Drafts/)
@@ -146,6 +168,23 @@ describe('FolderView', () => {
     fireEvent.click(within(row).getByRole('rowheader'))
     await waitFor(() => expect(router.history.location.search).toBe('?sel=10388'))
     expect(row.getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('keeps several selected documents in the view, out of the address, which holds one', async () => {
+    const user = userEvent.setup()
+    const { router } = await renderApp('/folders/7?sel=10388', routes())
+    const first = await findRow(/Letter from Dunmere Pryce/)
+    const second = within(list()).getByRole('row', { name: /Letter to Dunmere Pryce/ })
+    await user.keyboard('{Shift>}')
+    await user.click(within(second).getByRole('rowheader'))
+    await user.keyboard('{/Shift}')
+    await waitFor(() => expect(router.history.location.search).toBe(''))
+    expect(first.getAttribute('aria-selected')).toBe('true')
+    expect(second.getAttribute('aria-selected')).toBe('true')
+
+    await user.click(within(second).getByRole('rowheader'))
+    await waitFor(() => expect(router.history.location.search).toBe('?sel=10431'))
+    expect(first.getAttribute('aria-selected')).toBe('false')
   })
 
   it('selects the document an address names', async () => {
@@ -196,6 +235,14 @@ describe('FolderView', () => {
     fireEvent.click(remove)
     expect(await within(main()).findByRole('button', { name: 'Add to Favorites' })).toBeTruthy()
     expect(api.callsTo('DELETE /v1/me/favorites/950')).toHaveLength(1)
+  })
+
+  it('fills a favorite\'s star with the helper\'s amber, edged so it shows on a light page', async () => {
+    await renderApp('/folders/7', routes({ 'GET /v1/me/favorites': page([favorite(correspondence, 950)]) }))
+    const star = await within(main()).findByRole('button', { name: 'Remove from Favorites' })
+    expect(star.querySelector('.starred .tabler-icon-star-filled')).toBeTruthy()
+    // jsdom draws nothing, so the rule that edges it is read instead
+    expect(viewsCss).toMatch(/\.starred svg\s*\{[^}]*stroke:\s*var\(--hd-star-edge\)/)
   })
 
   it('says so when a favorite can\'t be changed', async () => {

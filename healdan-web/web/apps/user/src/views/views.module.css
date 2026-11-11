@@ -129,10 +129,17 @@
   color: var(--hd-text-secondary);
 }
 
-/* The helper's star colour (its polish spec); the filled shape and the button's name say it's a favorite as well. */
+/* The helper's star colour (its polish spec), with an edge that shows on a light page (tokens.css); the filled shape
+   and the button's name say it's a favorite as well. */
 .starred {
   display: inline-flex;
   color: var(--hd-star);
+}
+
+.starred svg {
+  stroke: var(--hd-star-edge);
+  stroke-width: 2;
+  stroke-linejoin: round;
 }
 
 .toolbar {

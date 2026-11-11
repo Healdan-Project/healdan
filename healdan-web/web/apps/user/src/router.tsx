@@ -4,6 +4,7 @@
 import { createRootRoute, createRoute, createRouter, type RouterHistory } from '@tanstack/react-router'
 import { t } from '@healdan/ui'
 import { Frame } from './frame/Frame'
+import { idFrom } from './queries'
 import { FolderView } from './views/FolderView'
 import { NotFound } from './views/NotFound'
 import { NotYet } from './views/NotYet'
@@ -57,9 +58,10 @@ const foldersRoute = createRoute({
   component: function FolderRoute() {
     const { id } = foldersRoute.useParams()
     const { sort, order } = foldersRoute.useSearch()
-    if (!/^\d{1,18}$/.test(id)) return <NotFound />
+    const folderId = idFrom(id)
+    if (folderId === undefined) return <NotFound />
     // A view of its own for each folder, so nothing chosen in one is carried to the next
-    return <FolderView key={id} folderId={Number(id)} sort={sort} order={order} />
+    return <FolderView key={folderId} folderId={folderId} sort={sort} order={order} />
   },
 })
 

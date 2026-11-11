@@ -33,5 +33,6 @@ can change the 30 days. A matter leaves the list once you haven't worked in it f
 - **Each entry** shows the matter, then its client's name in smaller text: `1002.1 – Commercial Lease Brightwell
   Bakeries Ltd`. An entry that's too long for the pane is cut off at its end.
 - **Click an entry** to open the matter's top level in the main area: its folders, its search folders and any
-  documents an administrator put there. See [Stores and Matter Workspaces](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matter).
+  documents an administrator put there. See
+  [Stores and Matter Workspaces](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matter).
 - **A matter you can no longer open,** or one that's been deleted, doesn't appear.

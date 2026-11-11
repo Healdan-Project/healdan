@@ -53,5 +53,11 @@ describe('tokens.css', () => {
     it.each(FOCUS_SURFACES)(`${scheme}: the focus edge shows on --hd-%s`, (bg) => {
       expect(contrast(tokens['--hd-focus-edge']!, tokens[`--hd-${bg}`]!)).toBeGreaterThanOrEqual(3)
     })
+
+    // The filled star keeps the helper's amber, which is too pale on light surfaces to show by itself: its edge does
+    // (WCAG 1.4.11's 3:1 for what shows a control's state).
+    it.each(PLAIN)(`${scheme}: the filled star's edge shows on --hd-%s`, (bg) => {
+      expect(contrast(tokens['--hd-star-edge']!, tokens[`--hd-${bg}`]!)).toBeGreaterThanOrEqual(3)
+    })
   }
 })

@@ -6,7 +6,7 @@ import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useId, useState, type ReactNode } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import { Button, Icon, Menu, MenuItem, Tree, t, toast, type IconName, type TreeNode } from '@healdan/ui'
-import { keys, useFavorites, useFolder, useMyMatters, useRecentMatters } from '../queries'
+import { idFrom, keys, useFavorites, useFolder, useMyMatters, useRecentMatters } from '../queries'
 import type { PageOf } from '../pages'
 import { useApi } from '../services'
 import { recentKinds } from '../views/RecentKind'
@@ -62,8 +62,7 @@ function currentFolder(pathname: string): string | undefined {
 /** The open folder, when the address is one's, so the pane can find its matter */
 function useCurrentFolder() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const id = currentFolder(pathname)
-  return useFolder(id !== undefined && /^\d{1,18}$/.test(id) ? Number(id) : undefined).data
+  return useFolder(idFrom(currentFolder(pathname))).data
 }
 
 /** A change to My Matters, then the list asked again; a refusal is said in a toast. */

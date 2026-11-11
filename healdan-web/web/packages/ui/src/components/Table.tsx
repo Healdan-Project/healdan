@@ -66,7 +66,10 @@ export interface TableProps<T extends TableRow> {
   onPreview?: (key: string) => void
   /** F2 */
   onRename?: (key: string) => void
-  /** Delete, or the Mac's delete key, for the selection, or the focused row when nothing is selected */
+  /**
+   * Delete, or the Mac's delete key (Backspace), for the selection, or the focused row when nothing is selected. With
+   * ⌘, Ctrl or Option held, the key is left to the browser.
+   */
   onDelete?: (keys: Set<string>) => void
   /** Called when the end of the rows comes into view and more are to come */
   loadMore?: () => void
@@ -75,11 +78,16 @@ export interface TableProps<T extends TableRow> {
   total?: number
   /** What shows when there are no rows */
   empty?: ReactNode
+  /** The rows shown are about to change, as while a new order loads: a screen reader waits for them */
+  busy?: boolean
 }
 
 function same(keys: Set<Key>, selection: Set<string>): boolean {
   return keys.size === selection.size && [...keys].every((key) => selection.has(String(key)))
 }
+
+/** What has the focus when it is on a row: the row itself, or one of its cells */
+const rowParts = ['row', 'gridcell', 'rowheader']
 
 /** --row-height in tokens.css: the virtualiser lays rows out in pixels */
 const ROW_HEIGHT = 34
@@ -102,15 +110,18 @@ export function Table<T extends TableRow>({
   isLoadingMore = false,
   total,
   empty,
+  busy = false,
   ...labels
 }: TableProps<T>) {
   const disabledKeys = rows.filter((row) => row.selectable === false).map((row) => row.id)
   const more = loadMore !== undefined && (total === undefined || rows.length < total)
 
-  // Ahead of React Aria's own keys, which would take Space to select; only for a body row, so a header still sorts.
+  // Ahead of React Aria's own keys, which would take Space to select; only when a body row or one of its cells has the
+  // focus, so a header still sorts and a control inside a row, such as a field, keeps its keys.
   function onKeyDownCapture(event: KeyboardEvent<HTMLDivElement>) {
-    const row = event.target instanceof Element ? event.target.closest('[data-row-key]') : null
-    const key = row?.getAttribute('data-row-key')
+    const target = event.target instanceof Element ? event.target : null
+    if (!target || !rowParts.includes(target.getAttribute('role') ?? '')) return
+    const key = target.closest('[data-row-key]')?.getAttribute('data-row-key')
     if (!key || event.altKey || event.ctrlKey || event.metaKey) return
     let handled = true
     if (event.key === ' ' && onPreview) onPreview(key)
@@ -138,7 +149,7 @@ export function Table<T extends TableRow>({
 
   return (
     // The handler only reads keys the rows inside already take; the wrapper isn't a control of its own.
-    <div className={styles.frame} onKeyDownCapture={onKeyDownCapture}>
+    <div className={styles.frame} onKeyDownCapture={onKeyDownCapture} aria-busy={busy || undefined}>
       <Virtualizer layout={TableLayout} layoutOptions={{ rowHeight: ROW_HEIGHT, headingHeight: ROW_HEIGHT, loaderHeight: ROW_HEIGHT }}>
         <AriaTable
           {...labels}

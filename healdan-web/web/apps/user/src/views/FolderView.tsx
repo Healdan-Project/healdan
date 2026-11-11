@@ -14,7 +14,7 @@ import { useApi } from '../services'
 import { Breadcrumb } from './Breadcrumb'
 import { NotFound } from './NotFound'
 import { Toolbar } from './Toolbar'
-import { isSortColumn, useListing, type Child, type ListingOrder, type SortColumn } from './useListing'
+import { childKey, isSortColumn, useListing, type Child, type ListingOrder, type SortColumn } from './useListing'
 import styles from './views.module.css'
 
 type S = components['schemas']
@@ -23,11 +23,8 @@ interface ListRow extends TableRow {
   item: Child
 }
 
-// Keys keep a folder and a document apart, as their ids could be the same number.
 function rowOf(item: Child): ListRow {
-  return item.type === 'folder'
-    ? { id: `f${item.id}`, textValue: item.name, selectable: false, item }
-    : { id: `d${item.docNumber}`, textValue: item.name, item }
+  return { id: childKey(item), textValue: item.name, selectable: item.type !== 'folder', item }
 }
 
 const kinds: [RegExp, IconName][] = [
@@ -160,6 +157,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
             isLoadingMore={listing.isLoadingMore}
             total={listing.total}
             empty={listing.isPending ? t('common.loading') : t('folder.empty')}
+            busy={listing.isStale}
           />
         </>
       )}

@@ -12,10 +12,13 @@ type S = components['schemas']
 // section 6.1). The Store isn't shown: people find matters, not Stores. Healdan has no page of a client's, so the client
 // is text; the folder you're in is text too, marked as the current page.
 export function Breadcrumb({ folder }: { folder: S['FolderView'] }) {
-  const below = folder.path.slice(Math.max(0, folder.path.findIndex((step) => step.kind === 'matter')))
+  const top = folder.path.findIndex((step) => step.kind === 'matter')
+  const matter = folder.matter
+  // A Store is in no matter, so it has no breadcrumb
+  if (top < 0 || !matter) return null
   const crumbs = [
-    ...(folder.matter ? [{ key: 'client', text: folder.matter.client.name, id: undefined }] : []),
-    ...below.map((step) => ({ key: String(step.id), text: step.kind === 'matter' && folder.matter ? folder.matter.display : step.name, id: step.id })),
+    { key: 'client', text: matter.client.name, id: undefined },
+    ...folder.path.slice(top).map((step) => ({ key: String(step.id), text: step.kind === 'matter' ? matter.display : step.name, id: step.id })),
   ]
   return (
     <nav aria-label={t('breadcrumb.label')} className={styles.breadcrumb}>

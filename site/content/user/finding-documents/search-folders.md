@@ -12,9 +12,10 @@ example:
 
 ## Opening One
 
-Search folders show among a matter's folders, by name, with their own icon: a folder with a magnifying glass. They're in the **My Matters** tree in the left pane, and in the list of a matter's top level. Click
-one to open it, and the main area lists its documents, as a folder's list does, with their **Title**, **Doc #**,
-**Version**, **Author** and **Edit Date**.
+Search folders show among a matter's folders, by name, with their own icon: a folder with a magnifying glass.
+They're in the **My Matters** tree in the left pane, and in the list of a matter's top level. Click one to open it,
+and the main area lists its documents, as a folder's list does, with their **Title**, **Doc #**, **Version**,
+**Author** and **Edit Date**.
 
 - **Newest change first,** worked out each time you open the folder. No column heading is marked while the list is in
   this order.

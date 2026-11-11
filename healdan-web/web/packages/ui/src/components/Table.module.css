@@ -4,6 +4,7 @@
 /* The virtualiser places each row and cell itself, so the list needs a height of its own: it fills what its parent
    leaves it, and scrolls inside. Each header, row and cell sits in a box the virtualiser sizes, which it fills. */
 .frame {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -16,6 +17,17 @@
   overflow: auto;
   outline: none;
   color: var(--hd-text);
+}
+
+/* With no row to focus, as while it loads or when it's empty, the list takes the focus itself. Its ring is drawn over
+   it, as the header, which the virtualiser stacks above the list, would hide the ring's top. */
+.frame:has(> .table[data-focus-visible])::after {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  box-shadow: var(--hd-focus-inset);
+  content: '';
+  pointer-events: none;
 }
 
 .column {

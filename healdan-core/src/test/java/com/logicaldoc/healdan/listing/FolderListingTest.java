@@ -323,8 +323,8 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 	private void set(long docId, String docNumber, String version, User author, String docClass,
 			LocalDateTime edited) {
 		JdbcTemplate jdbc = jdbc();
-		jdbc.update("update ld_document set ld_customid = ?, ld_version = ?, ld_lastmodified = ? where ld_id = ?",
-				docNumber, version, Timestamp.valueOf(edited), docId);
+		jdbc.update("update ld_document set ld_customid = ?, ld_version = ?, ld_fileversion = ?, ld_lastmodified = ? where ld_id = ?",
+				docNumber, version, version, Timestamp.valueOf(edited), docId);
 		attribute(docId, HealdanConstants.ATTR_AUTHOR, Attribute.Type.USER,
 				author == null ? null : author.getUsername(), author == null ? null : author.getId());
 		attribute(docId, HealdanConstants.ATTR_DOCCLASS, Attribute.Type.STRING, docClass, null);
@@ -492,7 +492,7 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 		for (int i = 0; i < copies.size(); i++)
 			values.add(new Object[] { "%d.%d".formatted(1 + i % 3, i % 2),
 					Timestamp.valueOf(LocalDateTime.of(2026, 5, 1, 0, 0).plusHours(i % 50)), copies.get(i) });
-		jdbc().batchUpdate("update ld_document set ld_version = ?, ld_lastmodified = ? where ld_id = ?", values);
+		jdbc().batchUpdate("update ld_document set ld_fileversion = ?, ld_lastmodified = ? where ld_id = ?", values);
 		Set<Long> all = new HashSet<>(copies);
 		all.add(template);
 		evict();

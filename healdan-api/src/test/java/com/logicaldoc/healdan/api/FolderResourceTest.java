@@ -579,6 +579,30 @@ public class FolderResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testVersionSortFollowsTheFileVersion() throws Exception {
+		// A was saved up to 1.3; B was filed at 1.0 and its properties edited five times since, which moves CE's
+		// version to 1.5 but leaves the file, and the list's Version column, at 1.0
+		Document a = fx.upload(documents, "a.docx", "a", clerk);
+		Document b = fx.upload(documents, "b.docx", "b", clerk);
+		awaitAsyncWork();
+		jdbc().update("update ld_document set ld_version = '1.3', ld_fileversion = '1.3' where ld_id = ?", a.getId());
+		jdbc().update("update ld_document set ld_version = '1.5', ld_fileversion = '1.0' where ld_id = ?", b.getId());
+		DocumentDAO.get().evict(Document.class, a.getId());
+		DocumentDAO.get().evict(Document.class, b.getId());
+		String token = signIn(clerk);
+		String base = "/api/v1/folders/" + documents.getId() + "/children?sort=version&order=";
+
+		List<String> ascending = new ArrayList<>();
+		for (JsonNode item : get(base + "asc").token(token).send().json().path("items"))
+			ascending.add(item.path("name").textValue() + " " + item.path("fileVersion").textValue());
+		assertEquals(List.of("b.docx 1.0", "a.docx 1.3"), ascending);
+		List<String> descending = new ArrayList<>();
+		for (JsonNode item : get(base + "desc").token(token).send().json().path("items"))
+			descending.add(item.path("name").textValue());
+		assertEquals(List.of("a.docx", "b.docx"), descending);
+	}
+
+	@Test
 	public void testChildrenRefusals() throws Exception {
 		String token = signIn(clerk);
 		String base = "/api/v1/folders/" + documents.getId() + "/children";

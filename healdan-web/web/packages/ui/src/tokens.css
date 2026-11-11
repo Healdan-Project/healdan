@@ -45,6 +45,8 @@
   --hd-caution-text: #9a5b00;
   --hd-required: #d70015;
   --hd-star: #f59f00;
+  /* The filled star's edge: the amber alone is 2:1 on a light page, too pale to show the state (tokens.test.ts). */
+  --hd-star-edge: #b35c00;
 
   --hd-font: -apple-system, blinkmacsystemfont, "Segoe UI", system-ui, sans-serif;
   --hd-font-size: 13px;
@@ -102,6 +104,7 @@
     --hd-caution-text: #f5a623;
     --hd-required: #ff6961;
     --hd-star: #fcc419;
+    --hd-star-edge: #fcc419;
 
     --hd-shadow-popup: 0 6px 24px rgb(0 0 0 / 55%), 0 0 0 1px var(--hd-line);
     --hd-scrim: rgb(0 0 0 / 55%);
