@@ -85,3 +85,8 @@ export function hitColumns(scope: SearchScope): TableColumn<ListRow>[] {
   if (scope === 'folders') return [title, matterColumn()]
   return [title, docNumber, version, matterColumn(), author, edited]
 }
+
+/** What a list keeps while the reading pane is open and the list is narrow (spec section 6.4): Title, Doc # and Edit Date. */
+export function narrowed(columns: TableColumn<ListRow>[]): TableColumn<ListRow>[] {
+  return columns.filter((column) => column.id === 'title' || column.id === 'docNumber' || column.id === 'edited')
+}

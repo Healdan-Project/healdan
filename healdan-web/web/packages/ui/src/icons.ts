@@ -13,7 +13,9 @@ import {
   IconChevronDown,
   IconChevronLeft,
   IconChevronRight,
+  IconChevronUp,
   IconDots,
+  IconEye,
   IconFileSpreadsheet,
   IconFileText,
   IconFileTypeDocx,
@@ -22,6 +24,7 @@ import {
   IconFolder,
   IconFolderSearch,
   IconHelpCircle,
+  IconLayoutSidebarRight,
   IconMail,
   IconPhoto,
   IconPlus,
@@ -30,6 +33,8 @@ import {
   IconStar,
   IconStarFilled,
   IconX,
+  IconZoomIn,
+  IconZoomOut,
 } from '@tabler/icons-react'
 
 export const icons = {
@@ -42,16 +47,19 @@ export const icons = {
   chevronDown: IconChevronDown,
   chevronLeft: IconChevronLeft,
   chevronRight: IconChevronRight,
+  chevronUp: IconChevronUp,
   close: IconX,
   document: IconFileText,
   dots: IconDots,
   email: IconMail,
+  eye: IconEye,
   filePdf: IconFileTypePdf,
   filter: IconFilter,
   fileWord: IconFileTypeDocx,
   folder: IconFolder,
   folderSearch: IconFolderSearch,
   help: IconHelpCircle,
+  dock: IconLayoutSidebarRight,
   picture: IconPhoto,
   plus: IconPlus,
   presentation: IconPresentation,
@@ -59,6 +67,8 @@ export const icons = {
   spreadsheet: IconFileSpreadsheet,
   star: IconStar,
   starFilled: IconStarFilled,
+  zoomIn: IconZoomIn,
+  zoomOut: IconZoomOut,
 }
 
 export type IconName = keyof typeof icons

@@ -42,11 +42,13 @@ describe('DetailsPanel', () => {
     expect(within(panel).getByText('# 10388 · Version 2.1 · 209 KB')).toBeTruthy()
     const thumbnail = panel.querySelector('img')
     expect(thumbnail?.getAttribute('src')).toBe('/api/v1/documents/10388/thumbnail')
-    // Open, Download, Edit and Preview wait for the tasks that build them; Copy Link works now
-    for (const name of ['Preview', 'Open', 'Download', 'Edit']) {
+    // Open, Download and Edit wait for the task that builds them; Preview and Copy Link work now
+    for (const name of ['Open', 'Download', 'Edit']) {
       expect((within(panel).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true)
     }
-    expect((within(panel).getByRole('button', { name: 'Copy Link' }) as HTMLButtonElement).disabled).toBe(false)
+    for (const name of ['Preview', 'Copy Link']) {
+      expect((within(panel).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false)
+    }
   })
 
   it('lists the properties in order, without Location outside search results and without the email fields of a document', async () => {

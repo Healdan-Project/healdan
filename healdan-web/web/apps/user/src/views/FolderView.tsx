@@ -19,9 +19,13 @@ import { keys, useFavorites, useFolder } from '../queries'
 import { useApi } from '../services'
 import { Breadcrumb } from './Breadcrumb'
 import { DetailsPanel } from '../details/DetailsPanel'
+import { PreviewButton } from '../preview/PreviewButton'
+import { QuickLook } from '../preview/QuickLook'
+import { ReadingPane } from '../preview/ReadingPane'
+import { documentsOf, usePreviewKey } from '../preview/usePreviewKey'
 import { NotFound } from './NotFound'
 import { Toolbar, type ListCount } from './Toolbar'
-import { listColumns, rowOf } from './listColumns'
+import { listColumns, narrowed, rowOf } from './listColumns'
 import { useRowSelection } from './useRowSelection'
 import { isSortColumn, useListing, type ListingOrder, type SortColumn } from './useListing'
 import styles from './views.module.css'
@@ -54,6 +58,10 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const headingId = useId()
   const { selected, selection, change: changeSelection } = useRowSelection()
   const rows = useMemo(() => listing.rows.map(rowOf), [listing.rows])
+  const documents = useMemo(() => documentsOf(listing.rows), [listing.rows])
+  const preview = usePreviewKey(changeSelection)
+  // The reading pane makes the list narrow: it keeps the columns that fit
+  const columns = region.show === 'preview' ? narrowed(listColumns) : listColumns
   const authors = useAuthorNames(listing.rows, facets.data)
 
   if (folder.isError) {
@@ -119,11 +127,13 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               label={t('folder.actions')}
               count={listing.isStale ? undefined : countOf(listing.documents, active > 0, unfiltered)}
               end={<FiltersButton ref={funnel} open={filtersOpen} active={active} onPress={toggleFilters} />}
-            />
+            >
+              <PreviewButton />
+            </Toolbar>
             <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />
             <Table
               aria-labelledby={headingId}
-              columns={listColumns}
+              columns={columns}
               rows={rows}
               sort={shown}
               onSort={sortBy}
@@ -131,6 +141,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               selection={selection}
               onSelectionChange={changeSelection}
               onOpen={open}
+              onPreview={preview}
               loadMore={listing.loadMore}
               isLoadingMore={listing.isLoadingMore}
               total={listing.total}
@@ -158,8 +169,10 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
             />
           }
           details={selected !== undefined && <DetailsPanel key={selected} docNumber={selected} row={selectedRow?.type === 'document' ? selectedRow : undefined} />}
+          preview={<ReadingPane docNumber={selected} row={selectedRow?.type === 'document' ? selectedRow : undefined} />}
         />
       )}
+      <QuickLook documents={documents} total={listing.documents} loadMore={listing.loadMore} />
     </section>
   )
 }

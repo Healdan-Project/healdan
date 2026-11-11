@@ -16,6 +16,7 @@ describe('focus style', () => {
       './DatePicker.module.css',
       './Dialog.module.css',
       './Menu.module.css',
+      './Overlay.module.css',
       './Table.module.css',
       './Toast.module.css',
       './Tree.module.css',
@@ -25,7 +26,7 @@ describe('focus style', () => {
   for (const [file, css] of Object.entries(sheets)) {
     it(`${file} uses the shared focus outline on focus-visible`, () => {
       const rules = [...css.matchAll(/([^{}]*\[data-focus-visible\][^{}]*)\{([^}]*)\}/g)]
-      if (file === './Dialog.module.css') {
+      if (file === './Dialog.module.css' || file === './Overlay.module.css') {
         expect(rules).toHaveLength(0) // the dialog holds focusable parts, not focus of its own
         return
       }

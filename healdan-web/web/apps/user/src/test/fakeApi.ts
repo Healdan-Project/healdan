@@ -41,11 +41,33 @@ export function folder(over: Partial<S['FolderView']> = {}): S['FolderView'] {
   }
 }
 
+/** The kind the server makes of a file name, for the extensions the tests use */
+export function kindOf(name: string): S['DocumentView']['kind'] {
+  const kinds: Record<string, S['DocumentView']['kind']> = {
+    pdf: 'pdf',
+    doc: 'word',
+    docx: 'word',
+    xls: 'excel',
+    xlsx: 'excel',
+    ppt: 'powerpoint',
+    pptx: 'powerpoint',
+    eml: 'email',
+    msg: 'email',
+    odt: 'opendocument',
+    png: 'picture',
+    jpg: 'picture',
+    tif: 'picture',
+  }
+  return kinds[name.slice(name.lastIndexOf('.') + 1).toLowerCase()] ?? 'other'
+}
+
 export function document(over: Partial<S['DocumentView']> = {}): S['DocumentView'] {
+  const name = over.name ?? 'Letter from Dunmere Pryce.pdf'
   return {
     type: 'document',
     docNumber: 10388,
-    name: 'Letter from Dunmere Pryce.pdf',
+    name,
+    kind: kindOf(name),
     size: 214_000,
     version: '1.0',
     fileVersion: '1.0',
@@ -178,6 +200,8 @@ export function fakeApi(over: Routes = {}, onSignedOut?: () => void): FakeApi {
     calls,
     callsTo: (pattern) => calls.filter((c) => matcher(pattern).test(`${c.method} ${c.path}`)),
     get: (path, query, options) => answer('GET', path, query, undefined, options?.signal),
+    // A route for a binary answer gives a Response (or throws, as a failed request does)
+    getResponse: (path, query, options) => answer<Response>('GET', path, query, undefined, options?.signal),
     send: (method, path, body) => answer(method, path, undefined, body),
     url: (path) => `/api${path}`,
   }

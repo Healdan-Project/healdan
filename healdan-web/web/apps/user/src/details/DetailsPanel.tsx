@@ -5,8 +5,10 @@ import { useState } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import { Button, formatSize, formatVersion, Icon, t } from '@healdan/ui'
 import { copyLink } from '../actions/copyLink'
+import { OpenDownload } from '../actions/OpenDownload'
 import { fileIcon } from '../fileIcon'
 import { ErrorPanel } from '../frame/ErrorPanel'
+import { useQuickLook } from '../preview/QuickLookState'
 import { useDocument, useProperties, useVersions } from '../queries'
 import { useApi } from '../services'
 import { Properties, type DetailsContext } from './Properties'
@@ -28,7 +30,7 @@ export interface DetailsPanelProps {
 
 /**
  * The selected document's details (spec section 6.2): its thumbnail, name, doc #, version and size, the actions, its
- * properties and its versions. Open, Download, Edit and Preview wait for the tasks that build them.
+ * properties and its versions. Preview opens Quick Look; Open, Download and Edit wait for the task that builds them.
  */
 export function DetailsPanel({ docNumber, row, version, context = 'folder' }: DetailsPanelProps) {
   const document = useDocument(docNumber, row)
@@ -45,8 +47,7 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
       <h2 className={styles.name}>{doc.name}</h2>
       <p className={styles.meta}>{t('details.meta', { n: doc.docNumber, version: formatVersion(doc.fileVersion), size: formatSize(doc.size) })}</p>
       <div className={styles.actions}>
-        <Button isDisabled>{t('details.open')}</Button>
-        <Button isDisabled>{t('details.download')}</Button>
+        <OpenDownload />
         <Button isDisabled>{t('details.edit')}</Button>
         <Button onPress={() => void copyLink(doc.docNumber)}>{t('details.copyLink')}</Button>
       </div>
@@ -80,6 +81,7 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
 // the icon of its kind instead of a broken image.
 function Thumbnail({ document }: { document: S['DocumentView'] }) {
   const api = useApi()
+  const quickLook = useQuickLook()
   const [failed, setFailed] = useState(false)
   return (
     <div className={styles.thumb}>
@@ -89,7 +91,7 @@ function Thumbnail({ document }: { document: S['DocumentView'] }) {
         <Icon name={fileIcon(document.name)} size={48} />
       )}
       <div className={styles.preview}>
-        <Button isDisabled>{t('details.preview')}</Button>
+        <Button onPress={() => quickLook.open(document.docNumber)}>{t('details.preview')}</Button>
       </div>
     </div>
   )

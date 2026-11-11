@@ -1031,6 +1031,67 @@ paths:
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/preview:
+    get:
+      operationId: getDocumentPreview
+      summary: A document's preview
+      description: |
+        The PDF to draw in a page: a PDF's own file, or the conversion the
+        server makes in the background of any other file (Word, Excel,
+        PowerPoint and OpenDocument files, among others). With `version` it
+        is the file of that version, as for `getDocumentContent`. A
+        `picture` kind needs no preview: it shows from its content.
+
+        It needs the Preview permission on top of reading: without it the
+        answer is `403 forbidden`, and so it is for a document protected by
+        a password (always refused through the API). A document the caller
+        can't read, or a version it doesn't have, is `404 not-found`.
+        Viewing a preview isn't recorded as a download.
+
+        A conversion that isn't made yet is `202`, with `Retry-After` in
+        seconds: ask again after that. A file with no preview, whether its
+        type has none or its conversion failed, is `404 no-preview`. A file
+        in storage that can't be reached right now is `503
+        storage-unreachable`, as for the content, and is answered before any
+        of the PDF is sent.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+        - name: version
+          in: query
+          required: false
+          description: A version from the document's timeline, such as `1.0`. The current file by default.
+          schema:
+            type: string
+            examples: ['1.0']
+      responses:
+        '200':
+          description: The PDF
+          headers:
+            Content-Length:
+              description: The PDF's size in bytes
+              required: true
+              schema:
+                type: integer
+                minimum: 0
+          content:
+            application/pdf:
+              schema:
+                type: string
+                contentMediaType: application/pdf
+        '202':
+          description: The preview is still being made
+          headers:
+            Retry-After:
+              description: How many seconds to wait before asking again
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/documents/{docNumber}/thumbnail:
     get:
       operationId: getDocumentThumbnail
@@ -1934,7 +1995,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, web-session-refused, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, web-session-refused, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, no-preview, server-error]
         fields:
           type: array
           items:
@@ -2338,7 +2399,7 @@ components:
     DocumentView:
       type: object
       additionalProperties: false
-      required: [type, docNumber, name, size, version, fileVersion, reference, folder, matter, author, dateFiled, lastModified, hold, canEdit, canOpen]
+      required: [type, docNumber, name, kind, size, version, fileVersion, reference, folder, matter, author, dateFiled, lastModified, hold, canEdit, canOpen]
       properties:
         type:
           type: string
@@ -2349,6 +2410,15 @@ components:
         name:
           type: string
           description: The file name
+        kind:
+          type: string
+          enum: [word, excel, powerpoint, pdf, email, opendocument, picture, other]
+          description: |
+            The kind of file its extension makes, the one list the File Type
+            filter also uses. It says how a client previews it: a `picture`
+            from its content, an `email` as a message, and every other kind
+            from `getDocumentPreview`, which answers `404 no-preview` for a
+            type that has none.
         size:
           type: integer
           format: int64

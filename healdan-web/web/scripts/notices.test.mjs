@@ -54,6 +54,18 @@ test('fails on a runtime package without a licence file, naming it', () => {
   assert.throws(() => noticesFor(root), /a@1\.0\.0/)
 })
 
+test("adds the licences of the data pdfjs-dist ships in folders, and fails when one is missing", () => {
+  const extras = ['cmaps/LICENSE', 'standard_fonts/LICENSE_FOXIT', 'standard_fonts/LICENSE_LIBERATION', 'wasm/LICENSE_OPENJPEG', 'wasm/LICENSE_PDFJS_OPENJPEG', 'wasm/LICENSE_JBIG2', 'wasm/LICENSE_PDFJS_JBIG2']
+  const files = { 'node_modules/pdfjs-dist/LICENSE': 'Licence of pdfjs' }
+  for (const extra of extras) files[`node_modules/pdfjs-dist/${extra}`] = `Text of ${extra}`
+  const text = noticesFor(project({ 'pdfjs-dist': { version: '6.5.438', license: 'Apache-2.0' } }, files))
+  assert.match(text, /Licence of pdfjs/)
+  for (const extra of extras) assert.match(text, new RegExp(`${extra}\\n\\nText of ${extra}`))
+
+  const root = project({ 'pdfjs-dist': { version: '6.5.438', license: 'Apache-2.0' } }, { 'node_modules/pdfjs-dist/LICENSE': 'Licence of pdfjs' })
+  assert.throws(() => noticesFor(root), /pdfjs-dist@6\.5\.438 cmaps\/LICENSE/)
+})
+
 test('writes apps/user/dist/notices.txt', () => {
   const root = project({ a: { version: '1.0.0', license: 'MIT' } }, { 'node_modules/a/LICENCE': 'Licence of a' })
   writeNotices(root)

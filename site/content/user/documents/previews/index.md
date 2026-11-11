@@ -3,9 +3,53 @@ title: Previews
 weight: 2
 ---
 
-A preview is a quick check that a document is the one you expect, before you open, print or email it. Word, Excel,
-PowerPoint and OpenDocument files, LibreOffice Draw's drawings among them, preview in the browser and get
-thumbnails, as PDFs and images do.
+A preview is a quick check that a document is the one you expect, before you open, print or email it. PDFs and pictures
+preview in the browser, and so do Word, Excel, PowerPoint and OpenDocument files, LibreOffice Draw's drawings among
+them, which Healdan turns into PDFs. All of them get thumbnails.
+
+## Quick Look
+
+Select a document in any list, a folder, search results or Recent Documents, and press **Space**. A large preview opens
+over the page, as Finder's Quick Look does. Nothing behind it moves.
+
+- **The bar across the top** has **‹** and **›**, the document's name, its place in the list (**4 of 7**), its doc #
+  (**# 10388**), a button that docks the preview (see [The Reading Pane](#the-reading-pane)), and **Open** and
+  **Download**.
+- **Move through the list** with ‹ and ›, or the arrow keys. The row behind Quick Look moves with you, so when you
+  close it, you're on the document you ended on. Past the last document loaded, › loads the next page of the list.
+- **Close it** with Space or **Esc**. The focus goes back to the row.
+- **Other ways in:** the **Preview** button in the toolbar above the list, and the one on the thumbnail in the
+  document's details.
+
+A PDF is shown one page at a time, with **Previous Page** and **Next Page**, and **Zoom In** and **Zoom Out**, in steps
+from 50% to 300% of the width of the room. 100% fits the page to it. To scroll a page that's bigger than the room with the
+keyboard, Tab to it and use Page Up and Page Down: the arrow keys walk the list.
+
+## The Reading Pane
+
+**Open as Reading Pane** in Quick Look's bar docks the preview in the right region, where the details usually are.
+
+- **It stays while you click or arrow down the list,** previewing each document you select, until you close it with
+  **Close Preview**. Closing it brings the details back.
+- **The funnel still opens Filters in its place.** The reading pane comes back when you next click a row, or close
+  Filters.
+- **The list keeps Title, Doc # and Edit Date** while the pane is open, so it fits beside it. The other columns come
+  back when you close it.
+- **With no document selected,** the pane waits for you to select one.
+
+## What's Shown
+
+| Kind | How it's shown |
+|---|---|
+| PDF | Its own pages |
+| Word, Excel, PowerPoint, OpenDocument and drawings | The PDF Healdan makes of them (see below) |
+| Pictures | As themselves, from the file. A picture your browser can't draw, such as a TIFF in Chrome, says there's no preview |
+| Emails | No preview yet: the page says so, with Open and Download |
+| Anything else | "There's no preview for this kind of file.", with **Open** and **Download** |
+
+A preview needs the Preview permission on top of reading the document. A picture's preview is its file, so it also
+needs the Download permission. A document protected by a password has no preview in the new interface. Without the
+permission, you see the same words as for a type with no preview.
 
 ## Which Files Preview
 
@@ -27,21 +71,20 @@ A preview shows the markup a document still carries, so you can catch a draft th
 
 - **Tracked changes** show as redlines, even if the document was saved with markup hidden. This works for `docx`,
   `docm`, `dotx` and `dotm` files. Older formats show markup only if they were saved showing it.
-- **Comments** show as notes: an icon at the commented text, which shows the comment when you click it.
+- **Comments** show as a note icon at the commented text. The preview doesn't open the note: to read a comment, open
+  the document.
 - **Thumbnails** show the markup too.
 
 ## When It's Ready
 
-Healdan prepares previews in the background when a file is filed or a new version is saved, usually within a
-minute. If you open a preview before that, wait a moment: it's made on the spot.
-
-## Printing and Downloading
-
-- **Print** from the preview, if you have the Print permission.
-- **The preview's download button** saves it as a PDF, if you have the Download permission.
-- **Without Download,** you see the thumbnail, but the preview says "not available", as it does for PDFs.
+Healdan prepares previews in the background when a file is filed or a new version is saved, usually within a minute.
+If you open one before that, the page says **Preparing a preview…** and asks again every few seconds, as the server
+tells it to, so the page appears by itself.
 
 ## "Not Available"
 
-The preview says "not available" for a file that can't be converted, such as a damaged or password-protected one.
-It doesn't hold up anyone else's previews. If a file you expect to preview doesn't, tell your administrator.
+A file that can't be converted, such as a damaged or password-protected one, has no preview, and the page says so,
+with Open and Download. It doesn't hold up anyone else's previews. If a file you expect to preview doesn't, tell your
+administrator.
+
+If the files' storage can't be reached for the moment, a banner says so, and the preview offers **Try Again**.

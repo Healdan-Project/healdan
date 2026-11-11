@@ -47,6 +47,7 @@ import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.listing.FileKinds;
 import com.logicaldoc.healdan.navigation.RecentDocuments;
 import com.logicaldoc.healdan.navigation.RecentDocuments.RecentDocument;
+import com.logicaldoc.healdan.preview.PreviewState;
 import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.token.DeviceHolds;
 import com.logicaldoc.healdan.util.StorageUnreachableException;
@@ -84,6 +85,12 @@ public class DocumentResource {
 
 	/** The media type of a thumbnail, as CE's {@code ThumbnailManager} makes it */
 	private static final String PNG = "image/png";
+
+	/** The media type of a preview */
+	private static final String PDF = "application/pdf";
+
+	/** How long a client waits before asking again for a preview that's still being made */
+	private static final int PREVIEW_RETRY_SECONDS = 5;
 
 	/** As in {@code ServletUtil.saveHistory}: a download within this many seconds of the last is not recorded again */
 	private static final int DEDUPLICATE_SECONDS = 30;
@@ -269,16 +276,9 @@ public class DocumentResource {
 
 			refuseProtected(document, caller.session(), docNumber);
 
-			String fileVersion = document.getFileVersion();
-			String fileName = document.getFileName();
-			if (StringUtils.isNotBlank(version)) {
-				Version found = VersionDAO.get().findByVersion(document.getId(), version.strip());
-				if (found == null)
-					throw ApiProblem.notFound("Document #%d has no version %s".formatted(docNumber, version.strip()));
-				fileVersion = found.getFileVersion();
-				if (StringUtils.isNotBlank(found.getFileName()))
-					fileName = found.getFileName();
-			}
+			FileOfVersion asked = fileOf(document, version, docNumber);
+			String fileVersion = asked.fileVersion();
+			String fileName = asked.fileName();
 
 			// The store is the truth: the size recorded in the database can be wrong
 			StoreResource resource = StoreResource.builder().docId(document.getId()).fileVersion(fileVersion).build();
@@ -309,6 +309,25 @@ public class DocumentResource {
 	}
 
 	/**
+	 * @param document the document
+	 * @param version a version from its timeline, such as {@code 1.0}; blank for the current file
+	 * @return the file version that holds that version's file, and the file's name
+	 * @throws ApiProblem {@code 404} if the document has no such version
+	 */
+	private static FileOfVersion fileOf(Document document, String version, long docNumber) throws PersistenceException {
+		if (StringUtils.isBlank(version))
+			return new FileOfVersion(document.getFileVersion(), document.getFileName());
+		Version found = VersionDAO.get().findByVersion(document.getId(), version.strip());
+		if (found == null)
+			throw ApiProblem.notFound("Document #%d has no version %s".formatted(docNumber, version.strip()));
+		return new FileOfVersion(found.getFileVersion(),
+				StringUtils.isNotBlank(found.getFileName()) ? found.getFileName() : document.getFileName());
+	}
+
+	private record FileOfVersion(String fileVersion, String fileName) {
+	}
+
+	/**
 	 * @return the file's stream
 	 * @throws IllegalStateException if it can't be opened; storage that can't be reached is its cause, and answered
 	 *         {@code 503} by {@link ProblemMapper}
@@ -318,6 +337,60 @@ public class DocumentResource {
 			return Store.get().getStream(resource);
 		} catch (IOException e) {
 			throw new IllegalStateException("Can't read the file of document #" + resource.getDocId(), e);
+		}
+	}
+
+	/**
+	 * A document's preview (M6 spec section 9.3): the PDF to draw in the page, of the current file or of the file of
+	 * {@code version}. A PDF is its own preview; any other file's is the conversion Healdan makes in the background
+	 * ({@link PreviewState}). Read through the checks of the old UI's preview: the Preview permission on top of
+	 * reading, and not for a document protected by a password. Not recorded as a download.
+	 *
+	 * @param docNumber the doc #
+	 * @param version a version of the document, such as {@code 1.0}; the current file by default
+	 * @return {@code 200} with the PDF; {@code 202} with {@code Retry-After} while it's being made
+	 * @throws ApiProblem {@code 404 not-found} for a document the caller can't read or a version it doesn't have,
+	 *         {@code 404 no-preview} for a file with no preview, {@code 403} without the Preview permission, and
+	 *         {@code 503} while the file's storage can't be reached
+	 */
+	@GET
+	@Path("{docNumber: [0-9]+}/preview")
+	@Produces(MediaType.WILDCARD)
+	public Response preview(@PathParam("docNumber") long docNumber, @QueryParam("version") String version) {
+		Caller caller = Caller.current();
+		try {
+			Document document = readable(docNumber, caller.user());
+			if (!AccessChecks.allowed(caller.user(), Permission.PREVIEW, document))
+				throw ApiProblem.forbidden("You may not preview document #%d.".formatted(docNumber));
+			refuseProtected(document, caller.session(), docNumber);
+
+			FileOfVersion asked = fileOf(document, version, docNumber);
+			PreviewState state = PreviewState.of(document, asked.fileVersion(), asked.fileName());
+			if (state == PreviewState.PENDING)
+				return Response.status(Response.Status.ACCEPTED).header(HttpHeaders.RETRY_AFTER, PREVIEW_RETRY_SECONDS)
+						.build();
+			if (state == PreviewState.NONE)
+				throw new ApiProblem(404, "no-preview", "Document #%d has no preview.".formatted(docNumber));
+
+			// A PDF is shown as it is; any other file by its conversion
+			boolean pdf = "pdf".equalsIgnoreCase(FilenameUtils.getExtension(asked.fileName()));
+			StoreResource resource = pdf
+					? StoreResource.builder().docId(document.getId()).fileVersion(asked.fileVersion()).build()
+					: PreviewState.conversion(document.getId(), asked.fileVersion());
+			if (!Store.get().exists(resource))
+				throw new ApiProblem(500, "server-error", "The document's file is missing from storage.");
+			long size = Store.get().size(resource);
+			// Opened before the answer starts, as the content's is: an outage is a 503, never a 200 that stops short
+			InputStream in = openStream(resource);
+			StreamingOutput body = out -> {
+				try (in) {
+					in.transferTo(out);
+				}
+			};
+			return Response.ok(body, PDF).header(HttpHeaders.CONTENT_LENGTH, size)
+					.header(HttpHeaders.CONTENT_DISPOSITION, "inline").build();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't read the preview of document #" + docNumber, e);
 		}
 	}
 

@@ -5,6 +5,10 @@ import { useNavigate } from '@tanstack/react-router'
 import { useId, useMemo, useRef } from 'react'
 import { t, Table, type TableSort } from '@healdan/ui'
 import { DetailsPanel } from '../details/DetailsPanel'
+import { PreviewButton } from '../preview/PreviewButton'
+import { QuickLook } from '../preview/QuickLook'
+import { ReadingPane } from '../preview/ReadingPane'
+import { documentsOf, usePreviewKey } from '../preview/usePreviewKey'
 import { FilterChips } from '../filters/FilterChips'
 import { FiltersButton } from '../filters/FiltersButton'
 import { FiltersPanel } from '../filters/FiltersPanel'
@@ -15,7 +19,7 @@ import { RightRegionView, useRightRegion } from '../frame/RightRegion'
 import { searchesDocuments, type SearchScope } from '../search/scopes'
 import { useSearchFacets, useSearchResults } from '../search/useSearchResults'
 import { Toolbar, type ListCount } from './Toolbar'
-import { hitColumns, rowOf } from './listColumns'
+import { hitColumns, narrowed, rowOf } from './listColumns'
 import { isSortColumn, type ListingOrder, type SortColumn } from './useListing'
 import { useRowSelection } from './useRowSelection'
 import styles from './views.module.css'
@@ -47,7 +51,11 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const facets = useSearchFacets({ scope, q: text, filters, enabled: filtersOpen })
   const { selected, selection, change: changeSelection } = useRowSelection()
   const rows = useMemo(() => results.rows.map(rowOf), [results.rows])
-  const columns = useMemo(() => hitColumns(scope), [scope])
+  const allColumns = useMemo(() => hitColumns(scope), [scope])
+  // The reading pane makes the list narrow: it keeps the columns that fit
+  const columns = region.show === 'preview' ? narrowed(allColumns) : allColumns
+  const hitDocuments = useMemo(() => documentsOf(results.rows), [results.rows])
+  const preview = usePreviewKey(changeSelection)
   const authors = useAuthorNames(results.rows, facets.data)
 
   if (text === '') {
@@ -97,7 +105,9 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               label={t('search.actions')}
               count={count}
               end={documents && <FiltersButton ref={funnel} open={filtersOpen} active={active} onPress={() => (filtersOpen ? region.close() : region.open('filters'))} />}
-            />
+            >
+              {documents && <PreviewButton />}
+            </Toolbar>
             {documents && <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />}
             <Table
               aria-labelledby={headingId}
@@ -109,6 +119,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               selection={selection}
               onSelectionChange={changeSelection}
               onOpen={open}
+              onPreview={documents ? preview : undefined}
               loadMore={results.loadMore}
               isLoadingMore={results.isLoadingMore}
               total={results.total}
@@ -136,7 +147,9 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
           )
         }
         details={selected !== undefined && <DetailsPanel key={selected} docNumber={selected} row={selectedRow?.type === 'document' ? selectedRow : undefined} context="search" />}
+        preview={documents && <ReadingPane docNumber={selected} row={selectedRow?.type === 'document' ? selectedRow : undefined} />}
       />
+      <QuickLook documents={hitDocuments} total={results.total} loadMore={results.loadMore} />
     </section>
   )
 }

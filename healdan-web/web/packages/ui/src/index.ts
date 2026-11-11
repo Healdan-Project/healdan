@@ -11,6 +11,7 @@ export { CheckGroup, type Choice, type CheckGroupProps } from './components/Chec
 export { RadioChoices, type RadioChoicesProps } from './components/RadioChoices'
 export { DatePicker, type DatePickerProps } from './components/DatePicker'
 export { Dialog, type DialogProps } from './components/Dialog'
+export { Overlay, type OverlayProps } from './components/Overlay'
 export { ComboBox, type ComboBoxOption, type ComboBoxProps, type ComboBoxSection } from './components/ComboBox'
 export { Toast, ToastRegion, clearToasts, toast } from './components/Toast'
 export { Icon, type IconName } from './icons'

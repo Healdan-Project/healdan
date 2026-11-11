@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 // Checks the built app: index.html links pressable.css under the id React Aria looks for (so it injects no <style>,
-// which the page's Content-Security-Policy would block), with Vite's base applied, and the file is in dist/.
+// which the page's Content-Security-Policy would block), with Vite's base applied, and the file is in dist/. And that
+// PDF.js's worker and its data files are there, which the preview fetches from /app/ (pdfjs-data.mjs puts them in).
 
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -19,6 +20,14 @@ export function distProblems(dist) {
     if (!/\bhref="\/app\/pressable\.css"/.test(link)) problems.push(`the pressable link's href is not /app/pressable.css: ${link}`)
   }
   if (!existsSync(join(dist, 'pressable.css'))) problems.push('dist/pressable.css is missing')
+  const assets = existsSync(join(dist, 'assets')) ? readdirSync(join(dist, 'assets')) : []
+  if (!assets.some((name) => /^pdf\.worker\.min-.+\.mjs$/.test(name))) problems.push("dist/assets has no PDF.js worker (pdf.worker.min-<hash>.mjs), which the preview's page can't draw without")
+  for (const folder of ['cmaps', 'standard_fonts']) {
+    if (!existsSync(join(dist, 'pdfjs', folder)) || readdirSync(join(dist, 'pdfjs', folder)).length === 0) problems.push(`dist/pdfjs/${folder}/ is missing or empty`)
+  }
+  for (const name of ['jbig2_nowasm_fallback.js', 'openjpeg_nowasm_fallback.js']) {
+    if (!existsSync(join(dist, 'pdfjs', 'wasm', name))) problems.push(`dist/pdfjs/wasm/${name} is missing`)
+  }
   return problems
 }
 

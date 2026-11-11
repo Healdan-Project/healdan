@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +43,7 @@ import com.logicaldoc.healdan.api.model.UserRef;
 import com.logicaldoc.healdan.api.model.UserView;
 import com.logicaldoc.healdan.listing.DocumentAuthors;
 import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
+import com.logicaldoc.healdan.listing.FileKinds;
 import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.ClientDAO;
 import com.logicaldoc.healdan.matter.FolderPosition;
@@ -178,7 +180,8 @@ public final class ApiViews {
 		boolean canOpen = allowed.contains(Permission.DOWNLOAD) && unprotected;
 		long docNumber = Long.parseLong(d.getCustomId());
 		Author author = authors.get(d.getId());
-		return new DocumentView("document", docNumber, d.getFileName(), d.getFileSize(), d.getVersion(),
+		return new DocumentView("document", docNumber, d.getFileName(),
+				FileKinds.of(FilenameUtils.getExtension(d.getFileName())), d.getFileSize(), d.getVersion(),
 				d.getFileVersion(), docNumber + "." + d.getFileVersion(),
 				new FolderRef(folderId, d.getFolder().getName(), folderKind), matter,
 				author == null ? null : new AuthorRef(author.username(), author.displayName()), d.getCreation(),

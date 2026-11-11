@@ -230,6 +230,7 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 403 | `token-only` | `DELETE /auth/tokens/current` on the web session, which has no token |
 | 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current` |
 | 404 | `not-found` | It doesn't exist, **or you can't read it**: the two get the same answer |
+| 404 | `no-preview` | `GET /documents/{docNumber}/preview` for a file with no preview: its type has none, or its conversion failed (see [Previews](#previews)) |
 | 409 | `checked-out`, `locked` | Someone else has the document checked out, or anyone has it locked with the web page's Lock action. The problem adds the `hold` |
 | 409 | `held-elsewhere` | You have the document checked out on another of your devices. The problem adds the `hold` and `lastSaved` |
 | 409 | `not-held` | A save with `ifHeld: true` found the document free: its check-out was released |
@@ -299,7 +300,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 | Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /clients/recent`, `PUT` and `DELETE /me/matters/{folderId}`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
 | Finding | `GET /search?scope=&q=&within=`, with filters and `facets`, `GET /suggest?q=` for the search box as someone types, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
-| A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone |
+| A document | `GET /documents/{docNumber}`, `/content`, `/preview`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone |
 | Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
 | Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
@@ -649,6 +650,25 @@ placeholder, and ask again later.
 
 The docs page has each one's fields, rules and errors. Every endpoint makes the checks the web page makes, so a
 document you can't read through the web page doesn't exist through the API either.
+
+## Previews
+
+`GET /documents/{docNumber}/preview` answers the PDF to draw in a page: a PDF's own file, or the conversion the server
+makes in the background of any other file (M1.5's queue; asking never makes one). `?version=` asks for a version's, as
+for `/content`. It needs the Preview permission on top of reading (`403` without it, and for a document protected by a
+password), and isn't recorded as a download.
+
+| Answer | When |
+|---|---|
+| `200`, `application/pdf` | There is a PDF |
+| `202`, with `Retry-After` in seconds (5) and no body | The conversion is queued: ask again after that |
+| `404 no-preview` | The type has none, the conversion failed (the "not available" PDF CE stores counts), or its job was given up on |
+| `404 not-found` | The document or the version isn't there, or the caller can't read it |
+| `503 storage-unreachable` | The file's storage can't be reached, as for `/content` |
+
+A document's `kind` (the one list the File Type filter uses: `word`, `excel`, `powerpoint`, `pdf`, `email`,
+`opendocument`, `picture` and `other`) says how a client previews it. The app draws a `picture` from `/content` and every
+other kind from `/preview`, and asks again while it is `202`; it has no list of types that convert.
 
 ## The Sign-In Throttle
 
