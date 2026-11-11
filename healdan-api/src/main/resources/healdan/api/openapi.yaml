@@ -898,7 +898,8 @@ paths:
         Resolves `#1234`, `#1234.2`, `#1234v2` and `#1234.2.1` to the document
         and version. Input that isn't a doc # is `400`. A document that
         doesn't exist, can't be read by the caller, isn't published to the
-        caller, or has no such version is `404` with the old web page's
+        caller, is outside the Stores or a legacy shortcut, or has no such
+        version is `404` with the old web page's
         message, such as "No document #1234".
       tags: [Search]
       parameters:
@@ -953,7 +954,9 @@ paths:
       description: |
         Addressed by its doc #. A document the caller can't read, one that
         isn't published to them, one outside the Stores (like the folders
-        there) and one that doesn't exist are all `404` with the same answer.
+        there), a legacy shortcut (a document row from before Healdan that
+        points to another document) and one that doesn't exist are all
+        `404` with the same answer.
         Lists, search and lookup leave out the same documents.
       tags: [Documents]
       parameters:

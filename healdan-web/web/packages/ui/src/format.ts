@@ -43,3 +43,19 @@ const lists = new Intl.ListFormat('en-US', { type: 'conjunction', style: 'narrow
 export function formatList(values: string[]): string {
   return lists.format(values)
 }
+
+const sizeUnits = ['B', 'KB', 'MB', 'GB', 'TB']
+
+/** A file's size in the units people read: "512 B", "209 KB", "1.4 MB" (1 KB is 1,024 bytes, as file managers count). */
+export function formatSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return ''
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < sizeUnits.length - 1) {
+    value /= 1024
+    unit++
+  }
+  // Bytes are whole; the others keep a decimal under 10 ("1.4 MB") and are whole above ("209 KB")
+  const digits = unit === 0 || value >= 10 ? 0 : 1
+  return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: digits }).format(value)} ${sizeUnits[unit]}`
+}

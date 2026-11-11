@@ -62,6 +62,16 @@ export function document(over: Partial<S['DocumentView']> = {}): S['DocumentView
   }
 }
 
+/** One property of a document, as GET /documents/{n}/properties lists it. */
+export function field(over: Partial<S['ProfileField']> = {}): S['ProfileField'] {
+  return { name: 'docclass', label: 'Class', type: 'string', required: false, editable: false, value: null, source: null, inheritedFrom: null, options: null, ...over }
+}
+
+/** One row of GET /documents/{n}/versions. */
+export function versionRow(over: Partial<S['VersionView']> = {}): S['VersionView'] {
+  return { version: '1.0', fileVersion: '1.0', kind: 'version', date: '2026-09-29T09:40:00Z', by: { id: 3, name: 'Jamie Clarke' }, comment: null, event: 'event.stored', ...over }
+}
+
 export function favorite(item: S['FolderView'] | S['DocumentView'], id = 900): S['FavoriteView'] {
   return { id, type: item.type, item }
 }

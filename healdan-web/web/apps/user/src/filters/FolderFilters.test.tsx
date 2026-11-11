@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
 import { children, document, folder, problem, type Routes } from '../test/fakeApi'
+import { detailsRoutes } from '../test/details'
 import { renderApp } from '../test/renderApp'
 
 type S = components['schemas']
@@ -49,6 +50,7 @@ const asks = (query: Record<string, unknown> | undefined, name: string) => query
 function routes(over: Routes = {}): Routes {
   return {
     'GET /v1/folders/7': correspondence,
+    ...detailsRoutes(pdfs[1]!),
     'GET /v1/folders/7/children': ({ query }: { query?: Record<string, unknown> }) => {
       const kinds = asks(query, 'type') as string[] | undefined
       const authors = asks(query, 'author') as string[] | undefined
@@ -203,7 +205,7 @@ describe('Filters in a folder', () => {
     await userEvent.click((await dataRows())[1]!)
     const details = await screen.findByRole('region', { name: 'Details' })
     expect(within(details).getByText('Notice of Arbitration.pdf')).toBeTruthy()
-    expect(within(details).getByText('# 10461')).toBeTruthy()
+    expect(within(details).getByText(/^# 10461 · Version 1 · /)).toBeTruthy()
     expect(panel()).toBeNull()
     // The filters count as set while the panel is away
     expect(within(main()).getByText('File Type: PDF')).toBeTruthy()

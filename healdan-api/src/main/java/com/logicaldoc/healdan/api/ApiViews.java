@@ -96,8 +96,9 @@ public final class ApiViews {
 	/**
 	 * @param d a document
 	 * @return whether the API shows it: it has a numeric doc # and is in a
-	 *         Store, like every folder the API shows. Elsewhere it answers like
-	 *         one that doesn't exist.
+	 *         Store, like every folder the API shows, and is no legacy shortcut
+	 *         (a row with {@code ld_docref}, whose own address is
+	 *         {@code 404}). Elsewhere it answers like one that doesn't exist.
 	 * @throws PersistenceException error at data layer
 	 */
 	public static boolean shows(Document d) throws PersistenceException {
@@ -113,7 +114,7 @@ public final class ApiViews {
 	 * @return whether the API shows it
 	 */
 	static boolean shows(Document d, FolderPosition folder) {
-		return hasDocNumber(d) && folder.isUnderAStore();
+		return d.getDocRef() == null && hasDocNumber(d) && folder.isUnderAStore();
 	}
 
 	/**

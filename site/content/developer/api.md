@@ -309,7 +309,8 @@ The sections below say more about the parts a client needs to know before it sta
 - **A typed doc #.** `GET /lookup?q=` takes what a person types and returns the document and version it names:
   `#1234`, `#1234.2`, `#1234v2`, `#1234.2.1`, and the title bar's `#1234 v2.1`, which may have spaces after the
   `#` and before the `v`. Encode the `#` as `%23`. Input that isn't a doc # is `400`; a document the caller can't
-  read, or a version it hasn't got, is `404`.
+  read, a version it hasn't got, and a legacy shortcut (a document row from before Healdan that points to another
+  document) are `404`, and `GET /documents/{docNumber}` of a shortcut's own doc # is the same `404`.
 - **Suggestions as someone types.** `GET /suggest?q=` answers `{ "matters": [...], "documents": [...] }`: up to 5
   matters whose number or name matches `q` (as the `matters` search scope finds them), then up to 5 documents whose
   title has every word of `q`, the last as the start of a word. Each matter has `id`, `number`, `name` and its

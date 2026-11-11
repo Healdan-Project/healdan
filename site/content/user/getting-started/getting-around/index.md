@@ -37,6 +37,22 @@ copy takes someone to the same place, and Back and Reload keep it.
 Open a matter or a folder from the left pane, and the main area lists what's in it: see [Opening a
 Matter](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matter).
 
+## The Details Panel
+
+Select a document in a folder's list, and its **Details** open at the right, in the same place as
+[Filters](../../finding-documents/searching/#filters). They show:
+
+- **A thumbnail** of the first page, when the document has one. Without one, a plain icon for the kind of file shows
+  instead.
+- **The name,** and under it the doc #, the version and the size: `# 10388 · Version 2 · 209 KB`.
+- **Open, Download and Edit,** which are greyed out until they come to the app, and **Copy Link**, which works now:
+  see [Copying a Link](../../finding-documents/finding-by-doc-number/#copying-a-link).
+- **Properties:** Client, Matter, Class, Subclass, Author, Typist and Date Filed, and, for an email, From, To, Sent
+  and Received. You can read them here; to change them, use the Classic Interface for now.
+- **Versions:** the document's timeline, newest first, with who saved each and when.
+
+Click another document to see its details instead, or select several and the details close.
+
 ## The Keyboard
 
 In the left pane's tree, the up and down arrow keys move between rows, the right arrow opens a matter or folder, the

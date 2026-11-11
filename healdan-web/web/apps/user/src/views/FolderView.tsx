@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useId, useMemo, useRef, useState } from 'react'
 import { ApiError, apiPath, type components } from '@healdan/api'
-import { Button, formatDate, formatVersion, Icon, t, Table, toast, type IconName, type TableColumn, type TableRow, type TableSort } from '@healdan/ui'
+import { Button, Icon, t, Table, toast, type TableSort } from '@healdan/ui'
 import { FilterChips } from '../filters/FilterChips'
 import { FiltersButton } from '../filters/FiltersButton'
 import { FiltersPanel } from '../filters/FiltersPanel'
@@ -18,56 +18,14 @@ import { keys, useFavorites, useFolder } from '../queries'
 import { useSelection } from '../selection'
 import { useApi } from '../services'
 import { Breadcrumb } from './Breadcrumb'
-import { DetailsStub } from './DetailsStub'
+import { DetailsPanel } from '../details/DetailsPanel'
 import { NotFound } from './NotFound'
 import { Toolbar, type ListCount } from './Toolbar'
-import { childKey, isSortColumn, useListing, type Child, type ListingOrder, type SortColumn } from './useListing'
+import { listColumns, rowOf } from './listColumns'
+import { isSortColumn, useListing, type ListingOrder, type SortColumn } from './useListing'
 import styles from './views.module.css'
 
 type S = components['schemas']
-
-interface ListRow extends TableRow {
-  item: Child
-}
-
-function rowOf(item: Child): ListRow {
-  return { id: childKey(item), textValue: item.name, selectable: item.type !== 'folder', item }
-}
-
-const kinds: [RegExp, IconName][] = [
-  [/\.pdf$/i, 'filePdf'],
-  [/\.(docx?|docm|dotx?|rtf)$/i, 'fileWord'],
-  [/\.(xlsx?|xlsm|csv)$/i, 'spreadsheet'],
-  [/\.(pptx?|pptm)$/i, 'presentation'],
-  [/\.(eml|msg)$/i, 'email'],
-  [/\.(png|jpe?g|gif|tiff?|bmp|webp|heic)$/i, 'picture'],
-]
-
-function iconOf(item: Child): IconName {
-  if (item.type === 'folder') return item.kind === 'searchFolder' ? 'folderSearch' : 'folder'
-  return kinds.find(([pattern]) => pattern.test(item.name))?.[1] ?? 'document'
-}
-
-// Title shows the file name: CE has no title of its own, and the server sorts Title by it (plan correction 7).
-const columns: TableColumn<ListRow>[] = [
-  {
-    id: 'title',
-    name: t('list.title'),
-    isRowHeader: true,
-    allowsSorting: true,
-    width: '3fr',
-    cell: ({ item }) => (
-      <>
-        <Icon name={iconOf(item)} />
-        <span className={styles.name}>{item.name}</span>
-      </>
-    ),
-  },
-  { id: 'docNumber', name: t('list.docNumber'), allowsSorting: true, align: 'end', width: 96, cell: ({ item }) => item.type === 'document' && String(item.docNumber) },
-  { id: 'version', name: t('list.version'), allowsSorting: true, align: 'end', width: 84, cell: ({ item }) => item.type === 'document' && formatVersion(item.fileVersion) },
-  { id: 'author', name: t('list.author'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.type === 'document' && item.author?.displayName },
-  { id: 'edited', name: t('list.edited'), allowsSorting: true, width: 132, cell: ({ item }) => item.type === 'document' && formatDate(item.lastModified) },
-]
 
 export interface FolderViewProps {
   folderId: number
@@ -181,7 +139,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
             <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />
             <Table
               aria-labelledby={headingId}
-              columns={columns}
+              columns={listColumns}
               rows={rows}
               sort={shown}
               onSort={sortBy}
@@ -215,7 +173,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               }}
             />
           }
-          details={selected !== undefined && <DetailsStub docNumber={selected} name={selectedRow?.name} />}
+          details={selected !== undefined && <DetailsPanel key={selected} docNumber={selected} row={selectedRow?.type === 'document' ? selectedRow : undefined} />}
         />
       )}
     </section>

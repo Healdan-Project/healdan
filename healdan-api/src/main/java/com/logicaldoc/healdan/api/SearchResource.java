@@ -215,7 +215,7 @@ public class SearchResource {
 		if (options == null)
 			throw new ApiProblem(500, "server-error", "The search for scope %s isn't available.".formatted(scope));
 		options.setExpression(q);
-		// The API shows no shortcut, whose own address is 404; and CE scores the rows it adds for them 0, which its
+		// The API shows no shortcut (ApiViews.shows refuses it, as its own address is 404); and CE scores the rows it adds for them 0, which its
 		// order of a window's hits can't place consistently among the scored ones
 		if (List.of("documents", "emails", "all").contains(scope))
 			options.setRetrieveAliases(false);

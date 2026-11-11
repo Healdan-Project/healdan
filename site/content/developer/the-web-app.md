@@ -89,6 +89,27 @@ nothing to show. The panel's groups are `@healdan/ui`'s `CheckGroup` and `RadioC
 (React Aria's, taking and giving days as `2026-11-02`). A search view offers the panel with `context="search"`, which
 adds Client and Matter.
 
+## Details and the \# Result
+
+`details/DetailsPanel.tsx` is the region's details: `<DetailsPanel docNumber row version context />` asks for the
+document, its properties and its versions (`useDocument`, `useProperties` and `useVersions` in `queries.ts`; the
+list's row shows at once as the placeholder) and renders the thumbnail, the name, `# n · Version v · size`
+(`formatSize` in `@healdan/ui`), the actions and `Properties` and `Versions`. A search view passes
+`context="search"`, which adds Location, linking to `/app/folders/<id>`. The panel never reads a file: the thumbnail
+is an `<img>` on `/api/v1/documents/{n}/thumbnail`, which the web session's cookie goes with, and an icon of the
+file's kind (`fileIcon.ts`) shows when there's none or the person can't open the document. Properties come from the
+list the server gives, by name; an email's From, To, Sent and Received show when any of them has a value, as the
+server fills them from the message and the browser never parses a file. Open, Download, Edit and Preview are
+disabled until their tasks; **Copy Link** (`actions/copyLink.ts`) writes `location.origin + '/app/doc/' + n` with the
+Clipboard API and shows a Toast, either way.
+
+`/app/doc/10388`, `/app/doc/10388.2` and the other forms of the lookup are `views/DocResult.tsx`: it asks
+`GET /v1/lookup?q=%2310388.2` and shows a list of that one document (`views/listColumns.tsx`, the folder list's
+columns), selected, with its details beside it and the named version marked in Versions. `useSelection` takes the
+number from the address on this route. A `404` shows "No document # 10388 that you can see.", the same for a
+document that isn't there and one that can't be read, and says only the number as typed; a `400` shows the not-found
+view.
+
 ## The Catalogue
 
 Every word the app shows is in one typed catalogue, `packages/ui/src/strings/en-US.ts`, and a view gets it with

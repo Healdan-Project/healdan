@@ -13,8 +13,6 @@ describe('the addresses', () => {
     ['/recent/folders', 'Recent Folders'],
     ['/recent/clients', 'Recent Clients'],
     ['/search?scope=documents&q=charter', 'Search'],
-    ['/doc/10388', 'Document'],
-    ['/doc/10388.2', 'Document'],
   ])('%s shows a view that is coming', async (path, title) => {
     await renderApp(path)
     expect(await screen.findByRole('heading', { level: 1, name: title })).toBeTruthy()

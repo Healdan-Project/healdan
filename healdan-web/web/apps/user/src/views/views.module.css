@@ -168,19 +168,3 @@
 .withRegion > .folder {
   min-width: 0;
 }
-
-.details {
-  padding: var(--hd-space-5);
-}
-
-.detailsName {
-  margin: 0 0 var(--hd-space-2);
-  font-size: var(--hd-font-size-title);
-  font-weight: var(--hd-weight-bold);
-  overflow-wrap: anywhere;
-}
-
-.detailsMeta {
-  margin: 0;
-  color: var(--hd-text-secondary);
-}

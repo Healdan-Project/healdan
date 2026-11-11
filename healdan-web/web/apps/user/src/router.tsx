@@ -6,6 +6,7 @@ import { t } from '@healdan/ui'
 import { Frame } from './frame/Frame'
 import { filterSearch, multiFilters, type Filters } from './filters/useFilters'
 import { idFrom } from './queries'
+import { DocResult } from './views/DocResult'
 import { FolderView } from './views/FolderView'
 import { NotFound } from './views/NotFound'
 import { NotYet } from './views/NotYet'
@@ -88,7 +89,11 @@ const searchRoute = createRoute({
 const docRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'doc/$ref',
-  component: () => <NotYet title={t('notYet.document')} />,
+  component: function DocRoute() {
+    // A view of its own for each address, so what one shows isn't carried to the next
+    const { ref } = docRoute.useParams()
+    return <DocResult key={ref} reference={ref} />
+  },
 })
 
 const routeTree = rootRoute.addChildren([indexRoute, recentRoute, foldersRoute, searchRoute, docRoute])
