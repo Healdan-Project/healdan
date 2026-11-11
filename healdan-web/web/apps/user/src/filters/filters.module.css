@@ -84,3 +84,7 @@
   color: var(--hd-accent-text);
   font-size: var(--hd-font-size-small);
 }
+
+.busy {
+  opacity: var(--hd-busy-opacity);
+}

@@ -23,9 +23,9 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: false,
-      // React Aria's chunk is one on purpose (above) and passed Vite's 500 kB default with the calendar; it's cached as a
-      // whole between the app's updates, so splitting it further would only add requests.
-      chunkSizeWarningLimit: 700,
+      // The app loads once (spec section 5) and React Aria is a chunk of its own on purpose (below); at about 508 kB with
+      // the calendar it passes Vite's 500 kB default, so the limit is set just over it.
+      chunkSizeWarningLimit: 600,
       // The libraries change less often than the app, so they're chunks of their own, which a browser keeps across the
       // app's updates (AppServlet serves every hashed file as immutable). React Aria is the biggest, so it's apart.
       rolldownOptions: {

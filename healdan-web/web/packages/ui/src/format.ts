@@ -36,3 +36,10 @@ export function formatDateTime(iso: string): string {
 export function formatVersion(version: string): string {
   return version.endsWith('.0') ? version.slice(0, -2) : version
 }
+
+const lists = new Intl.ListFormat('en-US', { type: 'conjunction', style: 'narrow' })
+
+/** Values in a line, as US English lists them narrowly: "Word, PDF, Excel". */
+export function formatList(values: string[]): string {
+  return lists.format(values)
+}

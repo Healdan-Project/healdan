@@ -30,8 +30,10 @@
   color: inherit;
 }
 
-.button[aria-pressed='true'] {
-  background: var(--hd-selection-inactive);
+/* Not the accent button, whose face already says it is a button */
+.button:not(.default)[aria-pressed='true'] {
+  border-color: var(--hd-pressed-edge);
+  background: var(--hd-pressed);
 }
 
 .button[data-pressed] {

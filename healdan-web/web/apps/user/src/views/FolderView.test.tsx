@@ -110,7 +110,7 @@ describe('FolderView', () => {
     expect(router.history.location.search).toBe('?sort=docNumber&order=desc')
   })
 
-  it('keeps the rows and the count while a new order loads, marking the list busy', async () => {
+  it('keeps the rows, without a count, while a new order loads, marking the list busy', async () => {
     let release = () => {}
     await renderApp(
       '/folders/7',
@@ -125,9 +125,11 @@ describe('FolderView', () => {
     fireEvent.click(within(list()).getByRole('columnheader', { name: /Doc #/ }))
     await waitFor(() => expect(list().closest('[aria-busy="true"]')).toBeTruthy())
     expect(within(list()).getByRole('row', { name: /Letter from Dunmere Pryce/ })).toBeTruthy()
-    expect(within(main()).getByText('7 documents')).toBeTruthy()
+    // The count isn't shown, or announced, for rows that are about to change
+    expect(within(main()).queryByText('7 documents')).toBeNull()
     act(() => release())
     await waitFor(() => expect(list().closest('[aria-busy="true"]')).toBeNull())
+    expect(await within(main()).findByText('7 documents')).toBeTruthy()
   })
 
   it('keeps a sort from the address', async () => {

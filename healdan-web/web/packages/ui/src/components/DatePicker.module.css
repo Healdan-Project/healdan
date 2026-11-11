@@ -125,3 +125,12 @@
 .cell[data-unavailable] {
   color: var(--hd-text-muted);
 }
+
+.error {
+  color: var(--hd-theirs);
+  font-size: var(--hd-font-size-small);
+}
+
+.picker[data-invalid] .group {
+  border-color: var(--hd-theirs);
+}

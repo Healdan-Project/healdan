@@ -15,6 +15,11 @@
   --hd-row-alt: #f4f5f5;
   --hd-pill: #e1e1e6;
   --hd-selection-inactive: #dcdcdc;
+  /* A pressed (toggled on) button: a face for --hd-text, and an edge that shows on the surface and on the face */
+  --hd-pressed: #dcdcdc;
+  --hd-pressed-edge: #6e6e73;
+  /* Rows that are about to change are dimmed, so a sighted person sees the list is updating */
+  --hd-busy-opacity: 0.7;
 
   --hd-text: #1d1d1f;
   --hd-text-secondary: #6e6e73;
@@ -83,6 +88,8 @@
     --hd-row-alt: #232325;
     --hd-pill: #3a3a3c;
     --hd-selection-inactive: #464646;
+    --hd-pressed: #464646;
+    --hd-pressed-edge: #aeaeb2;
 
     --hd-text: #f2f2f7;
     --hd-text-secondary: #aeaeb2;

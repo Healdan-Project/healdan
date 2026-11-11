@@ -139,7 +139,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
     const documents = [...next].filter((key) => key.startsWith('d'))
     setSeveral(documents.length > 1 ? new Set(documents) : null)
     // Clicking a document while Filters are open shows its details, as the owner asked; the funnel brings Filters back.
-    if (documents.length > 0 && region.show === 'filters') region.open('details')
+    if (documents.length === 1 && region.show === 'filters') region.open('details')
     select(documents.length === 1 ? Number(documents[0]!.slice(1)) : undefined)
   }
 
@@ -175,10 +175,10 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
           <>
             <Toolbar
               label={t('folder.actions')}
-              count={countOf(listing.documents, active > 0, unfiltered.data)}
+              count={listing.isStale ? undefined : countOf(listing.documents, active > 0, unfiltered)}
               end={<FiltersButton ref={funnel} open={filtersOpen} active={active} onPress={toggleFilters} />}
             />
-            <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} />
+            <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />
             <Table
               aria-labelledby={headingId}
               columns={columns}
@@ -205,6 +205,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               filters={filters}
               facets={facets.data}
               unavailable={facets.isError}
+                busy={facets.isPlaceholderData}
               context="folder"
               onChange={change}
               onClose={() => {
@@ -222,11 +223,12 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
 }
 
 /** What the count says: all the documents, or, with filters in use, how many pass of how many there are. */
-function countOf(documents: number | undefined, filtered: boolean, all: number | undefined): ListCount | undefined {
+function countOf(documents: number | undefined, filtered: boolean, unfiltered: { data?: number; isError: boolean }): ListCount | undefined {
   if (documents === undefined) return undefined
   if (!filtered) return { documents }
-  // Nothing says "3 of ?" while the other count comes
-  return all === undefined ? undefined : { documents, of: all }
+  // Nothing says "3 of ?" while the other count comes; if it never does, the count is the filtered one alone
+  if (unfiltered.data === undefined) return unfiltered.isError ? { documents } : undefined
+  return { documents, of: unfiltered.data }
 }
 
 /** The star beside a folder's name: in Favorites or not. */

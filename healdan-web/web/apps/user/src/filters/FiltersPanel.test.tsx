@@ -130,6 +130,13 @@ describe('FiltersPanel', () => {
     expect(screen.queryByText('Loading…')).toBeNull()
   })
 
+  it('marks the options busy while their counts are being asked for again', () => {
+    const { rerender, container } = render(<Panel />)
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull()
+    rerender(<Panel busy />)
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy()
+  })
+
   it('closes from its button', async () => {
     const onClose = vi.fn()
     render(<Panel onClose={onClose} />)

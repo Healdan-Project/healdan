@@ -55,7 +55,7 @@ Filters** in the panel, to put them away.
 
 | Filter | Options |
 |---|---|
-| **Edit Date** | Any Time, Today, Last 7 Days, Last 30 Days, This Year, or Between… with a **From** day and a **To** day (either can be left empty) |
+| **Edit Date** | Any Time, Today, Last 7 Days, Last 30 Days, This Year, or Between… with a **From** day and a **To** day (either can be left empty; an end date before the start date isn't applied, and the field says so) |
 | **File Type** | Word, Excel, PowerPoint, PDF, Email, OpenDocument, Picture, Other |
 | **Author** | the people who are an Author of documents in the folder |
 | **Class** | the classes of documents in the folder |
@@ -72,6 +72,6 @@ Today and the date ranges follow the server's time zone.
 - **The button's badge** counts the filters in use, even while the panel is closed. The count above the list then
   reads "3 of 7 documents": the documents that pass, of all the folder's documents you can read.
 - **Filters list documents, not folders,** so a folder's own folders are left out while a filter is in use.
-- **Clicking a document** while the filters are open puts the panel away to make room for that document's. The
-  filters stay set, and the button brings the panel back.
+- **Clicking a document** while the filters are open puts the panel away to make room for that document's own
+  panel. The filters stay set, and the button brings the panel back.
 - **The filters are in the page's address,** so Back, bookmarks and a copied link keep them.

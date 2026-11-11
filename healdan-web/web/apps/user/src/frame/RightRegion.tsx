@@ -53,11 +53,19 @@ export interface RightRegionProps {
 /** The region itself, beside a list. It isn't there at all when it has nothing to show, so the list takes its width. */
 export function RightRegionView({ filters, details, preview }: RightRegionProps) {
   const { show } = useRightRegion()
-  const content = show === 'filters' ? filters : show === 'details' ? details : preview
-  if (!show || !content) return null
+  const content = { filters, details, preview }
+  // What was asked for may not be something this view offers; the details (when a document is selected) are the default.
+  const kind: RegionKind | null = show && content[show] ? show : show && details ? 'details' : null
+  if (!kind) return null
   return (
-    <section className={styles.region} aria-label={show === 'filters' ? t('filters.region') : t('details.title')}>
-      {content}
+    <section className={styles.region} aria-label={labels[kind]()}>
+      {content[kind]}
     </section>
   )
+}
+
+const labels: Record<RegionKind, () => string> = {
+  filters: () => t('filters.region'),
+  details: () => t('details.title'),
+  preview: () => t('preview.region'),
 }

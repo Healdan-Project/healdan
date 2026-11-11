@@ -15,6 +15,8 @@ export interface FiltersPanelProps {
   facets?: S['Facets']
   /** The counts couldn't be had: the options show without them */
   unavailable?: boolean
+  /** The counts shown are the last ones, while new ones are asked for */
+  busy?: boolean
   /** A search offers Client and {matter} as well; a folder is in one already */
   context: 'folder' | 'search'
   onChange: (patch: Partial<Filters>) => void
@@ -38,6 +40,10 @@ function choicesFor(offered: { value: string; label: string; count: number }[] |
   return choices
 }
 
+function rangeKey(range: { from?: string; to?: string }): string {
+  return `${range.from ?? ''}|${range.to ?? ''}`
+}
+
 const presetChoices: Choice[] = [
   { value: 'any', label: t('filters.date.any') },
   ...datePresets.map((preset) => ({ value: preset, label: t(`filters.date.${preset}` as StringKey) })),
@@ -45,11 +51,30 @@ const presetChoices: Choice[] = [
 ]
 
 /** Filters, in the right region: Edit Date, then a tick list for each of the others, each option with its count. */
-export function FiltersPanel({ filters, facets, unavailable, context, onChange, onClose }: FiltersPanelProps) {
-  const hasRange = Boolean(filters.from || filters.to)
+export function FiltersPanel({ filters, facets, unavailable, busy, context, onChange, onClose }: FiltersPanelProps) {
   // Between… chosen but no day given yet is no filter, so it isn't in the address; the panel remembers it.
   const [between, setBetween] = useState(false)
-  const date = hasRange || between ? 'between' : (filters.edited ?? 'any')
+  // The range being edited is the panel's own until it is a good one: typing a month goes through others on the way,
+  // and one end can pass the other for a moment. Only a good range goes to the address, which takes a render or two to
+  // answer, so neither field is ever shown from the address while it is being typed in.
+  const [draft, setDraft] = useState<{ from?: string; to?: string }>({ from: filters.from, to: filters.to })
+  const [seen, setSeen] = useState(rangeKey(filters))
+  if (rangeKey(filters) !== seen) {
+    // The range changed from outside (a chip's ×, Clear All, a preset): the draft follows it
+    setSeen(rangeKey(filters))
+    setDraft({ from: filters.from, to: filters.to })
+    if (!filters.from && !filters.to) setBetween(false)
+  }
+  const reversed = Boolean(draft.from && draft.to && draft.from > draft.to)
+  const date = draft.from || draft.to || between ? 'between' : (filters.edited ?? 'any')
+
+  function setRange(next: { from?: string; to?: string }) {
+    setDraft(next)
+    if (next.from && next.to && next.from > next.to) return
+    // What the address will hold is what the panel has now, so its arrival isn't "from outside"
+    setSeen(rangeKey(next))
+    onChange({ from: next.from, to: next.to })
+  }
 
   function chooseDate(value: string) {
     if (value === 'between') {
@@ -80,22 +105,29 @@ export function FiltersPanel({ filters, facets, unavailable, context, onChange, 
         <RadioChoices label={t('filters.editDate')} choices={presetChoices} value={date} onChange={chooseDate} />
         {date === 'between' && (
           <div className={styles.range}>
-            <DatePicker label={t('filters.date.from')} value={filters.from} max={filters.to} onChange={(from) => onChange({ from })} />
-            <DatePicker label={t('filters.date.to')} value={filters.to} min={filters.from} onChange={(to) => onChange({ to })} />
+            <DatePicker label={t('filters.date.from')} value={draft.from} onChange={(from) => setRange({ ...draft, from })} />
+            <DatePicker
+              label={t('filters.date.to')}
+              value={draft.to}
+              error={reversed ? t('filters.date.reversed') : undefined}
+              onChange={(to) => setRange({ ...draft, to })}
+            />
           </div>
         )}
       </div>
-      {[
-        group('type', t('filters.type'), facets?.type?.map(({ value, count }) => ({ value, label: typeLabel(value), count })), typeLabel),
-        group('author', t('filters.author'), facets?.author?.map(({ value, displayName, count }) => ({ value, label: displayName, count }))),
-        group('class', t('filters.class'), facets?.class?.map(({ value, count }) => ({ value, label: value, count }))),
-        ...(context === 'search'
-          ? [
-              group('client', t('filters.client'), facets?.client?.map(({ value, count }) => ({ value, label: value, count }))),
-              group('matter', t('filters.matter'), facets?.matter?.map(({ value, count }) => ({ value, label: value, count }))),
-            ]
-          : []),
-      ].map((one, i) => one && <div key={i} className={styles.group}>{one}</div>)}
+      <div aria-busy={busy || undefined} className={busy ? styles.busy : undefined}>
+        {[
+          group('type', t('filters.type'), facets?.type?.map(({ value, count }) => ({ value, label: typeLabel(value), count })), typeLabel),
+          group('author', t('filters.author'), facets?.author?.map(({ value, displayName, count }) => ({ value, label: displayName, count }))),
+          group('class', t('filters.class'), facets?.class?.map(({ value, count }) => ({ value, label: value, count }))),
+          ...(context === 'search'
+            ? [
+                group('client', t('filters.client'), facets?.client?.map(({ value, count }) => ({ value, label: value, count }))),
+                group('matter', t('filters.matter'), facets?.matter?.map(({ value, count }) => ({ value, label: value, count }))),
+              ]
+            : []),
+        ].map((one, i) => one && <div key={i} className={styles.group}>{one}</div>)}
+      </div>
       {!facets && <p className={styles.note}>{unavailable ? t('filters.unavailable') : t('common.loading')}</p>}
     </div>
   )

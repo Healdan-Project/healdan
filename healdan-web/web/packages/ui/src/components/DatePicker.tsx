@@ -12,6 +12,7 @@ import {
   DatePicker as AriaDatePicker,
   DateSegment,
   Dialog,
+  FieldError,
   Group,
   Heading,
   Label,
@@ -28,6 +29,8 @@ export interface DatePickerProps {
   /** The earliest and latest day it takes, as 2026-11-02 */
   min?: string
   max?: string
+  /** What is wrong with the day, shown under the field and tied to it for a screen reader */
+  error?: string
 }
 
 function day(text?: string) {
@@ -40,9 +43,10 @@ function day(text?: string) {
 }
 
 /** A day typed in parts (month, day, year in the person's order), or picked from a calendar. Days go in and out as 2026-11-02. */
-export function DatePicker({ label, value, onChange, min, max }: DatePickerProps) {
-  // The field keeps what is typed so far, which may not be a day the caller should hear of yet; a new value from the
-  // caller replaces it (adjusted during render, as React advises, not in an effect).
+export function DatePicker({ label, value, onChange, min, max, error }: DatePickerProps) {
+  // The field keeps what is typed so far, which may not be a day the caller should hear of yet. It's replaced when the
+  // caller's value changes (compared with the caller's last value, not with what the field reported, so a caller that
+  // keeps its own value while the field is half typed doesn't blank it), adjusted during render, not in an effect.
   const [shown, setShown] = useState<DateValue | null>(day(value) ?? null)
   const [seen, setSeen] = useState(value)
   if (value !== seen) {
@@ -57,9 +61,9 @@ export function DatePicker({ label, value, onChange, min, max }: DatePickerProps
         setShown(next)
         // Typing the year goes through 0002, 0020 and 0202 on the way to 2026; none of them is the day meant.
         if (next && next.year < 1000) return
-        setSeen(next ? next.toString() : undefined)
         onChange(next ? next.toString() : undefined)
       }}
+      isInvalid={error ? true : undefined}
       minValue={day(min)}
       maxValue={day(max)}
     >
@@ -70,6 +74,7 @@ export function DatePicker({ label, value, onChange, min, max }: DatePickerProps
           <Icon name="calendar" />
         </AriaButton>
       </Group>
+      <FieldError className={styles.error}>{error}</FieldError>
       <Popover className={styles.popover}>
         <Dialog className={styles.dialog}>
           <Calendar>

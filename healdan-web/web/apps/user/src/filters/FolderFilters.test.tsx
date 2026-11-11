@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
-import { children, document, folder, type Routes } from '../test/fakeApi'
+import { children, document, folder, problem, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
 type S = components['schemas']
@@ -216,6 +216,124 @@ describe('Filters in a folder', () => {
     // Back to a row: its details again
     await userEvent.click((await dataRows())[0]!)
     expect(await screen.findByRole('region', { name: 'Details' })).toBeTruthy()
+  })
+
+  it("edits one end of a range without the other being cleared or garbled, typed segment by segment", async () => {
+    const { router } = await open('/folders/7?from=2026-11-01&to=2026-11-09')
+    await userEvent.click(funnel())
+    const to = await screen.findByRole('group', { name: 'To' })
+    // 11 to 12 passes through January, which would end before the start: nothing is sent until it is a good range
+    await userEvent.click(within(to).getByRole('spinbutton', { name: /month/i }))
+    await userEvent.keyboard('12')
+    await waitFor(() => expect(router.history.location.search).toBe('?from=2026-11-01&to=2026-12-09'))
+    expect(within(to).getByRole('spinbutton', { name: /month/i }).textContent).toBe('12')
+    expect(within(to).getByRole('spinbutton', { name: /day/i }).textContent).toBe('9')
+    expect(within(to).getByRole('spinbutton', { name: /year/i }).textContent).toBe('2026')
+    expect(screen.queryByText('The end date is before the start date.')).toBeNull()
+  })
+
+  it('says so, and changes nothing in the address, when a range ends before it starts', async () => {
+    const { router } = await open('/folders/7?from=2026-11-01&to=2026-11-09')
+    await userEvent.click(funnel())
+    const from = await screen.findByRole('group', { name: 'From' })
+    await userEvent.click(within(from).getByRole('spinbutton', { name: /day/i }))
+    await userEvent.keyboard('15')
+    const message = await screen.findByText('The end date is before the start date.')
+    expect(message).toBeTruthy()
+    expect(router.history.location.search).toBe('?from=2026-11-01&to=2026-11-09')
+    // The other end is as it was, not blanked, and the message is tied to the field
+    const to = screen.getByRole('group', { name: 'To' })
+    expect(within(to).getByRole('spinbutton', { name: /day/i }).textContent).toBe('9')
+    expect(to.closest('[aria-describedby]') ?? to.parentElement?.querySelector('[aria-describedby]')).toBeTruthy()
+    expect(within(from).getByRole('spinbutton', { name: /day/i }).textContent).toBe('15')
+    // Fixing the other end makes a good range, which is sent
+    await userEvent.click(within(to).getByRole('spinbutton', { name: /day/i }))
+    await userEvent.keyboard('20')
+    await waitFor(() => expect(router.history.location.search).toBe('?from=2026-11-15&to=2026-11-20'))
+    expect(screen.queryByText('The end date is before the start date.')).toBeNull()
+  })
+
+  it('moves focus to the next chip, else the previous, else the funnel, when a chip is dropped', async () => {
+    await open('/folders/7?type=pdf&author=pnair&class=Docs')
+    await within(main()).findByText('Author: Priya Nair')
+    await userEvent.click(within(main()).getByRole('button', { name: 'Remove Author Filter' }))
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(within(main()).getByRole('button', { name: 'Remove Class Filter' })))
+    await userEvent.click(within(main()).getByRole('button', { name: 'Remove Class Filter' }))
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(within(main()).getByRole('button', { name: 'Remove File Type Filter' })))
+    await userEvent.click(within(main()).getByRole('button', { name: 'Remove File Type Filter' }))
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(funnel()))
+  })
+
+  it('moves focus to the funnel after Clear All', async () => {
+    await open('/folders/7?type=pdf&author=pnair')
+    await userEvent.click(await within(main()).findByRole('button', { name: 'Clear All' }))
+    await waitFor(() => expect(within(main()).queryByRole('button', { name: 'Clear All' })).toBeNull())
+    expect(globalThis.document.activeElement).toBe(funnel())
+  })
+
+  it('shows no count while the rows are about to change, and the list looks busy', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const { router } = await open('/folders/7?type=pdf', {
+      'GET /v1/folders/7/children': async ({ query }: { query?: Record<string, unknown> }) => {
+        const kinds = asks(query, 'type') as string[] | undefined
+        if (kinds?.length === 2 && asks(query, 'limit') === 100) await gate
+        const kept = kinds?.length === 2 ? all : kinds ? pdfs : all
+        return { ...children(kept, { limit: asks(query, 'limit') as number }), ...(asks(query, 'facets') ? { facets } : {}) }
+      },
+    })
+    expect(await within(main()).findByText('3 of 7 documents')).toBeTruthy()
+    await userEvent.click(funnel())
+    await userEvent.click(await screen.findByRole('checkbox', { name: /^Word/ }))
+    await waitFor(() => expect(router.history.location.search).toBe('?type=pdf&type=word'))
+    // The old rows are still on screen, but "3 of 7" isn't the count of what is being asked for
+    expect(within(main()).queryByText('3 of 7 documents')).toBeNull()
+    expect(within(main()).getByRole('status').textContent).toBe('')
+    expect(within(main()).getByRole('grid').closest('[aria-busy="true"]')).toBeTruthy()
+    release()
+    expect(await within(main()).findByText('7 of 7 documents')).toBeTruthy()
+  })
+
+  it('shows the filtered count alone when the count without filters could not be had', async () => {
+    await open('/folders/7?type=pdf', {
+      'GET /v1/folders/7/children': ({ query }: { query?: Record<string, unknown> }) => {
+        if (asks(query, 'limit') === 1 && !asks(query, 'type')) return problem(500, 'server-error')
+        return children(pdfs, { limit: asks(query, 'limit') as number })
+      },
+    })
+    expect(await within(main()).findByText('3 documents')).toBeTruthy()
+  })
+
+  it('puts Between… away when the range goes, so Any Time shows after Clear All', async () => {
+    const { router } = await open('/folders/7')
+    await userEvent.click(funnel())
+    await userEvent.click(await screen.findByRole('radio', { name: 'Between…' }))
+    await userEvent.click(within(screen.getByRole('group', { name: 'From' })).getByRole('spinbutton', { name: /month/i }))
+    await userEvent.keyboard('11012026')
+    await waitFor(() => expect(router.history.location.search).toBe('?from=2026-11-01'))
+    await userEvent.click(within(main()).getByRole('button', { name: 'Clear All' }))
+    await waitFor(() => expect((screen.getByRole('radio', { name: 'Any Time' }) as HTMLInputElement).checked).toBe(true))
+    expect(screen.queryByRole('group', { name: 'From' })).toBeNull()
+  })
+
+  it('keeps Filters showing when several documents are selected, and shows details for exactly one', async () => {
+    await open('/folders/7')
+    await userEvent.click(funnel())
+    await screen.findByRole('region', { name: 'Filters' })
+    const rows = await dataRows()
+    await userEvent.click(rows[0]!)
+    await screen.findByRole('region', { name: 'Details' })
+    await userEvent.click(funnel())
+    // Select All, from the list
+    await userEvent.click(within((await dataRows())[0]!).getByRole('rowheader'))
+    await userEvent.keyboard('{Control>}a{/Control}')
+    await waitFor(async () => expect((await dataRows()).every((r) => r.getAttribute('aria-selected') === 'true')).toBe(true))
+    expect(screen.getByRole('region', { name: 'Filters' })).toBeTruthy()
+  })
+
+  it('names each count line and the chips in the catalogue, listing three values with commas', async () => {
+    await open('/folders/7?class=A&class=B&class=C')
+    expect(await within(main()).findByText('Class: A, B, C')).toBeTruthy()
   })
 
   it('passes axe with Filters open', async () => {

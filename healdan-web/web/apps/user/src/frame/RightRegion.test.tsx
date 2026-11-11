@@ -80,10 +80,42 @@ describe('RightRegionView', () => {
     const { container } = render(
       <RightRegionProvider>
         <Open />
-        {view}
+        <RightRegionView filters={<p>the filters</p>} />
       </RightRegionProvider>,
     )
     act(() => screen.getByRole('button').click())
     expect(container.querySelector('section')).toBeNull()
+  })
+
+  it('falls back to the details when the view offers no Filters, instead of showing nothing', () => {
+    selected = 10388
+    function Open() {
+      const region = useRightRegion()
+      return <button onClick={() => region.open('filters')}>open</button>
+    }
+    render(
+      <RightRegionProvider>
+        <Open />
+        <RightRegionView details={<p>the details</p>} />
+      </RightRegionProvider>,
+    )
+    act(() => screen.getByRole('button').click())
+    expect(screen.getByRole('region', { name: 'Details' }).textContent).toBe('the details')
+  })
+
+  it('names the reading pane as itself', () => {
+    selected = 10388
+    function Open() {
+      const region = useRightRegion()
+      return <button onClick={() => region.open('preview')}>open</button>
+    }
+    render(
+      <RightRegionProvider>
+        <Open />
+        <RightRegionView details={<p>the details</p>} preview={<p>the page</p>} />
+      </RightRegionProvider>,
+    )
+    act(() => screen.getByRole('button').click())
+    expect(screen.getByRole('region', { name: 'Preview' }).textContent).toBe('the page')
   })
 })
