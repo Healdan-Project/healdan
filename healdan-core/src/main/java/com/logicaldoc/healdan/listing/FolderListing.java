@@ -31,6 +31,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.listing.ListingQuery.Sort;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.security.FolderReads;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -55,6 +56,9 @@ public class FolderListing {
 
 	/** The most ids {@link #page(List, ListingQuery)} and {@link #facets(List, ListingQuery, Set)} take */
 	public static final int MAX_IDS = 1000;
+
+	/** The most ids {@link #sortedPage} takes: a search's window, sorted in one query */
+	public static final int MAX_SORTED_IDS = 10000;
 
 	/** The documents' properties a listing sorts, filters or counts by, and the aliases they join as */
 	private static final String AUTHOR = "ax";
@@ -203,9 +207,62 @@ public class FolderListing {
 	 * @throws PersistenceException error at data layer
 	 */
 	public ListedPage page(List<Long> docIds, User user, ListingQuery query) throws PersistenceException {
+		return page(docIds, new FolderReads(user), query);
+	}
+
+	/**
+	 * As {@link #page(List, User, ListingQuery)}, asking each folder's READ
+	 * only if the caller's {@link FolderReads} doesn't know it yet
+	 *
+	 * @param docIds the documents, in their order; at most {@link #MAX_IDS}
+	 * @param reads who looks, and the folders' READ known so far
+	 * @param query the order, the filters and the page
+	 * @return the page, and how many pass
+	 * @throws PersistenceException error at data layer
+	 */
+	public ListedPage page(List<Long> docIds, FolderReads reads, ListingQuery query) throws PersistenceException {
 		if (docIds.isEmpty())
 			return new ListedPage(List.of(), 0);
-		return page(readable(docIds, user), docIds, query);
+		return page(readable(docIds, reads, MAX_IDS), docIds, query);
+	}
+
+	/**
+	 * A page of documents anywhere, sorted, filtered and paged in one query,
+	 * applying the read rule as {@link #page(List, User, ListingQuery)} does:
+	 * a search's window sorted by a column.
+	 *
+	 * @param docIds the documents; at most {@link #MAX_SORTED_IDS}
+	 * @param reads who looks, and the folders' READ known so far
+	 * @param query the order, which must be set, the filters and the page
+	 * @return the page of the documents the user may read that pass the
+	 *         filters, in the order asked, and how many pass
+	 * @throws PersistenceException error at data layer
+	 * @throws IllegalArgumentException with no sort, or too many ids
+	 */
+	public ListedPage sortedPage(List<Long> docIds, FolderReads reads, ListingQuery query)
+			throws PersistenceException {
+		if (query.sort() == null)
+			throw new IllegalArgumentException("A sorted page needs a sort");
+		if (docIds.isEmpty())
+			return new ListedPage(List.of(), 0);
+		Scope scope = readable(docIds, reads, MAX_SORTED_IDS);
+
+		List<Long> ids = List.of();
+		if (query.limit() > 0) {
+			Select select = new Select(scope, query);
+			String order = order(select, query.sort(), query.descending());
+			select.params.addValue("limit", query.limit()).addValue("offset", query.offset());
+			ids = jdbc.queryForList("select d.ld_id" + select.from() + order + ListingSql.PAGE, select.params,
+					Long.class);
+		}
+		long total;
+		if (query.limit() > 0 && ids.size() < query.limit() && (!ids.isEmpty() || query.offset() == 0))
+			total = (long) query.offset() + ids.size();
+		else {
+			Select select = new Select(scope, query);
+			total = jdbc.queryForObject("select count(*)" + select.from(), select.params, Long.class);
+		}
+		return new ListedPage(ids, total);
 	}
 
 	/**
@@ -223,10 +280,26 @@ public class FolderListing {
 	 */
 	public Facets facets(List<Long> docIds, User user, ListingQuery query, Set<String> which)
 			throws PersistenceException {
+		return facets(docIds, new FolderReads(user), query, which);
+	}
+
+	/**
+	 * As {@link #facets(List, User, ListingQuery, Set)}, asking each folder's
+	 * READ only if the caller's {@link FolderReads} doesn't know it yet
+	 *
+	 * @param docIds the documents; at most {@link #MAX_IDS}
+	 * @param reads who looks, and the folders' READ known so far
+	 * @param query the filters
+	 * @param which the facets to count
+	 * @return the counts over the documents the user may read
+	 * @throws PersistenceException error at data layer
+	 */
+	public Facets facets(List<Long> docIds, FolderReads reads, ListingQuery query, Set<String> which)
+			throws PersistenceException {
 		Facets.check(which);
 		if (docIds.isEmpty())
 			return facets(List.of(), query, which);
-		return facets(readable(docIds, user), query, which);
+		return facets(readable(docIds, reads, MAX_IDS), query, which);
 	}
 
 	private Facets facets(Scope scope, ListingQuery query, Set<String> which) {
@@ -309,8 +382,9 @@ public class FolderListing {
 	 * so that rule, {@code R or not G} in a readable folder and {@code G and R}
 	 * in another, is {@code R or (the folder is readable and not G)}.
 	 */
-	private Scope readable(List<Long> docIds, User user) throws PersistenceException {
-		Scope listed = ids(docIds);
+	private Scope readable(List<Long> docIds, FolderReads reads, int max) throws PersistenceException {
+		Scope listed = ids(docIds, max);
+		User user = reads.user();
 		boolean admin = user.isAdmin();
 		boolean seesUnpublished = AccessChecks.seesUnpublished(user);
 		List<Long> readFolders = new ArrayList<>();
@@ -318,7 +392,7 @@ public class FolderListing {
 			MapSqlParameterSource params = new MapSqlParameterSource("ids", List.copyOf(new TreeSet<>(docIds)));
 			for (Long folderId : jdbc.queryForList("select distinct ld_folderid from ld_document where ld_id in (:ids)",
 					params, Long.class))
-				if (FolderDAO.get().isReadAllowed(folderId, user.getId()))
+				if (reads.readable(folderId))
 					readFolders.add(folderId);
 		}
 		long userId = user.getId();
@@ -361,8 +435,15 @@ public class FolderListing {
 	 * Documents given by id, at most {@link #MAX_IDS}
 	 */
 	private static Scope ids(List<Long> docIds) {
-		if (docIds.size() > MAX_IDS)
-			throw new IllegalArgumentException("At most %d documents at a time, not %d".formatted(MAX_IDS,
+		return ids(docIds, MAX_IDS);
+	}
+
+	/**
+	 * Documents given by id, at most {@code max}
+	 */
+	private static Scope ids(List<Long> docIds, int max) {
+		if (docIds.size() > max)
+			throw new IllegalArgumentException("At most %d documents at a time, not %d".formatted(max,
 					docIds.size()));
 		List<Long> ids = List.copyOf(new TreeSet<>(docIds));
 		return select -> {

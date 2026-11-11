@@ -40,6 +40,7 @@ import com.logicaldoc.healdan.listing.Facets;
 import com.logicaldoc.healdan.listing.FolderListing;
 import com.logicaldoc.healdan.listing.ListingQuery;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.security.FolderReads;
 import com.logicaldoc.healdan.support.BulkHits;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.spring.Context;
@@ -238,6 +239,12 @@ public class HitFacetsTest extends AbstractHealdanTestCase {
 			AccessChecks.readableDocuments(folder, inFolder, alice).forEach(d -> javaReadable.add(d.getId()));
 		}
 		assertEquals(Set.of(otherGroup, nothing, granted), Set.copyOf(javaReadable));
+		// The same answers for documents of any folders, each folder's READ asked once
+		List<Document> mixed = new ArrayList<>();
+		for (long id : cases)
+			mixed.add(DocumentDAO.get().findById(id));
+		assertEquals(Set.copyOf(javaReadable), Set.copyOf(AccessChecks
+				.readableDocuments(mixed, new FolderReads(alice)).stream().map(Document::getId).toList()));
 
 		ListingQuery none = ListingQuery.of(null, false, 0, 0);
 		assertEquals(Map.of("pdf", 3L), HitFacets.count(cases, alice, none, Set.of(Facets.TYPE)).counts()

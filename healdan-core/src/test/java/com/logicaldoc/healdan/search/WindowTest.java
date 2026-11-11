@@ -102,11 +102,18 @@ public class WindowTest extends AbstractHealdanTestCase {
 		ExtensionFilteredSearch all = filtered(2000, false);
 		assertEquals(HITS, all.getHits().size());
 		assertTrue(all.isComplete());
+		// The index's hits and their scores, before CE's checks; every hit here scores the same
+		assertEquals(HITS, all.engineHits());
+		assertEquals(all.getHits().get(0).getScore(), all.lowestScore());
+		assertEquals(all.lowestScore(), all.scoreAt(HITS));
+		assertEquals(0, all.scoreAt(HITS + 1));
+		assertEquals(0, all.scoreAt(0));
 
 		// The index had more than the window
 		ExtensionFilteredSearch window = filtered(1200, false);
 		assertEquals(1200, window.getHits().size());
 		assertFalse(window.isComplete());
+		assertEquals(1200, window.engineHits());
 		ExtensionFilteredSearch handler = filtered(1000, false);
 		assertEquals(1000, handler.getHits().size());
 		assertFalse(handler.isComplete());

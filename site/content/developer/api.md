@@ -330,7 +330,10 @@ The sections below say more about the parts a client needs to know before it sta
 `folders`, `matters` or `clients`. The hits are what the caller can read, best first.
 
 - **Paging to the end.** The `documents`, `emails` and `all` scopes page through every hit the full-text engine
-  finds, up to its first 10,000. Past those, a page is empty.
+  finds, up to its first 10,000, each on one page only. Past those, a page is empty. The engine ranks hits by a
+  score rounded to a percentage of the best one's, then by file name, so a search cuts a page only from the hits
+  ranked above its window's lowest score, which come in the same order however far it reads, and reads further when
+  those don't reach the page's end. When many hits score the same, a page can read up to 10,000 hits.
 - **How many.** Each of those searches reads at least the engine's first 2,500 hits, more for a page further on.
   When it has found every hit, `total` says how many there are. When it stopped before the last, `total` is `null`
   and `totalAtLeast` says how many it found that the caller can read: there are more, so a client shows "more than"
@@ -339,13 +342,18 @@ The sections below say more about the parts a client needs to know before it sta
   `author`, `class`, `client`, `matter`, `edited`, `from` and `to` as there. They're applied in the database, after
   the read check, to the hits read, so they find their matches among the first 10,000 hits, and `total` and
   `totalAtLeast` count the hits that pass. `type=folder` is `400`: search the `folders` scope instead.
+- **Sorting.** `sort` and `order` take a folder's values (see [Listing a Folder](#listing-a-folder)), and sort the
+  hits the caller can read the same way. A sorted search reads the engine's first 10,000 hits and sorts those, so
+  past 10,000 hits it sorts the 10,000 most relevant, and answers `totalAtLeast`. Without `sort` the best hits come
+  first, and `order` alone is `400`.
 - **Counts.** `facets=` adds the counts, as for a folder, each applying every filter but its own. They're taken in
-  the database over the hits the caller can read among the first 2,500, never by the full-text engine, whose counts
-  would include documents the caller can't read. When there are more hits than that, `facets` has
-  `"partial": true`, so a client can say the counts come from the first results.
+  the database over the hits the caller can read that rank above the engine's 2,500th hit, whatever the page or
+  the sort, never by the full-text engine, whose counts would include documents the caller can't read. When the
+  engine has more than 2,500 hits, `facets` has `"partial": true`, so a client can say the counts come from the
+  first results; when many hits score the same as the 2,500th, the counts can be of fewer hits, or none.
 - **The other scopes,** `folders`, `matters` and `clients`, look at the first 10,000 hits, and their `total` is
-  always `null`: a page with fewer than `limit` items is the last. They take no filters or `facets`; either is
-  `400 bad-request`.
+  always `null`: a page with fewer than `limit` items is the last. They take no filters, `sort` or `facets`; any
+  is `400 bad-request`.
 
 ```json
 {

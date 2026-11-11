@@ -797,21 +797,27 @@ paths:
         A leading wildcard, such as `*report` or `?ar`, is accepted.
 
         The `documents`, `emails` and `all` scopes page to the last hit, up to
-        the first 10,000 hits the search engine finds. They read at least the
-        engine's first 2,500 hits, so `total` is the real count when the
-        search found every hit; when it stopped before the last, `total` is
-        `null` and `totalAtLeast` says how many it found, with more to come. They take the filters (`type`, `author`, `class`, `client`,
-        `matter`, `edited`, `from`, `to`), applied in the database after the
-        read check, so a filter finds its matches among those first 10,000
-        hits, and `facets`, the counts. The counts are taken over the hits
-        the caller can read among the first 2,500, and are `partial` when
-        there are more.
-        No count includes a document the caller can't read.
+        the first 10,000 hits the search engine finds, each hit on one page
+        only. They read at least the engine's first 2,500 hits, so `total` is
+        the real count when the search found every hit; when it stopped before
+        the last, `total` is `null` and `totalAtLeast` says how many it found,
+        with more to come. They take the filters (`type`, `author`, `class`,
+        `client`, `matter`, `edited`, `from`, `to`), applied in the database
+        after the read check, so a filter finds its matches among those first
+        10,000 hits. With `sort`, they read the first 10,000 hits and sort the
+        ones the caller can read as a folder's documents are; past 10,000
+        hits, the sort is among the 10,000 most relevant, and the answer has
+        `totalAtLeast`. `order` without `sort` is `400`. `facets` adds the
+        counts, taken over the hits the caller can read that rank above the
+        engine's 2,500th hit, whatever the page, and `partial` when the engine
+        has more than 2,500. No count includes a document the caller can't
+        read.
 
         The `folders`, `matters` and `clients` scopes look at the first 10,000
         hits; their `total` is always `null`, and a page with fewer than
-        `limit` items is the last one. They take no filters or facets: either
-        is `400`. Pages are filled from the hits that follow the ones skipped.
+        `limit` items is the last one. They take no filters, `sort` or
+        `facets`: any is `400`. Pages are filled from the hits that follow the
+        ones skipped.
 
         With `within`, the `folders` and `documents` scopes return only what
         is inside that folder, at any depth. A `#` lookup in the `documents`
@@ -860,6 +866,8 @@ paths:
             items:
               type: string
               enum: [word, excel, powerpoint, pdf, email, opendocument, picture, other]
+        - $ref: '#/components/parameters/ListSort'
+        - $ref: '#/components/parameters/ListOrder'
         - $ref: '#/components/parameters/AuthorFilter'
         - $ref: '#/components/parameters/ClassFilter'
         - $ref: '#/components/parameters/ClientFilter'
@@ -2772,8 +2780,9 @@ components:
           const: true
           description: |
             A search's counts taken over the results the caller can read
-            among its first 2,500, when there are more. Left out when the
-            counts cover every result, as a folder's always do.
+            that rank above the engine's 2,500th, when the engine has more
+            than 2,500. Left out when the counts cover every result, as a
+            folder's always do.
     FacetCount:
       type: object
       additionalProperties: false

@@ -200,6 +200,36 @@ public final class AccessChecks {
 	}
 
 	/**
+	 * As {@link #readableDocuments(Folder, List, User)}, for documents in any
+	 * folders, such as a search's hits: one query on their own ACLs, and each
+	 * folder's READ asked once ({@link FolderReads})
+	 *
+	 * @param documents the documents
+	 * @param reads who reads, and what is known of the folders they may read
+	 * @return the readable and published ones, in the order given
+	 * @throws PersistenceException error at data layer
+	 */
+	public static List<Document> readableDocuments(List<Document> documents, FolderReads reads)
+			throws PersistenceException {
+		User user = reads.user();
+		boolean admin = user.isAdmin();
+		Map<Long, Boolean> own = admin || documents.isEmpty() ? Map.of()
+				: ownAclDecisions(documents.stream().map(Document::getId).toList(), user.getId());
+
+		List<Document> readable = new ArrayList<>();
+		for (Document document : documents) {
+			if (document.getDeleted() != 0)
+				continue;
+			Boolean decided = own.get(document.getId());
+			if (!(decided != null ? decided : reads.readable(document.getFolder().getId())))
+				continue;
+			if (visible(document, user))
+				readable.add(document);
+		}
+		return readable;
+	}
+
+	/**
 	 * @return for each document with own ACL rows that grant the user's groups
 	 *         anything, whether they grant READ
 	 */

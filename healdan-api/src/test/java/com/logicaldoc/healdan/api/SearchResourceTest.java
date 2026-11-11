@@ -10,6 +10,8 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,13 +30,17 @@ import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.metadata.Attribute;
+import com.logicaldoc.core.searchengine.Hit;
+import com.logicaldoc.core.searchengine.Search;
 import com.logicaldoc.core.searchengine.SearchEngine;
+import com.logicaldoc.core.searchengine.SearchOptions;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.search.ExtensionFilteredSearch;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.BulkHits;
 
@@ -461,7 +467,9 @@ public class SearchResourceTest extends ApiTestCase {
 	public void testTotalAtLeastPastTheWindow() throws Exception {
 		Document first = source(documents, "first.docx");
 		BulkHits bulk = new BulkHits();
-		bulk.index(bulk.copies(first.getId(), documents, 12000, i -> "falcon-" + i + ".docx"), "A falconapi");
+		// Twelve scores, 1,000 hits each
+		bulk.index(bulk.copies(first.getId(), documents, 12000, i -> "falcon-" + i + ".docx"),
+				i -> banded("falconapi", i / 1000));
 		String token = signIn(clerk);
 
 		JsonNode last = page("q=falconapi&offset=9900&limit=100", token);
@@ -473,13 +481,127 @@ public class SearchResourceTest extends ApiTestCase {
 		assertEquals(0, beyond.path("items").size());
 		assertEquals(SearchResource.MAX_WINDOW, beyond.path("totalAtLeast").asLong());
 
-		// The first page counts its window of readable hits
+		// The first page reads 2,500 hits, and counts the 2,000 that score above the 2,500th
 		JsonNode firstPage = page("q=falconapi&limit=100&facets=type", token);
 		assertEquals(100, firstPage.path("items").size());
 		assertTrue(firstPage.path("total").isNull());
 		assertEquals(SearchResource.FACET_WINDOW, firstPage.path("totalAtLeast").asLong());
 		assertTrue(firstPage.path("facets").path("partial").asBoolean());
-		assertEquals(SearchResource.FACET_WINDOW, firstPage.path("facets").path("type").get(0).path("count").asLong());
+		assertEquals(2000, firstPage.path("facets").path("type").get(0).path("count").asLong());
+		// The counts depend on the query, not the page
+		assertEquals(firstPage.path("facets"),
+				page("q=falconapi&offset=9900&limit=100&facets=type", token).path("facets"));
+
+		// Sorted, among the 10,000 most relevant
+		JsonNode sorted = page("q=falconapi&limit=100&sort=docNumber", token);
+		assertEquals(100, sorted.path("items").size());
+		assertTrue(sorted.path("total").isNull());
+		assertEquals(SearchResource.MAX_WINDOW, sorted.path("totalAtLeast").asLong());
+		List<Long> numbers = docNumbers(sorted.path("items"));
+		List<Long> ascending = new ArrayList<>(numbers);
+		Collections.sort(ascending);
+		assertEquals(ascending, numbers);
+	}
+
+	/**
+	 * @return a text of twelve words, of which {@code 12 - band} are the
+	 *         word: band 0 scores highest, and each band lower than the one
+	 *         before
+	 */
+	private static String banded(String word, int band) {
+		return (word + " ").repeat(12 - band) + "lorem ".repeat(band);
+	}
+
+	/**
+	 * @return the doc #s of every hit, in the order a search that reads them
+	 *         all gives, as the clerk
+	 */
+	private List<Long> wholeOrder(String word) throws Exception {
+		return List.copyOf(numbers(rankedHits(word).stream().map(Hit::getId).toList()).values());
+	}
+
+	/**
+	 * @return the doc #s of the pages of {@code query}, {@code limit} at a time,
+	 *         in order, to the first short page
+	 */
+	private List<Long> paged(String query, int limit, String token) {
+		List<Long> numbers = new ArrayList<>();
+		for (int offset = 0;; offset += limit) {
+			JsonNode items = page(query + "&limit=" + limit + "&offset=" + offset, token).path("items");
+			numbers.addAll(docNumbers(items));
+			if (items.size() < limit)
+				return numbers;
+		}
+	}
+
+	/**
+	 * 4,000 hits in twelve scores, of mixed types: the window's cut at 2,500
+	 * falls inside a score, where a wider window orders the hits otherwise
+	 */
+	@Test
+	public void testPagesStayInOneOrder() throws Exception {
+		Document first = source(documents, "first.pdf");
+		BulkHits bulk = new BulkHits();
+		String[] types = { ".pdf", ".docx", ".xlsx", ".odt", ".txt" };
+		List<Long> ids = bulk.copies(first.getId(), documents, 4000, i -> "merlin-" + i + types[i % types.length]);
+		bulk.index(ids, i -> banded("merlinapi", i % 12));
+		String token = signIn(clerk);
+
+		List<Long> whole = wholeOrder("merlinapi");
+		assertEquals(4000, whole.size());
+		// The cut at the first window falls inside a score
+		List<Hit> ranked = rankedHits("merlinapi");
+		assertEquals(ranked.get(SearchResource.FACET_WINDOW - 1).getScore(),
+				ranked.get(SearchResource.FACET_WINDOW).getScore());
+
+		// Every hit once, in one order, across windows of 2,500, 5,000 and all
+		assertEquals(whole, paged("q=merlinapi", 100, token));
+
+		// Filtered after the read check, the pages widen inside the first 2,500 hits
+		Set<Long> pdfs = new HashSet<>();
+		for (Map.Entry<Long, Long> number : numbers(ids).entrySet())
+			if (jdbc().queryForObject("select ld_type from ld_document where ld_id = ?", String.class, number.getKey())
+					.equals("pdf"))
+				pdfs.add(number.getValue());
+		List<Long> wholePdfs = whole.stream().filter(pdfs::contains).toList();
+		assertEquals(800, wholePdfs.size());
+		assertEquals(wholePdfs, paged("q=merlinapi&type=pdf", 100, token));
+
+		// The counts are the query's, whatever the page
+		JsonNode firstPage = page("q=merlinapi&limit=100&facets=type,author", token).path("facets");
+		assertEquals(firstPage, page("q=merlinapi&limit=100&offset=3000&facets=type,author", token).path("facets"));
+		assertTrue(firstPage.path("partial").asBoolean());
+	}
+
+	/**
+	 * @return every hit, in CE's order, with its scores, as the clerk; the
+	 *         search must find them all
+	 */
+	private List<Hit> rankedHits(String word) throws Exception {
+		SearchOptions options = Search.newOptions(HealdanConstants.SEARCH_DOCUMENTS_ONLY);
+		options.setExpression(word);
+		options.setUserId(clerk.getId());
+		options.setMaxHits(SearchResource.MAX_WINDOW);
+		ExtensionFilteredSearch search = (ExtensionFilteredSearch) Search.get(options);
+		search.setWidened(false);
+		List<Hit> hits = search.search();
+		assertTrue(search.isComplete());
+		return hits;
+	}
+
+	/**
+	 * 2,600 hits that all score the same: no window short of all of them is in
+	 * the order of every other
+	 */
+	@Test
+	public void testPagesStayInOneOrderAtOneScore() throws Exception {
+		Document first = source(documents, "first.pdf");
+		BulkHits bulk = new BulkHits();
+		bulk.index(bulk.copies(first.getId(), documents, SearchResource.FACET_WINDOW + 100, i -> "kite-" + i + ".pdf"),
+				"Notes on the kiteapi");
+		List<Long> whole = wholeOrder("kiteapi");
+		assertEquals(SearchResource.FACET_WINDOW + 100, whole.size());
+		assertEquals(whole, paged("q=kiteapi", 100, signIn(clerk)));
 	}
 
 	@Test
@@ -499,11 +621,10 @@ public class SearchResourceTest extends ApiTestCase {
 		JsonNode page = page("q=osprey&limit=100", signIn(clerk));
 		assertEquals(50, page.path("items").size());
 		assertEquals(50, page.path("total").asLong());
-		// The admin reads them all, and the first window is full of them
+		// The admin reads them all; as they all score the same, only the window that holds them all is in one order
 		JsonNode admin = page("q=osprey&limit=100", signInAdmin());
 		assertEquals(100, admin.path("items").size());
-		assertTrue(admin.path("total").isNull());
-		assertEquals(SearchResource.FACET_WINDOW, admin.path("totalAtLeast").asLong());
+		assertEquals(SearchResource.FACET_WINDOW + 550, admin.path("total").asLong());
 	}
 
 	/**
@@ -520,8 +641,8 @@ public class SearchResourceTest extends ApiTestCase {
 	}
 
 	/** A document of the filters' layout, as it was made */
-	private record Made(long docNumber, String author, String docClass, String kind, boolean recent, String matter,
-			boolean privileged) {
+	private record Made(long docNumber, String name, String version, Timestamp edited, String author,
+			String docClass, String kind, boolean recent, String matter, boolean privileged) {
 	}
 
 	/**
@@ -541,26 +662,27 @@ public class SearchResourceTest extends ApiTestCase {
 		BulkHits bulk = new BulkHits();
 		List<Made> made = new ArrayList<>();
 		List<Long> indexed = new ArrayList<>();
-		group(bulk, made, indexed, one, documents, 6, i -> "a-" + i + ".pdf", jclarke, "Correspondence", "pdf", true,
+		// The names and versions sort differently as text and as numbers
+		group(bulk, made, indexed, one, documents, 6, i -> "a-" + (10 - i) + ".pdf", "1.1", jclarke,
+				"Correspondence", "pdf", true, "1", false);
+		group(bulk, made, indexed, one, documents, 4, i -> "B-" + i + ".docx", "10.0", jclarke, "Advice", "word",
+				false, "1", false);
+		group(bulk, made, indexed, one, documents, 5, i -> "c-" + i + ".pdf", "2.9", treeve, "Correspondence", "pdf",
+				false, "1", false);
+		group(bulk, made, indexed, one, documents, 3, i -> "d-" + i + ".xlsx", "2.10", treeve, null, "excel", true,
 				"1", false);
-		group(bulk, made, indexed, one, documents, 4, i -> "b-" + i + ".docx", jclarke, "Advice", "word", false, "1",
-				false);
-		group(bulk, made, indexed, one, documents, 5, i -> "c-" + i + ".pdf", treeve, "Correspondence", "pdf", false,
-				"1", false);
-		group(bulk, made, indexed, one, documents, 3, i -> "d-" + i + ".xlsx", treeve, null, "excel", true, "1",
-				false);
-		group(bulk, made, indexed, two, otherDocuments, 4, i -> "e-" + i + ".pdf", treeve, "Correspondence", "pdf",
-				true, "2", false);
-		group(bulk, made, indexed, secret, privileged, 3, i -> "p-" + i + ".pdf", treeve, "Correspondence", "pdf",
-				true, "1", true);
+		group(bulk, made, indexed, two, otherDocuments, 4, i -> "e-" + i + ".pdf", "1.0", treeve, "Correspondence",
+				"pdf", true, "2", false);
+		group(bulk, made, indexed, secret, privileged, 3, i -> "p-" + i + ".pdf", "3.0", treeve, "Correspondence",
+				"pdf", true, "1", true);
 		bulk.evict(indexed);
 		bulk.index(indexed, "Notes on the harrierapi");
 		return made;
 	}
 
 	private void group(BulkHits bulk, List<Made> made, List<Long> indexed, Document source, Folder folder, int count,
-			IntFunction<String> names, User author, String docClass, String kind, boolean recent, String matter,
-			boolean privileged) {
+			IntFunction<String> names, String version, User author, String docClass, String kind, boolean recent,
+			String matter, boolean privileged) {
 		List<Long> ids = bulk.copies(source.getId(), folder, count, names);
 		bulk.set(ids, HealdanConstants.ATTR_AUTHOR, Attribute.Type.USER, author.getUsername(), author.getId());
 		bulk.set(ids, HealdanConstants.ATTR_DOCCLASS, Attribute.Type.STRING, docClass, null);
@@ -568,9 +690,12 @@ public class SearchResourceTest extends ApiTestCase {
 		bulk.set(ids, HealdanConstants.ATTR_MATTER, Attribute.Type.STRING, matter, null);
 		Timestamp edited = new Timestamp(System.currentTimeMillis() - (recent ? 0L : 60L * 24 * 60 * 60 * 1000));
 		for (long id : ids)
-			jdbc().update("update ld_document set ld_lastmodified = ? where ld_id = ?", edited, id);
-		numbers(ids).values().forEach(number -> made.add(
-				new Made(number, author.getUsername(), docClass, kind, recent, "998." + matter, privileged)));
+			jdbc().update("update ld_document set ld_lastmodified = ?, ld_version = ? where ld_id = ?", edited,
+					version, id);
+		List<Long> numbers = List.copyOf(numbers(ids).values());
+		for (int i = 0; i < count; i++)
+			made.add(new Made(numbers.get(i), names.apply(i), version, edited, author.getUsername(), docClass, kind,
+					recent, "998." + matter, privileged));
 		indexed.addAll(ids);
 	}
 
@@ -659,6 +784,46 @@ public class SearchResourceTest extends ApiTestCase {
 		assertEquals(Map.of("pdf", 6L, "word", 4L), counts(ticked.path("facets").path("type")));
 	}
 
+	@Test
+	public void testSortedAsAFolderIs() throws Exception {
+		List<Made> made = new ArrayList<>(filtersLayout());
+		made.removeIf(Made::privileged);
+		String token = signIn(clerk);
+
+		// As FolderListing sorts: the key, then the document's age (its doc # here), the same way
+		Map<String, Comparator<Made>> sorts = new LinkedHashMap<>();
+		sorts.put("title", Comparator.comparing(m -> m.name().toLowerCase()));
+		sorts.put("docNumber", Comparator.comparingLong(Made::docNumber));
+		sorts.put("version", Comparator.<Made>comparingInt(m -> Integer.parseInt(m.version().split("\\.")[0]))
+				.thenComparingInt(m -> Integer.parseInt(m.version().split("\\.")[1])));
+		sorts.put("author", Comparator.comparing(m -> (m.author() + " " + m.author()).toLowerCase()));
+		sorts.put("edited", Comparator.comparing(Made::edited));
+		for (Map.Entry<String, Comparator<Made>> sort : sorts.entrySet())
+			for (String order : new String[] { "asc", "desc" }) {
+				Comparator<Made> byHand = sort.getValue().thenComparingLong(Made::docNumber);
+				List<Long> expected = made.stream().sorted("desc".equals(order) ? byHand.reversed() : byHand)
+						.map(Made::docNumber).toList();
+				String query = "q=harrierapi&sort=" + sort.getKey() + "&order=" + order;
+				JsonNode page = page(query + "&limit=200", token);
+				assertEquals(query, expected, docNumbers(page.path("items")));
+				assertEquals(query, 22, page.path("total").asLong());
+				// Paged, one order
+				assertEquals(query, expected, paged(query, 5, token));
+			}
+
+		// No order is ascending; a filter and a sort together
+		JsonNode titles = page("q=harrierapi&sort=title&type=pdf&limit=200", token);
+		assertEquals(made.stream().filter(m -> m.kind().equals("pdf"))
+				.sorted(sorts.get("title").thenComparingLong(Made::docNumber)).map(Made::docNumber).toList(),
+				docNumbers(titles.path("items")));
+		assertEquals(15, titles.path("total").asLong());
+
+		// The relevance order without a sort, and counts with one
+		assertEquals(22, page("q=harrierapi&limit=200", token).path("total").asLong());
+		JsonNode counted = page("q=harrierapi&sort=edited&order=desc&limit=1&facets=type", token);
+		assertEquals(Map.of("pdf", 15L, "word", 4L, "excel", 3L), counts(counted.path("facets").path("type")));
+	}
+
 	private static Map<String, Long> counts(JsonNode options) {
 		Map<String, Long> counts = new LinkedHashMap<>();
 		options.forEach(option -> counts.put(option.path("value").textValue(), option.path("count").asLong()));
@@ -671,7 +836,9 @@ public class SearchResourceTest extends ApiTestCase {
 		for (String query : new String[] { "scope=folders&q=docu&author=jclarke", "scope=matters&q=998&facets=type",
 				"scope=clients&q=healdan&type=pdf", "q=x&type=folder", "q=x&type=spreadsheet", "q=x&matter=998",
 				"q=x&client=ABC", "q=x&facets=size", "q=x&edited=week", "q=x&edited=7d&from=2026-01-01",
-				"q=x&from=2026-02-01&to=2026-01-01", "q=x&author=" }) {
+				"q=x&from=2026-02-01&to=2026-01-01", "q=x&author=", "q=x&order=desc", "q=x&sort=size",
+				"q=x&sort=title&order=up", "scope=folders&q=docu&sort=title", "scope=matters&q=998&sort=docNumber",
+				"scope=clients&q=healdan&order=asc" }) {
 			ApiResponse response = get("/api/v1/search?" + query).token(token).send();
 			assertEquals(query + " " + response, 400, response.status());
 			assertEquals("bad-request", response.code());

@@ -4,7 +4,9 @@
 package com.logicaldoc.healdan.support;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -134,9 +136,25 @@ public class BulkHits {
 	 * @throws Exception if the index refuses them
 	 */
 	public void index(Collection<Long> ids, String content) throws Exception {
+		index(ids, i -> content);
+	}
+
+	/**
+	 * As {@link #index(Collection, String)}, with a text for each document
+	 *
+	 * @param ids the documents
+	 * @param contents the text of each, by its place in {@code ids}: a word
+	 *        repeated more often in texts of the same length scores higher
+	 * @throws Exception if the index refuses them
+	 */
+	public void index(Collection<Long> ids, IntFunction<String> contents) throws Exception {
 		NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(Context.get(DataSource.class));
 		List<Long> list = new ArrayList<>(ids);
-		List<SolrInputDocument> hits = new ArrayList<>();
+		Map<Long, Integer> places = new HashMap<>();
+		for (int i = 0; i < list.size(); i++)
+			places.put(list.get(i), i);
+		// In the order given, which the index keeps among hits that score the same
+		SolrInputDocument[] hits = new SolrInputDocument[list.size()];
 		for (int from = 0; from < list.size(); from += 1000)
 			jdbc.query("""
 					select d.ld_id, d.ld_tenantid, d.ld_language, d.ld_filename, d.ld_filesize, d.ld_date,
@@ -156,14 +174,15 @@ public class BulkHits {
 				hit.addField(HitField.DATE.getName(), rs.getTimestamp(6));
 				hit.addField(HitField.CREATION.getName(), rs.getTimestamp(7));
 				hit.addField(HitField.CUSTOM_ID.getName(), rs.getString(8));
-				hit.addField(HitField.CONTENT.getName(), content);
+				int place = places.get(rs.getLong(1));
+				hit.addField(HitField.CONTENT.getName(), contents.apply(place));
 				hit.addField(HitField.FOLDER_ID.getName(), rs.getLong(9));
 				hit.addField(HitField.FOLDER_NAME.getName(), rs.getString(10));
-				hits.add(hit);
+				hits[place] = hit;
 			});
 		SolrClient server = (SolrClient) SearchEngine.get().getServer();
-		for (int i = 0; i < hits.size(); i += 2000)
-			server.add(hits.subList(i, Math.min(i + 2000, hits.size())));
+		for (int i = 0; i < hits.length; i += 2000)
+			server.add(Arrays.asList(hits).subList(i, Math.min(i + 2000, hits.length)));
 		server.commit();
 	}
 

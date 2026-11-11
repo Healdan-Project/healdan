@@ -16,6 +16,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.listing.Facets;
 import com.logicaldoc.healdan.listing.FolderListing;
 import com.logicaldoc.healdan.listing.ListingQuery;
+import com.logicaldoc.healdan.security.FolderReads;
 
 /**
  * A search's counts (M6 spec section 9.2): the filters' options counted in
@@ -45,15 +46,32 @@ public final class HitFacets {
 	 */
 	public static Facets count(List<Long> readableIds, User user, ListingQuery query, Set<String> which)
 			throws PersistenceException {
+		return count(readableIds, new FolderReads(user), query, which);
+	}
+
+	/**
+	 * As {@link #count(List, User, ListingQuery, Set)}, asking each folder's
+	 * READ only if the caller's {@link FolderReads} doesn't know it yet, once
+	 * for all the chunks
+	 *
+	 * @param readableIds the hits, already checked; repeats count once
+	 * @param reads who searched, and the folders' READ known so far
+	 * @param query the filters
+	 * @param which the facets to count
+	 * @return the counts over the hits the user may read
+	 * @throws PersistenceException error at data layer
+	 */
+	public static Facets count(List<Long> readableIds, FolderReads reads, ListingQuery query, Set<String> which)
+			throws PersistenceException {
 		List<Long> ids = new ArrayList<>(new LinkedHashSet<>(readableIds));
 		if (ids.isEmpty())
-			return FolderListing.get().facets(List.of(), user, query, which);
+			return FolderListing.get().facets(List.of(), reads, query, which);
 
 		Map<String, Map<String, Long>> sums = new LinkedHashMap<>();
 		for (int from = 0; from < ids.size(); from += FolderListing.MAX_IDS) {
 			List<Long> chunk = ids.subList(from, Math.min(from + FolderListing.MAX_IDS, ids.size()));
 			// The chunks share no id, so each option's counts add up
-			FolderListing.get().facets(chunk, user, query, which).counts()
+			FolderListing.get().facets(chunk, reads, query, which).counts()
 					.forEach((facet, options) -> options.forEach((option, count) -> sums
 							.computeIfAbsent(facet, name -> new HashMap<>()).merge(option, count, Long::sum)));
 		}

@@ -2,12 +2,16 @@ package com.logicaldoc.core.searchengine;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +23,8 @@ import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.common.SolrInputDocument;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.AbstractCoreTestCase;
@@ -226,6 +232,40 @@ public class FulltextSearchTest extends AbstractCoreTestCase {
         assertTrue(search.isMoreHitsPresent());
         // The deleted copies, found first, are left out
         assertTrue(hits.stream().allMatch(hit -> hit.getId() >= 10100L));
+    }
+
+    /**
+     * Healdan (M6 spec 9.5): the window reaches Solr only up to 10,000 rows,
+     * whatever maximum a client of CE's web service, CMIS or RPC asks for
+     */
+    @Test
+    public void testRowsCappedAtTenThousand() throws Exception {
+        // Context.get(SearchEngine.class) takes a bean named SearchEngine before CE's searchEngine
+        SearchEngine engine = SearchEngine.get();
+        List<Integer> rows = new ArrayList<>();
+        SearchEngine recording = (SearchEngine) Proxy.newProxyInstance(SearchEngine.class.getClassLoader(),
+                new Class<?>[] { SearchEngine.class }, (proxy, method, args) -> {
+                    if (method.getName().equals("search") && args != null && args.length == 4)
+                        rows.add((Integer) args[3]);
+                    try {
+                        return method.invoke(engine, args);
+                    } catch (InvocationTargetException e) {
+                        throw e.getCause();
+                    }
+                });
+        DefaultListableBeanFactory factory = ((GenericApplicationContext) context).getDefaultListableBeanFactory();
+        factory.registerSingleton("SearchEngine", recording);
+        try {
+            for (int maxHits : new int[] { 50000, 10001, 10000, 2000, 1001, 1000, 40, 0 }) {
+                Search search = new FulltextSearch();
+                search.setOptions(kestrel(maxHits));
+                search.search();
+            }
+        } finally {
+            factory.destroySingleton("SearchEngine");
+        }
+        assertEquals(Arrays.asList(10000, 10000, 10000, 2000, 1001, null, null, null), rows);
+        assertSame(engine, SearchEngine.get());
     }
 
     private static FulltextSearchOptions kestrel(int maxHits) {
