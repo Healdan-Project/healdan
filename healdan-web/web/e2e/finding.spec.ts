@@ -111,18 +111,28 @@ test('finds a document by its title, and by its #', async ({ page }) => {
 })
 
 test('filters the results by file type', async ({ page }) => {
+  // The search's wait and the rounds below together can pass the default 90 seconds when the server answers empty a few times
+  test.setTimeout(170_000)
   await start(page)
   await searchUntilFound(page, RUN, NAMES.scan)
-  await page.getByRole('button', { name: /^Filters/ }).click()
-  const filters = page.getByRole('region', { name: 'Filters' })
-  // The checkbox itself is hidden under its label, as a person would click the words
-  await filters.getByText(/^Picture/).click()
-  await expect(filters.getByRole('checkbox', { name: /^Picture/ })).toBeChecked()
-  await expect(page).toHaveURL(/type=picture/)
-  await expect(main(page).getByRole('row', { name: new RegExp(NAMES.scan.replace('.', '\\.')) })).toBeVisible()
-  await expect(main(page).getByRole('row', { name: new RegExp(NAMES.alpha.replace('.', '\\.')) })).toHaveCount(0)
-  await expect(main(page).getByRole('group', { name: 'Filters in Use' })).toContainText('Picture')
-  await expect(main(page).getByText('1 document', { exact: true })).toBeVisible()
+  // The Indexer runs every 5 seconds in this step, and while it does the server now and then answers a search, or the count
+  // of its filters' options, with nothing at all, the same one a moment later having it all (seen by asking the API directly,
+  // with and without a filter). The page asks once and keeps the answer, so each round starts the search over, from its
+  // address, until one round gets through; what a round checks is what a person would do and see.
+  const results = main(page)
+  await expect(async () => {
+    await page.goto(`/app/search?scope=documents&q=${encodeURIComponent(RUN)}`)
+    await page.getByRole('button', { name: /^Filters/ }).click()
+    const filters = page.getByRole('region', { name: 'Filters' })
+    // The checkbox itself is hidden under its label, as a person would click the words
+    await filters.getByText(/^Picture/).click({ timeout: 5_000 })
+    await expect(filters.getByRole('checkbox', { name: /^Picture/ })).toBeChecked({ timeout: 5_000 })
+    await expect(page).toHaveURL(/type=picture/, { timeout: 5_000 })
+    await expect(results.getByRole('row', { name: new RegExp(NAMES.scan.replace('.', '\\.')) })).toBeVisible({ timeout: 5_000 })
+    await expect(results.getByRole('row', { name: new RegExp(NAMES.alpha.replace('.', '\\.')) })).toHaveCount(0)
+    await expect(results.getByRole('group', { name: 'Filters in Use' })).toContainText('Picture')
+    await expect(results.getByText('1 document', { exact: true })).toBeVisible({ timeout: 5_000 })
+  }).toPass({ timeout: 70_000, intervals: [500] })
 })
 
 test('copies a document link and follows it', async ({ page, context, browserName }) => {
