@@ -39,6 +39,15 @@ describe('the person menu', () => {
     expect(api.callsTo('DELETE /v1/session')).toHaveLength(1)
   })
 
+  it('stays signed in, and says so, when the server refuses the sign-out from this page', async () => {
+    await renderApp('/', { 'DELETE /v1/session': problem(403, 'web-session-refused') })
+    await openMenu('Priya Nair')
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Sign Out' }))
+    expect(await screen.findByText(/Healdan refused that from this page/)).toBeTruthy()
+    expect(goTo).not.toHaveBeenCalled()
+    expect(screen.queryByText("You've been signed out.")).toBeNull()
+  })
+
   it('stays when the sign-out fails for a reason other than being signed out already', async () => {
     await renderApp('/', { 'DELETE /v1/session': problem(500, 'server-error') })
     await openMenu('Priya Nair')

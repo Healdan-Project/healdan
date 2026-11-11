@@ -3,18 +3,11 @@
 
 package com.logicaldoc.healdan.seed;
 
+import java.util.List;
 import java.util.function.Supplier;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-
-import com.logicaldoc.core.security.Tenant;
-import com.logicaldoc.core.security.user.User;
-import com.logicaldoc.core.security.user.UserDAO;
-import com.logicaldoc.core.security.user.UserSource;
-import com.logicaldoc.util.crypt.Encrypter;
 
 /**
  * For the smoke test only: when {@code HEALDAN_SMOKE_FIXTURE} is {@code true},
@@ -41,9 +34,7 @@ import com.logicaldoc.util.crypt.Encrypter;
  * run on a later start.
  */
 @Component
-public class SmokeApiUserSeed implements SeedStep {
-
-	private static final Logger log = LoggerFactory.getLogger(SmokeApiUserSeed.class);
+public class SmokeApiUserSeed extends SmokeUserSeed {
 
 	static final String USERNAME = "apiuser";
 
@@ -54,58 +45,17 @@ public class SmokeApiUserSeed implements SeedStep {
 	 */
 	static final String PASSWORD = "Api-Smoke-Pw-42!x";
 
-	private final Supplier<String> flag;
-
 	@Autowired
 	public SmokeApiUserSeed() {
 		this(() -> System.getenv(SmokeFixtureSeed.ENV));
 	}
 
 	SmokeApiUserSeed(Supplier<String> flag) {
-		this.flag = flag;
+		super(flag, USERNAME, PASSWORD, "Api", "docker/tests/test-api.sh", List.of(SmokeSignInSeed.USERNAME));
 	}
 
 	@Override
 	public String name() {
 		return "smoke-api-user";
-	}
-
-	@Override
-	public boolean enabled() {
-		return "true".equals(flag.get());
-	}
-
-	@Override
-	public void run() throws Exception {
-		User existing = UserDAO.get().findByUsername(USERNAME);
-		if (existing != null) {
-			if (existing.isEnabled() && Encrypter.encryptSHA256(PASSWORD).equals(existing.getPassword()))
-				log.info("The user {} already exists and is left as it is", USERNAME);
-			else
-				log.warn("The user {} already exists, {}, and is left as it is, so docker/tests/test-api.sh can't "
-						+ "sign in as it", USERNAME, existing.isEnabled() ? "with another password" : "disabled");
-			return;
-		}
-
-		long others = UserDAO.get().queryForLong("select count(*) from ld_user where ld_username not in "
-				+ "('admin', '_system', '%s')".formatted(SmokeSignInSeed.USERNAME));
-		if (others > 0) {
-			log.warn("{} is true, but this stack has {} other users, so it isn't a fresh smoke stack: the user {}, "
-					+ "whose password is published, isn't made", SmokeFixtureSeed.ENV, others, USERNAME);
-			return;
-		}
-
-		User user = new User();
-		user.setTenantId(Tenant.DEFAULT_ID);
-		user.setUsername(USERNAME);
-		user.setName("Api");
-		user.setFirstName("User");
-		user.setEmail("apiuser@example.com");
-		user.setLanguage("en");
-		user.setDecodedPassword(PASSWORD);
-		user.setType(User.Type.DEFAULT);
-		user.setSource(UserSource.DEFAULT);
-		user.setEnabled(true);
-		UserDAO.get().store(user);
 	}
 }

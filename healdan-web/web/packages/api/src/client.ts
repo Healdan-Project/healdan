@@ -19,6 +19,7 @@ export interface RequestOptions {
 
 export interface ApiOptions {
   base?: string
+  /** Called on every 401, from reads and changes alike; the app's signed-out state takes the first. */
   onSignedOut?: () => void
 }
 
@@ -42,9 +43,6 @@ export function apiPath(parts: TemplateStringsArray, ...values: (string | number
 
 export function createApi(options: ApiOptions = {}): Api {
   const base = options.base ?? '/api'
-  // A burst of 401s calls onSignedOut once: the flag is set on the first and
-  // cleared by the next successful answer, so a later sign-out calls it again.
-  let signedOutReported = false
 
   async function request<T>(method: string, path: string, query?: Query, body?: unknown, signal?: AbortSignal): Promise<T> {
     const headers = new Headers()
@@ -58,13 +56,9 @@ export function createApi(options: ApiOptions = {}): Api {
     }
     const response = await fetch(`${base}${path}${queryString(query)}`, init)
     if (!response.ok) {
-      if (response.status === 401 && !signedOutReported) {
-        signedOutReported = true
-        options.onSignedOut?.()
-      }
+      if (response.status === 401) options.onSignedOut?.()
       throw await readProblem(response)
     }
-    signedOutReported = false
     if (response.status === 204) return undefined as T
     return (await response.json()) as T
   }

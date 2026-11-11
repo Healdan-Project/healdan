@@ -19,7 +19,7 @@ async function start(root: HTMLElement) {
   } catch {
     // Matter and Matters stay.
   }
-  const queryClient = createQueryClient({ onSignedOut: signedOut.mark })
+  const queryClient = createQueryClient()
   createRoot(root).render(
     <StrictMode>
       <App api={api} queryClient={queryClient} signedOut={signedOut} router={createAppRouter()} />

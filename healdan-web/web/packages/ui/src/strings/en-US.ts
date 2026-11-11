@@ -173,6 +173,7 @@ export const enUS = {
   'problems.over-upload-limit': 'That file is too large.',
   'problems.validation': 'Some details need fixing.',
   'problems.too-many-attempts': 'Too many attempts. Try again later.',
+  'problems.web-session-refused': "Healdan refused that from this page. Ask your administrator to check the server's address.",
   'problems.storage-unreachable': 'Files are unavailable for now. Try again in a few minutes.',
   'problems.server-error': 'Something went wrong.',
   'problems.unknown': 'Something went wrong.',

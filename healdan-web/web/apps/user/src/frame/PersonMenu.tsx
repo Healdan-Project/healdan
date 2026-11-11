@@ -22,7 +22,8 @@ export function PersonMenu() {
     try {
       await api.send('DELETE', '/v1/session')
     } catch (error) {
-      // Already signed out is the goal reached; anything else leaves the person signed in, so say so.
+      // Already signed out (401: no session) is the goal reached. Anything else leaves the person signed in, so say so:
+      // the route refusing the request is 403 web-session-refused, not a 401, for this reason.
       if (!(error instanceof ApiError && error.status === 401)) {
         toast(messageFor(error))
         return

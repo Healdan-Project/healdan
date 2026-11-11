@@ -57,19 +57,22 @@ public class SessionResourceTest extends ApiTestCase {
 		assertEquals(200, get("/api/v1/me").token(token).send().status());
 	}
 
-	// Another site can't sign anyone out
+	// Another site can't sign anyone out. A same-origin request that breaks the rule is 403, so the page doesn't take
+	// it for signed out
 	@Test
 	public void testOnlyFromHealdansOwnPages() {
 		MockHttpSession web = signInWeb(clerk);
 		String sid = sid(web);
 
 		ApiResponse noHeader = delete(SESSION).session(web).header(ApiCall.FETCH_SITE, "same-origin").send();
-		assertEquals(noHeader.toString(), 401, noHeader.status());
+		assertEquals(noHeader.toString(), 403, noHeader.status());
+		assertEquals(WebSessionRoute.REFUSED, noHeader.code());
 		ApiResponse crossSite = delete(SESSION).session(web).header(ApiCall.FETCH_SITE, "cross-site")
 				.header(ApiCall.CLIENT, "web").send();
 		assertEquals(crossSite.toString(), 401, crossSite.status());
 		ApiResponse otherOrigin = delete(SESSION).webSession(web).header("Origin", "https://elsewhere.example").send();
-		assertEquals(otherOrigin.toString(), 401, otherOrigin.status());
+		assertEquals(otherOrigin.toString(), 403, otherOrigin.status());
+		assertEquals(WebSessionRoute.REFUSED, otherOrigin.code());
 
 		assertTrue(SessionManager.get().isOpen(sid));
 		assertFalse(web.isInvalid());

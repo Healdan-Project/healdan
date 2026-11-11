@@ -23,7 +23,7 @@ function serve(): FakeApi {
 }
 
 function hook(api: FakeApi, options: ListingOptions) {
-  const queryClient = createQueryClient({ onSignedOut: () => {}, retry: false })
+  const queryClient = createQueryClient({ retry: false })
   const wrapper = ({ children: inner }: { children: ReactNode }) => (
     <ServicesProvider api={api} signedOut={createSignedOut()}>
       <QueryClientProvider client={queryClient}>{inner}</QueryClientProvider>

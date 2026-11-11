@@ -232,8 +232,8 @@ A first mockup showed whether the helper was running. The browser can't tell whe
 ### 7.2 `AppServlet`
 
 - **`@WebServlet("/app/*")`** serves the built files from the jar (`healdan/web/user/`).
-- **Any path under `/app/` that isn't a file** gets `index.html`, so addresses like `/app/doc/10388` load the app.
-- **Caching:** `index.html` is never cached; the other files carry a content hash in their names and are cached for a year, immutable.
+- **Any path under `/app/` that isn't a file** gets `index.html`, so addresses like `/app/doc/10388` and `/app/doc/10388.2` load the app. A file is one the build holds, or any path under `assets/`, where a missing one is `404`.
+- **Caching:** `index.html` is never cached; the files under `assets/` carry a content hash in their names and are cached for a year, immutable, and the rest aren't cached.
 - **Its own Content-Security-Policy,** in addition to CE's (both apply): `default-src 'self'`; `script-src 'self'`, with no inline script and no `eval`; `style-src 'self'`; `img-src 'self' data: blob:`; `worker-src 'self'` for PDF.js's worker; `connect-src 'self'`; `frame-src 'self'` for the email body (§9.4); `object-src 'none'`; `frame-ancestors 'none'`; `base-uri 'none'`; `form-action 'self'`. PDF.js runs with `isEvalSupported: false`.
 - **Without a web session,** the servlet sets the return path and sends the browser to `login.jsp` (§8.3). The page itself is code, not data; everything it shows comes from the API.
 - **No upstream file changes for this:** CE's chain already lets `/app/**` through (§3.2).
@@ -262,13 +262,13 @@ A first mockup showed whether the helper was running. The browser can't tell whe
 
 ### 8.1 The web-session route (call)
 
-`TokenFilter` gets a second way in, used only when a request has no `Authorization` header. It follows the Fetch Metadata pattern:
+`TokenFilter` gets a second way in, used only when a request has no Bearer `Authorization` header (another scheme's, such as Basic credentials for a proxy in front, signs nothing in). It follows the Fetch Metadata pattern:
 
-1. **Every request must say `Sec-Fetch-Site: same-origin`.** An `Origin` header, when present, must be the server's public address (`PublicAddress`, as M4's pages use it) or, without one, the scheme and host the request came to. A request without `Sec-Fetch-Site` comes from an old browser or isn't a browser, and is refused on this route.
-2. **A request that changes something** (`POST`, `PATCH`, `PUT`, `DELETE`) must also carry `X-Healdan-Client: web`. Another origin can't send that header without a preflight, and the API's CORS never allows one with cookies (M2 §8). A `GET` changes nothing, and another site can neither send one as same-origin nor read its answer, so downloads, thumbnails, previews and the email body work as plain links and `<img>`s.
+1. **Every request must say `Sec-Fetch-Site: same-origin`.** An `Origin` header, when present, must be the server's public address (`PublicAddress`, as M4's pages use it) or the scheme and host the request came to. A request without `Sec-Fetch-Site` comes from an old browser or isn't a browser, and is refused on this route.
+2. **A request that changes something** (`POST`, `PATCH`, `PUT`, `DELETE`, in any case, as CXF matches them) must also carry `X-Healdan-Client: web`. Another origin can't send that header without a preflight, and the API's CORS never allows one with cookies (M2 §8). A `GET` changes nothing, and another site can neither send one as same-origin nor read its answer, so downloads, thumbnails, previews and the email body work as plain links and `<img>`s.
 3. **The HTTP session,** found by Tomcat's HttpOnly `JSESSIONID` cookie, must hold an open CE session id in its `sid` attribute. The filter never takes `sid` from a parameter, a header or the `ldoc-sid` cookie, though `SessionManager.getSessionId` would.
 
-From there it works as the token route does: it renews the CE session, puts an `LDAuthenticationToken` for it in `SecurityContextHolder` for the length of the request, and clears it afterwards. A request with a Bearer token goes the token route and ignores cookies. No one signs in on this route, so the throttle doesn't come into it. A refusal is `401 unauthenticated`.
+From there it works as the token route does: it renews the CE session, puts an `LDAuthenticationToken` for it in `SecurityContextHolder` for the length of the request, and clears it afterwards. A request with a Bearer token goes the token route and ignores cookies. No one signs in on this route, so the throttle doesn't come into it. A same-origin request that breaks a rule is `403 web-session-refused`, which the app doesn't take for a sign-out; no open session, or a request no browser made from this origin, is `401 unauthenticated`.
 
 ### 8.2 Timeouts
 
@@ -280,15 +280,15 @@ A full page load of an `/app/…` address without a web session reaches `AppServ
 
 - it starts with `/app/`;
 - it has no `//`, no scheme and no backslash;
-- every character is a letter, a digit or one of `/ . _ ~ % - ? & =`;
+- every character is a letter, a digit or one of `/ . _ ~ % - ? & = +` (`+` is a space in the app's own queries);
 - it's at most 2,000 characters.
 
-Anything else is stored as `/app/`. Both the password form and M4's provider buttons then come back to it (`SignInResource` already follows `RequestedUrl` under `login.jsp`'s conditions).
+Anything else is stored as `/app/`. Both the password form and M4's provider buttons then come back to it (`SignInResource` already follows `RequestedUrl` under `login.jsp`'s conditions). Nothing in CE clears it after the sign-in, so `AppServlet` forgets it once a signed-in page loads.
 
 ### 8.4 Where a plain sign-in lands (call)
 
 - **A new setting, `ui.start`,** in `hd_setting`: `app` (the default) or `classic`, editable in Healdan Settings.
-- **A `@WebFilter` on `/login.jsp`** sets `RequestedUrl` to `/app/`, or to `frontend.jsp` for `classic`, when the HTTP session has none. `login.jsp`'s `switch` parameter, which clears `RequestedUrl`, still works.
+- **A `@WebFilter` on `/login.jsp`** sets `RequestedUrl` to `/app/`, or to `frontend.jsp` for `classic`, when the HTTP session has none waiting: only a return path into the app waits, and an earlier landing is replaced. `login.jsp`'s `switch` parameter, which clears `RequestedUrl`, still works.
 - **`SignInResource` falls back to the same setting** instead of `frontend.jsp`.
 - **So with `app`, signing in again after the old UI's session lapsed lands in the app too.** Classic Interface takes you back. The old UI's own pages don't set `RequestedUrl`, so the filter can't tell where you were.
 - No upstream file changes for this.
@@ -449,7 +449,7 @@ A last small pull request records the result: the roadmap, the plan's ledger and
 | An old-UI top-bar class in `logicaldoc-gui` (the builder picks it) | A one-line hook adding **Open in Healdan** | The way back to the app (§8.6) |
 | `logicaldoc-core/.../searchengine/FulltextSearch.java` (changed in the build: owner, 2026-11-10) | `internalSearch` passes `options.getMaxHits()` to the engine as Solr's `rows` when it's over 1,000, capped at 10,000, and `null` as before otherwise; `FulltextSearchTest` covers all three and joins `UPSTREAM_TESTS` | CE passed no `rows`, so the search handler's default of 1,000 (`solrconfig.xml`, which CE never copies over an install's) capped every full-text search, and search couldn't page past it (§9.5). A maximum of 1,000 or less still gets the handler's 1,000 rows, so the old UI's pages of 40, which CE fills after its permission check, behave as before. The cap of 10,000, the API's own window, is there because CE's web service (`maxHits`), CMIS (`maxItems`) and RPC searches pass a maximum the client chooses, which would otherwise ask Solr for every match, highlighted, and CE's SQL for all of them (Task 10's review, R30). The owner also approved making `setQueryFilters` `protected`, for the Author, Class, Client and Matter filters as Solr filter queries; it was dropped in the build, since CE's index holds no properties (§9.2), so the edit would have had no use |
 
-Nothing else upstream changes: not `context-security.xml`, `login.jsp` or `web.xml`.
+Nothing else upstream changes: not `context-security.xml`, `login.jsp` or `web.xml`. `HealdanAppLinkTest`, in `UPSTREAM_TESTS`, checks the hook is still in `MainMenu` before Sign Out, and the button's address.
 
 ### 14.2 Fork-owned files
 

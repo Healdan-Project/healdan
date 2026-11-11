@@ -80,13 +80,27 @@ class CheckWebLicencesTest(unittest.TestCase):
         self.assertFalse(checker.acceptable("GPL-3.0 WITH Classpath-exception-2.0", {"GPL-3.0"}))
 
     def test_allowed_passes_and_stale_fails(self):
-        with mock.patch.object(checker, "ALLOWED", {"node_modules/a": "reviewed"}):
+        with mock.patch.object(checker, "ALLOWED", {"node_modules/a": ("GPL-3.0", "reviewed")}):
             self.assertEqual([], checker.problems(self.lock(a=package("GPL-3.0"))))
             found = checker.problems(self.lock())
             self.assertEqual(["node_modules/a: in ALLOWED but not in the lockfile"], found)
 
+    def test_allowed_fails_when_the_licence_changes(self):
+        with mock.patch.object(checker, "ALLOWED", {"node_modules/a": ("Unlicense", "reviewed")}):
+            found = checker.problems(self.lock(a=package("GPL-3.0", version="6.0.0")))
+            self.assertEqual(["node_modules/a@6.0.0: allowed as Unlicense, but the lockfile now says GPL-3.0"], found)
+            self.assertEqual(1, len(checker.problems(self.lock(a=package(None)))))
+        with mock.patch.object(checker, "ALLOWED_DEV", {"node_modules/a": ("MPL-2.0", "reviewed")}):
+            self.assertEqual(1, len(checker.problems(self.lock(a=package("GPL-3.0", dev=True)))))
+
+    def test_real_lists_name_licences(self):
+        for entries in (checker.ALLOWED, checker.ALLOWED_DEV):
+            for key, (licence, reason) in entries.items():
+                with self.subTest(key=key):
+                    self.assertTrue(licence and reason)
+
     def test_dev_only_exceptions(self):
-        with mock.patch.object(checker, "ALLOWED_DEV", {"node_modules/a": "reviewed"}):
+        with mock.patch.object(checker, "ALLOWED_DEV", {"node_modules/a": ("MPL-2.0", "reviewed")}):
             self.assertEqual([], checker.problems(self.lock(a=package("MPL-2.0", dev=True))))
             found = checker.problems(self.lock(a=package("MPL-2.0")))
             self.assertEqual(1, len(found))

@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.app;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Optional;
@@ -63,6 +64,41 @@ public class AppServletTest {
 			assertHeaders(response);
 		}
 		assertEquals(200, call("GET", null).getStatus());
+	}
+
+	// An address with a dot, such as a version's #10388.2, is the app's, not a file
+	@Test
+	public void testDottedAddressAnswersIndex() throws Exception {
+		MockHttpServletResponse response = call("GET", "/doc/10388.2");
+		assertEquals(200, response.getStatus());
+		assertTrue(response.getContentAsString().contains("index fixture"));
+
+		signedIn = false;
+		assertEquals(302, call("GET", "/doc/10388.2").getStatus());
+	}
+
+	// Only Vite's assets/ holds hashed files: one elsewhere with a long hyphenated name isn't cached for good
+	@Test
+	public void testOnlyAssetsAreImmutable() throws Exception {
+		MockHttpServletResponse response = call("GET", "/third-party-notices.txt");
+		assertEquals(200, response.getStatus());
+		assertTrue(response.getContentAsString().contains("notices fixture"));
+		assertEquals("no-store", response.getHeader("Cache-Control"));
+	}
+
+	// The return path has been followed once a signed-in page loads; a file doesn't count
+	@Test
+	public void testSignedInPageForgetsReturnPath() throws Exception {
+		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/app/doc/5");
+		request.setServletPath("/app");
+		request.setPathInfo("/assets/app-AbC123xY.js");
+		request.getSession().setAttribute("RequestedUrl", "/app/doc/5");
+		servlet.service(request, new MockHttpServletResponse());
+		assertEquals("/app/doc/5", request.getSession().getAttribute("RequestedUrl"));
+
+		request.setPathInfo("/doc/5");
+		servlet.service(request, new MockHttpServletResponse());
+		assertNull(request.getSession().getAttribute("RequestedUrl"));
 	}
 
 	@Test

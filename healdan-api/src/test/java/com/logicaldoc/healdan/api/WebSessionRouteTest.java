@@ -55,8 +55,10 @@ import jakarta.ws.rs.Path;
 /**
  * The web-session route (M6 spec section 8.1): Healdan's own pages call the
  * API with the browser's CE session, same-origin only, and nothing else
- * reaches it. Every refusal is {@code 401 unauthenticated}. Clerk reads,
- * writes and downloads in matter 998.1.
+ * reaches it. A request with no open session, or that no browser made from
+ * this origin, is {@code 401 unauthenticated}; a same-origin one that breaks
+ * the rule is {@code 403 web-session-refused}, so the page doesn't take it for
+ * a sign-out. Clerk reads, writes and downloads in matter 998.1.
  */
 public class WebSessionRouteTest extends ApiTestCase {
 
@@ -205,11 +207,11 @@ public class WebSessionRouteTest extends ApiTestCase {
 	public void testOriginMustBeTheServers() {
 		MockHttpSession web = signInWeb(clerk);
 
-		assertRefused(get(ME).webSession(web).header("Origin", "https://elsewhere.example").send());
-		assertRefused(get(ME).webSession(web).header("Origin", "null").send());
-		assertRefused(get(ME).webSession(web).header("Origin", "http://localhost:8081").send());
-		assertRefused(get(ME).webSession(web).header("Origin", "https://localhost:8080").send());
-		assertRefused(post(FAVORITES).webSession(web).header("Origin", "https://elsewhere.example")
+		assertRejected(get(ME).webSession(web).header("Origin", "https://elsewhere.example").send());
+		assertRejected(get(ME).webSession(web).header("Origin", "null").send());
+		assertRejected(get(ME).webSession(web).header("Origin", "http://localhost:8081").send());
+		assertRejected(get(ME).webSession(web).header("Origin", "https://localhost:8080").send());
+		assertRejected(post(FAVORITES).webSession(web).header("Origin", "https://elsewhere.example")
 				.json(Map.of("folderId", documents.getId())).send());
 		assertEquals(0, favorites(web));
 
@@ -224,14 +226,18 @@ public class WebSessionRouteTest extends ApiTestCase {
 		MockHttpSession web = signInWeb(clerk);
 		Context.get().getConfig().setProperty(SERVER_URL, "https://healdan.example/");
 
-		// The address the request came to isn't the public one
-		assertRefused(get(ME).webSession(web).header("Origin", "http://localhost:8080").send());
 		assertEquals(200, get(ME).webSession(web).header("Origin", "https://healdan.example").send().status());
+		// The address the request came to, another name than the public one, as a server's IP address is
+		ApiResponse added = post(FAVORITES).webSession(web).header("Origin", "http://localhost:8080")
+				.json(Map.of("folderId", documents.getId())).send();
+		assertEquals(added.toString(), 201, added.status());
+		// Neither
+		assertRejected(get(ME).webSession(web).header("Origin", "https://elsewhere.example").send());
 
 		// The scheme's own port, written or not, is the same origin
 		Context.get().getConfig().setProperty(SERVER_URL, "https://healdan.example:443");
 		assertEquals(200, get(ME).webSession(web).header("Origin", "https://healdan.example").send().status());
-		assertRefused(get(ME).webSession(web).header("Origin", "https://healdan.example:8443").send());
+		assertRejected(get(ME).webSession(web).header("Origin", "https://healdan.example:8443").send());
 	}
 
 	@Test
@@ -243,9 +249,9 @@ public class WebSessionRouteTest extends ApiTestCase {
 		ApiResponse same = get(ME).webSession(web).server("http", "healdan.lan", 8080)
 				.header("Origin", "http://healdan.lan:8080").send();
 		assertEquals(same.toString(), 200, same.status());
-		assertRefused(get(ME).webSession(web).server("http", "healdan.lan", 8080)
+		assertRejected(get(ME).webSession(web).server("http", "healdan.lan", 8080)
 				.header("Origin", "http://localhost:8080").send());
-		assertRefused(get(ME).webSession(web).server("http", "healdan.lan", 8080)
+		assertRejected(get(ME).webSession(web).server("http", "healdan.lan", 8080)
 				.header("Origin", "https://healdan.lan:8080").send());
 	}
 
@@ -254,23 +260,26 @@ public class WebSessionRouteTest extends ApiTestCase {
 		MockHttpSession web = signInWeb(clerk);
 		Map<String, Long> body = Map.of("folderId", documents.getId());
 
-		assertRefused(sameOrigin(post(FAVORITES), web).json(body).send());
-		assertRefused(sameOrigin(post(FAVORITES), web).header(ApiCall.CLIENT, "Web").json(body).send());
-		assertRefused(sameOrigin(post(FAVORITES), web).header(ApiCall.CLIENT, "app").json(body).send());
+		assertRejected(sameOrigin(post(FAVORITES), web).json(body).send());
+		assertRejected(sameOrigin(post(FAVORITES), web).header(ApiCall.CLIENT, "Web").json(body).send());
+		assertRejected(sameOrigin(post(FAVORITES), web).header(ApiCall.CLIENT, "app").json(body).send());
 		assertEquals(0, favorites(web));
 		ApiResponse added = post(FAVORITES).webSession(web).json(body).send();
 		assertEquals(added.toString(), 201, added.status());
 
 		String favorite = FAVORITES + "/" + added.json().path("id").asLong();
-		assertRefused(sameOrigin(delete(favorite), web).send());
+		assertRejected(sameOrigin(delete(favorite), web).send());
 		assertEquals(1, favorites(web));
 		assertEquals(204, delete(favorite).webSession(web).send().status());
 		assertEquals(0, favorites(web));
 
 		for (ApiCall change : List.of(post(PROBE), patch(PROBE), put(PROBE), delete(PROBE)))
-			assertRefused(sameOrigin(change, web).send());
+			assertRejected(sameOrigin(change, web).send());
 		for (ApiCall change : List.of(post(PROBE), patch(PROBE), put(PROBE), delete(PROBE)))
 			assertProbed(change.webSession(web).send());
+		// In any case: CXF matches a method whatever its case, and fetch() sends patch as it's written
+		for (String method : List.of("post", "patch", "put", "delete"))
+			assertRejected(sameOrigin(call(method, PROBE), web).send());
 		// A read needs none
 		assertProbed(sameOrigin(get(PROBE), web).send());
 	}
@@ -319,11 +328,18 @@ public class WebSessionRouteTest extends ApiTestCase {
 		assertEquals("unauthenticated", revoked.code());
 		assertEquals("Bearer error=\"invalid_token\"", revoked.header("WWW-Authenticate"));
 
-		// Another scheme isn't the web session either
+		// A Bearer header goes by its token alone, even with none
+		ApiResponse none = get(ME).webSession(web).header("Authorization", "Bearer").send();
+		assertEquals(none.toString(), 401, none.status());
+		assertEquals("Bearer", none.header("WWW-Authenticate"));
+
+		// Another scheme, such as the Basic credentials a browser sends to a proxy in front, signs nothing in, and
+		// the web session works beside it
 		String basic = Base64.getEncoder()
 				.encodeToString(("clerk:" + HealdanFixtures.PASSWORD).getBytes(StandardCharsets.UTF_8));
-		assertRefused(get(ME).webSession(web).header("Authorization", "Basic " + basic).send());
-		assertRefused(get(ME).webSession(web).header("Authorization", "").send());
+		assertEquals(200, get(ME).webSession(web).header("Authorization", "Basic " + basic).send().status());
+		assertEquals(200, get(ME).webSession(web).header("Authorization", "").send().status());
+		assertRefused(get(ME).session(web).header("Authorization", "Basic " + basic).send());
 
 		// The session itself still works
 		assertTrue(SessionManager.get().isOpen(sid(web)));
@@ -473,6 +489,13 @@ public class WebSessionRouteTest extends ApiTestCase {
 	private static void assertRefused(ApiResponse response) {
 		assertEquals(response.toString(), 401, response.status());
 		assertEquals(response.toString(), "unauthenticated", response.code());
+	}
+
+	/** A same-origin request that breaks the rule, which signing in again wouldn't mend */
+	private static void assertRejected(ApiResponse response) {
+		assertEquals(response.toString(), 403, response.status());
+		assertEquals(response.toString(), WebSessionRoute.REFUSED, response.code());
+		assertNull(response.toString(), response.header("WWW-Authenticate"));
 	}
 
 	private static void assertProbed(ApiResponse response) {

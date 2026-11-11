@@ -17,11 +17,9 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.authentication.AuthenticationException;
-import com.logicaldoc.core.security.authentication.DefaultAuthenticator;
 import com.logicaldoc.core.security.spring.LDAuthenticationToken;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
-import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.signin.ProviderRecheck;
 import com.logicaldoc.healdan.token.ApiToken;
 import com.logicaldoc.healdan.token.ApiTokens;
@@ -45,9 +43,11 @@ import jakarta.ws.rs.core.Response;
  * <li>from its {@code Authorization: Bearer} device token. A token from a
  * provider sign-in is checked back with its provider when that's due
  * ({@link ProviderRecheck}, M4 spec section 9), before its session;</li>
- * <li>with no {@code Authorization} header at all, from the browser's CE web
- * session, for Healdan's own pages, on {@link WebSessionRoute}'s rule (M6
- * spec section 8.1). There the caller has no token.</li>
+ * <li>with no Bearer {@code Authorization} header (none, or another scheme's,
+ * such as the Basic credentials a browser sends to a proxy in front), from the
+ * browser's CE web session, for Healdan's own pages, on
+ * {@link WebSessionRoute}'s rule (M6 spec section 8.1). There the caller has
+ * no token.</li>
  * </ul>
  * Nothing else signs a request in: no {@code sid} parameter or header, no
  * {@code ldoc-sid} cookie, no Basic and no {@code X-API-KEY} (section 5.1).
@@ -63,6 +63,10 @@ import jakarta.ws.rs.core.Response;
 public class TokenFilter implements ContainerRequestFilter {
 
 	private static final Pattern BEARER = Pattern.compile("^Bearer[ \\t]+(\\S+)[ \\t]*$", Pattern.CASE_INSENSITIVE);
+
+	/** A Bearer authorization, well formed or not */
+	private static final Pattern BEARER_SCHEME = Pattern.compile("^[ \\t]*Bearer(?:[ \\t].*)?$",
+			Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
 	private static final String NO_TOKEN = "Sign in first, and send the device token as Authorization: Bearer.";
 
@@ -85,7 +89,7 @@ public class TokenFilter implements ContainerRequestFilter {
 			return;
 
 		String authorization = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
-		if (authorization == null) {
+		if (!bearerScheme(authorization)) {
 			webSession(requestContext);
 			return;
 		}
@@ -142,11 +146,14 @@ public class TokenFilter implements ContainerRequestFilter {
 
 	/**
 	 * The web-session route (M6 spec section 8.1), for a request with no
-	 * {@code Authorization} header: signs it in with the browser's CE session
-	 * if {@link WebSessionRoute} lets it. No one signs in here, so the
+	 * Bearer {@code Authorization} header: signs it in with the browser's CE
+	 * session if {@link WebSessionRoute} lets it. No one signs in here, so the
 	 * throttle doesn't come into it. A request that isn't a same-origin
 	 * browser request is refused as a request with no token is, with the
-	 * Bearer challenge; a same-origin one is refused without it.
+	 * Bearer challenge. A same-origin one that breaks the rule is
+	 * {@code 403 web-session-refused}, so the page doesn't take it for a
+	 * sign-out, and one with no open session is {@code 401} without a
+	 * challenge.
 	 */
 	private void webSession(ContainerRequestContext requestContext) {
 		if (!WebSessionRoute.sameOrigin(servletRequest)) {
@@ -155,14 +162,13 @@ public class TokenFilter implements ContainerRequestFilter {
 		}
 		String refusal = WebSessionRoute.refusal(servletRequest).orElse(null);
 		if (refusal != null) {
-			requestContext.abortWith(webRefused(NOT_WEB.formatted(refusal)));
+			requestContext.abortWith(ProblemMapper
+					.problem(new ApiProblem(403, WebSessionRoute.REFUSED, NOT_WEB.formatted(refusal))));
 			return;
 		}
 
 		Session session = WebSessionRoute.session(servletRequest).orElse(null);
-		// Checked on every request, as for a token: deleting a user fires no listener, and an expiry date or working
-		// hours can pass while the session stays open
-		User user = session != null ? sessionUser(session) : null;
+		User user = session != null ? WebSessionRoute.user(session) : null;
 		if (user == null) {
 			requestContext.abortWith(webRefused(SIGNED_OUT));
 			return;
@@ -187,30 +193,19 @@ public class TokenFilter implements ContainerRequestFilter {
 	}
 
 	/**
-	 * @return the web session's user, with its groups, if it still exists and
-	 *         may sign in now, as {@link HealdanTokenAuthenticator#signInUser}
-	 *         checks a token's; otherwise null
-	 */
-	private static User sessionUser(Session session) {
-		try {
-			User user = UserDAO.get().findById(session.getUserId(), true);
-			if (user == null)
-				return null;
-			com.logicaldoc.util.spring.Context.get(DefaultAuthenticator.class).validateUser(user);
-			return user;
-		} catch (AuthenticationException e) {
-			return null;
-		} catch (PersistenceException e) {
-			throw new IllegalStateException("Can't read the user of a web session", e);
-		}
-	}
-
-	/**
 	 * Forgets the caller and the security context of this thread.
 	 */
 	static void clear() {
 		Caller.clear();
 		SecurityContextHolder.clearContext();
+	}
+
+	/**
+	 * @return true if the authorization's scheme is Bearer, whether or not a
+	 *         token follows; false for none or another scheme
+	 */
+	static boolean bearerScheme(String authorization) {
+		return authorization != null && BEARER_SCHEME.matcher(authorization).matches();
 	}
 
 	/**

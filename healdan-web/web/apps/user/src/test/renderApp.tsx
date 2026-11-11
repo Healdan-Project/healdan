@@ -17,9 +17,10 @@ export interface Rendered {
 
 /** The whole app at an address (without the /app base), answering from the fake API. */
 export async function renderApp(path = '/', routes: Routes = {}): Promise<Rendered> {
-  const api = fakeApi(routes)
   const signedOut = createSignedOut()
-  const queryClient = createQueryClient({ onSignedOut: signedOut.mark, retry: false })
+  // As main.tsx gives createApi the same
+  const api = fakeApi(routes, signedOut.mark)
+  const queryClient = createQueryClient({ retry: false })
   const router = createAppRouter(createMemoryHistory({ initialEntries: ['/app' + path] }))
   // The router resolves its first address asynchronously; wait, so the first render already shows the view.
   await router.load()
