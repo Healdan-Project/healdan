@@ -17,9 +17,10 @@ import { messageFor } from '../frame/errors'
 import { RightRegionView, useRegionKind, useRightRegion } from '../frame/RightRegion'
 import { keys, useFavorites, useFolder } from '../queries'
 import { useApi } from '../services'
+import { SelectionActions } from '../actions/SelectionActions'
+import { useOpenKey } from '../actions/useOpenKey'
 import { Breadcrumb } from './Breadcrumb'
 import { DetailsPanel } from '../details/DetailsPanel'
-import { PreviewButton } from '../preview/PreviewButton'
 import { QuickLook } from '../preview/QuickLook'
 import { ReadingPane } from '../preview/ReadingPane'
 import { documentsOf, usePreviewKey } from '../preview/usePreviewKey'
@@ -60,6 +61,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const rows = useMemo(() => listing.rows.map(rowOf), [listing.rows])
   const documents = useMemo(() => documentsOf(listing.rows), [listing.rows])
   const preview = usePreviewKey(changeSelection)
+  const openDocument = useOpenKey(documents, changeSelection)
   // The reading pane makes the list narrow: it keeps the columns that fit
   const columns = useRegionKind({ preview: !store, details: selected !== undefined }) === 'preview' ? narrowed(listColumns) : listColumns
   const authors = useAuthorNames(listing.rows, facets.data)
@@ -93,10 +95,10 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
     })
   }
 
-  // A folder opens; a document is selected until opening it in its app comes (Tasks 16 and 18).
+  // A folder opens; a document opens in its app (or downloads, if the helper doesn't open its kind), and is selected
   function open(key: string) {
     if (key.startsWith('f')) void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })
-    else changeSelection(new Set([key]))
+    else openDocument(key)
   }
 
   const selectedRow = selected === undefined ? undefined : listing.rows.find((item) => item.type === 'document' && item.docNumber === selected)
@@ -128,7 +130,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               count={listing.isStale ? undefined : countOf(listing.documents, active > 0, unfiltered)}
               end={<FiltersButton ref={funnel} open={filtersOpen} active={active} onPress={toggleFilters} />}
             >
-              <PreviewButton />
+              <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} />
             </Toolbar>
             <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />
             <Table

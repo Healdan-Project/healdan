@@ -24,9 +24,51 @@ other's work. Opening the document on another of your computers warns you first,
 check-out there. The first computer then keeps its copy, but can't save it to the document. See
 [Checked Out to You on Another Computer](../../office/opening-documents/#checked-out-to-you-on-another-computer).
 
-A check-out from the web page belongs to no computer: it's yours, wherever you are.
+A check-out from the app or the Classic Interface belongs to no computer: it's yours, wherever you are.
 
-## In the Web Page
+## In the App
+
+Select a document, and its details show who has it, if anyone. **Check Out** is in the details, and in the toolbar
+above the list.
+
+### Checking Out
+
+Choose **Check Out**. Healdan checks the document out to you, and the details say "Checked out by you since" and the
+time. It doesn't download anything: to edit the file, use **Open** (see
+[Opening Documents](../../office/opening-documents/)), or **Download** it (see
+[Downloading Documents](../downloading-documents/)).
+
+You need permission to write the document. **Check Out** is greyed out while someone else has the document checked out
+or locked, and for a document you can't write.
+
+### Checking In
+
+While the document is checked out to you from the app, **Check In** is in its details. Choose it, then choose the file
+to upload. Healdan saves it as the document's next snapshot, such as 2.3, and checks the document in. The file is
+saved under the document's own name, whatever the file you chose is called. To start the next version instead, such as
+3.0, use the Classic Interface (see below). See [Versions](../versions/).
+
+### Giving Up a Check-Out
+
+To stop editing without saving anything, choose **Release**. The document stays as it was.
+
+### When Someone Else Has It
+
+The details name who has the document and since when: "Checked out by Alex Marsh since" the date and time. The app
+never takes a check-out over. It's released by the person who made it, on the computer it's checked out on, or by an
+administrator in the Classic Interface, with **Unlock**.
+
+That goes for your own check-out on a computer too. One you made by opening a document from the
+[Healdan Helper](../../office/) belongs to that computer, and the details say "Checked out by you on" its name. Release
+it there, or in the Classic Interface.
+
+A locked document says "Locked by" and who. A lock is taken off in the Classic Interface (see
+[Locking a Document](../locking-a-document/)).
+
+If the check-out changes under you, or a rule refuses it, the app says so in a few words, such as "It's checked out.",
+and shows the document's hold as it now is.
+
+## In the Classic Interface
 
 ### Checking Out
 
@@ -53,7 +95,7 @@ Only you, or an administrator, can check in a document checked out to you.
 To stop editing without saving anything, right-click the document and choose **Unlock**. The document stays as it
 was. Only you, or an administrator, can unlock a document checked out to you.
 
-Checking in or unlocking in the web page works whichever computer holds the check-out. If you have the document open
+Checking in or unlocking in the Classic Interface works whichever computer holds the check-out. If you have the document open
 in LibreOffice at the time, that copy can't be saved to the document any more: see
 [When Things Go Wrong](../../office/when-things-go-wrong/#your-check-out-ended).
 

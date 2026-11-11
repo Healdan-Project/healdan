@@ -15,6 +15,7 @@ describe('focus style', () => {
       './ComboBox.module.css',
       './DatePicker.module.css',
       './Dialog.module.css',
+      './Fields.module.css',
       './Menu.module.css',
       './Overlay.module.css',
       './Table.module.css',

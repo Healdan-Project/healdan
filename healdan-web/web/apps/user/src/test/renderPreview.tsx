@@ -4,6 +4,7 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { OpenInAppProvider } from '../actions/OpenInAppState'
 import { createQueryClient } from '../queryClient'
 import { ServicesProvider } from '../services'
 import { createSignedOut } from '../signedOut'
@@ -17,7 +18,9 @@ export function renderPreview(ui: ReactNode, routes: Routes = {}): { api: FakeAp
   const queryClient = createQueryClient({ retry: false })
   const view = render(
     <ServicesProvider api={api} signedOut={signedOut}>
-      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <OpenInAppProvider>{ui}</OpenInAppProvider>
+      </QueryClientProvider>
     </ServicesProvider>,
   )
   return { api, ...view }

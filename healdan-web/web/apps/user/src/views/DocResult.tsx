@@ -4,6 +4,7 @@
 import { useMemo } from 'react'
 import { ApiError } from '@healdan/api'
 import { t, Table } from '@healdan/ui'
+import { useOpenKey } from '../actions/useOpenKey'
 import { DetailsPanel } from '../details/DetailsPanel'
 import { QuickLook } from '../preview/QuickLook'
 import { ReadingPane } from '../preview/ReadingPane'
@@ -64,6 +65,7 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
   const document = useDocument(docNumber)
   const rows = useMemo(() => (document.data ? [rowOf(document.data)] : []), [document.data])
   const preview = usePreviewKey(() => {})
+  const openDocument = useOpenKey(document.data ? [document.data] : [], () => {})
   const columns = useRegionKind({ preview: true, details: true }) === 'preview' ? narrowed(listColumns) : listColumns
   if (document.isError) {
     // The document went away after the lookup found it: the same words as a lookup that found nothing
@@ -86,6 +88,7 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
           // The one row is the selection and stays it: the address is what selects
           selection={new Set(rows.map((row) => row.id))}
           onSelectionChange={() => {}}
+          onOpen={openDocument}
           onPreview={preview}
           empty={t('common.loading')}
         />

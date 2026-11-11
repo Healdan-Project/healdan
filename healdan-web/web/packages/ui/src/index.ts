@@ -10,6 +10,7 @@ export { Table, type TableColumn, type TableProps, type TableRow, type TableSort
 export { CheckGroup, type Choice, type CheckGroupProps } from './components/CheckGroup'
 export { RadioChoices, type RadioChoicesProps } from './components/RadioChoices'
 export { DatePicker, type DatePickerProps } from './components/DatePicker'
+export { CheckField, SelectField, TextField, type CheckFieldProps, type SelectFieldProps, type TextFieldProps } from './components/Fields'
 export { Dialog, type DialogProps } from './components/Dialog'
 export { Overlay, type OverlayProps } from './components/Overlay'
 export { ComboBox, type ComboBoxOption, type ComboBoxProps, type ComboBoxSection } from './components/ComboBox'

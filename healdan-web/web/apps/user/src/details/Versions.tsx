@@ -8,8 +8,21 @@ import styles from './details.module.css'
 
 type S = components['schemas']
 
-/** A document's timeline, newest first as the server gives it. `selected` is the version a # named (`#10388.2`); `onShowMore` is there while more are to load. */
-export function Versions({ versions, selected, onShowMore, loading = false }: { versions: S['VersionView'][]; selected?: string; onShowMore?: () => void; loading?: boolean }) {
+export interface VersionsProps {
+  versions: S['VersionView'][]
+  /** The version a # named (`#10388.2`) */
+  selected?: string
+  /** There while more are to load */
+  onShowMore?: () => void
+  loading?: boolean
+  /** Each row's Preview opens Quick Look on that version, and its Download saves that version's file; both are disabled without `canOpen` (the Download permission) */
+  onPreview?: (version: string) => void
+  onDownload?: (version: string) => void
+  canOpen?: boolean
+}
+
+/** A document's timeline, newest first as the server gives it. */
+export function Versions({ versions, selected, onShowMore, loading = false, onPreview, onDownload, canOpen = true }: VersionsProps) {
   return (
     <Section title={t('details.versions')}>
       {versions.length === 0 ? (
@@ -22,6 +35,20 @@ export function Versions({ versions, selected, onShowMore, loading = false }: { 
               {row.date && <span className={styles.versionMeta}>{formatDateTime(row.date)}</span>}
               {row.by?.name && <span className={styles.versionMeta}>{row.by.name}</span>}
               {row.comment && <span className={styles.versionComment}>{row.comment}</span>}
+              {(onPreview || onDownload) && (
+                <span className={styles.versionActions}>
+                  {onPreview && (
+                    <Button variant="quiet" isDisabled={!canOpen} aria-label={t('details.versionPreview', { version: formatVersion(row.version) })} onPress={() => onPreview(row.version)}>
+                      {t('details.preview')}
+                    </Button>
+                  )}
+                  {onDownload && (
+                    <Button variant="quiet" isDisabled={!canOpen} aria-label={t('details.versionDownload', { version: formatVersion(row.version) })} onPress={() => onDownload(row.version)}>
+                      {t('details.download')}
+                    </Button>
+                  )}
+                </span>
+              )}
             </li>
           ))}
         </ul>

@@ -67,9 +67,9 @@ export function PictureView({ document, version, showActions, source: given }: P
 
   if (picture.isError) {
     const refused = picture.error instanceof ApiError && (picture.error.status === 403 || picture.error.status === 404)
-    return refused ? <NoPreview document={document} showActions={showActions} /> : <ErrorPanel error={picture.error} onRetry={() => void picture.refetch()} />
+    return refused ? <NoPreview document={document} version={version} showActions={showActions} /> : <ErrorPanel error={picture.error} onRetry={() => void picture.refetch()} />
   }
-  if (broken) return <NoPreview document={document} showActions={showActions} />
+  if (broken) return <NoPreview document={document} version={version} showActions={showActions} />
   if (!source) return <p role="status" className={styles.message}>{t('preview.loading')}</p>
   return (
     <div className={styles.scroller}>

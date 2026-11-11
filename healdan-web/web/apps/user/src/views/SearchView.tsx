@@ -5,7 +5,8 @@ import { useNavigate } from '@tanstack/react-router'
 import { useId, useMemo, useRef } from 'react'
 import { t, Table, type TableSort } from '@healdan/ui'
 import { DetailsPanel } from '../details/DetailsPanel'
-import { PreviewButton } from '../preview/PreviewButton'
+import { SelectionActions } from '../actions/SelectionActions'
+import { useOpenKey } from '../actions/useOpenKey'
 import { QuickLook } from '../preview/QuickLook'
 import { ReadingPane } from '../preview/ReadingPane'
 import { documentsOf, usePreviewKey } from '../preview/usePreviewKey'
@@ -57,6 +58,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const columns = useRegionKind({ preview: documents, details: selected !== undefined }) === 'preview' ? narrowed(allColumns) : allColumns
   const hitDocuments = useMemo(() => documentsOf(results.rows), [results.rows])
   const preview = usePreviewKey(changeSelection)
+  const openDocument = useOpenKey(hitDocuments, changeSelection)
   const authors = useAuthorNames(results.rows, facets.data)
 
   if (text === '') {
@@ -77,12 +79,12 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
     void navigate({ to: '/search', search: (prev) => ({ ...prev, sort: column, order: next.direction === 'descending' ? 'desc' : 'asc' }), replace: true })
   }
 
-  // A folder or a matter opens; a document is selected until opening it in its app comes (Tasks 16 and 18).
+  // A folder or a matter opens; a document opens in its app (or downloads, if the helper doesn't open its kind), and is selected
   function open(key: string) {
     const row = rows.find((one) => one.id === key)
     if (row?.item.type === 'folder') void navigate({ to: '/folders/$id', params: { id: String(row.item.id) } })
     else if (row?.item.type === 'matter') void navigate({ to: '/folders/$id', params: { id: String(row.item.folderId) } })
-    else changeSelection(new Set([key]))
+    else openDocument(key)
   }
 
   const selectedRow = selected === undefined ? undefined : results.rows.find((item) => item.type === 'document' && item.docNumber === selected)
@@ -107,7 +109,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               count={count}
               end={documents && <FiltersButton ref={funnel} open={filtersOpen} active={active} onPress={() => (filtersOpen ? region.close() : region.open('filters'))} />}
             >
-              {documents && <PreviewButton />}
+              {documents && <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} />}
             </Toolbar>
             {documents && <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />}
             <Table

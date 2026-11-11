@@ -5,6 +5,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useId, useMemo, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { Icon, t, Table, type TableColumn, type TableRow } from '@healdan/ui'
+import { useOpenKey } from '../actions/useOpenKey'
 import { DetailsPanel } from '../details/DetailsPanel'
 import { QuickLook } from '../preview/QuickLook'
 import { ReadingPane } from '../preview/ReadingPane'
@@ -84,6 +85,7 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
   const columns = useRegionKind({ preview: true, details: selected !== undefined }) === 'preview' ? narrowed(allColumns) : allColumns
   const row = selected === undefined ? undefined : items?.find((doc) => doc.docNumber === selected)
   const preview = usePreviewKey(change)
+  const openDocument = useOpenKey(items ?? [], change)
   return (
     <RecentList
       kind={kind}
@@ -91,8 +93,8 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
       rows={rows}
       query={recent}
       selection={{ keys: selection, change }}
-      // A document is selected until opening it in its app comes (Tasks 16 and 18)
-      onOpen={(key) => change(new Set([key]))}
+      // A document opens in its app, or downloads if the helper doesn't open its kind, and is selected
+      onOpen={openDocument}
       onPreview={preview}
       region={
         <>

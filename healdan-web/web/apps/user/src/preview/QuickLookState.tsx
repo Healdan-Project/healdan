@@ -7,11 +7,13 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 export interface QuickLookState {
   /** The document Quick Look shows, by its number; undefined while it's closed */
   shown: number | undefined
+  /** The version Quick Look shows of it, when it was opened on one from the details' Versions; undefined for the current file */
+  version: string | undefined
   /** The document it was opened on, which has the focus back if it still does when it closes */
   from: number | undefined
-  /** Opens Quick Look on a document: Space on its row, or a Preview button */
-  open: (docNumber: number) => void
-  /** Moves to another document of the list, as ‹ and › do */
+  /** Opens Quick Look on a document, or on one of its versions: Space on its row, or a Preview button */
+  open: (docNumber: number, version?: string) => void
+  /** Moves to another document of the list, as ‹ and › do; a version is left behind, the new document's current file shows */
   go: (docNumber: number) => void
   close: () => void
 }
@@ -30,7 +32,7 @@ function listOf(location: { pathname: string; searchStr: string }): string {
 
 /** Whether Quick Look is open and on which document, for the views' lists and the buttons that open it. */
 export function QuickLookProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<{ shown: number; from: number; list: string }>()
+  const [state, setState] = useState<{ shown: number; version?: string; from: number; list: string }>()
   const list = useRouterState({ select: (router) => listOf(router.location) })
   // Back, a link or a new search while it's open leaves the list it was opened from: it closes, and isn't left set to
   // open over the next list that mounts. (Adjusting state while rendering is React's way to follow a changed value.)
@@ -38,9 +40,10 @@ export function QuickLookProvider({ children }: { children: ReactNode }) {
   const value = useMemo<QuickLookState>(
     () => ({
       shown: state?.shown,
+      version: state?.version,
       from: state?.from,
-      open: (docNumber) => setState({ shown: docNumber, from: docNumber, list }),
-      go: (docNumber) => setState((now) => now && { ...now, shown: docNumber }),
+      open: (docNumber, version) => setState({ shown: docNumber, version, from: docNumber, list }),
+      go: (docNumber) => setState((now) => now && { ...now, shown: docNumber, version: undefined }),
       close: () => setState(undefined),
     }),
     [state, list],

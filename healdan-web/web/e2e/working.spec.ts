@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { readFile } from 'node:fs/promises'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { PASSWORD, authorized, deviceToken, fileDocument, matterFolders, minimalPdf, signIn } from './helpers'
 
@@ -17,6 +18,10 @@ const TEXT_NAME = `Schedule-${RUN}.txt`
 // Hosts under .invalid never resolve: the test answers for them, and counts what reaches them
 const TRACKER = 'https://tracker.invalid/pixel.gif'
 const LINK = `https://link.invalid/report-${RUN}`
+// Working with a document: downloaded, checked out and released, and its Comments edited. A text file, so the download's
+// bytes can be compared with what was filed
+const WORK_NAME = `Working-${RUN}.txt`
+const WORK_TEXT = `The text of ${RUN}`
 
 /** An email with an HTML body, a tracking picture and a link, and a PDF attached, as an .eml */
 function trackingEmail(): Buffer {
@@ -66,6 +71,7 @@ test.beforeAll(async ({ playwright }, testInfo) => {
   documentsFolder = (await matterFolders(api, token)).documents
   await fileDocument(api, token, documentsFolder, PDF_NAME, 'application/pdf', minimalPdf(`Quick Look ${RUN}`))
   await fileDocument(api, token, documentsFolder, `${SUBJECT}.eml`, 'message/rfc822', trackingEmail())
+  await fileDocument(api, token, documentsFolder, WORK_NAME, 'text/plain', Buffer.from(WORK_TEXT))
 })
 
 test.afterAll(async () => {
@@ -196,4 +202,58 @@ test('Quick Look shows an email as a message, with the sender\'s picture blocked
   await dialog.getByRole('button', { name: `Save to Matter: ${ATTACHMENT_NAME}` }).click()
   await expect(dialog.getByText(/^Saved as # \d+$/)).toBeVisible()
   await expect(dialog.getByRole('button', { name: `Save to Matter: ${ATTACHMENT_NAME}` })).toBeHidden()
+})
+
+/** Signs in, opens the folder and selects the working document, whose details then show */
+async function selectWorkingDocument(page: Page) {
+  await page.goto('/login.jsp')
+  await signIn(page)
+  await expect(page.getByRole('heading', { name: 'Recent Documents' })).toBeVisible()
+  await page.goto(folderPath())
+  const row = main(page).getByRole('row', { name: new RegExp(WORK_NAME.replace('.', '\\.')) })
+  await expect(row).toBeVisible()
+  await row.getByRole('rowheader').click()
+  const details = page.getByRole('region', { name: 'Details' })
+  await expect(details.getByRole('heading', { name: WORK_NAME })).toBeVisible()
+  return details
+}
+
+test('Download saves the file as a plain link, under the document\'s name', async ({ page, browserName }, testInfo) => {
+  const details = await selectWorkingDocument(page)
+  // The web session carries the link: no script reads the bytes, and the browser's own download shows
+  const [download] = await Promise.all([page.waitForEvent('download'), details.getByRole('button', { name: 'Download', exact: true }).click()])
+  expect(download.suggestedFilename()).toBe(WORK_NAME)
+  // WebKit's own copy of a download is gone before Playwright can read it in the container (ENOENT on its artifacts folder, whether
+  // by path() or saveAs()), so only Chromium's bytes are compared with what was filed; both browsers prove the name
+  if (browserName === 'chromium') {
+    const saved = testInfo.outputPath(WORK_NAME)
+    await download.saveAs(saved)
+    expect(await readFile(saved, 'utf8')).toBe(WORK_TEXT)
+  }
+})
+
+test('Check Out holds the document for you, and Release lets it go', async ({ page }) => {
+  const details = await selectWorkingDocument(page)
+  await details.getByRole('button', { name: 'Check Out' }).click()
+  await expect(details.getByText(/^Checked out by you since/)).toBeVisible()
+  await expect(details.getByRole('button', { name: 'Check Out' })).toBeHidden()
+  await expect(details.getByRole('button', { name: 'Check In' })).toBeVisible()
+
+  await details.getByRole('button', { name: 'Release' }).click()
+  await expect(details.getByText(/^Checked out by you since/)).toBeHidden()
+  await expect(details.getByRole('button', { name: 'Check Out' })).toBeVisible()
+})
+
+test('Edit changes a property in place, and the new value is there when it is edited again', async ({ page }) => {
+  const details = await selectWorkingDocument(page)
+  await details.getByRole('button', { name: 'Edit' }).click()
+  const comments = details.getByRole('textbox', { name: 'Comments' })
+  await comments.fill(`Chase on Monday ${RUN}`)
+  await details.getByRole('button', { name: 'Save' }).click()
+  await expect(details.getByRole('button', { name: 'Save' })).toBeHidden()
+
+  await details.getByRole('button', { name: 'Edit' }).click()
+  await expect(details.getByRole('textbox', { name: 'Comments' })).toHaveValue(`Chase on Monday ${RUN}`)
+  await details.getByRole('button', { name: 'Cancel' }).click()
+  await expect(details.getByRole('textbox', { name: 'Comments' })).toBeHidden()
 })

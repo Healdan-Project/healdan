@@ -6,7 +6,27 @@ weight: 3
 You can open a Healdan document in LibreOffice, Word, Excel or PowerPoint from the web page, or from inside the app.
 Either way, a document you can edit opens checked out to you, and one you can't opens as a read-only copy.
 
-## From the Web Page: Open in App
+## From the App: Open
+
+Select one document, then choose **Open** in the toolbar or in its details, or double-click it, or press **Enter**
+on it. The document opens in the app you've chosen for its kind in the helper's Settings (see
+[Opening in Word, Excel and PowerPoint](#opening-in-word-excel-and-powerpoint)), and the helper's menu lists it.
+
+- **A kind the helper doesn't open downloads instead,** such as a picture, an email or a zip file. The kinds it opens
+  are the ones listed under [From the Classic Interface](#from-the-classic-interface-open-in-app).
+- **You need permission to download the document.** Without it, **Open** is greyed out, and double-clicking only
+  selects it.
+- **The first time,** your browser asks whether this page may open Healdan Helper. Allow it, and tick the box to
+  remember, if there is one.
+- **A notice appears:** "If nothing opened, install the Healdan Helper", with a link to
+  [Installing the Healdan Helper](../installing-the-helper/). If the document did open, ignore it. It goes after a
+  few seconds, or when you dismiss it.
+- **Use one address,** as below.
+
+Double-clicking and **Enter** work in every list of documents: a folder, search results, Recent Documents and the
+result of a `#` search.
+
+## From the Classic Interface: Open in App
 
 Select one document, then choose **Open in App** on the toolbar, or right-click it and choose **Open in App**. The
 document opens in the app you've chosen for its kind in the helper's Settings (see
@@ -21,13 +41,13 @@ document opens in the app you've chosen for its kind in the helper's Settings (s
 - **It's on while the document is checked out** too, so you can reopen your own, and others get a read-only copy.
 - **The first time,** your browser asks whether this page may open Healdan Helper. Allow it, and tick the box to
   remember, if there is one.
-- **A notice appears** in the web page: "If nothing opened, install the Healdan Helper", with a link to
+- **A notice appears** in the page: "If nothing opened, install the Healdan Helper", with a link to
   [Installing the Healdan Helper](../installing-the-helper/). If the document did open, ignore it.
 - **Use one address.** The helper opens only documents from the server it's signed in to, so open the web page at
   the address you signed the helper in with. If you sign in to the helper as `docs.example.org`, a web page opened
   as `192.168.1.20:8080` has its links refused, with a notice saying why.
 
-Double-clicking a document in the web page still shows its preview.
+Double-clicking a document in the Classic Interface still shows its preview.
 
 ## From LibreOffice: Open from Healdan
 
@@ -91,7 +111,7 @@ files in them, and in LibreOffice when it doesn't.
   - **Open from Healdan…** in the helper's menu, under Healdan's icon in the menu bar (see
     [The Helper's Menu](../installing-the-helper/#the-helpers-menu)). It shows the same window, and opens the document
     in the app you chose for its kind of file, as Open in App does.
-  - **Open in App** on the web page: see [From the Web Page](#from-the-web-page-open-in-app).
+  - **Open** in the app, or **Open in App** in the Classic Interface: see [From the App](#from-the-app-open).
   - **A new blank document,** then **Open from Healdan** on its Healdan tab. The blank document stays open, so close it
     afterwards.
 - **OpenDocument files** (`.odt`, `.ods`, `.odp` and `.odg` drawings) open in LibreOffice, whatever you've chosen,

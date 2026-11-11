@@ -136,3 +136,50 @@
   outline: var(--hd-focus-outline);
   outline-offset: var(--hd-focus-offset);
 }
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-4);
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+}
+
+.formReadOnly {
+  margin: 0;
+}
+
+.formLabel {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.override {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+  margin: 0;
+}
+
+.overridden {
+  padding: 0 var(--hd-space-3);
+  border-radius: var(--hd-radius-small);
+  background: var(--hd-pill);
+  color: var(--hd-text);
+  font-size: var(--hd-font-size-small);
+}
+
+.formActions {
+  display: flex;
+  gap: var(--hd-space-3);
+}
+
+.versionActions {
+  display: flex;
+  gap: var(--hd-space-2);
+  margin-inline-start: auto;
+}

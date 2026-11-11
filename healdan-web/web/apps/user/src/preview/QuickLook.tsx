@@ -3,7 +3,7 @@
 
 import { useEffect, useRef } from 'react'
 import type { components } from '@healdan/api'
-import { Button, Icon, Overlay, t } from '@healdan/ui'
+import { Button, formatVersion, Icon, Overlay, t } from '@healdan/ui'
 import { OpenDownload } from '../actions/OpenDownload'
 import { useRightRegion } from '../frame/RightRegion'
 import { useDocument } from '../queries'
@@ -53,11 +53,11 @@ function afterFocusRestored(then: () => void) {
  * loaded rows › loads the next page. Space and Esc close it, and focus is back on the row. Nothing behind it moves.
  */
 export function QuickLook(props: QuickLookProps) {
-  const { shown } = useQuickLook()
-  return shown === undefined ? null : <Shown {...props} docNumber={shown} />
+  const { shown, version } = useQuickLook()
+  return shown === undefined ? null : <Shown {...props} docNumber={shown} version={version} />
 }
 
-function Shown({ documents, total, loadMore, docNumber }: QuickLookProps & { docNumber: number }) {
+function Shown({ documents, total, loadMore, docNumber, version }: QuickLookProps & { docNumber: number; version?: string }) {
   const { from, go, close } = useQuickLook()
   const { select } = useSelection()
   const region = useRightRegion()
@@ -120,6 +120,7 @@ function Shown({ documents, total, loadMore, docNumber }: QuickLookProps & { doc
           <span className={styles.meta}>
             {place && <span>{place}</span>}
             <span>{t('preview.number', { n: current.docNumber })}</span>
+            {version && <span>{t('details.version', { version: formatVersion(version) })}</span>}
           </span>
         </div>
       }
@@ -128,11 +129,11 @@ function Shown({ documents, total, loadMore, docNumber }: QuickLookProps & { doc
           <Button variant="quiet" aria-label={t('preview.dock')} onPress={() => leave(true)}>
             <Icon name="dock" size={18} />
           </Button>
-          <OpenDownload />
+          <OpenDownload document={current} version={version} />
         </>
       }
     >
-      <PreviewBody document={current} showActions={false} />
+      <PreviewBody document={current} version={version} showActions={false} />
     </Overlay>
   )
 }

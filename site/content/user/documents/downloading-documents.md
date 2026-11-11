@@ -10,16 +10,28 @@ you do to your copy reaches it. To change a document, check it out, or open it i
 
 You need the Download permission on a document to download it. Without it, **Download** is greyed out.
 
-## One Document
+## One Document in the App
+
+Select the document and choose **Download**, in the toolbar above the list or in its details, or in Quick Look's bar.
+Your browser saves the file under the document's name, as it does for any link to a file. Healdan doesn't open the
+file in the page or keep a copy of it there.
+
+If the file can't be reached right now, because it's in cloud storage or on a share that's down, the browser saves
+Healdan's answer in its place, a small file that says so. Try again in a few minutes.
+
+**Open** downloads too, for a kind of file the helper doesn't open, such as a picture or a zip file. Double-clicking a
+document, or pressing **Enter** on it, does what **Open** does. See [Opening Documents](../../office/opening-documents/).
+
+## One Document in the Classic Interface
 
 Right-click the document and choose **Download**. The download button on the toolbar above the list does the same,
 and so does the **Download** link beside **Permalink** on the document's **Properties** tab.
 
 ## Several Documents
 
-Select them, then right-click one and choose **Download**, or use the toolbar's download button. They come as one
-zip file, named after their folder, such as `export-Correspondence.zip`. A document you can't download is left out
-of it.
+In the Classic Interface, select them, then right-click one and choose **Download**, or use the toolbar's download
+button. They come as one zip file, named after their folder, such as `export-Correspondence.zip`. A document you can't
+download is left out of it. The app downloads one document at a time.
 
 **Download package**, on the [Links](../links-between-documents/) tab's right-click menu, zips a document with the
 documents linked to it.
@@ -31,8 +43,9 @@ permission on the folder: ask your administrator if you need them.
 
 ## An Earlier Version
 
-Open the document's **Versions** tab, right-click the version and choose **Download**, or use the **Download** link
-in its **Permalink** column. See [Versions](../versions/).
+In the app, each version in the document's details has its own **Download**. In the Classic Interface, open the
+document's **Versions** tab, right-click the version and choose **Download**, or use the **Download** link in its
+**Permalink** column. See [Versions](../versions/).
 
 ## A Password-Protected Document
 

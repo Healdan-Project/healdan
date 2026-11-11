@@ -8,14 +8,14 @@ import type { components } from '@healdan/api'
 import styles from './preview.module.css'
 
 /** What a type with no preview shows (spec section 6.4): it says so, with Open and Download. */
-export function NoPreview({ document, message = t('preview.none'), showActions = true }: { document: components['schemas']['DocumentView']; message?: string; showActions?: boolean }) {
+export function NoPreview({ document, message = t('preview.none'), showActions = true, version }: { document: components['schemas']['DocumentView']; message?: string; showActions?: boolean; version?: string }) {
   return (
     <div className={styles.none}>
       <Icon name={fileIcon(document.name)} size={48} />
       <p className={styles.noneMessage}>{message}</p>
       {showActions && (
         <div className={styles.noneActions}>
-          <OpenDownload />
+          <OpenDownload document={document} version={version} />
         </div>
       )}
     </div>

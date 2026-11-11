@@ -120,9 +120,9 @@ export function PdfView({ document, version, showActions, source }: PreviewProps
 
   if (preview.isError) {
     const refused = preview.error instanceof ApiError && (preview.error.code === 'no-preview' || preview.error.status === 403 || preview.error.status === 404)
-    return refused ? <NoPreview document={document} showActions={showActions} /> : <ErrorPanel error={preview.error} onRetry={() => void preview.refetch()} />
+    return refused ? <NoPreview document={document} version={version} showActions={showActions} /> : <ErrorPanel error={preview.error} onRetry={() => void preview.refetch()} />
   }
-  if (failed) return <NoPreview document={document} message={t('preview.failed')} showActions={showActions} />
+  if (failed) return <NoPreview document={document} version={version} message={t('preview.failed')} showActions={showActions} />
   if (preview.data?.kind === 'pending') return <p role="status" className={styles.message}>{t('preview.preparing')}</p>
   if (!file) return <p role="status" className={styles.message}>{t('preview.loading')}</p>
 

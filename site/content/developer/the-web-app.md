@@ -101,9 +101,9 @@ list's row shows at once as the placeholder) and renders the thumbnail, the name
 is an `<img>` on `/api/v1/documents/{n}/thumbnail`, which the web session's cookie goes with, and an icon of the
 file's kind (`fileIcon.ts`) shows when there's none or the person can't open the document. Properties come from the
 list the server gives, by name; an email's From, To, Sent and Received show when any of them has a value, as the
-server fills them from the message and the browser never parses a file. Open, Download and Edit are
-disabled until their tasks; **Preview** opens Quick Look (see Previews, below), and **Copy Link** (`actions/copyLink.ts`) writes `location.origin + '/app/doc/' + n` with the
-Clipboard API and shows a Toast, either way.
+server fills them from the message and the browser never parses a file. **Preview** opens Quick Look (see Previews,
+below), and **Copy Link** (`actions/copyLink.ts`) writes `location.origin + '/app/doc/' + n` with the Clipboard API
+and shows a Toast, either way. The other actions are in "Working with a Document", next.
 
 `/app/doc/10388`, `/app/doc/10388.2` and the other forms of the lookup are `views/DocResult.tsx`: it asks
 `GET /v1/lookup?q=%2310388.2` and shows a list of that one document (`views/listColumns.tsx`, the folder list's
@@ -111,6 +111,33 @@ columns), selected, with its details beside it and the named version marked in V
 number from the address on this route. A `404` shows "No document # 10388 that you can see.", the same for a
 document that isn't there and one that can't be read, and says only the number as typed; a `400` shows the not-found
 view.
+
+## Working with a Document
+
+`actions/` holds what a person does to a document, and every place that offers it goes through it.
+
+- **`launch.ts`** is the one place the page follows an address: it clicks a transient `<a>`, so a `healdan:` link goes
+  to the helper without leaving the page and a file's address downloads under its name. No script reads the bytes, and
+  no blob is made. jsdom can't navigate, so `test/setup.ts` replaces it with a mock for every test, and a test that
+  cares imports `launch` and reads its calls.
+- **Open** (`openInApp.ts`, ported from the old UI's `HealdanOpenInApp` with the same cases in its test) builds
+  `healdan://open/<doc #>?server=<host>` for the kinds the helper opens, and downloads any other. `OpenInAppProvider`,
+  in the frame, shows the notice ("If nothing opened, install the Healdan Helper") and gives `useOpenInApp()` to
+  Open buttons, Quick Look and the lists. Double-click and Enter on a row go through `useOpenKey`, on every list of
+  documents, as Space goes through `usePreviewKey`; a document the person can't download (`canOpen`) is only selected.
+- **Download** (`download.ts`) is `launch` on `GET /v1/documents/{n}/content`, with `?version=` for a version. The web
+  session carries it, as it does for an email's attachment chip. A refusal the server makes is a file the browser
+  saves, since no script sees the answer; `canOpen` disables the button for the usual one.
+- **Check Out, Check In and Release** (`checkout.ts`, `useCheckout.ts`, `CheckoutControls.tsx`) follow the document's
+  `hold`. The web session is no device, so the app never takes over a check-out a device holds (`409
+  held-elsewhere`): it says who has it and since when, and that it's released on that computer or in the Classic
+  Interface. A check-in from the app is a file picked into `POST /v1/documents/{n}/versions` as a snapshot, with
+  `ifHeld` and `ifVersion`. Every outcome asks for the document and the lists again.
+- **Editing properties** is `details/PropertiesForm.tsx`, made from `GET /v1/documents/{n}/properties` and saved with
+  `PATCH`, sending only the fields that changed. `frame/errors.ts`'s `fieldErrors` gives each field a 422 names its
+  message from the catalogue (`fields.<code>`). The API doesn't say whether a `local` value overrides an inherited one,
+  so the form calls a local value **Overridden** unless the property belongs to one document (Author, Typist,
+  Comments, Legacy doc #); **Follow Folder** sends `null`.
 
 ## The Search Box and Search Results
 

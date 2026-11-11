@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { launch } from '../actions/launch'
 import { expectNoAxeViolations } from '../test/axe'
 import { detailsRoutes } from '../test/details'
 import { children, document, folder, type Routes } from '../test/fakeApi'
@@ -12,7 +14,10 @@ import { renderApp } from '../test/renderApp'
 
 vi.mock('./pdfEngine', () => import('../test/fakePdf'))
 
-beforeEach(resetPdf)
+beforeEach(() => {
+  resetPdf()
+  vi.mocked(launch).mockClear()
+})
 
 // Seven documents in a folder, # 10391 the fourth
 const docs = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf'].map((name, i) => document({ docNumber: 10388 + i, name: `${name}.pdf` }))
@@ -141,11 +146,27 @@ describe('QuickLook', () => {
     await waitFor(() => expect(echo.contains(window.document.activeElement)).toBe(true))
   })
 
-  it('has Open and Download with the details panel’s buttons, which wait for the task that builds them', async () => {
+  it('has Open and Download, which work as the details panel\'s do', async () => {
     await renderApp('/folders/7?sel=10391', routes())
     await spaceOn('Delta.pdf')
     const dialog = await quickLook('Delta.pdf')
-    for (const name of ['Open', 'Download']) expect((within(dialog).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true)
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Open' }))
+    expect(launch).toHaveBeenLastCalledWith(`healdan://open/10391?server=${window.location.host}`)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Download' }))
+    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10391/content', 'Delta.pdf')
+  })
+
+  it('previews a version from the details, and downloads that version; Open is for the current file only', async () => {
+    const { api } = await renderApp('/folders/7?sel=10391', routes())
+    await userEvent.click(await screen.findByRole('button', { name: 'Preview Version 2' }))
+
+    const dialog = await quickLook('Delta.pdf')
+    expect(within(dialog).getByText('Version 2')).toBeTruthy()
+    await waitFor(() => expect(api.callsTo('GET /v1/documents/10391/preview').map((call) => call.query)).toContainEqual({ version: '2.0' }))
+    expect((within(dialog).getByRole('button', { name: 'Open' }) as HTMLButtonElement).disabled).toBe(true)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Download' }))
+    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10391/content?version=2.0', 'Delta.pdf')
   })
 
   it('docks as the reading pane in the right region', async () => {

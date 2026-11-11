@@ -3,8 +3,12 @@
 
 import { cleanup } from '@testing-library/react'
 import { clearToasts, setLabels } from '@healdan/ui'
-import { afterEach } from 'vitest'
+import { afterEach, vi } from 'vitest'
 import { installIntersectionObserver } from './intersection'
+
+// The page follows an address (a healdan: link, a download) in one place, which jsdom can't do; a test that cares imports
+// `launch` from actions/launch and reads what it was asked to follow.
+vi.mock('../actions/launch', () => ({ launch: vi.fn() }))
 
 installIntersectionObserver()
 // The router scrolls to the top on each address, which jsdom doesn't do and says so on every test.
