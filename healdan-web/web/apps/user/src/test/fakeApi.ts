@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { ApiError, type Api, type components } from '@healdan/api'
+import type { PageOf } from '../pages'
 
 type S = components['schemas']
 
@@ -51,6 +52,7 @@ export function document(over: Partial<S['DocumentView']> = {}): S['DocumentView
     reference: '10388',
     folder: { id: 111, name: 'Correspondence', kind: 'folder' },
     matter: { id: 11, display: '1001.1 – Charter Dispute', client: client() },
+    author: { username: 'jclarke', displayName: 'Jamie Clarke' },
     dateFiled: '2026-09-29T09:40:00Z',
     lastModified: '2026-09-29T09:40:00Z',
     hold: null,
@@ -66,6 +68,14 @@ export function favorite(item: S['FolderView'] | S['DocumentView'], id = 900): S
 
 export function page<T>(items: T[]): { items: T[]; offset: number; limit: number; total: number } {
   return { items, offset: 0, limit: items.length, total: items.length }
+}
+
+type Child = S['FolderView'] | S['DocumentView']
+
+/** A folder's children as GET /folders/{id}/children answers: `documents` counts the documents among them. */
+export function children(items: Child[], over: { offset?: number; limit?: number; total?: number; documents?: number } = {}) {
+  const documents = items.filter((item) => item.type === 'document').length
+  return { items, offset: 0, limit: 100, total: items.length, documents, ...over } satisfies PageOf<Child> & { documents: number }
 }
 
 export const me: S['UserView'] = {
@@ -107,7 +117,7 @@ export function defaultRoutes(): Routes {
       favorite(document({ docNumber: 10500, name: 'Cap Table.xlsx' }), 901),
       favorite(folder({ id: 130, name: 'Due Diligence' }), 902),
     ]),
-    'GET /v1/folders/*/children': page([
+    'GET /v1/folders/*/children': children([
       folder({ id: 111, name: 'Correspondence' }),
       folder({ id: 112, name: 'My Recent Docs Here', kind: 'searchFolder' }),
     ]),

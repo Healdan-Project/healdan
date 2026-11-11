@@ -22,3 +22,8 @@ export function formatDateTime(iso: string): string {
   if (Number.isNaN(date.getTime())) return ''
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
+
+/** Healdan's numbering: 2.0 is version 2, and 2.1 a snapshot on its timeline. */
+export function formatVersion(version: string): string {
+  return version.endsWith('.0') ? version.slice(0, -2) : version
+}

@@ -13,8 +13,20 @@
   margin-bottom: var(--hd-space-4);
 }
 
-.heading {
+.headingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin: var(--hd-space-4) var(--hd-space-3) var(--hd-space-2);
+}
+
+.headingRow > button {
+  min-height: 20px;
+  color: var(--hd-text-secondary);
+}
+
+.heading {
+  margin: 0;
   color: var(--hd-text-secondary);
   font-size: 11px;
   font-weight: var(--hd-weight-bold);

@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.searchengine.Hit;
 import com.logicaldoc.core.searchengine.Search;
 import com.logicaldoc.core.searchengine.SearchException;
@@ -18,6 +19,7 @@ import com.logicaldoc.core.searchengine.SearchOptions;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.api.model.FacetsView;
 import com.logicaldoc.healdan.api.model.SearchPage;
+import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.listing.FolderListing;
 import com.logicaldoc.healdan.listing.ListedPage;
 import com.logicaldoc.healdan.listing.ListingQuery;
@@ -105,20 +107,26 @@ final class DocumentSearch {
 			User user, ListingQuery query, FacetsView counts) throws PersistenceException {
 		ListedPage listed = FolderListing.get().sortedPage(readable, checks.reads(),
 				query.page(paging.offset(), paging.limit()));
-		List<Object> items = new ArrayList<>();
-		for (Long id : listed.docIds())
-			items.add(ApiViews.document(checks.document(id), user));
+		List<Object> items = views(listed.docIds(), checks, user);
 		return new SearchPage(List.copyOf(items), paging.offset(), paging.limit(), complete ? listed.total() : null,
 				complete ? null : listed.total(), counts);
+	}
+
+	/** The page's documents' views, their Authors read in one go */
+	private static List<Object> views(List<Long> ids, HitChecks checks, User user) throws PersistenceException {
+		List<Document> documents = ids.stream().map(checks::document).toList();
+		Map<Long, Author> authors = ApiViews.authors(documents);
+		List<Object> items = new ArrayList<>();
+		for (Document d : documents)
+			items.add(ApiViews.document(d, user, authors));
+		return items;
 	}
 
 	private static SearchPage page(List<Long> stable, int passing, boolean complete, Paging paging,
 			HitChecks checks, User user, FacetsView counts) throws PersistenceException {
 		int from = (int) Math.min(paging.offset(), stable.size());
 		int to = (int) Math.min((long) paging.offset() + paging.limit(), stable.size());
-		List<Object> items = new ArrayList<>();
-		for (Long id : stable.subList(from, to))
-			items.add(ApiViews.document(checks.document(id), user));
+		List<Object> items = views(stable.subList(from, to), checks, user);
 		// Every hit read that passes counts toward the floor
 		return new SearchPage(List.copyOf(items), paging.offset(), paging.limit(), complete ? (long) passing : null,
 				complete ? null : (long) passing, counts);

@@ -24,11 +24,17 @@ export function t(key: StringKey, vars: Vars = {}): string {
 }
 
 const rules = new Intl.PluralRules('en-US')
+const counts = new Intl.NumberFormat('en-US')
 
+/**
+ * The form for the count, as {n}. The count and any other number in vars are counts, so they're grouped as US English
+ * groups them (1,234); t() leaves its numbers alone, as a doc # is never grouped.
+ */
 export function plural(key: PluralKey, count: number, vars: Vars = {}): string {
   const forms = enUSPlurals[key]
   const form = rules.select(count) === 'one' ? forms.one : forms.other
-  return fill(form, { ...vars, n: count })
+  const grouped = Object.fromEntries(Object.entries({ ...vars, n: count }).map(([name, value]) => [name, typeof value === 'number' ? counts.format(value) : value]))
+  return fill(form, grouped)
 }
 
 export type { PluralKey, StringKey }

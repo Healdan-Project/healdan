@@ -15,9 +15,10 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * @param offset how many items come before them
  * @param limit the most items a page holds
  * @param total how many items there are
+ * @param documents how many of them are documents
  * @param facets the counts asked for with {@code facets=}; left out when none
  *        were
  */
-public record FolderChildPage(List<Object> items, int offset, int limit, Long total,
+public record FolderChildPage(List<Object> items, int offset, int limit, Long total, long documents,
 		@JsonInclude(JsonInclude.Include.NON_NULL) FacetsView facets) {
 }

@@ -12,7 +12,11 @@
   grid-column: 1 / -1;
 }
 
+/* A column, so a view can fill what the banner leaves (a folder's list scrolls inside itself), and any other scrolls. */
 .main {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow: auto;
 }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { describe, expect, it } from 'vitest'
-import { formatDate, formatDateTime } from './format'
+import { formatDate, formatDateTime, formatVersion } from './format'
 
 describe('formatDate', () => {
   it("shows today's time", () => {
@@ -31,5 +31,15 @@ describe('formatDate', () => {
       expect(formatDate(bad)).toBe('')
       expect(formatDateTime(bad)).toBe('')
     }
+  })
+})
+
+describe('formatVersion', () => {
+  it('writes a version as Healdan numbers it: a whole version alone, a snapshot with its minor number', () => {
+    expect(formatVersion('3.0')).toBe('3')
+    expect(formatVersion('1.0')).toBe('1')
+    expect(formatVersion('2.1')).toBe('2.1')
+    expect(formatVersion('10.0')).toBe('10')
+    expect(formatVersion('10.10')).toBe('10.10')
   })
 })

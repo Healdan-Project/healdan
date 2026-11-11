@@ -17,6 +17,8 @@ export interface TreeNode {
   expandable?: boolean
   /** Undefined until they are loaded: an expanded node without them shows Loading. */
   children?: TreeNode[]
+  /** A control at the row's end, such as a Menu of what can be done with it */
+  menu?: ReactNode
 }
 
 export interface TreeProps {
@@ -60,6 +62,7 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, ...
                 <span className={styles.spacer} />
               )}
               {node.label}
+              {node.menu && <span className={styles.menu}>{node.menu}</span>}
             </span>
           )}
         </TreeItemContent>

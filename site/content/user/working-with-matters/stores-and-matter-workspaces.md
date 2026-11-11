@@ -8,7 +8,9 @@ Everything in Healdan lives in a **matter**, and every matter lives in a **Store
 ## Stores
 
 A Store is a top-level container: Personal and Client Work, say, or one per region. Your administrator creates the
-Stores and decides who can see each one. Stores show at the top of the folder tree.
+Stores and decides who can see each one. You don't open a Store to look for a matter: you reach matters through
+[My Matters and Recent Matters](../../finding-documents/my-matters-and-recent-matters/). The Classic Interface's
+folder tree still shows the Stores at its top.
 
 ## Matters
 
@@ -24,6 +26,30 @@ Stores and decides who can see each one. Stores show at the top of the folder tr
   Below that, you can create folders wherever your permissions allow.
 - **A workspace can't be renamed directly.** Its name follows the matter's, which an admin edits.
 
+## Opening a Matter
+
+Click a matter in the left pane and the main area shows its top level: its folders and search folders, by name, then
+any documents an administrator put there before Healdan kept documents out of it. Open a folder from the list or the
+tree, and the main area shows the folder the same way.
+
+- **The breadcrumb** at the top says where you are: the client, the matter as `998.1 – Firm Policies`, then each folder
+  down to this one. Click the matter or a folder in it to go there.
+- **The star** beside a folder's name adds the folder to **My Favorites** in the left pane, and takes it off again.
+  A matter's top level has no star: add the matter to [My Matters](../../finding-documents/my-matters-and-recent-matters/)
+  instead.
+- **The count** above the list says how many documents the folder holds, such as "7 documents". It counts every
+  document you can read, however many the list has shown so far.
+- **The list** shows the folder's own folders first, by name, then its documents, with their **Title** (the file
+  name), **Doc #**, **Version**, **Author** and **Edit Date**. A whole version shows as its number, such as 3, and a
+  snapshot as 3.1. A long list shows 100 documents at a time and brings in the next 100 as you scroll near its end.
+- **Sorting.** The documents come by title to begin with. Click a column's heading to sort by it, and click it again
+  to sort the other way. The folders stay first, by name.
+- **Selecting.** Click a document to select it, and Shift-click or ⌘-click (Ctrl-click on Windows) to select more.
+  The up and down arrow keys move the selection. Click a folder, or press Enter on it, to open it.
+
+The page's address keeps the sort and the selected document, so the link you copy, Back and Reload show the folder
+the same way. A document you can't read never shows, in the list or in the count.
+
 ## Permissions
 
 A matter's workspace decides who can see the matter. A folder inside it can be more restricted than the workspace,
@@ -32,7 +58,7 @@ doesn't. A single document can be shared more widely: see [Document Permissions]
 
 ## Words That Mean Something Else in LogicalDOC
 
-Healdan's interface is LogicalDOC's, so some of its screens use LogicalDOC's words:
+The Classic Interface is LogicalDOC's screens, so some of them use LogicalDOC's words:
 
 | Healdan says | LogicalDOC's screens say |
 |---|---|

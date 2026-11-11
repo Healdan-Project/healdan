@@ -4,10 +4,12 @@
 import { createRootRoute, createRoute, createRouter, type RouterHistory } from '@tanstack/react-router'
 import { t } from '@healdan/ui'
 import { Frame } from './frame/Frame'
+import { FolderView } from './views/FolderView'
 import { NotFound } from './views/NotFound'
 import { NotYet } from './views/NotYet'
 import { RecentDocuments } from './views/RecentDocuments'
 import { RecentKindView } from './views/RecentKind'
+import { isSortColumn, type ListingOrder, type SortColumn } from './views/useListing'
 
 // Addresses carry plain strings (?sel=10388, not ?sel="10388"), which the default JSON-aware search handling would quote.
 function parseSearch(search: string): Record<string, string> {
@@ -44,10 +46,21 @@ const recentRoute = createRoute({
   },
 })
 
+// A folder keeps its sort in the address, as Back and a pasted link should show it the same way.
 const foldersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'folders/$id',
-  component: () => <NotYet title={t('notYet.folder')} />,
+  validateSearch: (search: Record<string, unknown>): { sort?: SortColumn; order?: ListingOrder } => ({
+    sort: isSortColumn(search.sort) ? search.sort : undefined,
+    order: search.order === 'asc' || search.order === 'desc' ? search.order : undefined,
+  }),
+  component: function FolderRoute() {
+    const { id } = foldersRoute.useParams()
+    const { sort, order } = foldersRoute.useSearch()
+    if (!/^\d{1,18}$/.test(id)) return <NotFound />
+    // A view of its own for each folder, so nothing chosen in one is carried to the next
+    return <FolderView key={id} folderId={Number(id)} sort={sort} order={order} />
+  },
 })
 
 const searchRoute = createRoute({
@@ -73,4 +86,11 @@ const routeTree = rootRoute.addChildren([indexRoute, recentRoute, foldersRoute, 
 // The app lives under /app, served by AppServlet. Only the root context is supported in M6.
 export function createAppRouter(history?: RouterHistory) {
   return createRouter({ routeTree, basepath: '/app', history, parseSearch, stringifySearch })
+}
+
+// Links, navigate() and the search hooks are typed from the routes above.
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: ReturnType<typeof createAppRouter>
+  }
 }

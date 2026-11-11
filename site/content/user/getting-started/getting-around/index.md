@@ -20,7 +20,8 @@ The left pane scrolls on its own when it's longer than the window. From the top 
 - **Recent:** **Documents** is your recent documents, newest first, and is the page you start on.
 - **Recent Matters:** the matters you've worked in lately, each with its client beside it in smaller, paler type.
 - **My Matters:** the matters you've chosen to keep at hand, as a tree. Open a matter to see its folders and search
-  folders, and open a folder to see its own folders. A search folder has its own icon.
+  folders, and open a folder to see its own folders. A search folder has its own icon. The tree opens to the folder
+  you're in, and **+** beside the heading adds the matter you're in.
 - **My Favorites:** documents and folders you've added as favorites.
 
 [My Matters and Recent Matters](../../finding-documents/my-matters-and-recent-matters/) explains the first two.
@@ -33,10 +34,14 @@ When you sign in, the main area shows **Recent Documents**: the documents you fi
 downloaded lately, newest first. Click one to select it. Its doc # goes into the page's address, so the link you
 copy takes someone to the same place, and Back and Reload keep it.
 
+Open a matter or a folder from the left pane, and the main area lists what's in it: see [Opening a
+Matter](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matter).
+
 ## The Keyboard
 
 In the left pane's tree, the up and down arrow keys move between rows, the right arrow opens a matter or folder, the
-left arrow closes it, and Enter opens the row. Esc closes a menu.
+left arrow closes it, and Enter opens the row. In a folder's list, the up and down arrow keys move the selection, and
+Enter opens a folder. Esc closes a menu.
 
 ## When Something Goes Wrong
 

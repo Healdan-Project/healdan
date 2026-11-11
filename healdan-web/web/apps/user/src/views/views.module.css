@@ -64,3 +64,89 @@
 .empty {
   color: var(--hd-text-secondary);
 }
+
+/* A folder fills the main area, so its list has the height left to scroll in (the Table virtualises its rows). */
+.folder {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-bottom: 0;
+}
+
+.breadcrumb ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0 0 var(--hd-space-2);
+  padding: 0;
+  list-style: none;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.breadcrumb li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  margin-inline-end: var(--hd-space-2);
+}
+
+.breadcrumb a {
+  border-radius: var(--hd-radius-small);
+  color: var(--hd-text-secondary);
+  text-decoration: none;
+}
+
+.breadcrumb a:hover {
+  color: var(--hd-text);
+  text-decoration: underline;
+}
+
+.breadcrumb a:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
+.breadcrumb .here {
+  color: var(--hd-text);
+  font-weight: var(--hd-weight-medium);
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+  margin-bottom: var(--hd-space-3);
+}
+
+.heading .title {
+  margin: 0;
+}
+
+.star {
+  display: inline-flex;
+  color: var(--hd-text-secondary);
+}
+
+/* The helper's star colour (its polish spec); the filled shape and the button's name say it's a favorite as well. */
+.starred {
+  display: inline-flex;
+  color: var(--hd-star);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  min-height: 28px;
+  padding-bottom: var(--hd-space-3);
+  border-bottom: 1px solid var(--hd-line);
+}
+
+.count {
+  margin-inline-start: auto;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  white-space: nowrap;
+}

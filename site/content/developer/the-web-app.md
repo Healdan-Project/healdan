@@ -50,6 +50,23 @@ the Classic Interface, are on the stack's address.
    address and answers from a small fake API, and `expectNoAxeViolations`. Add what the fake API doesn't answer to
    `test/fakeApi.ts`, typed from the contract.
 
+The router's types are registered (`router.tsx`), so `Link`, `navigate()` and the search hooks check each address's
+parameters. Build an API path from data with `apiPath`, from `@healdan/api`, which encodes each value as one
+segment: `` apiPath`/v1/folders/${id}/children` ``.
+
+## Lists
+
+A list of documents is `@healdan/ui`'s `Table`: React Aria's Table, virtualised so only the rows on screen are drawn,
+with sortable headings and single or multiple selection. It passes Enter (or a double-click) out as `onOpen`, Space as
+`onPreview`, F2 as `onRename` and Delete as `onDelete`, for the view to act on; a row whose `selectable` is false,
+such as a folder among documents, opens on a click instead. Give it `loadMore` and `total`, and it calls `loadMore`
+when the end of the loaded rows comes into view while fewer than `total` are loaded. A folder's list takes its rows
+from `views/useListing.ts`, TanStack Query's infinite query over `GET /folders/{id}/children`, 100 at a time.
+
+The virtualiser places the rows itself, so the Table needs a height: it fills a flex column, as the folder view's is.
+jsdom has no IntersectionObserver, which notices the end of a list, so the tests' setup installs one that sees
+nothing until a test calls `bringObservedIntoView()` from `test/intersection.ts`, as scrolling to the end would.
+
 ## The Catalogue
 
 Every word the app shows is in one typed catalogue, `packages/ui/src/strings/en-US.ts`, and a view gets it with

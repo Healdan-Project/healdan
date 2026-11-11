@@ -9,7 +9,7 @@ import {
   Popover,
   type MenuItemProps as AriaMenuItemProps,
 } from 'react-aria-components'
-import { Button } from './Button'
+import { Button, type ButtonProps } from './Button'
 import styles from './Menu.module.css'
 
 export interface MenuProps {
@@ -17,6 +17,8 @@ export interface MenuProps {
   label: ReactNode
   /** The button's accessible name, when its label is only an icon. */
   'aria-label'?: string
+  /** The button's face (Button's variants) */
+  variant?: ButtonProps['variant']
   children: ReactNode
 }
 

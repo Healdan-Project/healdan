@@ -27,6 +27,14 @@ function queryString(query?: Query): string {
   return text ? `?${text}` : ''
 }
 
+/**
+ * A path with each value encoded as one segment, so an id from data can never add a segment or a query:
+ * apiPath`/v1/folders/${id}/children`.
+ */
+export function apiPath(parts: TemplateStringsArray, ...values: (string | number)[]): string {
+  return parts.reduce((path, part, i) => path + part + (i < values.length ? encodeURIComponent(String(values[i])) : ''), '')
+}
+
 export function createApi(options: ApiOptions = {}): Api {
   const base = options.base ?? '/api'
   // A burst of 401s calls onSignedOut once: the flag is set on the first and

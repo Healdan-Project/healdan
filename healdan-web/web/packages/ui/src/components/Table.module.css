@@ -1,0 +1,129 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The virtualiser places each row and cell itself, so the list needs a height of its own: it fills what its parent
+   leaves it, and scrolls inside. Each header, row and cell sits in a box the virtualiser sizes, which it fills. */
+.frame {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.table {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+  color: var(--hd-text);
+}
+
+.column {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 0 var(--hd-space-4);
+  border-bottom: 1px solid var(--hd-line);
+  background: var(--hd-window);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-medium);
+  text-align: start;
+  white-space: nowrap;
+  outline: none;
+  cursor: default;
+}
+
+.column[data-sort-direction] {
+  color: var(--hd-text);
+}
+
+.column[data-hovered][data-allows-sorting] {
+  color: var(--hd-text);
+}
+
+.heading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.end {
+  justify-content: flex-end;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.row {
+  box-sizing: border-box;
+  height: 100%;
+  border-bottom: 1px solid var(--hd-line);
+  color: var(--hd-text);
+  outline: none;
+  cursor: default;
+}
+
+.row[data-hovered] {
+  background: var(--hd-row-alt);
+}
+
+/* Selected, while the list has focus: the accent, with the text and icons on it in its own colour. */
+.table:focus-within .row[data-selected] {
+  background: var(--hd-accent-fill);
+  color: var(--hd-accent-on-fill);
+}
+
+/* Selected, while the focus is elsewhere: Inactive selection holds --hd-text only (tokens.css). */
+.row[data-selected] {
+  background: var(--hd-selection-inactive);
+  color: var(--hd-text);
+}
+
+.cell {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+  box-sizing: border-box;
+  height: 100%;
+  min-width: 0;
+  padding: 0 var(--hd-space-4);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  outline: none;
+}
+
+.cell svg {
+  flex: none;
+  color: var(--hd-text-secondary);
+}
+
+.row[data-selected] .cell svg {
+  color: inherit;
+}
+
+/* Rows touch each other and the edges of the box they scroll in, where an outline set off outside would be cut off, so
+   their ring is the inset one (tokens.css). */
+.row[data-focus-visible],
+.cell[data-focus-visible],
+.column[data-focus-visible] {
+  box-shadow: var(--hd-focus-inset);
+}
+
+.empty {
+  padding: var(--hd-space-5) var(--hd-space-4);
+  color: var(--hd-text-secondary);
+}
+
+.loader {
+  display: flex;
+  box-sizing: border-box;
+  height: 100%;
+  align-items: center;
+  padding: 0 var(--hd-space-4);
+  color: var(--hd-text-secondary);
+}

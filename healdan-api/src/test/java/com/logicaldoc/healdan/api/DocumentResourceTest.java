@@ -124,6 +124,9 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertTrue(doc.path("dateFiled").textValue(), doc.path("dateFiled").textValue().endsWith("Z"));
 		assertTrue(doc.path("lastModified").textValue().endsWith("Z"));
 		assertTrue(doc.path("hold").toString(), doc.path("hold").isNull());
+		// The Author is the uploader until someone says otherwise
+		assertEquals("boss", doc.path("author").path("username").textValue());
+		assertEquals("boss boss", doc.path("author").path("displayName").textValue());
 		assertTrue(doc.path("canEdit").booleanValue());
 		assertTrue(doc.path("canOpen").booleanValue());
 

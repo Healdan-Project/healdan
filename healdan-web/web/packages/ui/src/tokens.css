@@ -29,6 +29,9 @@
      fill alike (the gap is the surface; the edge is 5.3:1 or better on every surface), plus the helper's soft ring. */
   --hd-focus-outline: 2px solid var(--hd-focus-edge);
   --hd-focus-offset: 2px;
+  /* For what can't be set off, such as a list's rows, which touch: the same edge inside it, then a gap of the surface,
+     so it shows on a selected row's accent fill and on the rows around it alike. */
+  --hd-focus-inset: inset 0 0 0 2px var(--hd-focus-edge), inset 0 0 0 4px var(--hd-window);
 
   --hd-field: #ffffff;
   --hd-field-line: #c7c7cc;

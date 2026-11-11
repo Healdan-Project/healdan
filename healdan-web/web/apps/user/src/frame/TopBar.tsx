@@ -19,8 +19,8 @@ const scopeIcons: Record<RecentKind, IconName> = {
 
 // The Recent entry that is open, or the scope in a search's address, sets the scope the next search runs in.
 function useRouteScope(): RecentKind | undefined {
-  const { kind } = useParams({ strict: false }) as { kind?: string }
-  const { scope } = useSearch({ strict: false }) as { scope?: string }
+  const { kind } = useParams({ strict: false })
+  const { scope } = useSearch({ strict: false })
   if (isRecentKind(kind)) return kind
   return isRecentKind(scope) ? scope : undefined
 }
@@ -55,7 +55,7 @@ export function TopBar() {
     event.preventDefault()
     // A blank search is refused by the server, so the box just stays.
     if (query.trim() === '') return
-    void navigate({ to: '/search', search: { scope, q: query } as never })
+    void navigate({ to: '/search', search: { scope, q: query } })
   }
 
   const scopeName = t(`recent.${scope}`)

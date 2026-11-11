@@ -33,6 +33,7 @@ import com.logicaldoc.healdan.api.model.FolderChildPage;
 import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.api.model.NewFolder;
 import com.logicaldoc.healdan.api.model.Page;
+import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.listing.Facets;
 import com.logicaldoc.healdan.listing.FolderListing;
 import com.logicaldoc.healdan.listing.ListedPage;
@@ -207,7 +208,7 @@ public class FolderResource {
 
 			if ("searchFolder".equals(view.kind())) {
 				if (filters.foldersOnly())
-					return new FolderChildPage(List.of(), paging.offset(), paging.limit(), 0L, null);
+					return new FolderChildPage(List.of(), paging.offset(), paging.limit(), 0L, 0, null);
 				return searchFolderChildren(id, caller, filters, paging);
 			}
 
@@ -218,7 +219,7 @@ public class FolderResource {
 				List<Object> items = new ArrayList<>();
 				for (Folder f : slice.items())
 					items.add(ApiViews.subfolder(f, view, caller));
-				return new FolderChildPage(items, slice.offset(), slice.limit(), slice.total(), null);
+				return new FolderChildPage(items, slice.offset(), slice.limit(), slice.total(), 0, null);
 			}
 
 			// The subfolders come first, then the documents, each page taking where the last left off
@@ -230,13 +231,15 @@ public class FolderResource {
 			int documentOffset = Math.max(0, paging.offset() - subfolders.size());
 			ListedPage listed = FolderListing.get().page(folder, caller,
 					query.page(documentOffset, paging.limit() - items.size()));
-			for (Document d : documents(listed.docIds()))
-				items.add(ApiViews.document(d, caller, view.kind(), view.matter()));
+			List<Document> page = documents(listed.docIds());
+			Map<Long, Author> authors = ApiViews.authors(page);
+			for (Document d : page)
+				items.add(ApiViews.document(d, caller, view.kind(), view.matter(), authors));
 
 			FacetsView counts = filters.facets().isEmpty() ? null
 					: facetsView(FolderListing.get().facets(folder, caller, query, filters.facets()));
 			return new FolderChildPage(items, paging.offset(), paging.limit(), subfolders.size() + listed.total(),
-					counts);
+					listed.total(), counts);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list folder #" + id, e);
 		}
@@ -256,12 +259,14 @@ public class FolderResource {
 		ListedPage listed = FolderListing.get().page(ids, filters.query().page(paging.offset(), paging.limit()));
 
 		// A search folder's documents are anywhere, so each finds its own matter
+		List<Document> page = listed.docIds().stream().map(byId::get).toList();
+		Map<Long, Author> authors = ApiViews.authors(page);
 		List<Object> items = new ArrayList<>();
-		for (Long docId : listed.docIds())
-			items.add(ApiViews.document(byId.get(docId), caller));
+		for (Document d : page)
+			items.add(ApiViews.document(d, caller, authors));
 		FacetsView counts = filters.facets().isEmpty() ? null
 				: facetsView(FolderListing.get().facets(ids, filters.query(), filters.facets()));
-		return new FolderChildPage(items, paging.offset(), paging.limit(), listed.total(), counts);
+		return new FolderChildPage(items, paging.offset(), paging.limit(), listed.total(), listed.total(), counts);
 	}
 
 	/**

@@ -4,6 +4,9 @@
 import { cleanup } from '@testing-library/react'
 import { clearToasts, setLabels } from '@healdan/ui'
 import { afterEach } from 'vitest'
+import { installIntersectionObserver } from './intersection'
+
+installIntersectionObserver()
 
 // Vitest has no globals here, so Testing Library can't register its own cleanup.
 afterEach(() => {

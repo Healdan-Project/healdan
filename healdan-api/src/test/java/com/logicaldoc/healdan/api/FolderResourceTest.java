@@ -297,6 +297,8 @@ public class FolderResourceTest extends ApiTestCase {
 		assertEquals(response.toString(), 200, response.status());
 		JsonNode page = response.json();
 		assertEquals(4, page.path("total").asInt());
+		// The documents alone, for the view's count
+		assertEquals(2, page.path("documents").asInt());
 		assertEquals(0, page.path("offset").asInt());
 		assertEquals(50, page.path("limit").asInt());
 		List<String> names = new ArrayList<>();
@@ -312,6 +314,7 @@ public class FolderResourceTest extends ApiTestCase {
 				.send().json();
 		assertEquals(2, folders.path("items").size());
 		assertEquals(2, folders.path("total").asInt());
+		assertEquals(0, folders.path("documents").asInt());
 
 		// Boss sees all
 		assertEquals(6, get("/api/v1/folders/" + documents.getId() + "/children").token(signIn(boss)).send().json()
@@ -432,6 +435,7 @@ public class FolderResourceTest extends ApiTestCase {
 		JsonNode page = get("/api/v1/folders/" + search.getId() + "/children").token(signIn(clerk)).send().json();
 
 		assertEquals(2, page.path("total").asInt());
+		assertEquals(2, page.path("documents").asInt());
 		List<String> names = new ArrayList<>();
 		for (JsonNode item : page.path("items")) {
 			assertEquals("document", item.path("type").textValue());
@@ -491,6 +495,7 @@ public class FolderResourceTest extends ApiTestCase {
 		JsonNode page = response.json();
 		// The PDFs Clerk can read, the newest doc # first; a filter leaves the subfolder out
 		assertEquals(2, page.path("total").asInt());
+		assertEquals(2, page.path("documents").asInt());
 		assertEquals(2, page.path("items").size());
 		assertEquals(Long.parseLong(second.getCustomId()), page.path("items").get(0).path("docNumber").asLong());
 		assertEquals(Long.parseLong(first.getCustomId()), page.path("items").get(1).path("docNumber").asLong());
@@ -515,6 +520,7 @@ public class FolderResourceTest extends ApiTestCase {
 		JsonNode plain = get(base).token(token).send().json();
 		assertFalse(plain.has("facets"));
 		assertEquals(4, plain.path("total").asInt());
+		assertEquals(3, plain.path("documents").asInt());
 		assertEquals("Sub", plain.path("items").get(0).path("name").textValue());
 
 		// Repeated values are alternatives
@@ -529,6 +535,47 @@ public class FolderResourceTest extends ApiTestCase {
 		for (JsonNode item : byTitle.path("items"))
 			names.add(item.path("name").textValue());
 		assertEquals(List.of("Sub", "two.pdf", "three.docx", "one.pdf"), names);
+	}
+
+	@Test
+	public void testChildrenNameTheirAuthors() throws Exception {
+		User named = UserDAO.get().findById(clerk.getId());
+		named.setFirstName("Clara");
+		named.setName("Clerk");
+		UserDAO.get().store(named);
+		User gone = fx.user("gone");
+		User before = UserDAO.get().findById(gone.getId());
+		before.setFirstName("Aaron");
+		before.setName("Able");
+		UserDAO.get().store(before);
+		Document byClerk = fx.upload(documents, "a.docx", "a", clerk);
+		Document byGone = fx.upload(documents, "b.docx", "b", gone);
+		Document byNobody = fx.upload(documents, "c.docx", "c", boss);
+		awaitAsyncWork();
+		UserDAO.get().delete(gone.getId(), null);
+		jdbc().update("delete from ld_document_ext where ld_docid = ? and ld_name = 'author'", byNobody.getId());
+		DocumentDAO.get().evict(Document.class, byNobody.getId());
+		String token = signIn(clerk);
+		String base = "/api/v1/folders/" + documents.getId() + "/children";
+
+		JsonNode items = get(base + "?sort=author").token(token).send().json().path("items");
+
+		// The Author's name; the username kept with the property once the user is gone; null with no Author. The
+		// sort goes by what shows, so a former user sorts by the username, and no Author comes last.
+		assertEquals(3, items.size());
+		assertEquals(Long.parseLong(byClerk.getCustomId()), items.get(0).path("docNumber").asLong());
+		assertEquals("clerk", items.get(0).path("author").path("username").textValue());
+		assertEquals("Clara Clerk", items.get(0).path("author").path("displayName").textValue());
+		assertEquals(Long.parseLong(byGone.getCustomId()), items.get(1).path("docNumber").asLong());
+		assertEquals("gone", items.get(1).path("author").path("username").textValue());
+		assertEquals("gone", items.get(1).path("author").path("displayName").textValue());
+		assertEquals(Long.parseLong(byNobody.getCustomId()), items.get(2).path("docNumber").asLong());
+		assertTrue(items.get(2).toString(), items.get(2).has("author"));
+		assertTrue(items.get(2).path("author").isNull());
+
+		// A document's own answer says the same
+		assertEquals(items.get(0).path("author"),
+				get("/api/v1/documents/" + byClerk.getCustomId()).token(token).send().json().path("author"));
 	}
 
 	@Test
@@ -580,6 +627,7 @@ public class FolderResourceTest extends ApiTestCase {
 		JsonNode beyond = get(base + "?offset=10&limit=2").token(token).send().json();
 		assertEquals(0, beyond.path("items").size());
 		assertEquals(4, beyond.path("total").asInt());
+		assertEquals(0, beyond.path("documents").asInt());
 
 		JsonNode second = get(base + "?offset=1&limit=2").token(token).send().json();
 		assertEquals(List.of("b", "c"),

@@ -559,7 +559,8 @@ public class FolderListing {
 	/**
 	 * @return the Author's name, as {@code User.getFullName} makes it, in
 	 *         lower case; the username kept with the property for an Author
-	 *         who is no longer a user
+	 *         who is no longer a user, so the order is that of the names
+	 *         {@link DocumentAuthors} shows
 	 */
 	private static String authorName(Select select) {
 		select.join(AUTHOR, HealdanConstants.ATTR_AUTHOR);
@@ -616,8 +617,8 @@ public class FolderListing {
 
 		void joinAuthorUser() {
 			if (joined.add(AUTHOR_USER))
-				joins.append(" left join ld_user %s on %s.ld_id = %s.ld_intvalue".formatted(AUTHOR_USER, AUTHOR_USER,
-						AUTHOR));
+				joins.append(" left join ld_user %1$s on %1$s.ld_id = %2$s.ld_intvalue and %1$s.ld_deleted = 0"
+						.formatted(AUTHOR_USER, AUTHOR));
 		}
 
 		String from() {

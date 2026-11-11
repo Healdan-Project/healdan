@@ -36,6 +36,19 @@ export const enUS = {
   'myMatters.title': 'My {matters}',
   'myMatters.tree': 'My {matters}',
   'favorites.mine': 'My Favorites',
+  'myMatters.add': 'Add This {matter} to My {matters}',
+  'myMatters.remove': 'Remove from My {matters}',
+  'tree.more': 'More for {name}',
+  'breadcrumb.label': 'Breadcrumb',
+  'folder.favorite.add': 'Add to Favorites',
+  'folder.favorite.remove': 'Remove from Favorites',
+  'folder.actions': 'Folder Actions',
+  'folder.empty': 'This folder is empty.',
+  'list.title': 'Title',
+  'list.docNumber': 'Doc #',
+  'list.version': 'Version',
+  'list.author': 'Author',
+  'list.edited': 'Edit Date',
   'search.scope': 'Search In',
   'search.label': 'Search',
   'search.placeholder': 'Search, or type # and a number',
@@ -49,7 +62,6 @@ export const enUS = {
   'signedOut.message': "You've been signed out.",
   'signedOut.signIn': 'Sign In',
   'notYet.message': 'Coming soon.',
-  'notYet.folder': 'Folder',
   'notYet.search': 'Search',
   'notYet.document': 'Document',
   'notFound.message': "Not found, or you can't see it.",
@@ -82,6 +94,10 @@ export type StringKey = keyof typeof enUS
 // Each plural has the forms Intl.PluralRules('en-US') picks between.
 export const enUSPlurals = {
   documents: { one: '{n} document', other: '{n} documents' },
+  // "3 of 7 documents": the noun agrees with the whole, {n}
+  documentsOf: { one: '{shown} of {n} document', other: '{shown} of {n} documents' },
+  // A count the server stopped at
+  documentsMoreThan: { one: 'More than {n} document', other: 'More than {n} documents' },
   folders: { one: '{n} folder', other: '{n} folders' },
   matters: { one: '{n} {matter}', other: '{n} {matters}' },
 } as const

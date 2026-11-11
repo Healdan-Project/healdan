@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError, createApi } from './index'
+import { ApiError, apiPath, createApi } from './index'
 
 const fetchMock = vi.fn()
 
@@ -101,5 +101,13 @@ describe('createApi', () => {
     expect(createApi().url('/v1/documents/1/content', { version: '1.0' })).toBe('/api/v1/documents/1/content?version=1.0')
     expect(createApi().url('/v1/me')).toBe('/api/v1/me')
     expect(createApi({ base: '/x' }).url('/v1/me')).toBe('/x/v1/me')
+  })
+})
+
+describe('apiPath', () => {
+  it('encodes each value it puts in a path, so data can never add a segment or a query', () => {
+    expect(apiPath`/v1/folders/${7}/children`).toBe('/v1/folders/7/children')
+    expect(apiPath`/v1/folders/${'1/../2?x=1#y'}/children`).toBe('/v1/folders/1%2F..%2F2%3Fx%3D1%23y/children')
+    expect(apiPath`/v1/me/matters/${110}`).toBe('/v1/me/matters/110')
   })
 })

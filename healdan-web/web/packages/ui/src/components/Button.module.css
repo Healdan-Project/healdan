@@ -18,6 +18,18 @@
   color: var(--hd-accent-on-fill);
 }
 
+/* No face: it takes the surface it sits on, which holds any text colour, and the text keeps its own. */
+.button.quiet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  padding: 0 var(--hd-space-2);
+  border-color: transparent;
+  background: transparent;
+  color: inherit;
+}
+
 .button[data-pressed] {
   filter: brightness(0.92);
 }

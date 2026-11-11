@@ -5,7 +5,8 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 
 /** The selected document's number, which lives in the address as ?sel= so Back, bookmarks and pasted links keep it. */
 export function useSelection(): { selected: number | undefined; select: (docNumber: number | undefined) => void } {
-  const { sel } = useSearch({ strict: false }) as { sel?: string }
+  // Every route has the root's ?sel= (router.tsx), so its search is read from wherever this is used.
+  const { sel } = useSearch({ strict: false })
   const navigate = useNavigate()
   const selected = sel !== undefined && /^\d+$/.test(sel) ? Number(sel) : undefined
   return {
@@ -15,7 +16,7 @@ export function useSelection(): { selected: number | undefined; select: (docNumb
       void navigate({
         to: '.',
         replace: true,
-        search: ((prev: Record<string, unknown>) => ({ ...prev, sel: docNumber === undefined ? undefined : String(docNumber) })) as never,
+        search: (prev) => ({ ...prev, sel: docNumber === undefined ? undefined : String(docNumber) }),
       }),
   }
 }

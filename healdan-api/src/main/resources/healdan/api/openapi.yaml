@@ -1519,7 +1519,7 @@ paths:
         are left out, and an alias asked for by its own id is `404`. A search
         folder gives its documents, newest change first unless `sort` says
         otherwise, at most 1000. `total` is the full count, after the
-        filters.
+        filters, and `documents` the documents among them.
 
         The filters keep documents: with any of them, the subfolders are left
         out. Values of one filter are alternatives (`type=pdf&type=word`),
@@ -2247,6 +2247,18 @@ components:
           description: The matter as people read it, such as `998.1 - Healdan Demo`, with an en dash
         client:
           $ref: '#/components/schemas/ClientRef'
+    AuthorRef:
+      type: object
+      description: A document's Author
+      additionalProperties: false
+      required: [username, displayName]
+      properties:
+        username:
+          type: string
+          description: The username, which the `author` filter takes
+        displayName:
+          type: string
+          description: The Author's name, to show; the username when the Author is no longer a user
     HoldView:
       type: object
       description: Who has a document checked out or locked
@@ -2318,7 +2330,7 @@ components:
     DocumentView:
       type: object
       additionalProperties: false
-      required: [type, docNumber, name, size, version, fileVersion, reference, folder, matter, dateFiled, lastModified, hold, canEdit, canOpen]
+      required: [type, docNumber, name, size, version, fileVersion, reference, folder, matter, author, dateFiled, lastModified, hold, canEdit, canOpen]
       properties:
         type:
           type: string
@@ -2357,6 +2369,11 @@ components:
           oneOf:
             - $ref: '#/components/schemas/MatterRef'
             - type: 'null'
+        author:
+          oneOf:
+            - $ref: '#/components/schemas/AuthorRef'
+            - type: 'null'
+          description: The document's Author property; null when it has none
         dateFiled:
           type: string
           format: date-time
@@ -2730,7 +2747,15 @@ components:
     FolderChildPage:
       allOf:
         - $ref: '#/components/schemas/Page'
-        - properties:
+        - required: [documents]
+          properties:
+            documents:
+              type: integer
+              minimum: 0
+              description: |
+                How many of the items are documents: `total` less the
+                subfolders, which come first. With a filter, or in a search
+                folder, it is `total`.
             items:
               type: array
               items:

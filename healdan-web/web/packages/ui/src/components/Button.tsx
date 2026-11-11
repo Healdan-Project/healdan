@@ -5,10 +5,11 @@ import { Button as AriaButton, type ButtonProps as AriaButtonProps } from 'react
 import styles from './Button.module.css'
 
 export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style'> {
-  /** The default button is the accent one; secondary has a field-coloured face. */
-  variant?: 'default' | 'secondary'
+  /** The default button is the accent one; secondary has a field-coloured face; quiet has none, for an icon in a row. */
+  variant?: 'default' | 'secondary' | 'quiet'
 }
 
 export function Button({ variant = 'secondary', ...props }: ButtonProps) {
-  return <AriaButton {...props} className={`${styles.button} ${variant === 'default' ? styles.default : ''}`} />
+  const face = variant === 'default' ? styles.default : variant === 'quiet' ? styles.quiet : ''
+  return <AriaButton {...props} className={`${styles.button} ${face}`} />
 }
