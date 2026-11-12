@@ -13,6 +13,8 @@ signed in and end any sign-in you don't want.
 Open your menu, under your initials in the top bar, and choose **Signed-in Devices**. The list is yours alone: nobody
 else's sign-ins show in it, and nobody else sees yours.
 
+![The Signed-in Devices window with two devices: Healdan Helper on MacBook, signed in on 12 Nov 2026 at 04:40 and last used at 04:46, and Healdan Helper on Office PC, signed in at 04:39 and last used at 04:49, each expiring on 12 Nov 2027, and a Close button under them](signed-in-devices.png)
+
 ## What's Listed
 
 Each row is one device, with:
@@ -38,6 +40,8 @@ Revoke ends one device's sign-in at once.
 1. Choose **Revoke** beside the device. Healdan asks first, naming it, such as "Revoke Healdan Helper on a
    MacBook?", so a slip doesn't end the wrong one.
 2. Choose **Revoke** again to confirm, or **Cancel** to leave it as it was.
+
+![The question "Revoke Healdan Helper on MacBook?", which says it's signed out at once and has to ask you to sign in again before it's used, with Revoke and Cancel buttons](revoke-question.png)
 
 Healdan says "Revoked" and the device's name, and the device leaves the list. Close the list with **Close** or Esc.
 

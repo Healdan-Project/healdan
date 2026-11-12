@@ -20,6 +20,8 @@ open it in the main area.
   My Matters**. From the keyboard, move to the matter's row and press the right arrow: the first press opens the
   matter, the next moves to **⋯**, and Enter opens its menu.
 
+![The left pane with My Matters opened to the folders of 1002.1 – Commercial Lease, and the menu of 1001.1 – Charter Dispute open beside it, offering Remove from My Matters](my-matters-menu.png)
+
 My Matters are kept as bookmarks, so a matter you add also shows in the Classic Interface's **Bookmarks** section,
 and removing that bookmark there removes it from My Matters.
 

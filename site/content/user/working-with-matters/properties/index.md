@@ -7,10 +7,6 @@ Every document and folder carries the same set of properties, the **Healdan prof
 and its details show them. In the Classic Interface, open its **Ext. Properties** tab. Its **Properties** tab shows the
 doc #, which can't be edited, and the Date filed.
 
-The screenshot is of the Classic Interface's **Ext. Properties** tab.
-
-![The Ext. Properties tab: the Healdan profile, with Client 1001 and Matter 1 read-only, then Author treeve, Typist pnair, Class Correspondence, Subclass Letter, Comments, Legacy doc # and the email fields](ext-properties.png)
-
 ## The Properties
 
 | Property | What it holds |
@@ -31,6 +27,8 @@ Your administrator can add more properties.
 
 Choose **Edit** in a document's details. The properties become a form, made from the profile, so your firm's own
 properties are in it.
+
+![The details of Report on Lease – Unit 4 Weir Lane.odt, # 35, with its properties as a form: Client and Matter, Author Helen Ashcombe and Typist Priya Nair as text, Class (required) Correspondence, Subclass Letter, Comments and Legacy doc # as fields, Message-ID None, and the Save and Cancel buttons](edit-properties.png)
 
 - **A required property has a \* after its name.** Class is required.
 - **A property picked from a list offers only its options.** A Subclass offers only the ones that belong to the Class

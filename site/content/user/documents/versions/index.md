@@ -37,6 +37,8 @@ take it: see [Filing a Document](../../working-with-matters/filing-a-document/#d
 - **To go back to an earlier snapshot,** promote it from the Versions tab in the Classic Interface. That saves it as
   the latest.
 
+![The details of Subscription Agreement – Draft.docx, # 31, with its properties and its versions, newest first: Version 2 by Helen Ashcombe on 29 Oct 2026 at 16:00, Version 1.1 by Priya Nair on 23 Oct 2026 at 15:30, and Version 1 by Chris Doyle on 16 Oct 2026 at 14:30, each with Preview and Download](versions.png)
+
 ## Finding a Version by Number
 
 Type `#1234.2` in the search box and press Enter to go to version 2 of document 1234 as it stands, and `#1234.2.1` for

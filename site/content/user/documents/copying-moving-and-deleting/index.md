@@ -12,6 +12,8 @@ its permissions or because it's locked or checked out, is refused with a message
 Select the document and press **F2**, or choose **More**, in the toolbar above the list, then **Rename**. The title in
 its row becomes a field with the name, not its extension, selected.
 
+![The toolbar above the Drafts folder's list in matter 1002.1 with Lease – Draft for Client.docx selected and the More menu open, offering Rename, Move To…, Delete and Copy Link](more-menu.png)
+
 - **Enter saves the name,** and so does clicking away from the field after you've changed it. **Esc** leaves the name as
   it was.
 - **A document keeps its extension.** Type `Lease` and the document, a `.docx`, is `Lease.docx`. Type another extension,
@@ -36,6 +38,8 @@ Select the documents, then choose **More**, then **Move To…**. A window opens 
    matter to move the documents into it."
 
 The window never lists Stores, only matters and the folders inside them.
+
+![The Move 1 Document window inside the Drafts folder of matter 1003.2 – Licence Review, with Up One Level, "Folders in Drafts", "No folders in here.", and the Move Here and Cancel buttons](move-to.png)
 
 You can also **drag** the selected rows onto a folder in **My Matters** in the left pane. The folder lights up while you're
 over it. Dragging a row that isn't selected moves only that one. A drag can't be done from the keyboard: use **Move To…**.
@@ -76,8 +80,6 @@ top of a matter's workspace.
 
 Right-click a document for its menu. **Cut**, **Copy**, **Rename** and **Delete** are there, with everything else you can
 do to it. To act on several documents at once, select them all, then right-click one of them.
-
-![A letter in matter 1001.1's Correspondence folder, right-clicked: its menu lists Download, Preview, Summary, Open in Folder, Cut, Copy, Rename, Add bookmark, Send by email, Paste as link, Open in App, Checkout, Checkin, Lock, Unlock, More and Delete](document-menu.png)
 
 ## Copying a Document
 

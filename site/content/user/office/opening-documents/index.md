@@ -23,6 +23,8 @@ on it. The document opens in the app you've chosen for its kind in the helper's 
   seconds, or until you dismiss it, and shows over Quick Look too.
 - **Use one address,** as below.
 
+![The notice at the bottom right of the web page after Open on Heads of Terms – Unit 4 Weir Lane.docx: "If nothing opened, install the Healdan Helper.", with a link to install it and a close button, over the end of the document's details](open-notice.png)
+
 Double-clicking and **Enter** work in every list of documents: a folder, search results, Recent Documents and the
 result of a `#` search.
 

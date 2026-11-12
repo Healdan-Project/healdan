@@ -43,6 +43,8 @@ you're allowed to read. Suggested documents come from the same index as a search
 Search](#full-text-search)), so a document filed moments ago may not be suggested until the Indexer has read it, which
 can be up to 30 minutes by default. Matters are suggested at once.
 
+![The search box with "lease" typed in the Documents scope and its suggestions open: the matter 1002.1 – Commercial Lease with its client Brightwell Bakeries Ltd; five documents, among them Report on Lease – Unit 4 Weir Lane.odt, # 35 · 1002.1, and Lease – Draft for Client.docx, # 4 · 1002.1; and Search Documents for "lease" at the end](suggestions.png)
+
 ## `#` in the Box {#in-the-box}
 
 Type `#` and a doc # and press Enter to go straight to that document: `#10388`, `#10388.2` for version 2, `#10388.2.1`
@@ -136,3 +138,5 @@ Today and the date ranges follow the server's time zone.
 - **Clicking a document** while the filters are open puts the panel away to make room for that document's own
   panel. The filters stay set, and the button brings the panel back.
 - **The filters are in the page's address,** so Back, bookmarks and a copied link keep them.
+
+![Search results for "lease" in Documents, by relevance, with Filters open at the right and the File Type filter set to Word and PDF: a chip "File Type: Word, PDF" above eight documents, among them Lease – Engrossment.docx, # 48, matter 1002.1 Brightwell Bakeries Ltd, and Subscription Agreement – Draft.docx, # 31, matter 1003.1 Kestrel Software Ltd, and the filters' counts beside Word 5 and PDF 3](results-filters.png)

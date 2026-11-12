@@ -32,6 +32,8 @@ Click a matter in the left pane and the main area shows its top level: its folde
 any documents an administrator put there before Healdan kept documents out of it. Open a folder from the list or the
 tree, and the main area shows the folder the same way.
 
+![The top level of matter 1002.1 – Commercial Lease, under the breadcrumb for its client Brightwell Bakeries Ltd, with the Upload, Open, Preview, Download and Check Out buttons and a list of its folders, Correspondence, Drafts, Due Diligence, Emails and Executed, and its search folders Emails in This Matter and My Recent Docs Here](matter-top-level.png)
+
 - **The breadcrumb** at the top says where you are: the client, the matter as `998.1 – Firm Policies`, then each folder
   down to this one. Click the matter or a folder in it to go there.
 - **The star** beside a folder's name adds the folder to **My Favorites** in the left pane, and takes it off again.

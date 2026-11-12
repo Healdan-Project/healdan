@@ -38,6 +38,8 @@ time. It doesn't download anything: to edit the file, use **Open** (see
 [Opening Documents](../../office/opening-documents/)), or **Download** it (see
 [Downloading Documents](../downloading-documents/)).
 
+![The details of Lease – Draft for Client.docx, # 4, after Check Out: "Checked out by you since 12 Nov 2026, 04:50." with Check In and Release buttons, under Open, Download, Edit and Copy Link](checked-out-by-you.png)
+
 You need permission to write the document. **Check Out** is greyed out while someone else has the document checked out
 or locked, and for a document you can't write.
 
@@ -61,6 +63,8 @@ administrator in the Classic Interface, with **Unlock**.
 That goes for your own check-out on a computer too. One you made by opening a document from the
 [Healdan Helper](../../office/) belongs to that computer, and the details say "Checked out by you on" its name. Release
 it there, or in the Classic Interface.
+
+![The details of Lease – Engrossment.docx, # 48, held on a computer: "Checked out by you on Healdan Helper on Office PC since 12 Nov 2026, 04:49. Release it on that computer, or in the Classic Interface (Unlock).", with Edit greyed out](checked-out-on-computer.png)
 
 A locked document says "Locked by" and who. A lock is taken off in the Classic Interface (see
 [Locking a Document](../locking-a-document/)).

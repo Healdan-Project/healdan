@@ -6,6 +6,8 @@ weight: 2
 Healdan's web page has a top bar across the top, a left pane down the left side and the main area beside it. The
 colours follow your browser's light or dark setting.
 
+![Healdan's web page in the matter 1002.1 – Commercial Lease's Correspondence folder: the top bar with the Healdan name, the Documents search box and the PN menu; the left pane with Recent, Recent Matters, My Matters opened to the matter's folders, and My Favorites; the folder's four documents with Heads of Terms – Unit 4 Weir Lane.docx selected; and its details at the right, with the thumbnail, Open, Download, Edit, Copy Link and Check Out, the properties and the versions](whole-window.png)
+
 ## The Top Bar
 
 - **Healdan's mark and name** on the left take you back to the start page.
@@ -16,6 +18,8 @@ colours follow your browser's light or dark setting.
   Signed-in Devices lists where your account is signed in besides this page, and ends any of them: see
   [Signed-in Devices](../signed-in-devices/). Classic Interface opens the older web page, on the same sign-in. Sign Out
   ends your session.
+
+![Priya Nair's menu open under the PN button at the right of the top bar, showing her name, Signed-in Devices, Classic Interface and Sign Out](your-menu.png)
 
 ## The Left Pane
 
@@ -84,6 +88,8 @@ once the list has the focus.
 On a window narrower than about 1,000 pixels, such as a tablet, the left pane and the details, Filters or preview fold
 away so the list has the room. Two buttons in the top bar, **Navigation** and **Details and Filters**, open them over
 the list, and Esc or choosing a link closes them again. A phone's screen is too small for the app.
+
+![The web page in a window 768 pixels wide: the left pane open over the folder's list, with Recent, Recent Matters, My Matters opened to 1002.1 – Commercial Lease's folders, and My Favorites, below a top bar that has the Navigation and Details and Filters buttons](narrow-window.png)
 
 ## When Something Goes Wrong
 

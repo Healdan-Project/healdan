@@ -21,6 +21,8 @@ over the page, as Finder's Quick Look does. Nothing behind it moves.
 - **Other ways in:** the **Preview** button in the toolbar above the list, and the one on the thumbnail in the
   document's details.
 
+![Quick Look on Lease – Draft for Client.docx, # 4, 1 of 2: the bar with the previous and next buttons, the name, the dock button, Open, Download and Close, the page controls, "Page 1 of 3" and 100% zoom, and the top of the lease's first page](quick-look.png)
+
 A PDF is shown one page at a time, with **Previous Page** and **Next Page**, and **Zoom In** and **Zoom Out**, in steps
 from 50% to 300% of the width of the room. 100% fits the page to it. To scroll a page that's bigger than the room with the
 keyboard, Tab to the page: while it has the focus, the arrow keys scroll it, as they do any scrollable area, and Page
