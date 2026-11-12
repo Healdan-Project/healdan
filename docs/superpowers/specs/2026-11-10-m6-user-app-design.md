@@ -455,7 +455,7 @@ Nothing else upstream changes: not `context-security.xml`, `login.jsp` or `web.x
 ### 14.2 Fork-owned files
 
 - **New:** the `healdan-web` module (its Java, its `plugin.xml`, its assembly and its `web/` workspace); `.github/workflows/web.yml`; `.github/scripts/check-web-licences.py` and its tests; `docker/tests/test-web.sh`.
-- **Changed:** `healdan-api`'s `TokenFilter`, `SignInResource`, `openapi.yaml`, its resources for the new endpoints and their tests; `healdan-core` for `ui.start`, folder paging, search paging, facets, suggestions, the email body's cleaning, and Recent Clients; `.github/scripts/code-changed.sh`; `.github/workflows/build-logicaldoc.yml` (the skip flag); `docker/smoke-test.sh` (the new step); the `Dockerfile` (npm's cache mount); `docs/reference/healdan-api-inventory.md`; `docs/ROADMAP.md`; `CLAUDE.md` (`healdan-web`'s build, test and CI facts).
+- **Changed:** `healdan-api`'s `TokenFilter`, `SignInResource`, `openapi.yaml`, its resources for the new endpoints and their tests; `healdan-core` for `ui.start`, folder paging, search paging, facets, suggestions, the email body's cleaning, and Recent Clients; `.github/scripts/code-changed.sh`; `.github/workflows/build-logicaldoc.yml` (the skip flag, and `FulltextSearchTest` and `SnowballFilterFactoryTest` in `UPSTREAM_TESTS`); `docker/smoke-test.sh` (the new step); the `Dockerfile` (npm's cache mount); `docs/reference/healdan-api-inventory.md`; `docs/ROADMAP.md`; `CLAUDE.md` (`healdan-web`'s build, test and CI facts).
 
 ### 14.3 Docs pages (the docs site, `site/content/`)
 
@@ -465,7 +465,7 @@ Labels are quoted exactly as the app shows them, in US English, while the prose 
 - **User Guide, new:** The Classic Interface: what's still there, how to get to it, and that it's the same sign-in.
 - **User Guide, unchanged but opening with a note that they're in the Classic Interface:** Aliases; Bookmarks; Links Between Documents; Notes; Sharing a Document; Tags; Locking a Document; Document History; The Trash; Document Permissions; Your Profile and Password; Messages.
 - **Admin Guide:** Healdan Settings (`ui.start`).
-- **Install manual:** Upgrading (the app arrives; `ui.start`); Reverse Proxy (pass `Origin` and `Sec-Fetch-*`, which nginx and NPM do by default); Known Limitations (what's still classic, the browsers supported); Troubleshooting (being signed out; "Not found, or you can't see it").
+- **Install manual:** Upgrading (the app arrives; `ui.start`); Reverse Proxy (pass `Origin` and `Sec-Fetch-*`, which nginx and NPM do by default); Known Limitations (what's still classic, the browsers supported); Troubleshooting (being signed out; "Not found, or you can't see it"); Upgrading's new section Words Indexed Under a Wrong Stem (R82: rebuild the index once, with its cost).
 - **Developer Guide:** a new page, The Web App (the workspace, running Vite's dev server against a local stack, adding a view, the catalogue, the colour, type and spacing settings, the dependency rules); API (the web-session route and the new endpoints); How Healdan Extends LogicalDOC (`healdan-web`, `AppServlet`, the `login.jsp` filter); Building from Source (Node through Maven, the skip flag); Tests (the app's tests, `test-web.sh`); Continuous Integration (the `Web` check); Writing Docs (the label rule).
 
 ## 15. Verification

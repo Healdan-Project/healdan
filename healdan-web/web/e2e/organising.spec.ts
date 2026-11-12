@@ -36,7 +36,7 @@ test.beforeAll(async ({ playwright }, testInfo) => {
   const makeFolder = async (parentId: number, folderName: string) =>
     (await call<{ id: number }>(api!.post('/api/v1/folders', { ...authorized(token), data: { parentId, name: folderName } }), `making ${folderName}`)).id
   workFolder = await makeFolder(documentsFolder, WORK)
-  // Filed one after another, so a list newest first has each pair side by side
+  // Filed one after another; no spec relies on where in the list a document lands (selectTwo picks by name)
   for (const key of Object.keys(NAMES) as (keyof typeof NAMES)[])
     numbers[key] = await fileDocument(api, token, workFolder, NAMES[key], 'text/plain', Buffer.from(`${key} ${RUN}`))
   folders.picked = await makeFolder(documentsFolder, PICKED)
@@ -72,10 +72,9 @@ async function open(page: Page) {
 const row = (list: Locator, text: string) => list.getByRole('row', { name: escape(text) })
 const document = (n: number) => call<{ name: string; folder: { id: number; name: string } }>(api!.get(`/api/v1/documents/${n}`, authorized(token)), `document ${n}`)
 
-// Two documents selected by name, one click each (the second with Ctrl, or Cmd on a Mac), never as a range between them: the
-// list is newest edit first, and the Indexer, which runs every few seconds here, touches the documents' edit dates after they
-// are filed, so what lies between two rows isn't theirs to say (a document renamed by the other test once did, and made it
-// three rows). A click selects its row only once the selection has followed it into the address, so the first is waited for.
+// Two documents selected by name, one click each (the second with Ctrl, or Cmd on a Mac), never as a range between them:
+// what lies between two rows isn't theirs to say (a document renamed by the other test once did, and made it three rows,
+// while the list still followed LogicalDOC's last-modified time, which the Indexer moves). A click selects its row only once the selection has followed it into the address, so the first is waited for.
 async function selectTwo(list: Locator, first: string, second: string) {
   await row(list, first).getByRole('rowheader').click()
   await expect(list.getByRole('row', { selected: true })).toHaveCount(1)
@@ -165,11 +164,12 @@ test('moves two rows by dragging them onto a folder of the tree, and deletes two
   expect((await document(numbers.dragOne)).folder.id).toBe(folders.dragged)
   expect((await document(numbers.dragTwo)).folder.id).toBe(folders.dragged)
 
-  // Delete asks first, naming both in the list's order (newest first), and says where the Trash is
+  // Delete asks first, naming both, and says where the Trash is
   await selectTwo(list, NAMES.deleteTwo, NAMES.deleteOne)
   await page.keyboard.press('Delete')
   const question = page.getByRole('dialog', { name: 'Move 2 documents to the Trash?' })
-  // In the list's order, which the Indexer's touches of the documents' edit dates move about, so only the names are checked
+  // Both are named, whatever their order in the list
+  await expect(question.getByRole('listitem')).toHaveCount(2)
   expect((await question.getByRole('listitem').allTextContents()).sort()).toEqual([NAMES.deleteOne, NAMES.deleteTwo].sort())
   await expect(question.getByText('The Trash is in the Classic Interface, where they can be restored.')).toBeVisible()
   await question.getByRole('button', { name: 'Cancel' }).click()

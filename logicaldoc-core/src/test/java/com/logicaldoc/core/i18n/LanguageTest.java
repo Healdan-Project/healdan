@@ -46,6 +46,8 @@ public class LanguageTest {
 		SnowballProgram sbp = language.getStemmer();
 		assertNotNull(sbp);
 		assertEquals("org.tartarus.snowball.ext.GermanStemmer", sbp.getClass().getName());
+		// A stemmer keeps the word it is stemming, so threads can't share one: each call gives a new one
+		assertNotSame(sbp, language.getStemmer());
 
 		// Test for Arabic
 		Locale locale = Locale.forLanguageTag("ar");
