@@ -2195,7 +2195,8 @@ components:
         What to sort the documents by: `title` (the file name, ignoring
         case), `docNumber` (as a number), `version` (the file version,
         `fileVersion`, as a list shows it: by its major, then its minor
-        number), `author` (by name) or `edited` (the last change). Ties
+        number), `author` (by name) or `edited` (when its file last changed: filed, or a new version saved;
+        a change to its properties, a rename or a move doesn't count). Ties
         go by the document's age, so pages never overlap, and documents with
         no value to sort by come last either way. Anything else is `400`.
       schema:
@@ -2260,7 +2261,9 @@ components:
       in: query
       required: false
       description: |
-        Documents last changed `today`, in the last 7 days (`7d`, today and
+        Documents whose file last changed (it was filed, or a new version was
+        saved; a change to the properties, a rename or a move doesn't count)
+        `today`, in the last 7 days (`7d`, today and
         the six before), the last 30 (`30d`) or this `year`, in the server's
         time zone. Not with `from` or `to`.
       schema:
@@ -2270,7 +2273,9 @@ components:
       name: from
       in: query
       required: false
-      description: Documents last changed on this day or later, in the server's time zone.
+      description: |
+        Documents whose file last changed (filed, or a new version saved) on
+        this day or later, in the server's time zone.
       schema:
         type: string
         format: date
@@ -2278,7 +2283,9 @@ components:
       name: to
       in: query
       required: false
-      description: Documents last changed on this day or before, in the server's time zone.
+      description: |
+        Documents whose file last changed (filed, or a new version saved) on
+        this day or before, in the server's time zone.
       schema:
         type: string
         format: date
@@ -2817,6 +2824,11 @@ components:
         lastModified:
           type: string
           format: date-time
+          description: |
+            The document's Edit Date: when its file last changed, which is
+            when it was filed or a new version was saved. A change to its
+            properties, a rename or a move doesn't move it, and nor does the
+            Indexer, though CE's own last-modified time moves with all of them.
         hold:
           oneOf:
             - $ref: '#/components/schemas/HoldView'

@@ -170,6 +170,9 @@ meanwhile, but until the Indexer has finished, one may still miss a document it 
 The page's **Indexing queue** tab lists what is still waiting. **Drop index** would do the same after emptying the
 index, which makes searches find less than they should for longer, so it isn't needed.
 
+Rebuilding the index doesn't change the User app's **Edit Date**, which is when a document's file last changed. It does
+change the Classic Interface's **Last modified** for every document, as the Indexer stores each one it indexes again.
+
 ## Emails Filed Before the Outlook Add-in
 
 The upgrade that brings [Filing Email from Outlook](../../user/office/filing-email/) also starts keeping each email's

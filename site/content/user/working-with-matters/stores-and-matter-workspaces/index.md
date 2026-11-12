@@ -43,7 +43,9 @@ tree, and the main area shows the folder the same way.
   document you can read, however many the list has shown so far.
 - **The list** shows the folder's own folders first, by name, then its documents, with their **Title** (the file
   name), **Doc #**, **Version**, **Author** and **Edit Date**. A whole version shows as its number, such as 3, and a
-  snapshot as 3.1. A long list shows 100 documents at a time and brings in the next 100 as you scroll near its end.
+  snapshot as 3.1. **Edit Date** is when the document's file last changed: when it was filed, or when a new version of its file
+  was saved. Changing its properties, renaming it or moving it doesn't change it. A long list shows 100 documents at a time
+  and brings in the next 100 as you scroll near its end.
 - **Sorting.** The documents come by title to begin with. Click a column's heading to sort by it, and click it again
   to sort the other way. The folders stay first, by name.
 - **Selecting.** Click a document to select it, and Shift-click or ⌘-click (Ctrl-click on Windows) to select more.

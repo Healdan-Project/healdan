@@ -110,7 +110,7 @@ scopes have them; Folders, Matters and Clients don't.
 
 | Filter | Options |
 |---|---|
-| **Edit Date** | Any Time, Today, Last 7 Days, Last 30 Days, This Year, or Between… with a **From** day and a **To** day (either can be left empty; an end date before the start date isn't applied, and the field says so) |
+| **Edit Date** | when the file last changed (filed, or a new version saved; not a change to its properties, a rename or a move): Any Time, Today, Last 7 Days, Last 30 Days, This Year, or Between… with a **From** day and a **To** day (either can be left empty; an end date before the start date isn't applied, and the field says so) |
 | **File Type** | Word, Excel, PowerPoint, PDF, Email, OpenDocument, Picture, Other |
 | **Author** | the people who are an Author of documents in the folder, or among the results |
 | **Class** | the classes of documents in the folder, or among the results |

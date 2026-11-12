@@ -285,6 +285,41 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertEquals("a download that didn't happen isn't recorded", before, downloads(d));
 	}
 
+	/** What the Indexer leaves: the file's own date, and a later last-modified time that is no edit of the file */
+	private void asIndexed(Document d, String filed, String touched) {
+		jdbc().update("update ld_document set ld_date = ?, ld_lastmodified = ? where ld_id = ?",
+				java.sql.Timestamp.from(Instant.parse(filed)), java.sql.Timestamp.from(Instant.parse(touched)),
+				d.getId());
+		DocumentDAO.get().evict(Document.class, d.getId());
+	}
+
+	@Test
+	public void testLastModifiedIsWhenTheFileChanged() throws Exception {
+		Document d = file("edit.docx", "Lease draft");
+		asIndexed(d, "2026-01-10T09:00:00Z", "2026-03-01T10:00:00Z");
+		String token = signIn(clerk);
+		String view = "/api/v1/documents/" + number(d);
+
+		// The Indexer's later touch isn't an edit: the view says when the file was filed
+		assertEquals("2026-01-10T09:00:00Z",
+				Instant.parse(get(view).token(token).send().json().path("lastModified").textValue()).toString());
+
+		// A change to its properties moves CE's last-modified time and leaves the file's date
+		Document again = DocumentDAO.get().findById(d.getId(), true);
+		again.setComment("A note");
+		DocumentDAO.get().store(again, fx.documentHistory(boss));
+		assertEquals(Instant.parse("2026-01-10T09:00:00Z"), jdbc()
+				.queryForObject("select ld_date from ld_document where ld_id = ?", java.sql.Timestamp.class, d.getId())
+				.toInstant());
+		assertEquals("2026-01-10T09:00:00Z",
+				Instant.parse(get(view).token(token).send().json().path("lastModified").textValue()).toString());
+
+		// A new version of the file does move it on
+		checkin(d, boss, "Lease draft, second", false);
+		Instant after = Instant.parse(get(view).token(token).send().json().path("lastModified").textValue());
+		assertTrue(after.toString(), after.isAfter(Instant.parse("2026-01-10T09:00:00Z").plus(Duration.ofDays(30))));
+	}
+
 	@Test
 	public void testContent() throws Exception {
 		Document d = file("a.docx", "Lease draft");

@@ -622,6 +622,34 @@ public class FolderResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testEditDateIsWhenTheFileChanged() throws Exception {
+		// A was filed in January and the Indexer touched it last; B was filed in February and nothing touched it since
+		Document a = fx.upload(documents, "a.docx", "a", clerk);
+		Document b = fx.upload(documents, "b.docx", "b", clerk);
+		awaitAsyncWork();
+		jdbc().update("update ld_document set ld_date = '2026-01-10 09:00:00', ld_lastmodified = '2026-03-01 10:00:00' where ld_id = ?",
+				a.getId());
+		jdbc().update("update ld_document set ld_date = '2026-02-10 09:00:00', ld_lastmodified = '2026-02-10 09:00:00' where ld_id = ?",
+				b.getId());
+		DocumentDAO.get().evict(Document.class, a.getId());
+		DocumentDAO.get().evict(Document.class, b.getId());
+		String token = signIn(clerk);
+		String base = "/api/v1/folders/" + documents.getId() + "/children?";
+
+		assertEquals(get(base).token(token).send().toString(), 2, get(base).token(token).send().json().path("total").asInt());
+		List<String> ascending = new ArrayList<>();
+		ApiResponse sorted = get(base + "sort=edited&order=asc").token(token).send();
+		for (JsonNode item : sorted.json().path("items"))
+			ascending.add(item.path("name").textValue());
+		assertEquals(sorted.toString() + " by the file's date, not the last touch", List.of("a.docx", "b.docx"), ascending);
+		List<String> inFebruary = new ArrayList<>();
+		for (JsonNode item : get(base + "from=2026-02-01&to=2026-02-28").token(token).send().json().path("items"))
+			inFebruary.add(item.path("name").textValue());
+		assertEquals("the filter reads it too", List.of("b.docx"), inFebruary);
+		assertEquals(0, get(base + "edited=today").token(token).send().json().path("total").asInt());
+	}
+
+	@Test
 	public void testChildrenRefusals() throws Exception {
 		String token = signIn(clerk);
 		String base = "/api/v1/folders/" + documents.getId() + "/children";

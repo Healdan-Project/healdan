@@ -394,7 +394,8 @@ database, so a folder of thousands of documents answers as fast as a small one.
 - **Sorting.** `sort` is `title` (the file name, ignoring case; the default), `docNumber` (as a number, so #9 comes
   before #10), `version` (the file version, `fileVersion`, as the list shows it: by its major, then its minor
   number, so 2.9 comes before 2.10), `author` (by the
-  Author's name as `author.displayName` shows it, not the username) or `edited` (the last change). `order` is `asc` (the default) or `desc`.
+  Author's name as `author.displayName` shows it, not the username) or `edited` (when its file last changed: filed, or a new version saved, as the view's `lastModified` says; a change to its
+  properties, a rename or a move doesn't count). `order` is `asc` (the default) or `desc`.
   Documents with nothing to sort by, such as no Author, come last either way, and ties go by the document's age,
   so no document shows on two pages. Subfolders always come first, by name. A search folder keeps its own order,
   newest change first, unless `sort` says otherwise.
