@@ -45,9 +45,14 @@
   white-space: nowrap;
 }
 
+/* Device takes what the dates and Revoke leave, and wraps between words */
+.table th:first-child {
+  width: 99%;
+}
+
 .name {
   font-weight: var(--hd-weight-medium);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .visuallyHidden {

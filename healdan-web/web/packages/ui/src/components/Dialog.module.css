@@ -22,6 +22,10 @@
   overflow: auto;
 }
 
+.wide {
+  max-width: min(840px, calc(100vw - 2 * var(--hd-space-5)));
+}
+
 .dialog {
   padding: var(--hd-space-5);
   outline: none;

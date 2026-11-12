@@ -296,6 +296,33 @@ describe('Filters in a folder', () => {
     expect(await within(main()).findByText('7 of 7 documents')).toBeTruthy()
   })
 
+  it("keeps the last answer's groups and counts on screen, dimmed, while a recount is held, never zeros", async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    await open('/folders/7', {
+      'GET /v1/folders/7/children': async ({ query }: { query?: Record<string, unknown> }) => {
+        const kinds = asks(query, 'type') as string[] | undefined
+        // The recount for the ticked type is held; the list and the first count answer at once
+        if (kinds && asks(query, 'facets')) await gate
+        const kept = kinds ? words : all
+        return { ...children(kept, { limit: asks(query, 'limit') as number }), ...(asks(query, 'facets') ? { facets } : {}) }
+      },
+    })
+    await userEvent.click(funnel())
+    const filters = await screen.findByRole('region', { name: 'Filters' })
+    await within(filters).findByRole('checkbox', { name: /^Word, 4/ })
+    await userEvent.click(within(filters).getByRole('checkbox', { name: /^Word/ }))
+    // While the recount is held: still the same groups and counts, marked busy
+    await waitFor(() => expect(filters.querySelector('[aria-busy="true"]')).toBeTruthy())
+    expect(within(filters).getByRole('checkbox', { name: /^Word, 4/ })).toBeTruthy()
+    expect(within(filters).getByRole('checkbox', { name: /^PDF, 3/ })).toBeTruthy()
+    expect(within(filters).getByRole('group', { name: 'Author' })).toBeTruthy()
+    expect(within(filters).getByRole('group', { name: 'Class' })).toBeTruthy()
+    expect([...filters.querySelectorAll('[data-count]')].map((one) => one.textContent)).not.toContain('0')
+    release()
+    await waitFor(() => expect(filters.querySelector('[aria-busy="true"]')).toBeNull())
+  })
+
   it('shows the filtered count alone when the count without filters could not be had', async () => {
     await open('/folders/7?type=pdf', {
       'GET /v1/folders/7/children': ({ query }: { query?: Record<string, unknown> }) => {

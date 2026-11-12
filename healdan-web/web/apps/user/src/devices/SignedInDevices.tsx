@@ -61,7 +61,7 @@ export function SignedInDevices({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog title={asking ? t('devices.revokeTitle', { name: asking.name }) : t('person.devices')} isOpen onOpenChange={(open) => !open && onClose()}>
+    <Dialog size="wide" title={asking ? t('devices.revokeTitle', { name: asking.name }) : t('person.devices')} isOpen onOpenChange={(open) => !open && onClose()}>
       {(close) =>
         asking ? (
           <>

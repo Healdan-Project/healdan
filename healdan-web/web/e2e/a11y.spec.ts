@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { expect, test, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test'
+import { expect, test, type APIRequestContext, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import { expectNoViolations } from './axe'
 import { PASSWORD, USERNAME, authorized, call, deviceToken, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
 
@@ -10,6 +10,27 @@ import { PASSWORD, USERNAME, authorized, call, deviceToken, fileDocument, matter
 // contrast is checked (the Vitest checks run in jsdom, which has no colours). The documents are this run's own, in a folder
 // of its own inside E2E, a folder of matter 1.1's Documents folder (which the smoke fixture makes) that the specs which make
 // folders share.
+// Signed-in Devices fits its dialog: nothing scrolls sideways, every Revoke is inside the dialog, and at 1280 a device's name
+// takes no more than two lines (the dialog is as wide as its table needs; at 768 a name may wrap between words further)
+async function expectDevicesFit(dialog: Locator, width: number) {
+  const fit = await dialog.evaluate((box) => {
+    const edge = box.getBoundingClientRect()
+    const area = box.querySelector('table')!.parentElement!
+    const cell = box.querySelector('tbody th')!
+    return {
+      sideways: area.scrollWidth > area.clientWidth,
+      outside: [...box.querySelectorAll('[data-revoke]')].filter((one) => {
+        const at = one.getBoundingClientRect()
+        return at.left < edge.left || at.right > edge.right
+      }).length,
+      lines: cell.getBoundingClientRect().height / parseFloat(getComputedStyle(cell).lineHeight),
+    }
+  })
+  expect(fit.sideways, `the table scrolls sideways at ${width}`).toBe(false)
+  expect(fit.outside, `Revoke buttons outside the dialog at ${width}`).toBe(0)
+  if (width >= 1280) expect(fit.lines, 'a name takes at most two lines').toBeLessThanOrEqual(2.5)
+}
+
 const RUN = `a11y${Date.now().toString(36)}`
 const PDF = `Accessible ${RUN}.pdf`
 const TEXT = `Plain ${RUN}.txt`
@@ -145,6 +166,9 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(main().getByRole('group', { name: 'Filters in Use' })).toBeVisible()
       await expect(filters.locator('[aria-busy="true"]')).toBeVisible()
       await expect.poll(() => held.length).toBeGreaterThan(0)
+      // The last answer stays while the new one is asked for: its groups and counts, never zeros
+      expect(await filters.locator('[data-count]').allTextContents(), 'counts shown while held').not.toContain('0')
+      expect(await filters.locator('[data-count]').count(), 'the last answer stays on screen').toBeGreaterThan(0)
       await check('Filters while the counts are asked for again')
       for (const release of held) release()
       await page.unrouteAll({ behavior: 'wait' })
@@ -266,6 +290,17 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.getByRole('menuitem', { name: 'Move To…' }).click()
       await expect(page.getByRole('dialog', { name: 'Move 1 Document' })).toBeVisible()
       await check('the Move To… picker')
+      // The matter, then its client, with room between them: a button is a flex box, which drops the space of its text
+      const apart = await page.getByRole('dialog', { name: 'Move 1 Document' }).locator('[class*="client"]').first().evaluate((client) => {
+        // The text before it is the matter's: the one just ahead that isn't only the space a flex box drops
+        let text = client.previousSibling
+        while (text && !(text.textContent ?? '').trim()) text = text.previousSibling
+        const before = document.createRange()
+        before.selectNodeContents(text!)
+        const boxes = before.getClientRects()
+        return client.getBoundingClientRect().left - boxes[boxes.length - 1]!.right
+      })
+      expect(apart, 'the client starts clear of its matter').toBeGreaterThanOrEqual(4)
       await page.keyboard.press('Escape')
 
       // The person's menu is the last menu button of the bar (its name is the person's own)
@@ -278,6 +313,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.getByRole('dialog', { name: 'Signed-in Devices' })).toBeVisible()
       await expect(devices.getByRole('table', { name: 'Signed-in Devices' })).toBeVisible()
       await check('Signed-in Devices')
+      await expectDevicesFit(devices, 1280)
       // The Revoke question, then its refusal (in the colour of what is wrong), then a revoke that goes through, which gives the
       // focus back to a control of the dialog, as a real WebKit and Chromium do
       await devices.getByRole('button', { name: `Revoke ${device}` }).click()
@@ -319,6 +355,13 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: 'Details and Filters' }).click()
       await expect(page.getByRole('region', { name: 'Details' }).getByRole('heading', { name: TEXT })).toBeVisible()
       await check('the details over the list at 768 pixels')
+      await page.keyboard.press('Escape')
+      // Signed-in Devices, whole at this width too
+      await page.getByRole('banner').locator('button[aria-haspopup]').last().click()
+      await page.getByRole('menuitem', { name: 'Signed-in Devices' }).click()
+      const devices = page.getByRole('dialog', { name: 'Signed-in Devices' })
+      await expect(devices.getByRole('table', { name: 'Signed-in Devices' })).toBeVisible()
+      await expectDevicesFit(devices, 768)
       await page.keyboard.press('Escape')
       await page.setViewportSize({ width: 1280, height: 720 })
     })
