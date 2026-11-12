@@ -131,13 +131,16 @@ test('row 3: / jumps to the search box; a suggestion, a # and #n.N, a word and a
   await expect(box).toBeFocused()
 
   // A suggestion, chosen with the arrow keys: a document, whose title the box offers as it is typed. The box asks once for
-  // words that settle, so until the Indexer has read the document each try clears the box and types them again
+  // the words it settles on (and keeps the answer 10 s), so until the Indexer has read the document each try types them
+  // in another case: the server matches words in any case, and the box asks again for words it hasn't settled on before
+  const spellings = [`Alpha ${RUN}`, `alpha ${RUN}`, `ALPHA ${RUN}`]
+  let tries = 0
   await expect(async () => {
     await page.keyboard.press('Control+A')
     await page.keyboard.press('Backspace')
-    await page.keyboard.type(`Alpha ${RUN}`)
+    await page.keyboard.type(spellings[tries++ % spellings.length])
     await expect(page.getByRole('option', { name: escape(NAMES.alpha) })).toBeVisible({ timeout: 4_000 })
-  }).toPass({ timeout: 80_000, intervals: [1_000, 2_000, 3_000] })
+  }).toPass({ timeout: 80_000, intervals: [1_000, 2_000, 5_000] })
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(new RegExp(`/app/doc/${numbers.alpha}$`))
