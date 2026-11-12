@@ -164,7 +164,10 @@ for (const scheme of ['light', 'dark'] as const) {
       // The recount and the list are held while it is looked at: what is busy keeps AA contrast (R79). page.route doesn't
       // touch the page's policy.
       const held: (() => void)[] = []
-      await page.route(new RegExp(`/api/v1/folders/${workFolder}/children\\?.*[?&]type=other`), async (route) => {
+      // type=other is the first parameter of the recount (`?type=other&facets=...`) and not of the list, so it is looked for
+      // right after the `?` as well as after an `&`: a pattern that wanted an `&` before it held only the list, and the
+      // recount, which sets Filters' aria-busy, answered at once and was sometimes gone before it was looked for.
+      await page.route(new RegExp(`/api/v1/folders/${workFolder}/children\\?(.*&)?type=other(&|$)`), async (route) => {
         await new Promise<void>((resolve) => held.push(resolve))
         await route.continue()
       })
