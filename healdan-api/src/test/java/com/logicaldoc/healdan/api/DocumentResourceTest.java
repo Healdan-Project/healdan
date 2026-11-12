@@ -15,9 +15,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.TimeZone;
 
 import org.apache.commons.io.FileUtils;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -54,6 +57,21 @@ public class DocumentResourceTest extends ApiTestCase {
 	private User boss;
 
 	private Folder documents;
+
+	private static TimeZone zone;
+
+	// The test context has Hibernate read and write dates in Europe/Rome, while this class writes some through JDBC, in
+	// the JVM's zone: in any other zone the two differ by the zones' offset, so the class runs in Rome's.
+	@BeforeClass
+	public static void inRome() {
+		zone = TimeZone.getDefault();
+		TimeZone.setDefault(TimeZone.getTimeZone("Europe/Rome"));
+	}
+
+	@AfterClass
+	public static void backToTheMachinesZone() {
+		TimeZone.setDefault(zone);
+	}
 
 	@Before
 	public void createLayout() throws Exception {
