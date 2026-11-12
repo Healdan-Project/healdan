@@ -96,7 +96,7 @@ export function minimalPdf(text: string): Buffer {
 
 /**
  * The folder the specs that make folders of their own keep them in: `E2E`, inside Documents, found or made. Those specs
- * (`keyboard` and `a11y`) would otherwise add a row to Documents for each run, and the specs that look at Documents' own
+ * (`keyboard`, `a11y` and `organising`) would otherwise add rows to Documents for each run, and the specs that look at Documents' own
  * list (`filing`, `working`) find their documents among the first rows, where the list draws them. The folders are paged
  * through, so a stack with many of them can't make a second `E2E`.
  */

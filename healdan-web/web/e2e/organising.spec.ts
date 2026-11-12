@@ -2,14 +2,15 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, fileDocument, matterFolders, signIn } from './helpers'
+import { PASSWORD, authorized, call, deviceToken, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
 
 // Organising in the User app (M6 spec section 6.7): a folder made with New Folder, a document renamed in place, one moved
 // by the picker, two moved by dragging them onto a folder of the tree, and two deleted after the question. Playwright can't
 // drag between elements with a custom type, so the drag is the events a browser makes (dragstart on the row, then dragenter,
 // dragover and drop on the folder) with one DataTransfer built in the page, which is what the row's dragstart fills. The
-// documents are this run's own, in a folder of its own inside matter 1.1's Documents folder (which the smoke fixture makes), so
-// the list they are in holds nothing else, whatever earlier runs left; the folders they are moved to are in Documents.
+// documents are this run's own, in a folder of its own inside the specs' E2E folder in matter 1.1's Documents folder (which the
+// smoke fixture makes), so the list they are in holds nothing else, whatever earlier runs left; the folders they are moved to
+// are beside it in E2E, so no run adds a row to Documents' own list (helpers' specsFolder).
 const RUN = `org${Date.now().toString(36)}`
 const name = (what: string) => `${what} ${RUN}.txt`
 const NAMES = { rename: name('Rename me'), pick: name('Pick me'), dragOne: name('Drag one'), dragTwo: name('Drag two'), deleteOne: name('Delete one'), deleteTwo: name('Delete two') }
@@ -21,6 +22,7 @@ const DRAGGED = `Dragged ${RUN}`
 let api: APIRequestContext | undefined
 let token = ''
 let documentsFolder = 0
+let specsHome = 0
 let workFolder = 0
 let matterFolder = 0
 const numbers: Record<keyof typeof NAMES, number> = { rename: 0, pick: 0, dragOne: 0, dragTwo: 0, deleteOne: 0, deleteTwo: 0 }
@@ -35,12 +37,13 @@ test.beforeAll(async ({ playwright }, testInfo) => {
   matterFolder = where.matter
   const makeFolder = async (parentId: number, folderName: string) =>
     (await call<{ id: number }>(api!.post('/api/v1/folders', { ...authorized(token), data: { parentId, name: folderName } }), `making ${folderName}`)).id
-  workFolder = await makeFolder(documentsFolder, WORK)
+  specsHome = await specsFolder(api, token, documentsFolder)
+  workFolder = await makeFolder(specsHome, WORK)
   // Filed one after another; no spec relies on where in the list a document lands (selectTwo picks by name)
   for (const key of Object.keys(NAMES) as (keyof typeof NAMES)[])
     numbers[key] = await fileDocument(api, token, workFolder, NAMES[key], 'text/plain', Buffer.from(`${key} ${RUN}`))
-  folders.picked = await makeFolder(documentsFolder, PICKED)
-  folders.dragged = await makeFolder(documentsFolder, DRAGGED)
+  folders.picked = await makeFolder(specsHome, PICKED)
+  folders.dragged = await makeFolder(specsHome, DRAGGED)
   // The tree is My Matters: it opens to the folder shown, where the drag's target is
   await call(api.put(`/api/v1/me/matters/${matterFolder}`, authorized(token)), 'adding the matter to My Matters')
 })
@@ -123,6 +126,7 @@ test('makes a folder, renames a document in place, and moves another by the pick
   const picker = page.getByRole('dialog', { name: 'Move 1 Document' })
   await picker.getByRole('button', { name: /Smoke Matter/ }).first().click()
   await picker.getByRole('button', { name: new RegExp(`^Documents`) }).click()
+  await picker.getByRole('button', { name: /^E2E/ }).click()
   await picker.getByRole('button', { name: escape(PICKED) }).click()
   await picker.getByRole('button', { name: 'Move Here' }).click()
   await expect(page.getByText(`Moved 1 document to ${PICKED}`)).toBeVisible()
@@ -133,7 +137,7 @@ test('makes a folder, renames a document in place, and moves another by the pick
 test('moves two rows by dragging them onto a folder of the tree, and deletes two after the question', async ({ page }) => {
   const list = await open(page)
   const tree = page.getByRole('navigation', { name: 'Navigation' }).getByRole('treegrid', { name: 'My Matters' })
-  // The tree opens down to the open folder's parent, Documents, so the folders in it show
+  // The tree opens down to the open folder's parent, E2E, so the folders in it show
   const target = tree.getByRole('row', { name: escape(DRAGGED) }).getByText(DRAGGED)
   await expect(target).toBeVisible()
 

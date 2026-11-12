@@ -5,8 +5,8 @@ import { readFile } from 'node:fs/promises'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { PASSWORD, authorized, deviceToken, fileDocument, matterFolders, minimalPdf, signIn } from './helpers'
 
-// Working in the User app (M6 spec sections 6.4 to 6.6, and the tasks after it): Quick Look and reading an email today, with
-// filing, renaming, moving and deleting to come. The documents are made here, through the API with a device token, in matter 1.1's
+// Working in the User app (M6 spec sections 6.4 to 6.6): Quick Look, reading an email, opening, downloading and checking out;
+// filing, organising and the keys have specs of their own. The documents are made here, through the API with a device token, in matter 1.1's
 // Documents folder (which the smoke fixture makes), with names that are this run's own, so nothing depends on what an
 // earlier step left. Both browser projects run this file against one stack, each with its own run.
 const RUN = `wrk${Date.now().toString(36)}`
@@ -176,7 +176,7 @@ test('Quick Look shows an email as a message, with the sender\'s picture blocked
   await expect(body.getByText(`Hello from the run ${RUN}`)).toBeVisible()
   // The sender's own styles apply under the page's policy (style-src 'unsafe-inline')
   await expect(body.getByText(`Hello from the run ${RUN}`)).toHaveCSS('color', 'rgb(0, 51, 102)')
-  await page.waitForLoadState('networkidle')
+  // The frame has drawn its body, pictures and all that it would load; the route that answers for the tracker counts any ask
   expect(trackers).toEqual([])
   await expect(dialog.getByText('Pictures from the internet are blocked.')).toBeVisible()
 

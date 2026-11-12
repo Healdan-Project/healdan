@@ -113,6 +113,8 @@ function newContext(browser: Browser, use: Record<string, unknown>) {
 const main = () => page.getByRole('main')
 const list = () => main().getByRole('grid')
 const escape = (text: string) => new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+// The folder's own star, not a selected document's, which the details beside it have
+const FOLDER_STAR = /^(Add to|Remove from) Favorites$/
 const row = (name: string) => list().getByRole('row', { name: escape(name) })
 const inRow = (target: Locator) => target.evaluate((element) => element.contains(document.activeElement))
 
@@ -128,9 +130,14 @@ test('row 3: / jumps to the search box; a suggestion, a # and #n.N, a word and a
   await page.keyboard.press('/')
   await expect(box).toBeFocused()
 
-  // A suggestion, chosen with the arrow keys: a document, whose title the box offers as it is typed
-  await page.keyboard.type(`Alpha ${RUN}`)
-  await expect(page.getByRole('option', { name: escape(NAMES.alpha) })).toBeVisible({ timeout: 60_000 })
+  // A suggestion, chosen with the arrow keys: a document, whose title the box offers as it is typed. The box asks once for
+  // words that settle, so until the Indexer has read the document each try clears the box and types them again
+  await expect(async () => {
+    await page.keyboard.press('Control+A')
+    await page.keyboard.press('Backspace')
+    await page.keyboard.type(`Alpha ${RUN}`)
+    await expect(page.getByRole('option', { name: escape(NAMES.alpha) })).toBeVisible({ timeout: 4_000 })
+  }).toPass({ timeout: 80_000, intervals: [1_000, 2_000, 3_000] })
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(new RegExp(`/app/doc/${numbers.alpha}$`))
@@ -175,11 +182,11 @@ test('row 3: / jumps to the search box; a suggestion, a # and #n.N, a word and a
   // The funnel is a button, reached by Tab from the star beside the folder's name, and pressed by Enter
   await openFolder()
   const funnel = page.getByRole('button', { name: /^Filters/ })
-  await tabTo(page, funnel, { from: main().getByRole('button', { name: /Favorites/ }) })
+  await tabTo(page, funnel, { from: main().getByRole('button', { name: FOLDER_STAR }) })
   await page.keyboard.press('Enter')
   const filters = page.getByRole('region', { name: 'Filters' })
   await expect(filters).toBeVisible()
-  // Every document here is a text file, so File Type offers Other; Space ticks it, and the chip says so
+  // The text files here are of kind Other, which File Type offers; Space ticks it, and the chip says so
   await tabTo(page, filters.getByRole('checkbox', { name: /^Other/ }))
   await page.keyboard.press('Space')
   await expect(main().getByRole('group', { name: 'Filters in Use' })).toContainText('Other')
@@ -350,7 +357,7 @@ test('row 8: Upload opens the file picker by Enter and files what is chosen; wit
   await openFolder()
   const upload = main().getByRole('button', { name: 'Upload' })
   // The first control of the toolbar, which Tab reaches from the star beside the folder's name
-  await tabTo(page, upload, { from: main().getByRole('button', { name: /Favorites/ }) })
+  await tabTo(page, upload, { from: main().getByRole('button', { name: FOLDER_STAR }) })
   const chosen = `Uploaded ${RUN}.txt`
   const [picker] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Enter')])
   await picker.setFiles({ name: chosen, mimeType: 'text/plain', buffer: Buffer.from(`uploaded ${RUN}`) })
@@ -360,7 +367,7 @@ test('row 8: Upload opens the file picker by Enter and files what is chosen; wit
 
   // Option-Enter is the Option drop's key: the form asks first, and Enter in it files
   const withForm = `Uploaded with the form ${RUN}.txt`
-  await tabTo(page, upload, { from: main().getByRole('button', { name: /Favorites/ }) })
+  await tabTo(page, upload, { from: main().getByRole('button', { name: FOLDER_STAR }) })
   const [second] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Alt+Enter')])
   await second.setFiles({ name: withForm, mimeType: 'text/plain', buffer: Buffer.from(`with the form ${RUN}`) })
   const form = page.getByRole('dialog', { name: 'File Documents' })
@@ -376,7 +383,7 @@ test('row 9: New Folder, F2, Move To… and Delete are all keys', async () => {
 
   // New Folder asks for a name, and Enter makes it
   const newFolder = main().getByRole('button', { name: 'New Folder' })
-  await tabTo(page, newFolder, { from: main().getByRole('button', { name: /Favorites/ }) })
+  await tabTo(page, newFolder, { from: main().getByRole('button', { name: FOLDER_STAR }) })
   await page.keyboard.press('Enter')
   const asking = page.getByRole('dialog', { name: 'New Folder' })
   await expect(asking.getByRole('textbox', { name: 'Name' })).toBeFocused()

@@ -11,6 +11,9 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 30_000 },
   retries: 0,
+  // A stack that came up healthy but broken would make every spec wait out its sign-in, an hour in all, and the job's
+  // timeout would then end the run before docker/smoke-test.sh says why: ten failures are enough to stop for
+  maxFailures: 10,
   fullyParallel: false,
   workers: 1,
   outputDir: 'e2e-results',

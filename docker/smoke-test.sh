@@ -419,9 +419,9 @@ fast_indexer() {
     && compose restart app >/dev/null && wait_healthy "$(compose ps -q app)" 900
 }
 check "the Indexer runs every 5 seconds for the browser's searches" fast_indexer
-# Signs in as webuser, which the smoke overlay's SmokeWebUserSeed makes, and runs healdan-web's Playwright specs in
-# Chromium and WebKit in Playwright's Docker image: a link into the app, signing in, the way to the Classic Interface and
-# back, Sign Out, an accessibility scan, and the finding flow; then curl checks the web session's forgery refusals. Its
+# Signs in as webuser, which the smoke overlay's SmokeWebUserSeed makes, and runs every spec in healdan-web/web/e2e/ in
+# Chromium and WebKit in Playwright's Docker image (signing in and links into the app, finding, working, filing,
+# organising, the keyboard walk and the accessibility scans); then curl checks the web session's forgery refusals. Its
 # output carries its own PASS/FAIL lines.
 web_started=$SECONDS
 check "the User app in the browser" env BASE="$BASE" HEALDAN_INDEXER_FAST=1 bash docker/tests/test-web.sh

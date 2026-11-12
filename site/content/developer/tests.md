@@ -235,28 +235,36 @@ code is laid out.
   The script copies the workspace in without `node_modules`, installs its packages inside the container, and
   runs the specs against `BASE`. They sign in as `webuser`, whom the `smoke-web-user` setup step makes on a stack
   with the smoke overlay (its password is `SmokeWebUserSeed.PASSWORD`), and do not depend on anything an earlier
-  smoke step left. They check that a link into the app, followed signed out, comes back to its page after signing
+  smoke step left. They check that a link into the app, and a doc # link with its version (`/app/doc/<n>.1`, for a
+  document `signin.spec.ts` files through the API first), followed signed out, come back to their page after signing
   in, that signing in lands on **Recent Documents**, the way to the Classic Interface and back, and **Sign Out**. `finding.spec.ts` files three documents into
   matter 1.1's **Documents** folder through the API with a device token, under a word unique to the run, and then,
   through the page: opens the matter by its number in the Matters scope, adds it to My Matters and opens it from the
-  tree, finds a document by that word and by its `#`, filters by **Picture**, and copies a document's link and follows
-  it. The Indexer reads new documents into the index every 30 minutes, so `smoke-test.sh` sets it to every 5 seconds in
+  tree, finds a document by that word and by its `#`, filters by **Picture** after reading the counts the panel shows
+  (**Picture, 1** and **Other, 2**), and copies a document's link and follows it. The Indexer reads new documents into the index every 30 minutes, so `smoke-test.sh` sets it to every 5 seconds in
   `context.properties` and restarts the app at the start of step 9. Step 9 is the last, so that no other step runs with a fast Indexer, which would read storage document C through Garage and fill the read cache that step 8 checks it never did. The spec asks again until the document shows. Run by hand, `test-web.sh` has no such setting: make it yourself (`sed -i` the `schedule.delay.IndexerTask` and `schedule.interval.IndexerTask` lines of the conf volume's `context.properties` to `5000` and restart the app) and set `HEALDAN_INDEXER_FAST=1`, which only silences the script's warning, or `finding.spec` waits 80 seconds for a document the index doesn't have and fails. WebKit has no
   permission to read the clipboard, so the spec keeps what the page passes to `navigator.clipboard.writeText` on
   `window` and reads the link from there; Chromium's real clipboard is read as well. `working.spec.ts` files a one-page
   PDF into the same folder, and through the page selects it, presses Space and waits for Quick Look to draw page 1 of 1
   (dark pixels in the canvas), then checks that the page saw no `securitypolicyviolation` event and logged no policy
   error, which is how a change to PDF.js's settings or its version is caught under `AppServlet`'s policy, and that Esc
-  gives the focus back to the row. It also files an `.eml` with an HTML body, a tracking picture on a host under `.invalid`, a link and a PDF attached, and through the page opens it in Quick Look: the body renders in its frame, no request reaches the tracker until **Show Pictures** and one does after, the link opens a page of its own with no `opener`, and **Save to Matter** on the attachment makes its chip show the new doc #. `filing.spec.ts` drops three files on the folder's list (Playwright can't drag real ones, so it dispatches `dragenter`, `dragover` and `drop` with a `DataTransfer` built in the page), one of them an `.eml` the matter already holds, and checks that the tray says **Already in this matter as #**, that the other two are filed and show in the list, and that one file dropped on a row and saved as **Version 2** is version 2.0 of that document. `organising.spec.ts` files six documents and makes two folders through the API, adds the matter to My Matters, and through the page: makes a folder with **New Folder**; renames a document in place with F2, where another extension is refused beside the field and Esc leaves the name alone; moves a document with **More › Move To…**; drags two selected rows onto a folder in the tree (dispatching `dragstart` on the row and then `dragenter`, `dragover` and `drop` with one `DataTransfer` built in the page, so the row's own `dragstart` fills what the drop reads) and checks the folder lights up; and deletes two with the question, which it cancels first, then confirms. It needs the smoke fixture's Everyone group to hold the Rename, Move and Delete permissions, which the `smoke-organising` seed step gives it after `smoke-fixture`. Afterwards the script checks with `curl`
-  that the web session refuses a cross-site sign-out and one without the `X-Healdan-Client` header, and still
-  answers `GET`s.
+  gives the focus back to the row. It also files an `.eml` with an HTML body, a tracking picture on a host under `.invalid`, a link and a PDF attached, and through the page opens it in Quick Look: the body renders in its frame, no request reaches the tracker until **Show Pictures** and one does after, the link opens a page of its own with no `opener`, and **Save to Matter** on the attachment makes its chip show the new doc #. `filing.spec.ts` drops three files on the folder's list (Playwright can't drag real ones, so it dispatches `dragenter`, `dragover` and `drop` with a `DataTransfer` built in the page), one of them an `.eml` the matter already holds, and checks that the tray says **Already in this matter as #**, that the other two are filed and show in the list, and that one file dropped on a row and saved as **Version 2** is version 2.0 of that document. `organising.spec.ts` files six documents and makes two folders through the API, all inside the specs' shared `E2E` folder, adds the matter to My Matters, and through the page: makes a folder with **New Folder**; renames a document in place with F2, where another extension is refused beside the field and Esc leaves the name alone; moves a document with **More › Move To…**; drags two selected rows onto a folder in the tree (dispatching `dragstart` on the row and then `dragenter`, `dragover` and `drop` with one `DataTransfer` built in the page, so the row's own `dragstart` fills what the drop reads) and checks the folder lights up; and deletes two with the question, which it cancels first, then confirms. It needs the smoke fixture's Everyone group to hold the Rename, Move and Delete permissions, which the `smoke-organising` seed step gives it after `smoke-fixture`. Afterwards the script signs in with `curl`, checking
+  for LogicalDOC's `SID` header so a failed sign-in says so, and checks that the web session refuses a cross-site
+  sign-out and one without the `X-Healdan-Client` header, and still answers `GET`s; each `curl` has `--max-time 30`.
+  Playwright stops after 10 failures (`maxFailures` in `playwright.config.ts`), so a stack that came up healthy but
+  broken fails step 9 in minutes rather than the job's timeout.
   - `keyboard.spec.ts` walks rows 3 to 9 of the spec's manual acceptance by keyboard alone: after the sign-in page it
     presses keys (`page.keyboard`) and never clicks. A control is reached by Tab (`tabTo` in `helpers.ts`, which presses Tab until
-    the control has the focus and fails after a bound); `focus()` only starts a step at a row, which Tab and the arrow keys
-    reach (row 4 proves Tab gets into the list). It files its own documents and an email into a folder of its own, inside
-    `E2E`, a folder of Documents that this spec and `a11y.spec.ts` share so they add no row to Documents' own list (where
-    `filing.spec.ts` and `working.spec.ts` look for their documents, among the first rows the list draws). It walks:
-    - **Row 3:** `/` to the search box; a suggestion chosen with the arrow keys; a `#` and `#n.N`; a matter number in the
+    the control has the focus and fails after a bound). Not every walk starts where the page does: `focus()` starts a step
+    at a row, which Tab and the arrow keys reach (row 4 proves Tab gets into the list), at a column header (Shift+Tab and
+    the arrow keys reach it from a row), and at a menu item once Enter has opened the menu (its first key is ArrowDown),
+    and some `tabTo` walks start from the folder's star, the search box or an attachment's **Preview**, each with a comment
+    saying why. Those reaches by Shift+Tab and the menus' arrow keys aren't themselves walked. It files its own documents
+    and an email into a folder of its own, inside `E2E`, a folder of Documents that this spec, `organising.spec.ts` and
+    `a11y.spec.ts` share so they add no row to Documents' own list (where `filing.spec.ts` and `working.spec.ts` look for
+    their documents, among the first rows the list draws). It walks:
+    - **Row 3:** `/` to the search box; a suggestion chosen with the arrow keys (typed again until the Indexer has read the
+      document, as the box asks once for words that settle); a `#` and `#n.N`; a matter number in the
       Matters scope, picked from the scope menu; a word search and its results; the funnel, Filters and a tick.
     - **Row 4:** Tab into the list, and each column sorted from its header by Enter, both ways.
     - **Row 5:** Space, the arrow keys and Esc in Quick Look, and docking the reading pane.

@@ -116,6 +116,9 @@ test('filters the results by file type', async ({ page }) => {
   const results = main(page)
   await page.getByRole('button', { name: /^Filters/ }).click()
   const filters = page.getByRole('region', { name: 'Filters' })
+  // The counts are the server's, over what the search found: the picture, and the two text files under Other
+  await expect(filters.getByRole('checkbox', { name: 'Picture, 1' })).toHaveCount(1)
+  await expect(filters.getByRole('checkbox', { name: 'Other, 2' })).toHaveCount(1)
   // The checkbox itself is hidden under its label, as a person would click the words
   await filters.getByText(/^Picture/).click()
   await expect(filters.getByRole('checkbox', { name: /^Picture/ })).toBeChecked()
