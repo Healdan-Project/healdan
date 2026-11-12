@@ -119,6 +119,14 @@ learn from.
     (`WebSessionRoute`), so a disabled account goes to the sign-in page rather than to an app that can't load
     anything. Without one, the servlet stores the return path and redirects to `login.jsp`; once a signed-in page
     loads, it forgets the return path, so a later sign-in lands where Start In says.
+  - **Where a sign-in lands.** LogicalDOC's `login.jsp` sends the password form, as `j_successurl`, to the HTTP
+    session's `RequestedUrl`, which it writes unescaped into a script. Three pieces of `healdan-core`'s `web` package
+    fill it. `ReturnPath` is the return path `AppServlet` stores: a path under `/app/` of letters, digits and
+    `/ . _ ~ % - ? & = + *` only, with no `//` and at most 2,000 characters, or else `/app/`, so nothing that could end
+    the script's string gets in. `LoginLandingFilter` (`@WebFilter("/login.jsp")`) sets it, when no return path is
+    waiting, to where Start In (`ui.start`) says, `Landing.page()`: `/app/` or `/frontend.jsp`. With `?switch` it does
+    nothing, so `login.jsp`'s own clearing of the value still works. `SignInResource` sends a provider's sign-in to
+    the same `RequestedUrl` under `login.jsp`'s conditions, or to `Landing.page()`.
   - **Its headers.** Every answer carries a Content-Security-Policy that allows only the server's own address, with
     no inline script or style, and `nosniff` and `Referrer-Policy: same-origin`.
   - A server built without the app answers `503` at `/app/`, saying the User app wasn't built into it.

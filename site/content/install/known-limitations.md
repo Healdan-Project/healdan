@@ -120,7 +120,8 @@ weight: 12
 ## The User App
 
 - **Some things are still in the Classic Interface.** The app at `/app/` finds, previews, files, checks out, edits
-  the properties of, renames, moves and deletes documents, and makes folders. Other things are done in the Classic
+  the properties of (Author and Typist included), renames, moves and deletes documents, makes folders, and adds
+  documents and folders to My Favorites and takes them off. Other things are done in the Classic
   Interface, one choice away in the app's menu on the same sign-in: [The Classic
   Interface](../../user/the-classic-interface/) lists them. They are:
   - the Trash, to restore or remove what was deleted;
@@ -132,9 +133,14 @@ weight: 12
   - making and editing search folders;
   - choosing and reordering the list's columns, and setting properties on many documents at once;
   - renaming, moving and deleting folders, copying documents, and locking them;
-  - tags and bookmarks.
+  - tags, and a bookmark's own name and description (the Bookmarks section; the app's My Favorites adds and removes
+    them).
 
   Administration is there as well: the app has no screens for it yet.
+- **A secure address.** The app works only at an `https://` address, or on the machine Healdan runs on (`localhost`
+  or `127.0.0.1`). At a plain `http://` address on the network, browsers don't send the `Sec-Fetch-Site` header the
+  web session needs, so the app shows a page that says it needs a secure address, with a link to the Classic Interface,
+  which works there. Put Healdan behind a proxy that handles HTTPS: see [Reverse Proxy](../reverse-proxy/).
 - **Current browsers only.** The app is made for the current Safari, Chrome, Firefox and Edge, meaning the releases
   of the last two years, and is tested in Chromium and WebKit (Chrome and Edge, and Safari). An older browser may
   show it wrongly or not at all.

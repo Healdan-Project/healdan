@@ -8,8 +8,8 @@ import { pdfjsData } from './pdfjs-data.mjs'
 
 // `npm run dev` (in apps/user) serves the app at /app/ and sends the stack's own addresses to the stack named by
 // HEALDAN_DEV_TARGET, a running Healdan (http://127.0.0.1:8080 unless set). The web-session route refuses a request whose
-// Origin isn't the server's own, so the proxy rewrites it. Cookies don't depend on the port, so signing in at the
-// stack's address signs the dev server in too.
+// Origin isn't the server's own, so the proxy rewrites it. Cookies belong to a host name, not a port, so signing in at the
+// stack's address signs in the dev server on the same host name (`npm run dev -- --host 127.0.0.1`), not at localhost.
 export default defineConfig(({ mode }) => {
   const target = loadEnv(mode, '.', 'HEALDAN_').HEALDAN_DEV_TARGET || 'http://127.0.0.1:8080'
   const toStack: ProxyOptions = { target, changeOrigin: true, headers: { Origin: target } }

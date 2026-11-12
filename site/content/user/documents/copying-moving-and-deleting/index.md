@@ -6,6 +6,8 @@ weight: 6
 In the app you can rename, move and delete documents, and make folders. Copying a document, and moving, renaming or
 deleting a folder, are in the [Classic Interface](../../the-classic-interface/). What you can't do to a document, because of
 its permissions or because it's locked or checked out, is refused with a message in the app, and greyed out in the Classic Interface.
+All of it works in any list of documents in the app: a folder, search results, the Recent lists and a document's own
+page (`/app/doc/` and its doc #).
 
 ## Renaming a Document in the App
 

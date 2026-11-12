@@ -40,7 +40,11 @@ and sets the scope picker beside the search box to its scope, so your next searc
 Healdan has no list of all clients: a client shows here only through a matter you can read.
 
 - **Click a document** to select it, and its **Details** open at the right, with **Location**. Its doc # goes into the
-  page's address. Press Enter or double-click on a document to select it too.
+  page's address. Press Enter or double-click on a document to open it in its app, as in a folder (see
+  [Opening Documents](../../office/opening-documents/#from-the-app-open)); it's selected too.
+- **Rename, move and delete** work here as in any list: the toolbar's **More** (⋯) has **Rename**, **Move To…** and
+  **Delete**, F2 renames and Delete asks before moving to the Trash. See
+  [Copying, Moving and Deleting](../../documents/copying-moving-and-deleting/).
 - **Open a folder** with a click or Enter: it opens as it does anywhere.
 - **Open a client** and Healdan searches the **Clients** scope for it, which lists that client's matters.
 - **The lists keep the server's order,** so no column header sorts them. Your administrator can change the 30 days.

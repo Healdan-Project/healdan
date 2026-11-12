@@ -25,6 +25,9 @@ Whichever proxy you use:
   removes `Sec-Fetch-Site` makes Healdan answer each request as if no one were signed in, so the app says "You've been
   signed out." and does it again after every sign-in. A proxy that rewrites `Origin`, so it isn't `LOGICALDOC_PUBLIC_URL`
   or the address the browser used, makes the app say "Healdan refused that from this page", and signs nobody out.
+- **HTTPS for the User app.** Browsers send `Sec-Fetch-Site` only to an `https://` address, or to the machine they run
+  on, so the User app needs the proxy's HTTPS. Opened at a plain `http://` address from another machine, it shows a
+  page saying it needs a secure address, with a link to the Classic Interface, and nothing else.
 - **The root of the host name.** The User app works only at the root of its address, such as
   `https://docs.example.org/app/`, not under a path such as `https://example.org/healdan/app/`. Give Healdan a host
   name of its own: see [Known Limitations](../known-limitations/#the-user-app).

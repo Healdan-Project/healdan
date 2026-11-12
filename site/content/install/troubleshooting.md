@@ -41,6 +41,10 @@ to look.
   administrator ended it. **Sign In** brings them back to the page they were on. If it happens again straight after
   every sign-in, the proxy may be removing the browser's `Sec-Fetch-Site` header: see
   [Reverse Proxy](../reverse-proxy/).
+- **"Healdan needs a secure address."** The User app was opened at a plain `http://` address from another machine,
+  where browsers don't send the `Sec-Fetch-Site` header its sign-in needs. Use the `https://` address the proxy
+  serves (`LOGICALDOC_PUBLIC_URL`), or the Classic Interface, which the page links to: see
+  [Reverse Proxy](../reverse-proxy/).
 - **"Healdan refused that from this page."** The request didn't look like the page's own: its `Origin` header named
   another address than Healdan's, or a change was sent without the app's own header. Nobody is signed out by it.
   Check that `LOGICALDOC_PUBLIC_URL` is the address people type, that the proxy passes `Origin` on, and that people don't reach Healdan under two different host names, such as by IP address and by name.

@@ -51,7 +51,8 @@ let in only when all of these hold:
 4. **A change sends `X-Healdan-Client: web`.** That's every `POST`, `PATCH`, `PUT` and `DELETE`, in any case. Another site's page
    can't add a header to a request to Healdan without a CORS preflight, and the API never allows one with cookies
    (see [Calling the API from Another Origin](#calling-the-api-from-another-origin)). A `GET` needs no header, so
-   downloads, thumbnails and previews work as plain links and images.
+   downloads, thumbnails and previews work as plain links and images. The method is the request's own: CXF's
+   `_method` parameter and `X-HTTP-Method-Override` header are off, so a `GET` never becomes a change.
 5. **The HTTP session holds an open web-page session.** Tomcat finds the HTTP session by its `JSESSIONID` cookie,
    which is HttpOnly, and the sign-in page keeps the web-page session's id in it. The API never takes that id from
    a `sid` parameter or header, or from the `ldoc-sid` cookie, though LogicalDOC's own routes do.

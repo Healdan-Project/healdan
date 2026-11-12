@@ -117,7 +117,8 @@ scopes have them; Folders, Matters and Clients don't.
 | **Client** | in search results only: the clients of the matters the results are in, by number |
 | **Matter** | in search results only: the matters the results are in, such as `1001.1` |
 
-Today and the date ranges follow the server's time zone.
+Today and the days of a range are your own: they follow your computer's time zone, as the dates in the list do. A
+document saved late in the evening counts as that day's, wherever the server is.
 
 - **Each option shows a count:** how many documents ticking it would leave, among those you can read that pass the
   other filters. Options that would leave none aren't listed, apart from any you've already ticked.

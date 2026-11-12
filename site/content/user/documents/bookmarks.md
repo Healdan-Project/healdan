@@ -10,6 +10,9 @@ This is in the [Classic Interface](../../the-classic-interface/), which the Heal
 A bookmark keeps a document or folder you use often a click away. Your bookmarks are yours alone: nobody else sees
 them.
 
+In the app they're **My Favorites**, in the left pane: the star beside a folder's name, or beside a document's name in
+its details, adds it and takes it off. See [Getting Around](../../getting-started/getting-around/#the-left-pane).
+
 ## Adding a Bookmark
 
 Right-click a document or a folder and choose **Add bookmark**. Bookmarking the same one twice adds nothing.

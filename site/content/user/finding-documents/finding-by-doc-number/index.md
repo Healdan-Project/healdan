@@ -47,9 +47,9 @@ Select a document in a folder's list, and choose **Copy Link** in its details. H
 copied". Paste it into an email or a note. Whoever opens it signs in first if they need to, and then sees the document
 if they may read it.
 
-Healdan can only copy to your clipboard when the page is on a secure address (`https://`), or on your own computer. If
-it can't, it says "The link couldn't be copied." Type the address by hand instead: it's your page's address up to
-`/app/`, then `doc/` and the number.
+If your browser won't let Healdan use the clipboard, it says "The link couldn't be copied." Type the address by hand
+instead: it's your page's address up to `/app/`, then `doc/` and the number. The app itself only opens at a secure
+address (`https://`), or on the computer Healdan runs on, so the clipboard is there for it in a current browser.
 
 ## In the Classic Interface
 

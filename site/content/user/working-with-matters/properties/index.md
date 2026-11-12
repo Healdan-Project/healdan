@@ -35,8 +35,12 @@ properties are in it.
   you've chosen, and choosing another Class clears a Subclass that doesn't belong to it.
 - **Dates** are picked from a calendar or typed. A property that's a number takes a number, and a yes-or-no is a tick
   box.
+- **Author and Typist are people.** Type part of a name, and Healdan lists the people whose names hold it, up to 20;
+  pick one with the arrow keys and Enter, or a click. The person the property has now comes first in the list. Text
+  you leave half typed goes back to that person, and an empty field leaves the property empty (a required one is then
+  marked when you save).
 - **Client and Matter are text.** They come from the matter and can't be changed. The same goes for an email's From,
-  To, Sent and Received. Author and Typist show as they are: change them in the Classic Interface.
+  To, Sent and Received.
 - **Save sends only what you changed,** and it's saved as a new snapshot (see [Versions](../../documents/versions/)).
   **Cancel**, or Esc, puts everything back. By keyboard, the form opens with the first field ready to type in, and Enter in
   a field saves.

@@ -31,14 +31,16 @@ cd healdan-web/web
 npm ci --ignore-scripts
 npm run generate
 cd apps/user
-HEALDAN_DEV_TARGET=http://127.0.0.1:8080 npm run dev    # the stack's address; that one is the default
+HEALDAN_DEV_TARGET=http://127.0.0.1:8080 npm run dev -- --host 127.0.0.1    # the stack's address; that one is the default
 ```
 
-Open `http://localhost:5173/app/`. The dev server sends `/api`, `/login.jsp` and `/j_spring_security_check` to the
-stack. The API's web-session route refuses a request whose `Origin` isn't the server's own, so the dev server
-rewrites `Origin` to the stack's address. Cookies don't depend on the port, so you can sign in at the stack's own
-address, and the dev server's page is signed in too. Pages the app links to that the proxy doesn't pass, such as
-the Classic Interface, are on the stack's address.
+Sign in at the stack's own address, `http://127.0.0.1:8080/login.jsp`, then open `http://127.0.0.1:5173/app/`. A
+cookie belongs to a host name, not a port, so the dev server's page on the same host name is signed in too; one at
+`localhost` isn't, as that's another host name. The dev server sends `/api`, `/login.jsp` and
+`/j_spring_security_check` to the stack. The API's web-session route refuses a request whose `Origin` isn't the
+server's own, so the dev server rewrites `Origin` to the stack's address. The app's own **Sign In**, after a sign-out,
+reloads the dev server's page, which only the stack's `AppServlet` would send to the sign-in page: sign in at the stack
+again. Pages the app links to that the proxy doesn't pass, such as the Classic Interface, are on the stack's address.
 
 ## Adding a View
 
@@ -53,6 +55,15 @@ the Classic Interface, are on the stack's address.
 The router's types are registered (`router.tsx`), so `Link`, `navigate()` and the search hooks check each address's
 parameters. Build an API path from data with `apiPath`, from `@healdan/api`, which encodes each value as one
 segment: `` apiPath`/v1/folders/${id}/children` ``.
+
+## A Secure Address Only
+
+Browsers send `Sec-Fetch-Site` only to a potentially trustworthy address (HTTPS, or the machine itself), and the
+web-session route needs it, so at a plain `http://` address off the machine every call would be `401`. `main.tsx`'s
+`start(root, secure)` checks `window.isSecureContext` first and, without it, draws only `frame/InsecureAddress.tsx`,
+in the catalogue's words, with a link to the Classic Interface, before anything asks the server. Nothing that runs as
+the app loads may need a secure context either: a drag's page token (`organising/rows.ts`) is made with
+`crypto.getRandomValues`, as `crypto.randomUUID` exists only at a secure address.
 
 ## Lists
 
@@ -77,7 +88,9 @@ A folder's filters are `?type=pdf&type=word&author=pnair&class=…&edited=7d` (o
 address: `filters/useFilters.ts` reads them (`readFilters` leaves out what the API would refuse, so a pasted address
 never makes the list an error), counts them for the funnel's badge, and writes them back with `navigate`, replacing the
 entry. The router's `parseSearch` and `stringifySearch` carry the repeated ones as lists, and each route that takes
-filters adds `filterSearch` to its `validateSearch`. `useListing` sends them with every page; `filters/useFacets.ts`
+filters adds `filterSearch` to its `validateSearch`. `filterParams` adds `zone`, the browser's IANA time zone
+(`Intl.DateTimeFormat().resolvedOptions().timeZone`), which the server cuts Today and a range's days in, so they are the
+days the list's dates show. `useListing` sends them with every page; `filters/useFacets.ts`
 asks for the counts on their own (`GET /folders/{id}/children` with `facets`, `limit=1`) only while the panel is open,
 and for the folder's count with no filters only while one is in use, which is the "7" of "3 of 7 documents".
 
@@ -164,7 +177,10 @@ view.
 - **The form.** `GET /v1/folders/{id}/form` says what a new document would have. When a required property has no value, or
   Option is held, `FilingForm` appears first: a title for each file, and `details/FieldsForm.tsx`, the form of a document's
   properties (`PropertiesForm` is the same form over `PATCH`), so the two share their rules (required marks, lists, Subclass
-  narrowing, dates, number checks).
+  narrowing, dates, number checks). A user property, such as Author or Typist, is `details/UserField.tsx`: `@healdan/ui`'s
+  `PickField` (React Aria's ComboBox with its label above it), which asks `GET /v1/users?q=` once the typing pauses
+  (one character is enough; the server answers 20 at most), offers the field's own person first, and sends `{ id }`,
+  as the helper does. A folder or document property stays text.
 - **The tray.** `FilingTray` over `@healdan/ui`'s `Tray`, marked `data-react-aria-top-layer` so a modal's hiding of the page
   leaves it for a screen reader. A refusal is said from the catalogue (`refusal.ts`), from the problem's `code`, its
   `fields` or its `hold`, and an `already-filed` names the copy. **Edit** asks the details panel to open its form
@@ -203,6 +219,9 @@ for the toolbar's More menu (`actions/MoreMenu.tsx`).
   files, and a place that holds no documents is refused with the filing rule's words before any call. There's no keyboard
   drag: More › Move To… is the way for a keyboard.
 - **New Folder** is offered inside a matter's folders, and at a matter's top level only to an administrator (`useMe`).
+- **Every list of documents** has it: a folder, search results, Recent Documents and Emails, and the `#` result, each with
+  `useOrganisingTable` and a `Toolbar` holding `SelectionActions`. `useRowSelection(rows)` keeps only the selected rows
+  still listed, so once they're deleted or moved F2 and Delete take the focused row.
 
 Test it with `organising/*.test.tsx`; `testing.tsx` has routes for a folder that rename, move and delete as the server
 would, and a `DataTransfer` that keeps what a drag writes. `e2e/organising.spec.ts` does it in a real browser.

@@ -34,9 +34,10 @@ An email (`.eml` or `.msg`) takes its subject as its title and fills in its emai
 If a required property has no default, Healdan can't file the files without asking, so a form appears first. It also
 appears when you hold **Option (⌥)** as you drop, if you want to set something. It lists the files, each with a title you
 can edit, and one form of properties for all of them. Its button says how many it will file, such as **File 3 Items**. A
-required property is marked, and a property picked from a list offers only its choices. An email has no title to edit:
-it takes its subject, and the form says so. If you drop again while a form is open, the second form opens when the first
-closes. This is the same form as
+required property is marked, and a property picked from a list offers only its choices. **Author** and **Typist**
+are people: type part of a name and pick the person from the list Healdan finds. An email has no title to edit: it
+takes its subject, and the form says so. While a form is open the page behind it takes no drop; files dropped before
+it appears get a form of their own, which opens when the first closes. This is the same form as
 **Edit** in a document's details: see [Properties](../properties/).
 
 ![The File Documents form for three files going into the Correspondence folder of matter 1002.1: a title field for each of Note of Call – Hale.docx, Letter to Cardew Hollis.docx and Lease Plan Notes.txt, then Client 1002 – Brightwell Bakeries Ltd, Matter 1002.1 – Commercial Lease, Author and Typist Priya Nair, Class Correspondence, Subclass Letter, Comments and Legacy doc #, and the File 3 Items and Cancel buttons](filing-form.png)
@@ -100,7 +101,9 @@ checked out to you, which you hadn't done, it releases it again, and the tray sa
   See [Finding a Document by Doc #](../../finding-documents/finding-by-doc-number/).
 - **It takes its folder's properties:** the client and matter, and anything the folders above it set, such as its
   Class. See [Properties](../properties/).
-- **You're its Author and its Typist,** unless you change them. Typist is for filing on someone else's behalf.
+- **You're its Author and its Typist,** unless you change them in the form that comes first (hold Option as you drop,
+  or press Option-Enter on **Upload**), or later with **Edit** in its details. Typist is for filing on someone else's
+  behalf: a secretary filing a partner's letter makes the partner its Author.
 - **Its Date filed is now.** It records when the document entered Healdan, and can't be changed.
 - **An email gets its sender, recipients, subject and dates** read into its properties. See [Emails](../emails/).
 

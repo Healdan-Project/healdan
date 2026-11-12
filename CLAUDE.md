@@ -59,7 +59,7 @@ cd healdan-web/web && npm run typecheck                   # tsc over the workspa
 cd healdan-web/web && npm run lint                        # ESLint
 cd healdan-web/web && npm test                            # the app's Vitest tests and Node's runner for scripts/
 cd healdan-web/web && npm run build                       # generate and typecheck, then Vite's build into apps/user/dist/
-mvn -pl healdan-web -am -DskipTests package -Dhealdan.web.skip=true # healdan-web without the Node build (its jar then holds no app)
+mvn -pl healdan-web -am -DskipTests package -Dhealdan.web.skip=true -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true # healdan-web without the Node build (its jar then holds no app) or the GWT compile
 clients/libreoffice/build.sh                              # the LibreOffice extension, packaged as clients/libreoffice/healdan.oxt (reproducible)
 dotnet run --project clients/helper/tools/IconRender      # the extension's toolbar images and icon, from the helper's icons (by hand, on a Mac)
 clients/helper/packaging/mac/package.sh 1.2.3             # Healdan Helper.app and its .dmg, on a Mac; signed only with SIGN_IDENTITY set

@@ -36,7 +36,8 @@ tree, and the main area shows the folder the same way.
 
 - **The breadcrumb** at the top says where you are: the client, the matter as `998.1 – Firm Policies`, then each folder
   down to this one. Click the matter or a folder in it to go there.
-- **The star** beside a folder's name adds the folder to **My Favorites** in the left pane, and takes it off again.
+- **The star** beside a folder's name adds the folder to **My Favorites** in the left pane, and takes it off again. A
+  document has its own, beside its name in its details.
   A matter's top level has no star: add the matter to
   [My Matters](../../finding-documents/my-matters-and-recent-matters/) instead.
 - **The count** above the list says how many documents the folder holds, such as "7 documents". It counts every

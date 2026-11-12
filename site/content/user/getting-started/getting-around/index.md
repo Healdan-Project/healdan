@@ -13,7 +13,8 @@ colours follow your browser's light or dark setting.
 - **Healdan's mark and name** on the left take you back to the start page.
 - **The search box,** with the scope picker joined to its left. Press `/` to jump to it. It suggests matters and
   documents as you type, and `#` and a doc # goes straight to that document. See [Searching](../../finding-documents/searching/).
-- **The ? (Help) button** opens the User Guide, and the notices for the open-source software Healdan uses, each in a new window.
+- **The ? (Help) button** opens a menu with **User Guide** and **Open-Source Notices**, the notices for the open-source
+  software Healdan uses; each opens in a new window.
 - **Your menu**, under your initials, shows your name and has Signed-in Devices, Classic Interface and Sign Out.
   Signed-in Devices lists where your account is signed in besides this page, and ends any of them: see
   [Signed-in Devices](../signed-in-devices/). Classic Interface opens the older web page, on the same sign-in. Sign Out
@@ -31,7 +32,8 @@ The left pane scrolls on its own when it's longer than the window. From the top 
 - **My Matters:** the matters you've chosen to keep at hand, as a tree. Open a matter to see its folders and search
   folders, and open a folder to see its own folders. A search folder has its own icon. The tree opens to the folder
   you're in, and **+** beside the heading adds the matter you're in.
-- **My Favorites:** documents and folders you've added as favorites.
+- **My Favorites:** documents and folders you've added as favourites, with the star beside a folder's name or beside
+  a document's name in its details.
 
 [My Matters and Recent Matters](../../finding-documents/my-matters-and-recent-matters/) explains the first two.
 If your firm calls matters something else, such as projects, the headings use its word: Recent Projects and My
@@ -54,7 +56,8 @@ Select a document in a folder's list, in search results or in a Recent list, and
 
 - **A thumbnail** of the first page, when the document has one. Without one, a plain icon for the kind of file shows
   instead.
-- **The name,** and under it the doc #, the version and the size: `# 10388 · Version 2 · 209 KB`.
+- **The name,** with a star beside it that adds the document to **My Favorites** and takes it off again, and under it
+  the doc #, the version and the size: `# 10388 · Version 2 · 209 KB`.
 - **Open** opens the document in its app through the Healdan Helper, or downloads it when the helper doesn't open that kind
   of file: see [Opening Documents](../../office/opening-documents/#from-the-app-open). **Download** saves a copy of its file: see
   [Downloading Documents](../../documents/downloading-documents/#one-document-in-the-app). **Edit** turns the
@@ -64,8 +67,8 @@ Select a document in a folder's list, in search results or in a Recent list, and
   [Checking Out and Checking In](../../documents/checking-out-and-checking-in/#in-the-app).
 - **Properties:** Client, Matter, Class, Subclass, Author, Typist and Date Filed, and, for an email, From, To, Sent
   and Received. In search results, Recent lists and a document's own page (`/app/doc/` and its doc #) there is also
-  **Location**, the document's folder, which you can click. Choose **Edit** to change the ones you can, such as Class
-  and Subclass: see [Properties](../../working-with-matters/properties/#editing-in-the-app).
+  **Location**, the document's folder, which you can click. Choose **Edit** to change the ones you can, such as Class,
+  Subclass, Author and Typist: see [Properties](../../working-with-matters/properties/#editing-in-the-app).
 - **Versions:** the document's timeline, newest first, with who saved each and when.
 
 Click another document to see its details instead, or select several and the details close.
