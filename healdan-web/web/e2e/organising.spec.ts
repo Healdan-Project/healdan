@@ -72,6 +72,19 @@ async function open(page: Page) {
 const row = (list: Locator, text: string) => list.getByRole('row', { name: escape(text) })
 const document = (n: number) => call<{ name: string; folder: { id: number; name: string } }>(api!.get(`/api/v1/documents/${n}`, authorized(token)), `document ${n}`)
 
+// Two documents selected by name, one click each (the second with Ctrl, or Cmd on a Mac), never as a range between them: the
+// list is newest edit first, and the Indexer, which runs every few seconds here, touches the documents' edit dates after they
+// are filed, so what lies between two rows isn't theirs to say (a document renamed by the other test once did, and made it
+// three rows). A click selects its row only once the selection has followed it into the address, so the first is waited for.
+async function selectTwo(list: Locator, first: string, second: string) {
+  await row(list, first).getByRole('rowheader').click()
+  await expect(list.getByRole('row', { selected: true })).toHaveCount(1)
+  await row(list, second).getByRole('rowheader').click({ modifiers: ['ControlOrMeta'] })
+  await expect(list.getByRole('row', { selected: true })).toHaveCount(2)
+  await expect(row(list, first)).toHaveAttribute('aria-selected', 'true')
+  await expect(row(list, second)).toHaveAttribute('aria-selected', 'true')
+}
+
 test('makes a folder, renames a document in place, and moves another by the picker', async ({ page }) => {
   const list = await open(page)
 
@@ -125,11 +138,8 @@ test('moves two rows by dragging them onto a folder of the tree, and deletes two
   const target = tree.getByRole('row', { name: escape(DRAGGED) }).getByText(DRAGGED)
   await expect(target).toBeVisible()
 
-  // The two rows, side by side, are selected; dragging one of them carries both
-  await row(list, NAMES.dragTwo).getByRole('rowheader').click()
-  await expect(list.getByRole('row', { selected: true })).toHaveCount(1)
-  await row(list, NAMES.dragOne).getByRole('rowheader').click({ modifiers: ['Shift'] })
-  await expect(list.getByRole('row', { selected: true })).toHaveCount(2)
+  // The two rows are selected; dragging one of them carries both
+  await selectTwo(list, NAMES.dragTwo, NAMES.dragOne)
   const carried = await row(list, NAMES.dragOne).evaluate((element) => {
     const transfer = new DataTransfer()
     element.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: transfer }))
@@ -156,15 +166,11 @@ test('moves two rows by dragging them onto a folder of the tree, and deletes two
   expect((await document(numbers.dragTwo)).folder.id).toBe(folders.dragged)
 
   // Delete asks first, naming both in the list's order (newest first), and says where the Trash is
-  await row(list, NAMES.deleteTwo).getByRole('rowheader').click()
-  // A range counts from the row clicked first, once the selection has followed the click into the address
-  await expect(list.getByRole('row', { selected: true })).toHaveCount(1)
-  await row(list, NAMES.deleteOne).getByRole('rowheader').click({ modifiers: ['Shift'] })
-  // The address follows the selection a moment later: Delete is for both once both are selected
-  await expect(list.getByRole('row', { selected: true })).toHaveCount(2)
+  await selectTwo(list, NAMES.deleteTwo, NAMES.deleteOne)
   await page.keyboard.press('Delete')
   const question = page.getByRole('dialog', { name: 'Move 2 documents to the Trash?' })
-  await expect(question.getByRole('listitem')).toHaveText([NAMES.deleteTwo, NAMES.deleteOne])
+  // In the list's order, which the Indexer's touches of the documents' edit dates move about, so only the names are checked
+  expect((await question.getByRole('listitem').allTextContents()).sort()).toEqual([NAMES.deleteOne, NAMES.deleteTwo].sort())
   await expect(question.getByText('The Trash is in the Classic Interface, where they can be restored.')).toBeVisible()
   await question.getByRole('button', { name: 'Cancel' }).click()
   expect((await document(numbers.deleteOne)).name).toBe(NAMES.deleteOne)
