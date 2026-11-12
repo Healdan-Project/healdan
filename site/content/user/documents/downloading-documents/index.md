@@ -16,7 +16,7 @@ Select the document and choose **Download**, in the toolbar above the list or in
 Your browser saves the file under the document's name, as it does for any link to a file. Healdan doesn't open the
 file in the page or keep a copy of it there.
 
-![The web page in the Correspondence folder of matter 1002.1 – Commercial Lease with Heads of Terms – Unit 4 Weir Lane.docx selected: the toolbar above the list, with Upload, New Folder, Open, Preview, Download and Check Out, and the Download button in the document's details at the right](download-toolbar.png)
+![The web page in the Due Diligence folder of matter 1002.1 – Commercial Lease, with Site Plan – Unit 4 Weir Lane.odg selected: the toolbar above the list, with Upload, New Folder, Open, Preview, Download, Check Out and the ⋯ (More) button, the document count and Filters below it, and the Download button in the document's details at the right](download-toolbar.png)
 
 If the file can't be reached right now, because it's in cloud storage or on a share that's down, the download fails.
 Your browser shows that in its list of downloads, and some browsers save a small file saying why instead. The app

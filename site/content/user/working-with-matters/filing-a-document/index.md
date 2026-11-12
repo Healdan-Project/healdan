@@ -39,7 +39,7 @@ it takes its subject, and the form says so. If you drop again while a form is op
 closes. This is the same form as
 **Edit** in a document's details: see [Properties](../properties/).
 
-![The File Documents form for three files going into the Correspondence folder of matter 1002.1: a title field for each of Attendance Note – Call with Martin Hale.docx, Letter to Cardew Hollis – Rent Deposit.docx and Lease Plan Notes.txt, then Client 1002, Matter 1, Author and Typist Priya Nair, Class Correspondence, Subclass Letter, Comments, Legacy doc # and Message-ID, and the File 3 Items and Cancel buttons](filing-form.png)
+![The File Documents form for three files going into the Correspondence folder of matter 1002.1: a title field for each of Note of Call – Hale.docx, Letter to Cardew Hollis.docx and Lease Plan Notes.txt, then Client 1002 – Brightwell Bakeries Ltd, Matter 1002.1 – Commercial Lease, Author and Typist Priya Nair, Class Correspondence, Subclass Letter, Comments and Legacy doc #, and the File 3 Items and Cancel buttons](filing-form.png)
 
 ### The Tray
 
@@ -49,7 +49,7 @@ seen. Its heading counts them, such as "2 Filed, 1 Refused". **Collapse** folds 
 Finished** takes the filed and refused items off and keeps the running ones. At most three upload at a time, and they go on while you move about the app. If you try
 to leave the page while any are still uploading, the browser asks first.
 
-![The tray after the three files were filed, headed "3 Filed" with Clear Finished and Collapse: Attendance Note – Call with Martin Hale.docx filed as # 64, Letter to Cardew Hollis – Rent Deposit.docx as # 66 and Lease Plan Notes.txt as # 65, each in Correspondence, with Edit and Dismiss buttons](filing-tray.png)
+![The tray after the three files were filed, headed "3 Filed" with Clear Finished and Collapse: Note of Call – Hale.docx filed as # 66, Letter to Cardew Hollis.docx as # 65 and Lease Plan Notes.txt as # 64, each in Correspondence, with Edit and Dismiss buttons](filing-tray.png)
 
 - **Edit** on a filed file selects the document and opens its properties form in the details.
 - **Show** on an email that is already in the matter opens the copy. See [Emails](../emails/).
