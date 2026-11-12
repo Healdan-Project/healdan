@@ -229,6 +229,25 @@ describe('EmailView', () => {
     expect(screen.getByRole('button', { name: 'Save to Matter: Site Photo.png' })).toBeTruthy()
   })
 
+  it('keeps the focus in the chip when the Save to Matter it was on gives way to the #', async () => {
+    let filed: number | null = null
+    renderPreview(<EmailView document={mail} />, {
+      [message]: () => messageView({ attachments: messageView().attachments.map((a) => (a.index === 1 ? { ...a, docNumber: filed } : a)) }),
+      [save]: () => {
+        filed = 10500
+        return document({ docNumber: 10500, name: 'Contract.pdf' })
+      },
+    })
+
+    const button = await screen.findByRole('button', { name: 'Save to Matter: Contract.pdf' })
+    act(() => button.focus())
+    fireEvent.click(button)
+
+    expect(await screen.findByText('Saved as # 10500')).toBeTruthy()
+    // Not the page's body, from where Esc reaches no dialog: the attachment's own control, in the same chip
+    await waitFor(() => expect(window.document.activeElement).toBe(screen.getByRole('button', { name: 'Preview Contract.pdf' })))
+  })
+
   it('shows the # of an attachment that was filed already', async () => {
     const attachments = messageView().attachments.map((a) => (a.index === 3 ? { ...a, docNumber: 10412 } : a))
     renderPreview(<EmailView document={mail} />, { [message]: messageView({ attachments }) })
