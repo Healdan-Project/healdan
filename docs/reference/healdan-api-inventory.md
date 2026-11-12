@@ -3,12 +3,13 @@
 - **What:** every server call the old GWT UI makes, with the milestone that first needs it in the new JSON API, and where it lands there.
 - **Written:** 2026-10-23, for the [M2 design](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) (§12), from the code at `808d5395b`.
 - **Kept current:** each milestone that adds endpoints updates its entries' tags and endpoints in the same pull request.
+- **M6 built** its endpoints on 2026-11-10 to 2026-11-12 (§0.3), and its design left the rest of the old calls it weighed to later phases of the User app (`Later`) or to none (M6 spec §4, §16).
 - **M3 built** its endpoints on 2026-10-24 (§0.2): the bookmarks, `FolderService.create` and `/thumbnail` moved from M6 to M3, and the rest of M3's additions have no old call behind them.
 - **M2 built** every `M2` endpoint named here on 2026-10-23 and 2026-10-24 (§0.1). Its `openapi.yaml` (`healdan-api/src/main/resources/healdan/api/openapi.yaml`) is the reference for what they do; this file only maps the old calls to them.
 
-**Tags.** The milestone that first needs the call: `M2` (the add-in slice), `M3`, `M5`, `M6` (the User app), `M7` (walls), `Admin` (the backlog's Admin app), or `none`. `none` covers enterprise stubs with no server code (marked **NO IMPL**) and CE features Healdan doesn't use. Tags are judgements, and a milestone's design session can move them.
+**Tags.** The milestone that first needs the call: `M2` (the add-in slice), `M3`, `M5`, `M6` (the User app), `M7` (walls), `Later` (a phase of the User app after M6), `Admin` (the backlog's Admin app), or `none`. `none` covers enterprise stubs with no server code (marked **NO IMPL**) and CE features Healdan doesn't use. Tags are judgements, and a milestone's design session can move them.
 
-**Lands in.** `M2` and `M3` entries name the endpoint that replaces them (§0.1 and the M2 spec §6, §0.2 and the M3 spec §9). Everything else names only the resource area it will probably land in: a hint for that milestone's design, not a designed endpoint. Paths are under `/api/v1`.
+**Lands in.** `M2`, `M3` and `M6` entries name the endpoint that replaces them (§0.1 and the M2 spec §6, §0.2 and the M3 spec §9, §0.3 and the M6 spec §9). Everything else names only the resource area it will probably land in: a hint for that milestone's design, not a designed endpoint. Paths are under `/api/v1`.
 
 **Purposes** were inferred from names, signatures and spot-checked implementations, not from reading every method body.
 
@@ -26,10 +27,11 @@
 | M2 | 31 | 6 | 3 | 40 |
 | M3 | 3 | 1 | 1 | 5 |
 | M5 | 0 | 0 | 0 | 0 |
-| M6 | 96 | 20 | 10 | 126 |
+| M6 | 9 | 1 | 2 | 12 |
 | M7 | 0 | 0 | 0 | 0 |
+| Later | 74 | 17 | 7 | 98 |
 | Admin | 122 | 20 | 3 | 145 |
-| none | 223 | 5 | 6 | 234 |
+| none | 236 | 7 | 7 | 250 |
 | **all** | 475 | 52 | 23 | 550 |
 
 ### 0.1 What M2 replaces (built in M2)
@@ -81,60 +83,82 @@ M3 built every endpoint in this table, for the Healdan Helper's windows and save
 | (none: stamping is new) | the `Healdan Doc ID` property filled in by `POST /documents` and `POST /documents/{docNumber}/versions` |
 | `HealdanLookupService.lookup` (the title's form) | `GET /lookup?q=` and `/search` take `#1234 v2.1` |
 
-### 0.3 Per service
+### 0.3 What M6 adds (built in M6)
 
-| Service | Methods | M2 | M3 | M5 | M6 | M7 | Admin | none |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| InfoService | 4 | 1 |  |  | 1 |  | 1 | 1 |
-| SecurityService | 44 | 4 |  |  | 14 |  | 26 |  |
-| HealdanLookupService | 1 | 1 |  |  |  |  |  |  |
-| HealdanMatterService | 12 | 5 |  |  | 2 |  | 5 |  |
-| HealdanSearchFolderService | 6 | 2 |  |  | 4 |  |  |  |
-| HealdanSettingsService | 6 | 1 |  |  |  |  | 5 |  |
-| AttributeSetService | 10 |  |  |  |  |  | 10 |  |
-| AuditService | 4 |  |  |  |  |  |  | 4 |
-| AutomationService | 8 |  |  |  |  |  |  | 8 |
-| BarcodeService | 4 |  |  |  |  |  |  | 4 |
-| CalendarService | 5 |  |  |  |  |  |  | 5 |
-| ChatGPTService | 5 |  |  |  |  |  |  | 5 |
-| ChatService | 2 |  |  |  |  |  |  | 2 |
-| ClusterService | 2 |  |  |  |  |  |  | 2 |
-| ContactService | 5 |  |  |  |  |  |  | 5 |
-| DashletService | 7 |  |  |  | 4 |  | 3 |  |
-| DocuSignService | 6 |  |  |  |  |  |  | 6 |
-| DocumentService | 72 | 12 | 2 |  | 37 |  | 7 | 14 |
-| EmailAccountService | 8 |  |  |  |  |  |  | 8 |
-| FolderService | 27 | 2 | 1 |  | 17 |  | 7 |  |
-| FormService | 6 |  |  |  |  |  |  | 6 |
-| ImpexService | 12 |  |  |  |  |  |  | 12 |
-| ImportFolderService | 8 |  |  |  |  |  |  | 8 |
-| LDAPService | 7 |  |  |  |  |  |  | 7 |
-| MessageService | 8 |  |  |  |  |  | 5 | 3 |
-| OCRService | 1 |  |  |  |  |  |  | 1 |
-| ReadingRequestService | 5 |  |  |  |  |  |  | 5 |
-| ReportService | 9 |  |  |  |  |  |  | 9 |
-| RetentionPoliciesService | 5 |  |  |  |  |  |  | 5 |
-| SchemeService | 6 |  |  |  |  |  |  | 6 |
-| SearchEngineService | 14 |  |  |  |  |  | 14 |  |
-| SearchService | 5 | 1 |  |  | 4 |  |  |  |
-| SettingService | 18 |  |  |  | 2 |  | 16 |  |
-| ShareFileService | 5 |  |  |  |  |  |  | 5 |
-| SignService | 11 |  |  |  |  |  |  | 11 |
-| SplitService | 1 |  |  |  |  |  |  | 1 |
-| StampService | 8 |  |  |  |  |  |  | 8 |
-| SyndicationService | 6 |  |  |  |  |  |  | 6 |
-| SystemService | 17 |  |  |  |  |  | 17 |  |
-| TagService | 6 |  |  |  | 4 |  | 2 |  |
-| TemplateService | 6 | 2 |  |  |  |  | 4 |  |
-| TenantService | 7 |  |  |  |  |  |  | 7 |
-| TwoFactorsAuthenticationService | 3 |  |  |  |  |  |  | 3 |
-| UpdateService | 17 |  |  |  |  |  |  | 17 |
-| WorkflowService | 26 |  |  |  |  |  |  | 26 |
-| ZonalOCRService | 4 |  |  |  |  |  |  | 4 |
-| LoginService | 7 |  |  |  | 7 |  |  |  |
-| TfaService | 1 |  |  |  |  |  |  | 1 |
-| SetupService | 2 |  |  |  |  |  |  | 2 |
-| DropboxService | 6 |  |  |  |  |  |  | 6 |
+M6 built every endpoint in this table, for the User app ([M6 spec](../superpowers/specs/2026-11-10-m6-user-app-design.md) §9), but `GET /server` and `GET /users`, which M2 built and the app uses as they are. The rows marked "(none: …)" have no old call behind them.
+
+| Old call | M6 endpoint |
+|---|---|
+| `SecurityService.logout`, on the web page | `DELETE /session`, on the web session only |
+| `HealdanMatterService.addToMyMatters`, `removeFromMyMatters` | `PUT /me/matters/{folderId}`, `DELETE /me/matters/{folderId}` |
+| `DocumentService.rename` | `PATCH /documents/{docNumber}` |
+| `DocumentService.delete` | `DELETE /documents/{docNumber}` |
+| `FolderService.paste`, a cut's move | `POST /documents/{docNumber}/move` |
+| `DocumentService.extractEmail`, `saveEmailAttachment` | `GET /documents/{docNumber}/message`, `GET /documents/{docNumber}/message/body`, `POST /documents/{docNumber}/message/attachments/{id}/file` |
+| `/download-attachment` | `GET /documents/{docNumber}/message/parts/{id}` |
+| `/convertpdf/*` | `GET /documents/{docNumber}/preview` |
+| `SettingService.loadGUISettings`, `loadSettingsByNames`; `/data/users.xml` | M2's `GET /server` and `GET /users?q=`, as they are |
+| (none: recent emails are new) | `GET /documents/recent?kind=email` |
+| (none: recent clients are new) | `GET /clients/recent` |
+| (none: suggestions are new) | `GET /suggest?q=` |
+| (none: filters and their counts are new) | `type`, `author`, `class`, `client`, `matter`, `edited`, `from`, `to`, `zone`, `sort`, `order` and `facets` on `GET /folders/{id}/children` and `GET /search` |
+| (none: overrides are new) | `overrides` on `GET /documents/{docNumber}/properties` |
+| (none: the browser's way in is new) | the web-session route, on every endpoint but those for tokens alone (M6 spec §8.1) |
+
+### 0.4 Per service
+
+| Service | Methods | M2 | M3 | M5 | M6 | M7 | Later | Admin | none |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| InfoService | 4 | 1 |  |  |  |  | 1 | 1 | 1 |
+| SecurityService | 44 | 4 |  |  |  |  | 14 | 26 |  |
+| HealdanLookupService | 1 | 1 |  |  |  |  |  |  |  |
+| HealdanMatterService | 12 | 5 |  |  | 2 |  |  | 5 |  |
+| HealdanSearchFolderService | 6 | 2 |  |  |  |  | 4 |  |  |
+| HealdanSettingsService | 6 | 1 |  |  |  |  |  | 5 |  |
+| AttributeSetService | 10 |  |  |  |  |  |  | 10 |  |
+| AuditService | 4 |  |  |  |  |  |  |  | 4 |
+| AutomationService | 8 |  |  |  |  |  |  |  | 8 |
+| BarcodeService | 4 |  |  |  |  |  |  |  | 4 |
+| CalendarService | 5 |  |  |  |  |  |  |  | 5 |
+| ChatGPTService | 5 |  |  |  |  |  |  |  | 5 |
+| ChatService | 2 |  |  |  |  |  |  |  | 2 |
+| ClusterService | 2 |  |  |  |  |  |  |  | 2 |
+| ContactService | 5 |  |  |  |  |  |  |  | 5 |
+| DashletService | 7 |  |  |  |  |  |  | 3 | 4 |
+| DocuSignService | 6 |  |  |  |  |  |  |  | 6 |
+| DocumentService | 72 | 12 | 2 |  | 4 |  | 33 | 7 | 14 |
+| EmailAccountService | 8 |  |  |  |  |  |  |  | 8 |
+| FolderService | 27 | 2 | 1 |  | 1 |  | 15 | 7 | 1 |
+| FormService | 6 |  |  |  |  |  |  |  | 6 |
+| ImpexService | 12 |  |  |  |  |  |  |  | 12 |
+| ImportFolderService | 8 |  |  |  |  |  |  |  | 8 |
+| LDAPService | 7 |  |  |  |  |  |  |  | 7 |
+| MessageService | 8 |  |  |  |  |  |  | 5 | 3 |
+| OCRService | 1 |  |  |  |  |  |  |  | 1 |
+| ReadingRequestService | 5 |  |  |  |  |  |  |  | 5 |
+| ReportService | 9 |  |  |  |  |  |  |  | 9 |
+| RetentionPoliciesService | 5 |  |  |  |  |  |  |  | 5 |
+| SchemeService | 6 |  |  |  |  |  |  |  | 6 |
+| SearchEngineService | 14 |  |  |  |  |  |  | 14 |  |
+| SearchService | 5 | 1 |  |  |  |  |  |  | 4 |
+| SettingService | 18 |  |  |  | 2 |  |  | 16 |  |
+| ShareFileService | 5 |  |  |  |  |  |  |  | 5 |
+| SignService | 11 |  |  |  |  |  |  |  | 11 |
+| SplitService | 1 |  |  |  |  |  |  |  | 1 |
+| StampService | 8 |  |  |  |  |  |  |  | 8 |
+| SyndicationService | 6 |  |  |  |  |  |  |  | 6 |
+| SystemService | 17 |  |  |  |  |  |  | 17 |  |
+| TagService | 6 |  |  |  |  |  |  | 2 | 4 |
+| TemplateService | 6 | 2 |  |  |  |  |  | 4 |  |
+| TenantService | 7 |  |  |  |  |  |  |  | 7 |
+| TwoFactorsAuthenticationService | 3 |  |  |  |  |  |  |  | 3 |
+| UpdateService | 17 |  |  |  |  |  |  |  | 17 |
+| WorkflowService | 26 |  |  |  |  |  |  |  | 26 |
+| ZonalOCRService | 4 |  |  |  |  |  |  |  | 4 |
+| LoginService | 7 |  |  |  |  |  | 7 |  |  |
+| TfaService | 1 |  |  |  |  |  |  |  | 1 |
+| SetupService | 2 |  |  |  |  |  |  |  | 2 |
+| DropboxService | 6 |  |  |  |  |  |  |  | 6 |
 
 ## 1. GWT-RPC services
 
@@ -144,32 +168,32 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/common/client/services/InfoService.java`; RPC URL `/frontend/info` (`@RemoteServiceRelativePath("info")`)
 - Server impl: **InfoServiceImpl**
-- Methods: 4 (M2 1, M6 1, Admin 1, none 1)
-- Lands in: `/server` (M2); `/me` (M6); `/admin/tasks` (Admin)
+- Methods: 4 (M2 1, Later 1, Admin 1, none 1)
+- Lands in: `/server` (M2); `/me` (Later); `/admin/tasks` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
 | `getInfo` | Server/product info, feature list (Feature_*), tenant config, i18n bundle, supported languages, alerts. Called before and after login (`login` flag). | M2 |
 | `ping` | Session keep-alive; false if the session is gone. Not needed by the API: each token request renews its session. | none |
-| `getSessionInfo` | Unread system-message count and whether the session is still open (heartbeat poll). | M6 |
+| `getSessionInfo` | Unread system-message count and whether the session is still open (heartbeat poll). The User app sends no keep-alive (M6 spec §8.2); the unread count waits for Messages. | Later |
 | `getCronDescription` | Human text for a cron expression (task scheduler UI). | Admin |
 
 ### SecurityService
 
 - Interface: `gui/common/client/services/SecurityService.java`; RPC URL `/frontend/security` (`@RemoteServiceRelativePath("security")`)
 - Server impl: **SecurityServiceImpl**
-- Methods: 44 (M2 4, M6 14, Admin 26)
-- Lands in: `/me`, `/auth/tokens`, `/users` (M2); `/me/profile`, `/me/password`, `/auth/tokens` for API keys and devices (M6); `/admin/users`, `/admin/groups`, `/admin/security` (Admin)
+- Methods: 44 (M2 4, Later 14, Admin 26)
+- Lands in: `/me`, `/auth/tokens`, `/users` (M2); `/session` for the User app's sign-out (M6); `/me/profile`, `/me/password`, `/auth/tokens` for API keys and devices (Later); `/admin/users`, `/admin/groups`, `/admin/security` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
 | `getSession` | Builds the GUISession (sid, GUIUser incl. groups/permissions/menus, locale, config) for the current or given sid; null if invalid. This is the "current user" call. | M2 |
 | `getUser` | Full GUIUser by id (profile, groups, quotas, settings). Used for the current user too: GUI passes its own id. | M2 |
-| `logout` | Close the current session. | M2 |
-| `saveProfile`, `saveInterfaceSettings`, `changePassword`, `saveAvatar`, `resetAvatar` | User edits own profile, UI settings, password and avatar (avatar is uploaded to /upload first). | M6 |
-| `createApiKey`, `deleteApiKey`, `updateApiKey` | Own API keys (X-API-KEY, `ld-` prefix). Candidate seed for a token API. | M6 |
-| `trustDevice`, `updateDeviceLabel`, `isTrustedDevice`, `deleteTrustedDevices` | Trusted-device list for 2FA (own account). | M6 |
-| `addImpersonifier`, `deleteImpersonifiers` | Users allowed to impersonate me. | M6 |
+| `logout` | Close the current session. Built as `DELETE /auth/tokens/current` for a token, and as `DELETE /session` for the User app's web session (M6). | M2 |
+| `saveProfile`, `saveInterfaceSettings`, `changePassword`, `saveAvatar`, `resetAvatar` | User edits own profile, UI settings, password and avatar (avatar is uploaded to /upload first). | Later |
+| `createApiKey`, `deleteApiKey`, `updateApiKey` | Own API keys (X-API-KEY, `ld-` prefix). Candidate seed for a token API. | Later |
+| `trustDevice`, `updateDeviceLabel`, `isTrustedDevice`, `deleteTrustedDevices` | Trusted-device list for 2FA (own account). | Later |
+| `addImpersonifier`, `deleteImpersonifiers` | Users allowed to impersonate me. | Later |
 | `searchUsers` | Find users by username and/or group (user pickers in permissions, share, messages). Also needed by M7. | M2 |
 | `saveUser`, `deleteUser`, `changeStatus`, `replicateUsersSettings`, `cloneWorkTimes`, `createAccessTicket` | User CRUD, enable/disable, copy settings/work times, one-time access tickets. | Admin |
 | `getGroup`, `saveGroup`, `deleteGroup`, `removeFromGroup`, `addUserToGroup` | Group CRUD and membership. | Admin |
@@ -195,14 +219,14 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 - Interface: `gui/frontend/client/healdan/services/HealdanMatterService.java`; RPC URL `/frontend/healdanmatter` (`@RemoteServiceRelativePath("healdanmatter")`)
 - Server impl: **HealdanMatterServiceImpl**
 - Methods: 12 (M2 5, M6 2, Admin 5)
-- Lands in: `/folders/{id}`, `/matters/recent`, `/matters/mine`, `/search?scope=matters`, `/stores` (M2); `/matters/mine/{id}` (M6); `/admin/matters`, `/admin/templates` (Admin)
+- Lands in: `/folders/{id}`, `/matters/recent`, `/matters/mine`, `/search?scope=matters`, `/stores` (M2); `/me/matters/{folderId}` (M6); `/admin/matters`, `/admin/templates` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
 | `describeFolder` | What a folder is in Healdan's layout (kind, matter id, top level?, search folder?, in My Matters?). Needs READ. | M2 |
 | `recentMatters`, `myMatters` | Recent matters (where I last changed a document) and My Matters, with workspace id, display `client.matter - name`, client name. | M2 |
 | `resolve` | Matter-number lookup: `998.1` or a bare number -> matters (max 100). | M2 |
-| `addToMyMatters`, `removeFromMyMatters` | Edit My Matters (folder bookmarks). | M6 |
+| `addToMyMatters`, `removeFromMyMatters` | Edit My Matters (folder bookmarks). Built as `PUT` and `DELETE /me/matters/{folderId}`. | M6 |
 | `listStores` | The Stores to choose from. Admin-only, and the API keeps it admin-only (`GET /stores`). | M2 |
 | `create`, `update`, `getByFolder`, `suggestMatterNumber`, `listTemplates` | Matter admin: create from template (all-or-nothing), edit, read by workspace, suggest number, templates to choose from. All admin-only. | Admin |
 
@@ -210,14 +234,14 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/frontend/client/healdan/services/HealdanSearchFolderService.java`; RPC URL `/frontend/healdansearchfolder` (`@RemoteServiceRelativePath("healdansearchfolder")`)
 - Server impl: **HealdanSearchFolderServiceImpl**
-- Methods: 6 (M2 2, M6 4)
-- Lands in: `/folders/{id}`, `/folders/{id}/children` (M2); `/search-folders/{id}` (M6)
+- Methods: 6 (M2 2, Later 4)
+- Lands in: `/folders/{id}`, `/folders/{id}/children` (M2); `/search-folders/{id}` (Later)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
 | `get`, `evaluate` | Search folders (saved rule shown as a folder): read one; evaluate it to up to 1000 doc ids. | M2 |
-| `create`, `update` | Create or edit a search folder's rule. | M6 |
-| `classes`, `subclasses` | Class and Subclass option lists for the rule editor. | M6 |
+| `create`, `update` | Create or edit a search folder's rule. | Later |
+| `classes`, `subclasses` | Class and Subclass option lists for the rule editor. | Later |
 
 ### HealdanSettingsService
 
@@ -329,13 +353,13 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/frontend/client/services/DashletService.java`; RPC URL `/frontend/dashlet` (`@RemoteServiceRelativePath("dashlet")`)
 - Server impl: **DashletServiceImpl**
-- Methods: 7 (M6 4, Admin 3)
-- Lands in: `/me/dashlets` (M6); `/admin/dashlets` (Admin)
+- Methods: 7 (Admin 3, none 4)
+- Lands in: `/admin/dashlets` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
-| `loadDashlets`, `saveUserDashlets` | The user's home dashlets and their layout. | M6 |
-| `get`, `get` | Dashlet by id and by name (overloads). | M6 |
+| `loadDashlets`, `saveUserDashlets` | The user's home dashlets and their layout. The User app has none: its Recent section is the start page (M6 spec §4). | none |
+| `get`, `get` | Dashlet by id and by name (overloads). | none |
 | `save`, `saveDashlets`, `delete` | Define/delete dashlets. | Admin |
 
 ### DocuSignService
@@ -352,8 +376,8 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/frontend/client/services/DocumentService.java`; RPC URL `/frontend/document` (`@RemoteServiceRelativePath("document")`)
 - Server impl: **DocumentServiceImpl**
-- Methods: 72 (M2 12, M3 2, M6 37, Admin 7, none 14)
-- Lands in: `/documents/{docNumber}`, `/documents/{docNumber}/checkout`, `/documents/{docNumber}/versions`, `/documents/{docNumber}/properties`, `POST /documents` (M2); `/me/favorites` (M3); `/documents/{docNumber}/…` for notes, links, tickets and permissions, a favourite's name, and `/trash` (M6); `/admin/documents` (Admin)
+- Methods: 72 (M2 12, M3 2, M6 4, Later 33, Admin 7, none 14)
+- Lands in: `/documents/{docNumber}`, `/documents/{docNumber}/checkout`, `/documents/{docNumber}/versions`, `/documents/{docNumber}/properties`, `POST /documents` (M2); `/me/favorites` (M3); `PATCH` and `DELETE /documents/{docNumber}`, and `/documents/{docNumber}/message` (M6); `/documents/{docNumber}/…` for notes, links, tickets and permissions, a favourite's name, and `/trash` (Later); `/admin/documents` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
@@ -368,26 +392,27 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 | `createWithContent` | Create from metadata + string content, optionally leaving it checked out. | M2 |
 | `addDocuments`, `addDocuments` | Create documents from files posted earlier to /upload (session-held). Overload 1: language/folder/zip import/charset/template; overload 2: takes a metadata GUIDocument. = "save as new document". | M2 |
 | `cleanUploadedFileFolder` | Discard the session's pending uploads. Not needed by the API: uploads travel in the request that uses them. | none |
-| `countDocuments` | Count documents in folders by status (confirm dialogs, folder stats). | M6 |
-| `getVersionsById` | Compare/fetch two versions' details (id1,id2). | M6 |
-| `promoteVersion`, `deleteVersions`, `replaceFile` | Make an old version current; delete versions; replace a version's file with an upload. | M6 |
-| `rename` | Rename document. | M6 |
-| `lock` | Lock documents with comment. | M6 |
-| `delete`, `restore`, `deleteFromTrash`, `emptyTrash`, `destroyDocuments` | Move to trash, restore, purge from trash, empty trash, hard delete. | M6 |
-| `bulkUpdate` | Apply the same properties to many documents. | M6 |
+| `countDocuments` | Count documents in folders by status (confirm dialogs, folder stats). | Later |
+| `getVersionsById` | Compare/fetch two versions' details (id1,id2). | Later |
+| `promoteVersion`, `deleteVersions`, `replaceFile` | Make an old version current; delete versions; replace a version's file with an upload. | Later |
+| `rename` | Rename document. Built as `PATCH /documents/{docNumber}` with `{ name }`. | M6 |
+| `lock` | Lock documents with comment. | Later |
+| `delete` | Move to trash. Built as `DELETE /documents/{docNumber}`. | M6 |
+| `restore`, `deleteFromTrash`, `emptyTrash`, `destroyDocuments` | Restore, purge from trash, empty trash, hard delete. | Later |
+| `bulkUpdate` | Apply the same properties to many documents. | Later |
 | `getAllowedPermissions` | Effective permissions of the user over a set of documents (enables/disables actions). The API returns it as `canEdit`. | M2 |
-| `saveACL`, `applyParentFolderSecurity` | Edit a document's ACL; reset to the folder's. | M6 |
-| `makeImmutable` | Make documents immutable (read-only forever). | M6 |
+| `saveACL`, `applyParentFolderSecurity` | Edit a document's ACL; reset to the folder's. | Later |
+| `makeImmutable` | Make documents immutable (read-only forever). | Later |
 | `addBookmarks`, `deleteBookmarks` | Favorites (bookmarks). Healdan uses folder bookmarks as My Matters. Built as `POST` and `DELETE /me/favorites`. | M3 |
-| `updateBookmark` | A bookmark's own name and description. | M6 |
-| `linkDocuments`, `deleteLinks`, `updateLink`, `replaceAlias` | Document links; turn an alias into a real document. | M6 |
-| `saveNote`, `getNotes`, `getNote`, `saveNotes`, `deleteNotes` | Annotations/notes on a document or version. | M6 |
-| `createTicket`, `setTicketPassword`, `deleteTickets`, `enableTickets`, `disableTickets` | Download/view tickets (shareable links; served by /download-ticket). | M6 |
-| `getContentAsString` | Text content of a document (text editor). | M6 |
-| `convert` | Convert a file version to another format; creates a document. | M6 |
-| `sendAsEmail` | Email documents (links or attachments) from the server. | M6 |
-| `extractEmail`, `saveEmailAttachment` | Parse an .eml/.msg document for the viewer; save an attachment as a new document. | M6 |
-| `markHistoryAsRead` | Mark a history/notification event as read. | M6 |
+| `updateBookmark` | A bookmark's own name and description. | Later |
+| `linkDocuments`, `deleteLinks`, `updateLink`, `replaceAlias` | Document links; turn an alias into a real document. | Later |
+| `saveNote`, `getNotes`, `getNote`, `saveNotes`, `deleteNotes` | Annotations/notes on a document or version. | Later |
+| `createTicket`, `setTicketPassword`, `deleteTickets`, `enableTickets`, `disableTickets` | Download/view tickets (shareable links; served by /download-ticket). | Later |
+| `getContentAsString` | Text content of a document (text editor). | Later |
+| `convert` | Convert a file version to another format; creates a document. | Later |
+| `sendAsEmail` | Email documents (links or attachments) from the server. | Later |
+| `extractEmail`, `saveEmailAttachment` | Parse an .eml/.msg document for the viewer; save an attachment as a new document. Built as `GET /documents/{docNumber}/message` (with `/message/body` and `/message/parts/{id}`) and `POST /documents/{docNumber}/message/attachments/{id}/file`. | M6 |
+| `markHistoryAsRead` | Mark a history/notification event as read. | Later |
 | `indexDocuments`, `markUnindexable`, `markIndexable` | Force index / exclude from full-text index. | Admin |
 | `updatePages`, `deDuplicate`, `enforceFilesIntoFolderStore`, `merge` | Maintenance: recount pages, remove duplicates, move files to the folder's storage, merge PDFs into a new document. | Admin |
 | `isPasswordProtected`, `setPassword`, `unsetPassword`, `unprotect` | Per-document password protection (not relevant). | none |
@@ -409,21 +434,23 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/frontend/client/services/FolderService.java`; RPC URL `/frontend/folder` (`@RemoteServiceRelativePath("folder")`)
 - Server impl: **FolderServiceImpl**
-- Methods: 27 (M2 2, M3 1, M6 17, Admin 7)
-- Lands in: `/folders/{id}` (M2); `POST /folders` (M3); `/folders/{id}/…` for move, copy, permissions and trash (M6); `/admin/folders` (Admin)
+- Methods: 27 (M2 2, M3 1, M6 1, Later 15, Admin 7, none 1)
+- Lands in: `/folders/{id}` (M2); `POST /folders` (M3); `POST /documents/{docNumber}/move` (M6); `/folders/{id}/…` for move, copy, permissions and trash (Later); `/admin/folders` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
 | `getFolder` | Folder bean (path, permissions, template/attributes, counts) with optional path/doc count/subfolder count. The browse call. | M2 |
 | `getAllowedPermissions` | Effective permissions over a set of folders (can I add/write here). | M2 |
 | `create` | Create a folder. (Healdan restricts Client/Matter structure.) Built as `POST /folders`, New Folder in the helper's Save window. | M3 |
-| `createAlias`, `save`, `rename` | Alias, update properties, rename a folder. | M6 |
-| `delete`, `restore`, `deleteFromTrash` | Delete to trash, restore, purge. | M6 |
-| `move`, `merge`, `copyFolders`, `paste`, `pasteAsAlias` | Move/merge/copy folders; paste documents (copy/cut, links, notes, security options). | M6 |
-| `saveACL`, `inheritACL` | Edit folder ACL (optionally to subfolders); inherit from another folder. | M6 |
-| `applyTemplate` | Apply a folder template (structure) to a folder. | M6 |
-| `setFolderPagination`, `applyGridLayout` | Per-folder list paging/grid layout preference. | M6 |
-| `readImage` | Read an image posted to /upload for the folder (icon/image). | M6 |
+| `createAlias`, `save`, `rename` | Alias, update properties, rename a folder. | Later |
+| `delete`, `restore`, `deleteFromTrash` | Delete to trash, restore, purge. | Later |
+| `paste` | Paste documents (copy/cut, links, notes, security options). A cut's move is built as `POST /documents/{docNumber}/move`; copying waits for its phase. | M6 |
+| `move`, `merge`, `copyFolders`, `pasteAsAlias` | Move/merge/copy folders; paste documents as aliases. | Later |
+| `saveACL`, `inheritACL` | Edit folder ACL (optionally to subfolders); inherit from another folder. | Later |
+| `applyTemplate` | Apply a folder template (structure) to a folder. | Later |
+| `setFolderPagination` | Per-folder list paging preference. The User app loads every list 100 rows at a time (M6 spec §10.2). | none |
+| `applyGridLayout` | Per-folder grid layout preference: choosing columns waits for its phase. | Later |
+| `readImage` | Read an image posted to /upload for the folder (icon/image). | Later |
 | `applyMetadata`, `applyTags`, `applyStore`, `applyCapture` | Push a folder's metadata/tags/storage/capture settings to its subtree. | Admin |
 | `loadTemplates`, `saveTemplates` | List/save folder templates (CE feature, unrelated to Healdan workspace templates). | Admin |
 | `computeStats` | Compute folder statistics (counts, size). | Admin |
@@ -547,13 +574,13 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/frontend/client/services/SearchService.java`; RPC URL `/frontend/search` (`@RemoteServiceRelativePath("search")`)
 - Server impl: **SearchServiceImpl**
-- Methods: 5 (M2 1, M6 4)
-- Lands in: `/search` (M2); saved searches, if M6 turns them on (M6)
+- Methods: 5 (M2 1, none 4)
+- Lands in: `/search` (M2)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
 | `search` | Run a search from GUISearchOptions: type = fulltext, parametric (name/metadata), folders, tags, etc. Returns GUIResult (hits, time, estimated count). | M2 |
-| `save`, `load`, `delete`, `shareSearch` | Saved searches: store, load, delete, share with users/groups. | M6 |
+| `save`, `load`, `delete`, `shareSearch` | Saved searches: store, load, delete, share with users/groups. Never in the User app: M1 turned saved searches off, and search folders cover them (M6 spec §4). | none |
 
 ### SettingService
 
@@ -564,7 +591,7 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
-| `loadGUISettings`, `loadSettingsByNames` | UI/config settings by name (e.g. upload limits); GUI-visible settings. | M6 |
+| `loadGUISettings`, `loadSettingsByNames` | UI/config settings by name (e.g. upload limits); GUI-visible settings. The User app reads what it needs from M2's `GET /server`. | M6 |
 | `loadSettings`, `saveSettings`, `loadProtocolSettings`, `loadAuditingSettings`, `loadWebserviceStats`, `saveRegistration` | System settings by tenant; protocols (REST/WebDAV/CMIS); auditing; API stats; registration. | Admin |
 | `loadEmailSettings`, `saveEmailSettings`, `testEmail`, `testProxy` | Outgoing mail and proxy config + tests. | Admin |
 | `testStore`, `saveStoreSettings`, `removeStore` | Storage backends (CE "Store" = file store, NOT Healdan's Store). | Admin |
@@ -640,13 +667,13 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/frontend/client/services/TagService.java`; RPC URL `/frontend/tag` (`@RemoteServiceRelativePath("tag")`)
 - Server impl: **TagServiceImpl**
-- Methods: 6 (M6 4, Admin 2)
-- Lands in: `/tags` (M6); `/admin/tags` (Admin)
+- Methods: 6 (Admin 2, none 4)
+- Lands in: `/admin/tags` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
-| `getTagCloud`, `getSettings` | Tags with counts; tag settings (mode, size limits). | M6 |
-| `addTag`, `removeTag` | Add/remove a tag to the user's "my tags" selection. | M6 |
+| `getTagCloud`, `getSettings` | Tags with counts; tag settings (mode, size limits). Never in the User app (M6 spec §4); the Classic Interface keeps them. | none |
+| `addTag`, `removeTag` | Add/remove a tag to the user's "my tags" selection. | none |
 | `delete`, `rename` | Delete/rename a tag globally. | Admin |
 
 ### TemplateService
@@ -716,16 +743,16 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/login/client/services/LoginService.java`; RPC URL `/login/login` (`@RemoteServiceRelativePath("login")`)
 - Server impl: **LoginServiceImpl**
-- Methods: 7 (M6 7)
-- Lands in: `/auth/…` for password reset, legal notices and forced password change (M6)
+- Methods: 7 (Later 7)
+- Lands in: `/auth/…` for password reset, legal notices and forced password change (Later)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
-| `resetPassword` | Starts password recovery: emails a reset link (see /pswrecovery). | M6 |
-| `isSecretKeyRequired` | Does this user/device need a 2FA code at login. | M6 |
-| `getLegalsToConfirm`, `confirmLegal` | Legal documents the user must accept at login; record acceptance. | M6 |
-| `changePassword`, `generatePassword` | Forced password change at login; generate a compliant password for a username. | M6 |
-| `getUser` | Look up a user by username for the login/expired-password flow (unauthenticated). | M6 |
+| `resetPassword` | Starts password recovery: emails a reset link (see /pswrecovery). | Later |
+| `isSecretKeyRequired` | Does this user/device need a 2FA code at login. | Later |
+| `getLegalsToConfirm`, `confirmLegal` | Legal documents the user must accept at login; record acceptance. | Later |
+| `changePassword`, `generatePassword` | Forced password change at login; generate a compliant password for a username. | Later |
+| `getUser` | Look up a user by username for the login/expired-password flow (unauthenticated). | Later |
 
 ### TfaService
 
@@ -770,26 +797,26 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/data/attributeoptions.xml` | AttributeOptionsDataServlet | setId, attribute, category, withempty | Option values for a dropdown/preset attribute. | M2 | the `options` of each form field |
 | `/data/lockeddocs.xml` | LockedDocsDataServlet | userId | Documents locked/checked out (by a user). "My checked-out documents". **Broken upstream:** its SQL is missing a comma, and it checks no permission (capability map §6). | M2 | `/me/checkouts` (built on `DocumentDAO.findByLockUserAndStatus` instead) |
 | `/data/versions.xml` | VersionsDataServlet | docId, archiveId | Version history of a document (or versions of an Import/Export archive). | M2 | `/documents/{docNumber}/versions` |
-| `/data/documenthistory.xml` | DocumentHistoryDataServlet | docId (plus max, locale) | Audit events for one document (author, event, version, date, comment). Possible source for "recent documents". | M6 | `/documents/{docNumber}/history` |
-| `/data/folderhistory.xml` | FolderHistoryDataServlet | id | Audit events for one folder. | M6 | `/folders/{id}/history` |
-| `/data/acl.xml` | AclDataServlet | id, type (document/folder/menu/template) | Access control list entries (groups, users, permission flags) of an object. | M6 | `/documents/{docNumber}/permissions`, `/folders/{id}/permissions` |
+| `/data/documenthistory.xml` | DocumentHistoryDataServlet | docId (plus max, locale) | Audit events for one document (author, event, version, date, comment). Possible source for "recent documents". | Later | `/documents/{docNumber}/history` |
+| `/data/folderhistory.xml` | FolderHistoryDataServlet | id | Audit events for one folder. | Later | `/folders/{id}/history` |
+| `/data/acl.xml` | AclDataServlet | id, type (document/folder/menu/template) | Access control list entries (groups, users, permission flags) of an object. | Later | `/documents/{docNumber}/permissions`, `/folders/{id}/permissions` |
 | `/data/bookmarks.xml` | BookmarksDataServlet | (none)  | The user's bookmarks (documents and folders). Healdan stores My Matters as folder bookmarks. | M3 | `GET /me/favorites` (built; leaves out My Matters and what the user can't read) |
-| `/data/notes.xml` | NotesDataServlet | docId, userId, page | Notes/annotations of a document or by a user. | M6 | `/documents/{docNumber}/notes` |
-| `/data/links.xml` | LinksDataServlet | docId, parent | Links of a document, or children of a link/metadata group. | M6 | `/documents/{docNumber}/links` |
-| `/data/documentaliases.xml` | DocumentAliasesDataServlet | docId | Aliases (shortcuts) pointing to a document. | M6 | – (shortcuts are refused inside Stores) |
-| `/data/folderaliases.xml` | FolderAliasesDataServlet | folderId | Aliases pointing to a folder. | M6 | – (shortcuts are refused inside Stores) |
-| `/data/tags.xml` | TagsDataServlet | docId, folderId, firstLetter, editing | Tags (cloud or per document/folder). | M6 | `/tags` |
-| `/data/tickets.xml` | TicketsDataServlet | docId (+ standard) | Download/view tickets of a document. | M6 | `/documents/{docNumber}/tickets` |
-| `/data/deleteddocs.xml` | DeletedDocsDataServlet | folderId, userId | Documents in the trash (Healdan checks the menu right). | M6 | `/trash` |
-| `/data/deletedfolders.xml` | DeletedFoldersDataServlet | parentId, userId | Folders in the trash. | M6 | `/trash` |
-| `/data/garbage.xml` | GarbageDataServlet | (none) | Mixed latest 100 deleted docs/folders for the user (trash dashlet). | M6 | `/trash` |
-| `/data/users.xml` | UsersDataServlet | groupId, required, skipdisabled, impersonifiers | Users (optionally of a group), for pickers and admin grid. Needed by permission UIs (M6) and Walls (M7) too. | M6 | `/users` |
-| `/data/groups.xml` | GroupsDataServlet | (none) | Groups (name, description, source). | M6 | `/groups` |
-| `/data/dashlets.xml` | DashletsDataServlet | (none) | Defined dashlets. | M6 | `/me/dashlets` |
-| `/data/languages.xml` | LanguagesDataServlet | gui (only GUI-enabled languages) | Active languages. | M6 | `/server` |
-| `/data/timezones.xml` | TimeZonesDataServlet | (none) | Time zones for the profile form. | M6 | `/server` |
-| `/data/devices.xml` | DevicesDataServlet | trustedonly | The user's (trusted) devices. | M6 | `/auth/tokens` |
-| `/data/apikeys.xml` | ApiKeysDataServlet | (none) | The user's API keys. | M6 | `/auth/tokens` |
+| `/data/notes.xml` | NotesDataServlet | docId, userId, page | Notes/annotations of a document or by a user. | Later | `/documents/{docNumber}/notes` |
+| `/data/links.xml` | LinksDataServlet | docId, parent | Links of a document, or children of a link/metadata group. | Later | `/documents/{docNumber}/links` |
+| `/data/documentaliases.xml` | DocumentAliasesDataServlet | docId | Aliases (shortcuts) pointing to a document. | Later | – (shortcuts are refused inside Stores) |
+| `/data/folderaliases.xml` | FolderAliasesDataServlet | folderId | Aliases pointing to a folder. | Later | – (shortcuts are refused inside Stores) |
+| `/data/tags.xml` | TagsDataServlet | docId, folderId, firstLetter, editing | Tags (cloud or per document/folder). | none | – (never in the User app, M6 spec §4) |
+| `/data/tickets.xml` | TicketsDataServlet | docId (+ standard) | Download/view tickets of a document. | Later | `/documents/{docNumber}/tickets` |
+| `/data/deleteddocs.xml` | DeletedDocsDataServlet | folderId, userId | Documents in the trash (Healdan checks the menu right). | Later | `/trash` |
+| `/data/deletedfolders.xml` | DeletedFoldersDataServlet | parentId, userId | Folders in the trash. | Later | `/trash` |
+| `/data/garbage.xml` | GarbageDataServlet | (none) | Mixed latest 100 deleted docs/folders for the user (trash dashlet). | Later | `/trash` |
+| `/data/users.xml` | UsersDataServlet | groupId, required, skipdisabled, impersonifiers | Users (optionally of a group), for pickers and admin grid. Needed by permission UIs (Later) and Walls (M7) too. | M6 | `GET /users?q=` (built in M2; the User app's Author and Typist pickers use it) |
+| `/data/groups.xml` | GroupsDataServlet | (none) | Groups (name, description, source). | Later | `/groups` |
+| `/data/dashlets.xml` | DashletsDataServlet | (none) | Defined dashlets. | none | – (the User app has no dashlets, M6 spec §4) |
+| `/data/languages.xml` | LanguagesDataServlet | gui (only GUI-enabled languages) | Active languages. | Later | `/server` |
+| `/data/timezones.xml` | TimeZonesDataServlet | (none) | Time zones for the profile form. | Later | `/server` |
+| `/data/devices.xml` | DevicesDataServlet | trustedonly | The user's (trusted) devices. | Later | `/auth/tokens` |
+| `/data/apikeys.xml` | ApiKeysDataServlet | (none) | The user's API keys. | Later | `/auth/tokens` |
 | `/data/ratings.xml` | RatingsDataServlet | docId | Ratings of a document. | none | – |
 | `/data/contacts.xml` | ContactsDataServlet | userId | Address book contacts. | none | – |
 | `/data/messages.xml` | MessagesDataServlet | (none) | The user's internal messages. | none | – |
@@ -806,7 +833,7 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/data/indexingqueue.xml` | IndexingQueueDataServlet | (none) | Documents waiting to be indexed. | Admin | `/admin/search-engine` |
 | `/data/parsers.xml` | ParsersDataServlet | (none) | Registered parsers (extension -> parser). | Admin | `/admin/search-engine` |
 | `/data/formatconverters.xml` | FormatConvertersDataServlet | converter, in, out | Registered format converters. | Admin | `/admin/system` |
-| `/data/conversionformats.xml` | ConversionFormatsDataServlet | fileName | Formats a file can be converted to (convert menu). | M6 | `/documents/{docNumber}/conversions` |
+| `/data/conversionformats.xml` | ConversionFormatsDataServlet | fileName | Formats a file can be converted to (convert menu). | Later | `/documents/{docNumber}/conversions` |
 | `/data/tokenfilters.xml` | TokenFiltersDataServlet | filter | Index token filters. | Admin | `/admin/search-engine` |
 | `/data/extensionaliases.xml` | ExtensionAliasesDataServlet | (none) | Extension aliases for parsing. | Admin | `/admin/search-engine` |
 | `/data/charsets.xml` | CharsetsDataServlet | (none) | Available character sets (import). | Admin | `/admin/search-engine` |
@@ -821,17 +848,17 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | URL | Class | Params | What it does | First needed by | Lands in |
 |---|---|---|---|---|---|
 | `/upload` | UploadServlet | multipart POST (any field); sid from SessionFilter (param/header/cookie); GET lists pending | Stores posted files in the HTTP session map `uploads` keyed by original file name (UUID file on disk). Max `<tenant>.upload.maxsize` MB (default 10), `<tenant>.upload.disallow` extensions. Files are consumed by RPCs (addDocuments, checkin, replaceFile, readImage, saveAvatar...). Stateful and name-keyed: two uploads with the same name collide. | M2 | the `file` part of `POST /documents` and `POST /documents/{docNumber}/versions` |
-| `/uploadresource` | DocumentResourceUpload | docId, versionId/version, suffix; POST multipart | Upload a resource file (e.g. thumbnail/preview/alt rendition) for a document version; needs write. | M6 | `/documents/{docNumber}/renditions` |
+| `/uploadresource` | DocumentResourceUpload | docId, versionId/version, suffix; POST multipart | Upload a resource file (e.g. thumbnail/preview/alt rendition) for a document version; needs write. | Later | `/documents/{docNumber}/renditions` |
 | `/download, /download/*` | DownloadServlet | docId, versionId, version, fileVersion, suffix, fileName, downloadText, pluginId+resourcePath | Download a document's current/old file, a suffix rendition (thumb, conversion), the indexed text, or a plugin resource. Check-out needs this to get bytes. | M2 | `/documents/{docNumber}/content` |
-| `/download-ticket` | TicketDownload | ticketId, suffix, password, behavior, control; Basic Authorization header | Public (security=none) download/preview via a ticket; checks expiry, counters, password. | M6 | stays as it is (public ticket links) |
-| `/download-attachment` | DownloadAttachmentServlet | docId, fileVersion, attachmentFileName | Download an attachment inside an email document. | M6 | `/documents/{docNumber}/attachments` |
+| `/download-ticket` | TicketDownload | ticketId, suffix, password, behavior, control; Basic Authorization header | Public (security=none) download/preview via a ticket; checks expiry, counters, password. | Later | stays as it is (public ticket links) |
+| `/download-attachment` | DownloadAttachmentServlet | docId, fileVersion, attachmentFileName | Download an attachment inside an email document. | M6 | `GET /documents/{docNumber}/message/parts/{id}` (built: a download, or with `inline=true` a PDF's or a picture's preview) |
 | `/thumbnail` | ThumbnailServlet | docId, version, fileVersion, suffix | Image rendition (thumbnail / preview image); generated on demand. | M3 | `GET /documents/{docNumber}/thumbnail` (built: the current thumbnail, `404` until M1.5 has made it) |
-| `/convertpdf/*` | ConvertPdf | docId, version, fileVersion | Convert (if needed) and stream a PDF for viewing. | M6 | `GET /documents/{docNumber}/preview` (built, Task 16: `?version=`; `202` with `Retry-After` while M1.5 converts, `404 no-preview`; it never converts on the spot) |
-| `/zip-export` | ExportZip | folderId, level (and doc ids); GET/POST | Zip a folder tree or selected docs for download. | M6 | `/folders/{id}/zip` |
-| `/avatar` | AvatarServlet | userId | User picture image. | M6 | `/users/{id}/avatar` |
-| `/legal` | LegalServlet | legal, user | Legal-document text/PDF to accept at login (unauthenticated). | M6 | `/auth/legal` |
-| `/pswrecovery` | PswRecovery | ticketId, userId, tenant | Completes password recovery from the emailed link. | M6 | `/auth/password-reset` |
-| `/dashletcontent` | com.logicaldoc.core.dashlet.DashletContent (core) | dashletId etc. | Renders a content dashlet. | M6 | `/me/dashlets` |
+| `/convertpdf/*` | ConvertPdf | docId, version, fileVersion | Convert (if needed) and stream a PDF for viewing. | M6 | `GET /documents/{docNumber}/preview` (built: `?version=`; `202` with `Retry-After` while M1.5 converts, `404 no-preview`; it never converts on the spot) |
+| `/zip-export` | ExportZip | folderId, level (and doc ids); GET/POST | Zip a folder tree or selected docs for download. | Later | `/folders/{id}/zip` |
+| `/avatar` | AvatarServlet | userId | User picture image. | Later | `/users/{id}/avatar` |
+| `/legal` | LegalServlet | legal, user | Legal-document text/PDF to accept at login (unauthenticated). | Later | `/auth/legal` |
+| `/pswrecovery` | PswRecovery | ticketId, userId, tenant | Completes password recovery from the emailed link. | Later | `/auth/password-reset` |
+| `/dashletcontent` | com.logicaldoc.core.dashlet.DashletContent (core) | dashletId etc. | Renders a content dashlet. | none | – (the User app has no dashlets, M6 spec §4) |
 | `/display, /display/*` | DisplayServlet | query string or /type/id | Redirects deep links to `frontend.jsp?...` (GUI deep links). Replaced by the new UI's own routing. | none | – (the new UI routes its own links) |
 | `/stat` | StatChartServlet (stat package; abstract ChartServlet base) | objectId, tenantId, width, height, locale | Chart images of repository stats for the Admin screens. | Admin | `/admin/system` |
 | `/webservicechart` | WebserviceChartServlet (webservice module) | as /stat | Chart of web-service calls. | Admin | `/admin/system` |
@@ -842,7 +869,7 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/services/*` | WebserviceServlet (CXF) | REST (`/services/rest/*`); Healdan removes the SOAP endpoints ([spec](../superpowers/specs/2026-11-03-soap-removal-design.md)) | Existing REST API: out of scope, kept as is. | none | stays as it is |
 | `/webdav/*, /service/cmis/*` | WebdavServlet, CmisServlet | WebDAV, CMIS | Existing interfaces: out of scope, kept as is. | none | stays as it is |
 | `/j_spring_security_check (not a servlet)` | Spring Security form login | j_username, j_password, (2FA key)  | How the old GUI signs in (session cookie + ldoc-sid). Add-ins use /services/rest/auth instead. | M2 | `POST /auth/tokens` |
-| `/wk-event (WebSocket)` | websockets.EventEndpoint | (none; server push only) | See WebSocket section. | M6 | `/events` (Server-Sent Events, proposed for M6) |
+| `/wk-event (WebSocket)` | websockets.EventEndpoint | (none; server push only) | See WebSocket section. | Later | `/events` (Server-Sent Events, proposed; push updates are a later phase, M6 spec §16) |
 
 ## 4. WebSocket `/wk-event`
 
