@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import { Button, Dialog, formatDateTime, t, toast } from '@healdan/ui'
 import { ErrorPanel } from '../frame/ErrorPanel'
@@ -21,20 +21,41 @@ type Token = components['schemas']['TokenView']
 export function SignedInDevices({ onClose }: { onClose: () => void }) {
   const api = useApi()
   const queryClient = useQueryClient()
-  const list = useQuery({ queryKey: keys.devices, queryFn: () => api.get<PageOf<Token>>('/v1/auth/tokens', { limit: 200 }) })
+  const list = useQuery({ queryKey: keys.devices, queryFn: () => api.get<PageOf<Token>>('/v1/auth/tokens') })
   const [asking, setAsking] = useState<Token>()
   const [refusal, setRefusal] = useState<string>()
+  const [working, setWorking] = useState(false)
+  // Where the focus goes once the list is back: a row's Revoke (by id) or Close. The button that had it is gone by then, and a
+  // removed element fires no focusout in WebKit, so nothing else would give it back inside the dialog.
+  const focusNext = useRef<number | 'close'>(undefined)
+  const items = list.data?.items ?? []
+
+  useEffect(() => {
+    if (asking || focusNext.current === undefined) return
+    const next = focusNext.current
+    focusNext.current = undefined
+    globalThis.document.querySelector<HTMLElement>(next === 'close' ? '[data-close]' : `[data-revoke="${next}"]`)?.focus()
+  }, [asking])
+
+  function afterRevoke(device: Token): number | 'close' {
+    const at = items.findIndex((one) => one.id === device.id)
+    return (items[at + 1] ?? items[at - 1])?.id ?? 'close'
+  }
 
   async function revoke(device: Token) {
+    if (working) return
+    setWorking(true)
     try {
       await api.send('DELETE', apiPath`/v1/auth/tokens/${device.id}`)
       toast(t('devices.revoked', { name: device.name }))
+      focusNext.current = afterRevoke(device)
       setAsking(undefined)
       setRefusal(undefined)
     } catch (error) {
       // Said where the person is looking, so it can't be missed behind the dialog
       setRefusal(messageFor(error))
     } finally {
+      setWorking(false)
       await queryClient.invalidateQueries({ queryKey: keys.devices })
     }
   }
@@ -51,11 +72,12 @@ export function SignedInDevices({ onClose }: { onClose: () => void }) {
               </p>
             )}
             <div className={styles.actions}>
-              <Button variant="default" autoFocus onPress={() => void revoke(asking)}>
+              <Button variant="default" autoFocus isDisabled={working} onPress={() => void revoke(asking)}>
                 {t('devices.revoke')}
               </Button>
               <Button
                 onPress={() => {
+                  focusNext.current = asking.id
                   setAsking(undefined)
                   setRefusal(undefined)
                 }}
@@ -97,7 +119,14 @@ export function SignedInDevices({ onClose }: { onClose: () => void }) {
                         <td>{formatDateTime(device.lastUsed)}</td>
                         <td>{formatDateTime(device.expiresAt)}</td>
                         <td>
-                          <Button aria-label={t('devices.revokeName', { name: device.name })} onPress={() => setAsking(device)}>
+                          <Button
+                            aria-label={t('devices.revokeName', { name: device.name })}
+                            onPress={() => {
+                              setRefusal(undefined)
+                              setAsking(device)
+                            }}
+                            {...{ 'data-revoke': device.id }}
+                          >
                             {t('devices.revoke')}
                           </Button>
                         </td>
@@ -108,7 +137,9 @@ export function SignedInDevices({ onClose }: { onClose: () => void }) {
               </div>
             )}
             <div className={styles.actions}>
-              <Button onPress={close}>{t('devices.close')}</Button>
+              <Button onPress={close} {...{ 'data-close': true }}>
+                {t('devices.close')}
+              </Button>
             </div>
           </>
         )

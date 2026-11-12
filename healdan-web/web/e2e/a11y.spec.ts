@@ -3,7 +3,7 @@
 
 import { expect, test, type APIRequestContext, type BrowserContext, type Page } from '@playwright/test'
 import { expectNoViolations } from './axe'
-import { PASSWORD, authorized, deviceToken, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
+import { PASSWORD, USERNAME, authorized, call, deviceToken, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
 
 // An axe pass on each main view of the User app (M6 spec sections 5 and 15.1), in the light theme and in the dark one, which
 // Playwright's `colorScheme` switches as the system's setting would. A real browser draws the page, so this is where colour
@@ -67,8 +67,11 @@ for (const scheme of ['light', 'dark'] as const) {
     test.describe.configure({ mode: 'serial' })
     let context: BrowserContext | undefined
     let page: Page
+    // A device for the Revoke question to be about: its name is neutral, and the spec revokes it
+    const device = `Spec device ${RUN} ${scheme}`
 
     test.beforeAll(async ({ browser }, testInfo) => {
+      await call(api!.post('/api/v1/auth/tokens', { data: { username: USERNAME, password: PASSWORD, name: device, device: { id: `e2e-device-${RUN}-${scheme}` } } }), 'a device to revoke')
       context = await browser.newContext({ ...testInfo.project.use, colorScheme: scheme })
       page = await context.newPage()
       await page.goto('/login.jsp')
@@ -131,12 +134,88 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(filters).toBeVisible()
       await check('Filters')
       // The checkbox itself is hidden under its label, as a person would click the words
+      // The recount and the list are held while it is looked at: what is busy keeps AA contrast (R79). page.route doesn't
+      // touch the page's policy.
+      const held: (() => void)[] = []
+      await page.route(new RegExp(`/api/v1/folders/${workFolder}/children\\?.*[?&]type=other`), async (route) => {
+        await new Promise<void>((resolve) => held.push(resolve))
+        await route.continue()
+      })
       await filters.getByText(/^Other/).click()
       await expect(main().getByRole('group', { name: 'Filters in Use' })).toBeVisible()
-      // The counts are dimmed for the moment they are asked for again, which is meant to show: look once they've settled
+      await expect(filters.locator('[aria-busy="true"]')).toBeVisible()
+      await expect.poll(() => held.length).toBeGreaterThan(0)
+      await check('Filters while the counts are asked for again')
+      for (const release of held) release()
+      await page.unrouteAll({ behavior: 'wait' })
       await expect(filters.locator('[aria-busy="true"]')).toHaveCount(0)
       await check('Filters in use')
       await main().getByRole('button', { name: 'Clear All' }).click()
+    })
+
+    test('the list while it is asked for again in a new order, and the filing tray and form', async () => {
+      await page.goto(`/app/folders/${workFolder}?sort=title&order=asc`)
+      await expect(main().getByRole('row', { name: new RegExp(TEXT.replace('.', '\\.')) })).toBeVisible()
+      const path = new RegExp(`/api/v1/folders/${workFolder}/children\\?.*sort=docNumber`)
+      const held: (() => void)[] = []
+      await page.route(path, async (route) => {
+        await new Promise<void>((resolve) => held.push(resolve))
+        await route.continue()
+      })
+      await main().getByRole('columnheader', { name: /Doc #/ }).click()
+      await expect(main().locator('[aria-busy="true"]')).toBeVisible()
+      await check('the list while it is asked for again')
+      for (const release of held) release()
+      await page.unrouteAll({ behavior: 'wait' })
+      await expect(main().locator('[aria-busy="true"]')).toHaveCount(0)
+
+      // The tray, with a file just filed
+      await page.getByLabel('Choose Files to Upload').setInputFiles({ name: `Tray ${RUN}.txt`, mimeType: 'text/plain', buffer: Buffer.from('tray') })
+      const tray = page.getByRole('region', { name: 'Filing' })
+      await expect(tray.getByText(/^Filed as # \d+$/)).toBeVisible()
+      await check('the filing tray')
+      // The form that comes first, with Option (Option-Enter) on Upload
+      await main().getByRole('button', { name: 'Upload' }).focus()
+      const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Alt+Enter')])
+      await chooser.setFiles({ name: `Form ${RUN}.txt`, mimeType: 'text/plain', buffer: Buffer.from('form') })
+      await expect(page.getByRole('dialog', { name: 'File Documents' })).toBeVisible()
+      await check('the File Documents form')
+      await page.keyboard.press('Escape')
+    })
+
+    test('the rename field, the delete question and the Help menu', async () => {
+      await page.goto(`/app/folders/${workFolder}?sort=title&order=asc`)
+      const row = main().getByRole('row', { name: new RegExp(TEXT.replace('.', '\\.')) })
+      await row.focus()
+      await page.keyboard.press('ArrowDown')
+      await page.keyboard.press('ArrowUp')
+      await page.keyboard.press('F2')
+      await expect(page.getByRole('textbox', { name: `New name of ${TEXT}` })).toBeFocused()
+      await check('the rename field')
+      await page.keyboard.press('Escape')
+      await expect(row).toBeFocused()
+      await page.keyboard.press('Delete')
+      await expect(page.getByRole('dialog', { name: 'Move 1 document to the Trash?' })).toBeVisible()
+      await check('the delete question')
+      await page.keyboard.press('Escape')
+      await page.getByRole('banner').getByRole('button', { name: 'Help' }).click()
+      await expect(page.getByRole('menu')).toBeVisible()
+      await check('the Help menu')
+      await page.keyboard.press('Escape')
+    })
+
+    test('search results for a word, with their Filters', async () => {
+      // The Indexer reads new documents a few seconds after they are filed (step 9 makes it fast), so the search is asked again
+      // until the document shows
+      await expect(async () => {
+        await page.goto(`/app/search?scope=documents&q=${encodeURIComponent(RUN)}`)
+        await expect(main().getByRole('row', { name: new RegExp(TEXT.replace('.', '\\.')) })).toBeVisible({ timeout: 4_000 })
+      }).toPass({ timeout: 80_000, intervals: [1_000, 2_000, 3_000] })
+      await check('document search results')
+      await page.getByRole('button', { name: /^Filters/ }).click()
+      await expect(page.getByRole('region', { name: 'Filters' })).toBeVisible()
+      await expect(page.getByRole('region', { name: 'Filters' }).locator('[aria-busy="true"]')).toHaveCount(0)
+      await check('document search Filters')
     })
 
     test('search results, in the Matters scope', async () => {
@@ -194,10 +273,29 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.getByRole('menu')).toBeVisible()
       await check('the person menu')
       await page.getByRole('menuitem', { name: 'Signed-in Devices' }).click()
-      const devices = page.getByRole('dialog', { name: 'Signed-in Devices' })
-      await expect(devices.getByRole('table', { name: 'Signed-in devices' })).toBeVisible()
+      // The dialog is named by its title, which the Revoke question changes: the one dialog on the page is found without it
+      const devices = page.getByRole('dialog')
+      await expect(page.getByRole('dialog', { name: 'Signed-in Devices' })).toBeVisible()
+      await expect(devices.getByRole('table', { name: 'Signed-in Devices' })).toBeVisible()
       await check('Signed-in Devices')
+      // The Revoke question, then its refusal (in the colour of what is wrong), then a revoke that goes through, which gives the
+      // focus back to a control of the dialog, as a real WebKit and Chromium do
+      await devices.getByRole('button', { name: `Revoke ${device}` }).click()
+      await expect(devices.getByRole('heading', { name: `Revoke ${device}?` })).toBeVisible()
+      await check('the Revoke question')
+      const refuse = (route: { fulfill: (o: object) => Promise<void> }) =>
+        route.fulfill({ status: 404, contentType: 'application/problem+json', body: JSON.stringify({ status: 404, code: 'not-found', title: 'Not found', detail: 'x' }) })
+      await page.route(/\/api\/v1\/auth\/tokens\/\d+$/, refuse)
+      await devices.getByRole('button', { name: 'Revoke', exact: true }).click()
+      await expect(devices.getByRole('alert')).toBeVisible()
+      await check('the Revoke refusal')
+      await page.unroute(/\/api\/v1\/auth\/tokens\/\d+$/)
+      await devices.getByRole('button', { name: 'Revoke', exact: true }).click()
+      await expect(devices.getByRole('heading', { name: 'Signed-in Devices' })).toBeVisible()
+      await expect.poll(() => devices.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true)
+      // Esc still reaches the dialog from there
       await page.keyboard.press('Escape')
+      await expect(devices).toBeHidden()
     })
 
     test('a tablet-wide window, with the left pane opened over the list', async () => {
@@ -215,7 +313,25 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: 'Details and Filters' }).click()
       await expect(page.getByRole('region', { name: 'Details and Filters' })).toBeVisible()
       await check('the right region at 768 pixels')
+      await page.keyboard.press('Escape')
+      // With a document selected, the details are drawn over the list
+      await main().getByRole('row', { name: new RegExp(TEXT.replace('.', '\\.')) }).getByRole('rowheader').click()
+      await page.getByRole('button', { name: 'Details and Filters' }).click()
+      await expect(page.getByRole('region', { name: 'Details' }).getByRole('heading', { name: TEXT })).toBeVisible()
+      await check('the details over the list at 768 pixels')
+      await page.keyboard.press('Escape')
       await page.setViewportSize({ width: 1280, height: 720 })
+    })
+
+    // Last: it ends the session
+    test('the signed-out screen', async () => {
+      await page.goto('/app/')
+      await expect(page.getByRole('heading', { name: 'Recent Documents' })).toBeVisible()
+      // The session ends under the page, as a timeout would end it, and the next request says so
+      await page.evaluate(() => fetch('/api/v1/session', { method: 'DELETE', headers: { 'X-Healdan-Client': 'web' } }))
+      await page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: 'Emails' }).click()
+      await expect(page.getByText("You've been signed out.")).toBeVisible()
+      await check('the signed-out screen')
     })
   })
 }

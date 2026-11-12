@@ -32,7 +32,7 @@ export function CheckGroup({ label, choices, value, onChange }: CheckGroupProps)
             <Icon name="check" size={12} />
           </span>
           <span className={styles.text}>{choice.label}</span>
-          {choice.count !== undefined && <span className={styles.count}>{choice.count}</span>}
+          {choice.count !== undefined && <span className={styles.count} data-count>{choice.count}</span>}
         </Checkbox>
       ))}
     </CheckboxGroup>

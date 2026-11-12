@@ -38,13 +38,12 @@ The User app at `/app/` uses the Classic Interface's own sign-in. These are what
 to look.
 
 - **"You've been signed out."** The session ended: it timed out, the person signed out in another tab, or an
-  administrator ended it. **Sign In** brings them back to the page they were on. If it happens within moments of
-  every sign-in, the proxy may be hiding the browser's own headers from Healdan: see
+  administrator ended it. **Sign In** brings them back to the page they were on. If it happens again straight after
+  every sign-in, the proxy may be removing the browser's `Sec-Fetch-Site` header: see
   [Reverse Proxy](../reverse-proxy/).
-- **"Healdan refused that from this page."** The request didn't look like the page's own: its `Sec-Fetch-Site` or
-  `Origin` header was missing or named another address, or a change was sent without the app's own header. Check
-  that `LOGICALDOC_PUBLIC_URL` is the address people type, that the proxy passes `Origin` and `Sec-Fetch-Site` on,
-  and that people don't reach Healdan under two different host names, such as by IP address and by name.
+- **"Healdan refused that from this page."** The request didn't look like the page's own: its `Origin` header named
+  another address than Healdan's, or a change was sent without the app's own header. Nobody is signed out by it.
+  Check that `LOGICALDOC_PUBLIC_URL` is the address people type, that the proxy passes `Origin` on, and that people don't reach Healdan under two different host names, such as by IP address and by name.
 - **"Not found, or you can't see it."** The document, folder or page doesn't exist, or the person can't read it.
   Healdan says the same for both, so a reader can't tell which documents exist. If someone swears it exists, check
   their permission on its folder in the Classic Interface, and that it isn't in the Trash.

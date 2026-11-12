@@ -208,8 +208,9 @@ describe('Table', () => {
   it('marks itself busy while the rows it shows are about to change', () => {
     render(<Harness busy />)
     expect(screen.getByRole('grid').closest('[aria-busy="true"]')).toBeTruthy()
-    // Sighted people see it too: the rows are dimmed while they are about to change
-    expect(tableCss).toMatch(/\[aria-busy='true'\][^{]*\{[^}]*opacity:\s*var\(--hd-busy-opacity\)/)
+    // Sighted people see it too, as a strip along the top: the rows keep their colours, and so their contrast (R79)
+    expect(tableCss).toMatch(/\[aria-busy='true'\]::before\s*\{/)
+    expect(tableCss).not.toMatch(/\[aria-busy='true'\]\s*\{[^}]*opacity/)
   })
 
   it('shows what it is given when there are no rows', () => {

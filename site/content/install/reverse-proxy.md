@@ -22,8 +22,9 @@ Whichever proxy you use:
   Healdan accepts only from a request the browser marks as the page's own: it checks the `Origin` and
   `Sec-Fetch-Site` headers the browser sends. The proxy must pass both on unchanged. NPM, nginx and Caddy do by
   default, and so does any proxy that doesn't strip request headers. A proxy, or a firewall in front of it, that
-  removes `Sec-Fetch-Site` or rewrites `Origin` makes the app refuse each request as "Healdan refused that from this
-  page", and signs the person out. `Origin` must also match `LOGICALDOC_PUBLIC_URL` or the address the browser used.
+  removes `Sec-Fetch-Site` makes Healdan answer each request as if no one were signed in, so the app says "You've been
+  signed out." and does it again after every sign-in. A proxy that rewrites `Origin`, so it isn't `LOGICALDOC_PUBLIC_URL`
+  or the address the browser used, makes the app say "Healdan refused that from this page", and signs nobody out.
 - **The root of the host name.** The User app works only at the root of its address, such as
   `https://docs.example.org/app/`, not under a path such as `https://example.org/healdan/app/`. Give Healdan a host
   name of its own: see [Known Limitations](../known-limitations/#the-user-app).

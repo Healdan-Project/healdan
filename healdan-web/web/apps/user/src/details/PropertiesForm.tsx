@@ -58,7 +58,11 @@ export function PropertiesForm({ document, fields, onClose }: PropertiesFormProp
       <div
         ref={form}
         onKeyDown={(event) => {
-          if (event.key === 'Escape' && !event.defaultPrevented) onClose()
+          if (event.key === 'Escape' && !event.defaultPrevented) {
+            // One Esc closes one layer: this form, not the folded region it is in
+            event.preventDefault()
+            onClose()
+          }
         }}
       >
         <FieldsForm fields={fields} matter={document.matter} submitLabel={t('details.save')} onSubmit={save} onCancel={onClose} />

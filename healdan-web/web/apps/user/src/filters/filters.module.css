@@ -85,6 +85,9 @@
   font-size: var(--hd-font-size-small);
 }
 
-.busy {
+/* Counts being asked for again are the stale part: they dim, in the primary text colour so that they keep AA contrast dimmed
+   (tokens.test.ts checks it in both themes). The labels and the choices stay as they are. */
+.busy [data-count] {
+  color: var(--hd-text);
   opacity: var(--hd-busy-opacity);
 }

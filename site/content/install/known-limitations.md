@@ -13,7 +13,7 @@ weight: 12
 - **No HTTPS on its own.** The app speaks plain HTTP, so anything beyond the machine running Docker goes through a
   [reverse proxy](../reverse-proxy/).
 - **Signed-in Devices lists device sign-ins only.** The app's **Signed-in Devices** shows a person the sign-ins of
-  their Healdan Helper and add-ins, and revokes them one by one. It doesn't list the web page's own sessions, which
+  their Healdan Helper on each Mac, and any program signed in through the API with a password, and revokes them one by one. It doesn't list the web page's own sessions, which
   **Sign Out** ends, or LogicalDOC's API keys. Changing a person's password or disabling them signs every device out.
   For a lost device, also delete any LogicalDOC API keys the person doesn't recognise, under the person icon,
   **Security → API Keys** in the Classic Interface: a key outlasts a password change. Sessions already open in the web

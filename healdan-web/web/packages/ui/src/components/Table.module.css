@@ -167,7 +167,31 @@
   color: var(--hd-text-secondary);
 }
 
-/* While the rows shown are about to change (a new order, new filters), they dim as well as being marked busy. */
-.frame[aria-busy='true'] {
-  opacity: var(--hd-busy-opacity);
+/* While the rows shown are about to change (a new order, new filters), a strip pulses along the top as well as the list being
+   marked busy. The rows keep their colours: a person can still read and act on them, and dimming text breaks AA contrast. */
+.frame[aria-busy='true']::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: 2px;
+  background: var(--hd-accent-fill);
+  animation: busy-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes busy-pulse {
+  from {
+    opacity: 0.25;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame[aria-busy='true']::before {
+    animation: none;
+  }
 }

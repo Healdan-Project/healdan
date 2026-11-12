@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { t } from '@healdan/ui'
 import { useSelection } from '../selection'
-import { useNarrow } from './narrow'
+import { focusInto, isInnermost, openLayer, useNarrow } from './narrow'
 import styles from './RightRegion.module.css'
 
 /** What the right region shows (spec sections 6.1, 6.2 and 6.4) */
@@ -51,13 +51,18 @@ export function RightRegionProvider({ children }: { children: ReactNode }) {
   // that takes Esc for itself stops the event first.
   useEffect(() => {
     if (!narrow || !narrowOpen) return
+    const closeLayer = openLayer('region')
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (event.key !== 'Escape' || event.defaultPrevented || !isInnermost('region')) return
+      event.preventDefault()
       setNarrowOpen(false)
       document.querySelector<HTMLElement>(`[${REGION_BUTTON}]`)?.focus()
     }
     document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    return () => {
+      closeLayer()
+      document.removeEventListener('keydown', onKeyDown)
+    }
   }, [narrow, narrowOpen])
 
   const value = useMemo<RightRegion>(
@@ -122,12 +127,28 @@ export interface RightRegionProps {
 export function RightRegionView({ filters, details, preview }: RightRegionProps) {
   const content = { filters, details, preview }
   const region = useRightRegion()
+  const over = useRef<HTMLElement>(null)
+  const opened = region.narrow && region.narrowOpen
+  useEffect(() => {
+    if (!opened) return
+    focusInto(over.current)
+    // What the region holds is drawn when its data comes, which can replace the control that has the focus: until then, and
+    // for a second at most, the focus is taken again if it ends up on the page
+    const timer = setInterval(() => {
+      if (document.activeElement === document.body) focusInto(over.current)
+    }, 100)
+    const stop = setTimeout(() => clearInterval(timer), 1000)
+    return () => {
+      clearInterval(timer)
+      clearTimeout(stop)
+    }
+  }, [opened])
   const kind = regionKind(region.show, { filters: !!filters, details: !!details, preview: !!preview })
   if (region.narrow) {
     // Folded away behind the top bar's button. Opened, it covers the list, and says what it's for when it has nothing.
     if (!region.narrowOpen) return null
     return (
-      <section className={`${styles.region} ${styles.over} ${kind === 'preview' ? styles.wide : ''}`} aria-label={kind ? labels[kind]() : t('frame.side')}>
+      <section ref={over} className={`${styles.region} ${styles.over} ${kind === 'preview' ? styles.wide : ''}`} aria-label={kind ? labels[kind]() : t('frame.side')}>
         {kind ? content[kind] : <p className={styles.empty}>{t('frame.sideEmpty')}</p>}
       </section>
     )

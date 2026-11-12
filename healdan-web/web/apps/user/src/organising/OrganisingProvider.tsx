@@ -90,13 +90,17 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     if (outcome.refused.length > 0) setRefused({ title, lines: refusalLines(outcome.refused, me.data?.id) })
   }
 
-  async function move(documents: readonly Movable[], folder: { id: number; name: string }) {
+  /** `dragged`: a drop moved them, which leaves the focus where the person put it */
+  async function move(documents: readonly Movable[], folder: { id: number; name: string }, dragged = false) {
     // What is in the folder already isn't moved, and isn't counted
     const todo = documents.filter((one) => one.folder?.id !== folder.id)
     if (todo.length === 0) return toast(t('move.sameFolder'))
+    // Where the focus goes once the rows are gone, as after a delete: the picker that had it is gone, and the page would have it
+    const next = rowAfter(todo.map((one) => one.docNumber))
     const outcome = await moveDocuments(api, todo, folder.id)
     await invalidateDocumentLists(queryClient)
     report(outcome, plural('moved', outcome.done.length, { folder: folder.name || t('move.thisFolder') }), t('move.refusedTitle'))
+    if (outcome.done.length > 0 && !dragged) focusLater(next)
   }
 
   async function remove(documents: readonly Movable[]) {
@@ -128,7 +132,7 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
       const documents = readRows(event.dataTransfer.getData(ROWS_TYPE))
       const refusal = refusalOf(place)
       if (refusal) toast(t(refusal))
-      else if (documents.length > 0) void move(documents, { id: place.id, name: place.name ?? '' })
+      else if (documents.length > 0) void move(documents, { id: place.id, name: place.name ?? '' }, true)
     },
   }
 

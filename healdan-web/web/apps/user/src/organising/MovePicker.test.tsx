@@ -35,6 +35,20 @@ describe('The Move To… picker', () => {
     expect(api.callsTo('GET /v1/folders/2')).toHaveLength(0)
   })
 
+  it('leaves the focus on the list once the documents are moved, on the row that follows them, not on the page', async () => {
+    const { all } = routes()
+    await renderApp('/folders/7', all)
+    await select(/Lease/)
+    const dialog = await openPicker()
+    await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
+    await userEvent.click(await within(dialog).findByRole('button', { name: /Correspondence/ }))
+    const here = await within(dialog).findByRole('button', { name: 'Move Here' })
+    await waitFor(() => expect(here.hasAttribute('disabled')).toBe(false))
+    await userEvent.click(here)
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(globalThis.document.activeElement?.closest('[role="grid"]')).toBeTruthy())
+  })
+
   it('moves the selection into a folder of the chosen matter, each document with its own call', async () => {
     const { all, written } = routes()
     await renderApp('/folders/7', all)

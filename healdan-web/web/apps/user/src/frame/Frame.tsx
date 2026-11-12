@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { Outlet, useRouterState } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { OpenInAppProvider } from '../actions/OpenInAppState'
 import { FilingProvider } from '../filing/FilingProvider'
 import { OrganisingProvider } from '../organising/OrganisingProvider'
 import { QuickLookProvider } from '../preview/QuickLookState'
 import { useSignedOut } from '../services'
 import { LeftPane } from './LeftPane'
-import { useNarrow } from './narrow'
+import { focusInto, isInnermost, openLayer, useNarrow } from './narrow'
 import { RightRegionProvider } from './RightRegion'
 import { SignedOut } from './SignedOut'
 import { StorageBanner } from './StorageBanner'
@@ -43,18 +43,25 @@ function Layout() {
   // The address the pane was opened at: following a link in it goes to a view that has the width now, so the pane closes
   const [openedAt, setOpenedAt] = useState<string>()
   const paneOpen = openedAt === pathname
+  const over = useRef<HTMLDivElement>(null)
   const setPaneOpen = (open: boolean) => setOpenedAt(open ? pathname : undefined)
 
   // Esc closes the pane, and the focus goes back to the button that opened it. A menu or tree popup in it takes Esc for itself.
   useEffect(() => {
     if (!narrow || !paneOpen) return
+    const closeLayer = openLayer('pane')
+    focusInto(over.current)
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (event.key !== 'Escape' || event.defaultPrevented || !isInnermost('pane')) return
+      event.preventDefault()
       setPaneOpen(false)
       document.querySelector<HTMLElement>(`[${NAVIGATION_BUTTON}]`)?.focus()
     }
     document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    return () => {
+      closeLayer()
+      document.removeEventListener('keydown', onKeyDown)
+    }
     // setPaneOpen is made from the address each render
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [narrow, paneOpen])
@@ -64,7 +71,7 @@ function Layout() {
     <div className={`${styles.frame} ${narrow ? styles.narrow : ''}`}>
       <TopBar navigation={narrow ? { open, onToggle: () => setPaneOpen(!paneOpen) } : undefined} />
       {(!narrow || open) && (
-        <div className={narrow ? styles.over : styles.pane}>
+        <div ref={over} className={narrow ? styles.over : styles.pane}>
           <LeftPane />
         </div>
       )}

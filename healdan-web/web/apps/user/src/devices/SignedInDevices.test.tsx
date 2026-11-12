@@ -50,7 +50,7 @@ describe('Signed-in Devices', () => {
   it("lists each device's name, when it signed in, when it was last used and when it expires, and says the web page's sign-in isn't listed", async () => {
     const two = [token({ id: 1 }), token({ id: 2, name: 'Word on the front desk PC', created: '2026-09-01T08:00:00Z', lastUsed: '2026-09-02T08:00:00Z', expiresAt: '2026-12-01T08:00:00Z' })]
     const { dialog } = await openDevices(devices(two).routes)
-    const list = await within(dialog).findByRole('table', { name: 'Signed-in devices' })
+    const list = await within(dialog).findByRole('table', { name: 'Signed-in Devices' })
     expect(within(list).getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Device', 'Signed In', 'Last Used', 'Expires', 'Actions'])
     const rows = within(list).getAllByRole('row').slice(1)
     expect(rows).toHaveLength(2)
@@ -85,7 +85,7 @@ describe('Signed-in Devices', () => {
     expect(dialog.textContent).toContain('has to ask you to sign in again')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(api.callsTo('DELETE /v1/auth/tokens/*')).toHaveLength(0)
-    expect(await within(dialog).findByRole('table', { name: 'Signed-in devices' })).toBeTruthy()
+    expect(await within(dialog).findByRole('table', { name: 'Signed-in Devices' })).toBeTruthy()
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Revoke Healdan Helper on a MacBook' }))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Revoke' }))
@@ -116,5 +116,72 @@ describe('Signed-in Devices', () => {
     await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true))
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  describe('where the focus goes when the question gives way to the list', () => {
+    const named = (n: number) => `Device ${n}`
+    const three = () => devices([token({ id: 1, name: named(1) }), token({ id: 2, name: named(2) }), token({ id: 3, name: named(3) })])
+    const revokeOf = (dialog: HTMLElement, n: number) => within(dialog).getByRole('button', { name: `Revoke ${named(n)}` })
+    const ask = async (dialog: HTMLElement, n: number) => {
+      fireEvent.click(await within(dialog).findByRole('button', { name: `Revoke ${named(n)}` }))
+      await within(dialog).findByRole('heading', { name: `Revoke ${named(n)}?` })
+    }
+
+    it('goes back to the Revoke of the row that was asked about, after Cancel, inside the dialog', async () => {
+      const { dialog } = await openDevices(three().routes)
+      await ask(dialog, 2)
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+      await waitFor(() => expect(globalThis.document.activeElement).toBe(revokeOf(dialog, 2)))
+      expect(dialog.contains(globalThis.document.activeElement)).toBe(true)
+    })
+
+    it("goes to the next row's Revoke after a revoke, the previous one's after the last, and Close with none left", async () => {
+      const held = three()
+      const { dialog } = await openDevices(held.routes)
+      await ask(dialog, 1)
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Revoke' }))
+      await waitFor(() => expect(globalThis.document.activeElement).toBe(revokeOf(dialog, 2)))
+
+      await ask(dialog, 3)
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Revoke' }))
+      await waitFor(() => expect(globalThis.document.activeElement).toBe(revokeOf(dialog, 2)))
+
+      await ask(dialog, 2)
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Revoke' }))
+      await waitFor(() => expect(globalThis.document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Close' })))
+    })
+  })
+
+  it('asks for the list without a limit, which the route does not take', async () => {
+    const { api } = await openDevices(devices([token({})]).routes)
+    await waitFor(() => expect(api.callsTo('GET /v1/auth/tokens')).toHaveLength(1))
+    expect(api.callsTo('GET /v1/auth/tokens')[0]!.query).toBeUndefined()
+  })
+
+  it('sends one DELETE for a double press, with the confirming Revoke disabled while it runs', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const held = devices([token({ id: 7 })])
+    const { dialog, api } = await openDevices({ ...held.routes, 'DELETE /v1/auth/tokens/*': async () => (await gate, undefined) })
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Revoke Healdan Helper on a MacBook' }))
+    const confirm = within(dialog).getByRole('button', { name: 'Revoke' })
+    fireEvent.click(confirm)
+    await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(true))
+    fireEvent.click(confirm)
+    release()
+    await waitFor(() => expect(within(dialog).queryByRole('heading', { name: /^Revoke / })).toBeNull())
+    expect(api.callsTo('DELETE /v1/auth/tokens/*')).toHaveLength(1)
+  })
+
+  it('clears a refusal when another question opens', async () => {
+    const held = devices([token({ id: 7 }), token({ id: 8, name: 'Excel add-in' })])
+    const { dialog } = await openDevices({ ...held.routes, 'DELETE /v1/auth/tokens/7': problem(404, 'not-found') })
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Revoke Healdan Helper on a MacBook' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Revoke' }))
+    await within(dialog).findByRole('alert')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Revoke Excel add-in' }))
+    await within(dialog).findByRole('heading', { name: 'Revoke Excel add-in?' })
+    expect(within(dialog).queryByRole('alert')).toBeNull()
   })
 })

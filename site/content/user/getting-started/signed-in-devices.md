@@ -3,8 +3,9 @@ title: Signed-in Devices
 weight: 6
 ---
 
-Each Mac that runs Healdan Helper, and each Office add-in the helper serves, signs in to Healdan with a sign-in of its
-own, which you don't type a password for. **Signed-in Devices** lists them, so you can see where your account is
+Healdan Helper signs in to Healdan with a sign-in of its own on each Mac, which you don't type a password for. The
+Office add-ins and the LibreOffice extension don't sign in: they work through the helper. A program of your own that
+signs in through Healdan's API with your password is listed too. **Signed-in Devices** lists them, so you can see where your account is
 signed in and end any sign-in you don't want.
 
 ## Opening the List

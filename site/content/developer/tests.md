@@ -251,22 +251,39 @@ code is laid out.
   that the web session refuses a cross-site sign-out and one without the `X-Healdan-Client` header, and still
   answers `GET`s.
   - `keyboard.spec.ts` walks rows 3 to 9 of the spec's manual acceptance by keyboard alone: after the sign-in page it
-    presses keys (`page.keyboard`, with `focus()` only to start where Tab would have brought the focus) and never
-    clicks. It files its own documents and an email into a folder of its own, inside `E2E`, a folder of Documents that this spec and `a11y.spec.ts` share so they add no row to Documents' own list (where `filing.spec.ts` and `working.spec.ts` look for their documents, among the first rows the list draws), and goes through `/` to the search box and
-    a `#` to its document; the funnel, Filters and a tick; Tab into the list and each column's Enter sort, both ways;
-    Space, the arrow keys and Esc in Quick Look, and docking the reading pane; an email's **Show Pictures** and
-    **Save to Matter**; Enter to open in the app, **Check Out** and **Release**, and **Edit** with Enter to save;
-    **Upload** by Enter, with Option-Enter for the form that comes first; and **New Folder**, F2, **More › Move To…** and
-    Delete. A step that can't be done that way is a bug in the app.
+    presses keys (`page.keyboard`) and never clicks. A control is reached by Tab (`tabTo` in `helpers.ts`, which presses Tab until
+    the control has the focus and fails after a bound); `focus()` only starts a step at a row, which Tab and the arrow keys
+    reach (row 4 proves Tab gets into the list). It files its own documents and an email into a folder of its own, inside
+    `E2E`, a folder of Documents that this spec and `a11y.spec.ts` share so they add no row to Documents' own list (where
+    `filing.spec.ts` and `working.spec.ts` look for their documents, among the first rows the list draws). It walks:
+    - **Row 3:** `/` to the search box; a suggestion chosen with the arrow keys; a `#` and `#n.N`; a matter number in the
+      Matters scope, picked from the scope menu; a word search and its results; the funnel, Filters and a tick.
+    - **Row 4:** Tab into the list, and each column sorted from its header by Enter, both ways.
+    - **Row 5:** Space, the arrow keys and Esc in Quick Look, and docking the reading pane.
+    - **Row 6:** an email in Quick Look, **Show Pictures**, **Save to Matter**, and Enter on the saved attachment, with the
+      notice asserted.
+    - **Row 7:** Enter to open in the app, **Download** (the download event asserted), **Check Out** and **Release**, and
+      **Edit** with Enter to save and Esc to cancel.
+    - **Row 8:** **Upload** by Enter, and Option-Enter for the form that comes first.
+    - **Row 9:** **New Folder**, F2, **More › Move To…** and Delete, each with where the focus lands asserted.
+
+    It leaves out **Copy Link**, as headless browsers' clipboards differ between engines (`finding.spec.ts` covers it), and
+    row 9's move into another matter: the smoke fixture's only matter outside Smoke Cloud is 1.1, and a move into Smoke
+    Cloud would write through Garage after step 8 has checked its read cache. A step that can't be done by keys is a bug in the
+    app.
   - `a11y.spec.ts` runs axe on each main view in the light theme and again in the dark one (a browser context with
     Playwright's `colorScheme`, signed in once per theme): Recent's four lists, a matter, a folder with details and the
-    properties form, Filters, search results, a document's page, Quick Look on a PDF and on an email, the reading
-    pane, the dialogs and menus, and, at 768 × 1024, the folded top bar with the left pane and the right region opened
-    over the list. Colour contrast is checked here, as jsdom can't. axe-core is the workspace's own development
-    dependency: `e2e/axe.ts` reads its file from `node_modules` and runs it with `page.evaluate`, which the browser's
-    debugging protocol does and the page's Content-Security-Policy doesn't govern, so the policy stays as the app ships
-    it. `addScriptTag` with the source in it would be blocked by `script-src 'self'`, and turning the policy off for the
-    spec (`bypassCSP`) would test a page the app never serves.
+    properties form, Filters (with one in use, and while the counts are held open with `page.route`, since busy states keep
+    AA contrast), the list while it is asked for again, the filing tray and the File Documents form, the rename field, the
+    delete question, the Help menu, search results for a word with their Filters, a document's page, Quick Look on a PDF and
+    on an email, the reading pane, New Folder, More and Move To…, the person menu, Signed-in Devices with the Revoke question
+    and its refusal (and a real revoke, whose focus must stay in the dialog), at 768 × 1024 the folded top bar with the left
+    pane, the empty region and the details opened over the list, and last the signed-out screen (the session is ended with
+    `DELETE /api/v1/session` from the page). Colour contrast is checked here, as jsdom can't. axe-core is the workspace's own
+    development dependency: `e2e/axe.ts` reads its file from `node_modules` and runs it with `page.evaluate`, which the
+    browser's debugging protocol does and the page's Content-Security-Policy doesn't govern, so the policy stays as the app
+    ships it. No spec turns it off: `addScriptTag` with the source in it would be blocked by `script-src 'self'`, and
+    `bypassCSP` would test a page the app never serves.
   - It runs in `docker/smoke-test.sh` as step 9, on amd64 and arm64. On a Mac, Docker Desktop doesn't reach the
     host's ports from the default `--network host`: set `WEB_NETWORK=bridge`. The browser then still opens
     `http://127.0.0.1:<port>`, which a small proxy in its container forwards to `host.docker.internal`, because the web

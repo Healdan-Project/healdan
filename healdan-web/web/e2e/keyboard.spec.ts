@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
+import { PASSWORD, authorized, call, deviceToken, fileDocument, matterFolders, minimalPdf, signIn, specsFolder, tabTo } from './helpers'
 
 // The User app by keyboard alone (M6 spec section 15.2, rows 3 to 9; section 10.5): after the sign-in page, every step is a
-// key (`page.keyboard`), with `focus()` only to put the focus where a person's Tab would have brought it. No click. Where a
+// key (`page.keyboard`), and where a control is reached it is by Tab (`tabTo`). `focus()` only starts a step at a place the
+// walkthrough reaches some other way (a row, which Tab and the arrow keys reach: row 4 proves it), and says so. No click. Where a
 // step can't be done that way, that is a finding for the app, not something to work around here. The documents are this
 // run's own, in a folder of its own inside E2E, a folder of matter 1.1's Documents folder (which the smoke fixture makes) that
 // the specs which make folders share, so the list holds nothing else, whatever earlier runs left. One sign-in serves the whole file, and the tests run one after another.
@@ -65,6 +66,7 @@ let token = ''
 let context: BrowserContext | undefined
 let page: Page
 let workFolder = 0
+let matterFolder = 0
 const numbers: Record<keyof typeof NAMES | 'email', number> = { alpha: 0, bravo: 0, charlie: 0, pdf: 0, rename: 0, move: 0, remove: 0, email: 0 }
 const trackers: string[] = []
 
@@ -72,7 +74,9 @@ test.beforeAll(async ({ playwright, browser }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
   api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
   token = await deviceToken(api, RUN)
-  const specs = await specsFolder(api, token, (await matterFolders(api, token)).documents)
+  const folders = await matterFolders(api, token)
+  matterFolder = folders.matter
+  const specs = await specsFolder(api, token, folders.documents)
   const makeFolder = async (parentId: number, name: string) =>
     (await call<{ id: number }>(api!.post('/api/v1/folders', { ...authorized(token), data: { parentId, name } }), `making ${name}`)).id
   workFolder = await makeFolder(specs, WORK)
@@ -117,27 +121,66 @@ async function openFolder(sort = 'edited&order=desc') {
   await expect(row(NAMES.alpha)).toBeVisible()
 }
 
-test('row 3: / jumps to the search box, a # opens its document, and the funnel opens Filters, which a tick narrows', async () => {
+test('row 3: / jumps to the search box; a suggestion, a # and #n.N, a word and a matter number all search by keys; Filters narrow by a tick', async () => {
   await openFolder()
+  const box = page.getByRole('combobox', { name: 'Search' })
   // Nothing in a field, so the slash is the shortcut's
   await page.keyboard.press('/')
-  const box = page.getByRole('combobox', { name: 'Search' })
   await expect(box).toBeFocused()
-  await page.keyboard.type(`#${numbers.alpha}`)
+
+  // A suggestion, chosen with the arrow keys: a document, whose title the box offers as it is typed
+  await page.keyboard.type(`Alpha ${RUN}`)
+  await expect(page.getByRole('option', { name: escape(NAMES.alpha) })).toBeVisible({ timeout: 60_000 })
+  await page.keyboard.press('ArrowDown')
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(new RegExp(`/app/doc/${numbers.alpha}$`))
-  await expect(main().getByRole('heading', { name: NAMES.alpha }).or(main().getByRole('row', { name: escape(NAMES.alpha) })).first()).toBeVisible()
 
-  // The funnel is a button, reached and pressed by keys
+  // The box keeps the focus after a search, so the slash is pressed only when it doesn't have it (a slash in a field is typed)
+  const searchFor = async (text: string) => {
+    if (!(await box.evaluate((element) => element === document.activeElement))) await page.keyboard.press('/')
+    await expect(box).toBeFocused()
+    await page.keyboard.press('Control+A')
+    await page.keyboard.type(text)
+    await page.keyboard.press('Enter')
+  }
+
+  // A # opens its document, by number and with a version
+  await searchFor(`#${numbers.alpha}`)
+  await expect(page).toHaveURL(new RegExp(`/app/doc/${numbers.alpha}$`))
+  await searchFor(`#${numbers.alpha}.1`)
+  await expect(page).toHaveURL(new RegExp(`/app/doc/${numbers.alpha}\\.1$`))
+  await expect(main().getByRole('row', { name: escape(NAMES.alpha) })).toBeVisible()
+
+  // The Matters scope, picked from the scope menu by keys, takes a matter number
+  await tabTo(page, page.getByRole('button', { name: /Search In/ }), { from: box })
+  await page.keyboard.press('Enter')
+  await page.getByRole('menuitem', { name: 'Matters' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('button', { name: /Search In.*Matters/ })).toBeVisible()
+  await searchFor('1.1')
+  await expect(page).toHaveURL(new RegExp(`/app/folders/${matterFolder}$`))
+  // Back to Documents for the word search: the same menu
+  await tabTo(page, page.getByRole('button', { name: /Search In/ }), { from: box })
+  await page.keyboard.press('Enter')
+  await page.getByRole('menuitem', { name: 'Documents', exact: true }).focus()
+  await page.keyboard.press('Enter')
+
+  // A word, whose results come once the Indexer has read the documents (as finding.spec waits for them)
+  await expect(async () => {
+    await searchFor(`Alpha ${RUN}`)
+    await expect(page).toHaveURL(/\/app\/search\?/)
+    await expect(main().getByRole('row', { name: escape(NAMES.alpha) })).toBeVisible({ timeout: 4_000 })
+  }).toPass({ timeout: 80_000, intervals: [1_000, 2_000, 3_000] })
+
+  // The funnel is a button, reached by Tab from the star beside the folder's name, and pressed by Enter
   await openFolder()
   const funnel = page.getByRole('button', { name: /^Filters/ })
-  await funnel.focus()
+  await tabTo(page, funnel, { from: main().getByRole('button', { name: /Favorites/ }) })
   await page.keyboard.press('Enter')
   const filters = page.getByRole('region', { name: 'Filters' })
   await expect(filters).toBeVisible()
   // Every document here is a text file, so File Type offers Other; Space ticks it, and the chip says so
-  const other = filters.getByRole('checkbox', { name: /^Other/ })
-  await other.focus()
+  await tabTo(page, filters.getByRole('checkbox', { name: /^Other/ }))
   await page.keyboard.press('Space')
   await expect(main().getByRole('group', { name: 'Filters in Use' })).toContainText('Other')
   await page.keyboard.press('Space')
@@ -164,6 +207,7 @@ test('row 4: Tab reaches the list, and each column sorts from its header by Ente
   ]
   for (const [heading, column] of sorted) {
     const header = list().getByRole('columnheader', { name: escape(heading) })
+    // Tab reached the list above; a header is a stop of its own that Shift+Tab and the arrow keys reach from a row
     await header.focus()
     await page.keyboard.press('Enter')
     await expect(page).toHaveURL(new RegExp(`sort=${column}`))
@@ -206,7 +250,7 @@ test('row 5: Space opens Quick Look, the arrow keys walk the list, Esc closes it
   // Docked as the reading pane, which follows the arrow keys through the rows
   await page.keyboard.press('Space')
   await expect(dialog).toBeVisible()
-  await dialog.getByRole('button', { name: 'Open as Reading Pane' }).focus()
+  await tabTo(page, dialog.getByRole('button', { name: 'Open as Reading Pane' }))
   await page.keyboard.press('Enter')
   const pane = page.getByRole('region', { name: 'Preview' })
   await expect(pane).toBeVisible()
@@ -215,7 +259,7 @@ test('row 5: Space opens Quick Look, the arrow keys walk the list, Esc closes it
   await row(NAMES.pdf).focus()
   await page.keyboard.press('ArrowDown')
   await expect(pane.getByRole('heading')).not.toHaveText(NAMES.pdf)
-  await pane.getByRole('button', { name: 'Close Preview' }).focus()
+  await tabTo(page, pane.getByRole('button', { name: 'Close Preview' }), { from: row(NAMES.pdf) })
   await page.keyboard.press('Enter')
   await expect(pane).toBeHidden()
 })
@@ -231,17 +275,26 @@ test('row 6: an email reads in Quick Look, Show Pictures and Save to Matter are 
   await expect(body.getByText(`Hello from the run ${RUN}`)).toBeVisible()
   expect(trackers).toEqual([])
 
-  await dialog.getByRole('button', { name: 'Show Pictures' }).focus()
+  await tabTo(page, dialog.getByRole('button', { name: 'Show Pictures' }))
   await page.keyboard.press('Enter')
   await expect.poll(() => trackers.length).toBeGreaterThan(0)
 
-  await dialog.getByRole('button', { name: `Save to Matter: ${ATTACHMENT}` }).focus()
+  // Show Pictures loads the message again, and WebKit leaves the focus in the frame it reloaded, from where Tab stays in that
+  // frame: the walk goes on from the attachment's Preview, the control before it
+  await tabTo(page, dialog.getByRole('button', { name: `Save to Matter: ${ATTACHMENT}` }), { from: dialog.getByRole('button', { name: `Preview ${ATTACHMENT}` }) })
   await page.keyboard.press('Enter')
   await expect(dialog.getByText(/^Saved as # \d+$/)).toBeVisible()
 
   await page.keyboard.press('Escape')
   await expect(dialog).toBeHidden()
   await expect.poll(() => inRow(mail)).toBe(true)
+
+  // The attachment saved is a document of the matter: Enter on its row opens it in the app, and the notice says what to do
+  // if nothing opened
+  await openFolder('title&order=asc')
+  await row(ATTACHMENT).focus() // a row, as above
+  await page.keyboard.press('Enter')
+  await expect(page.getByText(/If nothing opened/)).toBeVisible()
 })
 
 test('row 7: Enter opens in the app, Check Out and Release are keys, and Edit changes a property and saves with Enter', async () => {
@@ -254,24 +307,31 @@ test('row 7: Enter opens in the app, Check Out and Release are keys, and Edit ch
 
   const details = page.getByRole('region', { name: 'Details' })
   await expect(details.getByRole('heading', { name: NAMES.pdf })).toBeVisible()
+  // Download, by Tab from the row: the download event is the proof
+  await tabTo(page, details.getByRole('button', { name: 'Download', exact: true }), { from: row(NAMES.pdf) })
+  const [download] = await Promise.all([page.waitForEvent('download'), page.keyboard.press('Enter')])
+  // WebKit suggests underscores for spaces
+  expect(download.suggestedFilename().replaceAll('_', ' ')).toBe(NAMES.pdf)
+
   const checkOut = details.getByRole('button', { name: 'Check Out' })
-  await checkOut.focus()
+  await tabTo(page, checkOut)
   await page.keyboard.press('Enter')
   await expect(details.getByText(/^Checked out by you since/)).toBeVisible()
-  await details.getByRole('button', { name: 'Release' }).focus()
+  await tabTo(page, details.getByRole('button', { name: 'Release' }))
   await page.keyboard.press('Enter')
   await expect(details.getByText(/^Checked out by you since/)).toBeHidden()
 
   const edit = details.getByRole('button', { name: 'Edit' })
   // Grey while the document is asked for again after the release, and a key on a grey button does nothing
   await expect(edit).toBeEnabled()
-  await edit.focus()
+  await tabTo(page, edit, { from: row(NAMES.pdf) })
   await page.keyboard.press('Enter')
   const comments = details.getByRole('textbox', { name: 'Comments' })
   // The form opens with the focus in its first field, since Edit went grey under the key that pressed it
   await expect(comments).toBeVisible()
   await expect.poll(() => details.locator('form').evaluate((form) => form.contains(document.activeElement))).toBe(true)
-  await comments.focus()
+  // The first field is a list (Class); Comments is a Tab or two on
+  await tabTo(page, comments)
   await page.keyboard.type(`Chase on Monday ${RUN}`)
   // Enter in a field of the form saves it, as a form does
   await page.keyboard.press('Enter')
@@ -289,7 +349,8 @@ test('row 7: Enter opens in the app, Check Out and Release are keys, and Edit ch
 test('row 8: Upload opens the file picker by Enter and files what is chosen; with Option, the form comes first', async () => {
   await openFolder()
   const upload = main().getByRole('button', { name: 'Upload' })
-  await upload.focus()
+  // The first control of the toolbar, which Tab reaches from the star beside the folder's name
+  await tabTo(page, upload, { from: main().getByRole('button', { name: /Favorites/ }) })
   const chosen = `Uploaded ${RUN}.txt`
   const [picker] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Enter')])
   await picker.setFiles({ name: chosen, mimeType: 'text/plain', buffer: Buffer.from(`uploaded ${RUN}`) })
@@ -299,12 +360,12 @@ test('row 8: Upload opens the file picker by Enter and files what is chosen; wit
 
   // Option-Enter is the Option drop's key: the form asks first, and Enter in it files
   const withForm = `Uploaded with the form ${RUN}.txt`
-  await upload.focus()
+  await tabTo(page, upload, { from: main().getByRole('button', { name: /Favorites/ }) })
   const [second] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Alt+Enter')])
   await second.setFiles({ name: withForm, mimeType: 'text/plain', buffer: Buffer.from(`with the form ${RUN}`) })
   const form = page.getByRole('dialog', { name: 'File Documents' })
   await expect(form).toBeVisible()
-  await form.getByRole('button', { name: /^File/ }).focus()
+  await tabTo(page, form.getByRole('button', { name: /^File/ }))
   await page.keyboard.press('Enter')
   await expect(form).toBeHidden()
   await expect(row(withForm)).toBeVisible()
@@ -314,7 +375,8 @@ test('row 9: New Folder, F2, Move To… and Delete are all keys', async () => {
   await openFolder('title&order=asc')
 
   // New Folder asks for a name, and Enter makes it
-  await main().getByRole('button', { name: 'New Folder' }).focus()
+  const newFolder = main().getByRole('button', { name: 'New Folder' })
+  await tabTo(page, newFolder, { from: main().getByRole('button', { name: /Favorites/ }) })
   await page.keyboard.press('Enter')
   const asking = page.getByRole('dialog', { name: 'New Folder' })
   await expect(asking.getByRole('textbox', { name: 'Name' })).toBeFocused()
@@ -322,6 +384,8 @@ test('row 9: New Folder, F2, Move To… and Delete are all keys', async () => {
   await page.keyboard.press('Enter')
   await expect(page.getByText(`Created ${MADE}`)).toBeVisible()
   await expect(row(MADE)).toBeVisible()
+  // The focus goes back to the button that asked
+  await expect(newFolder).toBeFocused()
 
   // F2 edits the title in the row, Enter saves it, and the row keeps the focus
   await row(NAMES.rename).focus()
@@ -340,9 +404,10 @@ test('row 9: New Folder, F2, Move To… and Delete are all keys', async () => {
   await page.keyboard.press('ArrowDown')
   await page.keyboard.press('ArrowUp')
   await expect(row(NAMES.move)).toHaveAttribute('aria-selected', 'true')
-  await main().getByRole('button', { name: 'More', exact: true }).focus()
+  const more = main().getByRole('button', { name: 'More', exact: true })
+  await tabTo(page, more, { from: row(NAMES.move) })
   await page.keyboard.press('Enter')
-  await page.getByRole('menuitem', { name: 'Move To…' }).focus()
+  await page.getByRole('menuitem', { name: 'Move To…' }).focus() // the menu's own first key is ArrowDown
   await page.keyboard.press('Enter')
   const picker = page.getByRole('dialog', { name: 'Move 1 Document' })
   await expect(picker).toBeVisible()
@@ -350,19 +415,22 @@ test('row 9: New Folder, F2, Move To… and Delete are all keys', async () => {
   for (const [step, shown] of [
     [/Smoke Matter/, /^Folders in .*Smoke Matter/],
     [/^Documents/, /^Folders in Documents$/],
-    [/^E2E/, /^Folders in E2E$/],
+    [/^E2E$/, /^Folders in E2E$/],
     [new RegExp(`^${WORK}`), new RegExp(`^Folders in ${WORK}$`)],
     [escape(TARGET), new RegExp(`^Folders in ${TARGET}$`)],
   ] as const) {
+    // The picker's buttons are a list of choices: Tab to each
     const choice = picker.getByRole('button', { name: step }).first()
-    await choice.focus()
+    await tabTo(page, choice, { limit: 300 })
     await page.keyboard.press('Enter')
     await expect(picker.getByRole('heading', { name: shown })).toBeVisible()
   }
-  await picker.getByRole('button', { name: 'Move Here' }).focus()
+  await tabTo(page, picker.getByRole('button', { name: 'Move Here' }))
   await page.keyboard.press('Enter')
   await expect(page.getByText(`Moved 1 document to ${TARGET}`)).toBeVisible()
   await expect(row(NAMES.move)).toHaveCount(0)
+  // The dialog is gone and the focus is back on the page, not on the body
+  await expect.poll(() => page.evaluate(() => document.activeElement !== document.body)).toBe(true)
 
   // Delete asks first, and Enter confirms
   // Down from the row above selects it, as arrowing to a row does; Delete acts on the selection
@@ -375,4 +443,6 @@ test('row 9: New Folder, F2, Move To… and Delete are all keys', async () => {
   await page.keyboard.press('Enter')
   await expect(page.getByText('Moved 1 document to the Trash')).toBeVisible()
   await expect(row(NAMES.remove)).toHaveCount(0)
+  // The focus goes to the row that took its place, so the next key works on the list
+  await expect.poll(() => inRow(list())).toBe(true)
 })

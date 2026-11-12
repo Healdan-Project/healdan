@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { expect, type APIRequestContext, type Page } from '@playwright/test'
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 // webuser is made by healdan-core's SmokeWebUserSeed on the smoke stack; docker/tests/test-web.sh passes its password.
 export const USERNAME = 'webuser'
@@ -97,14 +97,33 @@ export function minimalPdf(text: string): Buffer {
 /**
  * The folder the specs that make folders of their own keep them in: `E2E`, inside Documents, found or made. Those specs
  * (`keyboard` and `a11y`) would otherwise add a row to Documents for each run, and the specs that look at Documents' own
- * list (`filing`, `working`) find their documents among the first rows, where the list draws them.
+ * list (`filing`, `working`) find their documents among the first rows, where the list draws them. The folders are paged
+ * through, so a stack with many of them can't make a second `E2E`.
  */
 export async function specsFolder(api: APIRequestContext, token: string, documents: number): Promise<number> {
-  const inside = await call<{ items: { id: number; name: string; type: string }[] }>(
-    api.get(`/api/v1/folders/${documents}/children?type=folder&limit=200`, authorized(token)),
-    'the folders of Documents',
-  )
-  const found = inside.items.find((item) => item.type === 'folder' && item.name === 'E2E')
-  if (found) return found.id
+  for (let offset = 0; ; ) {
+    const inside = await call<{ items: { id: number; name: string; type: string }[]; total?: number }>(
+      api.get(`/api/v1/folders/${documents}/children?type=folder&limit=200&offset=${offset}`, authorized(token)),
+      'the folders of Documents',
+    )
+    const found = inside.items.find((item) => item.type === 'folder' && item.name === 'E2E')
+    if (found) return found.id
+    offset += inside.items.length
+    if (inside.items.length === 0 || (inside.total !== undefined && offset >= inside.total)) break
+  }
   return (await call<{ id: number }>(api.post('/api/v1/folders', { ...authorized(token), data: { parentId: documents, name: 'E2E' } }), 'making E2E')).id
+}
+
+/**
+ * Presses Tab until `target` has the focus, as a person who doesn't point would, and fails after `limit` presses. `from`, when
+ * given, is where the walk starts: a place the walkthrough reaches some other way, which the caller says why.
+ */
+export async function tabTo(page: Page, target: Locator, options: { from?: Locator; limit?: number } = {}) {
+  if (options.from) await options.from.focus()
+  const limit = options.limit ?? 60
+  for (let i = 0; i <= limit; i++) {
+    if (await target.evaluate((element) => element === document.activeElement).catch(() => false)) return
+    await page.keyboard.press('Tab')
+  }
+  throw new Error(`Tab didn't reach ${target} in ${limit} presses`)
 }

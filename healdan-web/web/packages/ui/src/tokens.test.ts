@@ -55,6 +55,14 @@ describe('tokens.css', () => {
       expect(contrast(tokens['--hd-focus-edge']!, tokens[`--hd-${bg}`]!)).toBeGreaterThanOrEqual(3)
     })
 
+    // Counts dim while they are asked for again, in the primary text colour (filters.module.css): still AA on every plain surface
+    it.each(PLAIN)(`${scheme}: --hd-text at the busy opacity reaches AA on --hd-%s`, (bg) => {
+      const opacity = Number(tokens['--hd-busy-opacity'])
+      const mix = (a: string, b: string) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * opacity + parseInt(b.slice(i, i + 2), 16) * (1 - opacity)).toString(16).padStart(2, '0')).join('')
+      const background = tokens[`--hd-${bg}`]!
+      expect(contrast(mix(tokens['--hd-text']!, background), background)).toBeGreaterThanOrEqual(4.5)
+    })
+
     // The filled star keeps the helper's amber, which is too pale on light surfaces to show by itself: its edge does
     // (WCAG 1.4.11's 3:1 for what shows a control's state).
     it.each(PLAIN)(`${scheme}: the filled star's edge shows on --hd-%s`, (bg) => {

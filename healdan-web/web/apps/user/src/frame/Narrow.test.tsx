@@ -118,4 +118,35 @@ describe('the frame at a tablet width', () => {
     await screen.findByRole('navigation', { name: 'Navigation' })
     await expectNoAxeViolations(document.body)
   })
+
+  describe('layers and focus', () => {
+    it('moves the focus into the pane when it opens, and into the region when it opens', async () => {
+      setViewport(768)
+      await renderApp('/folders/7', routes().all)
+      await select(/Letter to Dunmere/)
+      await userEvent.click(await navButton())
+      const pane = await screen.findByRole('navigation', { name: 'Navigation' })
+      await waitFor(() => expect(pane.contains(document.activeElement)).toBe(true))
+      await userEvent.keyboard('{Escape}')
+      await userEvent.click(await sideButton())
+      const region = await screen.findByRole('region', { name: 'Details' })
+      await waitFor(() => expect(region.contains(document.activeElement), String(document.activeElement?.outerHTML.slice(0,150))).toBe(true))
+    })
+
+    it('closes one layer for each Esc, the one opened last first', async () => {
+      setViewport(768)
+      await renderApp('/folders/7', routes().all)
+      await select(/Letter to Dunmere/)
+      await userEvent.click(await navButton())
+      await screen.findByRole('navigation', { name: 'Navigation' })
+      await userEvent.click(await sideButton())
+      await screen.findByRole('region', { name: 'Details' })
+
+      await userEvent.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('region', { name: 'Details' })).toBeNull())
+      expect(screen.getByRole('navigation', { name: 'Navigation' })).toBeTruthy()
+      await userEvent.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('navigation', { name: 'Navigation' })).toBeNull())
+    })
+  })
 })

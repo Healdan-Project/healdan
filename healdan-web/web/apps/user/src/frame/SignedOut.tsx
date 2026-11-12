@@ -10,7 +10,7 @@ export function SignedOut() {
   const here = window.location.pathname + window.location.search
   return (
     <main className={styles.panel}>
-      <p className={styles.message}>{t('signedOut.message')}</p>
+      <h1 className={styles.message}>{t('signedOut.message')}</h1>
       <a className={styles.signIn} href={here}>
         {t('signedOut.signIn')}
       </a>

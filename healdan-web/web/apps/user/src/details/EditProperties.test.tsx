@@ -9,6 +9,7 @@ import { expectNoAxeViolations } from '../test/axe'
 import { detailsRoutes, letter, propertiesOf } from '../test/details'
 import { children, document, field, folder, page, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
+import { setViewport } from '../test/viewport'
 
 type S = components['schemas']
 
@@ -340,6 +341,22 @@ describe('Editing properties', () => {
     await userEvent.keyboard('05')
     await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(patched).toEqual({ values: { reviewdate: '2026-11-05T00:00:00Z' } }))
+  })
+
+  it('cancels the form with one Esc and leaves the folded region open in a narrow window, the focus on Edit', async () => {
+    setViewport(768)
+    await renderApp('/folders/7?sel=10388', routes(profile()))
+    await userEvent.click(await screen.findByRole('button', { name: 'Details and Filters' }))
+    const panel = await details()
+    const button = await within(panel).findByRole('button', { name: 'Edit' })
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
+    button.focus()
+    await userEvent.keyboard('{Enter}')
+    await within(panel).findByRole('button', { name: 'Save' })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(within(panel).queryByRole('button', { name: 'Save' })).toBeNull())
+    expect(screen.queryByRole('region', { name: 'Details' })).toBe(panel)
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(button))
   })
 
   describe('by keyboard', () => {

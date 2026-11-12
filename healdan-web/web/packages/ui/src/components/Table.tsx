@@ -134,9 +134,15 @@ export function Table<T extends TableRow>({
 }: TableProps<T>) {
   // Rows that can be dragged are draggable, which React Aria's Row has no prop for. A row that is drawn (or drawn again, as a
   // refetch does) takes it from here.
-  const canDrag = (row: T) => drag !== undefined && row.selectable !== false && row.id !== undraggable
+  // `Collection` keeps each row's element with the ref callback of the render that last built it, and the Virtualizer can mount
+  // that element again later. So a row's callback reads what is current from a ref, not from the render that made it.
+  const latest = useRef({ drag, undraggable })
+  useEffect(() => {
+    latest.current = { drag, undraggable }
+  })
+  const canDragNow = (row: T) => latest.current.drag !== undefined && row.selectable !== false && row.id !== latest.current.undraggable
   const draggable = (row: T) => (element: HTMLElement | null) => {
-    if (element) element.draggable = canDrag(row)
+    if (element) element.draggable = canDragNow(row)
   }
   // React Aria draws a row again only when its item or the columns change, so a row that has been drawn already is brought up
   // to date here when `undraggable` or `drag` changes. Drawing every row again for it would make React Aria give the focus back
@@ -146,7 +152,7 @@ export function Table<T extends TableRow>({
     const byKey = new Map(rows.map((row) => [row.id, row]))
     for (const element of frame.current?.querySelectorAll<HTMLElement>('[data-row-key]') ?? []) {
       const row = byKey.get(element.getAttribute('data-row-key') ?? '')
-      if (row) element.draggable = canDrag(row)
+      if (row) element.draggable = canDragNow(row)
     }
     // canDrag is made from these
     // eslint-disable-next-line react-hooks/exhaustive-deps
