@@ -31,6 +31,18 @@ describe('New Folder', () => {
     await waitFor(() => expect(api.callsTo('GET /v1/folders/7/children').length).toBeGreaterThan(1))
   })
 
+  it('opens with the Name field focused, so what is typed next is the name', async () => {
+    const { all, written } = routes()
+    await renderApp('/folders/7', all)
+    const button = within(await toolbar()).getByRole('button', { name: 'New Folder' })
+    button.focus()
+    await userEvent.keyboard('{Enter}')
+    const dialog = await screen.findByRole('dialog', { name: 'New Folder' })
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(within(dialog).getByRole('textbox', { name: 'Name' })))
+    await userEvent.keyboard('Board Papers{Enter}')
+    await waitFor(() => expect(written.made).toEqual([{ parentId: 7, name: 'Board Papers' }]))
+  })
+
   it('is not offered at a matter\'s top level, which stays the administrators\'', async () => {
     const { all } = routes()
     await renderApp('/folders/110', all)

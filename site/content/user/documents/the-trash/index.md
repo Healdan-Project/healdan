@@ -3,6 +3,10 @@ title: The Trash
 weight: 7
 ---
 
+{{< callout type="info" >}}
+This is in the [Classic Interface](../../the-classic-interface/), which the Healdan app doesn't replace yet. In the app, open your menu and choose **Classic Interface**; you stay signed in.
+{{< /callout >}}
+
 A document or folder you delete goes to the trash, where you can restore it until it's removed for good.
 
 ## Finding It

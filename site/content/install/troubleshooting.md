@@ -32,6 +32,28 @@ Healdan's own log is `repository/logs/dms.log`, in the repository volume.
 | `Seed step 'storage-record-original' failed: Original's folder looks unmounted: …` | The first start on Healdan's storage found Original's folder empty, with no marker, while the database has documents, and stopped rather than mark an empty folder. Check that the folder the message names is there, such as a [host folder](../host-folders/) that didn't mount, and start again. The message also says how to write the marker by hand, if every document really has lost its file. |
 | `Storage backend … can't be reached, so reads of its files the read cache doesn't hold fail at once …` (in `dms.log`) | A storage backend's outage: see [A Storage Backend Is Failing](#a-storage-backend-is-failing). |
 
+## The App Signs People Out, or Says It Refused Something
+
+The User app at `/app/` uses the Classic Interface's own sign-in. These are what people tell you they see, and where
+to look.
+
+- **"You've been signed out."** The session ended: it timed out, the person signed out in another tab, or an
+  administrator ended it. **Sign In** brings them back to the page they were on. If it happens within moments of
+  every sign-in, the proxy may be hiding the browser's own headers from Healdan: see
+  [Reverse Proxy](../reverse-proxy/).
+- **"Healdan refused that from this page."** The request didn't look like the page's own: its `Sec-Fetch-Site` or
+  `Origin` header was missing or named another address, or a change was sent without the app's own header. Check
+  that `LOGICALDOC_PUBLIC_URL` is the address people type, that the proxy passes `Origin` and `Sec-Fetch-Site` on,
+  and that people don't reach Healdan under two different host names, such as by IP address and by name.
+- **"Not found, or you can't see it."** The document, folder or page doesn't exist, or the person can't read it.
+  Healdan says the same for both, so a reader can't tell which documents exist. If someone swears it exists, check
+  their permission on its folder in the Classic Interface, and that it isn't in the Trash.
+- **"You don't have permission to do that."** The person can see the document or folder, but not do what they
+  asked: delete or move it, write into the folder, or change its properties. Give them the permission on the
+  folder, or have someone who has it do the work.
+- **"Files are unavailable for now. Try again in a few minutes."** A storage backend can't be reached: see
+  [A Storage Backend Is Failing](#a-storage-backend-is-failing).
+
 ## Office Previews Say "Not Available"
 
 See [Office Previews](../what-runs/#office-previews) in What Runs.

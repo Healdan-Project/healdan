@@ -182,6 +182,25 @@ describe('The Upload button', () => {
     expect(sent.map((one) => [one.folderId, one.name])).toEqual([[7, 'Lease.docx'], [7, 'Plan.pdf']])
   })
 
+  it('shows the form first when it is pressed with Option held (Option-Enter by keyboard), as an Option drop does', async () => {
+    const { all, sent } = routes()
+    await renderApp('/folders/7', all)
+    const toolbar = await screen.findByRole('toolbar', { name: 'Folder Actions' })
+    within(toolbar).getByRole('button', { name: 'Upload' }).focus()
+    await userEvent.keyboard('{Alt>}{Enter}{/Alt}')
+    await userEvent.upload(screen.getByLabelText('Choose Files to Upload'), [file('Lease.docx')])
+    expect(await screen.findByRole('dialog', { name: 'File Documents' })).toBeTruthy()
+    expect(sent).toHaveLength(0)
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+
+    // A press without it files at once, as before, whatever the last press was
+    await userEvent.keyboard('{Enter}')
+    await userEvent.upload(screen.getByLabelText('Choose Files to Upload'), [file('Plan.pdf')])
+    await within(await tray()).findByText(/Filed as # \d+/)
+    expect(sent.map((one) => one.name)).toEqual(['Plan.pdf'])
+  })
+
   it('says to choose a folder inside the matter, and opens no picker, on a matter\'s top level', async () => {
     const top = folder({ id: 110, name: '1001.1 – Charter Dispute', kind: 'matter', path: [store, workspace], canFile: false })
     const { all } = routes({ 'GET /v1/folders/110': top, 'GET /v1/folders/110/children': children([]) })

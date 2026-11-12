@@ -3,6 +3,10 @@ title: Locking a Document
 weight: 4
 ---
 
+{{< callout type="info" >}}
+This is in the [Classic Interface](../../the-classic-interface/), which the Healdan app doesn't replace yet. In the app, open your menu and choose **Classic Interface**; you stay signed in.
+{{< /callout >}}
+
 Locking a document freezes it: nobody can change it until it's unlocked. A password goes further, and keeps its
 contents from anyone who doesn't know the password.
 

@@ -13,3 +13,20 @@
 .wide {
   width: clamp(360px, 42vw, 640px);
 }
+
+/* In a narrow window the region is folded away, and opens over the list, below the top bar, at the right edge */
+.over {
+  position: fixed;
+  inset-block: 52px 0;
+  inset-inline-end: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  max-width: 100%;
+  box-shadow: var(--hd-shadow-popup);
+}
+
+.empty {
+  margin: 0;
+  padding: var(--hd-space-5);
+  color: var(--hd-text-secondary);
+}

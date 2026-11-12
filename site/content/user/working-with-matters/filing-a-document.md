@@ -69,8 +69,9 @@ Dropping something that isn't a file, such as a link or text, files nothing and 
 ## Uploading with a Button
 
 **Upload** on the toolbar above the documents list opens your computer's file picker for the open folder. Its files go
-through the same queue and the same tray as dropped ones. Use a drop with Option held when you want the form. In the
-Classic Interface, the upload button on its toolbar still works.
+through the same queue and the same tray as dropped ones. Hold **Option (⌥)** as you choose **Upload**, or press
+Option-Enter with the button focused, when you want the form to come first. In the Classic Interface, the upload
+button on its toolbar still works.
 
 ## Dropping a File on a Document
 

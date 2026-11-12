@@ -3,6 +3,10 @@ title: Notes
 weight: 11
 ---
 
+{{< callout type="info" >}}
+This is in the [Classic Interface](../../the-classic-interface/), which the Healdan app doesn't replace yet. In the app, open your menu and choose **Classic Interface**; you stay signed in.
+{{< /callout >}}
+
 A note is a comment kept with a document in Healdan, not in its file: a check you've made, a point for whoever picks it
 up next. Notes never change the file.
 

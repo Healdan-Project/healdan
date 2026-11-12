@@ -3,6 +3,10 @@ title: Your Profile and Password
 weight: 4
 ---
 
+{{< callout type="info" >}}
+This is in the [Classic Interface](../../the-classic-interface/), which the Healdan app doesn't replace yet. In the app, open your menu and choose **Classic Interface**; you stay signed in.
+{{< /callout >}}
+
 Everything about your own account is under **Account** in the top bar:
 
 - **Profile:** your details, how Healdan looks for you, and your email signature;

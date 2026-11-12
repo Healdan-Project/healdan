@@ -341,5 +341,46 @@ describe('Editing properties', () => {
     await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(patched).toEqual({ values: { reviewdate: '2026-11-05T00:00:00Z' } }))
   })
-})
 
+  describe('by keyboard', () => {
+    // Edit is pressed with Enter, as a person who doesn't point does
+    async function editByKey() {
+      const panel = await details()
+      const button = await within(panel).findByRole('button', { name: 'Edit' })
+      await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
+      button.focus()
+      await userEvent.keyboard('{Enter}')
+      return { panel, button }
+    }
+
+    it('puts the focus in the first field when Edit is pressed, so the keys go on from there', async () => {
+      await renderApp('/folders/7?sel=10388', routes(profile()))
+      const { panel } = await editByKey()
+      await waitFor(() => expect(panel.contains(globalThis.document.activeElement)).toBe(true))
+      expect(globalThis.document.activeElement?.closest('form')).toBeTruthy()
+      expect(['INPUT', 'SELECT']).toContain(globalThis.document.activeElement?.tagName)
+    })
+
+    it('cancels on Esc, and gives the focus back to Edit', async () => {
+      await renderApp('/folders/7?sel=10388', routes(profile()))
+      const { panel, button } = await editByKey()
+      await waitFor(() => expect(within(panel).queryByRole('button', { name: 'Save' })).toBeTruthy())
+      await userEvent.keyboard('{Escape}')
+      await waitFor(() => expect(within(panel).queryByRole('button', { name: 'Save' })).toBeNull())
+      await waitFor(() => expect(globalThis.document.activeElement).toBe(button))
+    })
+
+    it('gives the focus back to Edit after Save, and after Cancel', async () => {
+      await renderApp('/folders/7?sel=10388', routes(profile(), { 'PATCH /v1/documents/10388/properties': () => page(profile()) }))
+      const { panel, button } = await editByKey()
+      await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
+      await waitFor(() => expect(globalThis.document.activeElement).toBe(button))
+      button.focus()
+      await userEvent.keyboard('{Enter}')
+      await userEvent.type(await within(panel).findByRole('textbox', { name: 'Comments' }), ' more')
+      await userEvent.keyboard('{Enter}')
+      await waitFor(() => expect(within(panel).queryByRole('button', { name: 'Save' })).toBeNull())
+      await waitFor(() => expect(globalThis.document.activeElement).toBe(button))
+    })
+  })
+})

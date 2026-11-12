@@ -170,6 +170,10 @@ view.
   `fields` or its `hold`, and an `already-filed` names the copy. **Edit** asks the details panel to open its form
   (`details/editRequest.ts`).
 
+- **The Upload button** is the keyboard's route into filing, as a drop has none: it opens the file picker, and pressed with
+  Option held (Option-Enter, or an Option click) the form comes first, as it does for a drop with Option. Dropping on a
+  row and dragging rows are for a pointer; Check In and **More › Move To…** are their keyboard forms.
+
 Test it with `filing/*.test.tsx`; jsdom has no `DragEvent`, so a test that needs Option puts `altKey` on the event by hand.
 `e2e/filing.spec.ts` drops real `File`s in a real browser, which Playwright can only do by dispatching the events itself
 with a `DataTransfer` built in the page.
@@ -292,6 +296,47 @@ when the first PDF is previewed. These are the settings that keep it inside the 
 - **One worker** is shared by every document opened, for the page's life, and **a copy of the bytes** is given to PDF.js,
   which hands its argument to the worker and leaves the caller's empty. PDF.js can't run its parsing under jsdom (its
   main-thread worker times out there), so `pdfEngine.ts` has no unit test: `working.spec.ts` is its test.
+
+## Signed-in Devices
+
+`devices/SignedInDevices.tsx` is the dialog the person menu opens: `GET /v1/auth/tokens` lists the person's device
+tokens (name, created, last used, expiry), and **Revoke** asks first, in the same dialog, then calls
+`DELETE /v1/auth/tokens/{id}`. The web page's own sign-in is no device (`Caller.token()` is null on the web-session
+route), so it isn't in the list, and the dialog says **Sign Out** ends it. A name is shown as text, never as markup.
+
+## A Narrow Window
+
+Below 1,024 pixels (`NARROW` in `frame/narrow.ts`, read with `useNarrow()`) the left pane and the right region fold
+away behind buttons in the top bar, **Navigation** and **Details and Filters**, each saying with `aria-expanded` whether
+it's open. The app is designed for 1,280 pixels and works at a tablet's 768; phones aren't a goal.
+
+- **The left pane** isn't drawn while it's folded, so it isn't in the tab order. Opened, it covers the list's left edge
+  (`Frame.module.css`), and following a link in it, or Esc, closes it. Esc puts the focus back on the button.
+- **The right region** keeps its content (Filters, the details or the docked reading pane), shown by
+  `RightRegionView` over the list from the right edge while `narrowOpen` is true, and `useRegionKind` gives a list no
+  narrower columns for it. `RightRegion.open()` opens it, so the funnel, **Preview** and the tray's **Edit** show it, but a
+  click on a row doesn't (`open('details', { reveal: false })`): selecting is not a request to see it. With nothing to
+  show it says so.
+- **To test it** in Vitest, `test/viewport.ts` gives jsdom a `matchMedia` for a width (`setViewport(768)` before a
+  render, `resize()` after), and `frame/Narrow.test.tsx` has the cases. `e2e/a11y.spec.ts` looks at it at 768 × 1024.
+
+## The Look in the Dark
+
+Both themes are defined as custom properties in `tokens.css` and chosen by the browser's `prefers-color-scheme`.
+Anything that isn't a custom property is on purpose: the brand mark's blues (`frame/Mark.tsx`) and the white paper a PDF
+page or a sender's email is drawn on (`preview/preview.module.css`, `preview/email.module.css`), which keep their own
+colours so a document reads as it was made. `tokens.test.ts` checks every text colour on every background it may sit
+on, in both themes. jsdom draws no colours, so `e2e/a11y.spec.ts` runs axe in a real browser in both, where contrast is
+checked on what is drawn.
+
+## The Keyboard
+
+Rows 3 to 9 of the spec's manual acceptance run by keyboard in `e2e/keyboard.spec.ts`, with no click after the sign-in
+page. A step that can't be done by keys is a finding to fix in the app, never to work round in the spec. The keys are in
+the spec's section 10.5: `/` jumps to the search box, the arrow keys move through a list, Enter opens in the app, Space
+opens Quick Look and Esc closes it, F2 renames, Delete moves to the trash after the question, and the tree, menus and
+dialogs follow React Aria's. The properties form (`details/PropertiesForm.tsx`) takes the focus in its first field when **Edit** opens it, since Edit goes grey, cancels on Esc, and gives the focus back to **Edit** when it closes. A list's keys are in `@healdan/ui`'s `Table`, which takes them ahead of React Aria's so
+Space previews rather than selects, and leaves them to a field inside a row.
 
 ## The Catalogue
 

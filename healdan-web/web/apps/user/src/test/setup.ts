@@ -5,6 +5,7 @@ import { cleanup } from '@testing-library/react'
 import { clearToasts, setLabels } from '@healdan/ui'
 import { afterEach, vi } from 'vitest'
 import { installIntersectionObserver } from './intersection'
+import { resetViewport } from './viewport'
 
 // The page follows an address (a healdan: link, a download) in one place, which jsdom can't do; a test that cares imports
 // `launch` from actions/launch and reads what it was asked to follow.
@@ -18,5 +19,6 @@ window.scrollTo = () => {}
 afterEach(() => {
   cleanup()
   clearToasts()
+  resetViewport()
   setLabels({ matter: 'Matter', matters: 'Matters' })
 })

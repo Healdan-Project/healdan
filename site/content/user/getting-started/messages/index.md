@@ -3,6 +3,10 @@ title: Messages
 weight: 5
 ---
 
+{{< callout type="info" >}}
+This is in the [Classic Interface](../../the-classic-interface/), which the Healdan app doesn't replace yet. In the app, open your menu and choose **Classic Interface**; you stay signed in.
+{{< /callout >}}
+
 Messages are short notes between people who use Healdan, such as a partner asking for a draft or the office manager
 warning of downtime. They stay inside Healdan: they aren't emails.
 

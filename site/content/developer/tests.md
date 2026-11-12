@@ -236,8 +236,7 @@ code is laid out.
   runs the specs against `BASE`. They sign in as `webuser`, whom the `smoke-web-user` setup step makes on a stack
   with the smoke overlay (its password is `SmokeWebUserSeed.PASSWORD`), and do not depend on anything an earlier
   smoke step left. They check that a link into the app, followed signed out, comes back to its page after signing
-  in, that signing in lands on **Recent Documents**, the way to the Classic Interface and back, **Sign Out**, and an
-  accessibility scan of the app in a real browser, contrast included. `finding.spec.ts` files three documents into
+  in, that signing in lands on **Recent Documents**, the way to the Classic Interface and back, and **Sign Out**. `finding.spec.ts` files three documents into
   matter 1.1's **Documents** folder through the API with a device token, under a word unique to the run, and then,
   through the page: opens the matter by its number in the Matters scope, adds it to My Matters and opens it from the
   tree, finds a document by that word and by its `#`, filters by **Picture**, and copies a document's link and follows
@@ -251,6 +250,23 @@ code is laid out.
   gives the focus back to the row. It also files an `.eml` with an HTML body, a tracking picture on a host under `.invalid`, a link and a PDF attached, and through the page opens it in Quick Look: the body renders in its frame, no request reaches the tracker until **Show Pictures** and one does after, the link opens a page of its own with no `opener`, and **Save to Matter** on the attachment makes its chip show the new doc #. `filing.spec.ts` drops three files on the folder's list (Playwright can't drag real ones, so it dispatches `dragenter`, `dragover` and `drop` with a `DataTransfer` built in the page), one of them an `.eml` the matter already holds, and checks that the tray says **Already in this matter as #**, that the other two are filed and show in the list, and that one file dropped on a row and saved as **Version 2** is version 2.0 of that document. `organising.spec.ts` files six documents and makes two folders through the API, adds the matter to My Matters, and through the page: makes a folder with **New Folder**; renames a document in place with F2, where another extension is refused beside the field and Esc leaves the name alone; moves a document with **More › Move To…**; drags two selected rows onto a folder in the tree (dispatching `dragstart` on the row and then `dragenter`, `dragover` and `drop` with one `DataTransfer` built in the page, so the row's own `dragstart` fills what the drop reads) and checks the folder lights up; and deletes two with the question, which it cancels first, then confirms. It needs the smoke fixture's Everyone group to hold the Rename, Move and Delete permissions. Afterwards the script checks with `curl`
   that the web session refuses a cross-site sign-out and one without the `X-Healdan-Client` header, and still
   answers `GET`s.
+  - `keyboard.spec.ts` walks rows 3 to 9 of the spec's manual acceptance by keyboard alone: after the sign-in page it
+    presses keys (`page.keyboard`, with `focus()` only to start where Tab would have brought the focus) and never
+    clicks. It files its own documents and an email into a folder of its own, inside `E2E`, a folder of Documents that this spec and `a11y.spec.ts` share so they add no row to Documents' own list (where `filing.spec.ts` and `working.spec.ts` look for their documents, among the first rows the list draws), and goes through `/` to the search box and
+    a `#` to its document; the funnel, Filters and a tick; Tab into the list and each column's Enter sort, both ways;
+    Space, the arrow keys and Esc in Quick Look, and docking the reading pane; an email's **Show Pictures** and
+    **Save to Matter**; Enter to open in the app, **Check Out** and **Release**, and **Edit** with Enter to save;
+    **Upload** by Enter, with Option-Enter for the form that comes first; and **New Folder**, F2, **More › Move To…** and
+    Delete. A step that can't be done that way is a bug in the app.
+  - `a11y.spec.ts` runs axe on each main view in the light theme and again in the dark one (a browser context with
+    Playwright's `colorScheme`, signed in once per theme): Recent's four lists, a matter, a folder with details and the
+    properties form, Filters, search results, a document's page, Quick Look on a PDF and on an email, the reading
+    pane, the dialogs and menus, and, at 768 × 1024, the folded top bar with the left pane and the right region opened
+    over the list. Colour contrast is checked here, as jsdom can't. axe-core is the workspace's own development
+    dependency: `e2e/axe.ts` reads its file from `node_modules` and runs it with `page.evaluate`, which the browser's
+    debugging protocol does and the page's Content-Security-Policy doesn't govern, so the policy stays as the app ships
+    it. `addScriptTag` with the source in it would be blocked by `script-src 'self'`, and turning the policy off for the
+    spec (`bypassCSP`) would test a page the app never serves.
   - It runs in `docker/smoke-test.sh` as step 9, on amd64 and arm64. On a Mac, Docker Desktop doesn't reach the
     host's ports from the default `--network host`: set `WEB_NETWORK=bridge`. The browser then still opens
     `http://127.0.0.1:<port>`, which a small proxy in its container forwards to `host.docker.internal`, because the web

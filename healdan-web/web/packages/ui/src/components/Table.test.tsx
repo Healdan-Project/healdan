@@ -259,6 +259,36 @@ describe('Table highlights', () => {
     expect(row(/Letter 1/).getAttribute('draggable')).toBe('false')
   })
 
+  it('keeps the row named by `undraggable` undraggable through every later render, and the others draggable', () => {
+    const drag = { type: 'application/x-test-rows', data: (keys: string[]) => keys.join(',') }
+    // The same rows throughout, as a list that has not changed gives: the Table has to draw the change itself
+    const same = items(2)
+    const { rerender } = render(<Harness drag={drag} rows={same} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('true')
+    rerender(<Harness drag={drag} undraggable="d1" rows={same} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('false')
+    expect(row(/Letter 2/).getAttribute('draggable')).toBe('true')
+    // A refetch draws the rows again, with new objects: the ref callbacks run again, and must still say false
+    rerender(<Harness drag={drag} undraggable="d1" rows={items(2)} />)
+    rerender(<Harness drag={drag} undraggable="d1" rows={items(2)} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('false')
+    // Once nothing is named it drags again
+    rerender(<Harness drag={drag} rows={items(2)} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('true')
+  })
+
+  it('does not draw the rows again to change what is draggable: React Aria would give the focus back to the row, out of its field', () => {
+    const drag = { type: 'application/x-test-rows', data: (keys: string[]) => keys.join(',') }
+    const same = items(2)
+    const cell = vi.fn((row: Item) => row.name)
+    const spied: TableColumn<Item>[] = [{ id: 'title', name: 'Title', isRowHeader: true, cell }]
+    const { rerender } = render(<Harness drag={drag} rows={same} columns={spied} />)
+    const drawn = cell.mock.calls.length
+    rerender(<Harness drag={drag} undraggable="d1" rows={same} columns={spied} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('false')
+    expect(cell.mock.calls.length).toBe(drawn)
+  })
+
   it('cancels a drag of rows that carry nothing, and leaves one that starts in a field alone', () => {
     const data = { setData: vi.fn(), effectAllowed: 'uninitialized' }
     render(

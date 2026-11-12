@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
 import {
   Cell,
   Collection,
@@ -89,6 +89,12 @@ export interface TableProps<T extends TableRow> {
    * for what a drag does.
    */
   drag?: { type: string; data: (keys: string[]) => string | undefined }
+  /**
+   * The key of a row that holds a field, which isn't dragged while it does: selecting text in the field would start a drag
+   * of the row. It is state the Table draws each time, as the ref callbacks run again on every render and would otherwise
+   * make the row draggable again at a refetch.
+   */
+  undraggable?: string
   /** The rows shown are about to change, as while a new order loads: a screen reader waits for them */
   busy?: boolean
 }
@@ -123,12 +129,28 @@ export function Table<T extends TableRow>({
   empty,
   busy = false,
   drag,
+  undraggable,
   ...labels
 }: TableProps<T>) {
-  // Rows that can be dragged are draggable, which React Aria's Row has no prop for
+  // Rows that can be dragged are draggable, which React Aria's Row has no prop for. A row that is drawn (or drawn again, as a
+  // refetch does) takes it from here.
+  const canDrag = (row: T) => drag !== undefined && row.selectable !== false && row.id !== undraggable
   const draggable = (row: T) => (element: HTMLElement | null) => {
-    if (element) element.draggable = drag !== undefined && row.selectable !== false
+    if (element) element.draggable = canDrag(row)
   }
+  // React Aria draws a row again only when its item or the columns change, so a row that has been drawn already is brought up
+  // to date here when `undraggable` or `drag` changes. Drawing every row again for it would make React Aria give the focus back
+  // to the row, out of the field that is why the row is undraggable.
+  const frame = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const byKey = new Map(rows.map((row) => [row.id, row]))
+    for (const element of frame.current?.querySelectorAll<HTMLElement>('[data-row-key]') ?? []) {
+      const row = byKey.get(element.getAttribute('data-row-key') ?? '')
+      if (row) element.draggable = canDrag(row)
+    }
+    // canDrag is made from these
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, drag, undraggable])
   const disabledKeys = rows.filter((row) => row.selectable === false).map((row) => row.id)
   const more = loadMore !== undefined && (total === undefined || rows.length < total)
 
@@ -178,7 +200,7 @@ export function Table<T extends TableRow>({
 
   return (
     // The handler only reads keys the rows inside already take; the wrapper isn't a control of its own.
-    <div className={styles.frame} onKeyDownCapture={onKeyDownCapture} onDragStart={drag ? onDragStart : undefined} aria-busy={busy || undefined}>
+    <div ref={frame} className={styles.frame} onKeyDownCapture={onKeyDownCapture} onDragStart={drag ? onDragStart : undefined} aria-busy={busy || undefined}>
       <Virtualizer layout={TableLayout} layoutOptions={{ rowHeight: ROW_HEIGHT, headingHeight: ROW_HEIGHT, loaderHeight: ROW_HEIGHT }}>
         <AriaTable
           {...labels}

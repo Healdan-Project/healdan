@@ -93,3 +93,18 @@ export function minimalPdf(text: string): Buffer {
   body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
   return Buffer.from(body, 'latin1')
 }
+
+/**
+ * The folder the specs that make folders of their own keep them in: `E2E`, inside Documents, found or made. Those specs
+ * (`keyboard` and `a11y`) would otherwise add a row to Documents for each run, and the specs that look at Documents' own
+ * list (`filing`, `working`) find their documents among the first rows, where the list draws them.
+ */
+export async function specsFolder(api: APIRequestContext, token: string, documents: number): Promise<number> {
+  const inside = await call<{ items: { id: number; name: string; type: string }[] }>(
+    api.get(`/api/v1/folders/${documents}/children?type=folder&limit=200`, authorized(token)),
+    'the folders of Documents',
+  )
+  const found = inside.items.find((item) => item.type === 'folder' && item.name === 'E2E')
+  if (found) return found.id
+  return (await call<{ id: number }>(api.post('/api/v1/folders', { ...authorized(token), data: { parentId: documents, name: 'E2E' } }), 'making E2E')).id
+}

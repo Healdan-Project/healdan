@@ -12,8 +12,10 @@ colours follow your browser's light or dark setting.
 - **The search box,** with the scope picker joined to its left. Press `/` to jump to it. It suggests matters and
   documents as you type, and `#` and a doc # goes straight to that document. See [Searching](../../finding-documents/searching/).
 - **Help** opens the User Guide, and the notices for the open-source software Healdan uses, each in a new window.
-- **Your menu**, under your initials, shows your name and has Classic Interface and Sign Out. Classic Interface opens
-  the older web page, on the same sign-in. Sign Out ends your session.
+- **Your menu**, under your initials, shows your name and has Signed-in Devices, Classic Interface and Sign Out.
+  Signed-in Devices lists where your account is signed in besides this page, and ends any of them: see
+  [Signed-in Devices](../signed-in-devices/). Classic Interface opens the older web page, on the same sign-in. Sign Out
+  ends your session.
 
 ## The Left Pane
 
@@ -63,6 +65,25 @@ Click another document to see its details instead, or select several and the det
 In the left pane's tree, the up and down arrow keys move between rows, the right arrow opens a matter or folder, the
 left arrow closes it, and Enter opens the row. In a folder's list, the up and down arrow keys move the selection, and
 Enter opens a folder. Esc closes a menu.
+
+Everything in the app can be done from the keyboard: Tab moves between the parts of the page, and these keys work
+once the list has the focus.
+
+| Key | What it does |
+|---|---|
+| `/` | Jumps to the search box |
+| Up and down arrows | Move through the list |
+| Enter | Opens the document in its app (the Healdan Helper), or a folder |
+| Space | Opens Quick Look; Esc closes it |
+| F2 | Renames the selected document in place |
+| Delete | Moves the selected documents to the Trash, after asking |
+| Option-Enter on **Upload** | Files with the form first |
+
+## A Narrower Window
+
+On a window narrower than about 1,000 pixels, such as a tablet, the left pane and the details, Filters or preview fold
+away so the list has the room. Two buttons in the top bar, **Navigation** and **Details and Filters**, open them over
+the list, and Esc or choosing a link closes them again. A phone's screen is too small for the app.
 
 ## When Something Goes Wrong
 

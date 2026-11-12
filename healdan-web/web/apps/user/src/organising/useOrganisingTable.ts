@@ -26,6 +26,8 @@ export function useOrganisingTable(rows: readonly Hit[], selection: ReadonlySet<
   return {
     selected: documentsOf(selection),
     tableProps: {
+      // A row holding the rename field isn't dragged, so selecting text in the field starts no drag of the row
+      undraggable: organising.renaming === undefined ? undefined : `d${organising.renaming}`,
       onRename: (key: string) => {
         const document = byKey.get(key)
         if (!document) return

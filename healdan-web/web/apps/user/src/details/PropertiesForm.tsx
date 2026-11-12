@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import { t, toast } from '@healdan/ui'
 import { fieldErrors, messageFor } from '../frame/errors'
@@ -22,11 +23,17 @@ export interface PropertiesFormProps {
 
 /**
  * A document's properties as a form (spec 6.2): `FieldsForm` over what the server lists. Save sends only what changed,
- * and a 422 marks each field.
+ * and a 422 marks each field. By keyboard (spec 10.5), the form takes the focus in its first field when it opens, since the
+ * Edit that opened it goes grey, and Esc cancels it.
  */
 export function PropertiesForm({ document, fields, onClose }: PropertiesFormProps) {
   const api = useApi()
   const queryClient = useQueryClient()
+  const form = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    form.current?.querySelector<HTMLElement>('input:not([type="hidden"]), select, textarea, [role="spinbutton"]')?.focus()
+  }, [])
 
   async function save(values: Record<string, S['PropertyValue']>): Promise<Map<string, string> | void> {
     if (Object.keys(values).length === 0) return onClose()
@@ -47,7 +54,15 @@ export function PropertiesForm({ document, fields, onClose }: PropertiesFormProp
 
   return (
     <Section title={t('details.properties')}>
-      <FieldsForm fields={fields} matter={document.matter} submitLabel={t('details.save')} onSubmit={save} onCancel={onClose} />
+      {/* Esc from a field the form's own keys left alone (an open list takes it first and stops it) */}
+      <div
+        ref={form}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && !event.defaultPrevented) onClose()
+        }}
+      >
+        <FieldsForm fields={fields} matter={document.matter} submitLabel={t('details.save')} onSubmit={save} onCancel={onClose} />
+      </div>
     </Section>
   )
 }

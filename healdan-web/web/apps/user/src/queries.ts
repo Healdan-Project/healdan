@@ -35,6 +35,7 @@ export const keys = {
   // A search's pages by what was asked, and the counts of its filters' options apart from them
   search: (options: Record<string, unknown>) => ['search', options] as const,
   searchFacets: (options: Record<string, unknown>) => ['search', 'facets', options] as const,
+  devices: ['auth', 'tokens'] as const,
   suggest: (q: string) => ['suggest', q] as const,
 }
 

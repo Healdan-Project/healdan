@@ -27,7 +27,7 @@ export function useRowSelection(): RowSelection {
     const documents = [...next].filter((key) => key.startsWith('d'))
     setSeveral(documents.length > 1 ? new Set(documents) : null)
     // Clicking a document while Filters are open shows its details, as the owner asked; the funnel brings Filters back.
-    if (documents.length === 1 && region.show === 'filters') region.open('details')
+    if (documents.length === 1 && region.show === 'filters') region.open('details', { reveal: false })
     select(documents.length === 1 ? Number(documents[0]!.slice(1)) : undefined)
   }
 

@@ -40,7 +40,8 @@ properties are in it.
 - **Client and Matter are text.** They come from the matter and can't be changed. The same goes for an email's From,
   To, Sent and Received. Author and Typist show as they are: change them in the Classic Interface.
 - **Save sends only what you changed,** and it's saved as a new snapshot (see [Versions](../../documents/versions/)).
-  **Cancel** puts everything back.
+  **Cancel**, or Esc, puts everything back. By keyboard, the form opens with the first field ready to type in, and Enter in
+  a field saves.
 - **A property Healdan refuses is marked** under its field, such as "That is too long." or "That isn't one of the
   choices.", and nothing is saved until all of them are right.
 

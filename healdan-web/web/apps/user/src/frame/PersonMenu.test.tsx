@@ -20,12 +20,12 @@ async function openMenu(name: string) {
 beforeEach(() => vi.mocked(goTo).mockClear())
 
 describe('the person menu', () => {
-  it('shows the name, Signed-in Devices (not yet usable), Classic Interface and Sign Out', async () => {
+  it('shows the name, Signed-in Devices, Classic Interface and Sign Out', async () => {
     await renderApp()
     const menu = await openMenu('Priya Nair')
     expect(menu.textContent).toContain('Priya Nair')
     const devices = await screen.findByRole('menuitem', { name: 'Signed-in Devices' })
-    expect(devices.getAttribute('aria-disabled')).toBe('true')
+    expect(devices.getAttribute('aria-disabled')).toBeNull()
     expect(screen.getByRole('menuitem', { name: 'Classic Interface' }).getAttribute('href')).toBe('/frontend.jsp')
     expect(screen.getByRole('menuitem', { name: 'Sign Out' })).toBeTruthy()
     await expectNoAxeViolations(document.body)

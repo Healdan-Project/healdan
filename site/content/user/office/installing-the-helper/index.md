@@ -346,6 +346,10 @@ Choose **Sign Out** in the helper's menu.
 - **While you're signed out,** LibreOffice's Open and Save show LibreOffice's own boxes, with a notice that the
   helper isn't running.
 
+To sign a Mac's helper out from somewhere else, such as a Mac you've lost or can't reach, revoke its sign-in in the
+web app's [Signed-in Devices](../../getting-started/signed-in-devices/). The helper then asks to sign in again the next
+time it talks to Healdan.
+
 ### If Healdan Can't Be Reached
 
 When the helper gets no answer from the server, it can't end the sign-in there, so it asks whether to sign out on

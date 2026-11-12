@@ -72,6 +72,7 @@ export function NewFolderDialog({ parent, onCancel }: NewFolderDialogProps) {
         >
           <TextField
             label={t('newFolder.name')}
+            autoFocus
             value={name}
             error={error}
             onChange={(value) => {

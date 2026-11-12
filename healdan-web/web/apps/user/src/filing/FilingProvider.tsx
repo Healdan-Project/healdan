@@ -32,8 +32,8 @@ export interface Filing {
    * carries the app's own rows isn't the filing's, and is left alone.
    */
   drop: (event: DragEvent, place: Place, row?: S['DocumentView']) => void
-  /** Files chosen with the Upload button, into a folder */
-  pick: (files: File[], place: Place) => void
+  /** Files chosen with the Upload button; `alt` (Option held when it was pressed) shows the form first */
+  pick: (files: File[], place: Place, alt?: boolean) => void
 }
 
 const Context = createContext<Filing | null>(null)
@@ -147,7 +147,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       }
       start(files, place, event.altKey, row)
     },
-    pick: (files, place) => start(files, place, false),
+    pick: (files, place, alt = false) => start(files, place, alt),
   }
 
   return (
