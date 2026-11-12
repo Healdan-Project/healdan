@@ -155,6 +155,18 @@ docker run --rm -v logicaldoc_logicaldoc-conf:/conf -v logicaldoc_logicaldoc-rep
   -v "$PWD":/backup busybox tar xzf /backup/logicaldoc-files.tgz -C /
 ```
 
+**On a second server trying a backup,** point its email at a mail server that doesn't exist before you start it.
+Otherwise it sends email as the first server would, such as [the `admin` alert](../../admin/healdan-settings/#the-admin-alert),
+if it's on, when you sign in as `admin` to test the backends:
+
+```bash
+docker run --rm -v logicaldoc_logicaldoc-conf:/conf busybox \
+  sed -i 's/^default\.smtp\.host=.*/default.smtp.host=smtp.invalid/' /conf/context.properties
+```
+
+Names ending in `.invalid` never resolve. Don't do this on a server that takes over from the first: it would send no
+email at all.
+
 ### Start Everything
 
 ```bash
@@ -173,6 +185,14 @@ and a secret that can't be read, as after a restore without the key that sealed 
 with **Edit**.
 
 {{% /steps %}}
+
+**When you've finished trying a backup on a second server,** `docker compose down -v` leaves its configuration and
+repository volumes, which the restore made before Compose did. They hold the encryption key and the backends' key
+files, so remove them too:
+
+```bash
+docker volume rm logicaldoc_logicaldoc-conf logicaldoc_logicaldoc-repository
+```
 
 ## An Offsite Copy
 
