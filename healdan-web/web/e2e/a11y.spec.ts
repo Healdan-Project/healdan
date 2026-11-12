@@ -248,9 +248,18 @@ for (const scheme of ['light', 'dark'] as const) {
       await check('document search Filters')
       // With Filters open the list is narrow: Title keeps the room it needs, and any text that doesn't fit ends in an ellipsis
       const cells = await main().getByRole('row').nth(1).evaluate((row) => {
+        // The box that draws the ellipsis is the text's own or one around it inside the cell (a matter's client sits inside the box
+        // that holds the matter number), and a flex box can't draw one
+        const endsInEllipsis = (from: Element, cell: Element) => {
+          for (let box: Element | null = from; box; box = box === cell ? null : box.parentElement) {
+            const style = getComputedStyle(box)
+            if (style.textOverflow === 'ellipsis' && style.display !== 'flex' && style.overflow === 'hidden') return true
+          }
+          return false
+        }
         const holders = [...row.querySelectorAll('[role="gridcell"], [role="rowheader"]')].map((cell) => {
           const own = [...cell.querySelectorAll('*')].reverse().find((one) => [...one.childNodes].some((node) => node.nodeType === 3 && node.textContent!.trim())) ?? cell
-          return { clipped: own.scrollWidth > own.clientWidth + 1 || cell.scrollWidth > cell.clientWidth + 1, ellipsis: getComputedStyle(own).textOverflow === 'ellipsis' && getComputedStyle(own).display !== 'flex', title: cell.getAttribute('role') === 'rowheader' ? cell.getBoundingClientRect().width : 0 }
+          return { clipped: own.scrollWidth > own.clientWidth + 1 || cell.scrollWidth > cell.clientWidth + 1, ellipsis: endsInEllipsis(own, cell), title: cell.getAttribute('role') === 'rowheader' ? cell.getBoundingClientRect().width : 0 }
         })
         return { unclipped: holders.filter((one) => one.clipped && !one.ellipsis).length, title: Math.max(...holders.map((one) => one.title)) }
       })
