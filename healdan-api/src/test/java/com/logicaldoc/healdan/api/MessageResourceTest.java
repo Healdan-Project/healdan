@@ -14,6 +14,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -308,6 +309,10 @@ public class MessageResourceTest extends ApiTestCase {
 		assertEquals(201, first.status());
 		assertEquals(second.toString(), 201, second.status());
 		assertNotEquals(first.json().path("docNumber").asLong(), second.json().path("docNumber").asLong());
+		// The second copy keeps its part's name, so it isn't taken for the other part's, renamed
+		JsonNode attachments = get(path(email, "")).token(token).send().json().path("attachments");
+		assertEquals(first.json().path("docNumber").asLong(), attachments.get(0).path("docNumber").asLong());
+		assertTrue(attachments.get(1).path("docNumber").isNull());
 	}
 
 	@Test
@@ -468,6 +473,41 @@ public class MessageResourceTest extends ApiTestCase {
 		attachments = get(path(email, "")).token(token).send().json().path("attachments");
 		assertEquals(first.json().path("docNumber").asLong(), attachments.get(0).path("docNumber").asLong());
 		assertEquals(second.json().path("docNumber").asLong(), attachments.get(1).path("docNumber").asLong());
+	}
+
+	@Test
+	public void testARenamedCopyStillPairsWithItsPart() throws Exception {
+		// Rename (M6) changes a copy's name, not its size
+		Document email = file("parts-attached.eml");
+		String token = signIn(clerk);
+		long filed = post(path(email, "/attachments/1/file")).token(token).send().json().path("docNumber").asLong();
+		ApiResponse renamed = patch("/api/v1/documents/" + filed).token(signInAdmin())
+				.json(Map.of("name", "Signed Contract.pdf")).send();
+		assertEquals(renamed.toString(), 200, renamed.status());
+
+		JsonNode attachments = get(path(email, "")).token(token).send().json().path("attachments");
+
+		assertEquals(filed, attachments.get(0).path("docNumber").asLong());
+		assertTrue(attachments.get(1).path("docNumber").isNull());
+	}
+
+	@Test
+	public void testTheLastCopyLeftPairsWithTheLastPartLeft() throws Exception {
+		// Renamed, and stamped or saved again, so neither its name nor its size is the part's: once the other part
+		// has its copy, the one left of each go together
+		Document email = fileBytes("pair.eml", emailWith("Agreement.txt", "short", "Schedule.txt", "a much longer one"));
+		String token = signIn(clerk);
+		long agreement = post(path(email, "/attachments/0/file")).token(token).send().json().path("docNumber").asLong();
+		long schedule = post(path(email, "/attachments/1/file")).token(token).send().json().path("docNumber").asLong();
+		Document copy = DocumentDAO.get().findByCustomId(String.valueOf(agreement), Tenant.DEFAULT_ID);
+		jdbc().update("update ld_document set ld_filename = 'Signed Agreement.txt', ld_filesize = 999 where ld_id = ?",
+				copy.getId());
+		DocumentDAO.get().evict(Document.class, copy.getId());
+
+		JsonNode attachments = get(path(email, "")).token(token).send().json().path("attachments");
+
+		assertEquals(agreement, attachments.get(0).path("docNumber").asLong());
+		assertEquals(schedule, attachments.get(1).path("docNumber").asLong());
 	}
 
 	@Test

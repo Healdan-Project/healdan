@@ -28,8 +28,9 @@ Every path below starts with `/api/v1`.
 
 The API signs a request in one of two ways:
 
-- **A device token,** for clients such as the Healdan Helper and the Office add-ins. The client sends it as
-  `Authorization: Bearer`. Most of this page is about tokens.
+- **A device token,** for a client on a computer, such as the Healdan Helper. The client sends it as
+  `Authorization: Bearer`. Most of this page is about tokens. The Office add-ins and the LibreOffice extension hold
+  none: they work through the helper.
 - **The browser's web session,** for Healdan's own pages, which the server serves from its own address. The page
   sends no token: the browser sends its session cookie, and the session is the one the sign-in page opened, the
   same as the web page's.
@@ -50,7 +51,8 @@ let in only when all of these hold:
 4. **A change sends `X-Healdan-Client: web`.** That's every `POST`, `PATCH`, `PUT` and `DELETE`, in any case. Another site's page
    can't add a header to a request to Healdan without a CORS preflight, and the API never allows one with cookies
    (see [Calling the API from Another Origin](#calling-the-api-from-another-origin)). A `GET` needs no header, so
-   downloads, thumbnails and previews work as plain links and images.
+   downloads, thumbnails and previews work as plain links and images. The method is the request's own: CXF's
+   `_method` parameter and `X-HTTP-Method-Override` header are off, so a `GET` never becomes a change.
 5. **The HTTP session holds an open web-page session.** Tomcat finds the HTTP session by its `JSESSIONID` cookie,
    which is HttpOnly, and the sign-in page keeps the web-page session's id in it. The API never takes that id from
    a `sid` parameter or header, or from the `ldoc-sid` cookie, though LogicalDOC's own routes do.
@@ -229,6 +231,7 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 403 | `forbidden` | You can see the object, but may not do this to it |
 | 403 | `token-only` | `DELETE /auth/tokens/current` on the web session, which has no token |
 | 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current` |
+| 403 | `web-session-refused` | A same-origin request on the web session that breaks one of its rules, such as a change without `X-Healdan-Client: web` (see [Two Ways In](#two-ways-in)). Signing in again doesn't mend it |
 | 404 | `not-found` | It doesn't exist, **or you can't read it**: the two get the same answer |
 | 404 | `no-preview` | `GET /documents/{docNumber}/preview` for a file with no preview: its type has none, or its conversion failed (see [Previews](#previews)); `GET /documents/{docNumber}/message/parts/{id}?inline=true` for an attachment that isn't a PDF or a picture |
 | 404 | `not-an-email` | A `/documents/{docNumber}/message` route for a document that isn't an email, or whose file can't be read as one (see [Reading a Filed Email](#reading-a-filed-email)) |
@@ -301,7 +304,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 | Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /clients/recent`, `PUT` and `DELETE /me/matters/{folderId}`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
 | Finding | `GET /search?scope=&q=&within=`, with filters and `facets`, `GET /suggest?q=` for the search box as someone types, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
-| A document | `GET /documents/{docNumber}`, `/content`, `/preview`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone |
+| A document | `GET /documents/{docNumber}`, `/content`, `/preview`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone; `PATCH /documents/{docNumber}` to rename, `POST /documents/{docNumber}/move` and `DELETE /documents/{docNumber}` |
 | Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are; `GET /documents/{docNumber}/message` and its `/body`, `/parts/{id}` and `POST /attachments/{id}/file` for reading a filed email |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
 | Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
@@ -355,7 +358,7 @@ The sections below say more about the parts a client needs to know before it sta
   and `totalAtLeast` says how many it found that the caller can read: there are more, so a client shows "more than"
   that number.
 - **Filters.** The same as a folder's (see [Listing a Folder](#listing-a-folder)): `type` takes file kinds, and
-  `author`, `class`, `client`, `matter`, `edited`, `from` and `to` as there. They're applied in the database, after
+  `author`, `class`, `client`, `matter`, `edited`, `from`, `to` and `zone` as there. They're applied in the database, after
   the read check, to the hits read, so they find their matches among the first 10,000 hits, and `total` and
   `totalAtLeast` count the hits that pass. `type=folder` is `400`: search the `folders` scope instead.
 - **Sorting.** `sort` and `order` take a folder's values (see [Listing a Folder](#listing-a-folder)), and sort the
@@ -393,14 +396,18 @@ database, so a folder of thousands of documents answers as fast as a small one.
 - **Sorting.** `sort` is `title` (the file name, ignoring case; the default), `docNumber` (as a number, so #9 comes
   before #10), `version` (the file version, `fileVersion`, as the list shows it: by its major, then its minor
   number, so 2.9 comes before 2.10), `author` (by the
-  Author's name as `author.displayName` shows it, not the username) or `edited` (the last change). `order` is `asc` (the default) or `desc`.
+  Author's name as `author.displayName` shows it, not the username) or `edited` (when its file last changed: filed, or a new version saved, as the view's `lastModified` says; a change to its
+  properties, a rename or a move doesn't count). `order` is `asc` (the default) or `desc`.
   Documents with nothing to sort by, such as no Author, come last either way, and ties go by the document's age,
   so no document shows on two pages. Subfolders always come first, by name. A search folder keeps its own order,
   newest change first, unless `sort` says otherwise.
 - **Filters.** `type` takes file kinds: `word`, `excel`, `powerpoint`, `pdf`, `email`, `opendocument`, `picture`
   and `other`, for any extension the others don't name. `author` takes usernames, `class` classes, `client` client
   numbers such as `998`, and `matter` matters such as `998.1`. `edited` is `today`, `7d`, `30d` or `year`; or give
-  `from` and `to`, either or both, as days such as `2026-06-01`, both included. The days are the server's.
+  `from` and `to`, either or both, as days such as `2026-06-01`, both included. `zone` says whose days they are, as
+  an IANA time zone such as `Europe/London`: today, and where each day starts and ends. The User app sends the
+  browser's, so the days match the dates it shows. Without `zone` they're the server's, and one the server doesn't
+  know is `400 bad-request`.
   Repeat a parameter for more than one value, `type=pdf&type=word`: any value passes, and the filters all apply
   together. With any filter set, the list holds documents alone, and `total` counts the documents that pass.
 - **How many.** `total` counts the subfolders and the documents, and `documents` the documents alone, so a client
@@ -428,6 +435,32 @@ and answers `201` with the folder and its address in `Location`. The new folder 
 and permissions. It needs the Add permission on the parent (`403` without it). A Store is `409 not-browsable`, a
 search folder is `409 filing-rule`, and a matter's top level is `409 refused` unless the caller is an
 administrator. A name is cleaned of `/` and markup; one that is empty then is `422 validation`.
+
+## Renaming, Moving and Deleting
+
+These three go through the calls the old web page uses (`DocumentManager`'s rename and move, and the document DAO's
+delete), so Healdan's rules decide as they do on every route: M1's re-stamping when a document moves into another
+matter, once per matter for an email, and the filing rules. Each runs under the document's lock, as a save does, and
+the checks come in this order: `404` for a document the caller can't read; for a move, `404` for a folder the caller
+can't read and `409 filing-rule` for one that can't hold documents (a Store, a matter's top level, a search folder);
+`403` without the permission (Rename, Move on the document and Write on the folder, or Delete) and for a document
+protected by a password; the holds a save is refused for (`409 checked-out`, `locked` and `held-elsewhere`); `409
+refused` for an immutable document, unless the caller is an administrator, as CE allows.
+
+- **`PATCH /documents/{docNumber}`** with `{"name": "Lease"}` answers `200` with the document. A name that doesn't
+  end in the document's extension keeps it, so `Lease` is `Lease.docx` and `Lease v1.2` is `Lease v1.2.docx`; one that
+  ends in another extension (`Lease.pdf`) is `422 validation` with `extension` for `name`, as a save's name is. A name
+  with a `/`, a `\`, a control character or a character the database can't store, such as an emoji, is `invalid`, checked
+  first; one over 255 characters, with the extension it keeps, is `too-long`, and a blank one `required`. The same name
+  changes nothing and makes no version. Once a deleted document is in the trash the answer is `204`, and a shortcut that
+  can't follow it is left and logged.
+- **`POST /documents/{docNumber}/move`** with `{"folderId": 1234}` answers `200` with the document. Into another matter
+  it takes that matter's Client and Matter and the values its folders pass down; a matter that holds the same email
+  already answers `409 already-filed` with the copy as `document`. A move into the folder it's in changes nothing.
+- **`DELETE /documents/{docNumber}`** answers `204`. The document, and any shortcuts to it, go to the trash, which
+  only the Classic Interface restores from, and the document is `404` from then on. A checked-out document is
+  `409 checked-out` for everyone, the caller too: release it first. The document goes first and then its shortcuts, so a rule
+  that refuses it leaves them.
 
 ## Favorites
 

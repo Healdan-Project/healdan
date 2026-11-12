@@ -3,6 +3,10 @@ title: Sharing a Document
 weight: 16
 ---
 
+{{< callout type="info" >}}
+This is in the [Classic Interface](../../the-classic-interface/), which the Healdan app doesn't replace yet. In the app, open your menu and choose **Classic Interface**; you stay signed in.
+{{< /callout >}}
+
 A **ticket** is a link that downloads one document without signing in to Healdan, for as long as you allow.
 
 {{< callout type="warning" >}}

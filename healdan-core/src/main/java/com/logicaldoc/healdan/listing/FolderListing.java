@@ -523,18 +523,28 @@ public class FolderListing {
 	}
 
 	/**
-	 * The days, in the server's time zone, the last day to its end
+	 * A document's Edit Date: when its file last changed, which is when it was
+	 * filed or a new version of the file was saved ({@code ld_date}, which CE
+	 * sets at create and at check-in). Not {@code ld_lastmodified}, which CE
+	 * sets on every store, so the Indexer, a change of properties, a rename and
+	 * a move all move it. The creation date stands in for a document with none.
+	 */
+	static final String EDIT_DATE = "coalesce(d.ld_date, d.ld_creation)";
+
+	/**
+	 * The days, in the time zone they were given in (the server's without one),
+	 * the last day to its end
 	 */
 	private static void edited(Select select, ListingQuery.Edited edited) {
 		if (edited == null)
 			return;
-		ZoneId zone = ZoneId.systemDefault();
+		ZoneId zone = edited.zoneOrServers();
 		if (edited.from() != null) {
-			select.where.add("d.ld_lastmodified >= :editedfrom");
+			select.where.add(EDIT_DATE + " >= :editedfrom");
 			select.params.addValue("editedfrom", startOf(edited.from(), zone));
 		}
 		if (edited.to() != null) {
-			select.where.add("d.ld_lastmodified < :editedto");
+			select.where.add(EDIT_DATE + " < :editedto");
 			select.params.addValue("editedto", startOf(edited.to().plusDays(1), zone));
 		}
 	}
@@ -555,7 +565,7 @@ public class FolderListing {
 		// The file's version, which a list shows; CE's own version moves on every change of properties too
 		case VERSION -> List.of(ListingSql.versionMajor("d.ld_fileversion"), ListingSql.versionMinor("d.ld_fileversion"));
 		case AUTHOR -> List.of(authorName(select));
-		case EDITED -> List.of("d.ld_lastmodified");
+		case EDITED -> List.of(EDIT_DATE);
 		};
 		List<String> order = new ArrayList<>();
 		for (String key : keys) {

@@ -43,7 +43,7 @@ start also creates:
 - a template, "Smoke template", with a Documents folder;
 - client 1, "Smoke Client";
 - matter "1.1 – Smoke Matter", owned by `admin`, with that Documents folder. The Everyone group can read it,
-  upload into it and download from it;
+  upload into it, download from it, rename, move and delete its documents;
 - the user `apiuser`, not an admin, with a throwaway password, which `docker/tests/test-api.sh` signs in as. Its
   password is published, so it's made only on a stack with no other users: on one with people, Healdan logs a
   warning instead.

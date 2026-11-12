@@ -33,6 +33,14 @@
   background: var(--hd-line);
 }
 
+/* Something that can be filed here is being dragged over it */
+.row[data-drop-target='true'] {
+  background: var(--hd-pill);
+  color: var(--hd-text);
+  outline: 2px solid var(--hd-accent-fill);
+  outline-offset: -2px;
+}
+
 /* The open one: --hd-pill takes --hd-text only (tokens.test.ts). */
 .item[data-current='true'] .row {
   background: var(--hd-pill);

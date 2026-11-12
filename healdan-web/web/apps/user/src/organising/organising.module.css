@@ -1,0 +1,108 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.names {
+  margin: 0 0 var(--hd-space-4);
+  padding-left: var(--hd-space-5);
+  max-height: 40dvh;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hd-space-3);
+}
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+  color: var(--hd-text-secondary);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--hd-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 30dvh;
+  overflow: auto;
+}
+
+/* The client, smaller and paler after the matter, as in the left pane (LeftPane.module.css) */
+.client {
+  margin-inline-start: var(--hd-space-1);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+/* The buttons are flex boxes, which drop the space between the icon and the name: a gap puts one back. The matter and its client
+   are one text, so the space between them is the text's own. */
+.list button {
+  gap: var(--hd-space-2);
+  text-align: start;
+}
+
+.matter {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note {
+  margin: 0;
+  color: var(--hd-text-secondary);
+}
+
+/* The title of a row being renamed: the field takes the name's place, with what is wrong beside it */
+.rename {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--hd-space-3);
+  min-width: 0;
+}
+
+.renameInput {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 24px;
+  padding: 0 var(--hd-space-2);
+  border: 1px solid var(--hd-field-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-field);
+  color: var(--hd-text);
+  font: inherit;
+}
+
+.renameInput:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
+.renameInput[aria-invalid='true'] {
+  border-color: var(--hd-required);
+}
+
+.renameError {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--hd-required);
+  font-size: var(--hd-font-size-small);
+}

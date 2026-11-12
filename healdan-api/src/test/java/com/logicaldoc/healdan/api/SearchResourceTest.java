@@ -5,10 +5,13 @@ package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -730,10 +733,11 @@ public class SearchResourceTest extends ApiTestCase {
 		bulk.set(ids, HealdanConstants.ATTR_CLIENT, Attribute.Type.STRING, "998", null);
 		bulk.set(ids, HealdanConstants.ATTR_MATTER, Attribute.Type.STRING, matter, null);
 		Timestamp edited = new Timestamp(System.currentTimeMillis() - (recent ? 0L : 60L * 24 * 60 * 60 * 1000));
-		// The list shows and sorts the file version; CE's own version is moved on, as property edits move it
+		// The list shows and sorts the file version; CE's own version is moved on, as property edits move it. Edit Date is the
+		// file's date (ld_date), so that is aged as well as the last-modified time
 		for (long id : ids)
-			jdbc().update("update ld_document set ld_lastmodified = ?, ld_fileversion = ?, ld_version = '50.0' where ld_id = ?",
-					edited, version, id);
+			jdbc().update("update ld_document set ld_lastmodified = ?, ld_date = ?, ld_fileversion = ?, ld_version = '50.0' where ld_id = ?",
+					edited, edited, version, id);
 		List<Long> numbers = List.copyOf(numbers(ids).values());
 		for (int i = 0; i < count; i++)
 			made.add(new Made(numbers.get(i), names.apply(i), version, edited, author.getUsername(), docClass, kind,
@@ -873,6 +877,42 @@ public class SearchResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testEditDateFiltersFollowTheZoneGiven() throws Exception {
+		// M6 R90: the days are the person's, whose zone the app sends; without one, the server's
+		ZoneId server = ZoneId.systemDefault();
+		ZoneId far = ZoneMoments.far();
+		Instant between = ZoneMoments.onDifferentDays(server, far);
+		Instant today = ZoneMoments.todayInOneOnly(server, far);
+		Document late = file("late.docx", "Notes on the gyrfalconapi");
+		Document recent = file("recent.docx", "Notes on the gyrfalconapi");
+		jdbc().update("update ld_document set ld_date = ? where ld_id = ?", Timestamp.from(between), late.getId());
+		jdbc().update("update ld_document set ld_date = ? where ld_id = ?", Timestamp.from(today), recent.getId());
+		DocumentDAO.get().evict(Document.class, late.getId());
+		DocumentDAO.get().evict(Document.class, recent.getId());
+		String token = signIn(clerk);
+		String q = "q=gyrfalconapi&";
+		String here = ZoneMoments.day(between, server);
+		String there = ZoneMoments.day(between, far);
+		assertNotEquals(here, there);
+
+		// Between: the day it falls on in each zone
+		Set<Long> lateOnly = Set.of(number(late));
+		assertEquals(lateOnly, numbersOf(page(q + "from=" + here + "&to=" + here, token)));
+		assertEquals(Set.of(), numbersOf(page(q + "from=" + here + "&to=" + here + ZoneMoments.param(far), token)));
+		assertEquals(lateOnly, numbersOf(page(q + "from=" + there + "&to=" + there + ZoneMoments.param(far), token)));
+
+		// Today: what is today in one zone is yesterday in the other
+		boolean todayHere = ZoneMoments.today(today, server);
+		assertNotEquals(todayHere, ZoneMoments.today(today, far));
+		Set<Long> recentOnly = Set.of(number(recent));
+		assertEquals(todayHere ? recentOnly : Set.of(), numbersOf(page(q + "edited=today", token)));
+		assertEquals(todayHere ? Set.of() : recentOnly, numbersOf(page(q + "edited=today" + ZoneMoments.param(far), token)));
+		// The counts take the zone too
+		assertEquals(todayHere ? 0 : 1, page(q + "edited=today&facets=type" + ZoneMoments.param(far), token)
+				.path("total").asLong());
+	}
+
+	@Test
 	public void testFiltersAndFacetsRefused() {
 		String token = signIn(clerk);
 		for (String query : new String[] { "scope=folders&q=docu&author=jclarke", "scope=matters&q=998&facets=type",
@@ -880,7 +920,8 @@ public class SearchResourceTest extends ApiTestCase {
 				"q=x&client=ABC", "q=x&facets=size", "q=x&edited=week", "q=x&edited=7d&from=2026-01-01",
 				"q=x&from=2026-02-01&to=2026-01-01", "q=x&author=", "q=x&order=desc", "q=x&sort=size",
 				"q=x&sort=title&order=up", "scope=folders&q=docu&sort=title", "scope=matters&q=998&sort=docNumber",
-				"scope=clients&q=healdan&order=asc" }) {
+				"scope=clients&q=healdan&order=asc", "q=x&zone=Mars/Olympus", "q=x&from=2026-01-01&zone=%2B99:00",
+				"scope=folders&q=docu&zone=Nowhere" }) {
 			ApiResponse response = get("/api/v1/search?" + query).token(token).send();
 			assertEquals(query + " " + response, 400, response.status());
 			assertEquals("bad-request", response.code());

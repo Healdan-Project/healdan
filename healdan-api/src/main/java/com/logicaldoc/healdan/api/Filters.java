@@ -4,7 +4,9 @@
 package com.logicaldoc.healdan.api;
 
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -63,13 +65,17 @@ record Filters(ListingQuery query, boolean foldersOnly, Set<String> facets) {
 	 * @param to the last day of the range
 	 * @param facets the counts to take, as a comma list of {@code type},
 	 *        {@code author}, {@code class}, {@code client} and {@code matter}
-	 * @param clock what today is, for {@code edited}
+	 * @param zone the time zone the edit dates' days are in, as an IANA id
+	 *        such as {@code Europe/London} (M6 R90: the app sends the
+	 *        person's); none for the server's
+	 * @param clock what now is, for {@code edited}; its zone is the server's,
+	 *        which {@code zone} replaces
 	 * @return the filters
 	 * @throws ApiProblem {@code 400 bad-request} for a value it doesn't take
 	 */
 	static Filters of(List<String> type, String sort, String order, List<String> author, List<String> docClass,
 			List<String> client, List<String> matter, String edited, String from, String to, String facets,
-			Clock clock) {
+			String zone, Clock clock) {
 		Set<String> types = values(type, "type");
 		boolean foldersOnly = types.remove("folder");
 		for (String kind : types)
@@ -97,8 +103,10 @@ record Filters(ListingQuery query, boolean foldersOnly, Set<String> facets) {
 				throw ApiProblem.badRequest(
 						"A matter is its client's number and its own, such as 998.1, not %s.".formatted(number));
 
+		ZoneId days = zone(zone);
 		ListingQuery query = new ListingQuery(sorting, "desc".equals(order), types, values(author, "author"),
-				values(docClass, "class"), clients, matters, edited(edited, from, to, clock), 0, 0);
+				values(docClass, "class"), clients, matters,
+				edited(edited, from, to, days == null ? clock : clock.withZone(days), days), 0, 0);
 
 		Set<String> counts = facets(facets);
 		if (foldersOnly && (!types.isEmpty() || query.filtered() || !counts.isEmpty()))
@@ -123,7 +131,21 @@ record Filters(ListingQuery query, boolean foldersOnly, Set<String> facets) {
 		return values;
 	}
 
-	private static Edited edited(String preset, String from, String to, Clock clock) {
+	/**
+	 * @return the zone, or null for none
+	 * @throws ApiProblem {@code 400} for one {@link ZoneId#of} refuses
+	 */
+	private static ZoneId zone(String zone) {
+		if (StringUtils.isEmpty(zone))
+			return null;
+		try {
+			return ZoneId.of(zone);
+		} catch (DateTimeException e) {
+			throw ApiProblem.badRequest("The zone is a time zone's id, such as Europe/London, not %s.".formatted(zone));
+		}
+	}
+
+	private static Edited edited(String preset, String from, String to, Clock clock, ZoneId zone) {
 		boolean range = StringUtils.isNotEmpty(from) || StringUtils.isNotEmpty(to);
 		if (StringUtils.isNotEmpty(preset)) {
 			if (range)
@@ -139,7 +161,7 @@ record Filters(ListingQuery query, boolean foldersOnly, Set<String> facets) {
 		LocalDate last = day(to, "to");
 		if (first != null && last != null && first.isAfter(last))
 			throw ApiProblem.badRequest("The edit dates can't end before they start.");
-		return new Edited(first, last);
+		return new Edited(first, last, zone);
 	}
 
 	private static LocalDate day(String value, String name) {

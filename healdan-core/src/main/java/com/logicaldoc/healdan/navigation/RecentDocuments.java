@@ -8,6 +8,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 import javax.sql.DataSource;
 
@@ -47,14 +49,20 @@ public class RecentDocuments {
 
 	/** The latest event of the user on each document, inside the window */
 	private static final String QUERY = """
-			select ld_docid, max(ld_date)
-			  from ld_history
-			 where ld_deleted = 0
-			   and ld_userid = :user
-			   and ld_event in (:events)
-			   and ld_date >= :since
-			   and ld_docid is not null
-			 group by ld_docid
+			select h.ld_docid, max(h.ld_date)
+			  from ld_history h
+			 where h.ld_deleted = 0
+			   and h.ld_userid = :user
+			   and h.ld_event in (:events)
+			   and h.ld_date >= :since
+			   and h.ld_docid is not null
+			%s
+			 group by h.ld_docid
+			""";
+
+	/** The documents of the types asked for alone, so the others never reach the read checks */
+	private static final String OF_TYPES = """
+			   and exists (select 1 from ld_document d where d.ld_id = h.ld_docid and lower(d.ld_type) in (:types))
 			""";
 
 	private final HealdanSettings settings;
@@ -94,6 +102,19 @@ public class RecentDocuments {
 	 * @throws PersistenceException error at data layer
 	 */
 	public List<RecentDocument> list(long userId, Filter filter) throws PersistenceException {
+		return list(userId, Set.of(), filter);
+	}
+
+	/**
+	 * @param userId the user
+	 * @param types the documents' types (their extensions, in any case) to list, such as {@code eml} and
+	 *        {@code msg}, chosen in the database before any document is read; none for every type
+	 * @param filter which of the readable documents of those types the caller lists; applied before the cap
+	 * @return the documents of those types the user worked with within the window that the user may read and the
+	 *         filter accepts, latest first, at most {@value #MAX_ENTRIES}
+	 * @throws PersistenceException error at data layer
+	 */
+	public List<RecentDocument> list(long userId, Set<String> types, Filter filter) throws PersistenceException {
 		User user = UserDAO.get().findById(userId);
 		if (user == null)
 			return List.of();
@@ -102,8 +123,13 @@ public class RecentDocuments {
 		long since = Math.max(0L, System.currentTimeMillis() - settings.recentMattersDays() * HealdanConstants.DAY);
 		MapSqlParameterSource params = new MapSqlParameterSource("user", userId).addValue("events", EVENT_KEYS)
 				.addValue("since", new Timestamp(since));
+		String query = QUERY.formatted("");
+		if (!types.isEmpty()) {
+			query = QUERY.formatted(OF_TYPES);
+			params.addValue("types", types.stream().map(type -> type.toLowerCase(Locale.ROOT)).sorted().toList());
+		}
 		List<RecentDocument> events = new ArrayList<>(
-				jdbc.query(QUERY, params, (rs, i) -> new RecentDocument(rs.getLong(1), rs.getTimestamp(2))));
+				jdbc.query(query, params, (rs, i) -> new RecentDocument(rs.getLong(1), rs.getTimestamp(2))));
 		events.sort(Comparator.comparingLong((RecentDocument e) -> e.lastAccess().getTime())
 				.thenComparingLong(RecentDocument::docId).reversed());
 

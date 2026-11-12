@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ApiError, apiPath, type components } from '@healdan/api'
 import { Button, formatDateTime, formatSize, Icon, t, toast } from '@healdan/ui'
 import { ErrorPanel } from '../frame/ErrorPanel'
@@ -44,6 +44,17 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, onPreview }: 
   const api = useApi()
   const queryClient = useQueryClient()
   const [saving, setSaving] = useState(false)
+  // The attachment's own control, which stays when Save to Matter gives way to the # it was filed as
+  const main = useRef<HTMLButtonElement & HTMLAnchorElement>(null)
+  const saveHadFocus = useRef(false)
+  useEffect(() => {
+    // The save the focus was on is gone: the focus would fall to the page, from where Esc reaches no dialog, so it goes to
+    // the attachment, in the same chip
+    if (attachment.docNumber === null || !saveHadFocus.current) return
+    saveHadFocus.current = false
+    const active = main.current?.ownerDocument.activeElement
+    if (!active || active === main.current?.ownerDocument.body) main.current?.focus()
+  }, [attachment.docNumber])
   // The size is beside the control, not in it, so the control's name (an action and the file's name) holds all its visible text
   const label = (
     <>
@@ -52,18 +63,19 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, onPreview }: 
     </>
   )
 
-  async function saveToMatter(): Promise<void> {
+  async function saveToMatter(focused: boolean): Promise<void> {
+    saveHadFocus.current = focused
     setSaving(true)
     try {
       const query = version ? `?${new URLSearchParams({ version }).toString()}` : ''
       await api.send('POST', `${apiPath`/v1/documents/${docNumber}/message/attachments/${attachment.index}/file`}${query}`)
       // The chip's # comes with the message, and the new document with its folder
-      await queryClient.invalidateQueries({ queryKey: keys.document(docNumber) })
+      await queryClient.invalidateQueries({ queryKey: keys.messages(docNumber) })
       await queryClient.invalidateQueries({ queryKey: keys.folder(folderId) })
       await queryClient.invalidateQueries({ queryKey: keys.recentDocuments })
     } catch (error) {
       // Filed already is the matter's rule speaking: the message is read again, which shows the copy if it is this email's
-      if (error instanceof ApiError && error.code === 'already-filed') await queryClient.invalidateQueries({ queryKey: keys.document(docNumber) })
+      if (error instanceof ApiError && error.code === 'already-filed') await queryClient.invalidateQueries({ queryKey: keys.messages(docNumber) })
       toast(`${t('email.saveFailed', { name: attachment.name })} ${messageFor(error)}`)
     } finally {
       setSaving(false)
@@ -73,17 +85,17 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, onPreview }: 
   return (
     <li className={styles.chip}>
       {shownAs(attachment) ? (
-        <button type="button" className={styles.chipMain} aria-label={t('email.previewAttachment', { name: attachment.name })} onClick={onPreview}>
+        <button ref={main} type="button" className={styles.chipMain} aria-label={t('email.previewAttachment', { name: attachment.name })} onClick={onPreview}>
           {label}
         </button>
       ) : !canOpen ? (
         // The person may preview the email but not download it, which the server would refuse
-        <button type="button" className={styles.chipMain} disabled aria-label={t('email.downloadAttachment', { name: attachment.name })}>
+        <button ref={main} type="button" className={styles.chipMain} disabled aria-label={t('email.downloadAttachment', { name: attachment.name })}>
           {label}
         </button>
       ) : (
         // A plain link to the attachment: the web session carries it, and the server records the download
-        <a className={styles.chipMain} href={api.url(apiPath`/v1/documents/${docNumber}/message/parts/${attachment.index}`, versionQuery(version))} download={attachment.name} aria-label={t('email.downloadAttachment', { name: attachment.name })}>
+        <a ref={main} className={styles.chipMain} href={api.url(apiPath`/v1/documents/${docNumber}/message/parts/${attachment.index}`, versionQuery(version))} download={attachment.name} aria-label={t('email.downloadAttachment', { name: attachment.name })}>
           {label}
         </a>
       )}
@@ -91,7 +103,7 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, onPreview }: 
       {attachment.docNumber !== null ? (
         <span className={styles.saved}>{t('email.saved', { n: attachment.docNumber })}</span>
       ) : (
-        <Button variant="quiet" aria-label={t('email.saveAttachment', { name: attachment.name })} isDisabled={saving || !canOpen} onPress={() => void saveToMatter()}>
+        <Button variant="quiet" aria-label={t('email.saveAttachment', { name: attachment.name })} isDisabled={saving || !canOpen} onPress={(event) => void saveToMatter(event.target.ownerDocument.activeElement === event.target)}>
           {t('email.saveToMatter')}
         </Button>
       )}
@@ -109,8 +121,11 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, onPreview }: 
 export function EmailView({ document, version, showActions }: PreviewProps) {
   const api = useApi()
   const message = useQuery({
-    queryKey: [...keys.document(document.docNumber), 'message', version ?? document.fileVersion],
+    // Its own key, by file version, apart from the document's: the lists' refreshes (an upload's finish, a rename) never
+    // read the whole email again on the server, and a new version is a new key. Save to Matter asks for it again.
+    queryKey: keys.message(document.docNumber, version ?? document.fileVersion),
     queryFn: ({ signal }) => api.get<components['schemas']['MessageView']>(apiPath`/v1/documents/${document.docNumber}/message`, versionQuery(version), { signal }),
+    staleTime: Infinity,
     refetchOnWindowFocus: false,
     gcTime: 30_000,
   })

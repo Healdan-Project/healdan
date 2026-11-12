@@ -217,6 +217,34 @@ public class RecentDocumentsTest extends AbstractHealdanTestCase {
 		assertTrue(filtered.contains(docs.get(0).getId()));
 	}
 
+	@Test
+	public void testTypesFilterBeforeTheReadChecks() throws Exception {
+		// Recent › Emails asks for two types: the documents of others never reach the read checks, which cost
+		// several queries each, nor the caller's filter
+		Document letter = bare("letter.txt");
+		Document mail = bare("mail.txt");
+		Document upper = bare("upper.txt");
+		Document notes = bare("notes.txt");
+		jdbc.update("update ld_document set ld_type = 'eml', ld_filename = 'mail.eml' where ld_id = ?", mail.getId());
+		jdbc.update("update ld_document set ld_type = 'MSG', ld_filename = 'upper.MSG' where ld_id = ?", upper.getId());
+		DocumentDAO.get().evict(Document.class, mail.getId());
+		DocumentDAO.get().evict(Document.class, upper.getId());
+		record(alice, letter, DocumentEvent.STORED, now.minus(Duration.ofHours(1)));
+		record(alice, mail, DocumentEvent.STORED, now.minus(Duration.ofHours(2)));
+		record(alice, notes, DocumentEvent.STORED, now.minus(Duration.ofHours(3)));
+		record(alice, upper, DocumentEvent.STORED, now.minus(Duration.ofHours(4)));
+		List<Long> asked = new ArrayList<>();
+
+		List<Long> emails = RecentDocuments.get().list(alice.getId(), Set.of("eml", "msg"), d -> asked.add(d.getId()))
+				.stream().map(RecentDocument::docId).toList();
+
+		assertEquals(List.of(mail.getId(), upper.getId()), emails);
+		assertEquals(List.of(mail.getId(), upper.getId()), asked);
+		// No types is every type
+		assertEquals(List.of(letter.getId(), mail.getId(), notes.getId(), upper.getId()), RecentDocuments.get()
+				.list(alice.getId(), Set.<String>of(), d -> true).stream().map(RecentDocument::docId).toList());
+	}
+
 	private void record(User user, Document doc, DocumentEvent event, Instant when) {
 		Timestamp date = Timestamp.from(when);
 		jdbc.update("""

@@ -3,6 +3,10 @@ title: Document History
 weight: 8
 ---
 
+{{< callout type="info" >}}
+This is in the [Classic Interface](../../the-classic-interface/), which the Healdan app doesn't replace yet. In the app, open your menu and choose **Classic Interface**; you stay signed in.
+{{< /callout >}}
+
 A document's history records who did what to it, and when: filing it, each check-in, moves, notes, locks and the
 rest, newest first.
 

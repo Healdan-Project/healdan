@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.listing;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Set;
 
 /**
@@ -46,13 +47,15 @@ public record ListingQuery(Sort sort, boolean descending, Set<String> kinds, Set
 	}
 
 	/**
-	 * The days a document's last change falls on, both included, in the
-	 * server's time zone.
+	 * The days a document's last change falls on, both included, each from its
+	 * midnight to the next in the time zone given (M6 R90: the person's own,
+	 * which the app sends).
 	 *
 	 * @param from the first day, or null for no start
 	 * @param to the last day, or null for no end
+	 * @param zone the time zone the days are in; null for the server's
 	 */
-	public record Edited(LocalDate from, LocalDate to) {
+	public record Edited(LocalDate from, LocalDate to, ZoneId zone) {
 
 		public Edited {
 			if (from != null && to != null && from.isAfter(to))
@@ -60,20 +63,37 @@ public record ListingQuery(Sort sort, boolean descending, Set<String> kinds, Set
 		}
 
 		/**
+		 * The days in the server's time zone
+		 */
+		public Edited(LocalDate from, LocalDate to) {
+			this(from, to, null);
+		}
+
+		/**
+		 * @return the time zone the days are in: the one given, else the
+		 *         server's
+		 */
+		public ZoneId zoneOrServers() {
+			return zone != null ? zone : ZoneId.systemDefault();
+		}
+
+		/**
 		 * @param name {@code today}, {@code 7d} (today and the six days
 		 *        before), {@code 30d} (today and the 29 before) or {@code year}
 		 *        (from the 1st of January)
-		 * @param clock what today is, and in which time zone
+		 * @param clock what today is, and in which time zone, which the days
+		 *        are then in too
 		 * @return the days, up to today
 		 * @throws IllegalArgumentException for another name
 		 */
 		public static Edited preset(String name, Clock clock) {
 			LocalDate today = LocalDate.now(clock);
+			ZoneId zone = clock.getZone();
 			return switch (name == null ? "" : name) {
-			case "today" -> new Edited(today, today);
-			case "7d" -> new Edited(today.minusDays(6), today);
-			case "30d" -> new Edited(today.minusDays(29), today);
-			case "year" -> new Edited(today.withDayOfYear(1), today);
+			case "today" -> new Edited(today, today, zone);
+			case "7d" -> new Edited(today.minusDays(6), today, zone);
+			case "30d" -> new Edited(today.minusDays(29), today, zone);
+			case "year" -> new Edited(today.withDayOfYear(1), today, zone);
 			default -> throw new IllegalArgumentException("No edit date preset " + name);
 			};
 		}

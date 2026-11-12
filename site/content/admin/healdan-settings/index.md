@@ -17,7 +17,7 @@ which sets up where each Store keeps its files (see [The Storage Tab](#the-stora
 | Default Class | the Class a document gets when nothing above it sets one. "Docs" to begin with |
 | Recent Matters window | how many days of a person's work their Recent Matters list covers. 30 to begin with |
 | Next doc # | the number the next document gets. It can only be raised, for example to start at 1000 after a trial. The panel shows the lowest number allowed |
-| Start In | where signing in takes people: **User App**, Healdan's browser app at `/app/`, or **Classic Interface**, LogicalDOC's own screens. **User App** to begin with. It applies to a plain sign-in, by password or through a provider. A link into the User app followed while signed out still comes back to that page after signing in. Opening the sign-in page with `?switch=1` skips it |
+| Start In | where signing in takes people: **User App**, Healdan's browser app at `/app/`, or **Classic Interface**, LogicalDOC's own screens. **User App** to begin with. It applies to a plain sign-in, by password or through a provider. A link into the User app followed while signed out still comes back to that page after signing in. Opening the sign-in page with `?switch=1` skips it for the password form, which then lands in the Classic Interface; a provider's button still follows Start In |
 | Device sign-in expires after (unused days) | how long a device signed in through Healdan's [API](../../developer/api/) stays signed in without being used. 30 to begin with, and from 1 to 3650. A change applies to every device at once |
 | Device sign-in lasts at most (days) | how long a device's sign-in lasts however often it's used. 365 to begin with, from 1 to 3650, and no less than the unused days. A change applies to sign-ins made after it |
 | API origins allowed (CORS) | the addresses, other than Healdan's own, whose pages may call the API, such as `https://localhost:3000`, separated by commas: scheme, host and an optional port, with no path and no `*`. Empty to begin with, which is right unless an add-in is served from another address |
@@ -34,12 +34,15 @@ The choices for Class and Subclass belong to the Healdan profile's attribute set
 
 ## Device Sign-Ins
 
-A device that signs in through the API, such as an Office add-in, keeps a token instead of the password. The token
-works only in the API: LogicalDOC's web services refuse it. The web page has no list of devices; the API lists a
-person's own. To sign out every device a person has signed in on, change their password or disable them. Deleting a
-person stops their devices at once too.
+A device that signs in through the API, such as Healdan Helper on a Mac, keeps a token instead of the password. (The
+Office add-ins and the LibreOffice extension hold no token: they work through the helper.) The token works only in the
+API: LogicalDOC's web services refuse it. A person's own **Signed-in Devices**, in their menu in the User app, lists
+their sign-ins and revokes each one. To sign out every device a person has signed in on, change their password or
+disable them. Deleting a person stops their devices at once too.
 
-**A lost device.** Change the person's password, which signs out every device. Then have them delete any LogicalDOC
+**A lost device.** If the person can still sign in, they can revoke its row in their **Signed-in Devices**, which
+signs out that device alone. Otherwise, or to be sure, change their password, which signs out every device. Then have
+them delete any LogicalDOC
 API keys they don't recognise: under the person icon in the top bar, **Security → API Keys**, right-click a key and
 choose **Delete**. Only a key's owner can delete it, an administrator included. A device token can't make a key, but whoever had the device may have had the web page too, and a
 key outlasts a password change. Last, end the person's open sessions: under **Administration → System → General**,

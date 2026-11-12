@@ -148,6 +148,45 @@ After the upgrade, the Indexer reads them at its next run, as it kept trying the
   their words. [Reschedule all for indexing](../../admin/system/search-and-indexing/#indexing-again) to have them
   read.
 
+## Words Indexed Under a Wrong Stem
+
+Until November 2026, LogicalDOC's code that cuts a word down to its stem for the full-text index (so that "leases"
+finds "lease") kept one working copy per language, which every thread that indexed or searched used at once. Two
+threads using it together could confuse each other. The Indexer, which works on two documents at a time, could
+store a word under the wrong stem or fail a document, and a search that ran while another did could answer
+with no hits. A search from the User app, which asks for its list and its Filters' counts together, met this most
+often.
+
+The fix gives each thread its own copy, so no new damage is done. Documents indexed before it may hold a few words
+under a wrong stem, and a search for those words won't find them. If **On error, mark unindexable** was on (see
+[above](#presentations-and-spreadsheets-whose-text-wasnt-read)), a document the fault made fail was given up on and
+isn't in the index at all. After the upgrade, rebuild the index once:
+
+1. Open **Administration → Settings → Search and Indexing**, the
+   [page's Indexing Again section](../../admin/system/search-and-indexing/#indexing-again).
+2. Click **Reschedule all for indexing** and answer **Yes** to "Do you want to reindex all documents?". It marks every
+   indexed document to be indexed again.
+3. If **On error, mark unindexable** was on, also bring back the documents it gave up on: on the **Indexing History**
+   tab, click the **Result** column's header to bring the failures together, select those documents, and choose
+   **Mark indexable** from the right-click menu. **Reschedule all for indexing** doesn't reach them.
+4. Leave the server running. The Indexer works through the documents on its next runs, and each one's new entry
+   replaces its old.
+
+This costs the Indexer's time. Its **Batch** is 500 documents to begin with, taken every 30 minutes, about 1,000
+documents an hour, so 50,000 documents take about two days. [Finding New Documents
+Sooner](../../admin/system/scheduled-tasks/#finding-new-documents-sooner) says how to run it more often, and **Batch** is
+on [Search and Indexing](../../admin/system/search-and-indexing/). Also:
+
+- Searches keep working meanwhile, but until the Indexer has reached a document, a search may still miss it. Choose a
+  quiet time. The **Indexing queue** tab lists what is still waiting. **Drop index** would do the same after emptying
+  the index, which makes searches find less than they should for longer, so it isn't needed.
+- The Indexer reads each file again. On a Store kept on an S3 backend, every file is read back from its bucket, which
+  costs the bucket's downloads and fills and turns over the [read cache](../../admin/storage-backends/).
+- The **Indexing History** tab gets a row for each document.
+
+Rebuilding the index doesn't change the User app's **Edit Date**, which is when a document's file last changed. It does
+change the Classic Interface's **Last modified** for every document, as the Indexer stores each one it indexes again.
+
 ## Emails Filed Before the Outlook Add-in
 
 The upgrade that brings [Filing Email from Outlook](../../user/office/filing-email/) also starts keeping each email's

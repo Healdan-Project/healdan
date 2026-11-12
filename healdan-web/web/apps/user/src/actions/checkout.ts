@@ -54,12 +54,24 @@ export function release(api: Api, docNumber: number): Promise<S['DocumentView']>
   return api.send('DELETE', apiPath`/v1/documents/${docNumber}/checkout`)
 }
 
-/** Saves a file as the document's next snapshot and checks it in; it must be the person's own check-out (`ifHeld`) and the version they saw. */
-export function checkIn(api: Api, document: S['DocumentView'], file: File): Promise<S['DocumentView']> {
+export interface SaveOptions {
+  /** `snapshot` for an ordinary save (2.1 becomes 2.2), `version` for the next major number (2.2 becomes 3.0) */
+  kind: 'snapshot' | 'version'
+  /** True when the save is only to be made while the document is the person's own check-out; false saves a free document and checks it in */
+  ifHeld: boolean
+}
+
+/** Saves a file as the document's next version, from the version the person saw (`ifVersion`), under the document's own name. */
+export function saveVersion(api: Api, document: S['DocumentView'], file: File, options: SaveOptions): Promise<S['DocumentView']> {
   const form = new FormData()
   // The document's own name, so a browser's name for the file can't change it
-  const version = { kind: 'snapshot', name: document.name, ifHeld: true, ifVersion: document.version }
+  const version = { kind: options.kind, name: document.name, ifHeld: options.ifHeld, ifVersion: document.version }
   form.append('version', new Blob([JSON.stringify(version)], { type: 'application/json' }))
   form.append('file', file, file.name)
   return api.send('POST', apiPath`/v1/documents/${document.docNumber}/versions`, form)
+}
+
+/** Saves a file as the document's next snapshot and checks it in; it must be the person's own check-out (`ifHeld`) and the version they saw. */
+export function checkIn(api: Api, document: S['DocumentView'], file: File): Promise<S['DocumentView']> {
+  return saveVersion(api, document, file, { kind: 'snapshot', ifHeld: true })
 }

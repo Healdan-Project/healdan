@@ -25,6 +25,8 @@ it makes a good link in an email or a note.
 The page shows a list with just that document in it, already selected, and its details at the right: its properties
 and its versions. For a version or snapshot, that version is marked in **Versions**.
 
+![The page for document # 31 in the web page: a list with just Subscription Agreement – Draft.docx, version 2, by Helen Ashcombe, selected, and its details at the right with its thumbnail, properties in matter 1003.1 – Series A Investment, and its versions, where Version 1.1, saved on 23 Oct 2026 at 15:30 by Priya Nair, is marked](doc-page.png)
+
 - **It's found the moment it's filed.** Doc # addresses don't wait for the search index.
 - **If you can't read the document,** Healdan answers as if it didn't exist: "No document # 1234 that you can see."
   The words are the same whether the document exists or not, so they never tell you which. They're the same for a
@@ -45,9 +47,9 @@ Select a document in a folder's list, and choose **Copy Link** in its details. H
 copied". Paste it into an email or a note. Whoever opens it signs in first if they need to, and then sees the document
 if they may read it.
 
-Healdan can only copy to your clipboard when the page is on a secure address (`https://`), or on your own computer. If
-it can't, it says "The link couldn't be copied." Type the address by hand instead: it's your page's address up to
-`/app/`, then `doc/` and the number.
+If your browser won't let Healdan use the clipboard, it says "The link couldn't be copied." Type the address by hand
+instead: it's your page's address up to `/app/`, then `doc/` and the number. The app itself only opens at a secure
+address (`https://`), or on the computer Healdan runs on, so the clipboard is there for it in a current browser.
 
 ## In the Classic Interface
 

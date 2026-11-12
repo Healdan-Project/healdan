@@ -117,7 +117,7 @@ describe('Filters in a folder', () => {
     expect(router.history.location.search).toBe('?type=pdf')
     expect(await within(main()).findByText('3 of 7 documents')).toBeTruthy()
     expect(within(main()).getByText('File Type: PDF')).toBeTruthy()
-    expect(funnel().getAttribute('aria-label')).toBe('Filters 1 in use')
+    expect(funnel().getAttribute('aria-label')).toBe('Filters 1 in Use')
     // The list is asked for the filter; "of 7" comes from one more request without it
     expect(api.callsTo('GET /v1/folders/7/children').some((c) => (c.query?.type as string[] | undefined)?.[0] === 'pdf' && c.query?.limit === 100)).toBe(true)
     expect(api.callsTo('GET /v1/folders/7/children').some((c) => c.query?.limit === 1 && !c.query?.type && !c.query?.facets)).toBe(true)
@@ -138,7 +138,7 @@ describe('Filters in a folder', () => {
     await waitFor(() => expect(router.history.location.search).toBe('?type=pdf&type=word&author=pnair'))
     expect(within(main()).getByText('File Type: PDF, Word')).toBeTruthy()
     expect(within(main()).getByText('Author: Priya Nair')).toBeTruthy()
-    expect(funnel().getAttribute('aria-label')).toBe('Filters 2 in use')
+    expect(funnel().getAttribute('aria-label')).toBe('Filters 2 in Use')
     expect(api.callsTo('GET /v1/folders/7/children').some((c) => (c.query?.type as string[] | undefined)?.join() === 'pdf,word')).toBe(true)
 
     await userEvent.click(within(main()).getByRole('button', { name: 'Clear All' }))
@@ -160,8 +160,19 @@ describe('Filters in a folder', () => {
     await open('/folders/7?type=pdf')
     expect(await within(main()).findByText('File Type: PDF')).toBeTruthy()
     expect(panel()).toBeNull()
-    expect(funnel().getAttribute('aria-label')).toBe('Filters 1 in use')
+    expect(funnel().getAttribute('aria-label')).toBe('Filters 1 in Use')
     expect(funnel().getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it("sends the person's time zone with the list and its counts, so Today and the days of a range are theirs", async () => {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const { api } = await open('/folders/7?edited=today')
+    await userEvent.click(funnel())
+    await screen.findByRole('region', { name: 'Filters' })
+    await waitFor(() => expect(api.callsTo('GET /v1/folders/7/children').some((c) => c.query?.facets)).toBe(true))
+    const calls = api.callsTo('GET /v1/folders/7/children').filter((c) => c.query?.edited === 'today')
+    expect(calls.length).toBeGreaterThan(1)
+    for (const call of calls) expect(call.query?.zone).toBe(zone)
   })
 
   it('sends the Edit Date preset, and a range from Between…', async () => {
@@ -209,7 +220,7 @@ describe('Filters in a folder', () => {
     expect(panel()).toBeNull()
     // The filters count as set while the panel is away
     expect(within(main()).getByText('File Type: PDF')).toBeTruthy()
-    expect(funnel().getAttribute('aria-label')).toBe('Filters 1 in use')
+    expect(funnel().getAttribute('aria-label')).toBe('Filters 1 in Use')
     expect(funnel().getAttribute('aria-pressed')).toBe('false')
 
     await userEvent.click(funnel())
@@ -294,6 +305,33 @@ describe('Filters in a folder', () => {
     expect(within(main()).getByRole('grid').closest('[aria-busy="true"]')).toBeTruthy()
     release()
     expect(await within(main()).findByText('7 of 7 documents')).toBeTruthy()
+  })
+
+  it("keeps the last answer's groups and counts on screen, dimmed, while a recount is held, never zeros", async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    await open('/folders/7', {
+      'GET /v1/folders/7/children': async ({ query }: { query?: Record<string, unknown> }) => {
+        const kinds = asks(query, 'type') as string[] | undefined
+        // The recount for the ticked type is held; the list and the first count answer at once
+        if (kinds && asks(query, 'facets')) await gate
+        const kept = kinds ? words : all
+        return { ...children(kept, { limit: asks(query, 'limit') as number }), ...(asks(query, 'facets') ? { facets } : {}) }
+      },
+    })
+    await userEvent.click(funnel())
+    const filters = await screen.findByRole('region', { name: 'Filters' })
+    await within(filters).findByRole('checkbox', { name: /^Word, 4/ })
+    await userEvent.click(within(filters).getByRole('checkbox', { name: /^Word/ }))
+    // While the recount is held: still the same groups and counts, marked busy
+    await waitFor(() => expect(filters.querySelector('[aria-busy="true"]')).toBeTruthy())
+    expect(within(filters).getByRole('checkbox', { name: /^Word, 4/ })).toBeTruthy()
+    expect(within(filters).getByRole('checkbox', { name: /^PDF, 3/ })).toBeTruthy()
+    expect(within(filters).getByRole('group', { name: 'Author' })).toBeTruthy()
+    expect(within(filters).getByRole('group', { name: 'Class' })).toBeTruthy()
+    expect([...filters.querySelectorAll('[data-count]')].map((one) => one.textContent)).not.toContain('0')
+    release()
+    await waitFor(() => expect(filters.querySelector('[aria-busy="true"]')).toBeNull())
   })
 
   it('shows the filtered count alone when the count without filters could not be had', async () => {

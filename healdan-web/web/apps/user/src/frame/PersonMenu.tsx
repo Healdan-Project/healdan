@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { useState } from 'react'
 import { ApiError } from '@healdan/api'
 import { Menu, MenuItem, clearToasts, t, toast } from '@healdan/ui'
+import { SignedInDevices } from '../devices/SignedInDevices'
 import { useMe } from '../queries'
 import { useApi } from '../services'
 import { messageFor } from './errors'
@@ -17,6 +19,7 @@ function initials(name: string): string {
 export function PersonMenu() {
   const api = useApi()
   const name = useMe().data?.name ?? ''
+  const [showDevices, setShowDevices] = useState(false)
 
   async function signOut() {
     try {
@@ -34,32 +37,34 @@ export function PersonMenu() {
   }
 
   return (
-    <Menu
-      label={
-        <>
-          <span className={styles.avatar} aria-hidden="true">
-            {initials(name)}
-          </span>
-          {/* The button's name is its content, so it can't differ from what shows (an aria-label that does fails WCAG 2.5.3). */}
-          <span className={styles.visuallyHidden}>{name || t('person.menu')}</span>
-        </>
-      }
-    >
-      {name && (
-        <MenuItem id="name" isDisabled>
-          {name}
+    <>
+      <Menu
+        label={
+          <>
+            <span className={styles.avatar} aria-hidden="true">
+              {initials(name)}
+            </span>
+            {/* The button's name is its content, so it can't differ from what shows (an aria-label that does fails WCAG 2.5.3). */}
+            <span className={styles.visuallyHidden}>{name || t('person.menu')}</span>
+          </>
+        }
+      >
+        {name && (
+          <MenuItem id="name" isDisabled>
+            {name}
+          </MenuItem>
+        )}
+        <MenuItem id="devices" onAction={() => setShowDevices(true)}>
+          {t('person.devices')}
         </MenuItem>
-      )}
-      {/* The dialog that lists a person's devices comes with Task 21. */}
-      <MenuItem id="devices" isDisabled>
-        {t('person.devices')}
-      </MenuItem>
-      <MenuItem id="classic" href="/frontend.jsp">
-        {t('person.classic')}
-      </MenuItem>
-      <MenuItem id="signOut" onAction={() => void signOut()}>
-        {t('person.signOut')}
-      </MenuItem>
-    </Menu>
+        <MenuItem id="classic" href="/frontend.jsp">
+          {t('person.classic')}
+        </MenuItem>
+        <MenuItem id="signOut" onAction={() => void signOut()}>
+          {t('person.signOut')}
+        </MenuItem>
+      </Menu>
+      {showDevices && <SignedInDevices onClose={() => setShowDevices(false)} />}
+    </>
   )
 }

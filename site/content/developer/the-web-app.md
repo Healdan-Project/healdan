@@ -31,14 +31,16 @@ cd healdan-web/web
 npm ci --ignore-scripts
 npm run generate
 cd apps/user
-HEALDAN_DEV_TARGET=http://127.0.0.1:8080 npm run dev    # the stack's address; that one is the default
+HEALDAN_DEV_TARGET=http://127.0.0.1:8080 npm run dev -- --host 127.0.0.1    # the stack's address; that one is the default
 ```
 
-Open `http://localhost:5173/app/`. The dev server sends `/api`, `/login.jsp` and `/j_spring_security_check` to the
-stack. The API's web-session route refuses a request whose `Origin` isn't the server's own, so the dev server
-rewrites `Origin` to the stack's address. Cookies don't depend on the port, so you can sign in at the stack's own
-address, and the dev server's page is signed in too. Pages the app links to that the proxy doesn't pass, such as
-the Classic Interface, are on the stack's address.
+Sign in at the stack's own address, `http://127.0.0.1:8080/login.jsp`, then open `http://127.0.0.1:5173/app/`. A
+cookie belongs to a host name, not a port, so the dev server's page on the same host name is signed in too; one at
+`localhost` isn't, as that's another host name. The dev server sends `/api`, `/login.jsp` and
+`/j_spring_security_check` to the stack. The API's web-session route refuses a request whose `Origin` isn't the
+server's own, so the dev server rewrites `Origin` to the stack's address. The app's own **Sign In**, after a sign-out,
+reloads the dev server's page, which only the stack's `AppServlet` would send to the sign-in page: sign in at the stack
+again. Pages the app links to that the proxy doesn't pass, such as the Classic Interface, are on the stack's address.
 
 ## Adding a View
 
@@ -53,6 +55,15 @@ the Classic Interface, are on the stack's address.
 The router's types are registered (`router.tsx`), so `Link`, `navigate()` and the search hooks check each address's
 parameters. Build an API path from data with `apiPath`, from `@healdan/api`, which encodes each value as one
 segment: `` apiPath`/v1/folders/${id}/children` ``.
+
+## A Secure Address Only
+
+Browsers send `Sec-Fetch-Site` only to a potentially trustworthy address (HTTPS, or the machine itself), and the
+web-session route needs it, so at a plain `http://` address off the machine every call would be `401`. `main.tsx`'s
+`start(root, secure)` checks `window.isSecureContext` first and, without it, draws only `frame/InsecureAddress.tsx`,
+in the catalogue's words, with a link to the Classic Interface, before anything asks the server. Nothing that runs as
+the app loads may need a secure context either: a drag's page token (`organising/rows.ts`) is made with
+`crypto.getRandomValues`, as `crypto.randomUUID` exists only at a secure address.
 
 ## Lists
 
@@ -77,7 +88,9 @@ A folder's filters are `?type=pdf&type=word&author=pnair&class=…&edited=7d` (o
 address: `filters/useFilters.ts` reads them (`readFilters` leaves out what the API would refuse, so a pasted address
 never makes the list an error), counts them for the funnel's badge, and writes them back with `navigate`, replacing the
 entry. The router's `parseSearch` and `stringifySearch` carry the repeated ones as lists, and each route that takes
-filters adds `filterSearch` to its `validateSearch`. `useListing` sends them with every page; `filters/useFacets.ts`
+filters adds `filterSearch` to its `validateSearch`. `filterParams` adds `zone`, the browser's IANA time zone
+(`Intl.DateTimeFormat().resolvedOptions().timeZone`), which the server cuts Today and a range's days in, so they are the
+days the list's dates show. `useListing` sends them with every page; `filters/useFacets.ts`
 asks for the counts on their own (`GET /folders/{id}/children` with `facets`, `limit=1`) only while the panel is open,
 and for the folder's count with no filters only while one is in use, which is the "7" of "3 of 7 documents".
 
@@ -141,6 +154,77 @@ view.
   message from the catalogue (`fields.<code>`). **Overridden** shows only where the API's `overrides` names the folder a
   `local` value takes the place of, and **Follow Folder** sends `null`; a local value with no folder behind it is a plain
   value. Save compares with the list the form opened with, not the live one, which a refetch can change under it.
+
+## Filing by Drag and Drop
+
+`filing/` is filing in the app (M6 spec 6.5). `FilingProvider` sits in the frame and owns the pieces that outlive a view:
+
+- **The queue.** `uploads.ts` (`createUploads`) runs at most three requests at once, each its own `POST /v1/documents`
+  or, for a drop on a row, `POST /v1/documents/{n}/versions` (the call `actions/checkout.ts`'s `saveVersion` makes, shared with
+  Check In). It lives in memory only, so uploads go on while the person moves between views, and a `beforeunload` handler
+  asks before the page is left while any is running. A finished request asks for the lists again
+  (`invalidateDocumentLists`), and a new document is `fresh` for a few seconds, which flashes its row.
+- **The drop.** `dropTargets.ts` decides what a drag carries and where it may go: `refusalOf` says a matter's top level, a
+  search folder and a Store hold no documents (`filing.chooseFolder`), and a folder the person may not write to takes none.
+  `useDropZone` puts the handlers on a folder's list: a folder's row is a drop target for that folder (its kind and `canFile` decide, as for a tree folder),
+  and one file on a document's row asks for a version only when its extension is the document's (`sameExtension`). The left
+  pane's tree takes drops through `Tree`'s `acceptsDrop` and `onDrop`. Both count `dragenter` and `dragleave` rather than trust
+  `relatedTarget`, which WebKit can leave null. A drag outside every target is cancelled by `FilingProvider`'s `window` listeners,
+  so the browser never opens a dropped file in place of the app. A drop is read at once, as the browser empties its data transfer when the event ends. It handles only
+  drops that carry `Files`; a drop that carries `ROWS_TYPE` (`application/x-healdan-documents`, the app's own rows,
+  which a move takes) is left alone, and a drop of a link or text says to drag the email to Finder first. A dragover of a
+  link or text is cancelled too, or the browser would follow the link and leave the page.
+- **The form.** `GET /v1/folders/{id}/form` says what a new document would have. When a required property has no value, or
+  Option is held, `FilingForm` appears first: a title for each file, and `details/FieldsForm.tsx`, the form of a document's
+  properties (`PropertiesForm` is the same form over `PATCH`), so the two share their rules (required marks, lists, Subclass
+  narrowing, dates, number checks). A user property, such as Author or Typist, is `details/UserField.tsx`: `@healdan/ui`'s
+  `PickField` (React Aria's ComboBox with its label above it), which asks `GET /v1/users?q=` once the typing pauses
+  (one character is enough; the server answers 20 at most), offers the field's own person first, and sends `{ id }`,
+  as the helper does. A folder or document property stays text.
+- **The tray.** `FilingTray` over `@healdan/ui`'s `Tray`, marked `data-react-aria-top-layer` so a modal's hiding of the page
+  leaves it for a screen reader. A refusal is said from the catalogue (`refusal.ts`), from the problem's `code`, its
+  `fields` or its `hold`, and an `already-filed` names the copy. **Edit** asks the details panel to open its form
+  (`details/editRequest.ts`).
+
+- **The Upload button** is the keyboard's route into filing, as a drop has none: it opens the file picker, and pressed with
+  Option held (Option-Enter, or an Option click) the form comes first, as it does for a drop with Option. Dropping on a
+  row and dragging rows are for a pointer; Check In and **More › Move To…** are their keyboard forms.
+
+Test it with `filing/*.test.tsx`; jsdom has no `DragEvent`, so a test that needs Option puts `altKey` on the event by hand.
+`e2e/filing.spec.ts` drops real `File`s in a real browser, which Playwright can only do by dispatching the events itself
+with a `DataTransfer` built in the page.
+
+## Organising
+
+`organising/` is New Folder, rename, move and delete (M6 spec 6.7). `OrganisingProvider` sits in the frame under the
+filing's and owns what outlives a view: which document's title is a field now, and the dialogs that ask (`ConfirmDelete`,
+`MovePicker`, `NewFolderDialog`) and say what was refused (`Refusals`). Views reach it through `useOrganising`, and
+`useOrganisingTable(rows, selection)` gives a list its `onRename` (F2), `onDelete` and `drag` props and the selected documents
+for the toolbar's More menu (`actions/MoreMenu.tsx`).
+
+- **One call each.** `actions/rename.ts`, `move.ts` and `remove.ts` make `PATCH /documents/{n}`, `POST /documents/{n}/move`
+  and `DELETE /documents/{n}`. A change to several documents (`actions/batch.ts`) is a call for each, one after another, which
+  keeps going when one is refused, so what was done stays done; the refusals come back as lines, each the document's name
+  and why, from the catalogue (`filing/refusal.ts`: a hold says who holds it, an `already-filed` names the copy).
+- **Rename in place.** `RenameField` replaces the title in the row. Enter saves, Esc cancels, and leaving the field with a
+  new name saves it. A refusal keeps the field open with the message beside it (`renameRefusal` words another extension
+  as what to do about it), and the focus goes back to the row when the field goes. The field stops its key and pointer
+  events, so the Table's own keys (Space, Delete, the arrows) and a double-click don't reach the row.
+- **The picker.** `MovePicker` starts from Recent Matters and My Matters (the left pane's queries) and the search box's
+  matter suggestions, then lists the chosen matter's folders from `fetchSubfolders` (also the tree's), a level at a time. It
+  never browses Stores, and **Move Here** needs a folder inside the matter.
+- **Dragging rows.** The Table's `drag` prop makes its selectable rows draggable, with the browser's own drag and drop (React
+  Aria's would add some 140 kB to the app's chunk of it), so a drag of a selected row carries every selected row, and of another row only that one. A drag carries `ROWS_TYPE` with the documents as JSON (`rows.ts`);
+  `FilingProvider` leaves it alone and the tree takes it (`acceptsDrop`, `dropRows`): the folder lights up as it does for
+  files, and a place that holds no documents is refused with the filing rule's words before any call. There's no keyboard
+  drag: More › Move To… is the way for a keyboard.
+- **New Folder** is offered inside a matter's folders, and at a matter's top level only to an administrator (`useMe`).
+- **Every list of documents** has it: a folder, search results, Recent Documents and Emails, and the `#` result, each with
+  `useOrganisingTable` and a `Toolbar` holding `SelectionActions`. `useRowSelection(rows)` keeps only the selected rows
+  still listed, so once they're deleted or moved F2 and Delete take the focused row.
+
+Test it with `organising/*.test.tsx`; `testing.tsx` has routes for a folder that rename, move and delete as the server
+would, and a `DataTransfer` that keeps what a drag writes. `e2e/organising.spec.ts` does it in a real browser.
 
 ## The Search Box and Search Results
 
@@ -231,6 +315,47 @@ when the first PDF is previewed. These are the settings that keep it inside the 
 - **One worker** is shared by every document opened, for the page's life, and **a copy of the bytes** is given to PDF.js,
   which hands its argument to the worker and leaves the caller's empty. PDF.js can't run its parsing under jsdom (its
   main-thread worker times out there), so `pdfEngine.ts` has no unit test: `working.spec.ts` is its test.
+
+## Signed-in Devices
+
+`devices/SignedInDevices.tsx` is the dialog the person menu opens: `GET /v1/auth/tokens` lists the person's device
+tokens (name, created, last used, expiry), and **Revoke** asks first, in the same dialog, then calls
+`DELETE /v1/auth/tokens/{id}`. The web page's own sign-in is no device (`Caller.token()` is null on the web-session
+route), so it isn't in the list, and the dialog says **Sign Out** ends it. A name is shown as text, never as markup.
+
+## A Narrow Window
+
+Below 1,024 pixels (`NARROW` in `frame/narrow.ts`, read with `useNarrow()`) the left pane and the right region fold
+away behind buttons in the top bar, **Navigation** and **Details and Filters**, each saying with `aria-expanded` whether
+it's open. The app is designed for 1,280 pixels and works at a tablet's 768; phones aren't a goal.
+
+- **The left pane** isn't drawn while it's folded, so it isn't in the tab order. Opened, it covers the list's left edge
+  (`Frame.module.css`), and following a link in it, or Esc, closes it. Esc puts the focus back on the button.
+- **The right region** keeps its content (Filters, the details or the docked reading pane), shown by
+  `RightRegionView` over the list from the right edge while `narrowOpen` is true, and `useRegionKind` gives a list no
+  narrower columns for it. `RightRegion.open()` opens it, so the funnel, **Preview** and the tray's **Edit** show it, but a
+  click on a row doesn't (`open('details', { reveal: false })`): selecting is not a request to see it. With nothing to
+  show it says so.
+- **To test it** in Vitest, `test/viewport.ts` gives jsdom a `matchMedia` for a width (`setViewport(768)` before a
+  render, `resize()` after), and `frame/Narrow.test.tsx` has the cases. `e2e/a11y.spec.ts` looks at it at 768 × 1024.
+
+## The Look in the Dark
+
+Both themes are defined as custom properties in `tokens.css` and chosen by the browser's `prefers-color-scheme`.
+Anything that isn't a custom property is on purpose: the brand mark's blues (`frame/Mark.tsx`) and the white paper a PDF
+page or a sender's email is drawn on (`preview/preview.module.css`, `preview/email.module.css`), which keep their own
+colours so a document reads as it was made. `tokens.test.ts` checks every text colour on every background it may sit
+on, in both themes. jsdom draws no colours, so `e2e/a11y.spec.ts` runs axe in a real browser in both, where contrast is
+checked on what is drawn.
+
+## The Keyboard
+
+Rows 3 to 9 of the spec's manual acceptance run by keyboard in `e2e/keyboard.spec.ts`, with no click after the sign-in
+page. A step that can't be done by keys is a finding to fix in the app, never to work round in the spec. The keys are in
+the spec's section 10.5: `/` jumps to the search box, the arrow keys move through a list, Enter opens in the app, Space
+opens Quick Look and Esc closes it, F2 renames, Delete moves to the trash after the question, and the tree, menus and
+dialogs follow React Aria's. The properties form (`details/PropertiesForm.tsx`) takes the focus in its first field when **Edit** opens it, since Edit goes grey, cancels on Esc, and gives the focus back to **Edit** when it closes. A list's keys are in `@healdan/ui`'s `Table`, which takes them ahead of React Aria's so
+Space previews rather than selects, and leaves them to a field inside a row.
 
 ## The Catalogue
 

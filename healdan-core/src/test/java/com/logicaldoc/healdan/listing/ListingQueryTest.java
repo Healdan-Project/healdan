@@ -9,6 +9,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Set;
@@ -30,10 +31,16 @@ public class ListingQueryTest {
 
 	@Test
 	public void testEditedPresets() {
-		assertEquals(new Edited(TODAY, TODAY), Edited.preset("today", CLOCK));
-		assertEquals(new Edited(TODAY.minusDays(6), TODAY), Edited.preset("7d", CLOCK));
-		assertEquals(new Edited(TODAY.minusDays(29), TODAY), Edited.preset("30d", CLOCK));
-		assertEquals(new Edited(LocalDate.of(2026, 1, 1), TODAY), Edited.preset("year", CLOCK));
+		ZoneId zone = CLOCK.getZone();
+		assertEquals(new Edited(TODAY, TODAY, zone), Edited.preset("today", CLOCK));
+		assertEquals(new Edited(TODAY.minusDays(6), TODAY, zone), Edited.preset("7d", CLOCK));
+		assertEquals(new Edited(TODAY.minusDays(29), TODAY, zone), Edited.preset("30d", CLOCK));
+		assertEquals(new Edited(LocalDate.of(2026, 1, 1), TODAY, zone), Edited.preset("year", CLOCK));
+		// The days are the clock's, so they are cut in its zone: at noon UTC it is already the 16th on Kiritimati
+		Clock far = Clock.fixed(Instant.parse("2026-06-15T12:00:00Z"), ZoneId.of("Pacific/Kiritimati"));
+		assertEquals(new Edited(TODAY.plusDays(1), TODAY.plusDays(1), far.getZone()), Edited.preset("today", far));
+		// Without a zone, the server's
+		assertEquals(ZoneId.systemDefault(), new Edited(TODAY, TODAY).zoneOrServers());
 		for (String name : new String[] { "week", "", null })
 			try {
 				Edited.preset(name, CLOCK);

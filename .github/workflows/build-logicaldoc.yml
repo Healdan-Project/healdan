@@ -106,6 +106,9 @@ jobs:
             DocumentServiceImplTest
             SearchServiceImplTest
             DocumentOnlyGrantTest
+            SnowballFilterFactoryTest
+            LanguageTest
+            SessionRenewalTest
             BookmarksDataServletTest
             RpcPermissionTest
             RpcPermissionGapsTest

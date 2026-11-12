@@ -8,16 +8,18 @@ import styles from './Dialog.module.css'
 export interface DialogProps {
   title: string
   isOpen: boolean
+  /** `wide` is for a dialog that holds a table; it still fits the window less its margins */
+  size?: 'default' | 'wide'
   onOpenChange: (isOpen: boolean) => void
   /** The dialog's buttons, given a function that closes it. */
   children: ReactNode | ((close: () => void) => ReactNode)
 }
 
 // A modal dialog: focus stays inside it, Esc closes it, and focus goes back to where it came from.
-export function Dialog({ title, isOpen, onOpenChange, children }: DialogProps) {
+export function Dialog({ title, isOpen, onOpenChange, size = 'default', children }: DialogProps) {
   return (
     <ModalOverlay className={styles.overlay} isOpen={isOpen} onOpenChange={onOpenChange} isDismissable>
-      <Modal className={styles.modal}>
+      <Modal className={size === 'wide' ? `${styles.modal} ${styles.wide}` : styles.modal}>
         <AriaDialog className={styles.dialog}>
           {({ close }) => (
             <>

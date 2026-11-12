@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useId, useMemo, useRef, useState } from 'react'
-import { ApiError, apiPath, type components } from '@healdan/api'
-import { Button, Icon, t, Table, toast, type TableSort } from '@healdan/ui'
+import { useId, useMemo, useRef } from 'react'
+import { ApiError } from '@healdan/api'
+import { t, Table, type TableSort } from '@healdan/ui'
 import { FilterChips } from '../filters/FilterChips'
 import { FiltersButton } from '../filters/FiltersButton'
 import { FiltersPanel } from '../filters/FiltersPanel'
@@ -13,12 +12,18 @@ import { useAuthorNames } from '../filters/useAuthorNames'
 import { useFacets, useUnfilteredDocuments } from '../filters/useFacets'
 import { useFilters } from '../filters/useFilters'
 import { ErrorPanel } from '../frame/ErrorPanel'
-import { messageFor } from '../frame/errors'
 import { RightRegionView, useRegionKind, useRightRegion } from '../frame/RightRegion'
-import { keys, useFavorites, useFolder } from '../queries'
-import { useApi } from '../services'
+import { useFolder } from '../queries'
+import { FavoriteStar } from '../actions/FavoriteStar'
 import { SelectionActions } from '../actions/SelectionActions'
 import { useOpenKey } from '../actions/useOpenKey'
+import { placeOf } from '../filing/dropTargets'
+import { NewFolderButton } from '../organising/NewFolder'
+import { useOrganisingTable } from '../organising/useOrganisingTable'
+import { useFiling } from '../filing/FilingProvider'
+import { UploadButton } from '../filing/UploadButton'
+import { useDropZone } from '../filing/useDropZone'
+import filingStyles from '../filing/filing.module.css'
 import { Breadcrumb } from './Breadcrumb'
 import { DetailsPanel } from '../details/DetailsPanel'
 import { QuickLook } from '../preview/QuickLook'
@@ -28,10 +33,8 @@ import { NotFound } from './NotFound'
 import { Toolbar, type ListCount } from './Toolbar'
 import { listColumns, narrowed, rowOf } from './listColumns'
 import { useRowSelection } from './useRowSelection'
-import { isSortColumn, useListing, type ListingOrder, type SortColumn } from './useListing'
+import { childKey, isSortColumn, useListing, type ListingOrder, type SortColumn } from './useListing'
 import styles from './views.module.css'
-
-type S = components['schemas']
 
 export interface FolderViewProps {
   folderId: number
@@ -57,8 +60,32 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const unfiltered = useUnfilteredDocuments({ folderId, enabled: active > 0 && !store })
   const navigate = useNavigate()
   const headingId = useId()
-  const { selected, selection, change: changeSelection } = useRowSelection()
-  const rows = useMemo(() => listing.rows.map(rowOf), [listing.rows])
+  const { selected, selection, change: changeSelection } = useRowSelection(listing.rows)
+  const organising = useOrganisingTable(listing.rows, selection)
+  // What was just filed flashes in the list, and the row the files are over is lit
+  const { fresh } = useFiling()
+  const place = useMemo(() => (view ? placeOf(view) : { id: folderId, kind: 'store' as const }), [view, folderId])
+  // By key, as a drag asks at every dragover which row it is over
+  const byKey = useMemo(() => new Map(listing.rows.map((item) => [childKey(item), item])), [listing.rows])
+  const zone = useDropZone(place, (key) => {
+    const found = byKey.get(key)
+    if (found?.type === 'document') return { document: found }
+    return found?.type === 'folder' ? { place: placeOf(found) } : undefined
+  })
+  // The rows are made once for each listing; a flash or a drag over a row changes only that row, so the others keep the
+  // object the Table drew them from and aren't drawn again
+  const listed = useMemo(() => listing.rows.map(rowOf), [listing.rows])
+  const rows = useMemo(
+    () =>
+      fresh.size === 0 && zone.overRow === undefined
+        ? listed
+        : listed.map((row) => {
+            const flash = row.item.type === 'document' && fresh.has(row.item.docNumber)
+            const dropping = zone.overRow === row.id
+            return flash || dropping ? { ...row, flash, dropping } : row
+          }),
+    [listed, fresh, zone.overRow],
+  )
   const documents = useMemo(() => documentsOf(listing.rows), [listing.rows])
   const preview = usePreviewKey(changeSelection)
   const openDocument = useOpenKey(documents, changeSelection)
@@ -110,14 +137,14 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
 
   return (
     <section className={styles.withRegion} aria-labelledby={headingId}>
-      <div className={`${styles.view} ${styles.folder}`}>
+      <div className={`${styles.view} ${styles.folder} ${filingStyles.zone}`} data-dropping={zone.dropping || undefined} {...zone.props}>
         <Breadcrumb folder={view} />
         <div className={styles.heading}>
           <h1 id={headingId} className={styles.title}>
             {view.name}
           </h1>
           {/* A matter goes in My Matters (the + in the left pane), not in Favorites */}
-          {view.kind !== 'matter' && !store && <FavoriteStar folderId={folderId} />}
+          {view.kind !== 'matter' && !store && <FavoriteStar what={{ folderId }} add={t('favorites.add')} remove={t('favorites.remove')} />}
         </div>
         {store ? (
           <p>{t('problems.not-browsable')}</p>
@@ -130,7 +157,9 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               count={listing.isStale ? undefined : countOf(listing.documents, active > 0, unfiltered)}
               end={<FiltersButton ref={funnel} open={filtersOpen} active={active} onPress={toggleFilters} />}
             >
-              <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} />
+              <UploadButton place={place} />
+              <NewFolderButton place={place} />
+              <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} selected={organising.selected} />
             </Toolbar>
             <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />
             <Table
@@ -144,6 +173,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               onSelectionChange={changeSelection}
               onOpen={open}
               onPreview={preview}
+              {...organising.tableProps}
               loadMore={listing.loadMore}
               isLoadingMore={listing.isLoadingMore}
               total={listing.total}
@@ -160,7 +190,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               filters={filters}
               facets={facets.data}
               unavailable={facets.isError}
-                busy={facets.isPlaceholderData}
+              busy={facets.isPlaceholderData}
               context="folder"
               onChange={change}
               onClose={() => {
@@ -188,37 +218,3 @@ function countOf(documents: number | undefined, filtered: boolean, unfiltered: {
   return { documents, of: unfiltered.data }
 }
 
-/** The star beside a folder's name: in Favorites or not. */
-function FavoriteStar({ folderId }: { folderId: number }) {
-  const api = useApi()
-  const queryClient = useQueryClient()
-  const favorites = useFavorites()
-  const [busy, setBusy] = useState(false)
-  const favorite = favorites.data?.items.find((f): f is S['FavoriteView'] => f.item.type === 'folder' && f.item.id === folderId)
-
-  async function toggle() {
-    setBusy(true)
-    try {
-      if (favorite) await api.send('DELETE', apiPath`/v1/me/favorites/${favorite.id}`)
-      else await api.send('POST', '/v1/me/favorites', { folderId })
-      await queryClient.invalidateQueries({ queryKey: keys.favorites })
-    } catch (error) {
-      toast(messageFor(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Button
-      variant="quiet"
-      aria-label={favorite ? t('folder.favorite.remove') : t('folder.favorite.add')}
-      isDisabled={busy || favorites.isPending}
-      onPress={() => void toggle()}
-    >
-      <span className={favorite ? styles.starred : styles.star}>
-        <Icon name={favorite ? 'starFilled' : 'star'} size={18} />
-      </span>
-    </Button>
-  )
-}

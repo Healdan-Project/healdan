@@ -208,8 +208,9 @@ describe('Table', () => {
   it('marks itself busy while the rows it shows are about to change', () => {
     render(<Harness busy />)
     expect(screen.getByRole('grid').closest('[aria-busy="true"]')).toBeTruthy()
-    // Sighted people see it too: the rows are dimmed while they are about to change
-    expect(tableCss).toMatch(/\[aria-busy='true'\][^{]*\{[^}]*opacity:\s*var\(--hd-busy-opacity\)/)
+    // Sighted people see it too, as a strip along the top: the rows keep their colours, and so their contrast (R79)
+    expect(tableCss).toMatch(/\[aria-busy='true'\]::before\s*\{/)
+    expect(tableCss).not.toMatch(/\[aria-busy='true'\]\s*\{[^}]*opacity/)
   })
 
   it('shows what it is given when there are no rows', () => {
@@ -221,5 +222,95 @@ describe('Table', () => {
     const { container } = render(<Harness rows={[folderRow, ...items(99)]} initial={['d3']} total={250} loadMore={vi.fn()} sort={{ column: 'title', direction: 'ascending' }} />)
     expect(screen.getAllByRole('row')).toHaveLength(101)
     await expectNoAxeViolations(container)
+  })
+})
+
+describe('Table highlights', () => {
+  it('marks a row that was just made and a row something is being dropped on, and the flash stops for reduced motion', () => {
+    render(<Harness rows={[{ ...items(2)[0]!, flash: true }, { ...items(2)[1]!, dropping: true }]} />)
+    const [flash, dropping] = screen.getAllByRole('row').slice(1)
+    expect(flash!.getAttribute('data-flash')).toBe('true')
+    expect(flash!.getAttribute('data-dropping')).toBeNull()
+    expect(dropping!.getAttribute('data-dropping')).toBe('true')
+    expect(tableCss).toMatch(/@media \(prefers-reduced-motion: reduce\) \{\s*\.row\[data-flash\] \{\s*animation: none/)
+  })
+
+  it('drags the selected rows with the type and data the caller makes of them, or the one row when it is not selected', () => {
+    const stored = new Map<string, string>()
+    const data = { setData: (type: string, text: string) => void stored.set(type, text), effectAllowed: 'uninitialized' }
+    const make = vi.fn((keys: string[]) => (keys.every((key) => key.startsWith('d')) ? keys.join(',') : undefined))
+    render(<Harness initial={['d1', 'd2']} drag={{ type: 'application/x-test-rows', data: make }} rows={[folderRow, ...items(3)]} />)
+
+    fireEvent.dragStart(row(/Letter 1/), { dataTransfer: data })
+    expect(make).toHaveBeenLastCalledWith(['d1', 'd2'])
+    expect(stored.get('application/x-test-rows')).toBe('d1,d2')
+
+    stored.clear()
+    fireEvent.dragStart(row(/Letter 3/), { dataTransfer: data })
+    expect(make).toHaveBeenLastCalledWith(['d3'])
+    expect(stored.get('application/x-test-rows')).toBe('d3')
+  })
+
+  it('makes the rows that can be selected draggable, and no row without drag', () => {
+    const { unmount } = render(<Harness drag={{ type: 'application/x-test-rows', data: (keys) => keys.join(',') }} rows={[folderRow, ...items(1)]} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('true')
+    expect(row(/Pleadings/).getAttribute('draggable')).toBe('false')
+    unmount()
+    render(<Harness />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('false')
+  })
+
+  it('keeps the row named by `undraggable` undraggable through every later render, and the others draggable', () => {
+    const drag = { type: 'application/x-test-rows', data: (keys: string[]) => keys.join(',') }
+    // The same rows throughout, as a list that has not changed gives: the Table has to draw the change itself
+    const same = items(2)
+    const { rerender } = render(<Harness drag={drag} rows={same} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('true')
+    rerender(<Harness drag={drag} undraggable="d1" rows={same} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('false')
+    expect(row(/Letter 2/).getAttribute('draggable')).toBe('true')
+    // A refetch draws the rows again, with new objects: the ref callbacks run again, and must still say false
+    rerender(<Harness drag={drag} undraggable="d1" rows={items(2)} />)
+    rerender(<Harness drag={drag} undraggable="d1" rows={items(2)} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('false')
+    // Once nothing is named it drags again
+    rerender(<Harness drag={drag} rows={items(2)} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('true')
+  })
+
+  it('does not draw the rows again to change what is draggable: React Aria would give the focus back to the row, out of its field', () => {
+    const drag = { type: 'application/x-test-rows', data: (keys: string[]) => keys.join(',') }
+    const same = items(2)
+    const cell = vi.fn((row: Item) => row.name)
+    const spied: TableColumn<Item>[] = [{ id: 'title', name: 'Title', isRowHeader: true, cell }]
+    const { rerender } = render(<Harness drag={drag} rows={same} columns={spied} />)
+    const drawn = cell.mock.calls.length
+    rerender(<Harness drag={drag} undraggable="d1" rows={same} columns={spied} />)
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('false')
+    expect(cell.mock.calls.length).toBe(drawn)
+  })
+
+  it('cancels a drag of rows that carry nothing, and leaves one that starts in a field alone', () => {
+    const data = { setData: vi.fn(), effectAllowed: 'uninitialized' }
+    render(
+      <Harness
+        drag={{ type: 'application/x-test-rows', data: (keys) => (keys.includes('f1') ? undefined : keys.join(',')) }}
+        rows={[folderRow, ...items(1)]}
+        columns={[{ id: 'title', name: 'Title', isRowHeader: true, cell: (item) => (item.id === 'd1' ? <input aria-label="Name" /> : item.name) }]}
+      />,
+    )
+    expect(fireEvent.dragStart(row(/Pleadings/), { dataTransfer: data })).toBe(false)
+    expect(data.setData).not.toHaveBeenCalled()
+    expect(fireEvent.dragStart(screen.getByRole('textbox', { name: 'Name' }), { dataTransfer: data })).toBe(true)
+    expect(data.setData).not.toHaveBeenCalled()
+  })
+
+  it('puts a text cell in a box that ends in an ellipsis, with the whole text still in it', () => {
+    render(<Harness rows={[{ id: 'd1', textValue: 'A long name', name: 'A very long name that will not fit in its cell' }]} />)
+    const text = screen.getByText('A very long name that will not fit in its cell')
+    // Not the cell itself (a flex box, which clips its text with no ellipsis), but a box of its own
+    expect(text.closest('[role="rowheader"], [role="gridcell"]')).not.toBe(text)
+    expect(text.className).toMatch(/text/)
+    expect(tableCss).toMatch(/\.text \{[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap/)
   })
 })

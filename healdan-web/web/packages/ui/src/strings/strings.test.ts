@@ -8,7 +8,7 @@ afterEach(() => setLabels({ matter: 'Matter', matters: 'Matters' }))
 
 describe('t', () => {
   it('fills variables', () => {
-    expect(t('filters.count', { n: 2 })).toBe('2 Filters')
+    expect(t('doc.heading', { n: 2 })).toBe('Document # 2')
   })
 
   it('rejects an unknown key at type-check time', () => {
@@ -17,15 +17,23 @@ describe('t', () => {
   })
 
   it('uses US spelling', () => {
-    expect(t('favorites.title')).toBe('Favorites')
-    expect(t('settings.color')).toBe('Color')
+    expect(t('favorites.mine')).toBe('My Favorites')
+    expect(t('favorites.add')).toBe('Add to Favorites')
   })
 
   it('replaces the matter label in strings that use it', () => {
-    expect(t('matters.new')).toBe('New Matter')
+    expect(t('email.saveToMatter')).toBe('Save to Matter')
     setLabels({ matter: 'Project', matters: 'Projects' })
-    expect(t('matters.new')).toBe('New Project')
+    expect(t('email.saveToMatter')).toBe('Save to Project')
     expect(t('matters.title')).toBe('Projects')
+  })
+})
+
+describe('{matterLower}', () => {
+  it('puts the firm\'s word in the middle of a sentence in lower case', () => {
+    expect(t('tray.alreadyFiled', { n: 10455 })).toBe('Already in this matter as # 10455')
+    setLabels({ matter: 'Project', matters: 'Projects' })
+    expect(t('filing.chooseFolder')).toBe('Choose a folder inside the project')
   })
 })
 
@@ -43,7 +51,7 @@ describe('plural', () => {
   })
 
   it('leaves the numbers t() is given alone, as a doc # is never grouped', () => {
-    expect(t('filters.count', { n: 10388 })).toBe('10388 Filters')
+    expect(t('doc.heading', { n: 10388 })).toBe('Document # 10388')
   })
 
   it('uses the configured label', () => {

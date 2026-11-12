@@ -12,11 +12,14 @@ weight: 12
   comes later. See [Supported Databases](../what-runs/#supported-databases).
 - **No HTTPS on its own.** The app speaks plain HTTP, so anything beyond the machine running Docker goes through a
   [reverse proxy](../reverse-proxy/).
-- **No list of signed-in devices.** The web page doesn't show the devices a person has signed in on through the
-  API. Changing their password or disabling them signs every one out. For a lost device, also delete any LogicalDOC
-  API keys the person doesn't recognise, under the person icon, **Security → API Keys**: a key outlasts a password
-  change. Sessions already open in the web page or with a key stay open until an administrator kills them. See
-  [Healdan Settings](../../admin/healdan-settings/#device-sign-ins).
+- **Signed-in Devices lists device sign-ins only.** The app's **Signed-in Devices** shows a person the sign-ins of
+  their Healdan Helper on each Mac, and any program signed in through the API with a password, and revokes them one by one. It doesn't list the web page's own sessions, which
+  **Sign Out** ends, or LogicalDOC's API keys. Changing a person's password or disabling them signs every device out.
+  For a lost device, also delete any LogicalDOC API keys the person doesn't recognise, under the person icon,
+  **Security → API Keys** in the Classic Interface: a key outlasts a password change. Sessions already open in the web
+  page or with a key stay open until an administrator kills them. See
+  [Healdan Settings](../../admin/healdan-settings/#device-sign-ins) and the User Guide's
+  [Signed-in Devices](../../user/getting-started/signed-in-devices/).
 - **Microsoft Entra ID is experimental.** Signing in through Entra ID hasn't been tried against a real Entra tenant
   yet, only through Authentik and a stand-in provider. See [Microsoft Entra ID](../sign-in/entra-id/).
 - **Provider accounts have no password.** An account that signs in through a provider, such as Microsoft Entra ID,
@@ -114,6 +117,43 @@ weight: 12
   unaffected. Microsoft Office works for the second person once the first has quit their helper or signed out of the
   Mac.
 
+## The User App
+
+- **Some things are still in the Classic Interface.** The app at `/app/` finds, previews, files, checks out, edits
+  the properties of (Author and Typist included), renames, moves and deletes documents, makes folders, and adds
+  documents and folders to My Favorites and takes them off. Other things are done in the Classic
+  Interface, one choice away in the app's menu on the same sign-in: [The Classic
+  Interface](../../user/the-classic-interface/) lists them. They are:
+  - the Trash, to restore or remove what was deleted;
+  - permissions on documents and folders;
+  - a document's history;
+  - notes, and links between documents;
+  - sharing: shared links, emailing a document from the server, and exporting as a ZIP;
+  - your profile and password, and your messages;
+  - making and editing search folders;
+  - choosing and reordering the list's columns, and setting properties on many documents at once;
+  - renaming, moving and deleting folders, copying documents, and locking them;
+  - tags, and a bookmark's own name and description (the Bookmarks section; the app's My Favorites adds and removes
+    them).
+
+  Administration is there as well: the app has no screens for it yet.
+- **A secure address.** The app works only at an `https://` address, or on the machine Healdan runs on (`localhost`
+  or `127.0.0.1`). At a plain `http://` address on the network, browsers don't send the `Sec-Fetch-Site` header the
+  web session needs, so the app shows a page that says it needs a secure address, with a link to the Classic Interface,
+  which works there. Put Healdan behind a proxy that handles HTTPS: see [Reverse Proxy](../reverse-proxy/).
+- **Current browsers only.** The app is made for the current Safari, Chrome, Firefox and Edge, meaning the releases
+  of the last two years, and is tested in Chromium and WebKit (Chrome and Edge, and Safari). An older browser may
+  show it wrongly or not at all.
+- **Tablets work, phones don't.** The app is designed for a window 1,280 pixels wide or more, and works at a
+  tablet's 768: the left pane and the details, Filters and preview fold away behind buttons in the top bar, and open
+  over the list. On a phone's width it isn't supported.
+- **Only the root of a host name.** The app is at `/app/` and finds its files and the API from the root of the same
+  host name, so Healdan can't be published under a path such as `/healdan/`: give it a host name of its own, as
+  [Reverse Proxy](../reverse-proxy/) shows.
+- **English only.** The app's words are US English, whatever language a person chose for the Classic Interface.
+- **The helper's state isn't shown.** The app doesn't say whether Healdan Helper is running. Open in App hands
+  the document to it, and says what to do if nothing opened.
+
 ## Storage Backends
 
 - **A backend per Store, not per matter.** Each Store keeps its files on one
@@ -148,6 +188,10 @@ weight: 12
   the **Healdan** button shows there for the people the add-in is deployed to, but the pane only says that it works in
   the new Outlook for Mac for now. Deploy it to the Mac users who'll file email: see
   [Deploying the Outlook Add-in](../office-integration/#deploying-the-outlook-add-in).
+- **Dragging a message into the browser works in Safari only.** Dragged out of the new Outlook for Mac onto the User
+  app's folder list, a message arrives in Safari as an `.eml` file named after its subject, and is filed like any file. In
+  Chrome the page gets no drop at all. Drag the message to Finder first, or file it from the add-in's pane. Other
+  browsers haven't been tried.
 - **The primary mailbox only.** The add-in works in your own mailbox, not in shared or delegated ones: Outlook turns
   its button off there.
 - **Filing is one message at a time for now.** Filing several messages at once isn't available yet: the new Outlook for

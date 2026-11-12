@@ -45,6 +45,18 @@ describe('Menu', () => {
     await waitFor(() => expect(document.activeElement).toBe(trigger))
   })
 
+  it('can be disabled, so its button opens nothing', () => {
+    render(
+      <Menu label="Actions" isDisabled>
+        <MenuItem id="one">One</MenuItem>
+      </Menu>,
+    )
+    const trigger = screen.getByRole('button', { name: 'Actions' })
+    expect(trigger.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(trigger)
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
   it('passes axe, closed and open', async () => {
     const { container } = setup()
     await expectNoAxeViolations(container)

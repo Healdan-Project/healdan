@@ -74,7 +74,8 @@ provider, whichever one you chose.
 ## Signing Out
 
 In the app, open your menu, under your initials in the top bar, and choose **Sign Out**. In the Classic Interface,
-use the power icon in the top bar, next to the help icon. Either brings you to the sign-in page, and nothing signs
+use the power icon at the end of the top bar's buttons, after **Open in Healdan**. Either brings you to the sign-in
+page, and nothing signs
 you straight back in. Signing out in one signs you out of both, as they share the one sign-in.
 
 If you signed in through a provider, signing out of Healdan doesn't sign you out of the provider. On a computer

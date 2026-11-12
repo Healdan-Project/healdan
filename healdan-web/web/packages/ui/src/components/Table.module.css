@@ -95,6 +95,33 @@
   color: var(--hd-text);
 }
 
+/* A document that was just filed: one short highlight, none under prefers-reduced-motion */
+.row[data-flash] {
+  animation: flash 1.6s ease-out 1;
+}
+
+@keyframes flash {
+  from {
+    background: color-mix(in srgb, var(--hd-accent-fill) 35%, transparent);
+  }
+
+  to {
+    background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row[data-flash] {
+    animation: none;
+  }
+}
+
+/* A file is being dragged over the row: dropping it there saves it as a new version */
+.row[data-dropping] {
+  background: var(--hd-pill);
+  box-shadow: inset 0 0 0 2px var(--hd-accent-fill);
+}
+
 .cell {
   display: flex;
   align-items: center;
@@ -107,6 +134,13 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   outline: none;
+}
+
+.text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cell svg {
@@ -140,7 +174,31 @@
   color: var(--hd-text-secondary);
 }
 
-/* While the rows shown are about to change (a new order, new filters), they dim as well as being marked busy. */
-.frame[aria-busy='true'] {
-  opacity: var(--hd-busy-opacity);
+/* While the rows shown are about to change (a new order, new filters), a strip pulses along the top as well as the list being
+   marked busy. The rows keep their colours: a person can still read and act on them, and dimming text breaks AA contrast. */
+.frame[aria-busy='true']::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 0;
+  inset-inline: 0;
+  height: 2px;
+  background: var(--hd-accent-fill);
+  animation: busy-pulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes busy-pulse {
+  from {
+    opacity: 0.25;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .frame[aria-busy='true']::before {
+    animation: none;
+  }
 }

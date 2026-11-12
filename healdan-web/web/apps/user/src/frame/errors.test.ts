@@ -25,9 +25,9 @@ describe('messageFor', () => {
     })
   }
 
-  it('reads not-found and forbidden the same', () => {
+  it('says a 404 is not found, or not seen, and a 403 (which only comes for what the person can see) is no permission', () => {
     expect(messageFor(new ApiError(404, 'not-found', 'x', {}))).toBe("Not found, or you can't see it.")
-    expect(messageFor(new ApiError(403, 'forbidden', 'x', {}))).toBe("Not found, or you can't see it.")
+    expect(messageFor(new ApiError(403, 'forbidden', 'x', {}))).toBe("You don't have permission to do that.")
   })
 
   it('says Something went wrong for an unknown code, a network failure and anything else', () => {

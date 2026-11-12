@@ -21,7 +21,9 @@ import java.util.Date;
  * @param matter the matter the document is in, or null outside one
  * @param author the document's Author, or null when it has none
  * @param dateFiled when the document was filed
- * @param lastModified when the document last changed
+ * @param lastModified the document's Edit Date: when its file last changed,
+ *        filed or a new version saved, never a property change, rename or
+ *        move (CE's {@code ld_date}, else its creation)
  * @param hold who has the document checked out or locked, or null if it's
  *        free
  * @param canEdit whether the caller may check the document out and save to it

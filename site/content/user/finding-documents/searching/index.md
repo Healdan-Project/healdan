@@ -43,6 +43,8 @@ you're allowed to read. Suggested documents come from the same index as a search
 Search](#full-text-search)), so a document filed moments ago may not be suggested until the Indexer has read it, which
 can be up to 30 minutes by default. Matters are suggested at once.
 
+![The search box with "lease" typed in the Documents scope and its suggestions open: the matter 1002.1 – Commercial Lease with its client Brightwell Bakeries Ltd; five documents, among them Report on Lease – Unit 4 Weir Lane.odt, # 35 · 1002.1, and Lease – Draft for Client.docx, # 4 · 1002.1; and Search Documents for "lease" at the end](suggestions.png)
+
 ## `#` in the Box {#in-the-box}
 
 Type `#` and a doc # and press Enter to go straight to that document: `#10388`, `#10388.2` for version 2, `#10388.2.1`
@@ -108,14 +110,15 @@ scopes have them; Folders, Matters and Clients don't.
 
 | Filter | Options |
 |---|---|
-| **Edit Date** | Any Time, Today, Last 7 Days, Last 30 Days, This Year, or Between… with a **From** day and a **To** day (either can be left empty; an end date before the start date isn't applied, and the field says so) |
+| **Edit Date** | when the file last changed (filed, or a new version saved; not a change to its properties, a rename or a move): Any Time, Today, Last 7 Days, Last 30 Days, This Year, or Between… with a **From** day and a **To** day (either can be left empty; an end date before the start date isn't applied, and the field says so) |
 | **File Type** | Word, Excel, PowerPoint, PDF, Email, OpenDocument, Picture, Other |
 | **Author** | the people who are an Author of documents in the folder, or among the results |
 | **Class** | the classes of documents in the folder, or among the results |
 | **Client** | in search results only: the clients of the matters the results are in, by number |
 | **Matter** | in search results only: the matters the results are in, such as `1001.1` |
 
-Today and the date ranges follow the server's time zone.
+Today and the days of a range are your own: they follow your computer's time zone, as the dates in the list do. A
+document saved late in the evening counts as that day's, wherever the server is.
 
 - **Each option shows a count:** how many documents ticking it would leave, among those you can read that pass the
   other filters. Options that would leave none aren't listed, apart from any you've already ticked.
@@ -136,3 +139,5 @@ Today and the date ranges follow the server's time zone.
 - **Clicking a document** while the filters are open puts the panel away to make room for that document's own
   panel. The filters stay set, and the button brings the panel back.
 - **The filters are in the page's address,** so Back, bookmarks and a copied link keep them.
+
+![Search results for "lease" in Documents, by relevance, with Filters open at the right and the File Type filter set to Word and PDF: the chip "File Type: Word, PDF" above eight documents with their doc #s, versions, matter numbers 1002.1 and 1003.1, authors and Edit Dates, such as # 48 on 30 Oct 2026 and # 62 on 10 Nov 2026, where long titles and names end in an ellipsis; and the filters' groups, with File Type counts of Word 5 and PDF 3, then Author](results-filters.png)

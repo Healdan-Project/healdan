@@ -12,6 +12,11 @@
   grid-column: 1 / -1;
 }
 
+/* The pane wrapper adds no box of its own: the pane (a nav) is the grid's cell */
+.pane {
+  display: contents;
+}
+
 /* A column, so a view can fill what the banner leaves (a folder's list scrolls inside itself), and any other scrolls. */
 .main {
   display: flex;
@@ -19,4 +24,23 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
+}
+
+/* A narrow window: the list has the width, and the left pane opens over it, below the top bar */
+.narrow {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.over {
+  position: fixed;
+  inset-block: 52px 0;
+  inset-inline-start: 0;
+  z-index: 20;
+  display: flex;
+  width: min(300px, 100%);
+  box-shadow: var(--hd-shadow-popup);
+}
+
+.over > nav {
+  flex: 1;
 }

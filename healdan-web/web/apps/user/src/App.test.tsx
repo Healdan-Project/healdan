@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from './test/axe'
 import { folder, problem } from './test/fakeApi'
 import { renderApp } from './test/renderApp'
@@ -47,6 +47,22 @@ describe('the addresses', () => {
     expect(screen.getByRole('banner')).toBeTruthy()
     expect(screen.getByRole('navigation', { name: 'Navigation' })).toBeTruthy()
     expect(screen.getByRole('main')).toBeTruthy()
+  })
+
+  it('shows a view that fails to draw as the catalogue\'s short message with Try Again, inside the frame, not the router\'s own screen', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      // A row that isn't a document makes the list throw as it draws
+      await renderApp('/', { 'GET /v1/documents/recent': { items: [null], offset: 0, limit: 1, total: 1 } })
+      const main = screen.getByRole('main')
+      expect(await within(main).findByText('Something went wrong.')).toBeTruthy()
+      expect(within(main).getByRole('button', { name: 'Try Again' })).toBeTruthy()
+      expect(screen.queryByText('Something went wrong!')).toBeNull()
+      expect(screen.queryByRole('button', { name: /Show Error/ })).toBeNull()
+      expect(screen.getByRole('banner')).toBeTruthy()
+    } finally {
+      quiet.mockRestore()
+    }
   })
 
   it('passes axe on the start page, fully loaded', async () => {

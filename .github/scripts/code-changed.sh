@@ -12,7 +12,7 @@
 #                 contract (healdan-api's openapi.yaml), which the helper's contract tests read.
 #   web=true      when a pull request changes anything under healdan-web/ (the User app's workspace and its module), the
 #                 web workflow itself, or the API contract, whose types the app generates.
-# Pushes, and pull requests that change anything else, get code=true; pushes always get clients=true. The docs site's
+# Pushes, and pull requests that change anything else, get code=true; pushes always get clients=true and web=true. The docs site's
 # own checks run in docs-site.yml, and the clients' in clients.yml.
 #
 # Needs a checkout with fetch-depth 2: on pull_request, HEAD is the merge commit and HEAD^1 the base it merges into.

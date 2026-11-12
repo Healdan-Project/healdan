@@ -15,7 +15,8 @@ export function setLabels(next: { matter: string; matters: string }): void {
 }
 
 function fill(template: string, vars: Vars): string {
-  const all: Vars = { ...labels, ...vars }
+  // {matterLower} is the firm's word in the middle of a sentence
+  const all: Vars = { ...labels, matterLower: labels.matter.toLowerCase(), ...vars }
   return template.replace(/\{(\w+)\}/g, (whole, name: string) => (name in all ? String(all[name]) : whole))
 }
 

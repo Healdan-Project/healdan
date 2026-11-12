@@ -31,8 +31,18 @@
   inset-block-end: var(--hd-space-3);
 }
 
-.name {
+/* The name, with the document's Favorites star after it */
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--hd-space-2);
   margin: 0 0 var(--hd-space-2);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
   font-size: var(--hd-font-size-title);
   font-weight: var(--hd-weight-bold);
   overflow-wrap: anywhere;

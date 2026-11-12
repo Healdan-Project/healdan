@@ -20,6 +20,8 @@ export interface TextFieldProps extends FieldProps {
   type?: 'text' | 'number'
   /** The keyboard a phone shows; `decimal` for a number typed as text, which a form can then check itself */
   inputMode?: 'decimal' | 'numeric'
+  /** Takes the focus when it first draws, as the first field of a dialog does */
+  autoFocus?: boolean
 }
 
 function Mark({ required }: { required?: boolean }) {
@@ -31,9 +33,9 @@ function Mark({ required }: { required?: boolean }) {
 }
 
 /** A one-line field with its label above it. */
-export function TextField({ label, value, onChange, type = 'text', inputMode, required, error }: TextFieldProps) {
+export function TextField({ label, value, onChange, type = 'text', inputMode, autoFocus, required, error }: TextFieldProps) {
   return (
-    <AriaTextField className={styles.field} value={value} onChange={onChange} type={type} isRequired={required} validationBehavior="aria" isInvalid={error ? true : undefined}>
+    <AriaTextField className={styles.field} autoFocus={autoFocus} value={value} onChange={onChange} type={type} isRequired={required} validationBehavior="aria" isInvalid={error ? true : undefined}>
       <Label className={styles.label}>
         {label}
         <Mark required={required} />

@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { createRootRoute, createRoute, createRouter, type RouterHistory } from '@tanstack/react-router'
+import { useQueryClient } from '@tanstack/react-query'
+import { createRootRoute, createRoute, createRouter, type ErrorComponentProps, type RouterHistory } from '@tanstack/react-router'
+import { ErrorPanel } from './frame/ErrorPanel'
 import { Frame } from './frame/Frame'
 import { filterSearch, multiFilters, type Filters } from './filters/useFilters'
 import { idFrom } from './queries'
@@ -106,9 +108,26 @@ const docRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([indexRoute, recentRoute, foldersRoute, searchRoute, docRoute])
 
+/**
+ * A view that failed as it drew (spec 10.7): the catalogue's short message and Try Again, which asks the server again
+ * for what the views show and draws the view anew. Never the error's own text.
+ */
+export function RouteError({ error, reset }: ErrorComponentProps) {
+  const queryClient = useQueryClient()
+  return (
+    <ErrorPanel
+      error={error}
+      onRetry={() => {
+        void queryClient.invalidateQueries()
+        reset()
+      }}
+    />
+  )
+}
+
 // The app lives under /app, served by AppServlet. Only the root context is supported in M6.
 export function createAppRouter(history?: RouterHistory) {
-  return createRouter({ routeTree, basepath: '/app', history, parseSearch, stringifySearch })
+  return createRouter({ routeTree, basepath: '/app', history, parseSearch, stringifySearch, defaultErrorComponent: RouteError })
 }
 
 // Links, navigate() and the search hooks are typed from the routes above.

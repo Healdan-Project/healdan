@@ -5,15 +5,22 @@ package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 
 import org.apache.commons.io.FileUtils;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -57,6 +64,22 @@ public class FolderResourceTest extends ApiTestCase {
 	private Folder workspace;
 
 	private Folder documents;
+
+	private static TimeZone zone;
+
+	// The test context has Hibernate write dates in Europe/Rome, and the listing's "today" is the JVM's zone, as in
+	// production, where the two are the same. With any other zone the two disagree on the day for some hours of it, so
+	// the class runs in Rome's, whatever the machine's.
+	@BeforeClass
+	public static void inRome() {
+		zone = TimeZone.getDefault();
+		TimeZone.setDefault(TimeZone.getTimeZone("Europe/Rome"));
+	}
+
+	@AfterClass
+	public static void backToTheMachinesZone() {
+		TimeZone.setDefault(zone);
+	}
 
 	@Before
 	public void createLayout() throws Exception {
@@ -622,6 +645,77 @@ public class FolderResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testEditDateIsWhenTheFileChanged() throws Exception {
+		// A was filed in January and the Indexer touched it last; B was filed in February and nothing touched it since
+		Document a = fx.upload(documents, "a.docx", "a", clerk);
+		Document b = fx.upload(documents, "b.docx", "b", clerk);
+		awaitAsyncWork();
+		jdbc().update("update ld_document set ld_date = '2026-01-10 09:00:00', ld_lastmodified = '2026-03-01 10:00:00' where ld_id = ?",
+				a.getId());
+		jdbc().update("update ld_document set ld_date = '2026-02-10 09:00:00', ld_lastmodified = '2026-02-10 09:00:00' where ld_id = ?",
+				b.getId());
+		DocumentDAO.get().evict(Document.class, a.getId());
+		DocumentDAO.get().evict(Document.class, b.getId());
+		String token = signIn(clerk);
+		String base = "/api/v1/folders/" + documents.getId() + "/children?";
+
+		assertEquals(get(base).token(token).send().toString(), 2, get(base).token(token).send().json().path("total").asInt());
+		List<String> ascending = new ArrayList<>();
+		ApiResponse sorted = get(base + "sort=edited&order=asc").token(token).send();
+		for (JsonNode item : sorted.json().path("items"))
+			ascending.add(item.path("name").textValue());
+		assertEquals(sorted.toString() + " by the file's date, not the last touch", List.of("a.docx", "b.docx"), ascending);
+		List<String> inFebruary = new ArrayList<>();
+		for (JsonNode item : get(base + "from=2026-02-01&to=2026-02-28").token(token).send().json().path("items"))
+			inFebruary.add(item.path("name").textValue());
+		assertEquals("the filter reads it too", List.of("b.docx"), inFebruary);
+		assertEquals(0, get(base + "edited=today").token(token).send().json().path("total").asInt());
+	}
+
+	@Test
+	public void testEditDateFiltersFollowTheZoneGiven() throws Exception {
+		// M6 R90: the days are the person's, whose zone the app sends; without one, the server's
+		ZoneId server = ZoneId.systemDefault();
+		ZoneId far = ZoneMoments.far();
+		Instant between = ZoneMoments.onDifferentDays(server, far);
+		Instant today = ZoneMoments.todayInOneOnly(server, far);
+		Document late = fx.upload(documents, "late.docx", "late", clerk);
+		Document recent = fx.upload(documents, "recent.docx", "recent", clerk);
+		awaitAsyncWork();
+		jdbc().update("update ld_document set ld_date = ? where ld_id = ?", Timestamp.from(between), late.getId());
+		jdbc().update("update ld_document set ld_date = ? where ld_id = ?", Timestamp.from(today), recent.getId());
+		DocumentDAO.get().evict(Document.class, late.getId());
+		DocumentDAO.get().evict(Document.class, recent.getId());
+		String token = signIn(clerk);
+		String base = "/api/v1/folders/" + documents.getId() + "/children?";
+		String here = ZoneMoments.day(between, server);
+		String there = ZoneMoments.day(between, far);
+		assertNotEquals(here, there);
+
+		// Between: the day it falls on in each zone
+		assertEquals(List.of("late.docx"), names(base + "from=" + here + "&to=" + here, token));
+		assertEquals(List.of(), names(base + "from=" + here + "&to=" + here + ZoneMoments.param(far), token));
+		assertEquals(List.of("late.docx"), names(base + "from=" + there + "&to=" + there + ZoneMoments.param(far), token));
+		assertEquals(List.of("late.docx"), names(base + "from=" + here + "&to=" + here + ZoneMoments.param(server), token));
+
+		// Today: what is today in one zone is yesterday in the other
+		boolean todayHere = ZoneMoments.today(today, server);
+		assertNotEquals(todayHere, ZoneMoments.today(today, far));
+		assertEquals(todayHere ? List.of("recent.docx") : List.of(), names(base + "edited=today", token));
+		assertEquals(todayHere ? List.of() : List.of("recent.docx"), names(base + "edited=today" + ZoneMoments.param(far), token));
+	}
+
+	/** The names in the first page of a folder's children */
+	private List<String> names(String query, String token) {
+		ApiResponse response = get(query).token(token).send();
+		assertEquals(query + ": " + response, 200, response.status());
+		List<String> names = new ArrayList<>();
+		for (JsonNode item : response.json().path("items"))
+			names.add(item.path("name").textValue());
+		return names;
+	}
+
+	@Test
 	public void testChildrenRefusals() throws Exception {
 		String token = signIn(clerk);
 		String base = "/api/v1/folders/" + documents.getId() + "/children";
@@ -629,7 +723,7 @@ public class FolderResourceTest extends ApiTestCase {
 		for (String query : new String[] { "sort=size", "sort=docnumber", "order=up", "type=folder&type=pdf",
 				"type=folder&author=clerk", "type=folder&facets=type", "type=docx", "edited=week",
 				"edited=7d&from=2026-01-01", "from=2026-13-01", "from=2026-06-02&to=2026-06-01", "facets=size",
-				"matter=1", "client=x", "author=" }) {
+				"matter=1", "client=x", "author=", "zone=Mars/Olympus", "edited=today&zone=%2B99:00" }) {
 			ApiResponse response = get(base + "?" + query).token(token).send();
 			assertEquals(query + ": " + response, 400, response.status());
 			assertEquals(query, "bad-request", response.code());

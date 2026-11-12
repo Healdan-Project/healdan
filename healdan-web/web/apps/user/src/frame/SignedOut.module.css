@@ -13,6 +13,15 @@
 .message {
   margin: 0;
   font-size: var(--hd-font-size-title);
+  font-weight: normal;
+}
+
+.detail {
+  max-width: 36em;
+  margin: 0;
+  padding: 0 var(--hd-space-5);
+  color: var(--hd-text-secondary);
+  text-align: center;
 }
 
 /* The accent button's look, on a link. */

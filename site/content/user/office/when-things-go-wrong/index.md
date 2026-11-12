@@ -198,7 +198,8 @@ next save then starts from a version Healdan has moved past.
 
 ## Signed Out or Signed In Again
 
-When your sign-in stops working (you changed your password, the helper wasn't used for a long time, or your account
+When your sign-in stops working (you changed your password, you revoked it in
+[Signed-in Devices](../../getting-started/signed-in-devices/), the helper wasn't used for a long time, or your account
 at your firm's sign-in provider was turned off), the helper says "Sign in to Healdan again. Your saves wait on this
 computer until you do", and shows the Sign In window, which says "Your sign-in ended. Sign in again." If the helper
 wasn't running when the sign-in ended, the Sign In window says so the next time it starts. If you then quit the

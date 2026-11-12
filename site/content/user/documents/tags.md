@@ -3,6 +3,10 @@ title: Tags
 weight: 12
 ---
 
+{{< callout type="info" >}}
+This is in the [Classic Interface](../../the-classic-interface/), which the Healdan app doesn't replace yet. In the app, open your menu and choose **Classic Interface**; you stay signed in.
+{{< /callout >}}
+
 Tags are short words you put on documents to group them across matters and folders: `lease` on every lease,
 `completion` on what a completion needs. A document can have several, and anyone who can read it sees them.
 

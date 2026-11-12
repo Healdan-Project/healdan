@@ -15,7 +15,9 @@ public class ReturnPathTest {
 	@Test
 	public void testKept() {
 		for (String path : new String[] { "/app/doc/10388", "/app/search?scope=documents&q=charter&type=pdf",
-				"/app/", "/app/search?q=%27%3C", "/app/search?scope=documents&q=charter+dispute", "/app/doc/10388.2" })
+				"/app/", "/app/search?q=%27%3C", "/app/search?scope=documents&q=charter+dispute", "/app/doc/10388.2",
+				// URLSearchParams leaves a search's wildcard as it is
+				"/app/search?scope=documents&q=lease*", "/app/search?q=*report" })
 			assertEquals(path, ReturnPath.safe(path));
 	}
 

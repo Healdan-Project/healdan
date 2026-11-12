@@ -7,7 +7,7 @@
 # workspace's package-lock.json. Then curl checks the forgery refusals a browser can't make: a cross-site sign-out
 # and a sign-out without the app's header, and that the web session's GET works.
 # Needs the smoke fixture, whose SmokeWebUserSeed makes webuser (test-api.sh's apiuser is blocked by its throttle
-# check, so the browser tests use another user), a running stack, Docker, curl, and node or python3.
+# check, so the browser tests use another user), a running stack, Docker, curl and python3.
 # Usage: BASE=http://127.0.0.1:18080 docker/tests/test-web.sh
 # The browser container shares the host's network (--network host), which Linux and CI allow. Docker Desktop on a Mac
 # doesn't reach the host's ports that way: there, set WEB_NETWORK=bridge. The browser then still opens
@@ -43,17 +43,28 @@ browsers() {
   docker run --rm --network "$WEB_NETWORK" --ipc=host -e BASE="$WEB_BROWSER_BASE" -e WEBUSER_PASSWORD \
     -v "$PWD/healdan-web/web:/src:ro" "mcr.microsoft.com/playwright:v${version}-noble" \
     bash -c "$PROXY "'mkdir /work && cd /src && tar cf - --exclude=node_modules --exclude=dist --exclude=e2e-results . | tar xf - -C /work \
-      && cd /work && npm ci --ignore-scripts --no-audit --no-fund && npx playwright test --reporter=line'
+      && cd /work && npm ci --ignore-scripts --no-audit --no-fund && { npx playwright test --reporter=line || { status=$?
+        # The container goes with its results: the page of each failed test, as Playwright saw it, says what was on screen
+        for f in e2e-results/*/error-context.md; do [ -f "$f" ] && { echo "== $f"; head -c 8000 "$f"; echo; }; done
+        exit $status; }; }'
 }
-check "the sign-in and the way across, in Chromium and WebKit" browsers
+check "every spec in healdan-web/web/e2e/, in Chromium and WebKit" browsers
 
 COOKIES=$(mktemp)
 trap 'rm -f "$COOKIES"' EXIT
-code() { curl -s -b "$COOKIES" -o /dev/null -w '%{http_code}' "$@"; }
+# Every call has a deadline, so a stack that stopped answering fails here rather than holding the job
+code() { curl -s --max-time 30 -b "$COOKIES" -o /dev/null -w '%{http_code}' "$@"; }
 
-curl -s -c "$COOKIES" -o /dev/null "$BASE/login.jsp"
-curl -s -b "$COOKIES" -c "$COOKIES" -o /dev/null -d 'j_username=webuser' --data-urlencode "j_password=$WEBUSER_PASSWORD" \
-  "$BASE/j_spring_security_check"
+# The sign-in page's form, as a browser posts it. LogicalDOC answers one that works with the session's id in a SID header,
+# and one that fails with a redirect to the context's root
+signs_in() {
+  local headers
+  curl -s --max-time 30 -c "$COOKIES" -o /dev/null "$BASE/login.jsp" || return 1
+  headers=$(curl -s --max-time 30 -b "$COOKIES" -c "$COOKIES" -o /dev/null -D - \
+    -d 'j_username=webuser' --data-urlencode "j_password=$WEBUSER_PASSWORD" "$BASE/j_spring_security_check") || return 1
+  grep -qi '^SID: ' <<<"$headers"
+}
+check "curl signs in as webuser" signs_in
 check "the web session's GET answers 200" test "$(code -H 'Sec-Fetch-Site: same-origin' "$BASE/api/v1/me")" = 200
 check "a cross-site sign-out is refused with 401" \
   test "$(code -H 'Sec-Fetch-Site: cross-site' -H 'X-Healdan-Client: web' -X DELETE "$BASE/api/v1/session")" = 401

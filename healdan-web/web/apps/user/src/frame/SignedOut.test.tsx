@@ -10,7 +10,8 @@ describe('SignedOut', () => {
   it('says so and offers Sign In, a link to the address the person is at', async () => {
     window.history.replaceState(null, '', '/app/folders/5?sel=10388')
     const { container } = render(<SignedOut />)
-    expect(screen.getByText("You've been signed out.")).toBeTruthy()
+    // The page's one heading, so a screen reader has a place to start (axe's page-has-heading-one)
+    expect(screen.getByRole('heading', { level: 1, name: "You've been signed out." })).toBeTruthy()
     const link = screen.getByRole('link', { name: 'Sign In' })
     expect(link.getAttribute('href')).toBe('/app/folders/5?sel=10388')
     await expectNoAxeViolations(container)

@@ -6,6 +6,7 @@ import { formatDate, formatVersion, Icon, t, type IconName, type TableColumn, ty
 import type { SearchScope } from '../search/scopes'
 import { fileIcon } from '../fileIcon'
 import { matterParts } from '../matterDisplay'
+import { DocumentTitle } from '../organising/RenameField'
 import { childKey, type Hit } from './useListing'
 import styles from './views.module.css'
 
@@ -35,7 +36,7 @@ const title: TableColumn<ListRow> = {
   cell: ({ item }) => (
     <>
       <Icon name={iconOf(item)} />
-      <span className={styles.name}>{item.type === 'matter' ? item.display : item.name}</span>
+      {item.type === 'document' ? <DocumentTitle document={item} className={styles.name} /> : <span className={styles.name}>{item.type === 'matter' ? item.display : item.name}</span>}
     </>
   ),
 }
@@ -83,7 +84,8 @@ export function hitColumns(scope: SearchScope): TableColumn<ListRow>[] {
     ]
   }
   if (scope === 'folders') return [title, matterColumn()]
-  return [title, docNumber, version, matterColumn(), author, edited]
+  // Title first: the others are narrower here than in a folder, and each ends in an ellipsis when it doesn't fit
+  return [{ ...title, minWidth: 220 }, { ...docNumber, width: 80 }, { ...version, width: 70 }, { ...matterColumn(), width: 130 }, author, { ...edited, width: 116 }]
 }
 
 /** What a list keeps while the reading pane is open and the list is narrow (spec section 6.4): Title, Doc # and Edit Date. */

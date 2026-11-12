@@ -1,13 +1,17 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import { detailsRoutes, letter, propertiesOf as fields } from '../test/details'
-import { children, document, folder, page, problem, type Routes } from '../test/fakeApi'
+import { children, document, favorite, folder, page, problem, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
+import { THUMBNAIL_RETRY_MS } from './DetailsPanel'
+import type { components } from '@healdan/api'
+
+type S = components['schemas']
 
 const correspondence = folder({ id: 7, name: 'Correspondence' })
 
@@ -41,12 +45,50 @@ describe('DetailsPanel', () => {
     expect(await within(panel).findByRole('heading', { level: 2, name: 'Letter from Dunmere Pryce.pdf' })).toBeTruthy()
     expect(within(panel).getByText('# 10388 · Version 2.1 · 209 KB')).toBeTruthy()
     const thumbnail = panel.querySelector('img')
-    expect(thumbnail?.getAttribute('src')).toBe('/api/v1/documents/10388/thumbnail')
+    // Addressed by its file version, so a new version's never comes from the browser's cache
+    expect(thumbnail?.getAttribute('src')).toBe('/api/v1/documents/10388/thumbnail?v=2.1')
     // Edit is for a document whose properties the person may change: none of these fields says it may be
     expect((within(panel).getByRole('button', { name: 'Edit' }) as HTMLButtonElement).disabled).toBe(true)
     for (const name of ['Open', 'Download', 'Preview', 'Copy Link']) {
       expect((within(panel).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false)
     }
+  })
+
+  it('adds the document to Favorites with the star by its name, which Tab reaches, and takes it out again', async () => {
+    let favorites: S['FavoriteView'][] = []
+    const sent: unknown[] = []
+    const { api } = await renderApp(
+      '/folders/7?sel=10388',
+      routes({
+        'GET /v1/me/favorites': () => page(favorites),
+        'POST /v1/me/favorites': ({ body }: { body?: unknown }) => {
+          sent.push(body)
+          favorites = [favorite(letter, 960)]
+          return favorites[0]
+        },
+        'DELETE /v1/me/favorites/*': () => {
+          favorites = []
+          return undefined
+        },
+      }),
+    )
+    const panel = await details()
+    const add = await within(panel).findByRole('button', { name: 'Add Document to Favorites' })
+    await waitFor(() => expect((add as HTMLButtonElement).disabled).toBe(false))
+    // After the thumbnail's Preview, Tab comes to the star
+    within(panel).getByRole('button', { name: 'Preview' }).focus()
+    await userEvent.tab()
+    expect(globalThis.document.activeElement).toBe(add)
+
+    await userEvent.keyboard('{Enter}')
+    const remove = await within(panel).findByRole('button', { name: 'Remove Document from Favorites' })
+    expect(sent).toEqual([{ docNumber: 10388 }])
+    // My Favorites shows it too
+    expect(await within(screen.getByRole('navigation', { name: 'Navigation' })).findByRole('link', { name: /Letter from Dunmere Pryce/ })).toBeTruthy()
+
+    await userEvent.click(remove)
+    expect(await within(panel).findByRole('button', { name: 'Add Document to Favorites' })).toBeTruthy()
+    expect(api.callsTo('DELETE /v1/me/favorites/960')).toHaveLength(1)
   })
 
   it('lists the properties in order, without Location outside search results and without the email fields of a document', async () => {
@@ -130,6 +172,35 @@ describe('DetailsPanel', () => {
 
     await waitFor(() => expect(panel.querySelector('img')).toBeNull())
     expect(panel.querySelector('.thumb svg')).toBeTruthy()
+  })
+
+  it('asks for a thumbnail that was missing again a little later, as the server makes it after a filing', async () => {
+    await renderApp('/folders/7?sel=10388', routes())
+    const panel = await details()
+    const img = await waitFor(() => {
+      const found = panel.querySelector('img')
+      expect(found).toBeTruthy()
+      return found!
+    })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      fireEvent.error(img)
+      await vi.waitFor(() => expect(panel.querySelector('img')).toBeNull())
+      act(() => vi.advanceTimersByTime(THUMBNAIL_RETRY_MS))
+      expect(panel.querySelector('img')?.getAttribute('src')).toBe('/api/v1/documents/10388/thumbnail?v=2.1')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('asks for the new thumbnail when a new version is saved', async () => {
+    let doc = letter
+    const { queryClient } = await renderApp('/folders/7?sel=10388', routes({ 'GET /v1/documents/10388': () => doc }))
+    const panel = await details()
+    await waitFor(() => expect(panel.querySelector('img')?.getAttribute('src')).toBe('/api/v1/documents/10388/thumbnail?v=2.1'))
+    doc = { ...letter, version: '3.0', fileVersion: '3.0' }
+    await act(() => queryClient.invalidateQueries({ queryKey: ['documents', 10388] }))
+    await waitFor(() => expect(panel.querySelector('img')?.getAttribute('src')).toBe('/api/v1/documents/10388/thumbnail?v=3.0'))
   })
 
   it('asks for no thumbnail of a document the person cannot open', async () => {

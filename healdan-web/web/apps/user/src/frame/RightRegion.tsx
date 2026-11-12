@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { t } from '@healdan/ui'
 import { useSelection } from '../selection'
+import { focusInto, isInnermost, openLayer, useNarrow } from './narrow'
 import styles from './RightRegion.module.css'
 
 /** What the right region shows (spec sections 6.1, 6.2 and 6.4) */
@@ -14,11 +15,22 @@ export interface RightRegion {
   show: RegionKind | null
   /** Whether the reading pane is docked, though Filters may be shown over it for now */
   docked: boolean
-  /** Opens Filters or docks the reading pane; 'details' shows what a click on a row shows (the pane if docked) */
-  open: (kind: RegionKind) => void
+  /**
+   * Opens Filters or docks the reading pane; 'details' shows what a click on a row shows (the pane if docked). In a narrow
+   * window the region is folded away and this opens it over the list, unless `reveal` is false (a click on a row isn't a
+   * request to see the region).
+   */
+  open: (kind: RegionKind, options?: { reveal?: boolean }) => void
   /** Closes what is shown: Filters, else the reading pane, which brings the details back */
   close: () => void
+  /** A narrow window: the region is folded away behind its button, and shows over the list while `narrowOpen` */
+  narrow: boolean
+  narrowOpen: boolean
+  setNarrowOpen: (open: boolean) => void
 }
+
+/** The top bar's button for the region: where the focus goes back to when Esc closes it */
+export const REGION_BUTTON = 'data-region-button'
 
 const Context = createContext<RightRegion | null>(null)
 
@@ -32,20 +44,45 @@ export function RightRegionProvider({ children }: { children: ReactNode }) {
   const { selected } = useSelection()
   const [filters, setFilters] = useState(false)
   const [docked, setDocked] = useState(false)
+  const narrow = useNarrow()
+  const [narrowOpen, setNarrowOpen] = useState(false)
+
+  // Esc closes the region shown over the list, and the focus goes back to the button that opened it. A popup inside the region
+  // that takes Esc for itself stops the event first.
+  useEffect(() => {
+    if (!narrow || !narrowOpen) return
+    const closeLayer = openLayer('region')
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || !isInnermost('region')) return
+      event.preventDefault()
+      setNarrowOpen(false)
+      document.querySelector<HTMLElement>(`[${REGION_BUTTON}]`)?.focus()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      closeLayer()
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [narrow, narrowOpen])
+
   const value = useMemo<RightRegion>(
     () => ({
+      narrow,
+      narrowOpen,
+      setNarrowOpen,
       show: filters ? 'filters' : docked ? 'preview' : selected === undefined ? null : 'details',
       docked,
-      open: (kind) => {
+      open: (kind, { reveal = true } = {}) => {
         setFilters(kind === 'filters')
         if (kind === 'preview') setDocked(true)
+        if (reveal) setNarrowOpen(true)
       },
       close: () => {
         if (filters) setFilters(false)
         else setDocked(false)
       },
     }),
-    [filters, docked, selected],
+    [filters, docked, selected, narrow, narrowOpen],
   )
   return <Context.Provider value={value}>{children}</Context.Provider>
 }
@@ -74,7 +111,9 @@ export function regionKind(show: RegionKind | null, offers: RegionOffers): Regio
 
 /** What the region draws for a view that offers these (see {@link regionKind}) */
 export function useRegionKind(offers: RegionOffers): RegionKind | null {
-  return regionKind(useRightRegion().show, offers)
+  const region = useRightRegion()
+  // Folded away, it takes no width from the list (it shows over it while it's open)
+  return region.narrow ? null : regionKind(region.show, offers)
 }
 
 export interface RightRegionProps {
@@ -87,7 +126,33 @@ export interface RightRegionProps {
 /** The region itself, beside a list. It isn't there at all when it has nothing to show, so the list takes its width. */
 export function RightRegionView({ filters, details, preview }: RightRegionProps) {
   const content = { filters, details, preview }
-  const kind = useRegionKind({ filters: !!filters, details: !!details, preview: !!preview })
+  const region = useRightRegion()
+  const over = useRef<HTMLElement>(null)
+  const opened = region.narrow && region.narrowOpen
+  useEffect(() => {
+    if (!opened) return
+    focusInto(over.current)
+    // What the region holds is drawn when its data comes, which can replace the control that has the focus: until then, and
+    // for a second at most, the focus is taken again if it ends up on the page
+    const timer = setInterval(() => {
+      if (document.activeElement === document.body) focusInto(over.current)
+    }, 100)
+    const stop = setTimeout(() => clearInterval(timer), 1000)
+    return () => {
+      clearInterval(timer)
+      clearTimeout(stop)
+    }
+  }, [opened])
+  const kind = regionKind(region.show, { filters: !!filters, details: !!details, preview: !!preview })
+  if (region.narrow) {
+    // Folded away behind the top bar's button. Opened, it covers the list, and says what it's for when it has nothing.
+    if (!region.narrowOpen) return null
+    return (
+      <section ref={over} className={`${styles.region} ${styles.over} ${kind === 'preview' ? styles.wide : ''}`} aria-label={kind ? labels[kind]() : t('frame.side')}>
+        {kind ? content[kind] : <p className={styles.empty}>{t('frame.sideEmpty')}</p>}
+      </section>
+    )
+  }
   if (!kind) return null
   return (
     <section className={`${styles.region} ${kind === 'preview' ? styles.wide : ''}`} aria-label={labels[kind]()}>

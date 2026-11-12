@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { createQueryClient } from '../queryClient'
 import { ServicesProvider } from '../services'
 import { createSignedOut } from '../signedOut'
-import { children, document, fakeApi, folder, type FakeApi } from '../test/fakeApi'
+import { children, document, fakeApi, folder, zone, type FakeApi } from '../test/fakeApi'
 import { useListing, type ListingOptions } from './useListing'
 
 const all = [folder({ id: 8, name: 'Drafts' }), ...Array.from({ length: 249 }, (_, i) => document({ docNumber: 10000 + i, name: `D${i}.pdf` }))]
@@ -40,7 +40,7 @@ describe('useListing', () => {
     expect(result.current.total).toBe(250)
     expect(result.current.documents).toBe(249)
     expect(api.calls).toEqual([
-      { method: 'GET', path: '/v1/folders/7/children', query: { sort: 'docNumber', order: 'desc', offset: 0, limit: 100 } },
+      { method: 'GET', path: '/v1/folders/7/children', query: { sort: 'docNumber', order: 'desc', zone, offset: 0, limit: 100 } },
     ])
   })
 
@@ -107,7 +107,7 @@ describe('useListing', () => {
     await waitFor(() => expect(result.current.rows).toHaveLength(100))
     rerender({ folderId: 7, sort: { column: 'title', direction: 'descending' } })
     await waitFor(() => expect(api.calls).toHaveLength(2))
-    expect(api.calls[1]?.query).toEqual({ sort: 'title', order: 'desc', offset: 0, limit: 100 })
+    expect(api.calls[1]?.query).toEqual({ sort: 'title', order: 'desc', zone, offset: 0, limit: 100 })
   })
 
   it('asks for nothing when told not to', async () => {

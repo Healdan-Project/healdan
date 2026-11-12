@@ -21,7 +21,7 @@ export function FiltersButton({ open, active, onPress, ref }: FiltersButtonProps
       <span className={styles.funnel}>
         <Icon name="filter" />
         {t('filters.button')}
-        {/* The name reads "Filters 2 in use", which holds the words and the number the eye sees (WCAG 2.5.3) */}
+        {/* The name reads "Filters 2 in Use", which holds the words and the number the eye sees (WCAG 2.5.3) */}
         {active > 0 && (
           <>
             {' '}

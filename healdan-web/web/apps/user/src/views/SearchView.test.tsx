@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
-import { client, document, folder, matter, problem, type Routes } from '../test/fakeApi'
+import { client, document, folder, matter, problem, zone, type Routes } from '../test/fakeApi'
 import { detailsRoutes } from '../test/details'
 import { bringObservedIntoView } from '../test/intersection'
 import { renderApp } from '../test/renderApp'
@@ -75,7 +75,7 @@ describe('SearchView', () => {
     // By relevance, so no column is the sort
     expect(within(await grid()).getAllByRole('columnheader').some((h) => h.getAttribute('aria-sort') === 'ascending' || h.getAttribute('aria-sort') === 'descending')).toBe(false)
     expect(await within(main()).findByText('2 documents')).toBeTruthy()
-    expect(api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'documents', q: 'charter', offset: 0, limit: 100 })
+    expect(api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'documents', q: 'charter', zone, offset: 0, limit: 100 })
   })
 
   it('puts the matter number with the client muted in the Matter column, and the matter name where a keyboard and a screen reader reach it', async () => {
@@ -101,7 +101,7 @@ describe('SearchView', () => {
     const { api, router } = await renderApp('/search?scope=documents&q=charter', routes())
     await rows()
     fireEvent.click(within(await grid()).getByRole('columnheader', { name: /Edit Date/ }))
-    await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toEqual({ scope: 'documents', q: 'charter', sort: 'edited', order: 'asc', offset: 0, limit: 100 }))
+    await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toEqual({ scope: 'documents', q: 'charter', sort: 'edited', order: 'asc', zone, offset: 0, limit: 100 }))
     expect(new URLSearchParams(router.history.location.search).get('sort')).toBe('edited')
     expect(new URLSearchParams(router.history.location.search).get('q')).toBe('charter')
     await waitFor(() => expect(within(grid2()).getByRole('columnheader', { name: /Edit Date/ }).getAttribute('aria-sort')).toBe('ascending'))
@@ -114,9 +114,15 @@ describe('SearchView', () => {
   it('keeps a sort, the filters and the scope from the address', async () => {
     const { api } = await renderApp('/search?scope=all&q=charter&sort=title&order=desc&type=pdf&matter=1001.1', routes())
     await rows()
-    expect(api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'all', q: 'charter', sort: 'title', order: 'desc', type: ['pdf'], matter: ['1001.1'], offset: 0, limit: 100 })
+    expect(api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'all', q: 'charter', sort: 'title', order: 'desc', type: ['pdf'], matter: ['1001.1'], zone, offset: 0, limit: 100 })
     expect(within(grid2()).getByRole('columnheader', { name: /Title/ }).getAttribute('aria-sort')).toBe('descending')
     expect(within(main()).getByText('in Docs & Emails')).toBeTruthy()
+  })
+
+  it("sends the person's time zone with a document search, so Today and the days of a range are theirs", async () => {
+    const { api } = await renderApp('/search?scope=documents&q=charter&from=2026-11-01&to=2026-11-02', routes())
+    await rows()
+    expect(api.callsTo('GET /v1/search')[0]?.query).toMatchObject({ from: '2026-11-01', to: '2026-11-02', zone: Intl.DateTimeFormat().resolvedOptions().timeZone })
   })
 
   it('searches Emails in the emails scope', async () => {
@@ -175,6 +181,31 @@ describe('SearchView', () => {
     expect(new URLSearchParams(router.history.location.search).get('q')).toBe('charter')
     await waitFor(() => expect(api.callsTo('GET /v1/search').some((c) => (c.query?.type as string[] | undefined)?.[0] === 'word' && c.query?.offset === 0 && c.query?.limit === 100)).toBe(true))
     expect(within(main()).getByRole('group', { name: 'Filters in Use' })).toBeTruthy()
+  })
+
+  it("keeps the last answer's groups and counts on screen, dimmed, while a recount is held, never zeros", async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    await renderApp(
+      '/search?scope=documents&q=charter',
+      routes({
+        'GET /v1/search': async ({ query }: { query?: Record<string, unknown> }) => {
+          // The recount for the ticked type is held; the list and the first count answer at once
+          if (query?.facets && query?.type) await gate
+          return { ...hits(found), ...(query?.facets ? { facets } : {}) }
+        },
+      }),
+    )
+    await rows()
+    await userEvent.click(funnel())
+    const region = await screen.findByRole('region', { name: 'Filters' })
+    await userEvent.click(await within(region).findByRole('checkbox', { name: 'Word, 1' }))
+    await waitFor(() => expect(region.querySelector('[aria-busy="true"]')).toBeTruthy())
+    for (const group of ['File Type', 'Author', 'Class', 'Client', 'Matter']) expect(within(region).getByRole('group', { name: group })).toBeTruthy()
+    expect(within(region).getByRole('checkbox', { name: 'Word, 1' })).toBeTruthy()
+    expect([...region.querySelectorAll('[data-count]')].map((one) => one.textContent)).not.toContain('0')
+    release()
+    await waitFor(() => expect(region.querySelector('[aria-busy="true"]')).toBeNull())
   })
 
   it('says when the counts come from the most relevant matches only, and offers a ticked value without a made-up count', async () => {

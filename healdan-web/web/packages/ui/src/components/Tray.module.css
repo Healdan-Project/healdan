@@ -1,0 +1,80 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The bottom left corner, as the toasts have the right; above a modal (z-index 100) */
+.tray {
+  position: fixed;
+  left: var(--hd-space-5);
+  bottom: var(--hd-space-5);
+  z-index: 190;
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  width: min(360px, calc(100vw - 2 * var(--hd-space-5)));
+  max-height: min(240px, 30dvh);
+  padding: var(--hd-space-4);
+  border-radius: var(--hd-radius-large);
+  background: var(--hd-window);
+  color: var(--hd-text);
+  box-shadow: var(--hd-shadow-popup);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+}
+
+.summary {
+  flex: 1;
+  margin: 0;
+  font-weight: var(--hd-weight-bold);
+}
+
+.place {
+  white-space: nowrap;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--hd-space-1) var(--hd-space-3);
+  align-items: center;
+  padding: var(--hd-space-3) 0;
+  border-top: 1px solid var(--hd-line);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--hd-space-3);
+  grid-column: 1;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.item[data-state='refused'] .status {
+  color: var(--hd-caution-text);
+}
+
+.actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+}

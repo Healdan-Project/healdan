@@ -285,6 +285,24 @@ public class WebSessionRouteTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testAReadCanNotBecomeAChange() {
+		// The route checks the request's own method. CXF would dispatch another for _method or X-HTTP-Method-Override
+		// only with org.apache.cxf.jaxrs.allow.http.method.override, which is off: so a same-origin GET (an <img> in
+		// any page of this origin that renders markup) never deletes, whatever it carries
+		MockHttpSession web = signInWeb(clerk);
+		ApiResponse added = post(FAVORITES).webSession(web).json(Map.of("folderId", documents.getId())).send();
+		assertEquals(added.toString(), 201, added.status());
+		String favorite = FAVORITES + "/" + added.json().path("id").asLong();
+
+		sameOrigin(get(favorite + "?_method=DELETE"), web).send();
+		sameOrigin(get(favorite), web).header("X-HTTP-Method-Override", "DELETE").send();
+		sameOrigin(post(favorite + "?_method=DELETE"), web).send();
+		sameOrigin(post(favorite), web).header("X-HTTP-Method-Override", "DELETE").send();
+
+		assertEquals(1, favorites(web));
+	}
+
+	@Test
 	public void testNeedsAnOpenSession() {
 		// No HTTP session
 		assertRefused(get(ME).header(ApiCall.FETCH_SITE, SAME_ORIGIN).send());

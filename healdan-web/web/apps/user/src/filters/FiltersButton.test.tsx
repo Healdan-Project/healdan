@@ -16,7 +16,7 @@ describe('FiltersButton', () => {
 
   it('shows how many are in use, in its badge and its name', () => {
     render(<FiltersButton open active={2} onPress={() => {}} />)
-    const button = screen.getByRole('button', { name: 'Filters 2 in use' })
+    const button = screen.getByRole('button', { name: 'Filters 2 in Use' })
     expect(button.getAttribute('aria-pressed')).toBe('true')
     expect(button.textContent).toBe('Filters 2')
   })

@@ -3,6 +3,10 @@ title: Aliases
 weight: 10
 ---
 
+{{< callout type="info" >}}
+This is in the [Classic Interface](../../the-classic-interface/), which the Healdan app doesn't replace yet. In the app, open your menu and choose **Classic Interface**; you stay signed in.
+{{< /callout >}}
+
 Healdan doesn't use aliases. Some menus still offer them, because they come from LogicalDOC, but Healdan refuses
 them everywhere a document can be.
 

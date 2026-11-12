@@ -3,6 +3,10 @@ title: Links Between Documents
 weight: 9
 ---
 
+{{< callout type="info" >}}
+This is in the [Classic Interface](../../the-classic-interface/), which the Healdan app doesn't replace yet. In the app, open your menu and choose **Classic Interface**; you stay signed in.
+{{< /callout >}}
+
 A link ties two documents together, such as a letter and the email that answers it, so that whoever opens one can
 find the other. Both documents show it, and a document with links shows a chain icon in the documents list.
 

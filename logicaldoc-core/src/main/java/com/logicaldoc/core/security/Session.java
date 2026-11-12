@@ -65,8 +65,11 @@ public class Session extends PersistentObject implements Comparable<Session> {
     @Transient
     private Map<Long, String> unprotectedDocs = Collections.synchronizedMap(new HashMap<>());
 
+    // Healdan: volatile, as one request renews it while another reads it in
+    // isTimedOut. Through a plain field the new Date could be seen before its
+    // time was, as 1970, and a session a few seconds old counted as timed out
     @Column(name = "ld_lastrenew", columnDefinition = "DATETIME(3)")
-    private Date lastRenew = new Date();
+    private volatile Date lastRenew = new Date();
 
     @Column(name = "ld_finished", columnDefinition = "DATETIME(3)")
     private Date finished;

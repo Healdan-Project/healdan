@@ -185,7 +185,8 @@ public final class ApiViews {
 				d.getFileVersion(), docNumber + "." + d.getFileVersion(),
 				new FolderRef(folderId, d.getFolder().getName(), folderKind), matter,
 				author == null ? null : new AuthorRef(author.username(), author.displayName()), d.getCreation(),
-				d.getLastModified(), hold, canEdit, canOpen);
+				// When the file last changed (filed, or a new version saved), not CE's last-modified time, which the Indexer moves
+				d.getDate() != null ? d.getDate() : d.getCreation(), hold, canEdit, canOpen);
 	}
 
 	/**

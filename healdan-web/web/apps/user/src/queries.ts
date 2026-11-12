@@ -3,7 +3,7 @@
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo } from 'react'
-import { apiPath, type components } from '@healdan/api'
+import { apiPath, type Api, type components } from '@healdan/api'
 import type { PageOf } from './pages'
 import { useApi } from './services'
 
@@ -21,6 +21,8 @@ export const keys = {
   myMatters: ['matters', 'mine'] as const,
   favorites: ['favorites'] as const,
   folder: (id: number) => ['folders', id] as const,
+  // The properties a new document filed into the folder would have
+  form: (id: number) => ['folders', id, 'form'] as const,
   subfolders: (id: number) => ['folders', id, 'subfolders'] as const,
   // Which facets, counted over what the filters leave, and how many documents the folder holds without filters
   facets: (id: number, options: Record<string, unknown>) => ['folders', id, 'facets', options] as const,
@@ -28,12 +30,17 @@ export const keys = {
   document: (docNumber: number) => ['documents', docNumber] as const,
   properties: (docNumber: number) => ['documents', docNumber, 'properties'] as const,
   versions: (docNumber: number) => ['documents', docNumber, 'versions'] as const,
+  // A filed email's message, by file version: apart from ['documents', n], which every list refresh asks again
+  messages: (docNumber: number) => ['messages', docNumber] as const,
+  message: (docNumber: number, fileVersion: string) => ['messages', docNumber, fileVersion] as const,
   lookup: (ref: string) => ['lookup', ref] as const,
   children: (id: number, options: Record<string, unknown>) => ['folders', id, 'children', options] as const,
   // A search's pages by what was asked, and the counts of its filters' options apart from them
   search: (options: Record<string, unknown>) => ['search', options] as const,
   searchFacets: (options: Record<string, unknown>) => ['search', 'facets', options] as const,
+  devices: ['auth', 'tokens'] as const,
   suggest: (q: string) => ['suggest', q] as const,
+  users: (q: string) => ['users', q] as const,
 }
 
 /**
@@ -150,4 +157,22 @@ export function useLookup(ref: string) {
     // A missing or unreadable document answers 404 for good, and retrying a 400 only repeats it
     retry: false,
   })
+}
+
+// The API gives at most 200 children at a time (50 unless asked), so a folder with more is read page by page.
+const CHILDREN_PAGE = 200
+
+/** A folder's subfolders, search folders included: the tree's, and the move picker's. */
+export async function fetchSubfolders(api: Api, id: string): Promise<S['FolderView'][]> {
+  const all: S['FolderView'][] = []
+  for (let offset = 0; ; ) {
+    const page = await api.get<PageOf<S['FolderView'] | S['DocumentView']>>(`/v1/folders/${encodeURIComponent(id)}/children`, {
+      type: 'folder',
+      limit: CHILDREN_PAGE,
+      offset,
+    })
+    all.push(...page.items.filter((item): item is S['FolderView'] => item.type === 'folder'))
+    offset += page.items.length
+    if (page.items.length < CHILDREN_PAGE || (page.total != null && offset >= page.total)) return all
+  }
 }

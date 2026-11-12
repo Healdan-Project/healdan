@@ -3,8 +3,15 @@ title: Bookmarks
 weight: 13
 ---
 
+{{< callout type="info" >}}
+This is in the [Classic Interface](../../the-classic-interface/), which the Healdan app doesn't replace yet. In the app, open your menu and choose **Classic Interface**; you stay signed in.
+{{< /callout >}}
+
 A bookmark keeps a document or folder you use often a click away. Your bookmarks are yours alone: nobody else sees
 them.
+
+In the app they're **My Favorites**, in the left pane: the star beside a folder's name, or beside a document's name in
+its details, adds it and takes it off. See [Getting Around](../../getting-started/getting-around/#the-left-pane).
 
 ## Adding a Bookmark
 

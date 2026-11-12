@@ -18,6 +18,20 @@ Whichever proxy you use:
   nginx example below does (`proxy_set_header Host $host`). A sign-in through a provider that starts on another
   name than `LOGICALDOC_PUBLIC_URL`'s is sent to that address first, so behind a proxy that puts its own name in
   `Host`, the sign-in page's provider buttons end in a browser's "too many redirects".
+- **The browser's own headers.** The User app at `/app/` signs the browser in with the web page's session, which
+  Healdan accepts only from a request the browser marks as the page's own: it checks the `Origin` and
+  `Sec-Fetch-Site` headers the browser sends. The proxy must pass both on unchanged. NPM, nginx and Caddy do by
+  default, and so does any proxy that doesn't strip request headers. A proxy, or a firewall in front of it, that
+  removes `Sec-Fetch-Site` makes Healdan answer each request as if no one were signed in, so the app says "You've been
+  signed out." and does it again after every sign-in. A proxy that rewrites `Origin`, so it isn't `LOGICALDOC_PUBLIC_URL`
+  or the address the browser used, makes the app say "Healdan refused that from this page", and signs nobody out.
+- **HTTPS for the User app.** Browsers send `Sec-Fetch-Site` only to an `https://` address, or to the machine they run
+  on, so the User app needs the proxy's HTTPS. Opened at a plain `http://` address from another machine, it shows a
+  page saying it needs a secure address, with a link to the Classic Interface, and nothing else.
+- **The root of the host name.** The User app works only at the root of its address, such as
+  `https://docs.example.org/app/`, not under a path such as `https://example.org/healdan/app/`. Give Healdan a host
+  name of its own: see [Known Limitations](../known-limitations/#the-user-app).
+
 - **WebSockets and large uploads.** The proxy must forward WebSockets (Healdan pushes live updates at
   `/wk-event`) and allow large uploads and long requests.
 - **The Healdan Helper needs HTTPS.** The helper that brings Healdan into LibreOffice refuses a server at a plain

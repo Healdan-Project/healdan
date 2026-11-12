@@ -19,6 +19,8 @@ export interface MenuProps {
   'aria-label'?: string
   /** The button's face (Button's variants) */
   variant?: ButtonProps['variant']
+  /** The button doesn't open the menu */
+  isDisabled?: boolean
   children: ReactNode
 }
 

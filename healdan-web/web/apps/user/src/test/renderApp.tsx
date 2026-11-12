@@ -4,6 +4,7 @@
 import { render } from '@testing-library/react'
 import { createMemoryHistory } from '@tanstack/react-router'
 import { App } from '../App'
+import type { QueryClient } from '@tanstack/react-query'
 import { createQueryClient } from '../queryClient'
 import { createAppRouter } from '../router'
 import { createSignedOut } from '../signedOut'
@@ -13,6 +14,7 @@ export interface Rendered {
   api: FakeApi
   router: ReturnType<typeof createAppRouter>
   view: ReturnType<typeof render>
+  queryClient: QueryClient
 }
 
 /** The whole app at an address (without the /app base), answering from the fake API. */
@@ -25,5 +27,5 @@ export async function renderApp(path = '/', routes: Routes = {}): Promise<Render
   // The router resolves its first address asynchronously; wait, so the first render already shows the view.
   await router.load()
   const view = render(<App api={api} queryClient={queryClient} signedOut={signedOut} router={router} />)
-  return { api, router, view }
+  return { api, router, view, queryClient }
 }

@@ -21,7 +21,8 @@ export const SUGGEST_DELAY_MS = 150
 /** What a suggestion's option id says it is: `m11` a matter, `d10392` a document, `search` the search itself. */
 export const SEARCH_ID = 'search'
 
-function useDebounced<T>(value: T, delay: number): T {
+/** The value once it has stayed the same for `delay` milliseconds */
+export function useDebounced<T>(value: T, delay: number): T {
   const [settled, setSettled] = useState(value)
   useEffect(() => {
     const timer = setTimeout(() => setSettled(value), delay)

@@ -18,7 +18,7 @@
   /* A pressed (toggled on) button: a face for --hd-text, and an edge that shows on the surface and on the face */
   --hd-pressed: #dcdcdc;
   --hd-pressed-edge: #6e6e73;
-  /* Rows that are about to change are dimmed, so a sighted person sees the list is updating */
+  /* Counts that are being asked for again are dimmed (the primary text colour at this opacity keeps AA on every surface) */
   --hd-busy-opacity: 0.7;
 
   --hd-text: #1d1d1f;
