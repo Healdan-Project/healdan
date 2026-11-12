@@ -5,6 +5,7 @@ package com.logicaldoc.core.security;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.lang.reflect.Modifier;
@@ -73,7 +74,7 @@ public class SessionRenewalTest extends AbstractCoreTestCase {
 			pool.shutdownNow();
 		}
 
-		assertEquals("A session a few seconds old ended while requests renewed it", null, ended.get());
+		assertNull("A session a few seconds old ended while requests renewed it", ended.get());
 		assertEquals(SessionStatus.OPEN, sessions.getStatus(sid));
 	}
 
