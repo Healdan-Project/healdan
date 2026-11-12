@@ -14,6 +14,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -234,8 +235,10 @@ public class DocumentResource {
 		User caller = Caller.current().user();
 		try {
 			List<Document> documents = new ArrayList<>();
-			// The kind filters before the cap of 50, so Emails lists as many as there are
-			for (RecentDocument recent : RecentDocuments.get().list(caller.getId(),
+			// The kind filters before the cap of 50, so Emails lists as many as there are; the types in the database,
+			// so the documents of other kinds are never read
+			Set<String> types = kind == null ? Set.of() : FileKinds.extensions(FileKinds.EMAIL);
+			for (RecentDocument recent : RecentDocuments.get().list(caller.getId(), types,
 					d -> ApiViews.shows(d) && (kind == null
 							|| FileKinds.EMAIL.equals(FileKinds.of(FilenameUtils.getExtension(d.getFileName())))))) {
 				Document document = DocumentDAO.get().findById(recent.docId());
@@ -275,7 +278,8 @@ public class DocumentResource {
 	 *
 	 * @param docNumber the doc #
 	 * @param request the new name; without the document's extension the
-	 *        document keeps it, and another extension is {@code 422 invalid}
+	 *        document keeps it, and another extension is {@code 422 validation}
+	 *        with {@code extension}
 	 * @return the document
 	 */
 	@PATCH
@@ -546,8 +550,10 @@ public class DocumentResource {
 	 *
 	 * @throws ApiProblem {@code 403} if the document is protected by a password
 	 *         that the caller's session hasn't given ({@link ApiViews#opens}).
-	 *         No API request gives one, so through the API such a document is
-	 *         always refused.
+	 *         No API request gives one: a device token's session never has
+	 *         one, so such a document is always refused to it, and the web
+	 *         session has one only for a document it unlocked in the Classic
+	 *         Interface, which CE keeps in the session.
 	 */
 	static void refuseProtected(Document document, Session session, long docNumber) {
 		if (!ApiViews.opens(document, session))

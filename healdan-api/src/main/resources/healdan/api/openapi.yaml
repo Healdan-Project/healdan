@@ -878,6 +878,7 @@ paths:
         - $ref: '#/components/parameters/EditedFilter'
         - $ref: '#/components/parameters/EditedFrom'
         - $ref: '#/components/parameters/EditedTo'
+        - $ref: '#/components/parameters/EditedZone'
         - $ref: '#/components/parameters/FacetsWanted'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Limit'
@@ -987,7 +988,9 @@ paths:
         1. `400 bad-request` for a body that isn't the JSON expected.
         2. `404 not-found` for a document the caller can't read.
         3. `403 forbidden` without the Rename permission, and for a document
-           protected by a password, which is always refused through the API.
+           protected by a password, which is always refused with a device
+           token, and on the web session unless that session unlocked it in
+           the Classic Interface.
         4. `409 checked-out` when someone else has it checked out, and
            `409 locked` when it's locked, by anyone, the caller included;
            both add the `hold`. `409 held-elsewhere` when the caller has it
@@ -1098,8 +1101,9 @@ paths:
         is `404`. The download is recorded in the document's history, as the
         old web page records it, once per 30 seconds.
 
-        A document protected by a password is always `403 forbidden` through
-        the API: open it in Healdan's web page. A document whose file is
+        A document protected by a password is `403 forbidden`: always with a
+        device token, and on the web session unless that session unlocked it
+        in the Classic Interface (open it there). A document whose file is
         missing from storage is `500 server-error`, as is one that exists
         but can't be read.
 
@@ -1164,7 +1168,8 @@ paths:
         It needs the Preview permission on top of reading, and not the
         Download permission: without Preview the answer is `403 forbidden`,
         and so it is for a document protected by a password (always refused
-        through the API). A document the caller can't read, or a version it
+        with a device token, and on the web session unless that session
+        unlocked it in the Classic Interface). A document the caller can't read, or a version it
         doesn't have, is `404 not-found`. Viewing a preview isn't recorded
         as a download, for a picture as for a PDF.
 
@@ -1508,8 +1513,9 @@ paths:
            optional.
         2. `404 not-found` for a document the caller can't read.
         3. `403 forbidden` without the Write permission, and for a document
-           protected by a password, which is always refused through the API:
-           open it in Healdan's web page.
+           protected by a password, which is always refused with a device
+           token, and on the web session unless that session unlocked it in
+           the Classic Interface: open it there.
         4. `409 held-elsewhere` when the caller has it checked out on another
            device, without `move: true`, with the `hold` and `lastSaved`.
         5. `409 checked-out` when someone else has it checked out, with or
@@ -1639,8 +1645,9 @@ paths:
            the newer content has the `fileVersion` the save had, as CE
            numbers it once the save's version is deleted.
         4. `403 forbidden` without the Write permission, and for a document
-           protected by a password, which is always refused through the API:
-           open it in Healdan's web page.
+           protected by a password, which is always refused with a device
+           token, and on the web session unless that session unlocked it in
+           the Classic Interface: open it there.
         5. `409 checked-out` when someone else has it checked out,
            administrators included: nobody saves over another person's open
            edit. An administrator releases the hold first
@@ -1795,8 +1802,9 @@ paths:
 
         1. `404 not-found` for a document the caller can't read.
         2. `403 forbidden` without the Write permission, and for a document
-           protected by a password, which is always refused through the API:
-           open it in Healdan's web page.
+           protected by a password, which is always refused with a device
+           token, and on the web session unless that session unlocked it in
+           the Classic Interface: open it there.
         3. `409 checked-out` when someone else has it checked out, and
            `409 locked` when it's locked with the web page's Lock action, by
            anyone, the caller included. Both add the `hold`.
@@ -1968,6 +1976,7 @@ paths:
         - $ref: '#/components/parameters/EditedFilter'
         - $ref: '#/components/parameters/EditedFrom'
         - $ref: '#/components/parameters/EditedTo'
+        - $ref: '#/components/parameters/EditedZone'
         - $ref: '#/components/parameters/FacetsWanted'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Limit'
@@ -2266,8 +2275,9 @@ components:
         Documents whose file last changed (it was filed, or a new version was
         saved; a change to the properties, a rename or a move doesn't count)
         `today`, in the last 7 days (`7d`, today and
-        the six before), the last 30 (`30d`) or this `year`, in the server's
-        time zone. Not with `from` or `to`.
+        the six before), the last 30 (`30d`) or this `year`, with today and
+        its days in `zone` (the server's time zone without it). Not with
+        `from` or `to`.
       schema:
         type: string
         enum: [today, 7d, 30d, year]
@@ -2277,7 +2287,8 @@ components:
       required: false
       description: |
         Documents whose file last changed (filed, or a new version saved) on
-        this day or later, in the server's time zone.
+        this day or later, the day in `zone` (the server's time zone without
+        it).
       schema:
         type: string
         format: date
@@ -2287,10 +2298,24 @@ components:
       required: false
       description: |
         Documents whose file last changed (filed, or a new version saved) on
-        this day or before, in the server's time zone.
+        this day or before, the day to its end in `zone` (the server's time
+        zone without it).
       schema:
         type: string
         format: date
+    EditedZone:
+      name: zone
+      in: query
+      required: false
+      description: |
+        The time zone the Edit Date filters' days are in, as an IANA id such
+        as `Europe/London`: today, for `edited`, and where each day of `from`
+        and `to` starts and ends. A browser's own, so the days are the ones
+        its person sees; the server's time zone without it. One the server
+        doesn't know is `400`.
+      schema:
+        type: string
+        examples: [Europe/London]
     FacetsWanted:
       name: facets
       in: query
@@ -2841,7 +2866,8 @@ components:
           description: |
             Whether the caller may check the document out and save to it: the
             Write permission, not immutable, not archived, not protected by a
-            password (always refused through the API), and no hold but the
+            password (unless the web session unlocked it in the Classic
+            Interface; never with a device token), and no hold but the
             caller's own check-out (a lock is a hold even for the user who
             took it), and that not held on another of the caller's devices.
             It isn't the test for changing the properties, which an
@@ -2852,8 +2878,9 @@ components:
           description: |
             Whether the caller may download the document's file, as
             `getDocumentContent` and `getDocumentThumbnail` decide: the
-            Download permission, and not protected by a password (always
-            refused through the API). A document the caller can read but not
+            Download permission, and not protected by a password (unless the
+            web session unlocked it in the Classic Interface; never with a
+            device token). A document the caller can read but not
             open still has its properties and versions, and a client can say
             so before asking for the file rather than finding out from a
             `403`.

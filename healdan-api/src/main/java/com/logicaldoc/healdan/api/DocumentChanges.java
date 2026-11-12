@@ -64,14 +64,17 @@ final class DocumentChanges {
 	/**
 	 * Renames the document through CE's rename. A name that doesn't end in the
 	 * document's extension keeps it; one that ends in another is {@code 422
-	 * invalid}. The same name is answered as it is, with no new version.
+	 * validation} with {@code extension}. The same name is answered as it is,
+	 * with no new version.
 	 *
 	 * @param docNumber the doc #
 	 * @param requested the name sent
 	 * @param caller the signed-in caller
 	 * @return the document, renamed
 	 * @throws ApiProblem {@code 422 validation} for the field {@code name}:
-	 *         {@code required}, {@code too-long}, {@code invalid}
+	 *         {@code required}, {@code too-long}, {@code invalid} (a slash, a
+	 *         backslash, a control character, or one the database can't
+	 *         store), {@code extension}
 	 */
 	DocumentView rename(long docNumber, String requested, Caller caller) {
 		if (requested == null)

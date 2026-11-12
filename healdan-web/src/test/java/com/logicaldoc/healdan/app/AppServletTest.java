@@ -43,8 +43,15 @@ public class AppServletTest {
 		return response;
 	}
 
+	/**
+	 * The policy of M6 spec 7.2, as its text, not as the constant the servlet builds it from, so a looser one fails
+	 */
+	private static final String POLICY = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; "
+			+ "font-src 'self' data:; worker-src 'self'; connect-src 'self'; frame-src 'self'; object-src 'none'; "
+			+ "frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+
 	private static void assertHeaders(MockHttpServletResponse response) {
-		assertEquals(AppServlet.POLICY, response.getHeader("Content-Security-Policy"));
+		assertEquals(POLICY, response.getHeader("Content-Security-Policy"));
 		assertEquals("nosniff", response.getHeader("X-Content-Type-Options"));
 		assertEquals("same-origin", response.getHeader("Referrer-Policy"));
 	}

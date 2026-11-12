@@ -91,6 +91,8 @@ public class SearchResource {
 	 * @param edited {@code today}, {@code 7d}, {@code 30d} or {@code year}
 	 * @param from the first day of an edit-date range
 	 * @param to the last day of the range
+	 * @param zone the time zone of the edit dates' days, as an IANA id; the
+	 *        server's without one
 	 * @param facets the counts to take, as a comma list
 	 * @return the hits as documents, folders or matters, best first; for the
 	 *         documents, emails and all scopes, how many there are, and the
@@ -104,7 +106,7 @@ public class SearchResource {
 			@QueryParam("author") List<String> author, @QueryParam("class") List<String> docClass,
 			@QueryParam("client") List<String> client, @QueryParam("matter") List<String> matter,
 			@QueryParam("edited") String edited, @QueryParam("from") String from, @QueryParam("to") String to,
-			@QueryParam("facets") String facets) {
+			@QueryParam("zone") String zone, @QueryParam("facets") String facets) {
 		Paging paging = Paging.of(offset, limit);
 		String chosen = StringUtils.isEmpty(scope) ? "documents" : scope;
 		if (!List.of("documents", "emails", "all", "folders", "matters", "clients").contains(chosen))
@@ -116,7 +118,7 @@ public class SearchResource {
 		if (StringUtils.isNotEmpty(order) && StringUtils.isEmpty(sort))
 			throw ApiProblem.badRequest("Give a sort with the order. Without one, the best hits come first.");
 		Filters filters = Filters.of(type, sort, order, author, docClass, client, matter, edited, from, to, facets,
-				Clock.systemDefaultZone());
+				zone, Clock.systemDefaultZone());
 		if (filters.foldersOnly())
 			throw ApiProblem.badRequest("A search's type is a file kind. Search the folders scope for folders.");
 		boolean documents = List.of("documents", "emails", "all").contains(chosen);

@@ -5,35 +5,30 @@ package com.logicaldoc.healdan.api;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.fasterxml.jackson.databind.JsonNode;
-import com.logicaldoc.healdan.api.model.ProfileFieldView;
-import com.logicaldoc.healdan.email.MediaTypes;
-import com.logicaldoc.healdan.profile.ProfileView;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
-
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
@@ -49,10 +44,13 @@ import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.MessageView;
 import com.logicaldoc.healdan.api.model.NewAttachment;
+import com.logicaldoc.healdan.api.model.ProfileFieldView;
 import com.logicaldoc.healdan.email.EmailBody;
 import com.logicaldoc.healdan.email.EmailFields;
+import com.logicaldoc.healdan.email.MediaTypes;
 import com.logicaldoc.healdan.email.MessageParts.Part;
 import com.logicaldoc.healdan.email.StoredMessage;
+import com.logicaldoc.healdan.profile.ProfileView;
 import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.util.MimeType;
 
@@ -444,8 +442,9 @@ public class MessageResource {
 	/**
 	 * Pairs each part with the document filed from it (M6 R61): by the name it was filed under and its size, then,
 	 * for parts the same in both, the k-th part with the k-th copy by doc #. What is left pairs by name alone, in
-	 * order, since a Word or LibreOffice file's size changes when it is stamped with its doc #. A part with no copy
-	 * has none.
+	 * order, since a Word or LibreOffice file's size changes when it is stamped with its doc #. A copy left whose name
+	 * is no part's was renamed in the app, which keeps its size: those pair by size alone, in order, and when one
+	 * part and one such copy are left after that, they go together. A part with no copy has none.
 	 *
 	 * @param parts the attachments, in order
 	 * @return each paired part's index and the doc # of its copy
@@ -465,6 +464,27 @@ public class MessageResource {
 						break;
 					}
 			}
+		// Only a copy whose name is no part's was renamed; one that still has a part's name is a second copy of it
+		Set<String> partNames = new HashSet<>();
+		for (Part part : parts)
+			partNames.add(withoutNumber(EmailFiling.filingName(part)));
+		List<Copy> renamed = new ArrayList<>(
+				copies.stream().filter(copy -> !used.contains(copy) && !partNames.contains(withoutNumber(copy.name()))).toList());
+		// Renamed: the size still says which
+		for (Part part : parts) {
+			if (paired.containsKey(part.index()))
+				continue;
+			for (Copy copy : renamed)
+				if (copy.size() == part.size()) {
+					renamed.remove(copy);
+					paired.put(part.index(), copy.docNumber());
+					break;
+				}
+		}
+		// Renamed and stamped or saved again: only being the last of each says which
+		List<Part> partsLeft = parts.stream().filter(part -> !paired.containsKey(part.index())).toList();
+		if (partsLeft.size() == 1 && renamed.size() == 1)
+			paired.put(partsLeft.get(0).index(), renamed.get(0).docNumber());
 		return paired;
 	}
 

@@ -532,12 +532,13 @@ public class FolderListing {
 	static final String EDIT_DATE = "coalesce(d.ld_date, d.ld_creation)";
 
 	/**
-	 * The days, in the server's time zone, the last day to its end
+	 * The days, in the time zone they were given in (the server's without one),
+	 * the last day to its end
 	 */
 	private static void edited(Select select, ListingQuery.Edited edited) {
 		if (edited == null)
 			return;
-		ZoneId zone = ZoneId.systemDefault();
+		ZoneId zone = edited.zoneOrServers();
 		if (edited.from() != null) {
 			select.where.add(EDIT_DATE + " >= :editedfrom");
 			select.params.addValue("editedfrom", startOf(edited.from(), zone));

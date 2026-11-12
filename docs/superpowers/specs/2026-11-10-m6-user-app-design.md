@@ -280,7 +280,7 @@ A full page load of an `/app/…` address without a web session reaches `AppServ
 
 - it starts with `/app/`;
 - it has no `//`, no scheme and no backslash;
-- every character is a letter, a digit or one of `/ . _ ~ % - ? & = +` (`+` is a space in the app's own queries);
+- every character is a letter, a digit or one of `/ . _ ~ % - ? & = + *` (`+` is a space in the app's own queries, and `*` a search's wildcard, which the app's addresses leave as it is; changed in the build, from the final review);
 - it's at most 2,000 characters.
 
 Anything else is stored as `/app/`. Both the password form and M4's provider buttons then come back to it (`SignInResource` already follows `RequestedUrl` under `login.jsp`'s conditions). Nothing in CE clears it after the sign-in, so `AppServlet` forgets it once a signed-in page loads.

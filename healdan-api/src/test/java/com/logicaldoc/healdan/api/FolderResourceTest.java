@@ -5,8 +5,12 @@ package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -669,6 +673,49 @@ public class FolderResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testEditDateFiltersFollowTheZoneGiven() throws Exception {
+		// M6 R90: the days are the person's, whose zone the app sends; without one, the server's
+		ZoneId server = ZoneId.systemDefault();
+		ZoneId far = ZoneMoments.far();
+		Instant between = ZoneMoments.onDifferentDays(server, far);
+		Instant today = ZoneMoments.todayInOneOnly(server, far);
+		Document late = fx.upload(documents, "late.docx", "late", clerk);
+		Document recent = fx.upload(documents, "recent.docx", "recent", clerk);
+		awaitAsyncWork();
+		jdbc().update("update ld_document set ld_date = ? where ld_id = ?", Timestamp.from(between), late.getId());
+		jdbc().update("update ld_document set ld_date = ? where ld_id = ?", Timestamp.from(today), recent.getId());
+		DocumentDAO.get().evict(Document.class, late.getId());
+		DocumentDAO.get().evict(Document.class, recent.getId());
+		String token = signIn(clerk);
+		String base = "/api/v1/folders/" + documents.getId() + "/children?";
+		String here = ZoneMoments.day(between, server);
+		String there = ZoneMoments.day(between, far);
+		assertNotEquals(here, there);
+
+		// Between: the day it falls on in each zone
+		assertEquals(List.of("late.docx"), names(base + "from=" + here + "&to=" + here, token));
+		assertEquals(List.of(), names(base + "from=" + here + "&to=" + here + ZoneMoments.param(far), token));
+		assertEquals(List.of("late.docx"), names(base + "from=" + there + "&to=" + there + ZoneMoments.param(far), token));
+		assertEquals(List.of("late.docx"), names(base + "from=" + here + "&to=" + here + ZoneMoments.param(server), token));
+
+		// Today: what is today in one zone is yesterday in the other
+		boolean todayHere = ZoneMoments.today(today, server);
+		assertNotEquals(todayHere, ZoneMoments.today(today, far));
+		assertEquals(todayHere ? List.of("recent.docx") : List.of(), names(base + "edited=today", token));
+		assertEquals(todayHere ? List.of() : List.of("recent.docx"), names(base + "edited=today" + ZoneMoments.param(far), token));
+	}
+
+	/** The names in the first page of a folder's children */
+	private List<String> names(String query, String token) {
+		ApiResponse response = get(query).token(token).send();
+		assertEquals(query + ": " + response, 200, response.status());
+		List<String> names = new ArrayList<>();
+		for (JsonNode item : response.json().path("items"))
+			names.add(item.path("name").textValue());
+		return names;
+	}
+
+	@Test
 	public void testChildrenRefusals() throws Exception {
 		String token = signIn(clerk);
 		String base = "/api/v1/folders/" + documents.getId() + "/children";
@@ -676,7 +723,7 @@ public class FolderResourceTest extends ApiTestCase {
 		for (String query : new String[] { "sort=size", "sort=docnumber", "order=up", "type=folder&type=pdf",
 				"type=folder&author=clerk", "type=folder&facets=type", "type=docx", "edited=week",
 				"edited=7d&from=2026-01-01", "from=2026-13-01", "from=2026-06-02&to=2026-06-01", "facets=size",
-				"matter=1", "client=x", "author=" }) {
+				"matter=1", "client=x", "author=", "zone=Mars/Olympus", "edited=today&zone=%2B99:00" }) {
 			ApiResponse response = get(base + "?" + query).token(token).send();
 			assertEquals(query + ": " + response, 400, response.status());
 			assertEquals(query, "bad-request", response.code());

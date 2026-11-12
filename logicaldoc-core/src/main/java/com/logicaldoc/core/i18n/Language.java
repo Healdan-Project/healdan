@@ -33,6 +33,7 @@ public class Language implements Comparable<Language> {
 
 	private String analyzerClass;
 
+	// Healdan: the stemmer's constructor, not a stemmer (see getStemmer)
 	private volatile Constructor<?> stemmerConstructor;
 
 	public Language(Locale locale) {
@@ -159,6 +160,7 @@ public class Language implements Comparable<Language> {
 	 * the constructor lookup is kept.
 	 */
 	public SnowballProgram getStemmer() {
+		// Healdan: a new stemmer at each call, as one can't be shared by threads; only the constructor is kept (M6 spec 14.1, R82)
 		if (stemmerConstructor == null) {
 			String stemmerClass = "org.tartarus.snowball.ext.%sStemmer".formatted(getLocale().getDisplayName(Locale.ENGLISH));
 

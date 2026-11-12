@@ -230,6 +230,7 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 403 | `forbidden` | You can see the object, but may not do this to it |
 | 403 | `token-only` | `DELETE /auth/tokens/current` on the web session, which has no token |
 | 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current` |
+| 403 | `web-session-refused` | A same-origin request on the web session that breaks one of its rules, such as a change without `X-Healdan-Client: web` (see [Two Ways In](#two-ways-in)). Signing in again doesn't mend it |
 | 404 | `not-found` | It doesn't exist, **or you can't read it**: the two get the same answer |
 | 404 | `no-preview` | `GET /documents/{docNumber}/preview` for a file with no preview: its type has none, or its conversion failed (see [Previews](#previews)); `GET /documents/{docNumber}/message/parts/{id}?inline=true` for an attachment that isn't a PDF or a picture |
 | 404 | `not-an-email` | A `/documents/{docNumber}/message` route for a document that isn't an email, or whose file can't be read as one (see [Reading a Filed Email](#reading-a-filed-email)) |
@@ -356,7 +357,7 @@ The sections below say more about the parts a client needs to know before it sta
   and `totalAtLeast` says how many it found that the caller can read: there are more, so a client shows "more than"
   that number.
 - **Filters.** The same as a folder's (see [Listing a Folder](#listing-a-folder)): `type` takes file kinds, and
-  `author`, `class`, `client`, `matter`, `edited`, `from` and `to` as there. They're applied in the database, after
+  `author`, `class`, `client`, `matter`, `edited`, `from`, `to` and `zone` as there. They're applied in the database, after
   the read check, to the hits read, so they find their matches among the first 10,000 hits, and `total` and
   `totalAtLeast` count the hits that pass. `type=folder` is `400`: search the `folders` scope instead.
 - **Sorting.** `sort` and `order` take a folder's values (see [Listing a Folder](#listing-a-folder)), and sort the
@@ -402,7 +403,10 @@ database, so a folder of thousands of documents answers as fast as a small one.
 - **Filters.** `type` takes file kinds: `word`, `excel`, `powerpoint`, `pdf`, `email`, `opendocument`, `picture`
   and `other`, for any extension the others don't name. `author` takes usernames, `class` classes, `client` client
   numbers such as `998`, and `matter` matters such as `998.1`. `edited` is `today`, `7d`, `30d` or `year`; or give
-  `from` and `to`, either or both, as days such as `2026-06-01`, both included. The days are the server's.
+  `from` and `to`, either or both, as days such as `2026-06-01`, both included. `zone` says whose days they are, as
+  an IANA time zone such as `Europe/London`: today, and where each day starts and ends. The User app sends the
+  browser's, so the days match the dates it shows. Without `zone` they're the server's, and one the server doesn't
+  know is `400 bad-request`.
   Repeat a parameter for more than one value, `type=pdf&type=word`: any value passes, and the filters all apply
   together. With any filter set, the list holds documents alone, and `total` counts the documents that pass.
 - **How many.** `total` counts the subfolders and the documents, and `documents` the documents alone, so a client

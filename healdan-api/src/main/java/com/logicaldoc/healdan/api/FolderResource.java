@@ -179,6 +179,8 @@ public class FolderResource {
 	 * @param edited {@code today}, {@code 7d}, {@code 30d} or {@code year}
 	 * @param from the first day of an edit-date range
 	 * @param to the last day of the range
+	 * @param zone the time zone of the edit dates' days, as an IANA id; the
+	 *        server's without one
 	 * @param facets the counts to take, as a comma list
 	 * @param offset how many items to skip
 	 * @param limit the most items to return
@@ -192,11 +194,11 @@ public class FolderResource {
 			@QueryParam("author") List<String> author, @QueryParam("class") List<String> docClass,
 			@QueryParam("client") List<String> client, @QueryParam("matter") List<String> matter,
 			@QueryParam("edited") String edited, @QueryParam("from") String from, @QueryParam("to") String to,
-			@QueryParam("facets") String facets, @QueryParam("offset") Integer offset,
+			@QueryParam("zone") String zone, @QueryParam("facets") String facets, @QueryParam("offset") Integer offset,
 			@QueryParam("limit") Integer limit) {
 		Paging paging = Paging.of(offset, limit);
 		Filters filters = Filters.of(type, sort, order, author, docClass, client, matter, edited, from, to, facets,
-				Clock.systemDefaultZone());
+				zone, Clock.systemDefaultZone());
 		ListingQuery query = filters.query();
 
 		User caller = Caller.current().user();

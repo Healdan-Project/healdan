@@ -11,8 +11,9 @@ import jakarta.servlet.http.HttpServletRequest;
  * The page a signed-out visit to the User app comes back to after signing in. CE's <code>login.jsp</code> reads the
  * HTTP session's <code>RequestedUrl</code> and writes it, unescaped, into a JavaScript string, so nothing goes in
  * that this class hasn't checked: a path under <code>/app/</code> of letters, digits and
- * <code>/ . _ ~ % - ? &amp; = +</code> only (<code>+</code> is a space in the app's own queries), with no
- * <code>//</code> (M6 spec 8.3). <code>AppServlet</code> forgets it once a signed-in page loads.
+ * <code>/ . _ ~ % - ? &amp; = + *</code> only (<code>+</code> is a space in the app's own queries, and <code>*</code>
+ * a search's wildcard, which the app's addresses leave as it is), with no <code>//</code> (M6 spec 8.3).
+ * <code>AppServlet</code> forgets it once a signed-in page loads.
  */
 public final class ReturnPath {
 
@@ -23,7 +24,7 @@ public final class ReturnPath {
 
 	public static final int MAX_LENGTH = 2000;
 
-	private static final Pattern ALLOWED = Pattern.compile("/app/[A-Za-z0-9/._~%?&=+-]*");
+	private static final Pattern ALLOWED = Pattern.compile("/app/[A-Za-z0-9/._~%?&=+*-]*");
 
 	private ReturnPath() {
 	}
