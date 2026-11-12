@@ -186,6 +186,13 @@ public class DocumentChangesTest extends ApiTestCase {
 
 		assertField(rename(d, "x".repeat(251) + ".docx", token), "name", "too-long");
 		assertField(rename(d, "a/b.docx", token), "name", "invalid");
+		// MariaDB's utf8 tables can't store it, which HSQLDB would take
+		assertField(rename(d, "Lease 📄.docx", token), "name", "invalid");
+		// The name sent fits, and only the extension the document keeps makes it too long
+		ApiResponse long_ = rename(d, "x".repeat(252), token);
+		assertField(long_, "name", "too-long");
+		assertEquals(long_.toString(), 1, long_.json().path("fields").size());
+		assertTrue(long_.toString(), long_.json().path("fields").path(0).path("detail").textValue().contains("250"));
 		assertField(rename(d, "  ", token), "name", "required");
 		ApiResponse none = patch(path(d)).token(token).json(Map.of()).send();
 		assertEquals(none.toString(), 400, none.status());

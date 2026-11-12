@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, type DragEvent, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import { t, toast } from '@healdan/ui'
 import { invalidateDocumentLists } from '../actions/refresh'
@@ -10,11 +10,11 @@ import { messageFor } from '../frame/errors'
 import type { PageOf } from '../pages'
 import { keys } from '../queries'
 import { useApi } from '../services'
-import { carriesFiles, carriesRows, refusalOf, sameExtension, takesDrag, type Place } from './dropTargets'
+import { carriesFiles, carriesRows, droppedFiles, refusalOf, sameExtension, takesDrag, type Place } from './dropTargets'
 import { FilingForm } from './FilingForm'
 import { FilingTray } from './FilingTray'
 import { missingRequired } from './required'
-import { createUploads, isBusy, named, type UploadItem, type Uploads } from './uploads'
+import { coalesced, createUploads, isBusy, named, type UploadItem, type Uploads } from './uploads'
 import { VersionOrNew } from './VersionOrNew'
 
 type S = components['schemas']
@@ -47,6 +47,8 @@ export function useFiling(): Filing {
 }
 
 interface PendingForm {
+  /** Its own, so the form that is open keeps its state while others queue behind it */
+  id: number
   files: File[]
   place: Place
   fields: S['ProfileField'][]
@@ -58,7 +60,12 @@ interface PendingVersion {
   document: S['DocumentView']
   /** Option was held, so "File as a New Document" asks for the form */
   alt: boolean
+  /** Where it was dropped, which "File as a New Document" files into */
+  place: Place
 }
+
+/** How often, at most, the lists are asked for again while the queue runs: once at once, then the rest gathered */
+const REFRESH_MS = 1000
 
 /**
  * Filing by drag and drop (spec 6.5). It owns the upload queue, which lives for as long as the page does, so uploads go
@@ -69,14 +76,25 @@ interface PendingVersion {
 export function FilingProvider({ children }: { children: ReactNode }) {
   const api = useApi()
   const queryClient = useQueryClient()
-  const uploads = useMemo(() => createUploads(api, { onSettled: () => void invalidateDocumentLists(queryClient) }), [api, queryClient])
+  const uploads = useMemo(
+    () =>
+      createUploads(api, {
+        // Each item settling would ask for every list, the tree and the details again: a run of them asks once a second
+        onSettled: coalesced(() => void invalidateDocumentLists(queryClient), REFRESH_MS),
+        meId: () => queryClient.getQueryData<S['UserView']>(keys.me)?.id,
+      }),
+    [api, queryClient],
+  )
   const items = useSyncExternalStore(uploads.subscribe, uploads.items)
   // Forms wait in turn: a drop that needs the form while another's is open keeps its files, and opens when that one closes
   const [forms, setForms] = useState<PendingForm[]>([])
+  const nextForm = useRef(1)
   const form = forms[0]
   const [version, setVersion] = useState<PendingVersion | undefined>()
   const busy = isBusy(items)
-  const fresh = useMemo(() => new Set(items.flatMap((item) => (item.status === 'filed' && item.fresh && item.docNumber !== undefined ? [item.docNumber] : []))), [items])
+  // The same set until what is fresh changes, so a list that flashes them isn't drawn again at each change to the queue
+  const freshKey = items.flatMap((item) => (item.status === 'filed' && item.fresh && item.docNumber !== undefined ? [item.docNumber] : [])).join(',')
+  const fresh = useMemo(() => new Set(freshKey === '' ? [] : freshKey.split(',').map(Number)), [freshKey])
 
   // A page left while a file is on its way loses it, so the browser asks first (it shows its own words)
   useEffect(() => {
@@ -120,7 +138,8 @@ export function FilingProvider({ children }: { children: ReactNode }) {
         const where = await queryClient
           .fetchQuery({ queryKey: keys.folder(place.id), queryFn: () => api.get<S['FolderView']>(apiPath`/v1/folders/${place.id}`), staleTime: 60_000 })
           .catch(() => undefined)
-        setForms((now) => [...now, { files, place, fields: answer.items, matter: where?.matter ?? undefined }])
+        const id = nextForm.current++
+        setForms((now) => [...now, { id, files, place, fields: answer.items, matter: where?.matter ?? undefined }])
       }
       else uploads.enqueue(named(files), place.id, undefined, { folderName: place.name, labels: labelsOf(answer.items) })
     } catch (error) {
@@ -130,9 +149,11 @@ export function FilingProvider({ children }: { children: ReactNode }) {
 
   function start(files: File[], place: Place, alt: boolean, row?: S['DocumentView']) {
     const refusal = refusalOf(place)
+    // One file on a document's row that could be its next version is a question; any other drop is a drop on the folder. A
+    // version needs Write on the document, not on its folder, so one the person may change is asked about even where they
+    // can't file (a document-only grant)
+    if (row && files.length === 1 && sameExtension(files[0]!.name, row.name) && (!refusal || row.canEdit)) return setVersion({ file: files[0]!, document: row, alt, place })
     if (refusal) return toast(t(refusal))
-    // One file on a document's row that could be its next version is a question; any other drop is a drop on the folder
-    if (row && files.length === 1 && sameExtension(files[0]!.name, row.name)) return setVersion({ file: files[0]!, document: row, alt })
     void fileInto(files, place, alt)
   }
 
@@ -147,9 +168,11 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       if (carriesRows(types) && !carriesFiles(types)) return
       event.preventDefault()
       // A drop's files and Option are read now: the browser empties the data transfer when the event ends
-      const files = carriesFiles(types) ? Array.from(event.dataTransfer.files) : []
+      const { files, folders } = carriesFiles(types) ? droppedFiles(event.dataTransfer) : { files: [], folders: 0 }
+      // A folder from Finder comes as a file the browser can't read: it's said, and the files beside it go on
+      if (folders > 0) toast(t('filing.noFolders'))
       if (files.length === 0) {
-        toast(t('filing.noFiles'))
+        if (folders === 0) toast(t('filing.noFiles'))
         return
       }
       start(files, place, event.altKey, row)
@@ -162,7 +185,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
       {children}
       {form && (
         <FilingForm
-          key={forms.length + form.files.map((file) => file.name).join('/')}
+          key={form.id}
           files={form.files}
           fields={form.fields}
           matter={form.matter}
@@ -182,9 +205,11 @@ export function FilingProvider({ children }: { children: ReactNode }) {
             setVersion(undefined)
           }}
           onNew={() => {
-            const place: Place = { id: version.document.folder.id, kind: 'folder', name: version.document.folder.name }
             setVersion(undefined)
-            void fileInto([version.file], place, version.alt)
+            // The question may have come where the person can't file (a document-only grant), so the folder's refusal is said now
+            const refusal = refusalOf(version.place)
+            if (refusal) toast(t(refusal))
+            else void fileInto([version.file], version.place, version.alt)
           }}
           onCancel={() => setVersion(undefined)}
         />

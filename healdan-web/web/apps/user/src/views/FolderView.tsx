@@ -69,19 +69,26 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   // What was just filed flashes in the list, and the row the files are over is lit
   const { fresh } = useFiling()
   const place = useMemo(() => (view ? placeOf(view) : { id: folderId, kind: 'store' as const }), [view, folderId])
+  // By key, as a drag asks at every dragover which row it is over
+  const byKey = useMemo(() => new Map(listing.rows.map((item) => [childKey(item), item])), [listing.rows])
   const zone = useDropZone(place, (key) => {
-    const found = listing.rows.find((item) => childKey(item) === key)
+    const found = byKey.get(key)
     if (found?.type === 'document') return { document: found }
     return found?.type === 'folder' ? { place: placeOf(found) } : undefined
   })
+  // The rows are made once for each listing; a flash or a drag over a row changes only that row, so the others keep the
+  // object the Table drew them from and aren't drawn again
+  const listed = useMemo(() => listing.rows.map(rowOf), [listing.rows])
   const rows = useMemo(
     () =>
-      listing.rows.map(rowOf).map((row) => {
-        const flash = row.item.type === 'document' && fresh.has(row.item.docNumber)
-        const dropping = zone.overRow === row.id
-        return flash || dropping ? { ...row, flash, dropping } : row
-      }),
-    [listing.rows, fresh, zone.overRow],
+      fresh.size === 0 && zone.overRow === undefined
+        ? listed
+        : listed.map((row) => {
+            const flash = row.item.type === 'document' && fresh.has(row.item.docNumber)
+            const dropping = zone.overRow === row.id
+            return flash || dropping ? { ...row, flash, dropping } : row
+          }),
+    [listed, fresh, zone.overRow],
   )
   const documents = useMemo(() => documentsOf(listing.rows), [listing.rows])
   const preview = usePreviewKey(changeSelection)

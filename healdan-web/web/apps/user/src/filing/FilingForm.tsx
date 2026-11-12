@@ -5,7 +5,7 @@ import { useState } from 'react'
 import type { components } from '@healdan/api'
 import { Dialog, plural, t, TextField } from '@healdan/ui'
 import { FieldsForm } from '../details/FieldsForm'
-import { missingRequired } from './required'
+import { missingRequired, withUntickedAsNo } from './required'
 import styles from './filing.module.css'
 import { named, type FilingFile } from './uploads'
 
@@ -33,7 +33,9 @@ export function FilingForm({ files, fields, matter, onFile, onCancel }: FilingFo
   const [titles, setTitles] = useState(() => named(files).map((one) => one.name))
   const [errors, setErrors] = useState<Set<number>>(() => new Set())
 
-  async function submit(values: Record<string, S['PropertyValue']>): Promise<Map<string, string> | void> {
+  async function submit(changed: Record<string, S['PropertyValue']>): Promise<Map<string, string> | void> {
+    // An unticked yes-or-no is No, which is a value
+    const values = withUntickedAsNo(fields, changed)
     // A title can't be empty, and a required property needs a value from the folder's or from the person
     const empty = new Set(titles.flatMap((title, i) => (title.trim() === '' && !isEmail(files[i]!.name) ? [i] : [])))
     const missing = missingRequired(fields, values)

@@ -66,6 +66,19 @@ describe('The form that comes first', () => {
   })
 
 
+  it('files a required yes-or-no with no value, left unticked, as No', async () => {
+    const form = page([...t.filledForm.items, field({ name: 'urgent', label: 'Urgent', type: 'boolean', required: true, editable: true, value: null })])
+    const { all, sent } = routes({}, { form })
+    await renderApp('/folders/7', all)
+    fireEvent.drop(await grid(), { dataTransfer: data([file('Lease.docx')]) })
+    const dialog = await screen.findByRole('dialog', { name: 'File Documents' })
+    expect((within(dialog).getByRole('checkbox', { name: /Urgent/ }) as HTMLInputElement).checked).toBe(false)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'File 1 Item' }))
+
+    await within(await tray()).findByText('Filed as # 10500')
+    expect(sent.map((one) => one.properties)).toEqual([{ urgent: false }])
+  })
+
   it('shows the form first when Option is held, though every field has a default', async () => {
     const { all, sent } = routes()
     await renderApp('/folders/7', all)

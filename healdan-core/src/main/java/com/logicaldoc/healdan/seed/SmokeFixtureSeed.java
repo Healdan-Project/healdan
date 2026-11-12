@@ -45,7 +45,7 @@ public class SmokeFixtureSeed implements SeedStep {
 	static final String ENV = "HEALDAN_SMOKE_FIXTURE";
 
 	private static final Set<Permission> EVERYONE_GETS = Set.of(Permission.READ, Permission.WRITE, Permission.ADD,
-			Permission.DOWNLOAD, Permission.PREVIEW, Permission.RENAME, Permission.MOVE, Permission.DELETE);
+			Permission.DOWNLOAD, Permission.PREVIEW);
 
 	private final Supplier<String> flag;
 

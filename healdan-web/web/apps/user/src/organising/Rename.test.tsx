@@ -145,6 +145,9 @@ describe('Renaming in place', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
     await waitFor(() => expect(written.renamed).toEqual([{ docNumber: 10431, name: 'Left Behind.docx' }]))
     await waitFor(() => expect(screen.queryByRole('textbox', { name: /New name/ })).toBeNull())
+    // The focus stays where the person put it: the row doesn't take it back
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(globalThis.document.activeElement?.closest('[data-row-key="d10431"]')).toBeNull()
 
     // Leaving while a refusal shows is a cancel: nothing more is asked
     await select(/Lease/)

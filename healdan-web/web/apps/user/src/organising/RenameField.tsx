@@ -42,17 +42,18 @@ function RenameField({ document }: { document: Movable }) {
     field.setSelectionRange(0, extension ? document.name.length - extension.length - 1 : document.name.length)
   }, [document.name])
 
-  async function save() {
+  /** `fromKey`: Enter saved, so the focus is the field's to give back; a save on leaving leaves it where the person put it */
+  async function save(fromKey: boolean) {
     if (finished.current || saving.current) return
     const name = text.trim()
-    if (name === document.name) return stop()
+    if (name === document.name) return stop(fromKey)
     saving.current = true
     try {
       await renameDocument(api, document.docNumber, name)
-      stop()
+      stop(fromKey)
     } catch (failure) {
       setError(renameRefusal(failure, document.name))
-      input.current?.focus()
+      if (fromKey) input.current?.focus()
     } finally {
       saving.current = false
       // Whether it worked or not, what shows the document is asked again
@@ -60,9 +61,10 @@ function RenameField({ document }: { document: Movable }) {
     }
   }
 
-  function stop() {
+  /** `focusRow`: the field had the focus, which goes to the row; not when the person left the field for somewhere else */
+  function stop(focusRow = true) {
     finished.current = true
-    stopRename(document.docNumber)
+    stopRename(document.docNumber, focusRow)
   }
 
   return (
@@ -84,7 +86,7 @@ function RenameField({ document }: { document: Movable }) {
           if (event.key === 'Enter') {
             event.preventDefault()
             if (text.trim() === '') setError(t('fields.required'))
-            else void save()
+            else void save(true)
           } else if (event.key === 'Escape') {
             event.preventDefault()
             stop()
@@ -92,8 +94,8 @@ function RenameField({ document }: { document: Movable }) {
         }}
         onBlur={() => {
           // Leaving the field with nothing changed, nothing in it, or a refusal showing is a cancel; with a new name, a save
-          if (text.trim() === '' || error) stop()
-          else void save()
+          if (text.trim() === '' || error) stop(false)
+          else void save(false)
         }}
         // A press or a double-click in the field is the field's: it doesn't select the row or open it
         onPointerDown={(event) => event.stopPropagation()}

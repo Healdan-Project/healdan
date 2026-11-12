@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { describe, expect, it } from 'vitest'
-import { carriesFiles, carriesRows, refusalOf, ROWS_TYPE } from './dropTargets'
+import { carriesFiles, carriesRows, droppedFiles, refusalOf, ROWS_TYPE } from './dropTargets'
 
 describe('dropTargets', () => {
   it('tells files from the app\'s own rows by the data transfer\'s types', () => {
@@ -24,5 +24,14 @@ describe('dropTargets', () => {
     expect(refusalOf({ id: 4, kind: 'folder', canFile: true })).toBeUndefined()
     // A folder in the tree is known only by its kind: the server decides the rest
     expect(refusalOf({ id: 5, kind: 'folder' })).toBeUndefined()
+  })
+
+  it('leaves out a folder dragged from Finder, which its item says is one, and counts it', () => {
+    const files = [new File(['a'], 'Lease.docx'), new File([''], 'Scans'), new File(['b'], 'Plan.pdf')]
+    const item = (isDirectory: boolean) => ({ kind: 'file', webkitGetAsEntry: () => ({ isDirectory }) })
+    const items = [item(false), item(true), item(false)] as unknown as DataTransferItemList
+    expect(droppedFiles({ files: files as unknown as FileList, items })).toEqual({ files: [files[0], files[2]], folders: 1 })
+    // Without items to say, every file is taken
+    expect(droppedFiles({ files: files as unknown as FileList })).toEqual({ files, folders: 0 })
   })
 })

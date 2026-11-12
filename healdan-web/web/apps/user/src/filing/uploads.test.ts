@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '@healdan/api'
 import { document, fakeApi, problem } from '../test/fakeApi'
-import { createUploads, named } from './uploads'
+import { coalesced, createUploads, named } from './uploads'
 
 const file = (name: string, text = 'x') => new File([text], name)
 const filed = (docNumber: number, name: string) => document({ docNumber, name })
@@ -127,14 +127,38 @@ describe('uploads', () => {
 describe('a version the server refuses', () => {
   const target = document({ docNumber: 10431, name: 'Letter.docx', version: '3.1' })
   const refusal = () => new ApiError(409, 'already-filed', 'x', { code: 'already-filed' })
+  const me = 5
+  // What the save left: the document checked out to the person from this page, which is no device
+  const leftMine = document({ docNumber: 10431, hold: { kind: 'checkout', by: { id: me, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null } })
+  const theirs = document({ docNumber: 10431, hold: { kind: 'checkout', by: { id: 3, name: 'Jamie Clarke' }, since: '2026-11-03T10:00:00Z', device: null } })
 
   it('releases the check-out the refusal left behind when the person had none before', async () => {
-    const api = fakeApi({ 'POST /v1/documents/10431/versions': refusal(), 'DELETE /v1/documents/10431/checkout': document({ docNumber: 10431 }) })
-    const uploads = createUploads(api, { onSettled: () => {} })
+    const api = fakeApi({ 'POST /v1/documents/10431/versions': refusal(), 'GET /v1/documents/10431': leftMine, 'DELETE /v1/documents/10431/checkout': document({ docNumber: 10431 }) })
+    const uploads = createUploads(api, { onSettled: () => {}, meId: () => me })
     uploads.enqueueVersion(target, file('d.docx'), false)
     await vi.waitFor(() => expect(uploads.busy()).toBe(false))
     await vi.waitFor(() => expect(api.callsTo('DELETE /v1/documents/10431/checkout')).toHaveLength(1))
     expect(uploads.items()[0]).toMatchObject({ status: 'refused', kind: 'version' })
+  })
+
+  it('releases it too after a failure the answer doesn\'t explain, which can come after the server\'s check-out', async () => {
+    for (const failure of [problem(500, 'server-error'), new TypeError('Failed to fetch')]) {
+      const api = fakeApi({ 'POST /v1/documents/10431/versions': failure, 'GET /v1/documents/10431': leftMine, 'DELETE /v1/documents/10431/checkout': document({ docNumber: 10431 }) })
+      const uploads = createUploads(api, { onSettled: () => {}, meId: () => me })
+      uploads.enqueueVersion(target, file('d.docx'), false)
+      await vi.waitFor(() => expect(api.callsTo('DELETE /v1/documents/10431/checkout')).toHaveLength(1))
+    }
+  })
+
+  it('leaves a check-out someone else took before the save failed, or one it can\'t tell is the person\'s', async () => {
+    for (const [now, meId] of [[theirs, () => me], [leftMine, () => undefined]] as const) {
+      const api = fakeApi({ 'POST /v1/documents/10431/versions': problem(500, 'server-error'), 'GET /v1/documents/10431': now })
+      const uploads = createUploads(api, { onSettled: () => {}, meId })
+      uploads.enqueueVersion(target, file('d.docx'), false)
+      await vi.waitFor(() => expect(api.callsTo('GET /v1/documents/10431')).toHaveLength(1))
+      await settle()
+      expect(api.callsTo('DELETE /v1/documents/10431/checkout')).toHaveLength(0)
+    }
   })
 
   it('leaves a check-out the person already had', async () => {
@@ -151,5 +175,30 @@ describe('a version the server refuses', () => {
     uploads.enqueueVersion(target, file('d.docx'), false)
     await vi.waitFor(() => expect(uploads.busy()).toBe(false))
     expect(api.callsTo('DELETE /v1/documents/10431/checkout')).toHaveLength(0)
+  })
+})
+
+describe('coalesced', () => {
+  it('calls at once, then gathers the calls of each interval into one at its end', () => {
+    vi.useFakeTimers()
+    try {
+      const call = vi.fn()
+      const refresh = coalesced(call, 1000)
+      refresh()
+      expect(call).toHaveBeenCalledTimes(1)
+      refresh()
+      refresh()
+      refresh()
+      expect(call).toHaveBeenCalledTimes(1)
+      vi.advanceTimersByTime(1000)
+      expect(call).toHaveBeenCalledTimes(2)
+      // Nothing more came, so nothing more is called, and the next one is called at once again
+      vi.advanceTimersByTime(1000)
+      expect(call).toHaveBeenCalledTimes(2)
+      refresh()
+      expect(call).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

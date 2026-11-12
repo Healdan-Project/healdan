@@ -445,8 +445,10 @@ refused` for an immutable document, unless the caller is an administrator, as CE
 - **`PATCH /documents/{docNumber}`** with `{"name": "Lease"}` answers `200` with the document. A name that doesn't
   end in the document's extension keeps it, so `Lease` is `Lease.docx` and `Lease v1.2` is `Lease v1.2.docx`; one that
   ends in another extension (`Lease.pdf`) is `422 validation` with `extension` for `name`, as a save's name is. A name
-  with a `/`, a `\` or a control character is `invalid`, checked first; one over 255 characters is `too-long`, and a blank one
-  `required`. The same name changes nothing and makes no version.
+  with a `/`, a `\`, a control character or a character the database can't store, such as an emoji, is `invalid`, checked
+  first; one over 255 characters, with the extension it keeps, is `too-long`, and a blank one `required`. The same name
+  changes nothing and makes no version. Once a deleted document is in the trash the answer is `204`, and a shortcut that
+  can't follow it is left and logged.
 - **`POST /documents/{docNumber}/move`** with `{"folderId": 1234}` answers `200` with the document. Into another matter
   it takes that matter's Client and Matter and the values its folders pass down; a matter that holds the same email
   already answers `409 already-filed` with the copy as `document`. A move into the folder it's in changes nothing.

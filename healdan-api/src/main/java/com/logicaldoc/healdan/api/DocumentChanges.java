@@ -5,6 +5,11 @@ package com.logicaldoc.healdan.api;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
@@ -25,6 +30,7 @@ import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.util.BasicPlane;
 
 /**
  * Renaming, moving and deleting a document (M6 spec section 6.7), through
@@ -45,6 +51,9 @@ final class DocumentChanges {
 
 	/** What a name's extension looks like, so that {@code Lease v1.2} doesn't count as one */
 	private static final Pattern EXTENSION = Pattern.compile("(?=.*[A-Za-z])[A-Za-z0-9]{1,8}");
+
+	/** How long a retry waits for CE's version record of the write it lost: CE stores it about a second after */
+	private static final long LOST_VERSION_WAIT_SECONDS = 10;
 
 	private final DocumentLocks locks;
 
@@ -81,8 +90,8 @@ final class DocumentChanges {
 				String name = name(document.getFileName(), requested);
 				if (name.equals(document.getFileName()))
 					return ApiViews.document(document, user);
-				write(id, d -> d != null && name.equals(d.getFileName()), failure, () -> DocumentManager.get().rename(id, name,
-						history(caller, DocumentEvent.RENAMED)));
+				write(id, d -> d != null && name.equals(d.getFileName()), DocumentEvent.RENAMED, user, failure,
+						() -> DocumentManager.get().rename(id, name, history(caller, DocumentEvent.RENAMED)));
 				return ApiViews.document(DocumentDAO.get().findById(id), user);
 			});
 		} catch (PersistenceException e) {
@@ -117,8 +126,8 @@ final class DocumentChanges {
 
 				if (document.getFolder().getId() == target.getId())
 					return ApiViews.document(document, user);
-				write(id, d -> d != null && d.getFolder().getId() == target.getId(), failure, () -> DocumentManager.get()
-						.moveToFolder(DocumentDAO.get().findById(id, true), target,
+				write(id, d -> d != null && d.getFolder().getId() == target.getId(), DocumentEvent.MOVED, user, failure,
+						() -> DocumentManager.get().moveToFolder(DocumentDAO.get().findById(id, true), target,
 								history(caller, DocumentEvent.MOVED)));
 				return ApiViews.document(DocumentDAO.get().findById(id), user);
 			});
@@ -154,10 +163,18 @@ final class DocumentChanges {
 				DocumentDAO documents = DocumentDAO.get();
 				List<Long> shortcuts = documents.findAliasIds(id);
 				// The document first: a rule that refuses it leaves its shortcuts where they were
-				write(id, d -> d == null || d.getDeleted() != 0, failure,
-						() -> documents.delete(id, history(caller, DocumentEvent.DELETED)));
+				write(id, d -> d == null || d.getDeleted() != 0, DocumentEvent.DELETED, user, failure, () -> {
+					documents.delete(id, history(caller, DocumentEvent.DELETED));
+					return null;
+				});
+				// The document is in the trash now, which is the answer: a shortcut that won't follow it is left, and said in the log
 				for (Long shortcut : shortcuts)
-					documents.delete(shortcut);
+					try {
+						documents.delete(shortcut);
+					} catch (PersistenceException | RuntimeException e) {
+						log.warn("Shortcut {} of document #{} wasn't moved to the trash with it: {}", shortcut, docNumber,
+								e.getMessage());
+					}
 				return null;
 			});
 		} catch (PersistenceException e) {
@@ -181,36 +198,75 @@ final class DocumentChanges {
 	 * write by another thread in that moment, such as the Office preview
 	 * saving the document when a conversion ends, makes CE's write fail or be
 	 * lost unseen at the commit ({@link CheckoutResource#checkOut}). So the
-	 * document is read back, and CE asked again until it's as asked.
+	 * document is read back, and CE asked again until it's as asked. A write
+	 * lost in its flush still has its version record stored by CE a moment
+	 * later, under the number the write gave the document, which the write
+	 * made again would take: that record goes first, as a check-in's does
+	 * ({@link VersionResource#dropLostVersion}).
 	 *
 	 * @param docId the document's id
 	 * @param stored whether the document (null if it can't be read) is as the change makes it
+	 * @param event the change's event, which its version record has
+	 * @param user the caller, whose version record alone is deleted
 	 * @param failure what failed, for the log
 	 * @param change CE's call
 	 * @throws PersistenceException CE's refusal, or its last failure
 	 */
-	private static void write(long docId, Predicate<Document> stored, String failure, Change change)
-			throws PersistenceException {
+	private static void write(long docId, Predicate<Document> stored, DocumentEvent event, User user, String failure,
+			Change change) throws PersistenceException {
 		for (int tries = 1;; tries++) {
+			// What the document is at, and the number CE's write will give it, taken before CE's call changes anything
+			Document read = DocumentDAO.get().findById(docId);
+			String before = read != null ? read.getVersion() : null;
+			String number = read != null ? VersionResource.nextVersion(read, false) : null;
+			Future<?> versioned;
 			try {
-				change.run();
+				versioned = change.run();
 			} catch (PersistenceException | RuntimeException e) {
 				if (tries >= CheckoutResource.TRIES || !CheckoutResource.overtaken(e))
 					throw e;
 				log.info("{} again, as another write came first: {}", failure, e.getMessage());
 				continue;
 			}
-			if (stored.test(DocumentDAO.get().findById(docId, true)))
+			Document now = DocumentDAO.get().findById(docId, true);
+			if (stored.test(now))
 				return;
+			// The write didn't reach the document, so the version CE gave it is the lost write's
+			if (number != null && now != null && Objects.equals(before, now.getVersion()))
+				dropLostVersion(docId, number, versioned, event, user);
 			if (tries >= CheckoutResource.TRIES)
 				throw new PersistenceException("%s: other writes kept overtaking the change".formatted(failure));
 			log.info("{} again, as another write overtook the change in its flush", failure);
 		}
 	}
 
+	/**
+	 * Waits for CE to store the version record of a write that was lost, which
+	 * it does in a thread of its own, and deletes it
+	 *
+	 * @param number the version number CE gave the write
+	 * @param versioned CE's store of the record, or null for a change that keeps none
+	 */
+	private static void dropLostVersion(long docId, String number, Future<?> versioned, DocumentEvent event,
+			User user) throws PersistenceException {
+		if (versioned == null)
+			return;
+		try {
+			versioned.get(LOST_VERSION_WAIT_SECONDS, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return;
+		} catch (ExecutionException | TimeoutException e) {
+			log.info("Document {}'s version record of a lost write wasn't stored in time: {}", docId, e.getMessage());
+			return;
+		}
+		VersionResource.dropLostVersion(docId, number, event, user);
+	}
+
 	/** CE's call to write a change */
 	private interface Change {
-		void run() throws PersistenceException;
+		/** @return CE's store of the change's version record, or null when it keeps none */
+		Future<?> run() throws PersistenceException;
 	}
 
 	private static DocumentHistory history(Caller caller, DocumentEvent event) {
@@ -236,6 +292,10 @@ final class DocumentChanges {
 		List<FieldError> errors = new ArrayList<>();
 		if (sent.chars().anyMatch(c -> c == '/' || c == '\\' || Character.isISOControl(c)))
 			errors.add(new FieldError("name", "invalid", "A name can't contain /, \\ or control characters."));
+		// CE's tables hold only the Basic Multilingual Plane, and strict MariaDB refuses the rest at the write
+		else if (!BasicPlane.holds(sent))
+			errors.add(new FieldError("name", "invalid",
+					"A name can't contain emoji or other characters the database can't store."));
 		if (sent.length() > Uploads.MAX_NAME_LENGTH)
 			errors.add(new FieldError("name", Uploads.TOO_LONG,
 					"A name can't be longer than %d characters.".formatted(Uploads.MAX_NAME_LENGTH)));
@@ -259,8 +319,14 @@ final class DocumentChanges {
 		List<FieldError> rules = new ArrayList<>();
 		Uploads.checkName(name, "name", rules);
 		boolean own = Uploads.extension(name).equalsIgnoreCase(extension);
-		rules.removeIf(e -> "extension".equals(e.code()) || own && "disallowed".equals(e.code()));
+		rules.removeIf(e -> "extension".equals(e.code()) || own && "disallowed".equals(e.code())
+				|| Uploads.TOO_LONG.equals(e.code()));
 		errors.addAll(rules);
+		// The name sent fits (checked above), so only the extension added to it can make it too long
+		if (name.length() > Uploads.MAX_NAME_LENGTH)
+			errors.add(new FieldError("name", Uploads.TOO_LONG,
+					"With its .%s, a name can't be longer than %d characters: without it, %d.".formatted(extension,
+							Uploads.MAX_NAME_LENGTH, Uploads.MAX_NAME_LENGTH - extension.length() - 1)));
 		if (!errors.isEmpty())
 			throw ApiProblem.validation(errors.stream().distinct().toList());
 		return name;

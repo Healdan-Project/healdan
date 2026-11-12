@@ -26,7 +26,9 @@ describe('renameRefusal', () => {
   })
 
   it('says any other refusal of the name from the catalogue', () => {
-    expect(renameRefusal(refused('name', 'too-long'), 'Lease.docx')).toBe('That is too long.')
+    expect(renameRefusal(refused('name', 'too-long'), 'Lease')).toBe('That is too long.')
+    // The extension the document keeps counts, which the person may not have typed
+    expect(renameRefusal(refused('name', 'too-long'), 'Lease.docx')).toBe("With its .docx, the name can't be longer than 255 characters.")
     // A slash is not the extension's business, whatever the name ends in: the app takes the server's code, not its own guess
     expect(renameRefusal(refused(), 'Lease.docx')).toBe("That name isn't allowed.")
     expect(renameRefusal(problem(409, 'locked'), 'Lease.docx')).toBe("It's locked.")

@@ -25,10 +25,10 @@ export function extensionOf(name: string): string | undefined {
 export function renameRefusal(error: unknown, current: string): string {
   if (error instanceof ApiError && error.code === 'validation') {
     const fields = (error.body as { fields?: { field?: unknown; code?: unknown }[] } | null)?.fields
-    if (fields?.some((one) => one?.field === 'name' && one.code === 'extension')) {
-      const ext = extensionOf(current)
-      return ext ? t('rename.extension', { ext }) : t('rename.noExtension')
-    }
+    const ext = extensionOf(current)
+    if (fields?.some((one) => one?.field === 'name' && one.code === 'extension')) return ext ? t('rename.extension', { ext }) : t('rename.noExtension')
+    // The document's extension counts, which the person may not have typed
+    if (ext && fields?.some((one) => one?.field === 'name' && one.code === 'too-long')) return t('rename.tooLong', { ext })
     const named = fieldErrors(error).get('name')
     if (named) return named
   }

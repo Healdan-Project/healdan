@@ -40,7 +40,7 @@ import com.logicaldoc.util.spring.Context;
 public class SmokeFixtureSeedTest extends AbstractHealdanTestCase {
 
 	private static final Set<Permission> EVERYONE_GETS = Set.of(Permission.READ, Permission.WRITE, Permission.ADD,
-			Permission.DOWNLOAD, Permission.PREVIEW, Permission.RENAME, Permission.MOVE, Permission.DELETE);
+			Permission.DOWNLOAD, Permission.PREVIEW);
 
 	private SmokeFixtureSeed seed(String flag) {
 		return new SmokeFixtureSeed(() -> flag);

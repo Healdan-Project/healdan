@@ -18,6 +18,19 @@ export function carriesFiles(types: readonly string[]): boolean {
 }
 
 /**
+ * The files a drop carries, and how many folders it carried besides: a folder from Finder is in `files` too, as a file the
+ * browser can't read, and only its item says it's a folder. Read during the drop, as the browser empties it after.
+ */
+export function droppedFiles(transfer: Pick<DataTransfer, 'files'> & { items?: DataTransferItemList }): { files: File[]; folders: number } {
+  const files = Array.from(transfer.files)
+  const items = transfer.items ? Array.from(transfer.items).filter((item) => item.kind === 'file') : []
+  // The file items are the files, in their order; a browser that lists them otherwise is taken at its word for the files
+  if (items.length !== files.length) return { files, folders: 0 }
+  const folder = items.map((item) => item.webkitGetAsEntry?.()?.isDirectory === true)
+  return { files: files.filter((_, i) => !folder[i]), folders: folder.filter(Boolean).length }
+}
+
+/**
  * Whether a drag is one the filing takes over, which means cancelling its dragover so the browser drops it here:
  * files, and a link or text, which a drop answers with where to find the file (a browser would otherwise follow
  * the link and leave the page, and its uploads). The app's own rows aren't: the move takes them.

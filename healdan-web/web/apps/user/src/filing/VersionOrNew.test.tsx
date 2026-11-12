@@ -5,7 +5,7 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@healdan/api'
-import { children, document } from '../test/fakeApi'
+import { children, document, folder } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import * as t from './testing'
 const { letter, heldByJamie, file, data, dropWithOption, routes, grid, tray, posts } = t
@@ -93,6 +93,30 @@ describe('Dropping one file on a document\'s row', () => {
     await within(await tray()).findByText('Filed as # 10500')
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(sent[0]).toMatchObject({ folderId: 7, name: 'Scan.pdf' })
+  })
+
+  it('asks in a folder the person can\'t file into, for a document they may change (a document-only grant)', async () => {
+    const { all, sent } = routes({ 'GET /v1/folders/7': folder({ ...t.correspondence, canFile: false }) })
+    await renderApp('/folders/7', all)
+    fireEvent.drop(await row(), { dataTransfer: data([file('Draft 2.docx')]) })
+    const dialog = await prompt()
+    expect((within(dialog).getByRole('button', { name: 'Save as Version 4' }) as HTMLButtonElement).disabled).toBe(false)
+    // A new document is still the folder's to refuse
+    await userEvent.click(within(dialog).getByRole('button', { name: 'File as a New Document' }))
+    expect(await screen.findByText("You can't file into this folder.")).toBeTruthy()
+    expect(sent).toHaveLength(0)
+  })
+
+  it('says the folder refuses, and doesn\'t ask, when the person may change neither', async () => {
+    const { all, sent } = routes({
+      'GET /v1/folders/7': folder({ ...t.correspondence, canFile: false }),
+      'GET /v1/folders/7/children': children([document({ ...letter, canEdit: false })]),
+    })
+    await renderApp('/folders/7', all)
+    fireEvent.drop(await row(), { dataTransfer: data([file('Draft 2.docx')]) })
+    expect(await screen.findByText("You can't file into this folder.")).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(sent).toHaveLength(0)
   })
 
   it('asks when the extension is the document\'s in another case', async () => {

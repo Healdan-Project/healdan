@@ -71,6 +71,44 @@ export interface UploadsOptions {
   limit?: number
   /** How long a new document is fresh, in ms */
   freshFor?: number
+  /** The signed-in person's id, if it's known: only their own check-out a failed save left is released */
+  meId?: () => number | undefined
+}
+
+/**
+ * Calls `call` at once, then at most once each `ms`: the calls in between are gathered into one at the end of the
+ * interval, so a burst of them costs two.
+ */
+export function coalesced(call: () => void, ms: number): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let again = false
+  const wait = () => {
+    timer = setTimeout(() => {
+      timer = undefined
+      if (!again) return
+      again = false
+      call()
+      wait()
+    }, ms)
+  }
+  return () => {
+    if (timer !== undefined) {
+      again = true
+      return
+    }
+    call()
+    wait()
+  }
+}
+
+/**
+ * Whether a save that failed may have left the check-out the server took for it: a rule that refused the check-in
+ * (`already-filed`, `refused`), or a failure the answer doesn't explain (a server error, or no answer). The other
+ * refusals (a hold, a precondition, the name, the file) come before the server checks anything out.
+ */
+function mayLeaveCheckOut(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return true
+  return error.code === 'already-filed' || error.code === 'refused' || error.status >= 500
 }
 
 /** How many uploads run at once: a person's connection is better used by a few than many */
@@ -116,16 +154,26 @@ export function createUploads(api: Api, options: UploadsOptions): Uploads {
       setTimeout(() => patch(item.id, { fresh: false }), options.freshFor ?? FRESH_MS)
     } catch (error) {
       patch(item.id, { status: 'refused', problem: error, existing: copyOf(error) })
-      // The server leaves the document checked out to the person when a rule refuses the check-in itself, even if it was
-      // free before. They never asked for that, so it's released, unless it was theirs already; any other refusal changes nothing
-      if (job.kind === 'version' && !job.ifHeld && error instanceof ApiError && (error.code === 'already-filed' || error.code === 'refused')) {
-        await api.send('DELETE', apiPath`/v1/documents/${job.document.docNumber}/checkout`).catch(() => undefined)
-      }
+      // The server leaves the document checked out to the person when a rule refuses the check-in itself, or the save fails
+      // after its check-out, even if it was free before. They never asked for that, so it's released, unless it was theirs
+      // already; any other refusal changes nothing
+      if (job.kind === 'version' && !job.ifHeld && mayLeaveCheckOut(error)) await releaseLeftover(job.document.docNumber).catch(() => undefined)
     } finally {
       jobs.delete(item.id)
       options.onSettled()
       pump()
     }
+  }
+
+  /**
+   * Releases the person's own check-out from this page, which the failed save took. A failure can also come after someone
+   * else took the document (an administrator's release would end theirs), so it's read first.
+   */
+  async function releaseLeftover(docNumber: number) {
+    const me = options.meId?.()
+    const now = await api.get<S['DocumentView']>(apiPath`/v1/documents/${docNumber}`)
+    if (me === undefined || now.hold?.kind !== 'checkout' || now.hold.device || now.hold.by?.id !== me) return
+    await api.send('DELETE', apiPath`/v1/documents/${docNumber}/checkout`)
   }
 
   function pump() {

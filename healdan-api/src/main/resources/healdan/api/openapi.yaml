@@ -995,9 +995,10 @@ paths:
         5. `409 refused` for an immutable document, unless the caller is an
            administrator, and when one of Healdan's rules refuses.
         6. `422 validation` for the field `name`: `required`, `too-long`
-           (over 255 characters), `invalid` (a `/`, a `\` or a control
-           character, checked first) and `extension` (another extension than
-           the document's, such as `Lease.pdf`).
+           (over 255 characters, with the extension the document keeps),
+           `invalid` (a `/`, a `\`, a control character, or one the database
+           can't store, such as an emoji, checked first) and `extension`
+           (another extension than the document's, such as `Lease.pdf`).
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -1030,7 +1031,8 @@ paths:
         refused`. A checked-out document is `409 checked-out` for everyone,
         the caller too, as the Classic Interface greys Delete out: release it
         first. The document is deleted before its shortcuts, so a rule that
-        refuses it leaves them.
+        refuses it leaves them. Once the document is in the trash the answer
+        is `204`: a shortcut that can't follow it is left, and logged.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'

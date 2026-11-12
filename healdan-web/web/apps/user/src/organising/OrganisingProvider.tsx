@@ -22,8 +22,8 @@ export interface Organising {
   /** The doc # whose title is a field now */
   renaming: number | undefined
   startRename: (docNumber: number) => void
-  /** Ends the rename (saved or not) and gives the focus back to the row */
-  stopRename: (docNumber: number) => void
+  /** Ends the rename (saved or not) and gives the focus back to the row, unless `focusRow` is false (the person left the field) */
+  stopRename: (docNumber: number, focusRow?: boolean) => void
   /** Asks first, then moves the documents to the trash */
   askDelete: (documents: Movable[]) => void
   /** Opens the picker, then moves the documents where it's told */
@@ -110,17 +110,18 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     if (selected !== undefined && outcome.done.some((one) => one.docNumber === selected)) select(undefined)
     await invalidateDocumentLists(queryClient)
     report(outcome, plural('deleted', outcome.done.length), t('delete.refusedTitle'))
-    // Where the focus goes once the rows are gone: the next row, or the one before, or the list
-    focusLater(next)
+    // Where the focus goes once the rows are gone: the next row, or the one before, or the list. With none gone, it stays
+    // where it was, as the dialog that says why gives it back there
+    if (outcome.done.length > 0) focusLater(next)
   }
 
   const value: Organising = {
     renaming,
     startRename: setRenaming,
-    stopRename: (docNumber) => {
+    stopRename: (docNumber, focusRow = true) => {
       setRenaming(undefined)
-      // The field is gone once this has rendered; the row is where the focus belongs
-      requestAnimationFrame(() => rowOf(docNumber)?.focus())
+      // The field is gone once this has rendered; the row is where the focus belongs, unless the person put it elsewhere
+      if (focusRow) requestAnimationFrame(() => rowOf(docNumber)?.focus())
     },
     askDelete: setDeleting,
     askMove: setMoving,
