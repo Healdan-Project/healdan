@@ -1,0 +1,66 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.view {
+  padding: var(--hd-space-5) var(--hd-space-6);
+}
+
+.title {
+  margin: 0 0 var(--hd-space-4);
+  font-size: 20px;
+  font-weight: var(--hd-weight-bold);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-4);
+  width: 100%;
+  min-height: var(--row-height);
+  padding: 0 var(--hd-space-4);
+  border: 0;
+  border-bottom: 1px solid var(--hd-line);
+  background: transparent;
+  color: var(--hd-text);
+  font: inherit;
+  text-align: start;
+  cursor: default;
+}
+
+.row[aria-pressed='true'] {
+  background: var(--hd-selection-inactive);
+  color: var(--hd-text);
+}
+
+.row:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: calc(var(--hd-focus-offset) * -1);
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Selected rows keep --hd-text: secondary text fails AA on --hd-selection-inactive. */
+.meta {
+  flex: none;
+  color: var(--hd-text-secondary);
+}
+
+.row[aria-pressed='true'] .meta {
+  color: var(--hd-text);
+}
+
+.empty {
+  color: var(--hd-text-secondary);
+}

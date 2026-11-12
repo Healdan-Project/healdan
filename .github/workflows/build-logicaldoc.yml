@@ -62,6 +62,10 @@ jobs:
       - name: Check for Oracle and SQL Server drivers
         run: python3 .github/scripts/check-database-drivers.py
 
+      # What the User app bundles is shipped with Healdan, so its npm packages must carry licences it can pass on
+      - name: Check the User app's licences
+        run: python3 .github/scripts/check-web-licences.py
+
       # The Dockerfile's images name the JDK, so this build and the Docker image's run the same one.
       - name: JDK version (from the Dockerfile)
         id: jdk
@@ -127,6 +131,7 @@ jobs:
             JobsDataServletTest
             HealdanNamesTest
             HealdanOpenInAppTest
+            HealdanAppLinkTest
             HealdanTextTest
             LockedDocsDataServletTest
             FolderSearchTest
@@ -217,7 +222,7 @@ jobs:
       - name: Maven install (all modules but the WAR, without the GWT compile)
         run: >-
           mvn -B -ntp -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dmaven.javadoc.skip=true
-          -Dassembly.skipAssembly=true -Dmaven.source.skip=true -pl '!logicaldoc-webapp' install
+          -Dhealdan.web.skip=true -Dassembly.skipAssembly=true -Dmaven.source.skip=true -pl '!logicaldoc-webapp' install
 
       # Each module gets the whole -Dtest list and runs the classes it has. -fae runs every module's tests even when
       # one module's fail. logicaldoc-gui's tests don't need the GWT compile, which its compile phase would run.
@@ -227,7 +232,7 @@ jobs:
           TESTS: ${{ matrix.tests }}
         run: |
           touch ~/logicaldoc-dev.properties
-          mvn -B -ntp -fae -pl "$MODULES" test -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest="$TESTS"
+          mvn -B -ntp -fae -pl "$MODULES" test -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dhealdan.web.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest="$TESTS"
 
       - name: Record test times
         run: python3 .github/scripts/test-shards.py times ./*/target/surefire-reports > test-times-${{ matrix.shard }}.txt

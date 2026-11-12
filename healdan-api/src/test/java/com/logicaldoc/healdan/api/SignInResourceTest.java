@@ -65,6 +65,8 @@ public class SignInResourceTest extends ApiTestCase {
 
 	private static final String FRONTEND = BASE + "/frontend.jsp";
 
+	private static final String APP = BASE + "/app/";
+
 	private static final String SERVER_URL = "server.url";
 
 	private static final String SECURE = "cookies.secure";
@@ -239,7 +241,7 @@ public class SignInResourceTest extends ApiTestCase {
 		ApiResponse response = signIn("fake", httpSession);
 
 		assertEquals(response.toString(), 302, response.status());
-		assertEquals(FRONTEND, response.header("Location"));
+		assertEquals(APP, response.header("Location"));
 		assertEquals("no-store", response.header("Cache-Control"));
 
 		String sidCookie = setCookie(response, "ldoc-sid");
@@ -274,7 +276,7 @@ public class SignInResourceTest extends ApiTestCase {
 
 		// With no HTTP session yet, the callback makes one
 		ApiResponse noSession = signIn("fake", null);
-		assertEquals(FRONTEND, noSession.header("Location"));
+		assertEquals(APP, noSession.header("Location"));
 		assertTrue(SessionManager.get().isOpen(cookieValue(setCookie(noSession, "ldoc-sid"))));
 
 		// With cookies.secure, the session's cookie is Secure, as the password form's is
@@ -293,7 +295,17 @@ public class SignInResourceTest extends ApiTestCase {
 				"/info", "//evil.example/x", "https://evil.example/", "/\\evil.example",
 				"/frontend.jsp\r\nSet-Cookie: x=y", "/frontend.jsp\nx", BASE + "@evil.example/",
 				"http://localhost:8081/frontend.jsp", "javascript:alert(1)", "frontend.jsp", "", " /frontend.jsp" })
-			assertEquals(requested, FRONTEND, landing(requested));
+			assertEquals(requested, APP, landing(requested));
+	}
+
+	@Test
+	public void testLandsWhereStartInSays() throws Exception {
+		ApiResponse plain = signIn("fake", new MockHttpSession());
+		assertEquals(APP, plain.header("Location"));
+
+		HealdanSettings.get().set(HealdanSettings.UI_START, "classic");
+		assertEquals(FRONTEND, signIn("fake", new MockHttpSession()).header("Location"));
+		assertEquals(BASE + "/app/doc/5", landing("/app/doc/5"));
 	}
 
 	/*
@@ -318,7 +330,7 @@ public class SignInResourceTest extends ApiTestCase {
 		assertEquals(0, SessionManager.get().countOpened("jane"));
 
 		// Put right, the same person signs in
-		assertEquals(FRONTEND, signIn("fake", new MockHttpSession()).header("Location"));
+		assertEquals(APP, signIn("fake", new MockHttpSession()).header("Location"));
 	}
 
 	@Test
@@ -351,7 +363,7 @@ public class SignInResourceTest extends ApiTestCase {
 		Started started = start("fake", null);
 		String code = fake.authorize(started.authorization());
 
-		assertEquals(FRONTEND, callback("fake", code, started.state(), started.cookie(), null).header("Location"));
+		assertEquals(APP, callback("fake", code, started.state(), started.cookie(), null).header("Location"));
 		assertRefused("expired", callback("fake", code, started.state(), started.cookie(), null));
 		assertEquals(1, fake.tokenRequests());
 		assertEquals(1, SessionManager.get().countOpened("jane"));
@@ -390,7 +402,7 @@ public class SignInResourceTest extends ApiTestCase {
 		Started started = start("fake", null);
 		String code = fake.authorize(started.authorization());
 		SignInTestHooks.passPendingTime(Duration.ofMinutes(9));
-		assertEquals(FRONTEND, callback("fake", code, started.state(), started.cookie(), null).header("Location"));
+		assertEquals(APP, callback("fake", code, started.state(), started.cookie(), null).header("Location"));
 	}
 
 	@Test
@@ -437,7 +449,7 @@ public class SignInResourceTest extends ApiTestCase {
 
 		// The linked account is disabled: CE's chain refuses it
 		fake.claims(claims(Map.of()));
-		assertEquals(FRONTEND, signIn("fake", null).header("Location"));
+		assertEquals(APP, signIn("fake", null).header("Location"));
 		jdbc().update("update ld_user set ld_enabled = 0 where ld_id = ?", jane.getId());
 		UserDAO.get().evict(jane.getId());
 		ApiResponse disabled = signIn("fake", null);
@@ -553,7 +565,7 @@ public class SignInResourceTest extends ApiTestCase {
 			String code = fake.authorize(started.authorization());
 			secrets.addAll(secretsOf(started, code));
 			ApiResponse signedIn = callback("fake", code, started.state(), started.cookie(), null);
-			assertEquals(FRONTEND, signedIn.header("Location"));
+			assertEquals(APP, signedIn.header("Location"));
 			secrets.add(fake.lastIdToken());
 			secrets.add(fake.lastAccessToken());
 			secrets.add(SessionManager.get().get(cookieValue(setCookie(signedIn, "ldoc-sid"))).getDecodedKey());

@@ -18,6 +18,7 @@ COPY --exclude=docker --exclude=Dockerfile --exclude=.dockerignore --exclude=.gi
 # The cache mount keeps only third-party dependencies: the reactor's own artifacts (com/logicaldoc, about half its
 # size) are rebuilt every time. Docker CI saves the mount between runs (.github/workflows/docker-image.yml).
 RUN --mount=type=cache,target=/root/.m2/repository \
+    --mount=type=cache,target=/root/.npm \
     mvn -B -ntp -DskipTests install \
  && rm -rf /root/.m2/repository/com/logicaldoc
 RUN mkdir -p /build/ROOT \

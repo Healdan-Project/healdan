@@ -1,0 +1,224 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>M6 mockup: reading an email</title>
+<style>:root{--border:#d1d1d6;--text-secondary:#6e6e73;--bg-secondary:#fff;--bg-tertiary:#e5e5e7}body{margin:24px auto;max-width:1340px;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#1d1d1f;background:#f5f5f7}.subtitle{color:var(--text-secondary)}.options{display:flex;flex-direction:column;gap:.75rem}.option{display:flex;gap:1rem;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem}.option .letter{flex:none;width:28px;height:28px;border-radius:6px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-weight:600}.option h3{margin:0 0 .25rem;font-size:1rem}.option p{margin:0;color:var(--text-secondary);font-size:.9rem}</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+.hd-wrap{position:relative;width:100%;overflow:hidden;border-radius:10px;border:1px solid var(--border);margin-bottom:1.5rem}
+.hd-app{width:1280px;height:760px;transform-origin:0 0;display:grid;grid-template-rows:52px 1fr;font:13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;background:#fff;
+--a:#0C69C0;--a-soft:#E6F0FA;--focus:#22A2E0;--side:#F5F5F7;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--hover:#EFEFF2}
+.hd-app i.ti{font-size:16px;line-height:1}
+.top{display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff}
+.brand{display:flex;align-items:center;gap:8px;width:216px;font-weight:600;font-size:15px}
+.mark{width:20px;height:22px}
+.search{flex:1;max-width:640px;display:flex;height:34px;border:1px solid #C7C7CC;border-radius:8px;overflow:hidden}
+.scope{display:flex;align-items:center;gap:6px;padding:0 10px 0 12px;background:var(--side);border-right:1px solid #C7C7CC;font-weight:500;white-space:nowrap}
+.q{flex:1;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--third)}
+.kbd{font:11px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--second)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--second)}
+.pill{display:flex;align-items:center;gap:6px;font-size:12px}
+.dot{width:7px;height:7px;border-radius:50%;background:#2DA44E}
+.avatar{width:28px;height:28px;border-radius:50%;background:#D9E7F7;color:var(--a);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px}
+.body{display:grid;grid-template-columns:248px 1fr 320px;min-height:0}
+.nav{background:var(--side);border-right:1px solid var(--line);padding:10px 8px;overflow:hidden}
+.navsec{font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;margin:14px 8px 4px;display:flex;justify-content:space-between}
+.navsec:first-child{margin-top:4px}
+.ni{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ni i{color:var(--second)}
+.ni.on{background:var(--a-soft);color:var(--a);font-weight:500}.ni.on i{color:var(--a)}
+.ni .sub{color:var(--third);font-size:11px;margin-left:2px}
+.ni.l2{padding-left:24px}.ni.l3{padding-left:44px}
+.chev{font-size:12px!important;color:var(--third)!important;width:12px}
+.main{display:flex;flex-direction:column;min-width:0}
+.crumbs{display:flex;align-items:center;gap:6px;padding:12px 20px 0;color:var(--second);font-size:12px}
+.crumbs b{color:#1D1D1F;font-weight:500}
+.title{display:flex;align-items:baseline;gap:10px;padding:4px 20px 10px}
+.title h1{font-size:20px;font-weight:600;margin:0}
+.title span{color:var(--second)}
+.bar{display:flex;align-items:center;gap:6px;padding:0 20px 10px;border-bottom:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid #D1D1D6;background:#fff;font-size:12.5px;white-space:nowrap}
+.btn.pri{background:var(--a);border-color:var(--a);color:#fff}.btn.pri i{color:#fff}
+.btn.ghost{border-color:transparent;color:var(--second)}
+.sep{width:1px;height:20px;background:var(--line);margin:0 4px}
+.count{margin-left:auto;color:var(--third);font-size:12px;white-space:nowrap}
+table{width:100%;border-collapse:collapse}
+th{font-size:11.5px;font-weight:500;color:var(--second);text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th.sorted{color:#1D1D1F}
+td{padding:0 10px;height:34px;border-bottom:1px solid #F2F2F4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.sel td{background:#DCEAF8}
+tr:hover td{background:var(--hover)}tr.sel:hover td{background:#DCEAF8}
+.fi{display:flex;align-items:center;gap:8px}
+.fi i{font-size:17px}
+.pdf{color:#C8372D}.doc{color:#2B579A}.xls{color:#217346}.odt{color:#0E85CD}.eml{color:#B7792B}
+.hold{color:#C77700}
+.drop{margin:10px 20px;border:1.5px dashed #C7C7CC;border-radius:8px;color:var(--third);text-align:center;padding:10px;font-size:12px}
+.side{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;gap:4px;padding:10px 12px 0;border-bottom:1px solid var(--line)}
+.tab{padding:6px 10px 8px;color:var(--second);font-weight:500;border-bottom:2px solid transparent}
+.tab.on{color:var(--a);border-color:var(--a)}
+.det{padding:14px 16px;overflow:hidden}
+.thumb{height:150px;border:1px solid var(--line);border-radius:6px;background:linear-gradient(#fff,#fff) padding-box;display:flex;flex-direction:column;gap:6px;padding:14px 18px;margin-bottom:12px;position:relative}
+.thumb div{height:5px;background:#E9E9EC;border-radius:2px}
+.thumb .pv{position:absolute;right:8px;bottom:8px}
+.dname{font-weight:600;font-size:14px;margin-bottom:2px}
+.dmeta{color:var(--second);font-size:12px;margin-bottom:10px}
+.acts{display:flex;gap:6px;margin-bottom:14px}
+.kv{display:grid;grid-template-columns:96px 1fr;row-gap:6px;font-size:12.5px}
+.kv dt{color:var(--second)}.kv dd{margin:0}
+.h4{font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px}
+.ver{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;border-bottom:1px solid #F2F2F4}
+.ver span:last-child{color:var(--second)}
+.notes{display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:.9rem}
+.notes li{margin-bottom:.35rem}
+
+.chips{display:flex;align-items:center;gap:6px;padding:8px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 6px 0 10px;border-radius:12px;background:var(--a-soft);color:#0A4F91;font-size:12px}
+.chip i{font-size:13px!important}
+.clear{color:var(--a);font-size:12px;margin-left:4px}
+.fbtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid #D1D1D6;background:#fff;font-size:12.5px}
+.fbtn.on{background:var(--a-soft);border-color:#9DC3EA;color:#0A4F91}.fbtn.on i{color:#0A4F91}
+.badge{min-width:16px;height:16px;border-radius:8px;background:var(--a);color:#fff;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;padding:0 4px}
+.phead{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600;font-size:14px}
+.phead i{color:var(--second)}
+.fgrp{padding:10px 16px 6px;border-bottom:1px solid #F2F2F4}
+.fgrp h5{margin:0 0 6px;font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between}
+.fopt{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12.5px}
+.fopt .n{margin-left:auto;color:var(--third);font-variant-numeric:tabular-nums}
+.cb{width:14px;height:14px;border:1px solid #AEAEB2;border-radius:3px;display:inline-flex;align-items:center;justify-content:center}
+.cb.on{background:var(--a);border-color:var(--a)}.cb.on::after{content:"";width:7px;height:4px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.rb{width:14px;height:14px;border:1px solid #AEAEB2;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+.rb.on{border:4px solid var(--a)}
+.state{font-size:.8rem;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;margin:.5rem 0}
+</style>
+<style>
+.ovl{position:absolute;inset:52px 0 0 0;background:rgba(20,20,24,.55);display:flex;align-items:center;justify-content:center;gap:18px}
+.ql{width:820px;height:680px;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);display:flex;flex-direction:column;overflow:hidden}
+.pvbar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;border-bottom:1px solid var(--line)}
+.pvbar .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px}
+.hint{color:var(--third);font-size:11.5px;white-space:nowrap;margin-left:auto}
+.navbtn{width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center}
+.navbtn i{font-size:20px!important;color:#1D1D1F}
+.eh{padding:16px 24px 10px;border-bottom:1px solid var(--line)}
+.eh .subj{font-size:18px;font-weight:600;margin-bottom:10px}
+.eh .from{display:flex;align-items:center;gap:10px}
+.eh .av{width:34px;height:34px;border-radius:50%;background:#F3E3C9;color:#8A5A12;display:flex;align-items:center;justify-content:center;font-weight:600}
+.eh .who b{font-weight:600}.eh .who span{color:var(--second);font-size:12px}
+.eh .when{margin-left:auto;text-align:right;color:var(--second);font-size:12px;line-height:1.5}
+.eh .to{margin-top:8px;color:var(--second);font-size:12px}
+.blocked{margin:10px 24px 0;background:#F5F5F7;border-radius:6px;padding:7px 10px;font-size:12px;color:var(--second);display:flex;align-items:center;gap:8px}
+.blocked a{color:var(--a);margin-left:auto}
+.atts{display:flex;gap:8px;flex-wrap:wrap;padding:10px 24px 0}
+.att{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12px}
+.att .s{color:var(--third)}
+.att .sv{color:var(--a);border-left:1px solid var(--line);padding-left:8px;margin-left:2px;white-space:nowrap}
+.att.done .sv{color:#2DA44E}
+.ebody{padding:14px 24px;font-size:13.5px;line-height:1.55;color:#222}
+.ebody p{margin:0 0 10px}
+.quote{border-left:3px solid #E0E0E5;padding-left:10px;color:var(--second)}
+</style>
+
+<h2>Reading an email</h2>
+<p class="subtitle">Space on a filed email opens it in Quick Look, as a message rather than a PDF. Docking it as a reading pane shows the same view.</p>
+
+<div class="hd-wrap"><div class="hd-app" style="position:relative">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan</div>
+    <div class="search"><div class="scope"><i class="ti ti-file-text"></i>Documents<i class="ti ti-chevron-down" style="font-size:13px"></i></div><div class="q"><i class="ti ti-search"></i>Search, or type # and a number<span style="margin-left:auto" class="kbd">/</span></div></div>
+    <div class="topright"><span class="pill"><span class="dot"></span>Helper</span><i class="ti ti-help-circle" style="font-size:18px"></i><span class="avatar">PN</span></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="navsec">Recent</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail"></i>Emails</div>
+      <div class="ni"><i class="ti ti-folder"></i>Folders</div>
+      <div class="ni"><i class="ti ti-building"></i>Clients</div>
+      <div class="navsec">Recent Matters</div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.2 – Licence Review <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Matters <i class="ti ti-plus" style="font-size:13px"></i></div>
+      <div class="ni"><i class="ti ti-chevron-down chev"></i><i class="ti ti-briefcase"></i>1001.1 – Charter Dispute <span class="sub">Saltmarsh</span></div>
+      <div class="ni l2 on"><i class="ti ti-folder-open"></i>Correspondence</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Pleadings</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Evidence</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Drafts</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Emails</div>
+      <div class="ni l2"><i class="ti ti-lock"></i>Privileged</div>
+      <div class="ni l2"><i class="ti ti-folder-search"></i>My Recent Docs Here</div>
+      <div class="ni l2"><i class="ti ti-folder-search"></i>Emails in This Matter</div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Favorites</div>
+      <div class="ni"><i class="ti ti-star"></i>Cap Table – Series A.xlsx</div>
+      <div class="ni"><i class="ti ti-star"></i>1002.1 › Due Diligence</div>
+    </div>
+    <div class="main"><div class="crumbs"><span>Saltmarsh Shipping Ltd</span><i class="ti ti-chevron-right" style="font-size:12px"></i><span>1001.1 – Charter Dispute – MV Northern Star</span><i class="ti ti-chevron-right" style="font-size:12px"></i><b>Correspondence</b></div>
+      <div class="title"><h1>Correspondence</h1><span>1001.1 – Charter Dispute – MV Northern Star</span><i class="ti ti-star" style="color:var(--third);margin-left:4px"></i></div></div>
+    <div class="side"></div>
+  </div>
+  <div class="ovl">
+    <span class="navbtn"><i class="ti ti-chevron-left"></i></span>
+    <div class="ql">
+      <div class="pvbar"><i class="ti ti-mail eml" style="font-size:17px"></i><span class="t">Email from Saltmarsh – Instructions</span><span class="hint">5 of 7 · # 10455</span><span class="btn pri"><i class="ti ti-external-link"></i>Open</span><span class="btn ghost" title="Dock as reading pane"><i class="ti ti-layout-sidebar-right"></i></span><span class="btn ghost"><i class="ti ti-download"></i></span><span class="btn ghost"><i class="ti ti-x"></i></span></div>
+      <div class="eh">
+        <div class="subj">MV Northern Star – instructions to respond to Owners' claim</div>
+        <div class="from"><span class="av">MH</span><div class="who"><b>Marcus Hale</b> <span>&lt;marcus.hale@saltmarsh-shipping.example&gt;</span></div>
+          <div class="when">Sent Sep 28, 2026, 4:12 PM<br>Received Sep 28, 2026, 4:12 PM</div></div>
+        <div class="to">To: Tom Reeve · Cc: Jamie Clarke, Priya Nair</div>
+      </div>
+      <div class="atts">
+        <span class="att"><i class="ti ti-file-type-pdf pdf"></i>Hire Statement – Q3.pdf <span class="s">186 KB</span><span class="sv">Save to Matter</span></span>
+        <span class="att done"><i class="ti ti-file-spreadsheet xls"></i>Laytime Workings.xlsx <span class="s">42 KB</span><span class="sv"><i class="ti ti-check" style="font-size:12px"></i> # 10405</span></span>
+      </div>
+      <div class="blocked"><i class="ti ti-photo-off" style="font-size:15px"></i>Pictures from the internet are blocked, so the sender can't tell this email was opened.<a>Show Pictures</a></div>
+      <div class="ebody">
+        <p>Tom,</p>
+        <p>Further to our call this morning, please respond to Dunmere Pryce's letter of 29 September on the basis we discussed. We dispute the off-hire calculation for the period at Rotterdam and the demurrage figure, which double-counts the time waiting for a berth.</p>
+        <p>The hire statement and Priya's laytime workings are attached. Let me know if you need the master's log for those days.</p>
+        <p>Regards,<br>Marcus</p>
+        <p class="quote">From: Dunmere Pryce LLP<br>Sent: 28 September 2026 11:02<br>Subject: MV Northern Star – Owners' claim…</p>
+      </div>
+    </div>
+    <span class="navbtn"><i class="ti ti-chevron-right"></i></span>
+  </div>
+</div></div>
+<script>
+(function(){function fit(){document.querySelectorAll('.hd-wrap').forEach(function(w){var a=w.querySelector('.hd-app');var s=Math.min(1,w.clientWidth/1280);a.style.transform='scale('+s+')';w.style.height=(760*s)+'px';});}window.addEventListener('resize',fit);fit();setTimeout(fit,50);})();
+</script>
+
+<div class="notes">
+<div>
+<h3>What it shows</h3>
+<ul>
+<li>The subject, sender, To and Cc, and both dates, read from the filed message.</li>
+<li><b>Attachments</b> as chips. Clicking one previews it if it's a PDF or a picture, or downloads it. <b>Save to Matter</b> files it as a document of its own in this email's folder, with the email's sent properties and an attachment link, as filing from Outlook does (M5). One already filed shows its #.</li>
+<li>The email's own text. Its HTML is cleaned and shown in a sandboxed frame, so no script in a message ever runs.</li>
+<li><b>Open</b> opens the <code>.eml</code> or <code>.msg</code> in your mail app, as double-click does.</li>
+</ul>
+</div>
+<div>
+<h3>Pictures from the internet</h3>
+<ul>
+<li>Many emails load pictures from the sender's server, and some are trackers that tell the sender each time the email is opened, and from where.</li>
+<li>I propose blocking them by default, as Outlook and Apple Mail can, with <b>Show Pictures</b> for that viewing only. Pictures sent inside the message always show.</li>
+</ul>
+</div>
+</div>
+
+<h3 style="margin-top:1rem">Should pictures from the internet be blocked?</h3>
+<div class="options">
+  <div class="option" data-choice="block">
+    <div class="letter">A</div>
+    <div class="content"><h3>Blocked, with Show Pictures</h3><p>Blocked every time, unless you ask for them on that viewing.</p></div>
+  </div>
+  <div class="option" data-choice="never">
+    <div class="letter">B</div>
+    <div class="content"><h3>Always blocked</h3><p>No button. A filed email is a record, and its trackers never fire.</p></div>
+  </div>
+  <div class="option" data-choice="show">
+    <div class="letter">C</div>
+    <div class="content"><h3>Always shown</h3><p>The email looks as it did in the inbox.</p></div>
+  </div>
+</div>

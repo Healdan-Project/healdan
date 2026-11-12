@@ -1,0 +1,203 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>M6 mockup: the overall layout</title>
+<style>:root{--border:#d1d1d6;--text-secondary:#6e6e73;--bg-secondary:#fff;--bg-tertiary:#e5e5e7}body{margin:24px auto;max-width:1340px;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#1d1d1f;background:#f5f5f7}.subtitle{color:var(--text-secondary)}.options{display:flex;flex-direction:column;gap:.75rem}.option{display:flex;gap:1rem;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem}.option .letter{flex:none;width:28px;height:28px;border-radius:6px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-weight:600}.option h3{margin:0 0 .25rem;font-size:1rem}.option p{margin:0;color:var(--text-secondary);font-size:.9rem}</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+.hd-wrap{width:100%;overflow:hidden;border-radius:10px;border:1px solid var(--border);margin-bottom:1.5rem}
+.hd-app{width:1280px;height:760px;transform-origin:0 0;display:grid;grid-template-rows:52px 1fr;font:13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;background:#fff;
+--a:#0C69C0;--a-soft:#E6F0FA;--focus:#22A2E0;--side:#F5F5F7;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--hover:#EFEFF2}
+.hd-app i.ti{font-size:16px;line-height:1}
+.top{display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff}
+.brand{display:flex;align-items:center;gap:8px;width:216px;font-weight:600;font-size:15px}
+.mark{width:20px;height:22px}
+.search{flex:1;max-width:640px;display:flex;height:34px;border:1px solid #C7C7CC;border-radius:8px;overflow:hidden}
+.scope{display:flex;align-items:center;gap:6px;padding:0 10px 0 12px;background:var(--side);border-right:1px solid #C7C7CC;font-weight:500;white-space:nowrap}
+.q{flex:1;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--third)}
+.kbd{font:11px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--second)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--second)}
+.pill{display:flex;align-items:center;gap:6px;font-size:12px}
+.dot{width:7px;height:7px;border-radius:50%;background:#2DA44E}
+.avatar{width:28px;height:28px;border-radius:50%;background:#D9E7F7;color:var(--a);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px}
+.body{display:grid;grid-template-columns:248px 1fr 320px;min-height:0}
+.nav{background:var(--side);border-right:1px solid var(--line);padding:10px 8px;overflow:hidden}
+.navsec{font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;margin:14px 8px 4px;display:flex;justify-content:space-between}
+.navsec:first-child{margin-top:4px}
+.ni{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ni i{color:var(--second)}
+.ni.on{background:var(--a-soft);color:var(--a);font-weight:500}.ni.on i{color:var(--a)}
+.ni .sub{color:var(--third);font-size:11px;margin-left:2px}
+.ni.l2{padding-left:24px}.ni.l3{padding-left:44px}
+.chev{font-size:12px!important;color:var(--third)!important;width:12px}
+.main{display:flex;flex-direction:column;min-width:0}
+.crumbs{display:flex;align-items:center;gap:6px;padding:12px 20px 0;color:var(--second);font-size:12px}
+.crumbs b{color:#1D1D1F;font-weight:500}
+.title{display:flex;align-items:baseline;gap:10px;padding:4px 20px 10px}
+.title h1{font-size:20px;font-weight:600;margin:0}
+.title span{color:var(--second)}
+.bar{display:flex;align-items:center;gap:6px;padding:0 20px 10px;border-bottom:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid #D1D1D6;background:#fff;font-size:12.5px;white-space:nowrap}
+.btn.pri{background:var(--a);border-color:var(--a);color:#fff}.btn.pri i{color:#fff}
+.btn.ghost{border-color:transparent;color:var(--second)}
+.sep{width:1px;height:20px;background:var(--line);margin:0 4px}
+.count{margin-left:auto;color:var(--third);font-size:12px;white-space:nowrap}
+table{width:100%;border-collapse:collapse}
+th{font-size:11.5px;font-weight:500;color:var(--second);text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th.sorted{color:#1D1D1F}
+td{padding:0 10px;height:34px;border-bottom:1px solid #F2F2F4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.sel td{background:#DCEAF8}
+tr:hover td{background:var(--hover)}tr.sel:hover td{background:#DCEAF8}
+.fi{display:flex;align-items:center;gap:8px}
+.fi i{font-size:17px}
+.pdf{color:#C8372D}.doc{color:#2B579A}.xls{color:#217346}.odt{color:#0E85CD}.eml{color:#B7792B}
+.hold{color:#C77700}
+.drop{margin:10px 20px;border:1.5px dashed #C7C7CC;border-radius:8px;color:var(--third);text-align:center;padding:10px;font-size:12px}
+.side{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;gap:4px;padding:10px 12px 0;border-bottom:1px solid var(--line)}
+.tab{padding:6px 10px 8px;color:var(--second);font-weight:500;border-bottom:2px solid transparent}
+.tab.on{color:var(--a);border-color:var(--a)}
+.det{padding:14px 16px;overflow:hidden}
+.thumb{height:150px;border:1px solid var(--line);border-radius:6px;background:linear-gradient(#fff,#fff) padding-box;display:flex;flex-direction:column;gap:6px;padding:14px 18px;margin-bottom:12px;position:relative}
+.thumb div{height:5px;background:#E9E9EC;border-radius:2px}
+.thumb .pv{position:absolute;right:8px;bottom:8px}
+.dname{font-weight:600;font-size:14px;margin-bottom:2px}
+.dmeta{color:var(--second);font-size:12px;margin-bottom:10px}
+.acts{display:flex;gap:6px;margin-bottom:14px}
+.kv{display:grid;grid-template-columns:96px 1fr;row-gap:6px;font-size:12.5px}
+.kv dt{color:var(--second)}.kv dd{margin:0}
+.h4{font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px}
+.ver{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;border-bottom:1px solid #F2F2F4}
+.ver span:last-child{color:var(--second)}
+.notes{display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:.9rem}
+.notes li{margin-bottom:.35rem}
+</style>
+
+<h2>The User app: overall layout</h2>
+<p class="subtitle">Priya Nair has matter 1001.1 open at its Correspondence folder and a letter selected. Demo-firm data; the colours are the helper's, the icons Tabler's. This is about where things sit, not the final look.</p>
+
+<div class="hd-wrap" id="hdwrap"><div class="hd-app" id="hdapp">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan</div>
+    <div class="search"><div class="scope"><i class="ti ti-file-text"></i>Documents<i class="ti ti-chevron-down" style="font-size:13px"></i></div><div class="q"><i class="ti ti-search"></i>Search, or type # and a number<span style="margin-left:auto" class="kbd">/</span></div></div>
+    <div class="topright"><span class="pill"><span class="dot"></span>Helper</span><i class="ti ti-help-circle" style="font-size:18px"></i><span class="avatar">PN</span></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="navsec">Search</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail"></i>Emails</div>
+      <div class="ni"><i class="ti ti-folder"></i>Folders</div>
+      <div class="ni"><i class="ti ti-building"></i>Clients</div>
+      <div class="navsec">Recent Matters</div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.2 – Licence Review <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Matters <i class="ti ti-plus" style="font-size:13px"></i></div>
+      <div class="ni"><i class="ti ti-chevron-down chev"></i><i class="ti ti-briefcase"></i>1001.1 – Charter Dispute <span class="sub">Saltmarsh</span></div>
+      <div class="ni l2 on"><i class="ti ti-folder-open"></i>Correspondence</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Pleadings</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Evidence</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Drafts</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Emails</div>
+      <div class="ni l2"><i class="ti ti-lock"></i>Privileged</div>
+      <div class="ni l2"><i class="ti ti-folder-search"></i>My Recent Docs Here</div>
+      <div class="ni l2"><i class="ti ti-folder-search"></i>Emails in This Matter</div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Favorites</div>
+      <div class="ni"><i class="ti ti-star"></i>Cap Table – Series A.xlsx</div>
+      <div class="ni"><i class="ti ti-star"></i>1002.1 › Due Diligence</div>
+    </div>
+    <div class="main">
+      <div class="crumbs"><span>Saltmarsh Shipping Ltd</span><i class="ti ti-chevron-right" style="font-size:12px"></i><span>1001.1 – Charter Dispute – MV Northern Star</span><i class="ti ti-chevron-right" style="font-size:12px"></i><b>Correspondence</b></div>
+      <div class="title"><h1>Correspondence</h1><span>1001.1 – Charter Dispute – MV Northern Star</span><i class="ti ti-star" style="color:var(--third);margin-left:4px"></i></div>
+      <div class="bar">
+        <span class="btn pri"><i class="ti ti-upload"></i>Upload</span>
+        <span class="btn"><i class="ti ti-folder-plus"></i>New Folder</span>
+        <span class="sep"></span>
+        <span class="btn ghost"><i class="ti ti-external-link"></i>Open</span>
+        <span class="btn ghost"><i class="ti ti-eye"></i>Preview</span>
+        <span class="btn ghost"><i class="ti ti-download"></i>Download</span>
+        <span class="btn ghost"><i class="ti ti-lock"></i>Check Out</span>
+        <span class="btn ghost"><i class="ti ti-dots"></i></span>
+        <span class="count">7 documents</span>
+      </div>
+      <table>
+        <thead><tr><th style="width:44%">Title</th><th class="num">Doc #</th><th class="num">Version</th><th>Author</th><th class="sorted">Edit Date <i class="ti ti-arrow-down" style="font-size:11px"></i></th><th></th></tr></thead>
+        <tbody>
+          <tr><td><span class="fi"><i class="ti ti-file-type-docx doc"></i>Letter to Dunmere Pryce – Response to Claim.docx</span></td><td class="num">10431</td><td class="num">3</td><td>Priya Nair</td><td>Today 09:42</td><td><i class="ti ti-lock hold" title="Checked out by you"></i></td></tr>
+          <tr><td><span class="fi"><i class="ti ti-file-text odt"></i>Attendance Note – Ops Call with Saltmarsh.odt</span></td><td class="num">10402</td><td class="num">1</td><td>Priya Nair</td><td>Oct 3, 2026</td><td></td></tr>
+          <tr><td><span class="fi"><i class="ti ti-file-type-docx doc"></i>Letter to Saltmarsh – Initial Advice.docx</span></td><td class="num">10397</td><td class="num">2</td><td>Tom Reeve</td><td>Oct 1, 2026</td><td></td></tr>
+          <tr class="sel"><td><span class="fi"><i class="ti ti-file-type-pdf pdf"></i>Letter from Dunmere Pryce – Owners' Claim.pdf</span></td><td class="num">10388</td><td class="num">1</td><td>Jamie Clarke</td><td>Sep 29, 2026</td><td></td></tr>
+          <tr><td><span class="fi"><i class="ti ti-mail eml"></i>Email from Saltmarsh – Instructions.eml</span></td><td class="num">10455</td><td class="num">1</td><td>Tom Reeve</td><td>Sep 28, 2026</td><td></td></tr>
+          <tr><td><span class="fi"><i class="ti ti-file-type-pdf pdf"></i>Notice of Arbitration – Draft Comments.pdf</span></td><td class="num">10461</td><td class="num">1</td><td>Jamie Clarke</td><td>Sep 26, 2026</td><td></td></tr>
+          <tr><td><span class="fi"><i class="ti ti-file-spreadsheet xls"></i>Correspondence Log.xlsx</span></td><td class="num">10390</td><td class="num">4</td><td>Priya Nair</td><td>Sep 24, 2026</td><td></td></tr>
+        </tbody>
+      </table>
+      <div class="drop"><i class="ti ti-upload" style="font-size:14px"></i> Drop files or emails here to file them in Correspondence</div>
+    </div>
+    <div class="side">
+      <div class="tabs"><span class="tab on">Details</span><span class="tab">Filters</span></div>
+      <div class="det">
+        <div class="thumb"><div style="width:40%"></div><div></div><div></div><div style="width:85%"></div><div></div><div style="width:70%"></div><div></div><div style="width:60%"></div><span class="btn pv"><i class="ti ti-arrows-maximize"></i>Preview</span></div>
+        <div class="dname">Letter from Dunmere Pryce – Owners' Claim.pdf</div>
+        <div class="dmeta"># 10388 · Version 1 · 214 KB</div>
+        <div class="acts"><span class="btn pri"><i class="ti ti-external-link"></i>Open</span><span class="btn"><i class="ti ti-download"></i>Download</span><span class="btn"><i class="ti ti-pencil"></i>Edit</span></div>
+        <dl class="kv">
+          <dt>Client</dt><dd>1001 – Saltmarsh Shipping Ltd</dd>
+          <dt>Matter</dt><dd>1001.1 – Charter Dispute</dd>
+          <dt>Class</dt><dd>Correspondence</dd>
+          <dt>Subclass</dt><dd>Letter</dd>
+          <dt>Author</dt><dd>Jamie Clarke</dd>
+          <dt>Typist</dt><dd>Jamie Clarke</dd>
+          <dt>Date Filed</dt><dd>Sep 29, 2026, 9:40 AM</dd>
+        </dl>
+        <div class="h4">Versions</div>
+        <div class="ver"><span>1 · Current</span><span>Jamie Clarke · Sep 29</span></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+<script>
+(function(){function fit(){var w=document.getElementById('hdwrap'),a=document.getElementById('hdapp');if(!w||!a)return;var s=Math.min(1,w.clientWidth/1280);a.style.transform='scale('+s+')';w.style.height=(760*s)+'px';}window.addEventListener('resize',fit);fit();setTimeout(fit,50);})();
+</script>
+
+<div class="notes">
+<div>
+<h3>What's settled, drawn as the roadmap has it</h3>
+<ul>
+<li>Scope picker joined to the search box; <span class="kbd">/</span> jumps to it.</li>
+<li>Left: the four search scopes, Recent Matters, the My Matters tree (search folders inside it), My Favorites.</li>
+<li>Breadcrumb as client › <code>client.matter – name</code> › folder.</li>
+<li>Title, Doc #, Version, Edit Date (plus Author) in the list; double-click opens in the app.</li>
+<li>Right: the selected item's details, or the filters.</li>
+</ul>
+</div>
+<div>
+<h3>What I've had to guess</h3>
+<ul>
+<li><b>The four scopes on the left.</b> I've read them as: each opens that scope, starting from your recent ones, and the search box then searches within it.</li>
+<li><b>Details and Filters</b> as two tabs you switch between.</li>
+<li><b>"Helper"</b> top right: whether Open in App will work on this computer.</li>
+<li>A drop zone under the list, though the whole list takes drops.</li>
+<li>Actions on a toolbar above the list as well as in the panel.</li>
+</ul>
+</div>
+</div>
+
+<h3 style="margin-top:1rem">How should the right panel switch between details and filters?</h3>
+<div class="options">
+  <div class="option" data-choice="tabs">
+    <div class="letter">A</div>
+    <div class="content"><h3>Two tabs, Details and Filters</h3><p>You choose. Selecting a document doesn't hide the filters you're using unless you're on Details.</p></div>
+  </div>
+  <div class="option" data-choice="auto">
+    <div class="letter">B</div>
+    <div class="content"><h3>It follows the selection</h3><p>Filters while nothing is selected, Details once something is. Fewer clicks, but the panel changes under you as you click about.</p></div>
+  </div>
+  <div class="option" data-choice="both">
+    <div class="letter">C</div>
+    <div class="content"><h3>Filters above the list, details on the right</h3><p>Filters as a row of drop-downs over the list (Date, Type, Author…), so both show at once; the panel is only ever details.</p></div>
+  </div>
+</div>

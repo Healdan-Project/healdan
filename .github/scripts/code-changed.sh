@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 The Healdan Project
 # SPDX-License-Identifier: LGPL-3.0-only
 
-# Writes two step outputs so the CI workflows can skip their build steps and still report the checks master's ruleset
+# Writes three step outputs so the CI workflows can skip their build steps and still report the checks master's ruleset
 # requires.
 #   code=false    when a pull request changes only docs (docs/, the docs site in site/, and Markdown files outside
 #                 src/) or the desktop clients (clients/helper/, clients/libreoffice/ and clients/icons/), none of
@@ -10,6 +10,8 @@
 #                 packages the Office add-in's pages and manifest into its jar, so a change there builds the server too.
 #   clients=true  when a pull request changes anything under clients/, the clients workflow itself, or the API
 #                 contract (healdan-api's openapi.yaml), which the helper's contract tests read.
+#   web=true      when a pull request changes anything under healdan-web/ (the User app's workspace and its module), the
+#                 web workflow itself, or the API contract, whose types the app generates.
 # Pushes, and pull requests that change anything else, get code=true; pushes always get clients=true. The docs site's
 # own checks run in docs-site.yml, and the clients' in clients.yml.
 #
@@ -18,6 +20,7 @@ set -euo pipefail
 
 code=true
 clients=true
+web=true
 if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
   # --no-renames lists a renamed file's old path too, so moving code into docs/, site/ or to a .md name counts as code.
   changed=$(git diff --name-only --no-renames HEAD^1 HEAD)
@@ -34,9 +37,14 @@ if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
     code=false
     echo "Only docs and clients changed, so the Java build steps are skipped."
   fi
+  web=false
+  if grep -qE '^healdan-web/|^\.github/workflows/web\.yml$|^healdan-api/src/main/resources/healdan/api/openapi\.yaml$' <<<"$changed"; then
+    web=true
+  fi
   if [ "$clients" = false ]; then
     echo "No client changed, so the client builds are skipped."
   fi
 fi
 echo "code=$code" >> "$GITHUB_OUTPUT"
 echo "clients=$clients" >> "$GITHUB_OUTPUT"
+echo "web=$web" >> "$GITHUB_OUTPUT"

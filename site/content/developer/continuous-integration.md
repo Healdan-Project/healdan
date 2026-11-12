@@ -9,19 +9,21 @@ weight: 4
 
 | Check | Workflow | What it does |
 |---|---|---|
-| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`) and for Oracle's and SQL Server's drivers (`check-database-drivers.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
+| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`) for Oracle's and SQL Server's drivers (`check-database-drivers.py`) and for the licences of the User app's npm packages (`check-web-licences.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, `WarParsersTest` and `WarStorageTest`, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`), the helper's open-save-close cycle (its stack test), provider sign-in through a stand-in Keycloak (`test-signin.sh`) and storage backends against a stand-in Garage (`test-storage.sh`) included |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
+| `Web` | `web.yml` | Builds and tests the User app in `healdan-web/web`: generates the API's types, typechecks, lints, runs the tests and builds (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
 
 ## How `build` Runs
 
 `build` is the last of several jobs, so that the tests can run side by side:
 
-1. **`checks`** runs the icon, doc-link, hosts, Maven repository and database driver checks, reads the JDK from
+1. **`checks`** runs the icon, doc-link, hosts, Maven repository, database driver and web licence checks, reads the JDK from
    the `Dockerfile`, and plans the test shards with `.github/scripts/test-shards.py`.
 2. **`Tests (1 of N)` … `Tests (N of N)`** each compile every module except the WAR, without the GWT compile, the
-   javadoc or the plugin zips (the Docker build makes all of those), then run their share of the tests.
+   javadoc or the plugin zips (the Docker build makes all of those), then run their share of the tests. They skip
+   the User app's Node build too (`-Dhealdan.web.skip=true`), which the `Web` check and the Docker build run.
 3. **`build`** passes when `checks` and every shard passed. It's the check `master` requires.
 4. **`test-times`** saves how long each test class took, for the next run's plan. It isn't part of `build`.
 
@@ -53,34 +55,58 @@ downloads only what's missing. Before that step, on 29 October 2026, shards on M
 had saved, downloaded every file again, and failed on SourceForge's 403.
 
 The Docker build keeps its own copy, which the `maven:3.9` image both writes and reads, so it doesn't need the step.
+It keeps npm's cache for the User app's packages beside it, keyed on `healdan-web/web/package-lock.json`, and only
+`master`'s amd64 job saves either.
 
 ## What a Pull Request Runs
 
-`.github/scripts/code-changed.sh` lists the files a pull request changes and writes two answers. `code` is false
+`.github/scripts/code-changed.sh` lists the files a pull request changes and writes three answers. `code` is false
 when the pull request changes only docs (`docs/`, `site/`, and Markdown outside a `src/` folder) and the helper, the
 LibreOffice extension and the icons (`clients/helper/`, `clients/libreoffice/` and `clients/icons/`). A change under
 `clients/office/` counts as code as well as clients, because `healdan-api` packages the Office add-in's pages and
 manifest into its jar. A Markdown file there is still docs. `code` gates the Java build's test shards and the Docker
 build steps. `clients` is true when the pull request changes anything under `clients/`, `clients.yml` itself, or the
 API contract, `healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. It
-gates the client test jobs. A push always gets both true.
+gates the client test jobs. `web` is true when the pull request changes anything under `healdan-web/`, `web.yml`
+itself, or the API contract, which the User app's types are generated from. It gates the `Web` check's app job. A
+push always gets all three true.
 
 Every workflow still reports its required checks when its steps are skipped, so `master`'s ruleset can require
 them all.
 
-| The pull request changes | `build` shards | Docker `Test` jobs | Client test jobs |
-|---|---|---|---|
-| Only the helper, the extension or the icons in `clients/` | Skipped | Skipped | Run |
-| `clients/office/`, other than Markdown | Run | Run | Run |
-| The API contract, `openapi.yaml` | Run | Run | Run |
-| Only the server, or anything else outside `clients/` and the docs | Run | Run | Skipped |
-| Only docs | Skipped | Skipped | Skipped |
-| Docs and the helper, extension or icons | Skipped | Skipped | Run |
-| The server and `clients/` | Run | Run | Run |
+| The pull request changes | `build` shards | Docker `Test` jobs | Client test jobs | `Web` app job |
+|---|---|---|---|---|
+| Only the helper, the extension or the icons in `clients/` | Skipped | Skipped | Run | Skipped |
+| `clients/office/`, other than Markdown | Run | Run | Run | Skipped |
+| The API contract, `openapi.yaml` | Run | Run | Run | Run |
+| `healdan-web/`, other than Markdown | Run | Run | Skipped | Run |
+| Only the server, or anything else outside `clients/` and the docs | Run | Run | Skipped | Skipped |
+| Only docs | Skipped | Skipped | Skipped | Skipped |
+| Docs and the helper, extension or icons | Skipped | Skipped | Run | Skipped |
+| The server and `clients/` | Run | Run | Run | Skipped |
 
 Pushes to `master` that change only docs or Markdown files don't rebuild the image (`paths-ignore` in `docker-image.yml`
-and `build-logicaldoc.yml`). A push always gets both answers true, so one that changes only the helper, the extension
+and `build-logicaldoc.yml`). A push always gets every answer true, so one that changes only the helper, the extension
 or the icons rebuilds it.
+
+## The Web Check
+
+`web.yml` has no paths filter either, so every pull request runs it and the check can be required. Its jobs are:
+
+1. **`changes`** runs `code-changed.sh`.
+2. **`User app (ubuntu-24.04)`** sets up the Node version in `healdan-web/web/.nvmrc` and, in `healdan-web/web`,
+   runs `npm ci --ignore-scripts`, `npm run generate` (the API's types, from `openapi.yaml`), `npm run typecheck`,
+   `npm run lint`, `npm test` and `npm run build`.
+3. **`Web`** is the check to require. It passes when the app job passed, or when it was skipped because nothing under
+   `healdan-web/`, nor `web.yml`, nor the API contract changed. A cancelled run fails it.
+
+`check-web-licences.py` runs in `build`'s `checks` job, not here, so a package with a licence Healdan can't pass on
+fails there. It reads `healdan-web/web/package-lock.json` and fails on a package the app ships (one the lockfile
+doesn't mark `dev`) with a licence outside MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC and 0BSD, or with none.
+A package used only to build or test may also be BlueOak-1.0.0, CC0-1.0, CC-BY-4.0, Python-2.0 or Unlicense. A
+package with another licence needs an entry in the script's `ALLOWED` list, with the licence reviewed and the reason
+it's acceptable. An entry whose package the lockfile now gives another licence fails, and so does one the lockfile no
+longer has, so the list stays honest.
 
 ## The Clients Check
 

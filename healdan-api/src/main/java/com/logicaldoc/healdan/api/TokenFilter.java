@@ -37,15 +37,23 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 
 /**
- * Signs every API request in from its {@code Authorization: Bearer} device
- * token, unless the resource method is {@link Public} (spec section 5.3).
- * Nothing else signs a request in: no cookie, {@code sid}, Basic or
- * {@code X-API-KEY} (section 5.1). A token from a provider sign-in is checked
- * back with its provider when that's due ({@link ProviderRecheck}, M4 spec
- * section 9), before its session.
+ * Signs every API request in, unless the resource method is {@link Public}
+ * (spec section 5.3), in one of two ways:
+ * <ul>
+ * <li>from its {@code Authorization: Bearer} device token. A token from a
+ * provider sign-in is checked back with its provider when that's due
+ * ({@link ProviderRecheck}, M4 spec section 9), before its session;</li>
+ * <li>with no Bearer {@code Authorization} header (none, or another scheme's,
+ * such as the Basic credentials a browser sends to a proxy in front), from the
+ * browser's CE web session, for Healdan's own pages, on
+ * {@link WebSessionRoute}'s rule (M6 spec section 8.1). There the caller has
+ * no token.</li>
+ * </ul>
+ * Nothing else signs a request in: no {@code sid} parameter or header, no
+ * {@code ldoc-sid} cookie, no Basic and no {@code X-API-KEY} (section 5.1).
  * <p>
  * For the length of the request the caller is in {@link Caller}, and an
- * {@link LDAuthenticationToken} with the token's CE session is in
+ * {@link LDAuthenticationToken} with the request's CE session is in
  * {@link SecurityContextHolder}, where CE's code looks for the current
  * session. {@link ApiServlet} clears both after every request, once the
  * response is written: a streamed body, such as a document's content, is
@@ -56,9 +64,17 @@ public class TokenFilter implements ContainerRequestFilter {
 
 	private static final Pattern BEARER = Pattern.compile("^Bearer[ \\t]+(\\S+)[ \\t]*$", Pattern.CASE_INSENSITIVE);
 
+	/** A Bearer authorization, well formed or not */
+	private static final Pattern BEARER_SCHEME = Pattern.compile("^[ \\t]*Bearer(?:[ \\t].*)?$",
+			Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+
 	private static final String NO_TOKEN = "Sign in first, and send the device token as Authorization: Bearer.";
 
 	private static final String REFUSED = "This device token doesn't work any more. Sign in again.";
+
+	private static final String NOT_WEB = "This request can't use the browser's session: %s.";
+
+	private static final String SIGNED_OUT = "You're signed out, or your session has ended. Sign in again.";
 
 	@Context
 	private ResourceInfo resourceInfo;
@@ -72,7 +88,13 @@ public class TokenFilter implements ContainerRequestFilter {
 		if (method != null && method.isAnnotationPresent(Public.class))
 			return;
 
-		String presented = bearer(requestContext.getHeaderString(HttpHeaders.AUTHORIZATION));
+		String authorization = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
+		if (!bearerScheme(authorization)) {
+			webSession(requestContext);
+			return;
+		}
+
+		String presented = bearer(authorization);
 		if (presented == null) {
 			requestContext.abortWith(unauthenticated(NO_TOKEN, "Bearer"));
 			return;
@@ -119,6 +141,51 @@ public class TokenFilter implements ContainerRequestFilter {
 
 		tokens.touch(token, now);
 
+		signIn(user, session, token);
+	}
+
+	/**
+	 * The web-session route (M6 spec section 8.1), for a request with no
+	 * Bearer {@code Authorization} header: signs it in with the browser's CE
+	 * session if {@link WebSessionRoute} lets it. No one signs in here, so the
+	 * throttle doesn't come into it. A request that isn't a same-origin
+	 * browser request is refused as a request with no token is, with the
+	 * Bearer challenge. A same-origin one that breaks the rule is
+	 * {@code 403 web-session-refused}, so the page doesn't take it for a
+	 * sign-out, and one with no open session is {@code 401} without a
+	 * challenge.
+	 */
+	private void webSession(ContainerRequestContext requestContext) {
+		if (!WebSessionRoute.sameOrigin(servletRequest)) {
+			requestContext.abortWith(unauthenticated(NO_TOKEN, "Bearer"));
+			return;
+		}
+		String refusal = WebSessionRoute.refusal(servletRequest).orElse(null);
+		if (refusal != null) {
+			requestContext.abortWith(ProblemMapper
+					.problem(new ApiProblem(403, WebSessionRoute.REFUSED, NOT_WEB.formatted(refusal))));
+			return;
+		}
+
+		Session session = WebSessionRoute.session(servletRequest).orElse(null);
+		User user = session != null ? WebSessionRoute.user(session) : null;
+		if (user == null) {
+			requestContext.abortWith(webRefused(SIGNED_OUT));
+			return;
+		}
+
+		SessionManager.get().renew(session.getSid());
+		signIn(user, session, null);
+	}
+
+	/**
+	 * Puts the caller in {@link Caller}, and an {@link LDAuthenticationToken}
+	 * with its CE session in {@link SecurityContextHolder}, for the length of
+	 * the request.
+	 *
+	 * @param token the device token, or null on the web-session route
+	 */
+	private static void signIn(User user, Session session, ApiToken token) {
 		Caller.set(new Caller(user, session, token));
 		LDAuthenticationToken authentication = new LDAuthenticationToken(user, null, authorities(user));
 		authentication.setSid(session.getSid());
@@ -131,6 +198,14 @@ public class TokenFilter implements ContainerRequestFilter {
 	static void clear() {
 		Caller.clear();
 		SecurityContextHolder.clearContext();
+	}
+
+	/**
+	 * @return true if the authorization's scheme is Bearer, whether or not a
+	 *         token follows; false for none or another scheme
+	 */
+	static boolean bearerScheme(String authorization) {
+		return authorization != null && BEARER_SCHEME.matcher(authorization).matches();
 	}
 
 	/**
@@ -204,6 +279,14 @@ public class TokenFilter implements ContainerRequestFilter {
 
 	private static Response refused() {
 		return unauthenticated(REFUSED, "Bearer error=\"invalid_token\"");
+	}
+
+	/**
+	 * @return {@code 401 unauthenticated} without a challenge, which a
+	 *         browser's page needn't answer
+	 */
+	private static Response webRefused(String detail) {
+		return ProblemMapper.problem(ApiProblem.unauthenticated(detail));
 	}
 
 	private static Response unauthenticated(String detail, String challenge) {

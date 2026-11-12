@@ -1,0 +1,97 @@
+name: Web
+
+# Builds and tests the User app in healdan-web/web (an npm workspace): the generated API types, the typecheck, ESLint,
+# the unit tests and the production build. The Maven build (build-logicaldoc.yml) skips Node with -Dhealdan.web.skip=true,
+# and the Docker image build runs the same build through Maven.
+#
+# No paths filter: the Web check should be required, so every pull request runs the workflow and the app job skips
+# itself when code-changed.sh says the app didn't change: nothing under healdan-web/, this workflow or the API contract
+# (healdan-api's openapi.yaml, which the app's types are generated from). The Web job, the check, then passes at once.
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its outdated run. Pushes get a group per ref and commit, as in
+# build-logicaldoc.yml.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || format('{0}-{1}', github.ref, github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      web: ${{ steps.changes.outputs.web }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          # A pull request's merge commit and its base, so code-changed.sh can list the files it changes.
+          fetch-depth: 2
+
+      - name: Check for web changes
+        id: changes
+        run: bash .github/scripts/code-changed.sh
+
+  app:
+    name: User app (ubuntu-24.04)
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: healdan-web/web
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: healdan-web/web/.nvmrc
+          cache: npm
+          cache-dependency-path: healdan-web/web/package-lock.json
+
+      - name: Install the packages
+        run: npm ci --ignore-scripts
+
+      - name: Generate the API types
+        run: npm run generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  # The check master's ruleset requires: it passes when the app job did, or was skipped because nothing changed.
+  web:
+    name: Web
+    needs: [ changes, app ]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report the result
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          APP: ${{ needs.app.result }}
+          WEB: ${{ needs.changes.outputs.web }}
+        run: |
+          [ "$CHANGES" = success ] || exit 1
+          [ "$APP" = success ] && exit 0
+          [ "$APP" = skipped ] && [ "$WEB" = false ] && exit 0
+          exit 1

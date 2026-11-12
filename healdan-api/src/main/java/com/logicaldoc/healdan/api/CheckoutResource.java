@@ -83,7 +83,9 @@ public class CheckoutResource {
 	 * answered as it is, and from now on held on this device if the caller's
 	 * token names one; but when another of the caller's devices holds it, the
 	 * answer is {@code 409 held-elsewhere} unless the body asks to move it
-	 * here (M3 spec section 9.4).
+	 * here (M3 spec section 9.4). The web-session route is no device (M6 spec
+	 * section 8.1): what it checks out no device holds, and it can't move a
+	 * check-out a device holds.
 	 *
 	 * @param docNumber the doc #
 	 * @param body the {@link CheckoutRequest}, as JSON: whether to move the
@@ -114,10 +116,11 @@ public class CheckoutResource {
 				DeviceHolds devices = DeviceHolds.get();
 				if (ApiViews.checkedOutBy(document, user)) {
 					if (!devices.heldHere(document, token)) {
-						if (!move)
+						// The web-session route is no device, so a check-out can't move to it
+						if (!move || token == null)
 							throw heldElsewhere(document, user, docNumber);
 						devices.move(document, token, app);
-					} else if (token.getDevice() != null) {
+					} else if (token != null && token.getDevice() != null) {
 						// Opened on this device, which holds it from now on; the app named before stays unless another is
 						String named = app != null ? app
 								: devices.current(document).map(HoldDevice::getApp).orElse(null);

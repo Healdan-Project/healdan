@@ -102,11 +102,12 @@ public class DeviceHolds {
 	/**
 	 * Records that the document's check-out is held on the token's device,
 	 * through the token, in the app. A token with no device records none,
-	 * which any of the holder's devices may write to. Writes nothing when the
-	 * record already says so.
+	 * which any of the holder's devices may write to, and so does no token at
+	 * all: the API's web-session route, Healdan's own pages, is no device (M6
+	 * spec section 8.1). Writes nothing when the record already says so.
 	 *
 	 * @param doc the document, as it is now: checked out to the token's user
-	 * @param token the token of the device that holds it
+	 * @param token the token of the device that holds it, or null for none
 	 * @param app the app the document is open in, or null
 	 */
 	public void record(Document doc, ApiToken token, String app) {
@@ -118,23 +119,25 @@ public class DeviceHolds {
 	 * the API, in the same write.
 	 *
 	 * @param doc the document, as it is now: checked out to the token's user
-	 * @param token the token of the device that holds it
+	 * @param token the token of the device that holds it, or null for none
 	 * @param app the app the document is open in, or null
 	 * @param save the save just stored, which {@link #lastSaveId(Document)}
 	 *        and {@link #repeat(Document, String)} answer from now on; null to
 	 *        keep the last one
 	 */
 	public void record(Document doc, ApiToken token, String app, Save save) {
+		String device = device(token);
+		Long tokenId = token != null ? token.getId() : null;
 		HoldDevice row = find(doc);
-		if (row != null && upToDate(doc, row) && Objects.equals(row.getDevice(), token.getDevice())
-				&& Objects.equals(row.getTokenId(), token.getId()) && Objects.equals(row.getApp(), app)
+		if (row != null && upToDate(doc, row) && Objects.equals(row.getDevice(), device)
+				&& Objects.equals(row.getTokenId(), tokenId) && Objects.equals(row.getApp(), app)
 				&& (save == null || isLastSave(row, save)))
 			return;
 
 		if (row == null)
 			row = newRow(doc);
-		row.setDevice(token.getDevice());
-		row.setTokenId(token.getId());
+		row.setDevice(device);
+		row.setTokenId(tokenId);
 		row.setApp(app);
 		setLastSave(row, save);
 		store(row);
@@ -156,12 +159,21 @@ public class DeviceHolds {
 	 * check.
 	 *
 	 * @param doc a document, as it is now
-	 * @param token a token of the user who has it checked out
+	 * @param token a token of the user who has it checked out, or null for
+	 *        none, which is no device
 	 * @return true unless another device holds the check-out; true for a
 	 *         check-out no device holds
 	 */
 	public boolean heldHere(Document doc, ApiToken token) {
-		return current(doc).map(row -> row.getDevice().equals(token.getDevice())).orElse(true);
+		String device = device(token);
+		return current(doc).map(row -> row.getDevice().equals(device)).orElse(true);
+	}
+
+	/**
+	 * @return the token's device, or null for a token with none or no token
+	 */
+	private static String device(ApiToken token) {
+		return token != null ? token.getDevice() : null;
 	}
 
 	/**

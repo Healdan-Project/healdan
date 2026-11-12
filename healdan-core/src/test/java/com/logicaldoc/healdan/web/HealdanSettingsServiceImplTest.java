@@ -372,4 +372,30 @@ public class HealdanSettingsServiceImplTest extends AbstractHealdanTestCase {
 		assertEquals(365, HealdanSettings.get().apiTokenMaxDays());
 		assertTrue(HealdanSettings.get().apiCorsOrigins().isEmpty());
 	}
+
+	@Test
+	public void testStartInRoundTrip() throws Exception {
+		GUIHealdanSettings settings = as(boss).load();
+		assertEquals("app", settings.getUiStart());
+
+		settings.setUiStart("classic");
+		assertEquals("classic", as(boss).save(settings).getUiStart());
+		assertEquals("classic", as(boss).load().getUiStart());
+		assertEquals("classic", HealdanSettings.get().get(HealdanSettings.UI_START));
+
+		settings.setUiStart("app");
+		as(boss).save(settings);
+		assertEquals("app", HealdanSettings.get().uiStart());
+	}
+
+	@Test
+	public void testStartInRefused() throws Exception {
+		for (String value : new String[] { null, "", "Classic", "other" }) {
+			GUIHealdanSettings settings = as(boss).load();
+			settings.setUiStart(value);
+			ServerException e = assertThrows(ServerException.class, () -> as(boss).save(settings));
+			assertEquals("Start In must be the User App or the Classic Interface.", e.getMessage());
+			assertEquals("app", HealdanSettings.get().uiStart());
+		}
+	}
 }

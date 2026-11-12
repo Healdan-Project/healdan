@@ -198,6 +198,7 @@
         <module>healdan-core</module>
         <module>healdan-api</module>
         <module>healdan-storage</module>
+        <module>healdan-web</module>
         <module>logicaldoc-android</module>
         <module>logicaldoc-ios</module>
         <module>logicaldoc-webapp</module>

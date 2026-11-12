@@ -37,6 +37,7 @@ import com.logicaldoc.gui.frontend.client.dropbox.DropboxAuthorization;
 import com.logicaldoc.gui.frontend.client.dropbox.DropboxDialog;
 import com.logicaldoc.gui.frontend.client.dropbox.DropboxService;
 import com.logicaldoc.gui.frontend.client.google.drive.DriveMenuItem;
+import com.logicaldoc.gui.frontend.client.healdan.HealdanAppLink;
 import com.logicaldoc.gui.frontend.client.onlyoffice.OnlyOfficeCreate;
 import com.logicaldoc.gui.frontend.client.onlyoffice.OnlyOfficeEditor;
 import com.logicaldoc.gui.frontend.client.panels.MainPanel;
@@ -152,6 +153,7 @@ public class MainMenu extends ToolStrip implements FolderObserver, DocumentObser
 
         addSeparator();
         addSupportButton();
+        HealdanAppLink.add(this); // Healdan: the way back to the User app (M6 spec 8.6)
         addLogoutButton();
 
         addFill();

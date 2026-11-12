@@ -16,9 +16,14 @@ import java.util.concurrent.ThreadPoolExecutor;
 import javax.sql.DataSource;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockServletConfig;
 import org.springframework.mock.web.MockServletContext;
 
+import com.logicaldoc.core.security.Client;
+import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.SessionManager;
+import com.logicaldoc.core.security.authentication.AuthenticationException;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
@@ -99,6 +104,10 @@ public abstract class ApiTestCase extends AbstractHealdanTestCase {
 		return call("PATCH", path);
 	}
 
+	protected ApiCall put(String path) {
+		return call("PUT", path);
+	}
+
 	protected ApiCall delete(String path) {
 		return call("DELETE", path);
 	}
@@ -107,7 +116,7 @@ public abstract class ApiTestCase extends AbstractHealdanTestCase {
 		return call("OPTIONS", path);
 	}
 
-	private ApiCall call(String method, String path) {
+	protected ApiCall call(String method, String path) {
 		return new ApiCall(servlet, servletContext, method, path);
 	}
 
@@ -127,6 +136,39 @@ public abstract class ApiTestCase extends AbstractHealdanTestCase {
 	 */
 	protected String signInAdmin() {
 		return signIn("admin", "admin");
+	}
+
+	/**
+	 * Signs a user {@link HealdanFixtures#user} made in as CE's sign-in page
+	 * does: opens a CE session through CE's sign-in chain and keeps its id in
+	 * the HTTP session's {@code sid} attribute, for the web-session route
+	 * ({@link ApiCall#webSession}).
+	 *
+	 * @param user the user
+	 * @return the HTTP session, whose {@code sid} attribute is the CE
+	 *         session's id
+	 */
+	protected MockHttpSession signInWeb(User user) {
+		Session session;
+		try {
+			session = SessionManager.get().newSession(user.getUsername(), HealdanFixtures.PASSWORD,
+					new Client("web", "127.0.0.1", "localhost"));
+		} catch (AuthenticationException e) {
+			throw new AssertionError("Couldn't sign " + user.getUsername() + " in to the web page", e);
+		}
+		if (session == null)
+			throw new AssertionError("Couldn't sign " + user.getUsername() + " in to the web page");
+		MockHttpSession http = new MockHttpSession(servletContext);
+		http.setAttribute(SessionManager.PARAM_SID, session.getSid());
+		return http;
+	}
+
+	/**
+	 * @param http an HTTP session {@link #signInWeb} made
+	 * @return the id of the CE session it holds
+	 */
+	protected static String sid(MockHttpSession http) {
+		return (String) http.getAttribute(SessionManager.PARAM_SID);
 	}
 
 	private String signIn(String username, String password) {

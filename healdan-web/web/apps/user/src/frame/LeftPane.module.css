@@ -1,0 +1,78 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.pane {
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: var(--hd-space-3) var(--hd-space-3) var(--hd-space-5);
+  border-inline-end: 1px solid var(--hd-line);
+  background: var(--hd-sidebar);
+}
+
+.section {
+  margin-bottom: var(--hd-space-4);
+}
+
+.heading {
+  margin: var(--hd-space-4) var(--hd-space-3) var(--hd-space-2);
+  color: var(--hd-text-secondary);
+  font-size: 11px;
+  font-weight: var(--hd-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+  padding: var(--hd-space-2) var(--hd-space-3);
+  border-radius: var(--hd-radius);
+  color: var(--hd-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.entry:hover {
+  background: var(--hd-line);
+}
+
+/* The open entry: --hd-pill takes --hd-text only, so the muted client below turns to it too. */
+.entry[aria-current='page'] {
+  background: var(--hd-pill);
+  font-weight: var(--hd-weight-medium);
+}
+
+.entry:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}
+
+.text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.client {
+  margin-inline-start: var(--hd-space-1);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.entry[aria-current='page'] .client,
+[data-current='true'] .client {
+  color: var(--hd-text);
+}
+
+.none {
+  margin: 0 var(--hd-space-3);
+  color: var(--hd-text-secondary);
+}

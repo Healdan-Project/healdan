@@ -90,6 +90,25 @@ public class DeviceHoldsTest extends AbstractHealdanTestCase {
 		assertFalse("a token without a device isn't the device", holds().heldHere(reload(), none));
 	}
 
+	// The API's web-session route has no token (M6 spec section 8.1): it's no device, as a token without one isn't
+	@Test
+	public void testNoTokenIsNoDevice() throws Exception {
+		ApiToken mac = token("mac-1");
+		checkout(clerk);
+		assertTrue("a hold with no record is held anywhere", holds().heldHere(reload(), null));
+
+		holds().record(reload(), mac, "LibreOffice");
+		assertFalse("no token isn't the device", holds().heldHere(reload(), null));
+
+		holds().record(reload(), null, "LibreOffice", save("save-1"));
+		assertTrue("what no token records no device holds", holds().current(reload()).isEmpty());
+		assertTrue(holds().heldHere(reload(), null));
+		assertTrue(holds().heldHere(reload(), mac));
+		assertNull(jdbc().queryForObject("select hd_tokenid from hd_hold_device where hd_docid = ?", Long.class,
+				doc.getId()));
+		assertEquals("save-1", holds().lastSaveId(reload()));
+	}
+
 	@Test
 	public void testNewTokenSameDeviceStillHere() throws Exception {
 		ApiToken first = token("mac-1");

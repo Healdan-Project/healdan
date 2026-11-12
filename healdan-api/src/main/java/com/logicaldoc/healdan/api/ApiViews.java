@@ -186,10 +186,12 @@ public final class ApiViews {
 	/**
 	 * @param hold the holder's view of a document's hold ({@link #hold(Document, User)})
 	 * @param caller the signed-in caller
-	 * @return false if another of the caller's devices holds the check-out
+	 * @return false if another of the caller's devices holds the check-out;
+	 *         on the web-session route, which is no device, if any does
 	 */
 	static boolean heldHere(HoldView hold, Caller caller) {
-		return hold.device() == null || hold.device().id().equals(caller.token().getDevice());
+		return hold.device() == null
+				|| caller.token() != null && hold.device().id().equals(caller.token().getDevice());
 	}
 
 	/**

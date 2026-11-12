@@ -1,0 +1,87 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+
+.item {
+  display: block;
+  border-radius: var(--hd-radius);
+  color: var(--hd-text);
+  outline: none;
+  cursor: default;
+  /* RAC sets --tree-item-level (1 for the top) on each item. */
+  padding-inline-start: calc((var(--tree-item-level, 1) - 1) * var(--hd-space-6));
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+  min-width: 0;
+  padding: var(--hd-space-2) var(--hd-space-3);
+  border-radius: var(--hd-radius);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item[data-hovered] .row {
+  background: var(--hd-line);
+}
+
+/* The open one: --hd-pill takes --hd-text only (tokens.test.ts). */
+.item[data-current='true'] .row {
+  background: var(--hd-pill);
+  color: var(--hd-text);
+  font-weight: var(--hd-weight-medium);
+}
+
+.item[data-focus-visible] .row {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}
+
+.item[data-disabled] {
+  color: var(--hd-text-muted);
+}
+
+.chevron {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  min-height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--hd-text-secondary);
+}
+
+.chevron[data-focus-visible] {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
+.chevron svg {
+  transition: transform 0.1s;
+}
+
+.chevron svg.open {
+  transform: rotate(90deg);
+}
+
+.spacer {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+}
+
+.loading {
+  color: var(--hd-text-secondary);
+}

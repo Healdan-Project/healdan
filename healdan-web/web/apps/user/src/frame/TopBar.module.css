@@ -1,0 +1,100 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-5);
+  padding: 0 var(--hd-space-5);
+  border-bottom: 1px solid var(--hd-line);
+  background: var(--hd-window);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+  width: 216px;
+  color: var(--hd-text);
+  font-size: 15px;
+  font-weight: var(--hd-weight-bold);
+  text-decoration: none;
+}
+
+.brand:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}
+
+/* The scope picker and the box are one control: one border, a rule between. */
+.search {
+  display: flex;
+  flex: 1;
+  max-width: 640px;
+  height: 34px;
+  border: 1px solid var(--hd-field-line);
+  border-radius: var(--hd-radius-large);
+  background: var(--hd-field);
+}
+
+.search > button {
+  height: 100%;
+  border: 0;
+  border-inline-end: 1px solid var(--hd-field-line);
+  border-radius: var(--hd-radius-large) 0 0 var(--hd-radius-large);
+  background: var(--hd-sidebar);
+}
+
+.scope {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+  font-weight: var(--hd-weight-medium);
+}
+
+.box {
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--hd-space-4);
+  border: 0;
+  border-radius: 0 var(--hd-radius-large) var(--hd-radius-large) 0;
+  background: transparent;
+  color: var(--hd-text);
+  font: inherit;
+}
+
+.box:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-4);
+  margin-inline-start: auto;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--hd-pill);
+  color: var(--hd-text);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

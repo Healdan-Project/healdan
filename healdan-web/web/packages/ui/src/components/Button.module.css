@@ -1,0 +1,38 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.button {
+  min-height: 26px;
+  padding: 0 var(--hd-space-4);
+  border: 1px solid var(--hd-button-secondary-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-button-secondary);
+  color: var(--hd-text);
+  font: inherit;
+  cursor: default;
+}
+
+.button.default {
+  border-color: var(--hd-accent-fill);
+  background: var(--hd-accent-fill);
+  color: var(--hd-accent-on-fill);
+}
+
+.button[data-pressed] {
+  filter: brightness(0.92);
+}
+
+.button[data-disabled] {
+  color: var(--hd-text-muted);
+}
+
+.button.default[data-disabled] {
+  border-color: var(--hd-line);
+  background: var(--hd-line);
+}
+
+.button[data-focus-visible] {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}

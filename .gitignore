@@ -11,3 +11,13 @@ target
 site/public/
 site/resources/
 site/.hugo_build.lock
+
+# The User app's workspace (healdan-web/web): installed packages, the build, and the types generated from openapi.yaml
+healdan-web/web/**/node_modules/
+healdan-web/web/**/dist/
+healdan-web/web/packages/api/src/schema.d.ts
+healdan-web/web/**/*.tsbuildinfo
+
+# The User app's browser tests (docker/tests/test-web.sh)
+healdan-web/web/e2e-results/
+healdan-web/web/playwright-report/

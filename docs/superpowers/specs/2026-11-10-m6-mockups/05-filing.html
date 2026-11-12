@@ -1,0 +1,320 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>M6 mockup: filing by drag and drop</title>
+<style>:root{--border:#d1d1d6;--text-secondary:#6e6e73;--bg-secondary:#fff;--bg-tertiary:#e5e5e7}body{margin:24px auto;max-width:1340px;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#1d1d1f;background:#f5f5f7}.subtitle{color:var(--text-secondary)}.options{display:flex;flex-direction:column;gap:.75rem}.option{display:flex;gap:1rem;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem}.option .letter{flex:none;width:28px;height:28px;border-radius:6px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-weight:600}.option h3{margin:0 0 .25rem;font-size:1rem}.option p{margin:0;color:var(--text-secondary);font-size:.9rem}</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+.hd-wrap{position:relative;width:100%;overflow:hidden;border-radius:10px;border:1px solid var(--border);margin-bottom:1.5rem}
+.hd-app{width:1280px;height:760px;transform-origin:0 0;display:grid;grid-template-rows:52px 1fr;font:13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;background:#fff;
+--a:#0C69C0;--a-soft:#E6F0FA;--focus:#22A2E0;--side:#F5F5F7;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--hover:#EFEFF2}
+.hd-app i.ti{font-size:16px;line-height:1}
+.top{display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff}
+.brand{display:flex;align-items:center;gap:8px;width:216px;font-weight:600;font-size:15px}
+.mark{width:20px;height:22px}
+.search{flex:1;max-width:640px;display:flex;height:34px;border:1px solid #C7C7CC;border-radius:8px;overflow:hidden}
+.scope{display:flex;align-items:center;gap:6px;padding:0 10px 0 12px;background:var(--side);border-right:1px solid #C7C7CC;font-weight:500;white-space:nowrap}
+.q{flex:1;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--third)}
+.kbd{font:11px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--second)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--second)}
+.pill{display:flex;align-items:center;gap:6px;font-size:12px}
+.dot{width:7px;height:7px;border-radius:50%;background:#2DA44E}
+.avatar{width:28px;height:28px;border-radius:50%;background:#D9E7F7;color:var(--a);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px}
+.body{display:grid;grid-template-columns:248px 1fr 320px;min-height:0}
+.nav{background:var(--side);border-right:1px solid var(--line);padding:10px 8px;overflow:hidden}
+.navsec{font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;margin:14px 8px 4px;display:flex;justify-content:space-between}
+.navsec:first-child{margin-top:4px}
+.ni{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ni i{color:var(--second)}
+.ni.on{background:var(--a-soft);color:var(--a);font-weight:500}.ni.on i{color:var(--a)}
+.ni .sub{color:var(--third);font-size:11px;margin-left:2px}
+.ni.l2{padding-left:24px}.ni.l3{padding-left:44px}
+.chev{font-size:12px!important;color:var(--third)!important;width:12px}
+.main{display:flex;flex-direction:column;min-width:0}
+.crumbs{display:flex;align-items:center;gap:6px;padding:12px 20px 0;color:var(--second);font-size:12px}
+.crumbs b{color:#1D1D1F;font-weight:500}
+.title{display:flex;align-items:baseline;gap:10px;padding:4px 20px 10px}
+.title h1{font-size:20px;font-weight:600;margin:0}
+.title span{color:var(--second)}
+.bar{display:flex;align-items:center;gap:6px;padding:0 20px 10px;border-bottom:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid #D1D1D6;background:#fff;font-size:12.5px;white-space:nowrap}
+.btn.pri{background:var(--a);border-color:var(--a);color:#fff}.btn.pri i{color:#fff}
+.btn.ghost{border-color:transparent;color:var(--second)}
+.sep{width:1px;height:20px;background:var(--line);margin:0 4px}
+.count{margin-left:auto;color:var(--third);font-size:12px;white-space:nowrap}
+table{width:100%;border-collapse:collapse}
+th{font-size:11.5px;font-weight:500;color:var(--second);text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th.sorted{color:#1D1D1F}
+td{padding:0 10px;height:34px;border-bottom:1px solid #F2F2F4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.sel td{background:#DCEAF8}
+tr:hover td{background:var(--hover)}tr.sel:hover td{background:#DCEAF8}
+.fi{display:flex;align-items:center;gap:8px}
+.fi i{font-size:17px}
+.pdf{color:#C8372D}.doc{color:#2B579A}.xls{color:#217346}.odt{color:#0E85CD}.eml{color:#B7792B}
+.hold{color:#C77700}
+.drop{margin:10px 20px;border:1.5px dashed #C7C7CC;border-radius:8px;color:var(--third);text-align:center;padding:10px;font-size:12px}
+.side{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;gap:4px;padding:10px 12px 0;border-bottom:1px solid var(--line)}
+.tab{padding:6px 10px 8px;color:var(--second);font-weight:500;border-bottom:2px solid transparent}
+.tab.on{color:var(--a);border-color:var(--a)}
+.det{padding:14px 16px;overflow:hidden}
+.thumb{height:150px;border:1px solid var(--line);border-radius:6px;background:linear-gradient(#fff,#fff) padding-box;display:flex;flex-direction:column;gap:6px;padding:14px 18px;margin-bottom:12px;position:relative}
+.thumb div{height:5px;background:#E9E9EC;border-radius:2px}
+.thumb .pv{position:absolute;right:8px;bottom:8px}
+.dname{font-weight:600;font-size:14px;margin-bottom:2px}
+.dmeta{color:var(--second);font-size:12px;margin-bottom:10px}
+.acts{display:flex;gap:6px;margin-bottom:14px}
+.kv{display:grid;grid-template-columns:96px 1fr;row-gap:6px;font-size:12.5px}
+.kv dt{color:var(--second)}.kv dd{margin:0}
+.h4{font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;margin:16px 0 6px}
+.ver{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;border-bottom:1px solid #F2F2F4}
+.ver span:last-child{color:var(--second)}
+.notes{display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:.9rem}
+.notes li{margin-bottom:.35rem}
+
+.chips{display:flex;align-items:center;gap:6px;padding:8px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 6px 0 10px;border-radius:12px;background:var(--a-soft);color:#0A4F91;font-size:12px}
+.chip i{font-size:13px!important}
+.clear{color:var(--a);font-size:12px;margin-left:4px}
+.fbtn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid #D1D1D6;background:#fff;font-size:12.5px}
+.fbtn.on{background:var(--a-soft);border-color:#9DC3EA;color:#0A4F91}.fbtn.on i{color:#0A4F91}
+.badge{min-width:16px;height:16px;border-radius:8px;background:var(--a);color:#fff;font-size:10.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;padding:0 4px}
+.phead{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600;font-size:14px}
+.phead i{color:var(--second)}
+.fgrp{padding:10px 16px 6px;border-bottom:1px solid #F2F2F4}
+.fgrp h5{margin:0 0 6px;font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;display:flex;justify-content:space-between}
+.fopt{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12.5px}
+.fopt .n{margin-left:auto;color:var(--third);font-variant-numeric:tabular-nums}
+.cb{width:14px;height:14px;border:1px solid #AEAEB2;border-radius:3px;display:inline-flex;align-items:center;justify-content:center}
+.cb.on{background:var(--a);border-color:var(--a)}.cb.on::after{content:"";width:7px;height:4px;border:2px solid #fff;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.rb{width:14px;height:14px;border:1px solid #AEAEB2;border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
+.rb.on{border:4px solid var(--a)}
+.state{font-size:.8rem;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em;margin:.5rem 0}
+</style>
+<style>
+.dragov{position:absolute;inset:0;background:rgba(12,105,192,.07);border:2px solid var(--a);border-radius:8px;display:flex;align-items:flex-start;justify-content:center;padding-top:150px}
+.dragmsg{background:var(--a);color:#fff;border-radius:8px;padding:10px 16px;font-weight:500;display:flex;gap:8px;align-items:center;box-shadow:0 6px 20px rgba(12,105,192,.3)}
+.dragmsg i{color:#fff}
+.ghost{position:absolute;left:420px;top:300px;background:#fff;border:1px solid #D1D1D6;border-radius:8px;padding:6px 10px;box-shadow:0 8px 24px rgba(0,0,0,.18);display:flex;gap:8px;align-items:center;font-size:12px}
+.ghost .n{background:#C8372D;color:#fff;border-radius:9px;font-size:10.5px;font-weight:600;padding:1px 6px}
+.ni.drop{background:var(--a);color:#fff}.ni.drop i{color:#fff}
+.dlgbg{position:absolute;inset:0;background:rgba(20,20,24,.38);display:flex;align-items:center;justify-content:center}
+.dlg{width:720px;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden}
+.dlg h3{margin:0;padding:16px 20px 4px;font-size:16px}
+.dlg .sub{padding:0 20px 12px;color:var(--second);font-size:12.5px}
+.files{margin:0 20px;border:1px solid var(--line);border-radius:8px}
+.fr{display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid #F2F2F4;font-size:12.5px}
+.fr:last-child{border:0}
+.fr .in{flex:1;border:1px solid #D1D1D6;border-radius:5px;height:26px;display:flex;align-items:center;padding:0 8px}
+.fr .tag{font-size:11.5px;color:var(--second);white-space:nowrap}
+.fr.warn{background:#FFF7E8}
+.fr.warn .tag{color:#9A5B00}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;padding:14px 20px}
+.fld2 label{display:block;font-size:11.5px;color:var(--second);margin-bottom:3px}
+.fld2 label b{color:#C8372D;font-weight:500}
+.fld2 .in{border:1px solid #D1D1D6;border-radius:5px;height:28px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;font-size:12.5px}
+.fld2 .in.ro{background:var(--side);color:var(--second)}
+.dfoot{display:flex;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--line);background:#FAFAFB}
+.tray{position:absolute;right:16px;bottom:16px;width:380px;background:#fff;border:1px solid #D1D1D6;border-radius:10px;box-shadow:0 12px 36px rgba(0,0,0,.2);overflow:hidden}
+.tray .th{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;font-weight:600;border-bottom:1px solid var(--line)}
+.tr{display:grid;grid-template-columns:20px 1fr auto;gap:8px;align-items:center;padding:8px 14px;border-bottom:1px solid #F2F2F4;font-size:12.5px}
+.tr:last-child{border:0}
+.tr .s{font-size:11.5px;color:var(--second)}
+.tr a{color:var(--a);font-size:12px;text-decoration:none;white-space:nowrap}
+.prog{height:4px;background:#E5E5EA;border-radius:2px;margin-top:4px}.prog div{height:4px;background:var(--a);border-radius:2px;width:62%}
+.ok{color:#2DA44E}.wn{color:#C77700}
+tr.new td{background:#EEF8F0}
+</style>
+
+<h2>Filing by drag and drop</h2>
+<p class="subtitle">Priya drags a draft, a scan and an email from her desktop into 1001.1's Correspondence. The email's message is already in this matter. Matters hold a message once (M5), so it mustn't be filed twice.</p>
+
+<div class="state">1 · Dragging over the folder</div>
+<div class="hd-wrap"><div class="hd-app" style="position:relative">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan</div>
+    <div class="search"><div class="scope"><i class="ti ti-file-text"></i>Documents<i class="ti ti-chevron-down" style="font-size:13px"></i></div><div class="q"><i class="ti ti-search"></i>Search, or type # and a number<span style="margin-left:auto" class="kbd">/</span></div></div>
+    <div class="topright"><span class="pill"><span class="dot"></span>Helper</span><i class="ti ti-help-circle" style="font-size:18px"></i><span class="avatar">PN</span></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="navsec">Recent</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail"></i>Emails</div>
+      <div class="ni"><i class="ti ti-folder"></i>Folders</div>
+      <div class="ni"><i class="ti ti-building"></i>Clients</div>
+      <div class="navsec">Recent Matters</div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.2 – Licence Review <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Matters <i class="ti ti-plus" style="font-size:13px"></i></div>
+      <div class="ni"><i class="ti ti-chevron-down chev"></i><i class="ti ti-briefcase"></i>1001.1 – Charter Dispute <span class="sub">Saltmarsh</span></div>
+      <div class="ni l2 drop"><i class="ti ti-folder-open"></i>Correspondence</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Pleadings</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Evidence</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Drafts</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Emails</div>
+      <div class="ni l2"><i class="ti ti-lock"></i>Privileged</div>
+      <div class="ni l2"><i class="ti ti-folder-search"></i>My Recent Docs Here</div>
+      <div class="ni l2"><i class="ti ti-folder-search"></i>Emails in This Matter</div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Favorites</div>
+      <div class="ni"><i class="ti ti-star"></i>Cap Table – Series A.xlsx</div>
+      <div class="ni"><i class="ti ti-star"></i>1002.1 › Due Diligence</div>
+    </div>
+    <div class="main" style="position:relative">
+      <div class="crumbs"><span>Saltmarsh Shipping Ltd</span><i class="ti ti-chevron-right" style="font-size:12px"></i><span>1001.1 – Charter Dispute – MV Northern Star</span><i class="ti ti-chevron-right" style="font-size:12px"></i><b>Correspondence</b></div>
+      <div class="title"><h1>Correspondence</h1><span>1001.1 – Charter Dispute – MV Northern Star</span><i class="ti ti-star" style="color:var(--third);margin-left:4px"></i></div>
+      <div class="bar"><span class="btn pri"><i class="ti ti-upload"></i>Upload</span><span class="btn"><i class="ti ti-folder-plus"></i>New Folder</span><span class="count">7 documents</span><span class="fbtn"><i class="ti ti-filter"></i>Filters</span></div>
+      <table><thead><tr><th style="width:48%">Title</th><th class="num">Doc #</th><th class="num">Version</th><th>Author</th><th class="sorted">Edit Date <i class="ti ti-arrow-down" style="font-size:11px"></i></th></tr></thead><tbody><tr class=""><td><span class="fi"><i class="ti ti-file-type-docx doc"></i>Letter to Dunmere Pryce – Response to Claim.docx</span></td><td class="num">10431</td><td class="num">3</td><td>Priya Nair</td><td>Today 09:42</td></tr><tr class=""><td><span class="fi"><i class="ti ti-file-text odt"></i>Attendance Note – Ops Call with Saltmarsh.odt</span></td><td class="num">10402</td><td class="num">1</td><td>Priya Nair</td><td>Oct 3, 2026</td></tr><tr class=""><td><span class="fi"><i class="ti ti-file-type-docx doc"></i>Letter to Saltmarsh – Initial Advice.docx</span></td><td class="num">10397</td><td class="num">2</td><td>Tom Reeve</td><td>Oct 1, 2026</td></tr><tr class=""><td><span class="fi"><i class="ti ti-file-type-pdf pdf"></i>Letter from Dunmere Pryce – Owners' Claim.pdf</span></td><td class="num">10388</td><td class="num">1</td><td>Jamie Clarke</td><td>Sep 29, 2026</td></tr><tr class=""><td><span class="fi"><i class="ti ti-mail eml"></i>Email from Saltmarsh – Instructions.eml</span></td><td class="num">10455</td><td class="num">1</td><td>Tom Reeve</td><td>Sep 28, 2026</td></tr></tbody></table>
+      <div class="dragov"><div class="dragmsg"><i class="ti ti-upload"></i>Drop to file 3 items in Correspondence</div></div>
+    </div>
+    <div></div>
+  </div>
+  <div class="ghost"><i class="ti ti-files" style="font-size:16px"></i>Witness Statement – Draft.docx<span class="n">3</span></div>
+</div></div>
+
+<div class="state">A · A form first, then File</div>
+<div class="hd-wrap"><div class="hd-app" style="position:relative">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan</div>
+    <div class="search"><div class="scope"><i class="ti ti-file-text"></i>Documents<i class="ti ti-chevron-down" style="font-size:13px"></i></div><div class="q"><i class="ti ti-search"></i>Search, or type # and a number<span style="margin-left:auto" class="kbd">/</span></div></div>
+    <div class="topright"><span class="pill"><span class="dot"></span>Helper</span><i class="ti ti-help-circle" style="font-size:18px"></i><span class="avatar">PN</span></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="navsec">Recent</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail"></i>Emails</div>
+      <div class="ni"><i class="ti ti-folder"></i>Folders</div>
+      <div class="ni"><i class="ti ti-building"></i>Clients</div>
+      <div class="navsec">Recent Matters</div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.2 – Licence Review <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Matters <i class="ti ti-plus" style="font-size:13px"></i></div>
+      <div class="ni"><i class="ti ti-chevron-down chev"></i><i class="ti ti-briefcase"></i>1001.1 – Charter Dispute <span class="sub">Saltmarsh</span></div>
+      <div class="ni l2 on"><i class="ti ti-folder-open"></i>Correspondence</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Pleadings</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Evidence</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Drafts</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Emails</div>
+      <div class="ni l2"><i class="ti ti-lock"></i>Privileged</div>
+      <div class="ni l2"><i class="ti ti-folder-search"></i>My Recent Docs Here</div>
+      <div class="ni l2"><i class="ti ti-folder-search"></i>Emails in This Matter</div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Favorites</div>
+      <div class="ni"><i class="ti ti-star"></i>Cap Table – Series A.xlsx</div>
+      <div class="ni"><i class="ti ti-star"></i>1002.1 › Due Diligence</div>
+    </div>
+    <div class="main"><div class="crumbs"><span>Saltmarsh Shipping Ltd</span><i class="ti ti-chevron-right" style="font-size:12px"></i><span>1001.1 – Charter Dispute – MV Northern Star</span><i class="ti ti-chevron-right" style="font-size:12px"></i><b>Correspondence</b></div>
+      <div class="title"><h1>Correspondence</h1><span>1001.1 – Charter Dispute – MV Northern Star</span><i class="ti ti-star" style="color:var(--third);margin-left:4px"></i></div><div class="bar"><span class="btn pri"><i class="ti ti-upload"></i>Upload</span><span class="btn"><i class="ti ti-folder-plus"></i>New Folder</span><span class="count">7 documents</span><span class="fbtn"><i class="ti ti-filter"></i>Filters</span></div><table><thead><tr><th style="width:48%">Title</th><th class="num">Doc #</th><th class="num">Version</th><th>Author</th><th class="sorted">Edit Date <i class="ti ti-arrow-down" style="font-size:11px"></i></th></tr></thead><tbody><tr class=""><td><span class="fi"><i class="ti ti-file-type-docx doc"></i>Letter to Dunmere Pryce – Response to Claim.docx</span></td><td class="num">10431</td><td class="num">3</td><td>Priya Nair</td><td>Today 09:42</td></tr><tr class=""><td><span class="fi"><i class="ti ti-file-text odt"></i>Attendance Note – Ops Call with Saltmarsh.odt</span></td><td class="num">10402</td><td class="num">1</td><td>Priya Nair</td><td>Oct 3, 2026</td></tr><tr class=""><td><span class="fi"><i class="ti ti-file-type-docx doc"></i>Letter to Saltmarsh – Initial Advice.docx</span></td><td class="num">10397</td><td class="num">2</td><td>Tom Reeve</td><td>Oct 1, 2026</td></tr><tr class=""><td><span class="fi"><i class="ti ti-file-type-pdf pdf"></i>Letter from Dunmere Pryce – Owners' Claim.pdf</span></td><td class="num">10388</td><td class="num">1</td><td>Jamie Clarke</td><td>Sep 29, 2026</td></tr><tr class=""><td><span class="fi"><i class="ti ti-mail eml"></i>Email from Saltmarsh – Instructions.eml</span></td><td class="num">10455</td><td class="num">1</td><td>Tom Reeve</td><td>Sep 28, 2026</td></tr></tbody></table></div>
+    <div></div>
+  </div>
+  <div class="dlgbg"><div class="dlg">
+    <h3>File 3 Items</h3>
+    <div class="sub">In 1001.1 – Charter Dispute – MV Northern Star › Correspondence</div>
+    <div class="files">
+      <div class="fr"><i class="ti ti-file-type-docx doc" style="font-size:17px"></i><span class="in">Witness Statement – Captain Halloran – Draft</span><span class="tag">.docx · 48 KB</span></div>
+      <div class="fr"><i class="ti ti-file-type-pdf pdf" style="font-size:17px"></i><span class="in">Port Agent's Statement of Facts</span><span class="tag">.pdf · 1.2 MB</span></div>
+      <div class="fr warn"><i class="ti ti-mail eml" style="font-size:17px"></i><span style="flex:1">Email from Saltmarsh – Instructions</span><span class="tag"><i class="ti ti-alert-triangle" style="font-size:13px"></i> Already in this matter as # 10455, so it will be skipped</span></div>
+    </div>
+    <div class="form">
+      <div class="fld2"><label>Class <b>*</b></label><div class="in">Correspondence <i class="ti ti-selector" style="font-size:13px;color:var(--third)"></i></div></div>
+      <div class="fld2"><label>Subclass</label><div class="in"><span style="color:var(--third)">None</span> <i class="ti ti-selector" style="font-size:13px;color:var(--third)"></i></div></div>
+      <div class="fld2"><label>Author <b>*</b></label><div class="in">Priya Nair <i class="ti ti-selector" style="font-size:13px;color:var(--third)"></i></div></div>
+      <div class="fld2"><label>Typist <b>*</b></label><div class="in">Priya Nair <i class="ti ti-selector" style="font-size:13px;color:var(--third)"></i></div></div>
+      <div class="fld2"><label>Client</label><div class="in ro">1001 – Saltmarsh Shipping Ltd</div></div>
+      <div class="fld2"><label>Matter</label><div class="in ro">1001.1 – Charter Dispute</div></div>
+    </div>
+    <div class="dfoot"><span class="btn">Cancel</span><span class="btn pri">File 2 Items</span></div>
+  </div></div>
+</div></div>
+
+<div class="state">B · Filed at once, with a tray to check and adjust</div>
+<div class="hd-wrap"><div class="hd-app" style="position:relative">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan</div>
+    <div class="search"><div class="scope"><i class="ti ti-file-text"></i>Documents<i class="ti ti-chevron-down" style="font-size:13px"></i></div><div class="q"><i class="ti ti-search"></i>Search, or type # and a number<span style="margin-left:auto" class="kbd">/</span></div></div>
+    <div class="topright"><span class="pill"><span class="dot"></span>Helper</span><i class="ti ti-help-circle" style="font-size:18px"></i><span class="avatar">PN</span></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="navsec">Recent</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail"></i>Emails</div>
+      <div class="ni"><i class="ti ti-folder"></i>Folders</div>
+      <div class="ni"><i class="ti ti-building"></i>Clients</div>
+      <div class="navsec">Recent Matters</div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.2 – Licence Review <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Matters <i class="ti ti-plus" style="font-size:13px"></i></div>
+      <div class="ni"><i class="ti ti-chevron-down chev"></i><i class="ti ti-briefcase"></i>1001.1 – Charter Dispute <span class="sub">Saltmarsh</span></div>
+      <div class="ni l2 on"><i class="ti ti-folder-open"></i>Correspondence</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Pleadings</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Evidence</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Drafts</div>
+      <div class="ni l2"><i class="ti ti-folder"></i>Emails</div>
+      <div class="ni l2"><i class="ti ti-lock"></i>Privileged</div>
+      <div class="ni l2"><i class="ti ti-folder-search"></i>My Recent Docs Here</div>
+      <div class="ni l2"><i class="ti ti-folder-search"></i>Emails in This Matter</div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Favorites</div>
+      <div class="ni"><i class="ti ti-star"></i>Cap Table – Series A.xlsx</div>
+      <div class="ni"><i class="ti ti-star"></i>1002.1 › Due Diligence</div>
+    </div>
+    <div class="main"><div class="crumbs"><span>Saltmarsh Shipping Ltd</span><i class="ti ti-chevron-right" style="font-size:12px"></i><span>1001.1 – Charter Dispute – MV Northern Star</span><i class="ti ti-chevron-right" style="font-size:12px"></i><b>Correspondence</b></div>
+      <div class="title"><h1>Correspondence</h1><span>1001.1 – Charter Dispute – MV Northern Star</span><i class="ti ti-star" style="color:var(--third);margin-left:4px"></i></div><div class="bar"><span class="btn pri"><i class="ti ti-upload"></i>Upload</span><span class="btn"><i class="ti ti-folder-plus"></i>New Folder</span><span class="count">7 documents</span><span class="fbtn"><i class="ti ti-filter"></i>Filters</span></div><table><thead><tr><th style="width:48%">Title</th><th class="num">Doc #</th><th class="num">Version</th><th>Author</th><th class="sorted">Edit Date <i class="ti ti-arrow-down" style="font-size:11px"></i></th></tr></thead><tbody><tr class="new"><td><span class="fi"><i class="ti ti-file-type-docx doc"></i>Witness Statement – Captain Halloran – Draft.docx</span></td><td class="num">10472</td><td class="num">1</td><td>Priya Nair</td><td>Just now</td></tr><tr class=""><td><span class="fi"><i class="ti ti-file-type-docx doc"></i>Letter to Dunmere Pryce – Response to Claim.docx</span></td><td class="num">10431</td><td class="num">3</td><td>Priya Nair</td><td>Today 09:42</td></tr><tr class=""><td><span class="fi"><i class="ti ti-file-text odt"></i>Attendance Note – Ops Call with Saltmarsh.odt</span></td><td class="num">10402</td><td class="num">1</td><td>Priya Nair</td><td>Oct 3, 2026</td></tr><tr class=""><td><span class="fi"><i class="ti ti-file-type-docx doc"></i>Letter to Saltmarsh – Initial Advice.docx</span></td><td class="num">10397</td><td class="num">2</td><td>Tom Reeve</td><td>Oct 1, 2026</td></tr><tr class=""><td><span class="fi"><i class="ti ti-file-type-pdf pdf"></i>Letter from Dunmere Pryce – Owners' Claim.pdf</span></td><td class="num">10388</td><td class="num">1</td><td>Jamie Clarke</td><td>Sep 29, 2026</td></tr><tr class=""><td><span class="fi"><i class="ti ti-mail eml"></i>Email from Saltmarsh – Instructions.eml</span></td><td class="num">10455</td><td class="num">1</td><td>Tom Reeve</td><td>Sep 28, 2026</td></tr></tbody></table></div>
+    <div></div>
+  </div>
+  <div class="tray">
+    <div class="th">Filing 3 Items <i class="ti ti-chevron-down" style="color:var(--second)"></i></div>
+    <div class="tr"><i class="ti ti-circle-check ok"></i><div>Witness Statement – Captain Halloran – Draft.docx<div class="s"># 10472 · Correspondence, by Priya Nair</div></div><a>Edit</a></div>
+    <div class="tr"><i class="ti ti-upload" style="color:var(--a)"></i><div>Port Agent's Statement of Facts.pdf<div class="prog"><div></div></div></div><a>Cancel</a></div>
+    <div class="tr"><i class="ti ti-alert-triangle wn"></i><div>Email from Saltmarsh – Instructions<div class="s">Already in this matter as # 10455</div></div><a>Show</a></div>
+  </div>
+</div></div>
+<script>
+(function(){function fit(){document.querySelectorAll('.hd-wrap').forEach(function(w){var a=w.querySelector('.hd-app');var s=Math.min(1,w.clientWidth/1280);a.style.transform='scale('+s+')';w.style.height=(760*s)+'px';});}window.addEventListener('resize',fit);fit();setTimeout(fit,50);})();
+</script>
+
+<div class="notes">
+<div>
+<h3>Either way</h3>
+<ul>
+<li><b>Where you can drop:</b> anywhere on a folder's list, or on a folder in the My Matters tree, which lights up. A matter's top level and search folders refuse, with "Choose a folder inside the matter" (the filing rule).</li>
+<li><b>Emails</b> (<code>.eml</code>, <code>.msg</code>) take their subject as the title and fill From, To, CC, Sent and Received themselves. One already in the matter is never filed twice, and you're shown its #.</li>
+<li><b>Dropping one file on a document row</b> asks "Save as Version 4 of # 10431, or File as a New Document?", as iManage does.</li>
+<li><b>The defaults</b> are the folder's own (its Class, if it sets one), and you as Author and Typist. Client and Matter always come from the matter.</li>
+<li>The uploads keep going if you move to another folder. Leaving the page warns you while any are still uploading.</li>
+</ul>
+</div>
+<div>
+<h3>The difference</h3>
+<ul>
+<li><b>A</b> asks every time, like the helper's Save to Healdan. You get it right first time, at the cost of a click per drop.</li>
+<li><b>B</b> files straight away with the defaults, and new rows flash green in the list. You fix what needs fixing afterwards, with Edit in the tray or the details panel.</li>
+<li><b>C</b> is B, but the form appears whenever a required field has no default, and holding <span class="kbd">⌥</span> while dropping asks for it anyway.</li>
+</ul>
+</div>
+</div>
+
+<h3 style="margin-top:1rem">How should a drop file its documents?</h3>
+<div class="options">
+  <div class="option" data-choice="form">
+    <div class="letter">A</div>
+    <div class="content"><h3>A form first</h3><p>The form appears on every drop, prefilled. Nothing is filed until you press File.</p></div>
+  </div>
+  <div class="option" data-choice="instant">
+    <div class="letter">B</div>
+    <div class="content"><h3>File at once</h3><p>Filed with the defaults straight away. The tray shows each document's # and lets you edit it.</p></div>
+  </div>
+  <div class="option" data-choice="hybrid">
+    <div class="letter">C</div>
+    <div class="content"><h3>At once, unless something's missing</h3><p>B, but the form appears when a required field has no default, or when you hold ⌥ while dropping.</p></div>
+  </div>
+</div>

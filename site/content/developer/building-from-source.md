@@ -56,6 +56,31 @@ Healdan's modules need.
   mvn -pl logicaldoc-gui -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true install
   ```
 
+## The User App
+
+The User app is the web page at `/app/`. Its source is an npm workspace in `healdan-web/web`, and the `healdan-web`
+module builds it with Maven, so a full build needs no Node of your own: `frontend-maven-plugin` downloads the Node
+version that `healdan-web/web/.nvmrc` names (the same one `healdan-web/pom.xml` names) into `healdan-web/target/`,
+runs `npm ci --ignore-scripts` and `npm run build`, and copies `apps/user/dist/` into the module's jar.
+
+- **`-Dhealdan.web.skip=true`** skips all of that. The jar then holds no app, and `/app/` answers `503`. Use it
+  when you aren't working on the app, as CI's `build` check does.
+- **`npm ci --ignore-scripts`** installs the packages exactly as the lockfile records them, and runs none of their
+  install scripts. The build tools' binaries come from platform packages, so nothing needs a script.
+- **The packages' licences** are checked by `.github/scripts/check-web-licences.py`, and the build writes the
+  notices for the ones the app ships into `apps/user/dist/notices.txt`.
+
+To work on the app itself, use Node from `.nvmrc` and run, in `healdan-web/web`:
+
+```bash
+npm ci --ignore-scripts   # install the packages
+npm run generate          # the API's types, from healdan-api's openapi.yaml
+npm run typecheck         # tsc over the workspace
+npm run lint              # ESLint
+npm test                  # Vitest, and Node's runner for the build's scripts
+npm run build             # generate, typecheck, then Vite's production build into apps/user/dist/
+```
+
 ## The Desktop Clients
 
 The desktop clients are under `clients/`, and build separately from Maven. [Desktop Clients](../desktop-clients/)

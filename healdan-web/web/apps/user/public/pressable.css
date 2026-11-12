@@ -1,0 +1,11 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The rule React Aria's usePress injects as a <style> (react-aria 1.22.1), which style-src 'self' blocks. index.html links
+   this file under the id usePress looks for, so it injects nothing. pressable.test.ts checks the rule and the id still
+   match the installed react-aria. */
+@layer {
+  [data-react-aria-pressable] {
+    touch-action: pan-x pan-y pinch-zoom;
+  }
+}
