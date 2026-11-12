@@ -49,6 +49,26 @@ function rowOf(docNumber: number): HTMLElement | null {
   return globalThis.document.querySelector<HTMLElement>(`[data-row-key="d${docNumber}"]`)
 }
 
+/** The key of the row that follows the documents' rows in the list drawn now, else the one before them, else none */
+function rowAfter(docNumbers: number[]): string | undefined {
+  const gone = new Set(docNumbers.map((n) => `d${n}`))
+  const keys = Array.from(globalThis.document.querySelectorAll('[role="grid"] [data-row-key]'), (row) => row.getAttribute('data-row-key') ?? '')
+  const last = keys.findLastIndex((key) => gone.has(key))
+  if (last < 0) return undefined
+  return keys.slice(last + 1).find((key) => !gone.has(key)) ?? keys.slice(0, last).findLast((key) => !gone.has(key))
+}
+
+/** Focuses a row once it has been drawn again, or the list when there is no such row (as the dialog that had the focus gives it back first) */
+function focusLater(key: string | undefined) {
+  let tries = 0
+  const attempt = () => {
+    const target = (key ? globalThis.document.querySelector<HTMLElement>(`[data-row-key="${key}"]`) : null) ?? (key ? null : globalThis.document.querySelector<HTMLElement>('[role="grid"]'))
+    if (target) target.focus()
+    else if (++tries < 20) setTimeout(attempt, 50)
+  }
+  setTimeout(attempt, 0)
+}
+
 /**
  * Renaming, moving and deleting documents, and making folders (spec 6.7): what is being renamed, the dialogs that ask
  * and the one that says what was refused. Each document is its own call, so a refusal leaves the others done.
@@ -71,17 +91,23 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
   }
 
   async function move(documents: readonly Movable[], folder: { id: number; name: string }) {
-    const outcome = await moveDocuments(api, documents, folder.id)
+    // What is in the folder already isn't moved, and isn't counted
+    const todo = documents.filter((one) => one.folder?.id !== folder.id)
+    if (todo.length === 0) return toast(t('move.sameFolder'))
+    const outcome = await moveDocuments(api, todo, folder.id)
     await invalidateDocumentLists(queryClient)
-    report(outcome, plural('moved', outcome.done.length, { folder: folder.name }), t('move.refusedTitle'))
+    report(outcome, plural('moved', outcome.done.length, { folder: folder.name || t('move.thisFolder') }), t('move.refusedTitle'))
   }
 
   async function remove(documents: readonly Movable[]) {
+    const next = rowAfter(documents.map((one) => one.docNumber))
     const outcome = await removeDocuments(api, documents)
     // What was deleted can't stay selected: its details would answer 404
     if (selected !== undefined && outcome.done.some((one) => one.docNumber === selected)) select(undefined)
     await invalidateDocumentLists(queryClient)
     report(outcome, plural('deleted', outcome.done.length), t('delete.refusedTitle'))
+    // Where the focus goes once the rows are gone: the next row, or the one before, or the list
+    focusLater(next)
   }
 
   const value: Organising = {

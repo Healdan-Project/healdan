@@ -5,6 +5,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@healdan/api'
 import { ROWS_TYPE } from '../filing/dropTargets'
+import { children, document as doc } from '../test/fakeApi'
+import { readRows } from './rows'
 import { renderApp } from '../test/renderApp'
 import { lease, plan, routes, row, select, transfer } from './testing'
 
@@ -26,14 +28,14 @@ describe('Dragging rows onto a folder of the tree', () => {
     const data = transfer()
     fireEvent.dragStart(await row(/Lease/), { dataTransfer: data })
     expect(data.types).toContain(ROWS_TYPE)
-    expect(JSON.parse(data.getData(ROWS_TYPE))).toEqual([
-      { docNumber: 10432, name: 'Lease.docx' },
-      { docNumber: 10433, name: 'Plan.pdf' },
+    expect(readRows(data.getData(ROWS_TYPE))).toEqual([
+      { docNumber: 10432, name: 'Lease.docx', folder: { id: 7 } },
+      { docNumber: 10433, name: 'Plan.pdf', folder: { id: 7 } },
     ])
 
     const other = transfer()
     fireEvent.dragStart(await row(/Letter to Dunmere/), { dataTransfer: other })
-    expect(JSON.parse(other.getData(ROWS_TYPE))).toEqual([{ docNumber: 10431, name: 'Letter to Dunmere Pryce.docx' }])
+    expect(readRows(other.getData(ROWS_TYPE))).toEqual([{ docNumber: 10431, name: 'Letter to Dunmere Pryce.docx', folder: { id: 7 } }])
   })
 
   it('moves what was dragged into the folder it is dropped on', async () => {
@@ -77,8 +79,9 @@ describe('Dragging rows onto a folder of the tree', () => {
     expect(api.callsTo('POST /v1/documents/*/move')).toHaveLength(0)
   })
 
-  it('names what the server refused, and moves the rest', async () => {
+  it('names what the server refused, in the catalogue\'s words for a 403 and for a 404', async () => {
     const { box, written } = await open({
+      'POST /v1/documents/10432/move': new ApiError(404, 'not-found', 'A server sentence that must not be shown raw.', { code: 'not-found' }),
       'POST /v1/documents/10433/move': new ApiError(403, 'forbidden', 'A server sentence that must not be shown raw.', { code: 'forbidden' }),
     })
     await select(/Lease/, /Plan/)
@@ -87,8 +90,50 @@ describe('Dragging rows onto a folder of the tree', () => {
     fireEvent.drop(await label(box, /Correspondence/), { dataTransfer: data })
 
     const dialog = await screen.findByRole('dialog', { name: "Some Documents Weren't Moved" })
-    expect(within(dialog).getByRole('listitem').textContent).toBe("Plan.pdf: Not found, or you can't see it.")
-    expect(written.moved).toEqual([{ docNumber: 10432, folderId: 111 }])
+    expect(within(dialog).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      "Lease.docx: Not found, or you can't see it.",
+      "Plan.pdf: You don't have permission to do that.",
+    ])
+    expect(written.moved).toEqual([])
+  })
+
+  it('moves nothing from a drag that began in another page, whatever type it carries', async () => {
+    const { box, written, api } = await open()
+    const foreign = transfer()
+    foreign.setData(ROWS_TYPE, JSON.stringify({ token: 'another page', documents: [{ docNumber: 10432, name: 'Lease.docx', folder: { id: 7 } }] }))
+    const old = transfer()
+    old.setData(ROWS_TYPE, JSON.stringify([{ docNumber: 10432, name: 'Lease.docx' }]))
+    fireEvent.drop(await label(box, /Correspondence/), { dataTransfer: foreign })
+    fireEvent.drop(await label(box, /Correspondence/), { dataTransfer: old })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(written.moved).toEqual([])
+    expect(api.callsTo('POST /v1/documents/*/move')).toHaveLength(0)
+  })
+
+  describe('onto the folder they are in', () => {
+    const there = doc({ docNumber: 10440, name: 'There.docx', folder: { id: 111, name: 'Correspondence', kind: 'folder' } })
+
+    it('makes no call and says so, rather than say the documents moved', async () => {
+      const { box, written, api } = await open({ 'GET /v1/folders/7/children': () => children([there]) })
+      await select(/There/)
+      const data = transfer()
+      fireEvent.dragStart(await row(/There/), { dataTransfer: data })
+      fireEvent.drop(await label(box, /Correspondence/), { dataTransfer: data })
+      expect(await screen.findByText("They're in that folder already.")).toBeTruthy()
+      expect(written.moved).toEqual([])
+      expect(api.callsTo('POST /v1/documents/*/move')).toHaveLength(0)
+      expect(screen.queryByText(/^Moved/)).toBeNull()
+    })
+
+    it('moves the rest when only some are there, and counts only them', async () => {
+      const { box, written } = await open({ 'GET /v1/folders/7/children': () => children([there, lease, plan]) })
+      await select(/Lease/, /There/)
+      const data = transfer()
+      fireEvent.dragStart(await row(/Lease/), { dataTransfer: data })
+      fireEvent.drop(await label(box, /Correspondence/), { dataTransfer: data })
+      await waitFor(() => expect(written.moved).toEqual([{ docNumber: 10432, folderId: 111 }]))
+      expect(await screen.findByText('Moved 1 document to Correspondence')).toBeTruthy()
+    })
   })
 
   it('leaves a drag of files to the filing, which files them', async () => {
@@ -108,6 +153,5 @@ describe('Dragging a folder', () => {
     const data = transfer()
     fireEvent.dragStart(await row(/Drafts/), { dataTransfer: data })
     expect(data.types).not.toContain(ROWS_TYPE)
-    expect([lease, plan]).toHaveLength(2)
   })
 })

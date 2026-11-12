@@ -48,6 +48,9 @@ over it. Dragging a row that isn't selected moves only that one. A drag can't be
   except any set on the document itself. In another matter it also takes that matter's client and matter: see
   [Properties](../../working-with-matters/properties/).
 
+Moving documents into the folder they're in does nothing: Healdan says "They're in that folder already." When only some are
+there, the others move and only they are counted.
+
 Dropping documents on a matter's top level, or on a search folder, says "Choose a folder inside the matter" and moves
 nothing. See [Where Documents Can Go](#where-documents-can-go).
 
@@ -58,8 +61,8 @@ documents to the Trash?" and lists each one's name. Choose **Move to Trash**, or
 
 - **The Trash is in the Classic Interface,** where you can restore what you deleted: "The Trash is in the Classic
   Interface, where they can be restored." See [The Trash](../the-trash/).
-- **You need the Delete permission.** A document locked, or checked out by someone else, is refused with the reason, and the
-  others are deleted all the same.
+- **You need the Delete permission.** A document that's locked, or checked out by anyone, you included, is refused with the
+  reason: release it first. The others are deleted all the same.
 
 ## Making a Folder in the App
 

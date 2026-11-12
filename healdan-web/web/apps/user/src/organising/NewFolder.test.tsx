@@ -8,7 +8,7 @@ import { ApiError } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
 import { children, folder, me } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
-import { matterTop, routes, store, toolbar, workspace } from './testing'
+import { routes, store, toolbar, workspace } from './testing'
 
 const search = folder({ id: 112, name: 'Recent', kind: 'searchFolder', path: [store, workspace, { id: 112, name: 'Recent', kind: 'searchFolder' }], canFile: false })
 
@@ -44,12 +44,11 @@ describe('New Folder', () => {
     expect(await within(await toolbar()).findByRole('button', { name: 'New Folder' })).toBeTruthy()
   })
 
-  it('is not offered in a search folder or a Store', async () => {
+  it('is not offered in a search folder, even to an administrator', async () => {
     const { all } = routes({ 'GET /v1/folders/112': search, 'GET /v1/folders/112/children': children([]), 'GET /v1/me': { ...me, admin: true } })
     await renderApp('/folders/112', all)
     await toolbar()
     expect(screen.queryByRole('button', { name: 'New Folder' })).toBeNull()
-    expect(matterTop.kind).toBe('matter')
   })
 
   it('keeps the dialog open with what is wrong, from the catalogue, when the server refuses', async () => {
@@ -68,7 +67,6 @@ describe('New Folder', () => {
     expect(screen.queryByText(/server sentence/)).toBeNull()
     expect(written.made).toEqual([])
 
-    // A refusal that names no field is said under the name all the same
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   })
@@ -79,6 +77,6 @@ describe('New Folder', () => {
     await userEvent.click(within(await toolbar()).getByRole('button', { name: 'New Folder' }))
     const dialog = await screen.findByRole('dialog', { name: 'New Folder' })
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'Board{Enter}')
-    expect(await within(dialog).findByText("Not found, or you can't see it.")).toBeTruthy()
+    expect(await within(dialog).findByText("You don't have permission to do that.")).toBeTruthy()
   })
 })

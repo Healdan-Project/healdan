@@ -70,6 +70,8 @@ Enter opens a folder. Esc closes a menu.
   to the page you were on.
 - **"Not found, or you can't see it."** The page, folder or document doesn't exist, or you don't have permission to
   read it. Healdan says the same for both.
+- **"You don't have permission to do that."** You can see the document or folder, but not do what you asked to it, such
+  as delete or move it. Ask your administrator for the permission.
 - **"Files are unavailable for now. Try again in a few minutes."** Healdan can't reach where your files are kept.
   Your work isn't lost. Ask your administrator if it lasts.
 - **"Something went wrong."** Try Again asks once more. If it keeps failing, tell your administrator.

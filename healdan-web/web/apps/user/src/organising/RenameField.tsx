@@ -38,8 +38,15 @@ function RenameField({ document }: { document: Movable }) {
     const field = input.current
     if (!field) return
     field.focus()
+    // The row isn't dragged while its title is a field, so selecting text in the field starts no drag of the row. Set on the
+    // element, not through the row, which would draw the row again as the field takes the focus.
+    const row = field.closest<HTMLElement>('[data-row-key]')
+    if (row) row.draggable = false
     const extension = extensionOf(document.name)
     field.setSelectionRange(0, extension ? document.name.length - extension.length - 1 : document.name.length)
+    return () => {
+      if (row) row.draggable = true
+    }
   }, [document.name])
 
   async function save() {
@@ -51,7 +58,7 @@ function RenameField({ document }: { document: Movable }) {
       await renameDocument(api, document.docNumber, name)
       stop()
     } catch (failure) {
-      setError(renameRefusal(failure, name, document.name))
+      setError(renameRefusal(failure, document.name))
       input.current?.focus()
     } finally {
       saving.current = false

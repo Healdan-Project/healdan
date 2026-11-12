@@ -442,13 +442,16 @@ refused` for an immutable document, unless the caller is an administrator, as CE
 
 - **`PATCH /documents/{docNumber}`** with `{"name": "Lease"}` answers `200` with the document. A name that doesn't
   end in the document's extension keeps it, so `Lease` is `Lease.docx` and `Lease v1.2` is `Lease v1.2.docx`; one that
-  ends in another extension (`Lease.pdf`) is `422 validation` with `invalid` for `name`. A name over 255 characters is
-  `too-long`, and a blank one `required`. The same name changes nothing and makes no version.
+  ends in another extension (`Lease.pdf`) is `422 validation` with `extension` for `name`, as a save's name is. A name
+  with a `/`, a `\` or a control character is `invalid`, checked first; one over 255 characters is `too-long`, and a blank one
+  `required`. The same name changes nothing and makes no version.
 - **`POST /documents/{docNumber}/move`** with `{"folderId": 1234}` answers `200` with the document. Into another matter
   it takes that matter's Client and Matter and the values its folders pass down; a matter that holds the same email
   already answers `409 already-filed` with the copy as `document`. A move into the folder it's in changes nothing.
 - **`DELETE /documents/{docNumber}`** answers `204`. The document, and any shortcuts to it, go to the trash, which
-  only the Classic Interface restores from, and the document is `404` from then on.
+  only the Classic Interface restores from, and the document is `404` from then on. A checked-out document is
+  `409 checked-out` for everyone, the caller too: release it first. The document goes first and then its shortcuts, so a rule
+  that refuses it leaves them.
 
 ## Favorites
 

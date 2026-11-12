@@ -8,7 +8,11 @@ import { ApiError } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
 import { renderApp } from '../test/renderApp'
 import { heldByJamie } from '../filing/testing'
+import { children, document as doc } from '../test/fakeApi'
+import { inFolder } from '../filing/testing'
 import { routes, row, select, toolbar } from './testing'
+
+const only = doc({ docNumber: 10450, name: 'Only.docx', folder: inFolder })
 
 describe('Deleting', () => {
   it('asks "Move 2 documents to the Trash?" naming each, and says the Trash is in the Classic Interface', async () => {
@@ -84,5 +88,47 @@ describe('Deleting', () => {
     expect(written.deleted).toEqual([10433])
     expect(await screen.findByText('Moved 1 document to the Trash')).toBeTruthy()
     await expectNoAxeViolations(dialog)
+  })
+
+  describe('puts the focus', () => {
+    const focused = () => document.activeElement?.getAttribute('data-row-key')
+
+    it('on the next row after Delete, whichever of the list is deleted', async () => {
+      const { all } = routes()
+      await renderApp('/folders/7', all)
+      await select(/Lease/)
+      await userEvent.keyboard('{Delete}')
+      await userEvent.click(await screen.findByRole('button', { name: 'Move to Trash' }))
+      await waitFor(() => expect(focused()).toBe('d10433'))
+    })
+
+    it('on the row before it, when the last row is deleted', async () => {
+      const { all } = routes()
+      await renderApp('/folders/7', all)
+      await select(/Plan/)
+      await userEvent.keyboard('{Delete}')
+      await userEvent.click(await screen.findByRole('button', { name: 'Move to Trash' }))
+      await waitFor(() => expect(focused()).toBe('d10432'))
+    })
+
+    it('on the next row after More > Delete too', async () => {
+      const { all } = routes()
+      await renderApp('/folders/7', all)
+      await select(/Lease/)
+      await userEvent.click(within(await toolbar()).getByRole('button', { name: 'More' }))
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Move to Trash' }))
+      await waitFor(() => expect(focused()).toBe('d10433'))
+    })
+
+    it('on the list when nothing is left in it', async () => {
+      let left = [only]
+      const { all } = routes({ 'GET /v1/folders/7/children': () => children(left), 'DELETE /v1/documents/*': () => void (left = []) })
+      await renderApp('/folders/7', all)
+      await select(/Only/)
+      await userEvent.keyboard('{Delete}')
+      await userEvent.click(await screen.findByRole('button', { name: 'Move to Trash' }))
+      await waitFor(() => expect(document.activeElement?.getAttribute('role')).toBe('grid'))
+    })
   })
 })

@@ -23,6 +23,7 @@ import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FieldError;
+import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.security.AccessChecks;
 
 /**
@@ -80,7 +81,7 @@ final class DocumentChanges {
 				String name = name(document.getFileName(), requested);
 				if (name.equals(document.getFileName()))
 					return ApiViews.document(document, user);
-				write(id, d -> name.equals(d.getFileName()), failure, () -> DocumentManager.get().rename(id, name,
+				write(id, d -> d != null && name.equals(d.getFileName()), failure, () -> DocumentManager.get().rename(id, name,
 						history(caller, DocumentEvent.RENAMED)));
 				return ApiViews.document(DocumentDAO.get().findById(id), user);
 			});
@@ -116,7 +117,7 @@ final class DocumentChanges {
 
 				if (document.getFolder().getId() == target.getId())
 					return ApiViews.document(document, user);
-				write(id, d -> d.getFolder().getId() == target.getId(), failure, () -> DocumentManager.get()
+				write(id, d -> d != null && d.getFolder().getId() == target.getId(), failure, () -> DocumentManager.get()
 						.moveToFolder(DocumentDAO.get().findById(id, true), target,
 								history(caller, DocumentEvent.MOVED)));
 				return ApiViews.document(DocumentDAO.get().findById(id), user);
@@ -145,13 +146,18 @@ final class DocumentChanges {
 					throw ApiProblem.forbidden("You may not delete document #%d.".formatted(docNumber));
 				refuseChange(document, caller, docNumber);
 
+				// A checked-out document isn't deleted, whoever holds it, as the Classic Interface greys Delete out
+				HoldView hold = ApiViews.hold(document);
+				if (hold != null && "checkout".equals(hold.kind()))
+					throw CheckoutResource.conflict(hold, docNumber, user);
+
 				DocumentDAO documents = DocumentDAO.get();
-				for (Long shortcut : documents.findAliasIds(id))
+				List<Long> shortcuts = documents.findAliasIds(id);
+				// The document first: a rule that refuses it leaves its shortcuts where they were
+				write(id, d -> d == null || d.getDeleted() != 0, failure,
+						() -> documents.delete(id, history(caller, DocumentEvent.DELETED)));
+				for (Long shortcut : shortcuts)
 					documents.delete(shortcut);
-				documents.delete(id, history(caller, DocumentEvent.DELETED));
-				Document deleted = documents.findById(id, true);
-				if (deleted != null && deleted.getDeleted() == 0)
-					throw new PersistenceException("Document %d wasn't deleted".formatted(id));
 				return null;
 			});
 		} catch (PersistenceException e) {
@@ -178,7 +184,7 @@ final class DocumentChanges {
 	 * document is read back, and CE asked again until it's as asked.
 	 *
 	 * @param docId the document's id
-	 * @param stored whether the document is as the change makes it
+	 * @param stored whether the document (null if it can't be read) is as the change makes it
 	 * @param failure what failed, for the log
 	 * @param change CE's call
 	 * @throws PersistenceException CE's refusal, or its last failure
@@ -194,8 +200,7 @@ final class DocumentChanges {
 				log.info("{} again, as another write came first: {}", failure, e.getMessage());
 				continue;
 			}
-			Document document = DocumentDAO.get().findById(docId);
-			if (document != null && stored.test(document))
+			if (stored.test(DocumentDAO.get().findById(docId, true)))
 				return;
 			if (tries >= CheckoutResource.TRIES)
 				throw new PersistenceException("%s: other writes kept overtaking the change".formatted(failure));
@@ -227,21 +232,35 @@ final class DocumentChanges {
 		if (StringUtils.isBlank(sent))
 			throw ApiProblem.validation(List.of(new FieldError("name", "required", "Give the document a name.")));
 
+		// What a name can't hold is said first, whatever follows the last dot
+		List<FieldError> errors = new ArrayList<>();
+		if (sent.chars().anyMatch(c -> c == '/' || c == '\\' || Character.isISOControl(c)))
+			errors.add(new FieldError("name", "invalid", "A name can't contain /, \\ or control characters."));
+		if (sent.length() > Uploads.MAX_NAME_LENGTH)
+			errors.add(new FieldError("name", Uploads.TOO_LONG,
+					"A name can't be longer than %d characters.".formatted(Uploads.MAX_NAME_LENGTH)));
+		if (!errors.isEmpty())
+			throw ApiProblem.validation(errors);
+
 		String extension = Uploads.extension(current);
 		String sentExtension = Uploads.extension(sent);
 		String name = sent;
-		List<FieldError> errors = new ArrayList<>();
 		if (!sentExtension.isEmpty() && sentExtension.equalsIgnoreCase(extension))
 			name = sent.substring(0, sent.length() - sentExtension.length()) + extension;
 		else if (EXTENSION.matcher(sentExtension).matches())
-			errors.add(new FieldError("name", "invalid",
+			errors.add(new FieldError("name", "extension",
 					extension.isEmpty() ? "The name can't have an extension, as the document's has none."
 							: "The name must end in .%s, as the document's does.".formatted(extension)));
 		else if (!extension.isEmpty())
 			name = sent.endsWith(".") ? sent + extension : sent + "." + extension;
 
-		Uploads.checkName(name, "name", errors);
-		errors.removeIf(e -> "extension".equals(e.code()) || "disallowed".equals(e.code()));
+		// The name rule's own checks, but for what the document's extension already settles: that the name has one, and
+		// that it isn't disallowed, which only another extension (refused above) could change
+		List<FieldError> rules = new ArrayList<>();
+		Uploads.checkName(name, "name", rules);
+		boolean own = Uploads.extension(name).equalsIgnoreCase(extension);
+		rules.removeIf(e -> "extension".equals(e.code()) || own && "disallowed".equals(e.code()));
+		errors.addAll(rules);
 		if (!errors.isEmpty())
 			throw ApiProblem.validation(errors.stream().distinct().toList());
 		return name;

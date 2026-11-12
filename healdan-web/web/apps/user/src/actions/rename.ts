@@ -18,14 +18,14 @@ export function extensionOf(name: string): string | undefined {
 }
 
 /**
- * What to tell the person of a refused rename, from the catalogue. The server keeps the document's extension, and says
- * `invalid` of a name that ends in another, which this words as what to do about it.
+ * What to tell the person of a refused rename, from the catalogue and the code the server gives the name: the server
+ * decides what is wrong, so another extension (`extension`) is worded as what to do about it, and any other (`invalid`,
+ * `too-long`, `required`) is the catalogue's message for the code.
  */
-export function renameRefusal(error: unknown, typed: string, current: string): string {
+export function renameRefusal(error: unknown, current: string): string {
   if (error instanceof ApiError && error.code === 'validation') {
     const fields = (error.body as { fields?: { field?: unknown; code?: unknown }[] } | null)?.fields
-    const wrongExtension = fields?.some((one) => one?.field === 'name' && one.code === 'invalid') && extensionOf(typed) !== extensionOf(current)
-    if (wrongExtension) {
+    if (fields?.some((one) => one?.field === 'name' && one.code === 'extension')) {
       const ext = extensionOf(current)
       return ext ? t('rename.extension', { ext }) : t('rename.noExtension')
     }

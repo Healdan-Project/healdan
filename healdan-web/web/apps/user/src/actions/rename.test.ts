@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { problem } from '../test/fakeApi'
 import { extensionOf, renameRefusal } from './rename'
 
-const invalid = (field = 'name', code = 'invalid') =>
+const refused = (field = 'name', code = 'invalid') =>
   new ApiError(422, 'validation', 'A server sentence that must not be shown raw.', { code: 'validation', fields: [{ field, code }] })
 
 describe('extensionOf', () => {
@@ -21,14 +21,15 @@ describe('extensionOf', () => {
 
 describe('renameRefusal', () => {
   it('says what to do about another extension', () => {
-    expect(renameRefusal(invalid(), 'Lease.pdf', 'Lease.docx')).toBe("The name has to end in .docx, as the document's does.")
-    expect(renameRefusal(invalid(), 'Lease.pdf', 'Lease')).toBe("The name can't have an extension, as the document's has none.")
+    expect(renameRefusal(refused('name', 'extension'), 'Lease.docx')).toBe("The name has to end in .docx, as the document's does.")
+    expect(renameRefusal(refused('name', 'extension'), 'Lease')).toBe("The name can't have an extension, as the document's has none.")
   })
 
   it('says any other refusal of the name from the catalogue', () => {
-    expect(renameRefusal(invalid('name', 'too-long'), 'x'.repeat(300), 'Lease.docx')).toBe('That is too long.')
-    expect(renameRefusal(invalid(), 'a/b.docx', 'Lease.docx')).toBe("That name isn't allowed.")
-    expect(renameRefusal(problem(409, 'locked'), 'Lease.docx', 'Lease.docx')).toBe("It's locked.")
-    expect(renameRefusal(new Error('boom'), 'Lease.docx', 'Lease.docx')).toBe('Something went wrong.')
+    expect(renameRefusal(refused('name', 'too-long'), 'Lease.docx')).toBe('That is too long.')
+    // A slash is not the extension's business, whatever the name ends in: the app takes the server's code, not its own guess
+    expect(renameRefusal(refused(), 'Lease.docx')).toBe("That name isn't allowed.")
+    expect(renameRefusal(problem(409, 'locked'), 'Lease.docx')).toBe("It's locked.")
+    expect(renameRefusal(new Error('boom'), 'Lease.docx')).toBe('Something went wrong.')
   })
 })

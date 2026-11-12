@@ -137,7 +137,7 @@ test('moves two rows by dragging them onto a folder of the tree, and deletes two
     return { types: [...transfer.types], data: transfer.getData('application/x-healdan-documents') }
   })
   expect(carried.types).toContain('application/x-healdan-documents')
-  expect((JSON.parse(carried.data) as { docNumber: number }[]).map((one) => one.docNumber).sort()).toEqual([numbers.dragOne, numbers.dragTwo].sort())
+  expect((JSON.parse(carried.data) as { documents: { docNumber: number }[] }).documents.map((one) => one.docNumber).sort()).toEqual([numbers.dragOne, numbers.dragTwo].sort())
 
   // Over the folder it lights up; dropped, both move there
   await target.evaluate((element) => {

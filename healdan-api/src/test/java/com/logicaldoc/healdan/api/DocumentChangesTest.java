@@ -16,7 +16,15 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.logicaldoc.core.HealdanVetoException;
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentListener;
+import com.logicaldoc.core.document.DocumentListenerManager;
+import com.logicaldoc.core.metadata.AttributeOption;
+import com.logicaldoc.core.metadata.AttributeOptionDAO;
+import com.logicaldoc.core.metadata.AttributeSet;
+import com.logicaldoc.core.metadata.AttributeSetDAO;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
@@ -31,6 +39,7 @@ import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.support.DbSnapshot;
+import com.logicaldoc.healdan.support.HealdanFixtures;
 
 /**
  * {@code PATCH}, {@code POST .../move} and {@code DELETE} on
@@ -138,9 +147,36 @@ public class DocumentChangesTest extends ApiTestCase {
 
 		ApiResponse pdf = rename(d, "Lease.pdf", token);
 
-		assertField(pdf, "name", "invalid");
+		assertField(pdf, "name", "extension");
 		assertTrue(pdf.json().path("fields").path(0).path("detail").textValue().contains(".docx"));
 		before.assertUnchanged();
+	}
+
+	@Test
+	public void testRenameSaysWhichRuleRefusedTheName() throws Exception {
+		Document d = file("a.docx");
+		DbSnapshot before = fx.snapshot();
+
+		// A slash is a name that isn't allowed, whatever follows the last dot
+		assertField(rename(d, "Smith/Jones", token), "name", "invalid");
+		assertField(rename(d, "Letter 11/10/26", token), "name", "invalid");
+		assertField(rename(d, "Lease.pdf", token), "name", "extension");
+		assertField(rename(d, "J.Smith", token), "name", "extension");
+		before.assertUnchanged();
+	}
+
+	@Test
+	public void testRenameAddsTheExtensionAfterATrailingDot() throws Exception {
+		Document d = file("a.docx");
+		assertName(d, "Lease.", "Lease.docx");
+	}
+
+	@Test
+	public void testRenameADocumentWithoutAnExtension() throws Exception {
+		Document d = fx.upload(documents, "Notes", "one", boss);
+		awaitAsyncWork();
+		assertName(d, "Minutes", "Minutes");
+		assertField(rename(d, "Minutes.pdf", token), "name", "extension");
 	}
 
 	@Test
@@ -337,6 +373,158 @@ public class DocumentChangesTest extends ApiTestCase {
 		assertEquals("locked", delete(path(locked)).token(token).send().code());
 		assertEquals(0, jdbc().queryForObject("select ld_deleted from ld_document where ld_id = ?", Integer.class,
 				held.getId()).intValue());
+	}
+
+	@Test
+	public void testMoveIntoAnotherMatterTakesTheInheritedValuesToo() throws Exception {
+		Document d = file("a.docx");
+		AttributeSet set = AttributeSetDAO.get().findByName(HealdanConstants.PROFILE_TEMPLATE, Tenant.DEFAULT_ID, true);
+		AttributeOptionDAO.get().store(new AttributeOption(set.getId(), "docclass", "Letters"));
+		Folder other = FolderDAO.get().findById(otherDocuments.getId(), true);
+		other.setValue("docclass", "Letters");
+		com.logicaldoc.core.folder.FolderHistory change = fx.folderHistory(fx.admin());
+		change.setEvent(com.logicaldoc.core.folder.FolderEvent.CHANGED);
+		FolderDAO.get().store(other, change);
+		assertNotEquals("Letters", value(d, "docclass"));
+
+		assertEquals(200, move(d, otherDocuments.getId(), token).status());
+
+		assertEquals("Letters", value(d, "docclass"));
+		assertEquals("999", value(d, HealdanConstants.ATTR_CLIENT));
+	}
+
+	@Test
+	public void testPasswordProtectedDocumentIsRefusedOnEachRoute() throws Exception {
+		Document d = file("a.docx");
+		DocumentHistory history = fx.documentHistory(boss);
+		history.setEvent(DocumentEvent.CHANGED);
+		DocumentDAO.get().setPassword(d.getId(), "S3cret-pw!", history);
+		DbSnapshot before = fx.snapshot();
+
+		for (ApiResponse refused : List.of(rename(d, "b.docx", token), move(d, drafts.getId(), token),
+				delete(path(d)).token(token).send())) {
+			assertEquals(refused.toString(), 403, refused.status());
+			assertTrue(refused.json().path("detail").textValue().contains("protected by a password"));
+		}
+		before.assertUnchanged();
+	}
+
+	@Test
+	public void testDocumentCheckedOutOnAnotherDeviceIsRefusedOnEachRoute() throws Exception {
+		Document d = file("a.docx");
+		String mac = deviceToken("mac-1");
+		String pc = deviceToken("pc-1");
+		assertEquals(200, post(path(d) + "/checkout").token(mac).send().status());
+		DbSnapshot before = fx.snapshot();
+
+		for (ApiResponse refused : List.of(rename(d, "b.docx", pc), move(d, drafts.getId(), pc),
+				delete(path(d)).token(pc).send())) {
+			assertEquals(refused.toString(), 409, refused.status());
+			assertEquals("held-elsewhere", refused.code());
+		}
+		before.assertUnchanged();
+	}
+
+	@Test
+	public void testDeleteRefusesEveryCheckOutTheCallersToo() throws Exception {
+		// The web page's check-out, which no device holds
+		Document web = file("w.docx");
+		checkout(web, clerk);
+		ApiResponse viaWeb = delete(path(web)).webSession(signInWeb(clerk)).send();
+		assertEquals(viaWeb.toString(), 409, viaWeb.status());
+		assertEquals("checked-out", viaWeb.code());
+
+		// And the check-out of the device the token is from
+		Document device = file("d.docx");
+		String mac = deviceToken("mac-1");
+		assertEquals(200, post(path(device) + "/checkout").token(mac).send().status());
+		ApiResponse own = delete(path(device)).token(mac).send();
+		assertEquals(own.toString(), 409, own.status());
+		assertEquals("checked-out", own.code());
+		assertEquals(0, deleted(web) + deleted(device));
+	}
+
+	@Test
+	public void testDeleteTakesTheShortcutsToTheTrash() throws Exception {
+		Document d = file("a.docx");
+		Document shortcut = fx.legacyShortcut(d, drafts);
+
+		assertEquals(204, delete(path(d)).token(token).send().status());
+
+		assertNotEquals(0, deleted(d));
+		assertNotEquals(0, deleted(shortcut));
+	}
+
+	@Test
+	public void testRefusedDeleteLeavesTheShortcuts() throws Exception {
+		Document d = file("a.docx");
+		Document shortcut = fx.legacyShortcut(d, drafts);
+		DocumentListener veto = new DeleteVeto(d.getId());
+		DocumentListenerManager.get().getListeners().add(0, veto);
+		ApiResponse refused;
+		try {
+			refused = delete(path(d)).token(token).send();
+		} finally {
+			DocumentListenerManager.get().getListeners().remove(veto);
+		}
+
+		assertEquals(refused.toString(), 409, refused.status());
+		assertEquals("refused", refused.code());
+		assertEquals(0, deleted(d));
+		assertEquals(0, deleted(shortcut));
+	}
+
+	private int deleted(Document d) {
+		return jdbc().queryForObject("select ld_deleted from ld_document where ld_id = ?", Integer.class, d.getId());
+	}
+
+	private String deviceToken(String device) {
+		ApiResponse response = post("/api/v1/auth/tokens").json(Map.of("username", "clerk", "password",
+				HealdanFixtures.PASSWORD, "name", "Test device", "device", Map.of("id", device))).send();
+		assertEquals(response.toString(), 201, response.status());
+		return response.json().path("token").textValue();
+	}
+
+	/** Refuses the deletion of one document, as a Healdan rule would */
+	private static final class DeleteVeto implements DocumentListener {
+
+		private final long docId;
+
+		DeleteVeto(long docId) {
+			this.docId = docId;
+		}
+
+		@Override
+		public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary)
+				throws PersistenceException {
+			if (document.getId() == docId && DocumentEvent.DELETED.toString().equals(transaction.getEvent()))
+				throw new HealdanVetoException("Not this one.");
+		}
+
+		@Override
+		public void afterStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			// Nothing to refuse
+		}
+
+		@Override
+		public void afterFileStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			// Nothing to refuse
+		}
+
+		@Override
+		public void beforeCheckin(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			// Nothing to refuse
+		}
+
+		@Override
+		public void afterCheckin(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			// Nothing to refuse
+		}
+
+		@Override
+		public void afterSaveHistory(Document document, DocumentHistory event, Map<String, Object> dictionary) {
+			// Nothing to refuse
+		}
 	}
 
 	private ApiResponse rename(Document d, String name, String as) {

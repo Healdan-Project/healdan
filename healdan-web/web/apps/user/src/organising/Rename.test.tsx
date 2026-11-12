@@ -63,7 +63,7 @@ describe('Renaming in place', () => {
       'PATCH /v1/documents/*': ({ body }: { body?: unknown }) => {
         if (refuse) {
           refuse = false
-          const fields = [{ field: 'name', code: 'invalid', detail: 'A server sentence that must not be shown raw.' }]
+          const fields = [{ field: 'name', code: 'extension', detail: 'A server sentence that must not be shown raw.' }]
           throw new ApiError(422, 'validation', 'A server sentence that must not be shown raw.', { status: 422, code: 'validation', fields })
         }
         written.renamed.push({ docNumber: 10431, name: (body as { name: string }).name })
@@ -124,5 +124,50 @@ describe('Renaming in place', () => {
     expect(await screen.findByText('Select one document to rename it.')).toBeTruthy()
     expect(screen.queryByRole('textbox')).toBeNull()
     expect(written.renamed).toEqual([])
+  })
+
+  it('saves what was changed when the field is left, and a refusal showing cancels instead', async () => {
+    let refuse = true
+    const { all, written } = routes({
+      'PATCH /v1/documents/*': ({ body }: { body?: unknown }) => {
+        const name = (body as { name: string }).name
+        if (refuse && name === 'Bad.pdf') throw new ApiError(422, 'validation', 'x', { code: 'validation', fields: [{ field: 'name', code: 'extension' }] })
+        written.renamed.push({ docNumber: 10431, name })
+        return letter
+      },
+    })
+    await renderApp('/folders/7', all)
+    // Leaving with a new name saves it
+    await select(/Letter to Dunmere/)
+    await userEvent.keyboard('{F2}')
+    await userEvent.clear(await field())
+    await userEvent.keyboard('Left Behind.docx')
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await waitFor(() => expect(written.renamed).toEqual([{ docNumber: 10431, name: 'Left Behind.docx' }]))
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: /New name/ })).toBeNull())
+
+    // Leaving while a refusal shows is a cancel: nothing more is asked
+    await select(/Lease/)
+    await userEvent.keyboard('{F2}')
+    const input = await field('Lease.docx')
+    await userEvent.clear(input)
+    await userEvent.keyboard('Bad.pdf{Enter}')
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: /New name/ })).toBeNull())
+    expect(written.renamed).toHaveLength(1)
+    refuse = false
+  })
+
+  it('makes the row being renamed undraggable, so selecting text in its field starts no drag of the row', async () => {
+    const { all } = routes()
+    await renderApp('/folders/7', all)
+    await select(/Lease/)
+    expect((await row(/Lease/)).getAttribute('draggable')).toBe('true')
+    await userEvent.keyboard('{F2}')
+    await field('Lease.docx')
+    expect((await row(/Lease/)).getAttribute('draggable')).toBe('false')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.getAllByRole('row', { name: /Lease/ })[0]!.getAttribute('draggable')).toBe('true'))
   })
 })

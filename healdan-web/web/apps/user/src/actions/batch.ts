@@ -7,6 +7,8 @@ import { refusalText } from '../filing/refusal'
 export interface Movable {
   docNumber: number
   name: string
+  /** Where it is, when that's known, so a move to there is known to change nothing */
+  folder?: { id: number }
 }
 
 export interface Refusal {
