@@ -6,10 +6,10 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
-import { children, document, favorite, folder, page, problem, type Routes } from '../test/fakeApi'
+import { children, document, favorite, folder, page, problem, zone, type Routes } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
 import { renderApp } from '../test/renderApp'
-import viewsCss from './views.module.css?raw'
+import actionsCss from '../actions/actions.module.css?raw'
 
 type S = components['schemas']
 
@@ -86,7 +86,7 @@ describe('FolderView', () => {
     expect(cells).toEqual(['10431', '3', 'Priya Nair', 'Oct 3, 2026'])
 
     expect(api.callsTo('GET /v1/folders/7/children')).toEqual([
-      { method: 'GET', path: '/v1/folders/7/children', query: { offset: 0, limit: 100 } },
+      { method: 'GET', path: '/v1/folders/7/children', query: { zone, offset: 0, limit: 100 } },
     ])
   })
 
@@ -99,13 +99,13 @@ describe('FolderView', () => {
     fireEvent.click(within(list()).getByRole('columnheader', { name: /Doc #/ }))
     await waitFor(() => expect(router.history.location.search).toBe('?sort=docNumber&order=asc'))
     await waitFor(() =>
-      expect(api.callsTo('GET /v1/folders/7/children').at(-1)?.query).toEqual({ sort: 'docNumber', order: 'asc', offset: 0, limit: 100 }),
+      expect(api.callsTo('GET /v1/folders/7/children').at(-1)?.query).toEqual({ sort: 'docNumber', order: 'asc', zone, offset: 0, limit: 100 }),
     )
     await waitFor(() => expect(within(list()).getByRole('columnheader', { name: /Doc #/ }).getAttribute('aria-sort')).toBe('ascending'))
 
     fireEvent.click(within(list()).getByRole('columnheader', { name: /Doc #/ }))
     await waitFor(() =>
-      expect(api.callsTo('GET /v1/folders/7/children').at(-1)?.query).toEqual({ sort: 'docNumber', order: 'desc', offset: 0, limit: 100 }),
+      expect(api.callsTo('GET /v1/folders/7/children').at(-1)?.query).toEqual({ sort: 'docNumber', order: 'desc', zone, offset: 0, limit: 100 }),
     )
     expect(router.history.location.search).toBe('?sort=docNumber&order=desc')
   })
@@ -136,7 +136,7 @@ describe('FolderView', () => {
     const { api } = await renderApp('/folders/7?sort=edited&order=desc', routes())
     await findRow(/Drafts/)
     expect(within(list()).getByRole('columnheader', { name: /Edit Date/ }).getAttribute('aria-sort')).toBe('descending')
-    expect(api.callsTo('GET /v1/folders/7/children')[0]?.query).toEqual({ sort: 'edited', order: 'desc', offset: 0, limit: 100 })
+    expect(api.callsTo('GET /v1/folders/7/children')[0]?.query).toEqual({ sort: 'edited', order: 'desc', zone, offset: 0, limit: 100 })
   })
 
   it('asks for the next 100 rows once as the end comes into view, and the count stays the total', async () => {
@@ -244,7 +244,7 @@ describe('FolderView', () => {
     const star = await within(main()).findByRole('button', { name: 'Remove from Favorites' })
     expect(star.querySelector('.starred .tabler-icon-star-filled')).toBeTruthy()
     // jsdom draws nothing, so the rule that edges it is read instead
-    expect(viewsCss).toMatch(/\.starred svg\s*\{[^}]*stroke:\s*var\(--hd-star-edge\)/)
+    expect(actionsCss).toMatch(/\.starred svg\s*\{[^}]*stroke:\s*var\(--hd-star-edge\)/)
   })
 
   it('says so when a favorite can\'t be changed', async () => {

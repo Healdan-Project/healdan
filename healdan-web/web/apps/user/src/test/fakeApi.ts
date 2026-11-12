@@ -139,6 +139,9 @@ export const me: S['UserView'] = {
   admin: false,
 }
 
+/** The browser's time zone, which every list, search and count sends for the Edit Date filters (R90) */
+export const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
 export function problem(status: number, code: string, detail = 'A server sentence that must not be shown raw.'): ApiError {
   return new ApiError(status, code, detail, { status, code, detail })
 }

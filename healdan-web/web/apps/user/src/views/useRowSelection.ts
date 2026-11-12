@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRightRegion } from '../frame/RightRegion'
 import { useSelection } from '../selection'
 
@@ -15,13 +15,19 @@ export interface RowSelection {
 
 /**
  * The selection of a list of documents (rows keyed `d<number>`): one document is in the address as ?sel=, which also
- * shows its details; several can't all be in an address, so the view keeps them while it has none.
+ * shows its details; several can't all be in an address, so the view keeps them while it has none. Of those, only the
+ * ones still listed count: once they are deleted or moved away, nothing is selected, and F2 and Delete take the row the
+ * focus is on.
+ *
+ * @param rows what the list holds, as far as it's loaded
  */
-export function useRowSelection(): RowSelection {
+export function useRowSelection(rows?: readonly { type: string; docNumber?: number }[]): RowSelection {
   const region = useRightRegion()
   const { selected, select } = useSelection()
   const [several, setSeveral] = useState<Set<string> | null>(null)
-  const selection = several && selected === undefined ? several : new Set(selected === undefined ? [] : [`d${selected}`])
+  const listed = useMemo(() => (rows ? new Set(rows.flatMap((row) => (row.type === 'document' ? [`d${row.docNumber}`] : []))) : undefined), [rows])
+  const kept = useMemo(() => (several && listed ? new Set([...several].filter((key) => listed.has(key))) : several), [several, listed])
+  const selection = kept && selected === undefined ? kept : new Set(selected === undefined ? [] : [`d${selected}`])
 
   function change(next: Set<string>) {
     const documents = [...next].filter((key) => key.startsWith('d'))

@@ -79,6 +79,36 @@ describe('The form that comes first', () => {
     expect(sent.map((one) => one.properties)).toEqual([{ urgent: false }])
   })
 
+  it('files with another Author, picked in the form', async () => {
+    const form = page(t.filledForm.items.map((one) => (one.name === 'author' ? { ...one, editable: true } : one)))
+    const { all, sent } = routes({ 'GET /v1/users': page([{ id: 3, username: 'jclarke', name: 'Jamie Clarke' }]) }, { form })
+    await renderApp('/folders/7', all)
+    dropWithOption(await grid(), [file('Lease.docx')])
+    const dialog = await screen.findByRole('dialog', { name: 'File Documents' })
+    const author = within(dialog).getByRole('combobox', { name: 'Author' }) as HTMLInputElement
+    expect(author.value).toBe('Priya Nair')
+    await userEvent.clear(author)
+    await userEvent.type(author, 'jam')
+    await userEvent.click(await screen.findByRole('option', { name: 'Jamie Clarke' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'File 1 Item' }))
+    await within(await tray()).findByText('Filed as # 10500')
+    expect(sent[0]).toMatchObject({ name: 'Lease.docx', properties: { author: { id: 3 } } })
+  })
+
+  it('refuses a required Author left empty, as it does any required field', async () => {
+    const form = page(t.filledForm.items.map((one) => (one.name === 'author' ? { ...one, required: true, editable: true } : one)))
+    const { all, sent } = routes({}, { form })
+    await renderApp('/folders/7', all)
+    dropWithOption(await grid(), [file('Lease.docx')])
+    const dialog = await screen.findByRole('dialog', { name: 'File Documents' })
+    const author = within(dialog).getByRole('combobox', { name: /Author/ })
+    await userEvent.clear(author)
+    await userEvent.tab()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'File 1 Item' }))
+    expect(await within(dialog).findByText('This needs a value.')).toBeTruthy()
+    expect(sent).toHaveLength(0)
+  })
+
   it('shows the form first when Option is held, though every field has a default', async () => {
     const { all, sent } = routes()
     await renderApp('/folders/7', all)
@@ -137,6 +167,21 @@ describe('The form that comes first', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'File 2 Items' }))
     await within(await tray()).findByText('Filed as # 10501')
     expect(sent.map((one) => one.name)).toEqual(['Re Lease.eml', 'Plan.pdf'])
+  })
+
+  it('keeps what was typed in the open form when a second drop\'s form comes to wait behind it', async () => {
+    const { all } = routes({}, { form: emptyForm })
+    const { api } = await renderApp('/folders/7', all)
+    const list = await grid()
+    fireEvent.drop(list, { dataTransfer: data([file('First.pdf')]) })
+    const first = await screen.findByRole('dialog', { name: 'File Documents' })
+    const title = within(first).getByRole('textbox', { name: 'Title of First.pdf' })
+    await userEvent.clear(title)
+    await userEvent.type(title, 'Signed Lease.pdf')
+    fireEvent.drop(list, { dataTransfer: data([file('Second.pdf')]) })
+    await waitFor(() => expect(api.callsTo('GET /v1/folders/7/form')).toHaveLength(2))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect((within(screen.getByRole('dialog', { name: 'File Documents' })).getByRole('textbox', { name: 'Title of First.pdf' }) as HTMLInputElement).value).toBe('Signed Lease.pdf')
   })
 
   it('keeps the files of a first drop when a second needs the form too: its form opens when the first closes', async () => {

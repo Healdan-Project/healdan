@@ -58,12 +58,12 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, onPreview }: 
       const query = version ? `?${new URLSearchParams({ version }).toString()}` : ''
       await api.send('POST', `${apiPath`/v1/documents/${docNumber}/message/attachments/${attachment.index}/file`}${query}`)
       // The chip's # comes with the message, and the new document with its folder
-      await queryClient.invalidateQueries({ queryKey: keys.document(docNumber) })
+      await queryClient.invalidateQueries({ queryKey: keys.messages(docNumber) })
       await queryClient.invalidateQueries({ queryKey: keys.folder(folderId) })
       await queryClient.invalidateQueries({ queryKey: keys.recentDocuments })
     } catch (error) {
       // Filed already is the matter's rule speaking: the message is read again, which shows the copy if it is this email's
-      if (error instanceof ApiError && error.code === 'already-filed') await queryClient.invalidateQueries({ queryKey: keys.document(docNumber) })
+      if (error instanceof ApiError && error.code === 'already-filed') await queryClient.invalidateQueries({ queryKey: keys.messages(docNumber) })
       toast(`${t('email.saveFailed', { name: attachment.name })} ${messageFor(error)}`)
     } finally {
       setSaving(false)
@@ -109,8 +109,11 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, onPreview }: 
 export function EmailView({ document, version, showActions }: PreviewProps) {
   const api = useApi()
   const message = useQuery({
-    queryKey: [...keys.document(document.docNumber), 'message', version ?? document.fileVersion],
+    // Its own key, by file version, apart from the document's: the lists' refreshes (an upload's finish, a rename) never
+    // read the whole email again on the server, and a new version is a new key. Save to Matter asks for it again.
+    queryKey: keys.message(document.docNumber, version ?? document.fileVersion),
     queryFn: ({ signal }) => api.get<components['schemas']['MessageView']>(apiPath`/v1/documents/${document.docNumber}/message`, versionQuery(version), { signal }),
+    staleTime: Infinity,
     refetchOnWindowFocus: false,
     gcTime: 30_000,
   })

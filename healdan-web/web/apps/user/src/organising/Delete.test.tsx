@@ -47,6 +47,19 @@ describe('Deleting', () => {
     expect(api.callsTo('DELETE /v1/documents/*')).toHaveLength(2)
   })
 
+  it('forgets the selection of documents it deleted, so F2 renames the row the focus is on', async () => {
+    const { all, written } = routes()
+    await renderApp('/folders/7', all)
+    await select(/Letter/, /Lease/)
+    await userEvent.keyboard('{Delete}')
+    await userEvent.click(await screen.findByRole('button', { name: 'Move to Trash' }))
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-row-key')).toBe('d10433'))
+    await userEvent.keyboard('{F2}')
+    expect(screen.queryByText('Select one document to rename it.')).toBeNull()
+    await userEvent.keyboard('Plan Two{Enter}')
+    await waitFor(() => expect(written.renamed).toEqual([{ docNumber: 10433, name: 'Plan Two.pdf' }]))
+  })
+
   it('Enter confirms, as the Trash can be restored from', async () => {
     const { all, written } = routes()
     await renderApp('/folders/7', all)

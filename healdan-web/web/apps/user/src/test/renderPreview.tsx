@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { render } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { OpenInAppProvider } from '../actions/OpenInAppState'
@@ -11,7 +11,7 @@ import { createSignedOut } from '../signedOut'
 import { fakeApi, type FakeApi, type Routes } from './fakeApi'
 
 /** One part of the app on its own, with the fake API and a query client, for parts that need no router. */
-export function renderPreview(ui: ReactNode, routes: Routes = {}): { api: FakeApi } & ReturnType<typeof render> {
+export function renderPreview(ui: ReactNode, routes: Routes = {}): { api: FakeApi; queryClient: QueryClient } & ReturnType<typeof render> {
   const signedOut = createSignedOut()
   // As main.tsx gives createApi the same
   const api = fakeApi(routes, signedOut.mark)
@@ -23,7 +23,7 @@ export function renderPreview(ui: ReactNode, routes: Routes = {}): { api: FakeAp
       </QueryClientProvider>
     </ServicesProvider>,
   )
-  return { api, ...view }
+  return { api, queryClient, ...view }
 }
 
 /** The bytes of a PDF as the preview route answers them */

@@ -63,25 +63,25 @@ export function Tray({ label, summary, items, onDismiss, dismissLabel, onClear, 
         </Button>
       </div>
       {!collapsed && (
-      <ul className={styles.list}>
-        {items.map((item) => (
-          <li key={item.id} className={styles.item} data-state={item.state}>
-            <span className={styles.name}>{item.name}</span>
-            <span className={styles.status}>
-              <span>{item.status}</span>
-              {item.place && <span className={styles.place}>{item.place}</span>}
-            </span>
-            <span className={styles.actions}>
-              {item.actions}
-              {(item.state === 'filed' || item.state === 'refused') && (
-                <Button variant="quiet" aria-label={dismissLabel(item.name)} onPress={() => onDismiss(item.id)}>
-                  <Icon name="close" size={14} />
-                </Button>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
+        <ul className={styles.list}>
+          {items.map((item) => (
+            <li key={item.id} className={styles.item} data-state={item.state}>
+              <span className={styles.name}>{item.name}</span>
+              <span className={styles.status}>
+                <span>{item.status}</span>
+                {item.place && <span className={styles.place}>{item.place}</span>}
+              </span>
+              <span className={styles.actions}>
+                {item.actions}
+                {(item.state === 'filed' || item.state === 'refused') && (
+                  <Button variant="quiet" aria-label={dismissLabel(item.name)} onPress={() => onDismiss(item.id)}>
+                    <Icon name="close" size={14} />
+                  </Button>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   )

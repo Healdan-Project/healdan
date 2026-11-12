@@ -7,9 +7,10 @@ import { describe, expect, it } from 'vitest'
 import { problem } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { ApiError } from '@healdan/api'
+import { heldByJamie } from '../filing/testing'
 import { letter, row, routes, select, toolbar } from './testing'
 
-const field = (name = 'Letter to Dunmere Pryce.docx') => screen.findByRole('textbox', { name: `New name of ${name}` })
+const field = (name = 'Letter to Dunmere Pryce.docx') => screen.findByRole('textbox', { name: `New Name of ${name}` })
 
 describe('Renaming in place', () => {
   it('F2 edits the title in the row with the name, not its extension, selected, and Enter saves it', async () => {
@@ -30,6 +31,20 @@ describe('Renaming in place', () => {
     expect(await row(/Lease Cover\.docx/)).toBeTruthy()
     await waitFor(() => expect(document.activeElement?.getAttribute('data-row-key')).toBe('d10431'))
     expect(api.callsTo('GET /v1/folders/7/children').length).toBeGreaterThan(1)
+  })
+
+  it('asks again for what names documents and matters: My Favorites, Recent Matters and Recent Clients', async () => {
+    const { all, written } = routes()
+    const { api } = await renderApp('/folders/7', all)
+    await waitFor(() => expect(api.callsTo('GET /v1/me/favorites')).toHaveLength(1))
+    await waitFor(() => expect(api.callsTo('GET /v1/matters/recent')).toHaveLength(1))
+    await select(/Letter to Dunmere/)
+    await userEvent.keyboard('{F2}')
+    await field()
+    await userEvent.keyboard('Lease Cover{Enter}')
+    await waitFor(() => expect(written.renamed).toHaveLength(1))
+    await waitFor(() => expect(api.callsTo('GET /v1/me/favorites')).toHaveLength(2))
+    expect(api.callsTo('GET /v1/matters/recent')).toHaveLength(2)
   })
 
   it('Esc cancels without a call, and the row has the focus', async () => {
@@ -97,6 +112,18 @@ describe('Renaming in place', () => {
     await field()
     await userEvent.keyboard('Other{Enter}')
     expect((await screen.findByRole('alert')).textContent).toBe("It's checked out.")
+  })
+
+  it('says who has the document and where it is released, as a move or a delete does', async () => {
+    const { all } = routes({
+      'PATCH /v1/documents/*': new ApiError(409, 'checked-out', 'A server sentence that must not be shown raw.', { code: 'checked-out', hold: heldByJamie }),
+    })
+    await renderApp('/folders/7', all)
+    await select(/Letter to Dunmere/)
+    await userEvent.keyboard('{F2}')
+    await field()
+    await userEvent.keyboard('Other{Enter}')
+    expect((await screen.findByRole('alert')).textContent).toMatch(/^It's checked out\. Checked out by Jamie Clarke since .*released on the computer/)
   })
 
   it('More › Rename does the same, and works only with one document selected', async () => {

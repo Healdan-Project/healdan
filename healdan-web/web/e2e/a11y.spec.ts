@@ -223,7 +223,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.keyboard.press('ArrowDown')
       await page.keyboard.press('ArrowUp')
       await page.keyboard.press('F2')
-      await expect(page.getByRole('textbox', { name: `New name of ${TEXT}` })).toBeFocused()
+      await expect(page.getByRole('textbox', { name: `New Name of ${TEXT}` })).toBeFocused()
       await check('the rename field')
       await page.keyboard.press('Escape')
       await expect(row).toBeFocused()

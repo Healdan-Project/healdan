@@ -391,7 +391,7 @@ test('row 9: New Folder, F2, Move To… and Delete are all keys', async () => {
   await row(NAMES.rename).focus()
   await expect(row(NAMES.rename)).toBeFocused()
   await page.keyboard.press('F2')
-  const field = page.getByRole('textbox', { name: `New name of ${NAMES.rename}` })
+  const field = page.getByRole('textbox', { name: `New Name of ${NAMES.rename}` })
   await expect(field).toBeFocused()
   await page.keyboard.type(`Renamed ${RUN}`)
   await page.keyboard.press('Enter')

@@ -98,7 +98,7 @@ test('makes a folder, renames a document in place, and moves another by the pick
   // F2 edits the title in the row. Another extension is refused where the field is, and Esc leaves the name alone
   await row(list, NAMES.rename).getByRole('rowheader').click()
   await page.keyboard.press('F2')
-  const field = page.getByRole('textbox', { name: `New name of ${NAMES.rename}` })
+  const field = page.getByRole('textbox', { name: `New Name of ${NAMES.rename}` })
   await expect(field).toBeFocused()
   await field.fill(`Wrong ${RUN}.pdf`)
   await field.press('Enter')

@@ -1243,6 +1243,15 @@ paths:
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
+        - name: v
+          in: query
+          required: false
+          description: |
+            Anything, which the server ignores. The User app sends the file
+            version, so a new version's thumbnail is never the last one from
+            the browser's cache.
+          schema:
+            type: string
       responses:
         '200':
           description: The thumbnail

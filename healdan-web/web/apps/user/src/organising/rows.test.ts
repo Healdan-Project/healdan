@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { pageToken, readRows, rowsPayload } from './rows'
 
 describe('The rows a drag carries', () => {
@@ -25,5 +25,21 @@ describe('The rows a drag carries', () => {
     expect(readRows(JSON.stringify({ token: pageToken, documents: 'x' }))).toEqual([])
     expect(readRows('not json')).toEqual([])
     expect(readRows('')).toEqual([])
+  })
+})
+
+describe("The page's token", () => {
+  it('is made without crypto.randomUUID, which a page at a plain http:// address lacks', async () => {
+    vi.resetModules()
+    const randomUUID = vi.spyOn(globalThis.crypto, 'randomUUID').mockImplementation(() => {
+      throw new TypeError('crypto.randomUUID is not a function')
+    })
+    try {
+      const fresh = await import('./rows')
+      expect(fresh.pageToken).toMatch(/^[0-9a-f]{32}$/)
+      expect(randomUUID).not.toHaveBeenCalled()
+    } finally {
+      randomUUID.mockRestore()
+    }
   })
 })

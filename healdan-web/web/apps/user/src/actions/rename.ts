@@ -3,6 +3,7 @@
 
 import { ApiError, apiPath, type Api, type components } from '@healdan/api'
 import { t } from '@healdan/ui'
+import { refusalText } from '../filing/refusal'
 import { fieldErrors, messageFor } from '../frame/errors'
 
 type S = components['schemas']
@@ -20,9 +21,10 @@ export function extensionOf(name: string): string | undefined {
 /**
  * What to tell the person of a refused rename, from the catalogue and the code the server gives the name: the server
  * decides what is wrong, so another extension (`extension`) is worded as what to do about it, and any other (`invalid`,
- * `too-long`, `required`) is the catalogue's message for the code.
+ * `too-long`, `required`) is the catalogue's message for the code. A hold says who has the document and where it's
+ * released, as a move's or a delete's refusal does.
  */
-export function renameRefusal(error: unknown, current: string): string {
+export function renameRefusal(error: unknown, current: string, meId?: number): string {
   if (error instanceof ApiError && error.code === 'validation') {
     const fields = (error.body as { fields?: { field?: unknown; code?: unknown }[] } | null)?.fields
     const ext = extensionOf(current)
@@ -31,6 +33,7 @@ export function renameRefusal(error: unknown, current: string): string {
     if (ext && fields?.some((one) => one?.field === 'name' && one.code === 'too-long')) return t('rename.tooLong', { ext })
     const named = fieldErrors(error).get('name')
     if (named) return named
+    return messageFor(error)
   }
-  return messageFor(error)
+  return refusalText(error, meId)
 }

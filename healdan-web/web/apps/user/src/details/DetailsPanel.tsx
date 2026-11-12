@@ -6,6 +6,7 @@ import { apiPath, type components } from '@healdan/api'
 import { Button, formatSize, formatVersion, Icon, t } from '@healdan/ui'
 import { CheckoutControls } from '../actions/CheckoutControls'
 import { copyLink } from '../actions/copyLink'
+import { FavoriteStar } from '../actions/FavoriteStar'
 import { OpenDownload } from '../actions/OpenDownload'
 import { useOpenInApp } from '../actions/OpenInAppState'
 import { fileIcon } from '../fileIcon'
@@ -66,8 +67,11 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
 
   return (
     <div className={styles.panel}>
-      <Thumbnail key={doc.docNumber} document={doc} />
-      <h2 className={styles.name}>{doc.name}</h2>
+      <Thumbnail key={`${doc.docNumber}v${doc.fileVersion}`} document={doc} />
+      <div className={styles.header}>
+        <h2 className={styles.name}>{doc.name}</h2>
+        <FavoriteStar what={{ docNumber: doc.docNumber }} add={t('favorites.addDocument')} remove={t('favorites.removeDocument')} />
+      </div>
       <p className={styles.meta}>{t('details.meta', { n: doc.docNumber, version: formatVersion(doc.fileVersion), size: formatSize(doc.size) })}</p>
       <div className={styles.actions}>
         <OpenDownload document={doc} />
@@ -120,16 +124,31 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
   )
 }
 
-// The server's thumbnail, a PNG of the first page. A document with none yet (404), or one the person can't open, shows
-// the icon of its kind instead of a broken image.
+/** How long a missing thumbnail waits before it's asked for again, and how many times */
+export const THUMBNAIL_RETRY_MS = 5000
+const THUMBNAIL_TRIES = 4
+
+// The server's thumbnail, a PNG of the first page, addressed by the file version so a new version's is never the old one
+// from the browser's cache (the component is keyed by it too). A document with none yet (404), or one the person can't
+// open, shows the icon of its kind instead of a broken image; one that's missing is asked for again a little later, as
+// the server makes it in the background after a filing or a save.
 function Thumbnail({ document }: { document: S['DocumentView'] }) {
   const api = useApi()
   const quickLook = useQuickLook()
   const [failed, setFailed] = useState(false)
+  const [tries, setTries] = useState(1)
+  useEffect(() => {
+    if (!failed || tries >= THUMBNAIL_TRIES) return
+    const timer = setTimeout(() => {
+      setTries((now) => now + 1)
+      setFailed(false)
+    }, THUMBNAIL_RETRY_MS)
+    return () => clearTimeout(timer)
+  }, [failed, tries])
   return (
     <div className={styles.thumb}>
       {document.canOpen && !failed ? (
-        <img src={api.url(apiPath`/v1/documents/${document.docNumber}/thumbnail`)} alt="" className={styles.image} onError={() => setFailed(true)} />
+        <img key={tries} src={api.url(apiPath`/v1/documents/${document.docNumber}/thumbnail`, { v: document.fileVersion })} alt="" className={styles.image} onError={() => setFailed(true)} />
       ) : (
         <Icon name={fileIcon(document.name)} size={48} />
       )}

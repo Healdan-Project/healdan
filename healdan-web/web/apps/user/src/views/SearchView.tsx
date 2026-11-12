@@ -51,7 +51,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const funnel = useRef<HTMLButtonElement>(null)
   const filtersOpen = region.show === 'filters'
   const facets = useSearchFacets({ scope, q: text, filters, enabled: filtersOpen })
-  const { selected, selection, change: changeSelection } = useRowSelection()
+  const { selected, selection, change: changeSelection } = useRowSelection(results.rows)
   const rows = useMemo(() => results.rows.map(rowOf), [results.rows])
   const organising = useOrganisingTable(results.rows, selection)
   const allColumns = useMemo(() => hitColumns(scope), [scope])

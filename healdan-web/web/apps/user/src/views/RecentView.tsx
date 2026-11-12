@@ -4,7 +4,8 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useId, useMemo, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
-import { Icon, t, Table, type TableColumn, type TableRow } from '@healdan/ui'
+import { Icon, t, Table, type TableColumn, type TableProps, type TableRow } from '@healdan/ui'
+import { SelectionActions } from '../actions/SelectionActions'
 import { useOpenKey } from '../actions/useOpenKey'
 import { DetailsPanel } from '../details/DetailsPanel'
 import { QuickLook } from '../preview/QuickLook'
@@ -13,8 +14,10 @@ import { usePreviewKey } from '../preview/usePreviewKey'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { RightRegionView, useRegionKind } from '../frame/RightRegion'
 import { useRecentClients, useRecentDocuments, useRecentFolders } from '../queries'
+import { useOrganisingTable } from '../organising/useOrganisingTable'
 import { isRecentKind, type RecentKind } from '../search/scopes'
 import { NotFound } from './NotFound'
+import { Toolbar } from './Toolbar'
 import { hitColumns, narrowed, rowOf } from './listColumns'
 import { useRowSelection } from './useRowSelection'
 import styles from './views.module.css'
@@ -44,9 +47,13 @@ interface ListProps<T extends TableRow> {
   onPreview?: (key: string) => void
   /** The right region, when the list has one */
   region?: ReactNode
+  /** The toolbar above a list of documents */
+  toolbar?: ReactNode
+  /** F2, Delete and dragging, for a list of documents */
+  organising?: Pick<TableProps<T>, 'onRename' | 'onDelete' | 'drag' | 'undraggable'>
 }
 
-function RecentList<T extends TableRow>({ kind, columns, rows, query, selection, onOpen, onPreview, region }: ListProps<T>) {
+function RecentList<T extends TableRow>({ kind, columns, rows, query, selection, onOpen, onPreview, region, toolbar, organising }: ListProps<T>) {
   const headingId = useId()
   return (
     <section className={styles.withRegion} aria-labelledby={headingId}>
@@ -57,17 +64,21 @@ function RecentList<T extends TableRow>({ kind, columns, rows, query, selection,
         {query.isError ? (
           <ErrorPanel error={query.error} onRetry={() => void query.refetch()} />
         ) : (
-          <Table
-            aria-labelledby={headingId}
-            columns={columns}
-            rows={rows}
-            selectionMode={selection ? 'multiple' : 'single'}
-            selection={selection?.keys ?? new Set()}
-            onSelectionChange={selection?.change ?? (() => {})}
-            onOpen={onOpen}
-            onPreview={onPreview}
-            empty={query.isPending ? t('common.loading') : t(`recent.empty.${kind}`)}
-          />
+          <>
+            {toolbar}
+            <Table
+              aria-labelledby={headingId}
+              columns={columns}
+              rows={rows}
+              selectionMode={selection ? 'multiple' : 'single'}
+              selection={selection?.keys ?? new Set()}
+              onSelectionChange={selection?.change ?? (() => {})}
+              onOpen={onOpen}
+              onPreview={onPreview}
+              {...organising}
+              empty={query.isPending ? t('common.loading') : t(`recent.empty.${kind}`)}
+            />
+          </>
         )}
       </div>
       {region}
@@ -77,8 +88,8 @@ function RecentList<T extends TableRow>({ kind, columns, rows, query, selection,
 
 function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
   const recent = useRecentDocuments(kind === 'emails' ? 'email' : undefined)
-  const { selected, selection, change } = useRowSelection()
   const items = recent.data?.items
+  const { selected, selection, change } = useRowSelection(items)
   const rows = useMemo(() => (items ?? []).map(rowOf), [items])
   const allColumns = useMemo(() => hitColumns('documents'), [])
   // The reading pane makes the list narrow: it keeps the columns that fit
@@ -86,6 +97,8 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
   const row = selected === undefined ? undefined : items?.find((doc) => doc.docNumber === selected)
   const preview = usePreviewKey(change)
   const openDocument = useOpenKey(items ?? [], change)
+  // Rename, Move To… and Delete, with F2 and Delete, as in every list of documents (R95)
+  const organising = useOrganisingTable(items ?? [], selection)
   return (
     <RecentList
       kind={kind}
@@ -93,6 +106,12 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
       rows={rows}
       query={recent}
       selection={{ keys: selection, change }}
+      toolbar={
+        <Toolbar label={t('recent.actions')}>
+          <SelectionActions document={row} selected={organising.selected} />
+        </Toolbar>
+      }
+      organising={organising.tableProps}
       // A document opens in its app, or downloads if the helper doesn't open its kind, and is selected
       onOpen={openDocument}
       onPreview={preview}

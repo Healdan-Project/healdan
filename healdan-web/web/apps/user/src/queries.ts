@@ -30,6 +30,9 @@ export const keys = {
   document: (docNumber: number) => ['documents', docNumber] as const,
   properties: (docNumber: number) => ['documents', docNumber, 'properties'] as const,
   versions: (docNumber: number) => ['documents', docNumber, 'versions'] as const,
+  // A filed email's message, by file version: apart from ['documents', n], which every list refresh asks again
+  messages: (docNumber: number) => ['messages', docNumber] as const,
+  message: (docNumber: number, fileVersion: string) => ['messages', docNumber, fileVersion] as const,
   lookup: (ref: string) => ['lookup', ref] as const,
   children: (id: number, options: Record<string, unknown>) => ['folders', id, 'children', options] as const,
   // A search's pages by what was asked, and the counts of its filters' options apart from them
@@ -37,6 +40,7 @@ export const keys = {
   searchFacets: (options: Record<string, unknown>) => ['search', 'facets', options] as const,
   devices: ['auth', 'tokens'] as const,
   suggest: (q: string) => ['suggest', q] as const,
+  users: (q: string) => ['users', q] as const,
 }
 
 /**

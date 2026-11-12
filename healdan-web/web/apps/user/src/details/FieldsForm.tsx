@@ -5,6 +5,7 @@ import { useState, type FormEvent, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { Button, CheckField, DatePicker, SelectField, t, TextField } from '@healdan/ui'
 import { textOf } from './Properties'
+import { UserField } from './UserField'
 import styles from './details.module.css'
 
 type S = components['schemas']
@@ -13,14 +14,24 @@ type Field = S['ProfileField']
 // Client and Matter come from the matter, and the email fields from the message: never edited here, whatever `editable` says.
 // The Message-ID is the server's alone (it is read from the message and indexed), so no form shows it, as the read view doesn't
 const NEVER = new Set(['client', 'matter', 'emailmessageid', 'emailfrom', 'emailto', 'emailcc', 'emailsubject', 'emailsent', 'emailreceived'])
-const FORM_TYPES = new Set<Field['type']>(['string', 'integer', 'decimal', 'date', 'boolean'])
+// A user field (Author, Typist) is a picker of people (R92); a folder or a document field stays text, as it is shown
+const FORM_TYPES = new Set<Field['type']>(['string', 'integer', 'decimal', 'date', 'boolean', 'user'])
 
 export const isEditable = (field: Field) => field.editable && !NEVER.has(field.name) && FORM_TYPES.has(field.type)
 
-/** What the form shows for a field, as text: the day of a date (its UTC day, as `textOf` shows it), `true` or `false` for a yes or no */
+/** A person a user field holds, as the API lists it */
+function personOf(value: Field['value']): S['UserRef'] | null {
+  return value !== null && typeof value === 'object' && 'id' in value ? value : null
+}
+
+/**
+ * What the form shows for a field, as text: the day of a date (its UTC day, as `textOf` shows it), `true` or `false` for
+ * a yes or no, a person's id for a user field
+ */
 function draftOf(field: Field): string {
   const value = field.value
   if (field.type === 'boolean') return value === true ? 'true' : 'false'
+  if (field.type === 'user') return String(personOf(value)?.id ?? '')
   if (value === null || value === undefined) return ''
   if (field.type === 'date') return typeof value === 'string' ? value.slice(0, 10) : ''
   return typeof value === 'string' || typeof value === 'number' ? String(value) : ''
@@ -38,6 +49,8 @@ function numberOk(field: Field, draft: string): boolean {
 function valueOf(field: Field, draft: string): S['PropertyValue'] {
   if (field.type === 'boolean') return draft === 'true'
   if (draft.trim() === '') return null
+  // A person by id, as the helper sends one
+  if (field.type === 'user') return { id: Number(draft) }
   if (isNumber(field)) return Number(draft)
   return field.type === 'date' ? `${draft}T00:00:00Z` : draft
 }
@@ -60,8 +73,8 @@ export interface FieldsFormProps {
 /**
  * The form a document's properties (`PropertiesForm`) and the filing of new documents (`FilingForm`) are both made of
  * (spec 6.2, 6.5), made from what the server lists, so the firm's own properties are in it: a property picked from a
- * list offers only its options (a Subclass only its Class's), a required one is marked, and Client, Matter and the email
- * fields stay text. A value that differs from the inherited one becomes an override, and Follow Folder clears it so the
+ * list offers only its options (a Subclass only its Class's), a person (Author, Typist) is picked from the people found
+ * as their name is typed, a required one is marked, and Client, Matter and the email fields stay text. A value that differs from the inherited one becomes an override, and Follow Folder clears it so the
  * property follows its folder again. Submit hands over only what changed, and a number field that isn't a number is an
  * error to fix, not a value to clear.
  */
@@ -70,6 +83,11 @@ export function FieldsForm({ fields, matter, submitLabel, children, onSubmit, on
   // (after a check-out, or on returning to the window) and which would then send a value the person never touched
   const [opened] = useState(fields)
   const [drafts, setDrafts] = useState(() => new Map(opened.filter(isEditable).map((field) => [field.name, draftOf(field)])))
+  // The names of the people the user fields hold, by id: the ones they opened with, and the ones picked since
+  const [people, setPeople] = useState(() => new Map(opened.flatMap((field): [string, string][] => {
+    const person = field.type === 'user' ? personOf(field.value) : null
+    return person ? [[String(person.id), person.name ?? '']] : []
+  })))
   const [following, setFollowing] = useState<Set<string>>(() => new Set())
   const [errors, setErrors] = useState<Map<string, string>>(() => new Map())
   const [working, setWorking] = useState(false)
@@ -176,6 +194,17 @@ export function FieldsForm({ fields, matter, submitLabel, children, onSubmit, on
               />
             ) : field.type === 'boolean' ? (
               <CheckField label={field.label} required={field.required} error={error} checked={draft(name) === 'true'} onChange={(checked) => change(name, String(checked))} />
+            ) : field.type === 'user' ? (
+              <UserField
+                label={field.label}
+                required={field.required}
+                error={error}
+                value={draft(name) === '' ? null : { id: Number(draft(name)), name: people.get(draft(name)) ?? null }}
+                onChange={(person) => {
+                  if (person) setPeople((now) => new Map(now).set(String(person.id), person.name ?? ''))
+                  change(name, person ? String(person.id) : '')
+                }}
+              />
             ) : field.type === 'date' ? (
               <DatePicker label={field.label} required={field.required} error={error} value={draft(name) || undefined} onChange={(day) => change(name, day ?? '')} />
             ) : (

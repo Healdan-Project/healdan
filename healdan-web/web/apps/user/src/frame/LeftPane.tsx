@@ -74,7 +74,8 @@ function useMyMattersChange() {
   return async (method: 'PUT' | 'DELETE', folderId: number) => {
     try {
       await api.send(method, apiPath`/v1/me/matters/${folderId}`)
-      await queryClient.invalidateQueries({ queryKey: keys.myMatters })
+      // Recent Clients are those of recent matters and My Matters
+      await Promise.all([queryClient.invalidateQueries({ queryKey: keys.myMatters }), queryClient.invalidateQueries({ queryKey: keys.recentClients })])
     } catch (error) {
       toast(messageFor(error))
     }

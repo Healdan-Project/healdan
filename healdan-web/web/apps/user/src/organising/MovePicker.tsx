@@ -8,7 +8,7 @@ import { Button, Dialog, Icon, plural, t, TextField, toast } from '@healdan/ui'
 import type { Movable } from '../actions/batch'
 import { messageFor } from '../frame/errors'
 import { fetchSubfolders, keys, useFolder, useMyMatters, useRecentMatters } from '../queries'
-import { suggestable, useSuggestions } from '../search/Suggestions'
+import { matterLabel, suggestable, useSuggestions } from '../search/Suggestions'
 import { useApi } from '../services'
 import styles from './organising.module.css'
 
@@ -110,7 +110,7 @@ function Matters({ onChoose }: { onChoose: (folderId: number) => void }) {
               <Choice key={matter.id} onPress={() => void open(matter.id)}>
                 <Icon name="briefcase" />
                 <span className={styles.matter}>
-                  {matter.client.number}.{matter.number} – {matter.name} <span className={styles.client} data-client>{matter.client.name}</span>
+                  {matterLabel(matter)} <span className={styles.client} data-client>{matter.client.name}</span>
                 </span>
               </Choice>
             ))}

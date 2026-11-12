@@ -4,6 +4,7 @@
 import { createMemoryHistory } from '@tanstack/react-router'
 import { describe, expect, it } from 'vitest'
 import { createAppRouter } from '../router'
+import { zone } from '../test/fakeApi'
 import { activeCount, filterParams, filterSearch, noFilters, readFilters } from './useFilters'
 
 describe('readFilters', () => {
@@ -48,8 +49,8 @@ describe('activeCount and filterParams', () => {
   })
 
   it("gives the API's query, with repeated values as lists and nothing for what is unset", () => {
-    expect(filterParams(noFilters)).toEqual({})
-    expect(filterParams({ ...noFilters, type: ['pdf', 'word'], from: '2026-11-01' })).toEqual({ type: ['pdf', 'word'], from: '2026-11-01' })
+    expect(filterParams(noFilters)).toEqual({ zone })
+    expect(filterParams({ ...noFilters, type: ['pdf', 'word'], from: '2026-11-01' })).toEqual({ type: ['pdf', 'word'], from: '2026-11-01', zone })
     expect(filterSearch({ type: 'pdf', q: 'x' })).toEqual({ type: ['pdf'] })
   })
 })

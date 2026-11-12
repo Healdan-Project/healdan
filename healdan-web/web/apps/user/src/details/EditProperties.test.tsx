@@ -147,6 +147,98 @@ describe('Editing properties', () => {
     expect(api.callsTo('PATCH /v1/documents/10388/properties')).toHaveLength(1)
   })
 
+  it('changes the Author by a picker that asks for people as they are typed, and sends the person picked', async () => {
+    let patched: unknown
+    const asked: unknown[] = []
+    await renderApp(
+      '/folders/7?sel=10388',
+      routes(profile(), {
+        'GET /v1/users': ({ query }: { query?: Record<string, unknown> }) => {
+          asked.push(query?.q)
+          return page([
+            { id: 7, username: 'pat', name: 'Pat Example' },
+            { id: 3, username: 'jclarke', name: 'Jamie Clarke' },
+          ])
+        },
+        'PATCH /v1/documents/10388/properties': ({ body }: { body?: unknown }) => {
+          patched = body
+          return page(profile({ author: { value: { id: 7, name: 'Pat Example' } } }))
+        },
+      }),
+    )
+    const panel = await edit()
+    const author = within(panel).getByRole('combobox', { name: 'Author' }) as HTMLInputElement
+    // The field's person is its value
+    expect(author.value).toBe('Jamie Clarke')
+    // By keyboard alone: type, an arrow to the person, Enter
+    await userEvent.clear(author)
+    await userEvent.type(author, 'pa')
+    const listbox = await screen.findByRole('listbox')
+    expect(await within(listbox).findByRole('option', { name: 'Pat Example' })).toBeTruthy()
+    // The field's own person is offered first, and nobody twice
+    expect(within(listbox).getAllByRole('option').map((one) => one.textContent)).toEqual(['Jamie Clarke', 'Pat Example'])
+    expect(asked.at(-1)).toBe('pa')
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}')
+    expect(author.value).toBe('Pat Example')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(patched).toEqual({ values: { author: { id: 7 } } }))
+  })
+
+  it('asks for nobody until something is typed, and puts the person back when the text is left half typed', async () => {
+    let patched: unknown = 'nothing'
+    const { api } = await renderApp(
+      '/folders/7?sel=10388',
+      routes(profile(), {
+        'GET /v1/users': page([{ id: 7, username: 'pat', name: 'Pat Example' }]),
+        'PATCH /v1/documents/10388/properties': ({ body }: { body?: unknown }) => {
+          patched = body
+          return page(profile())
+        },
+      }),
+    )
+    const panel = await edit()
+    const typist = within(panel).getByRole('combobox', { name: 'Typist' }) as HTMLInputElement
+    await userEvent.clear(typist)
+    expect(api.callsTo('GET /v1/users')).toEqual([])
+    await userEvent.type(typist, 'p')
+    await screen.findByRole('option', { name: 'Pat Example' })
+    expect(api.callsTo('GET /v1/users').at(-1)?.query).toEqual({ q: 'p' })
+    await userEvent.tab()
+    expect(typist.value).toBe('Priya Nair')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
+    // Nothing changed, so nothing is sent
+    await waitFor(() => expect(within(panel).queryByRole('button', { name: 'Save' })).toBeNull())
+    expect(patched).toBe('nothing')
+  })
+
+  it('clears a user property that was emptied, and marks a required one the server refuses empty', async () => {
+    let patched: unknown
+    await renderApp(
+      '/folders/7?sel=10388',
+      routes(profile({ author: { required: true } }), {
+        'PATCH /v1/documents/10388/properties': ({ body }: { body?: unknown }) => {
+          patched = body
+          throw new ApiError(422, 'validation', 'Author needs a value.', {
+            status: 422,
+            code: 'validation',
+            detail: 'Author needs a value.',
+            fields: [{ field: 'author', code: 'required', detail: 'Author needs a value.' }],
+          })
+        },
+      }),
+    )
+    const panel = await edit()
+    const author = within(panel).getByRole('combobox', { name: /Author/ }) as HTMLInputElement
+    expect(author.getAttribute('aria-required')).toBe('true')
+    await userEvent.clear(author)
+    await userEvent.tab()
+    expect(author.value).toBe('')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(patched).toEqual({ values: { author: null } }))
+    expect(await within(panel).findByText('This needs a value.')).toBeTruthy()
+  })
+
   it("saves against what the form opened with, so a refetch while it's open doesn't send what someone else changed", async () => {
     let patched: unknown
     let fields = profile()

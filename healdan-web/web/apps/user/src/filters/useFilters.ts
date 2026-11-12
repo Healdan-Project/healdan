@@ -23,7 +23,7 @@ export interface Filters {
   client: string[]
   matter: string[]
   edited?: DatePreset
-  /** A range of days, as 2026-11-02; the API reads both in its own time zone */
+  /** A range of days, as 2026-11-02; the API reads them, and Today, in the zone `filterParams` sends */
   from?: string
   to?: string
 }
@@ -79,13 +79,24 @@ export function activeCount(filters: Filters): number {
   return multiFilters.filter((name) => filters[name].length > 0).length + edited
 }
 
-/** The filters as the API's query takes them. */
+/** The browser's time zone, as an IANA id such as Europe/London; undefined in a browser that can't say. */
+export function browserZone(): string | undefined {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  return zone ? zone : undefined
+}
+
+/**
+ * The filters as the API's query takes them, with the browser's time zone, which the server cuts Today and the days of
+ * a range in: the dates the list shows are in it too (spec section 5, R90).
+ */
 export function filterParams(filters: Filters): Record<string, string | string[]> {
   const params: Record<string, string | string[]> = {}
   for (const name of multiFilters) if (filters[name].length > 0) params[name] = filters[name]
   if (filters.edited) params.edited = filters.edited
   if (filters.from) params.from = filters.from
   if (filters.to) params.to = filters.to
+  const zone = browserZone()
+  if (zone) params.zone = zone
   return params
 }
 

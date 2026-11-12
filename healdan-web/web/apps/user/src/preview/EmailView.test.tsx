@@ -1,14 +1,15 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { formatDateTime } from '@healdan/ui'
+import { formatDateTime, setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
 import { document, messageView, problem } from '../test/fakeApi'
 import { resetPdf } from '../test/fakePdf'
 import { pdfResponse, renderPreview } from '../test/renderPreview'
+import { invalidateDocumentLists } from '../actions/refresh'
 import { EmailView } from './EmailView'
 
 vi.mock('./pdfEngine', () => import('../test/fakePdf'))
@@ -44,6 +45,28 @@ describe('EmailView', () => {
     expect(within(details).getByText(formatDateTime('2026-11-03T10:00:00Z'))).toBeTruthy()
     expect(within(details).getByText(formatDateTime('2026-11-03T10:07:05Z'))).toBeTruthy()
     for (const label of ['From', 'To', 'Cc', 'Sent', 'Received']) expect(within(details).getByText(label)).toBeTruthy()
+  })
+
+  it('reads the message once for its file version, not again when the lists are refreshed, and again for a new version', async () => {
+    function Saved() {
+      const [fileVersion, setFileVersion] = useState(mail.fileVersion)
+      return (
+        <>
+          <button type="button" onClick={() => setFileVersion('1.1')}>
+            Saved Again
+          </button>
+          <EmailView document={{ ...mail, fileVersion }} />
+        </>
+      )
+    }
+    const { api, queryClient } = renderPreview(<Saved />, { [message]: messageView() })
+    await screen.findByRole('heading', { name: 'Re: Charter Dispute' })
+    // An upload's finish, a rename or a check-out elsewhere refreshes every list
+    await act(() => invalidateDocumentLists(queryClient))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(api.callsTo(message)).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Saved Again' }))
+    await waitFor(() => expect(api.callsTo(message)).toHaveLength(2))
   })
 
   it('leaves out what the message does not have, and says when it has no subject', async () => {
@@ -212,6 +235,13 @@ describe('EmailView', () => {
 
     expect(await screen.findByText('Saved as # 10412')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Save to Matter: Schedule.xlsx' })).toBeNull()
+  })
+
+  it("says Save to the firm's own word for a matter", async () => {
+    setLabels({ matter: 'Project', matters: 'Projects' })
+    renderPreview(<EmailView document={mail} />, { [message]: messageView() })
+    const save = await screen.findByRole('button', { name: 'Save to Project: Contract.pdf' })
+    expect(save.textContent).toBe('Save to Project')
   })
 
   it('keeps Save to Matter when saving fails', async () => {

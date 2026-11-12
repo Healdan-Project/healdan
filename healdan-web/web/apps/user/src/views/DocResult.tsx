@@ -4,6 +4,7 @@
 import { useMemo } from 'react'
 import { ApiError } from '@healdan/api'
 import { t, Table } from '@healdan/ui'
+import { SelectionActions } from '../actions/SelectionActions'
 import { useOpenKey } from '../actions/useOpenKey'
 import { DetailsPanel } from '../details/DetailsPanel'
 import { QuickLook } from '../preview/QuickLook'
@@ -11,8 +12,10 @@ import { ReadingPane } from '../preview/ReadingPane'
 import { usePreviewKey } from '../preview/usePreviewKey'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { RightRegionView, useRegionKind } from '../frame/RightRegion'
+import { useOrganisingTable } from '../organising/useOrganisingTable'
 import { useDocument, useLookup } from '../queries'
 import { NotFound } from './NotFound'
+import { Toolbar } from './Toolbar'
 import { listColumns, narrowed, rowOf } from './listColumns'
 import styles from './views.module.css'
 
@@ -63,9 +66,14 @@ function NotFoundNumber({ reference }: { reference: string }) {
 
 function Found({ docNumber, version }: { docNumber: number; version?: string }) {
   const document = useDocument(docNumber)
-  const rows = useMemo(() => (document.data ? [rowOf(document.data)] : []), [document.data])
+  const found = useMemo(() => (document.data ? [document.data] : []), [document.data])
+  const rows = useMemo(() => found.map(rowOf), [found])
+  // The one row is the selection and stays it: the address is what selects
+  const selection = useMemo(() => new Set(rows.map((row) => row.id)), [rows])
   const preview = usePreviewKey(() => {})
-  const openDocument = useOpenKey(document.data ? [document.data] : [], () => {})
+  const openDocument = useOpenKey(found, () => {})
+  // Rename, Move To… and Delete, with F2 and Delete, as in every list of documents (R95)
+  const organising = useOrganisingTable(found, selection)
   const columns = useRegionKind({ preview: true, details: true }) === 'preview' ? narrowed(listColumns) : listColumns
   if (document.isError) {
     // The document went away after the lookup found it: the same words as a lookup that found nothing
@@ -80,16 +88,19 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
     <section className={styles.withRegion}>
       <div className={`${styles.view} ${styles.folder}`}>
         <h1 className={styles.title}>{t('doc.heading', { n: docNumber })}</h1>
+        <Toolbar label={t('doc.actions')}>
+          <SelectionActions document={document.data} selected={organising.selected} />
+        </Toolbar>
         <Table
           aria-label={t('doc.heading', { n: docNumber })}
           columns={columns}
           rows={rows}
           selectionMode="single"
-          // The one row is the selection and stays it: the address is what selects
-          selection={new Set(rows.map((row) => row.id))}
+          selection={selection}
           onSelectionChange={() => {}}
           onOpen={openDocument}
           onPreview={preview}
+          {...organising.tableProps}
           empty={t('common.loading')}
         />
       </div>

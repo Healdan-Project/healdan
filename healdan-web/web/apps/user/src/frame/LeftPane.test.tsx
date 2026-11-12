@@ -194,6 +194,23 @@ describe('LeftPane', () => {
     expect(api.callsTo('DELETE /v1/me/matters/110')).toHaveLength(1)
   })
 
+  it('asks for Recent Clients again when My Matters changes, as its clients come from both', async () => {
+    let mine = [matter()]
+    const { api } = await renderApp('/recent/clients', {
+      'GET /v1/matters/mine': () => page(mine),
+      'DELETE /v1/me/matters/*': () => {
+        mine = []
+        return undefined
+      },
+    })
+    await screen.findByRole('heading', { level: 1, name: 'Recent Clients' })
+    await waitFor(() => expect(api.callsTo('GET /v1/clients/recent')).toHaveLength(1))
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.click(within(tree).getByRole('button', { name: 'More for 1001.1 – Charter Dispute' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Remove from My Matters' }))
+    await waitFor(() => expect(api.callsTo('GET /v1/clients/recent')).toHaveLength(2))
+  })
+
   it('says Loading… while a section\'s list is on its way, never an empty list', async () => {
     const waiting = () => new Promise(() => {})
     await renderApp('/folders/1', { 'GET /v1/matters/mine': waiting, 'GET /v1/matters/recent': waiting, 'GET /v1/me/favorites': waiting })

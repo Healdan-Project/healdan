@@ -1,11 +1,10 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useId, useMemo, useRef, useState } from 'react'
-import { ApiError, apiPath, type components } from '@healdan/api'
-import { Button, Icon, t, Table, toast, type TableSort } from '@healdan/ui'
+import { useId, useMemo, useRef } from 'react'
+import { ApiError } from '@healdan/api'
+import { t, Table, type TableSort } from '@healdan/ui'
 import { FilterChips } from '../filters/FilterChips'
 import { FiltersButton } from '../filters/FiltersButton'
 import { FiltersPanel } from '../filters/FiltersPanel'
@@ -13,10 +12,9 @@ import { useAuthorNames } from '../filters/useAuthorNames'
 import { useFacets, useUnfilteredDocuments } from '../filters/useFacets'
 import { useFilters } from '../filters/useFilters'
 import { ErrorPanel } from '../frame/ErrorPanel'
-import { messageFor } from '../frame/errors'
 import { RightRegionView, useRegionKind, useRightRegion } from '../frame/RightRegion'
-import { keys, useFavorites, useFolder } from '../queries'
-import { useApi } from '../services'
+import { useFolder } from '../queries'
+import { FavoriteStar } from '../actions/FavoriteStar'
 import { SelectionActions } from '../actions/SelectionActions'
 import { useOpenKey } from '../actions/useOpenKey'
 import { placeOf } from '../filing/dropTargets'
@@ -37,8 +35,6 @@ import { listColumns, narrowed, rowOf } from './listColumns'
 import { useRowSelection } from './useRowSelection'
 import { childKey, isSortColumn, useListing, type ListingOrder, type SortColumn } from './useListing'
 import styles from './views.module.css'
-
-type S = components['schemas']
 
 export interface FolderViewProps {
   folderId: number
@@ -64,7 +60,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const unfiltered = useUnfilteredDocuments({ folderId, enabled: active > 0 && !store })
   const navigate = useNavigate()
   const headingId = useId()
-  const { selected, selection, change: changeSelection } = useRowSelection()
+  const { selected, selection, change: changeSelection } = useRowSelection(listing.rows)
   const organising = useOrganisingTable(listing.rows, selection)
   // What was just filed flashes in the list, and the row the files are over is lit
   const { fresh } = useFiling()
@@ -148,7 +144,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
             {view.name}
           </h1>
           {/* A matter goes in My Matters (the + in the left pane), not in Favorites */}
-          {view.kind !== 'matter' && !store && <FavoriteStar folderId={folderId} />}
+          {view.kind !== 'matter' && !store && <FavoriteStar what={{ folderId }} add={t('favorites.add')} remove={t('favorites.remove')} />}
         </div>
         {store ? (
           <p>{t('problems.not-browsable')}</p>
@@ -194,7 +190,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               filters={filters}
               facets={facets.data}
               unavailable={facets.isError}
-                busy={facets.isPlaceholderData}
+              busy={facets.isPlaceholderData}
               context="folder"
               onChange={change}
               onClose={() => {
@@ -222,37 +218,3 @@ function countOf(documents: number | undefined, filtered: boolean, unfiltered: {
   return { documents, of: unfiltered.data }
 }
 
-/** The star beside a folder's name: in Favorites or not. */
-function FavoriteStar({ folderId }: { folderId: number }) {
-  const api = useApi()
-  const queryClient = useQueryClient()
-  const favorites = useFavorites()
-  const [busy, setBusy] = useState(false)
-  const favorite = favorites.data?.items.find((f): f is S['FavoriteView'] => f.item.type === 'folder' && f.item.id === folderId)
-
-  async function toggle() {
-    setBusy(true)
-    try {
-      if (favorite) await api.send('DELETE', apiPath`/v1/me/favorites/${favorite.id}`)
-      else await api.send('POST', '/v1/me/favorites', { folderId })
-      await queryClient.invalidateQueries({ queryKey: keys.favorites })
-    } catch (error) {
-      toast(messageFor(error))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Button
-      variant="quiet"
-      aria-label={favorite ? t('folder.favorite.remove') : t('folder.favorite.add')}
-      isDisabled={busy || favorites.isPending}
-      onPress={() => void toggle()}
-    >
-      <span className={favorite ? styles.starred : styles.star}>
-        <Icon name={favorite ? 'starFilled' : 'star'} size={18} />
-      </span>
-    </Button>
-  )
-}

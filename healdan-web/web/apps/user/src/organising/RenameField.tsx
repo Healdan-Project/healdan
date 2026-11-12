@@ -7,6 +7,7 @@ import { t } from '@healdan/ui'
 import { invalidateDocumentLists } from '../actions/refresh'
 import { extensionOf, renameDocument, renameRefusal } from '../actions/rename'
 import type { Movable } from '../actions/batch'
+import { useMe } from '../queries'
 import { useApi } from '../services'
 import { useOrganising } from './OrganisingProvider'
 import styles from './organising.module.css'
@@ -25,6 +26,7 @@ function RenameField({ document }: { document: Movable }) {
   const api = useApi()
   const queryClient = useQueryClient()
   const { stopRename } = useOrganising()
+  const me = useMe()
   const [text, setText] = useState(document.name)
   const [error, setError] = useState<string>()
   const input = useRef<HTMLInputElement>(null)
@@ -52,7 +54,7 @@ function RenameField({ document }: { document: Movable }) {
       await renameDocument(api, document.docNumber, name)
       stop(fromKey)
     } catch (failure) {
-      setError(renameRefusal(failure, document.name))
+      setError(renameRefusal(failure, document.name, me.data?.id))
       if (fromKey) input.current?.focus()
     } finally {
       saving.current = false
