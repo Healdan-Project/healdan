@@ -28,8 +28,9 @@ Every path below starts with `/api/v1`.
 
 The API signs a request in one of two ways:
 
-- **A device token,** for clients such as the Healdan Helper and the Office add-ins. The client sends it as
-  `Authorization: Bearer`. Most of this page is about tokens.
+- **A device token,** for a client on a computer, such as the Healdan Helper. The client sends it as
+  `Authorization: Bearer`. Most of this page is about tokens. The Office add-ins and the LibreOffice extension hold
+  none: they work through the helper.
 - **The browser's web session,** for Healdan's own pages, which the server serves from its own address. The page
   sends no token: the browser sends its session cookie, and the session is the one the sign-in page opened, the
   same as the web page's.

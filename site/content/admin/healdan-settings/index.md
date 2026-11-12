@@ -37,10 +37,12 @@ The choices for Class and Subclass belong to the Healdan profile's attribute set
 A device that signs in through the API, such as Healdan Helper on a Mac, keeps a token instead of the password. (The
 Office add-ins and the LibreOffice extension hold no token: they work through the helper.) The token works only in the
 API: LogicalDOC's web services refuse it. A person's own **Signed-in Devices**, in their menu in the User app, lists
-their sign-ins and revokes each one. To sign out every device a person has signed in on, change their password or disable them. Deleting a
-person stops their devices at once too.
+their sign-ins and revokes each one. To sign out every device a person has signed in on, change their password or
+disable them. Deleting a person stops their devices at once too.
 
-**A lost device.** Change the person's password, which signs out every device. Then have them delete any LogicalDOC
+**A lost device.** If the person can still sign in, they can revoke its row in their **Signed-in Devices**, which
+signs out that device alone. Otherwise, or to be sure, change their password, which signs out every device. Then have
+them delete any LogicalDOC
 API keys they don't recognise: under the person icon in the top bar, **Security → API Keys**, right-click a key and
 choose **Delete**. Only a key's owner can delete it, an administrator included. A device token can't make a key, but whoever had the device may have had the web page too, and a
 key outlasts a password change. Last, end the person's open sessions: under **Administration → System → General**,
