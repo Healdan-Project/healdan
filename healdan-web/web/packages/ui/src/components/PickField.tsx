@@ -21,7 +21,7 @@ export interface PickFieldProps {
   value: PickFieldOption | null
   /** Something else was picked, or the box was emptied and left (null) */
   onChange: (value: PickFieldOption | null) => void
-  /** The options for what is typed, which the caller finds; the value is offered first whatever they are */
+  /** The options for what is typed, which the caller finds; the value is offered first while something is typed */
   options: PickFieldOption[]
   /** What is typed, as it changes, for the caller to find options for; the value's label while nothing is typed */
   onTextChange: (text: string) => void
@@ -40,7 +40,10 @@ export function PickField({ label, required, error, value, onChange, options, on
     setShown(value)
     setText(value?.label ?? '')
   }
-  const items = value ? [value, ...options.filter((option) => option.id !== value.id)] : options
+  // The value is offered first while something is typed. An emptied box offers nothing: React Aria reports picking the
+  // value again from a list as it reports leaving the box, so an emptied box with the value in its list couldn't tell
+  // the two apart
+  const items = value && text.trim() !== '' ? [value, ...options.filter((option) => option.id !== value.id)] : options
 
   function type(next: string) {
     setText(next)
@@ -48,18 +51,29 @@ export function PickField({ label, required, error, value, onChange, options, on
   }
 
   function pick(key: Key | null) {
-    // Leaving the box calls this with what was picked: an empty box picks nothing, and half-typed text goes back
-    if (key === null || (key === value?.id && text.trim() === '')) {
-      setText('')
-      onTextChange('')
-      if (value) onChange(null)
+    if (key === null) {
+      empty()
       return
     }
+    // Leaving the box also calls this with what was picked: half-typed text goes back to it, and an emptied box is left
+    // to leave(), as it offers nothing to pick
+    if (key === value?.id && text.trim() === '') return
     const picked = items.find((option) => option.id === String(key))
     if (!picked) return
     setText(picked.label)
     onTextChange('')
     if (picked.id !== value?.id) onChange(picked)
+  }
+
+  function empty() {
+    setText('')
+    onTextChange('')
+    if (value) onChange(null)
+  }
+
+  // An emptied box left by Tab or a click elsewhere picks nothing
+  function leave() {
+    if (text.trim() === '') empty()
   }
 
   return (
@@ -83,7 +97,7 @@ export function PickField({ label, required, error, value, onChange, options, on
           </span>
         )}
       </Label>
-      <Input className={styles.input} />
+      <Input className={styles.input} onBlur={leave} />
       <FieldError className={styles.error}>{error}</FieldError>
       <Popover className={comboStyles.popover} placement="bottom start" offset={4}>
         <ListBox className={comboStyles.list}>

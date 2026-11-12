@@ -68,6 +68,26 @@ describe('PickField', () => {
     expect(onChange).toHaveBeenLastCalledWith(null)
   })
 
+  it('offers nothing in an emptied box, and keeps what is picked when it is picked again from the list', async () => {
+    const onChange = vi.fn()
+    render(<Example onChange={onChange} />)
+    await userEvent.clear(box())
+    await userEvent.keyboard('{ArrowDown}')
+    expect(screen.queryByRole('listbox')).toBeNull()
+
+    await userEvent.type(box(), 'jam')
+    await screen.findByRole('option', { name: 'Jamie Clarke' })
+    await userEvent.keyboard('{ArrowDown}{Enter}')
+    expect(box().value).toBe('Jamie Clarke')
+    expect(onChange).not.toHaveBeenCalled()
+
+    await userEvent.clear(box())
+    await userEvent.type(box(), 'cla')
+    await userEvent.click(await screen.findByRole('option', { name: 'Jamie Clarke' }))
+    expect(box().value).toBe('Jamie Clarke')
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('marks a required field and says what is wrong with it, and passes axe', async () => {
     const { container } = render(<Example required error="This needs a value." start={null} />)
     expect(box().getAttribute('aria-required')).toBe('true')
