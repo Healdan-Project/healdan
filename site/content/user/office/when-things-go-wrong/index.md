@@ -224,7 +224,7 @@ When Open in App doesn't open anything:
   running helper, but an old one can't. Keep only the copy in Applications.
 - **"That link is from …, but Healdan Helper is signed in to …":** open the web page at the address the helper is
   signed in to: **Open Healdan in Browser** in the helper's menu opens it. See
-  [Opening Documents](../opening-documents/#from-the-web-page-open-in-app).
+  [Opening Documents](../opening-documents/#from-the-app-open).
 - **"Sign in to Healdan Helper to open documents":** you're signed out. Choose **Sign In…** in the helper's menu,
   then click Open in App again.
 - **One of the helper's windows is waiting for you,** such as Save to Healdan. The helper ignores links meanwhile,

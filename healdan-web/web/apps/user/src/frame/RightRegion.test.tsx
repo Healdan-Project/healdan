@@ -50,6 +50,38 @@ describe('useRightRegion', () => {
     expect(result.current.show).toBe('filters')
   })
 
+  it('docks the reading pane over the details, and closing it brings the details back', () => {
+    selected = 10388
+    const { result } = renderHook(useRightRegion, { wrapper })
+    act(() => result.current.open('preview'))
+    expect(result.current.show).toBe('preview')
+    expect(result.current.docked).toBe(true)
+    act(() => result.current.close())
+    expect(result.current.show).toBe('details')
+    expect(result.current.docked).toBe(false)
+  })
+
+  it('keeps the reading pane docked with nothing selected, as a place for the next click', () => {
+    const { result } = renderHook(useRightRegion, { wrapper })
+    act(() => result.current.open('preview'))
+    expect(result.current.show).toBe('preview')
+  })
+
+  it('shows Filters over the docked pane until a click on a row, which brings the pane back; closing Filters does too', () => {
+    selected = 10388
+    const { result } = renderHook(useRightRegion, { wrapper })
+    act(() => result.current.open('preview'))
+    act(() => result.current.open('filters'))
+    expect(result.current.show).toBe('filters')
+    // The next click on a row asks for the details, which a docked pane takes the place of
+    act(() => result.current.open('details'))
+    expect(result.current.show).toBe('preview')
+    act(() => result.current.open('filters'))
+    act(() => result.current.close())
+    expect(result.current.show).toBe('preview')
+    expect(result.current.docked).toBe(true)
+  })
+
   it('refuses to be used outside its provider', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(() => renderHook(useRightRegion)).toThrow(/RightRegionProvider/)
@@ -71,7 +103,7 @@ describe('RightRegionView', () => {
     expect(screen.getByRole('region', { name: 'Details' }).textContent).toBe('the details')
   })
 
-  it('draws nothing for the reading pane until it exists', () => {
+  it('draws nothing for a reading pane a view does not offer', () => {
     selected = 10388
     function Open() {
       const region = useRightRegion()

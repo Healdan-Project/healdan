@@ -4,12 +4,17 @@
 import { useState } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import { Button, formatSize, formatVersion, Icon, t } from '@healdan/ui'
+import { CheckoutControls } from '../actions/CheckoutControls'
 import { copyLink } from '../actions/copyLink'
+import { OpenDownload } from '../actions/OpenDownload'
+import { useOpenInApp } from '../actions/OpenInAppState'
 import { fileIcon } from '../fileIcon'
 import { ErrorPanel } from '../frame/ErrorPanel'
+import { useQuickLook } from '../preview/QuickLookState'
 import { useDocument, useProperties, useVersions } from '../queries'
 import { useApi } from '../services'
 import { Properties, type DetailsContext } from './Properties'
+import { PropertiesForm } from './PropertiesForm'
 import { Section } from './Section'
 import { Versions } from './Versions'
 import styles from './details.module.css'
@@ -28,13 +33,16 @@ export interface DetailsPanelProps {
 
 /**
  * The selected document's details (spec section 6.2): its thumbnail, name, doc #, version and size, the actions, its
- * properties and its versions. Open, Download, Edit and Preview wait for the tasks that build them.
+ * properties and its versions. Preview opens Quick Look; Edit changes the properties in place.
  */
 export function DetailsPanel({ docNumber, row, version, context = 'folder' }: DetailsPanelProps) {
   const document = useDocument(docNumber, row)
   const properties = useProperties(docNumber)
   const versions = useVersions(docNumber, version)
+  const quickLook = useQuickLook()
+  const app = useOpenInApp()
   const doc = document.data
+  const [editing, setEditing] = useState(false)
 
   if (document.isError) return <ErrorPanel error={document.error} onRetry={() => void document.refetch()} />
   if (!doc) return <p className={styles.note}>{t('common.loading')}</p>
@@ -45,15 +53,19 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
       <h2 className={styles.name}>{doc.name}</h2>
       <p className={styles.meta}>{t('details.meta', { n: doc.docNumber, version: formatVersion(doc.fileVersion), size: formatSize(doc.size) })}</p>
       <div className={styles.actions}>
-        <Button isDisabled>{t('details.open')}</Button>
-        <Button isDisabled>{t('details.download')}</Button>
-        <Button isDisabled>{t('details.edit')}</Button>
+        <OpenDownload document={doc} />
+        <Button isDisabled={editing || !properties.data?.items.some((field) => field.editable)} onPress={() => setEditing(true)}>
+          {t('details.edit')}
+        </Button>
         <Button onPress={() => void copyLink(doc.docNumber)}>{t('details.copyLink')}</Button>
       </div>
+      <CheckoutControls document={doc} />
       {properties.isError ? (
         <Section title={t('details.properties')}>
           <p className={styles.note}>{t('details.propertiesUnavailable')}</p>
         </Section>
+      ) : properties.data && editing ? (
+        <PropertiesForm document={doc} fields={properties.data.items} onClose={() => setEditing(false)} />
       ) : properties.data ? (
         <Properties document={doc} fields={properties.data.items} context={context} />
       ) : (
@@ -66,7 +78,15 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
           <p className={styles.note}>{t('details.versionsUnavailable')}</p>
         </Section>
       ) : versions.items ? (
-        <Versions versions={versions.items} selected={version} onShowMore={versions.hasMore ? versions.loadMore : undefined} loading={versions.isLoadingMore} />
+        <Versions
+          versions={versions.items}
+          selected={version}
+          onShowMore={versions.hasMore ? versions.loadMore : undefined}
+          loading={versions.isLoadingMore}
+          canOpen={doc.canOpen}
+          onPreview={(of) => quickLook.open(doc.docNumber, of)}
+          onDownload={(of) => app.download(doc, of)}
+        />
       ) : (
         <Section title={t('details.versions')}>
           <p className={styles.note}>{t('common.loading')}</p>
@@ -80,6 +100,7 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
 // the icon of its kind instead of a broken image.
 function Thumbnail({ document }: { document: S['DocumentView'] }) {
   const api = useApi()
+  const quickLook = useQuickLook()
   const [failed, setFailed] = useState(false)
   return (
     <div className={styles.thumb}>
@@ -89,7 +110,7 @@ function Thumbnail({ document }: { document: S['DocumentView'] }) {
         <Icon name={fileIcon(document.name)} size={48} />
       )}
       <div className={styles.preview}>
-        <Button isDisabled>{t('details.preview')}</Button>
+        <Button onPress={() => quickLook.open(document.docNumber)}>{t('details.preview')}</Button>
       </div>
     </div>
   )

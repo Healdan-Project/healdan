@@ -325,7 +325,7 @@ public class EmailFiling {
 	 * @return the name to file the part under: an attached message's ends with
 	 *         {@code .eml}, so the email listener reads it as an email
 	 */
-	private static String filingName(Part part) {
+	static String filingName(Part part) {
 		String name = part.name();
 		if (!part.attachedMessage() || EML.equalsIgnoreCase(Uploads.extension(name)))
 			return name;
@@ -466,7 +466,7 @@ public class EmailFiling {
 		}
 	}
 
-	private static DocumentLink link(Document email, Document attachment) throws PersistenceException {
+	static DocumentLink link(Document email, Document attachment) throws PersistenceException {
 		DocumentLink link = new DocumentLink();
 		link.setType(LINK_TYPE);
 		link.setDocument1(email);
@@ -489,7 +489,7 @@ public class EmailFiling {
 	 *         stored, whose problem would say it was filed, or something
 	 *         couldn't be taken back
 	 */
-	private static RuntimeException undo(Throwable failure, List<Document> stored, List<DocumentLink> links,
+	static RuntimeException undo(Throwable failure, List<Document> stored, List<DocumentLink> links,
 			Caller caller) {
 		for (int i = links.size() - 1; i >= 0; i--) {
 			try {

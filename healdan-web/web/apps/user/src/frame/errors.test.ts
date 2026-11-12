@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { ApiError } from '@healdan/api'
 import { strings, t, type StringKey } from '@healdan/ui'
 import yaml from '../../../../../../healdan-api/src/main/resources/healdan/api/openapi.yaml?raw'
-import { isStorageUnreachable, messageFor } from './errors'
+import { fieldErrors, isStorageUnreachable, messageFor } from './errors'
 
 // The codes the contract lists, read from the file so a new one can't go unmapped.
 const listed = /examples: \[(bad-request[^\]]*)\]/.exec(yaml)?.[1]?.split(',').map((c) => c.trim()) ?? []
@@ -53,5 +53,32 @@ describe('isStorageUnreachable', () => {
     expect(isStorageUnreachable(new ApiError(503, 'storage-unreachable', '', {}))).toBe(true)
     expect(isStorageUnreachable(new ApiError(503, 'server-error', '', {}))).toBe(false)
     expect(isStorageUnreachable(new TypeError('x'))).toBe(false)
+  })
+})
+
+describe('fieldErrors', () => {
+  const validation = (fields: unknown) => new ApiError(422, 'validation', 'x', { code: 'validation', fields })
+
+  it('gives each field its message from the catalogue, never the server\'s text', () => {
+    const errors = fieldErrors(
+      validation([
+        { field: 'docclass', code: 'not-an-option', detail: 'java.lang.IllegalArgumentException' },
+        { field: 'comments', code: 'too-long', detail: 'x' },
+      ]),
+    )
+    expect(Object.fromEntries(errors)).toEqual({ docclass: "That isn't one of the choices.", comments: 'That is too long.' })
+  })
+
+  it('keeps the first message of a field, and says the problem for a code it has no message for', () => {
+    expect(Object.fromEntries(fieldErrors(validation([{ field: 'a', code: 'read-only', detail: '' }, { field: 'a', code: 'type', detail: '' }, { field: 'b', code: 'odd', detail: '' }])))).toEqual({
+      a: "That can't be changed.",
+      b: 'Some details need fixing.',
+    })
+  })
+
+  it('is empty for anything that is not a validation problem with fields', () => {
+    expect(fieldErrors(new ApiError(409, 'checked-out', 'x', {})).size).toBe(0)
+    expect(fieldErrors(validation('nope')).size).toBe(0)
+    expect(fieldErrors(new TypeError('x')).size).toBe(0)
   })
 })

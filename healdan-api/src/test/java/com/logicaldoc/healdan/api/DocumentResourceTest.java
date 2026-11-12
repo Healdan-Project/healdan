@@ -109,6 +109,7 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertEquals("document", doc.path("type").textValue());
 		assertEquals(number(d), doc.path("docNumber").asLong());
 		assertEquals("a.docx", doc.path("name").textValue());
+		assertEquals("word", doc.path("kind").textValue());
 		assertEquals("Lease draft".length(), doc.path("size").asLong());
 		assertEquals("1.0", doc.path("version").textValue());
 		assertEquals("1.0", doc.path("fileVersion").textValue());

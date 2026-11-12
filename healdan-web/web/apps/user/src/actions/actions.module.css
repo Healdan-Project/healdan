@@ -1,0 +1,18 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.hold {
+  margin: 0 0 var(--hd-space-4);
+  color: var(--hd-text-secondary);
+}
+
+.holdActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hd-space-3);
+  margin-bottom: var(--hd-space-4);
+}
+
+.holdActions:empty {
+  display: none;
+}

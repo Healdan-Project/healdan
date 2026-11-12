@@ -4,7 +4,7 @@
 import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import type { components } from '@healdan/api'
-import { formatDate, formatDateTime, t } from '@healdan/ui'
+import { formatDate, formatDateTime, formatDay, t } from '@healdan/ui'
 import { Section } from './Section'
 import styles from './details.module.css'
 
@@ -16,10 +16,15 @@ export type DetailsContext = 'folder' | 'search'
 // The fields of an email, which the server fills from the message; a document that isn't one has them empty.
 const emailFields = ['emailfrom', 'emailto', 'emailsent', 'emailreceived']
 
-function textOf(field: S['ProfileField'] | undefined): string {
+// The date properties that are moments, the message's own; every other date property is a day, kept as its UTC midnight
+// (as the form and the helper write it), so it shows as that day wherever the person is
+const moments = new Set(['emailsent', 'emailreceived'])
+
+export function textOf(field: S['ProfileField'] | undefined): string {
   const value = field?.value
   if (value === null || value === undefined || value === '') return ''
-  if (typeof value === 'string') return field?.type === 'date' ? formatDateTime(value) : value
+  if (typeof value === 'string' && field?.type === 'date') return moments.has(field.name) ? formatDateTime(value) : formatDay(value.slice(0, 10))
+  if (typeof value === 'string') return value
   if (typeof value === 'number') return String(value)
   if (typeof value === 'boolean') return t(value ? 'details.yes' : 'details.no')
   return value.name ?? t('details.unnamedUser')
@@ -31,7 +36,7 @@ interface Entry {
 }
 
 /**
- * A document's properties, read only (editing in place comes with Task 18): Location in search results; Client, Matter,
+ * A document's properties, read only (the form that edits them is `PropertiesForm`): Location in search results; Client, Matter,
  * Class, Subclass, Author, Typist and Date Filed; and an email's From, To, Sent and Received. Names and labels come
  * from the properties the server lists, so the firm's own words show.
  */

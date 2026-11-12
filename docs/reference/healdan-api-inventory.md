@@ -826,7 +826,7 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/download-ticket` | TicketDownload | ticketId, suffix, password, behavior, control; Basic Authorization header | Public (security=none) download/preview via a ticket; checks expiry, counters, password. | M6 | stays as it is (public ticket links) |
 | `/download-attachment` | DownloadAttachmentServlet | docId, fileVersion, attachmentFileName | Download an attachment inside an email document. | M6 | `/documents/{docNumber}/attachments` |
 | `/thumbnail` | ThumbnailServlet | docId, version, fileVersion, suffix | Image rendition (thumbnail / preview image); generated on demand. | M3 | `GET /documents/{docNumber}/thumbnail` (built: the current thumbnail, `404` until M1.5 has made it) |
-| `/convertpdf/*` | ConvertPdf | docId, version, fileVersion | Convert (if needed) and stream a PDF for viewing. | M6 | `/documents/{docNumber}/preview` |
+| `/convertpdf/*` | ConvertPdf | docId, version, fileVersion | Convert (if needed) and stream a PDF for viewing. | M6 | `GET /documents/{docNumber}/preview` (built, Task 16: `?version=`; `202` with `Retry-After` while M1.5 converts, `404 no-preview`; it never converts on the spot) |
 | `/zip-export` | ExportZip | folderId, level (and doc ids); GET/POST | Zip a folder tree or selected docs for download. | M6 | `/folders/{id}/zip` |
 | `/avatar` | AvatarServlet | userId | User picture image. | M6 | `/users/{id}/avatar` |
 | `/legal` | LegalServlet | legal, user | Legal-document text/PDF to accept at login (unauthenticated). | M6 | `/auth/legal` |

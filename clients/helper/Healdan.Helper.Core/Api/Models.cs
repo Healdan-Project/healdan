@@ -192,6 +192,7 @@ public sealed record ProfileField(
     JsonElement Value,
     string? Source,
     FolderRef? InheritedFrom,
+    FolderRef? Overrides,
     List<Option>? Options);
 
 /// <summary>A value to pick; a Subclass's names the Class it belongs to.</summary>

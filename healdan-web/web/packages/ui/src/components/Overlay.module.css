@@ -1,0 +1,60 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* Fixed over the app: nothing behind it reflows. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--hd-scrim);
+}
+
+.modal {
+  display: flex;
+  width: min(1100px, calc(100vw - 2 * var(--hd-space-6)));
+  height: calc(100dvh - 2 * var(--hd-space-6));
+  border-radius: var(--hd-radius-large);
+  background: var(--hd-window);
+  color: var(--hd-text);
+  box-shadow: var(--hd-shadow-popup);
+  overflow: hidden;
+}
+
+.dialog {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  outline: none;
+}
+
+.bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--hd-space-3);
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border-bottom: 1px solid var(--hd-line);
+  background: var(--hd-bar);
+}
+
+.heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: var(--hd-space-3);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}

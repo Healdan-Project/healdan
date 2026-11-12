@@ -12,6 +12,7 @@ import java.util.Date;
  * @param type always {@code document}
  * @param docNumber the doc #
  * @param name the file name
+ * @param kind the kind of file its extension makes ({@code FileKinds}), which says how the web app previews it
  * @param size the current file's size in bytes
  * @param version CE's version, which moves on property edits too
  * @param fileVersion the version the file's content was last saved as
@@ -27,7 +28,7 @@ import java.util.Date;
  * @param canOpen whether the caller may download the document's file, as
  *        its content and thumbnail ask
  */
-public record DocumentView(String type, long docNumber, String name, long size, String version, String fileVersion,
+public record DocumentView(String type, long docNumber, String name, String kind, long size, String version, String fileVersion,
 		String reference, FolderRef folder, MatterRef matter, AuthorRef author, Date dateFiled, Date lastModified,
 		HoldView hold, boolean canEdit, boolean canOpen) {
 }

@@ -39,3 +39,12 @@
 .message {
   display: block;
 }
+
+.link {
+  color: var(--hd-accent-text);
+}
+
+.link:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}

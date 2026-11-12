@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { Outlet } from '@tanstack/react-router'
+import { OpenInAppProvider } from '../actions/OpenInAppState'
+import { QuickLookProvider } from '../preview/QuickLookState'
 import { useSignedOut } from '../services'
 import { LeftPane } from './LeftPane'
 import { RightRegionProvider } from './RightRegion'
@@ -17,14 +19,18 @@ export function Frame() {
   if (signedOut) return <SignedOut />
   return (
     <RightRegionProvider>
-      <div className={styles.frame}>
-        <TopBar />
-        <LeftPane />
-        <main className={styles.main}>
-          <StorageBanner />
-          <Outlet />
-        </main>
-      </div>
+      <QuickLookProvider>
+        <OpenInAppProvider>
+          <div className={styles.frame}>
+            <TopBar />
+            <LeftPane />
+            <main className={styles.main}>
+              <StorageBanner />
+              <Outlet />
+            </main>
+          </div>
+        </OpenInAppProvider>
+      </QuickLookProvider>
     </RightRegionProvider>
   )
 }

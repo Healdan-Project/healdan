@@ -4,6 +4,7 @@
 import react from '@vitejs/plugin-react'
 import { loadEnv, type ProxyOptions } from 'vite'
 import { defineConfig } from 'vitest/config'
+import { pdfjsData } from './pdfjs-data.mjs'
 
 // `npm run dev` (in apps/user) serves the app at /app/ and sends the stack's own addresses to the stack named by
 // HEALDAN_DEV_TARGET, a running Healdan (http://127.0.0.1:8080 unless set). The web-session route refuses a request whose
@@ -14,7 +15,7 @@ export default defineConfig(({ mode }) => {
   const toStack: ProxyOptions = { target, changeOrigin: true, headers: { Origin: target } }
   return {
     base: '/app/',
-    plugins: [react()],
+    plugins: [react(), pdfjsData()],
     // errors.test.ts reads the contract (healdan-api's openapi.yaml), which is outside this app.
     server: {
       fs: { allow: ['../../../..'] },
@@ -32,6 +33,8 @@ export default defineConfig(({ mode }) => {
         output: {
           codeSplitting: {
             groups: [
+              // PDF.js is loaded when a PDF is first previewed (PdfView imports it on demand), so it's a chunk of its own
+              { name: 'pdfjs', test: /node_modules[\\/]pdfjs-dist[\\/]/ },
               { name: 'react-aria', test: /node_modules[\\/](react-aria|react-aria-components|react-stately|@react-aria|@react-stately|@react-types|@internationalized)[\\/]/ },
               { name: 'vendor', test: /node_modules[\\/]/ },
             ],

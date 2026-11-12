@@ -82,8 +82,10 @@ asks for the counts on their own (`GET /folders/{id}/children` with `facets`, `l
 and for the folder's count with no filters only while one is in use, which is the "7" of "3 of 7 documents".
 
 The right of a list is one region (`frame/RightRegion.tsx`): `useRightRegion()` gives `show` (`'filters'`, `'details'`,
-`'preview'` or null), `open(kind)` and `close()`. Details are the default while a document is selected; the funnel
-opens Filters over them, and a view opens the details again when a row is clicked with Filters showing. A view renders
+`'preview'` or null), `docked`, `open(kind)` and `close()`. Details are the default while a document is selected; the
+funnel opens Filters over them, and a view opens the details again when a row is clicked with Filters showing. The
+reading pane, once docked (`open('preview')`), is what `'details'` means until `close()` closes it, so the funnel's
+Filters give way to it again at the next click on a row. A view renders
 `RightRegionView` beside its list with what each kind shows, and the region isn't in the page at all when there's
 nothing to show. The panel's groups are `@healdan/ui`'s `CheckGroup` and `RadioChoices`, and its dates `DatePicker`
 (React Aria's, taking and giving days as `2026-11-02`). A search view offers the panel with `context="search"`, which
@@ -99,9 +101,9 @@ list's row shows at once as the placeholder) and renders the thumbnail, the name
 is an `<img>` on `/api/v1/documents/{n}/thumbnail`, which the web session's cookie goes with, and an icon of the
 file's kind (`fileIcon.ts`) shows when there's none or the person can't open the document. Properties come from the
 list the server gives, by name; an email's From, To, Sent and Received show when any of them has a value, as the
-server fills them from the message and the browser never parses a file. Open, Download, Edit and Preview are
-disabled until their tasks; **Copy Link** (`actions/copyLink.ts`) writes `location.origin + '/app/doc/' + n` with the
-Clipboard API and shows a Toast, either way.
+server fills them from the message and the browser never parses a file. **Preview** opens Quick Look (see Previews,
+below), and **Copy Link** (`actions/copyLink.ts`) writes `location.origin + '/app/doc/' + n` with the Clipboard API
+and shows a Toast, either way. The other actions are in "Working with a Document", next.
 
 `/app/doc/10388`, `/app/doc/10388.2` and the other forms of the lookup are `views/DocResult.tsx`: it asks
 `GET /v1/lookup?q=%2310388.2` and shows a list of that one document (`views/listColumns.tsx`, the folder list's
@@ -109,6 +111,36 @@ columns), selected, with its details beside it and the named version marked in V
 number from the address on this route. A `404` shows "No document # 10388 that you can see.", the same for a
 document that isn't there and one that can't be read, and says only the number as typed; a `400` shows the not-found
 view.
+
+## Working with a Document
+
+`actions/` holds what a person does to a document, and every place that offers it goes through it.
+
+- **`launch.ts`** is the one place the page follows an address: it clicks a transient `<a>`, so a `healdan:` link goes
+  to the helper without leaving the page and a file's address downloads under its name. No script reads the bytes, and
+  no blob is made. jsdom can't navigate, so `test/setup.ts` replaces it with a mock for every test, and a test that
+  cares imports `launch` and reads its calls.
+- **Open** (`openInApp.ts`, ported from the old UI's `HealdanOpenInApp` with the same cases in its test) builds
+  `healdan://open/<doc #>?server=<host>` for the kinds the helper opens, and downloads any other. `OpenInAppProvider`,
+  in the frame, shows the notice ("If nothing opened, install the Healdan Helper") as a toast with a link, for 15
+  seconds (`toastWithLink` in `@healdan/ui`; the Toast region is above Quick Look and outside what its dialog hides), and gives `useOpenInApp()` to
+  Open buttons, Quick Look and the lists. Double-click and Enter on a row go through `useOpenKey`, on every list of
+  documents, as Space goes through `usePreviewKey`; a document the person can't download (`canOpen`) is only selected.
+- **Download** (`download.ts`) is `launch` on `GET /v1/documents/{n}/content`, with `?version=` for a version. The web
+  session carries it, as it does for an email's attachment chip. A refusal the server makes after the click (a
+  `503 storage-unreachable`, a `500`) is the browser's: it shows a failed download, or some browsers save the small
+  answer as a file, and the app sees none of it. `canOpen` disables the button for the usual refusal, a missing
+  permission or a password.
+- **Check Out, Check In and Release** (`checkout.ts`, `useCheckout.ts`, `CheckoutControls.tsx`) follow the document's
+  `hold`. The web session is no device, so the app never takes over a check-out a device holds (`409
+  held-elsewhere`): it says who has it and since when, and that it's released on that computer or in the Classic
+  Interface. A check-in from the app is a file picked into `POST /v1/documents/{n}/versions` as a snapshot, with
+  `ifHeld` and `ifVersion`. Every outcome asks for the document and the lists again.
+- **Editing properties** is `details/PropertiesForm.tsx`, made from `GET /v1/documents/{n}/properties` and saved with
+  `PATCH`, sending only the fields that changed. `frame/errors.ts`'s `fieldErrors` gives each field a 422 names its
+  message from the catalogue (`fields.<code>`). **Overridden** shows only where the API's `overrides` names the folder a
+  `local` value takes the place of, and **Follow Folder** sends `null`; a local value with no folder behind it is a plain
+  value. Save compares with the list the form opened with, not the live one, which a refetch can change under it.
 
 ## The Search Box and Search Results
 
@@ -137,6 +169,68 @@ answer's `total` is reached, or, when it's `null`, when it's shorter than the 10
 `views/RecentView.tsx` is the start page and `/recent/<kind>`, a Table each, with `useRowSelection` (the selection of
 document rows, shared with search) putting a document in `?sel=` and its details in the region; a recent client opens
 a Clients search.
+
+## Previews
+
+`preview/PreviewBody.tsx` is the one switch that picks the view of a document by its `kind`, for both places that show
+one: a `picture` is `PictureView` (the preview's own bytes, `image/*`, read through the API client and shown from a `blob:`
+address that is revoked when it's replaced or unmounted), an `email` is `EmailView` (below), and every other
+kind is `PdfView`, which asks `GET /documents/{n}/preview`, shows "Preparing a preview…" and asks again after
+`Retry-After` while it's `202`, and shows `NoPreview` for `404 no-preview`. The app has no list of types that convert. Neither a picture's nor a PDF's preview is recorded as a download.
+The client's `getResponse` gives the `Response` for such an answer (its bytes, its status and its headers), with the
+sign-out and problem handling `get` has. `PdfView` and `PictureView` read a `PreviewSource` (an API path, its query and a
+name) that is the document's own preview by default, so an email's attachment is drawn by the same views, not a second viewer.
+
+### Reading an Email
+
+`preview/EmailView.tsx` shows a filed email as a message from `GET /documents/{n}/message` (see
+[Reading a Filed Email](../api/#reading-a-filed-email)): the subject and the sender, To, Cc, Sent and Received, the
+attachments as chips, then the body. The body is `EmailBodyFrame`, an `<iframe>` of the server's page at
+`/message/body`, with `sandbox="allow-popups allow-popups-to-escape-sandbox"` and never `allow-scripts` or
+`allow-same-origin`: `EmailBodyFrame.test.tsx` asserts both on the element. The server cleans the page and gives it its own
+Content-Security-Policy, so the app's (`AppServlet`'s) stays as it is. Pictures from the internet are removed from it
+until **Show Pictures**, which reloads the frame with `?pictures=true`, for that viewing only (`EmailView` has no
+state that outlives its document: `PreviewBody` keys it on the document). A chip is a button that previews a PDF or a
+picture in place of the body (`/message/parts/{id}?inline=true`, with **Back to Message**) or a plain link that
+downloads anything else; **Save to Matter** posts to `/message/attachments/{id}/file`, and the chip shows the new
+document's # when the message is read again. `working.spec.ts` checks the whole path in both browsers, with a tracking
+picture on a host that never resolves.
+
+`preview/QuickLook.tsx` is the modal over a list, in `@healdan/ui`'s `Overlay` (a React Aria modal with ‹ ›, the arrow
+keys, Space and Esc). A view renders `<QuickLook documents total loadMore />` with the documents of its list, in order,
+and passes Space on a row to `usePreviewKey`; which document is shown is in `QuickLookState`, a context in the frame, so
+the details' and the toolbar's Preview buttons open it too. ‹ › move the selection with them, and at the end of the
+loaded rows › calls the list's `loadMore` and moves on when the page comes. `ReadingPane` is the same view docked in the
+right region, and `narrowed()` in `views/listColumns.tsx` gives the list its three columns while it's there.
+
+### PDF.js Under the Page's Policy
+
+`AppServlet`'s Content-Security-Policy allows no `eval`, no WebAssembly and nothing but the server's own address.
+`preview/pdfEngine.ts` is the only file that imports `pdfjs-dist`, and it's loaded on demand, as a chunk of its own,
+when the first PDF is previewed. These are the settings that keep it inside the policy; change none without running
+`working.spec.ts` in both browsers and watching for a violation:
+
+- **The worker** is `pdf.worker.min.mjs`, imported with `?url`, so Vite emits it under `/app/assets/` with a hash
+  (`worker-src 'self'`). Pages draw on the main thread, in a canvas; there's no text layer.
+- **`isEvalSupported: false`** is what the spec names. PDF.js 6 dropped the option along with the `new Function` it
+  guarded, so it isn't passed, and `scripts/pdfjs-policy.test.mjs` fails if a version of PDF.js brings an eval back.
+- **`useWasm: false`.** PDF.js compiles WebAssembly for ICC colour profiles, PostScript functions and JPEG 2000 and JBIG2
+  images, which the policy refuses without `'wasm-unsafe-eval'` (a refused compile is a violation report even though
+  PDF.js recovers). With it off, the two image decoders run as JavaScript, loaded from `wasmUrl`, and an ICC colour
+  space uses its alternate.
+- **Its data comes from `/app/pdfjs/`**, never a CDN: `cMapUrl` (`cmaps/`, for CJK text whose fonts aren't in the PDF),
+  `standardFontDataUrl` (`standard_fonts/`, for the fourteen fonts a PDF may not embed) and `wasmUrl` (`wasm/`, the two
+  JavaScript decoders). `apps/user/pdfjs-data.mjs` is a Vite plugin that emits those files into the build, and serves
+  them from `node_modules` in `npm run dev`, so none is committed. `AppServlet` treats only what Vite writes under
+  `assets/` as hashed (and so immutable for a year). These keep PDF.js's own names, so they're served `no-cache` with
+  an `ETag` of their bytes: the browser keeps each and asks again before using it, and gets a `304` until an upgrade of
+  PDF.js changes it. `scripts/check-dist.mjs` fails the build when the worker or a folder is missing, and
+  `scripts/notices.mjs` adds their licences (Foxit's and Liberation's fonts, OpenJPEG's and JBIG2's decoders) to
+  `notices.txt`.
+- **Fonts from the file** are made with the FontFace API from the file's bytes, which `font-src` doesn't govern.
+- **One worker** is shared by every document opened, for the page's life, and **a copy of the bytes** is given to PDF.js,
+  which hands its argument to the worker and leaves the caller's empty. PDF.js can't run its parsing under jsdom (its
+  main-thread worker times out there), so `pdfEngine.ts` has no unit test: `working.spec.ts` is its test.
 
 ## The Catalogue
 
@@ -168,5 +262,6 @@ And the build checks these:
   app ships into `apps/user/dist/notices.txt`.
 - **The page's Content-Security-Policy** allows no inline style, so a library that injects one is a problem:
   `scripts/check-dist.mjs` checks the one React Aria would inject, for pressed states, is a linked file.
-- **The libraries are chunks of their own** (`vite.config.ts`): React Aria in one, the rest in another, each named
-  with its hash, which `AppServlet` serves as immutable, so a browser keeps them across the app's updates.
+- **The libraries are chunks of their own** (`vite.config.ts`): React Aria in one, PDF.js in another (loaded only
+  when a PDF is previewed) and the rest in a third, each named with its hash, which `AppServlet` serves as immutable,
+  so a browser keeps them across the app's updates.

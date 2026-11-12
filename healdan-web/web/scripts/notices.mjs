@@ -13,6 +13,21 @@ import { fileURLToPath } from 'node:url'
 // client-only is the React team's marker package (react-aria-components depends on it).
 const DECLARED_ONLY = new Set(['client-only'])
 
+// Licences of data a package ships in folders, beyond its own: pdfjs-dist's standard fonts (Foxit's and Liberation's),
+// predefined CMaps and JPEG 2000 and JBIG2 decoders, which the app serves from /app/pdfjs/ (apps/user/pdfjs-data.mjs).
+// A file named here that the package lacks fails the build, so a new version can't drop a notice unseen.
+const EXTRA_LICENCES = {
+  'pdfjs-dist': [
+    'cmaps/LICENSE',
+    'standard_fonts/LICENSE_FOXIT',
+    'standard_fonts/LICENSE_LIBERATION',
+    'wasm/LICENSE_OPENJPEG',
+    'wasm/LICENSE_PDFJS_OPENJPEG',
+    'wasm/LICENSE_JBIG2',
+    'wasm/LICENSE_PDFJS_JBIG2',
+  ],
+}
+
 const LICENCE_FILE = /^(licen[sc]e|notice)([-._].*)?$/i
 
 function licenceFiles(dir) {
@@ -40,6 +55,10 @@ export function noticesFor(root) {
       continue
     }
     const texts = files.map((file) => readFileSync(join(dir, file), 'utf8').trim())
+    for (const extra of EXTRA_LICENCES[name] ?? []) {
+      if (existsSync(join(dir, extra))) texts.push(`${extra}\n\n${readFileSync(join(dir, extra), 'utf8').trim()}`)
+      else missing.push(`${name}@${entry.version} ${extra}`)
+    }
     sections.push(`${name} ${entry.version}\nLicence: ${entry.license ?? 'unknown'}\n\n${texts.join('\n\n')}\n`)
   }
   if (missing.length > 0) {

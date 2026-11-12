@@ -3,9 +3,11 @@ title: Properties
 weight: 3
 ---
 
-Every document and folder carries the same set of properties, the **Healdan profile**. Select a document and open
-its **Ext. Properties** tab to see them. Its **Properties** tab shows the doc #, which can't be edited, and the Date
-filed.
+Every document and folder carries the same set of properties, the **Healdan profile**. In the app, select a document
+and its details show them. In the Classic Interface, open its **Ext. Properties** tab. Its **Properties** tab shows the
+doc #, which can't be edited, and the Date filed.
+
+The screenshot is of the Classic Interface's **Ext. Properties** tab.
 
 ![The Ext. Properties tab: the Healdan profile, with Client 1001 and Matter 1 read-only, then Author treeve, Typist pnair, Class Correspondence, Subclass Letter, Comments, Legacy doc # and the email fields](ext-properties.png)
 
@@ -24,6 +26,26 @@ filed.
 | From, To, CC, Subject, Sent, Received, Message-ID | an email's details. See [Emails](../emails/) |
 
 Your administrator can add more properties.
+
+## Editing in the App
+
+Choose **Edit** in a document's details. The properties become a form, made from the profile, so your firm's own
+properties are in it.
+
+- **A required property has a \* after its name.** Class is required.
+- **A property picked from a list offers only its options.** A Subclass offers only the ones that belong to the Class
+  you've chosen, and choosing another Class clears a Subclass that doesn't belong to it.
+- **Dates** are picked from a calendar or typed. A property that's a number takes a number, and a yes-or-no is a tick
+  box.
+- **Client and Matter are text.** They come from the matter and can't be changed. The same goes for an email's From,
+  To, Sent and Received. Author and Typist show as they are: change them in the Classic Interface.
+- **Save sends only what you changed,** and it's saved as a new snapshot (see [Versions](../../documents/versions/)).
+  **Cancel** puts everything back.
+- **A property Healdan refuses is marked** under its field, such as "That is too long." or "That isn't one of the
+  choices.", and nothing is saved until all of them are right.
+
+**Edit** is greyed out when you can't change the document's properties: you don't have the Write permission, someone
+else has it checked out or locked, it's checked out to you on another computer, or it's protected by a password.
 
 ## Comments
 
@@ -46,6 +68,9 @@ it. Author, Typist, Comments, Legacy doc # and the email details belong to one d
 To give a document or folder a value of its own, set it on that document or folder. It then stops following its
 folder for that property, and passes its own value down if it's a folder.
 
-- **To follow the folder again,** set the property back to the value it would inherit, or clear it.
+- **To follow the folder again,** set the property back to the value it would inherit, or clear it. In the app,
+  a property whose own value takes the place of a folder's is marked **Overridden** while you edit, and **Follow
+  Folder** beside it makes it follow the folder when you save. A value of the document's own that no folder would
+  supply is just a value: clear it to remove it.
 - **Client and Matter can't be overridden.** They always come from the matter.
 - **Changing the Class** clears a Subclass that doesn't belong to the new Class.

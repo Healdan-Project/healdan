@@ -5,13 +5,17 @@ import { useNavigate } from '@tanstack/react-router'
 import { useId, useMemo, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { Icon, t, Table, type TableColumn, type TableRow } from '@healdan/ui'
+import { useOpenKey } from '../actions/useOpenKey'
 import { DetailsPanel } from '../details/DetailsPanel'
+import { QuickLook } from '../preview/QuickLook'
+import { ReadingPane } from '../preview/ReadingPane'
+import { usePreviewKey } from '../preview/usePreviewKey'
 import { ErrorPanel } from '../frame/ErrorPanel'
-import { RightRegionView } from '../frame/RightRegion'
+import { RightRegionView, useRegionKind } from '../frame/RightRegion'
 import { useRecentClients, useRecentDocuments, useRecentFolders } from '../queries'
 import { isRecentKind, type RecentKind } from '../search/scopes'
 import { NotFound } from './NotFound'
-import { hitColumns, rowOf } from './listColumns'
+import { hitColumns, narrowed, rowOf } from './listColumns'
 import { useRowSelection } from './useRowSelection'
 import styles from './views.module.css'
 
@@ -36,11 +40,13 @@ interface ListProps<T extends TableRow> {
   query: { isError: boolean; isPending: boolean; error: unknown; refetch: () => unknown }
   selection?: { keys: Set<string>; change: (next: Set<string>) => void }
   onOpen?: (key: string) => void
+  /** Space */
+  onPreview?: (key: string) => void
   /** The right region, when the list has one */
   region?: ReactNode
 }
 
-function RecentList<T extends TableRow>({ kind, columns, rows, query, selection, onOpen, region }: ListProps<T>) {
+function RecentList<T extends TableRow>({ kind, columns, rows, query, selection, onOpen, onPreview, region }: ListProps<T>) {
   const headingId = useId()
   return (
     <section className={styles.withRegion} aria-labelledby={headingId}>
@@ -59,6 +65,7 @@ function RecentList<T extends TableRow>({ kind, columns, rows, query, selection,
             selection={selection?.keys ?? new Set()}
             onSelectionChange={selection?.change ?? (() => {})}
             onOpen={onOpen}
+            onPreview={onPreview}
             empty={query.isPending ? t('common.loading') : t(`recent.empty.${kind}`)}
           />
         )}
@@ -73,8 +80,12 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
   const { selected, selection, change } = useRowSelection()
   const items = recent.data?.items
   const rows = useMemo(() => (items ?? []).map(rowOf), [items])
-  const columns = useMemo(() => hitColumns('documents'), [])
+  const allColumns = useMemo(() => hitColumns('documents'), [])
+  // The reading pane makes the list narrow: it keeps the columns that fit
+  const columns = useRegionKind({ preview: true, details: selected !== undefined }) === 'preview' ? narrowed(allColumns) : allColumns
   const row = selected === undefined ? undefined : items?.find((doc) => doc.docNumber === selected)
+  const preview = usePreviewKey(change)
+  const openDocument = useOpenKey(items ?? [], change)
   return (
     <RecentList
       kind={kind}
@@ -82,9 +93,18 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
       rows={rows}
       query={recent}
       selection={{ keys: selection, change }}
-      // A document is selected until opening it in its app comes (Tasks 16 and 18)
-      onOpen={(key) => change(new Set([key]))}
-      region={<RightRegionView details={selected !== undefined && <DetailsPanel key={selected} docNumber={selected} row={row} context="search" />} />}
+      // A document opens in its app, or downloads if the helper doesn't open its kind, and is selected
+      onOpen={openDocument}
+      onPreview={preview}
+      region={
+        <>
+          <RightRegionView
+            details={selected !== undefined && <DetailsPanel key={selected} docNumber={selected} row={row} context="search" />}
+            preview={<ReadingPane docNumber={selected} row={row} />}
+          />
+          <QuickLook documents={items ?? []} />
+        </>
+      }
     />
   )
 }

@@ -29,9 +29,15 @@ public class AppServletTest {
 	};
 
 	private MockHttpServletResponse call(String method, String pathInfo) throws Exception {
+		return call(method, pathInfo, null);
+	}
+
+	private MockHttpServletResponse call(String method, String pathInfo, String ifNoneMatch) throws Exception {
 		MockHttpServletRequest request = new MockHttpServletRequest(method, "/app" + pathInfo);
 		request.setServletPath("/app");
 		request.setPathInfo(pathInfo);
+		if (ifNoneMatch != null)
+			request.addHeader("If-None-Match", ifNoneMatch);
 		MockHttpServletResponse response = new MockHttpServletResponse();
 		servlet.service(request, response);
 		return response;
@@ -51,6 +57,28 @@ public class AppServletTest {
 		assertEquals("public, max-age=31536000, immutable", response.getHeader("Cache-Control"));
 		assertTrue(response.getContentAsString().contains("fixture"));
 		assertHeaders(response);
+	}
+
+	@Test
+	public void testPdfJsDataFilesAreKeptAndCheckedAgainWhateverTheirNames() throws Exception {
+		// Their names are PDF.js's own, and some look like a hash to a pattern: 19 CMaps and a font
+		for (String path : new String[] { "/pdfjs/cmaps/Adobe-Japan1-0.bcmap",
+				"/pdfjs/standard_fonts/LiberationSans-BoldItalic.ttf" }) {
+			MockHttpServletResponse response = call("GET", path);
+			assertEquals(path, 200, response.getStatus());
+			assertEquals(path, "no-cache", response.getHeader("Cache-Control"));
+			String tag = response.getHeader("ETag");
+			assertTrue(path, tag != null && tag.matches("\"[A-Za-z0-9_-]{43}\""));
+			assertTrue(path, response.getContentAsByteArray().length > 0);
+
+			// Asked again with the tag it has: not sent again
+			MockHttpServletResponse again = call("GET", path, "W/\"other\", " + tag);
+			assertEquals(path, 304, again.getStatus());
+			assertEquals(path, 0, again.getContentAsByteArray().length);
+			assertEquals(path, tag, again.getHeader("ETag"));
+
+			assertEquals(path, 200, call("GET", path, "\"other\"").getStatus());
+		}
 	}
 
 	@Test

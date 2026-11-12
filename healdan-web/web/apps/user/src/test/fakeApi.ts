@@ -41,11 +41,34 @@ export function folder(over: Partial<S['FolderView']> = {}): S['FolderView'] {
   }
 }
 
+/** The kind the server makes of a file name, for the extensions the tests use */
+export function kindOf(name: string): S['DocumentView']['kind'] {
+  const kinds: Record<string, S['DocumentView']['kind']> = {
+    pdf: 'pdf',
+    doc: 'word',
+    docx: 'word',
+    xls: 'excel',
+    xlsx: 'excel',
+    ppt: 'powerpoint',
+    pptx: 'powerpoint',
+    eml: 'email',
+    msg: 'email',
+    odt: 'opendocument',
+    png: 'picture',
+    jpg: 'picture',
+    tif: 'picture',
+    heic: 'picture',
+  }
+  return kinds[name.slice(name.lastIndexOf('.') + 1).toLowerCase()] ?? 'other'
+}
+
 export function document(over: Partial<S['DocumentView']> = {}): S['DocumentView'] {
+  const name = over.name ?? 'Letter from Dunmere Pryce.pdf'
   return {
     type: 'document',
     docNumber: 10388,
-    name: 'Letter from Dunmere Pryce.pdf',
+    name,
+    kind: kindOf(name),
     size: 214_000,
     version: '1.0',
     fileVersion: '1.0',
@@ -62,9 +85,28 @@ export function document(over: Partial<S['DocumentView']> = {}): S['DocumentView
   }
 }
 
+/** A filed email as GET /documents/{n}/message answers: a subject, a sender, two recipients, a PDF and a picture. */
+export function messageView(over: Partial<S['MessageView']> = {}): S['MessageView'] {
+  return {
+    subject: 'Re: Charter Dispute',
+    from: 'Dunmere Pryce <dunmere@pryce.example>',
+    to: 'Priya Nair <priya@example.test>',
+    cc: 'Jamie Clarke <jclarke@example.test>',
+    sent: '2026-11-03T10:00:00Z',
+    received: '2026-11-03T10:07:05Z',
+    attachments: [
+      { index: 1, name: 'Contract.pdf', type: 'application/pdf', size: 120_000, message: false, docNumber: null },
+      { index: 2, name: 'Site Photo.png', type: 'image/png', size: 40_000, message: false, docNumber: null },
+      { index: 3, name: 'Schedule.xlsx', type: 'application/vnd.ms-excel', size: 9_000, message: false, docNumber: null },
+    ],
+    body: '/api/v1/documents/10388/message/body',
+    ...over,
+  }
+}
+
 /** One property of a document, as GET /documents/{n}/properties lists it. */
 export function field(over: Partial<S['ProfileField']> = {}): S['ProfileField'] {
-  return { name: 'docclass', label: 'Class', type: 'string', required: false, editable: false, value: null, source: null, inheritedFrom: null, options: null, ...over }
+  return { name: 'docclass', label: 'Class', type: 'string', required: false, editable: false, value: null, source: null, inheritedFrom: null, overrides: null, options: null, ...over }
 }
 
 /** One row of GET /documents/{n}/versions. */
@@ -178,7 +220,14 @@ export function fakeApi(over: Routes = {}, onSignedOut?: () => void): FakeApi {
     calls,
     callsTo: (pattern) => calls.filter((c) => matcher(pattern).test(`${c.method} ${c.path}`)),
     get: (path, query, options) => answer('GET', path, query, undefined, options?.signal),
+    // A route for a binary answer gives a Response (or throws, as a failed request does)
+    getResponse: (path, query, options) => answer<Response>('GET', path, query, undefined, options?.signal),
     send: (method, path, body) => answer(method, path, undefined, body),
-    url: (path) => `/api${path}`,
+    url: (path, query) => {
+      const params = new URLSearchParams()
+      for (const [name, value] of Object.entries(query ?? {})) if (value !== undefined) params.append(name, String(value))
+      const text = params.toString()
+      return `/api${path}${text ? `?${text}` : ''}`
+    },
   }
 }

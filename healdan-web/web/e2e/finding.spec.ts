@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { PASSWORD, USERNAME, signIn } from './helpers'
+import { PASSWORD, authorized, deviceToken, fileDocument, matterFolders, signIn } from './helpers'
 
 // Finding in the User app (M6 spec section 6.3): the search box and its scopes, a matter opened by its number, My Matters
 // and its tree, a document found by its words and by its #, Filters, and Copy Link. The documents are made here, through
@@ -19,58 +19,29 @@ let token = ''
 let matterFolder = 0
 let alpha = 0
 
-async function call<T>(response: Promise<{ ok(): boolean; status(): number; json(): Promise<unknown> }>, what: string): Promise<T> {
-  const answer = await response
-  expect(answer.ok(), `${what}: HTTP ${answer.status()}`).toBe(true)
-  return (answer.status() === 204 ? undefined : await answer.json()) as T
-}
-
-async function file(folderId: number, name: string, mimeType: string, buffer: Buffer): Promise<number> {
-  const made = await call<{ docNumber: number }>(
-    api!.post('/api/v1/documents', {
-      headers: { Authorization: `Bearer ${token}` },
-      multipart: {
-        document: { name: 'document.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ folderId, checkOut: false })) },
-        file: { name, mimeType, buffer },
-      },
-    }),
-    `filing ${name}`,
-  )
-  return made.docNumber
-}
-
-const get = <T>(path: string) => call<T>(api!.get(`/api/v1${path}`, { headers: { Authorization: `Bearer ${token}` } }), `GET ${path}`)
+const file = (folderId: number, name: string, mimeType: string, buffer: Buffer) => fileDocument(api!, token, folderId, name, mimeType, buffer)
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
   api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
-  const signedIn = await call<{ token: string }>(
-    api.post('/api/v1/auth/tokens', { data: { username: USERNAME, password: PASSWORD, name: `e2e ${RUN}`, device: { id: `e2e-${RUN}` } } }),
-    'a device token',
-  )
-  token = signedIn.token
-  const matters = await get<{ items: { number: number; client: { number: number }; folderId: number }[] }>('/search?scope=matters&q=1.1')
-  // Exactly matter 1 of client 1, not whatever else the search matched first
-  const matter = matters.items.find((one) => one.client.number === 1 && one.number === 1)
-  expect(matter, 'the smoke fixture has matter 1.1').toBeTruthy()
-  matterFolder = matter!.folderId
-  const inside = await get<{ items: { id: number; name: string; type: string }[] }>(`/folders/${matterFolder}/children?type=folder`)
-  const documents = inside.items.find((item) => item.type === 'folder' && item.name === 'Documents')
-  expect(documents, 'matter 1.1 has a Documents folder').toBeTruthy()
+  token = await deviceToken(api, RUN)
+  const folders = await matterFolders(api, token)
+  matterFolder = folders.matter
+  const documents = { id: folders.documents }
   // The contents don't hold the run's word, so a hit is the title's: the search looks in both
-  alpha = await file(documents!.id, NAMES.alpha, 'text/plain', Buffer.from('Quarterly note, first'))
-  await file(documents!.id, NAMES.beta, 'text/plain', Buffer.from('Quarterly note, second'))
-  await file(documents!.id, NAMES.scan, 'image/png', PNG)
+  alpha = await file(documents.id, NAMES.alpha, 'text/plain', Buffer.from('Quarterly note, first'))
+  await file(documents.id, NAMES.beta, 'text/plain', Buffer.from('Quarterly note, second'))
+  await file(documents.id, NAMES.scan, 'image/png', PNG)
   // The matter starts out of My Matters, whatever the other browser's run left
-  await api.delete(`/api/v1/me/matters/${matterFolder}`, { headers: { Authorization: `Bearer ${token}` } })
+  await api.delete(`/api/v1/me/matters/${matterFolder}`, authorized(token))
 })
 
 test.afterAll(async () => {
   // beforeAll may have failed before there was anything to clean up
   if (!api) return
   if (token) {
-    if (matterFolder) await api.delete(`/api/v1/me/matters/${matterFolder}`, { headers: { Authorization: `Bearer ${token}` } })
-    await api.delete('/api/v1/auth/tokens/current', { headers: { Authorization: `Bearer ${token}` } })
+    if (matterFolder) await api.delete(`/api/v1/me/matters/${matterFolder}`, authorized(token))
+    await api.delete('/api/v1/auth/tokens/current', authorized(token))
   }
   await api.dispose()
 })
@@ -140,18 +111,28 @@ test('finds a document by its title, and by its #', async ({ page }) => {
 })
 
 test('filters the results by file type', async ({ page }) => {
+  // The search's wait and the rounds below together can pass the default 90 seconds when the server answers empty a few times
+  test.setTimeout(170_000)
   await start(page)
   await searchUntilFound(page, RUN, NAMES.scan)
-  await page.getByRole('button', { name: /^Filters/ }).click()
-  const filters = page.getByRole('region', { name: 'Filters' })
-  // The checkbox itself is hidden under its label, as a person would click the words
-  await filters.getByText(/^Picture/).click()
-  await expect(filters.getByRole('checkbox', { name: /^Picture/ })).toBeChecked()
-  await expect(page).toHaveURL(/type=picture/)
-  await expect(main(page).getByRole('row', { name: new RegExp(NAMES.scan.replace('.', '\\.')) })).toBeVisible()
-  await expect(main(page).getByRole('row', { name: new RegExp(NAMES.alpha.replace('.', '\\.')) })).toHaveCount(0)
-  await expect(main(page).getByRole('group', { name: 'Filters in Use' })).toContainText('Picture')
-  await expect(main(page).getByText('1 document', { exact: true })).toBeVisible()
+  // The Indexer runs every 5 seconds in this step, and while it does the server now and then answers a search, or the count
+  // of its filters' options, with nothing at all, the same one a moment later having it all (seen by asking the API directly,
+  // with and without a filter). The page asks once and keeps the answer, so each round starts the search over, from its
+  // address, until one round gets through; what a round checks is what a person would do and see.
+  const results = main(page)
+  await expect(async () => {
+    await page.goto(`/app/search?scope=documents&q=${encodeURIComponent(RUN)}`)
+    await page.getByRole('button', { name: /^Filters/ }).click()
+    const filters = page.getByRole('region', { name: 'Filters' })
+    // The checkbox itself is hidden under its label, as a person would click the words
+    await filters.getByText(/^Picture/).click({ timeout: 5_000 })
+    await expect(filters.getByRole('checkbox', { name: /^Picture/ })).toBeChecked({ timeout: 5_000 })
+    await expect(page).toHaveURL(/type=picture/, { timeout: 5_000 })
+    await expect(results.getByRole('row', { name: new RegExp(NAMES.scan.replace('.', '\\.')) })).toBeVisible({ timeout: 5_000 })
+    await expect(results.getByRole('row', { name: new RegExp(NAMES.alpha.replace('.', '\\.')) })).toHaveCount(0)
+    await expect(results.getByRole('group', { name: 'Filters in Use' })).toContainText('Picture')
+    await expect(results.getByText('1 document', { exact: true })).toBeVisible({ timeout: 5_000 })
+  }).toPass({ timeout: 70_000, intervals: [500] })
 })
 
 test('copies a document link and follows it', async ({ page, context, browserName }) => {

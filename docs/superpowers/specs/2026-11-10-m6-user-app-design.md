@@ -233,7 +233,7 @@ A first mockup showed whether the helper was running. The browser can't tell whe
 
 - **`@WebServlet("/app/*")`** serves the built files from the jar (`healdan/web/user/`).
 - **Any path under `/app/` that isn't a file** gets `index.html`, so addresses like `/app/doc/10388` and `/app/doc/10388.2` load the app. A file is one the build holds, or any path under `assets/`, where a missing one is `404`.
-- **Caching:** `index.html` is never cached; the files under `assets/` carry a content hash in their names and are cached for a year, immutable, and the rest aren't cached.
+- **Caching:** `index.html` is never cached; the files under `assets/` carry a content hash in their names and are cached for a year, immutable; PDF.js's data under `pdfjs/`, named as PDF.js names it, is kept and checked again on each use (`no-cache` with an `ETag`, changed in the build: PR C's review); and the rest aren't cached.
 - **Its own Content-Security-Policy,** in addition to CE's (both apply): `default-src 'self'`; `script-src 'self'`, with no inline script and no `eval`; `style-src 'self'`; `img-src 'self' data: blob:`; `worker-src 'self'` for PDF.js's worker; `connect-src 'self'`; `frame-src 'self'` for the email body (§9.4); `object-src 'none'`; `frame-ancestors 'none'`; `base-uri 'none'`; `form-action 'self'`. PDF.js runs with `isEvalSupported: false`.
 - **Without a web session,** the servlet sets the return path and sends the browser to `login.jsp` (§8.3). The page itself is code, not data; everything it shows comes from the API.
 - **No upstream file changes for this:** CE's chain already lets `/app/**` through (§3.2).
@@ -336,7 +336,7 @@ Everything else the app uses exists. Dropping a file on a row uses `POST /docume
 
 ### 9.3 Preview
 
-`GET /documents/{n}/preview?version=` answers M1.5's PDF of that version: `202` with `Retry-After` while it's still converting, `404 no-preview` for a type that has none, and `503 storage-unreachable` when the file can't be reached. A picture previews from `/content`. The app asks again after `Retry-After` while Quick Look stays open.
+`GET /documents/{n}/preview?version=` answers M1.5's PDF of that version: `202` with `Retry-After` while it's still converting, `404 no-preview` for a type that has none, and `503 storage-unreachable` when the file can't be reached. A picture previews from the same endpoint as its own bytes (`200 image/*`, changed in the build: R54, Task 16's review), under the same checks and recorded as no download, where `/content` would record one and need the Download permission. The app asks again after `Retry-After` while Quick Look stays open.
 
 ### 9.4 Emails (refined while writing the spec)
 

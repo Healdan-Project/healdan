@@ -80,11 +80,17 @@ public class ProfileView {
 	 * @param source where the value comes from; null when there is no value
 	 * @param inheritedFromId the folder an inherited value comes from, or null
 	 * @param inheritedFromName that folder's name, or null
+	 * @param overridesId for a local value, the folder whose value it takes the
+	 *        place of (the nearest that sets the property); null when no
+	 *        folder would supply one, for every other source, and in the form
+	 *        for a new document
+	 * @param overridesName that folder's name, or null
 	 * @param options the values to pick from, in order; null for a field that
 	 *        isn't picked from a list
 	 */
 	public record ProfileField(String name, String label, Attribute.Type type, boolean required, boolean editable,
-			Object value, Source source, Long inheritedFromId, String inheritedFromName, List<Option> options) {
+			Object value, Source source, Long inheritedFromId, String inheritedFromName, Long overridesId,
+			String overridesName, List<Option> options) {
 	}
 
 	/** A folder on the way from a folder up to its matter's workspace, with its local attributes */
@@ -156,8 +162,12 @@ public class ProfileView {
 			String name = definition.getKey();
 			Object value = valueOf(document.getAttribute(name), definition.getValue().getType());
 			if (value != null && (local.contains(name) || !inheritable.contains(name)))
-				// An override, or a document-only value: both belong to the document
-				fields.add(field(name, definition.getValue(), value, Source.LOCAL, null));
+			{
+				// An override, or a document-only value: both belong to the document. An override takes the place of
+				// the nearest folder that sets the property, the one the value would be inherited from without it
+				Step overridden = inheritable.contains(name) ? supplier(name, steps) : null;
+				fields.add(field(name, definition.getValue(), value, Source.LOCAL, null, overridden));
+			}
 			else
 				fields.add(inheritedField(name, definition.getValue(), value, steps));
 		}
@@ -196,12 +206,26 @@ public class ProfileView {
 		return field(name, definition, value, Source.INHERITED, null);
 	}
 
+	/** @return the nearest folder that sets the property, or null when none does */
+	private static Step supplier(String name, List<Step> steps) {
+		for (Step step : steps)
+			if (step.locals().contains(name))
+				return step;
+		return null;
+	}
+
 	private ProfileField field(String name, Attribute definition, Object value, Source source, Step from)
 			throws PersistenceException {
+		return field(name, definition, value, source, from, null);
+	}
+
+	private ProfileField field(String name, Attribute definition, Object value, Source source, Step from,
+			Step overridden) throws PersistenceException {
 		boolean editable = !schema.fixed().contains(name) && !FROM_MESSAGE.contains(name) && !definition.isReadonly();
 		return new ProfileField(name, StringUtils.defaultIfBlank(definition.getLabel(), name), definition.getType(),
 				definition.isMandatory(), editable, value, source, from != null ? from.id() : null,
-				from != null ? from.name() : null, options(name, definition));
+				from != null ? from.name() : null, overridden != null ? overridden.id() : null,
+				overridden != null ? overridden.name() : null, options(name, definition));
 	}
 
 	private static List<Option> options(String name, Attribute definition) throws PersistenceException {

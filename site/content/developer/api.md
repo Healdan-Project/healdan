@@ -230,6 +230,8 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 403 | `token-only` | `DELETE /auth/tokens/current` on the web session, which has no token |
 | 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current` |
 | 404 | `not-found` | It doesn't exist, **or you can't read it**: the two get the same answer |
+| 404 | `no-preview` | `GET /documents/{docNumber}/preview` for a file with no preview: its type has none, or its conversion failed (see [Previews](#previews)); `GET /documents/{docNumber}/message/parts/{id}?inline=true` for an attachment that isn't a PDF or a picture |
+| 404 | `not-an-email` | A `/documents/{docNumber}/message` route for a document that isn't an email, or whose file can't be read as one (see [Reading a Filed Email](#reading-a-filed-email)) |
 | 409 | `checked-out`, `locked` | Someone else has the document checked out, or anyone has it locked with the web page's Lock action. The problem adds the `hold` |
 | 409 | `held-elsewhere` | You have the document checked out on another of your devices. The problem adds the `hold` and `lastSaved` |
 | 409 | `not-held` | A save with `ifHeld: true` found the document free: its check-out was released |
@@ -299,8 +301,8 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 | Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /clients/recent`, `PUT` and `DELETE /me/matters/{folderId}`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
 | Finding | `GET /search?scope=&q=&within=`, with filters and `facets`, `GET /suggest?q=` for the search box as someone types, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
-| A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone |
-| Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are |
+| A document | `GET /documents/{docNumber}`, `/content`, `/preview`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone |
+| Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are; `GET /documents/{docNumber}/message` and its `/body`, `/parts/{id}` and `POST /attachments/{id}/file` for reading a filed email |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
 | Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
 
@@ -330,6 +332,13 @@ The sections below say more about the parts a client needs to know before it sta
 - **Comments.** Every document has a Comments property (`comments`), free text of up to 4000 characters that comes
   after Subclass in the form and the properties. The `documents` search scope finds a document by its Comments: it
   matches those whose Comments contain every word of `q`, in any case, along with the full-text hits.
+
+- **Where a property's value comes from.** `GET /documents/{docNumber}/properties` gives each property a `source`:
+  `local` for a value set on the document, `inherited` with `inheritedFrom` naming the folder it comes from, or
+  `default`. A `local` value also has `overrides`, the folder whose value it takes the place of, which the document
+  would inherit if its own value went. It is null for a value no folder would supply (Author, Comments, a value no
+  folder sets), for every value that isn't `local`, and in the filing form. A client shows a value as overridden only
+  when `overrides` isn't null, and `PATCH` with `null` for it makes the property follow that folder again.
 
 ## Searching
 
@@ -627,6 +636,42 @@ The answer is `201`, with the email's address as `Location`.
   One that waits more than 30 seconds is `409 filing-in-progress`: send it again. The same refusal comes from the
   web page and every other way a copy of the message could reach the matter.
 
+### Reading a Filed Email
+
+A filed `.eml` or `.msg` can be read as a message, for a client that shows email without opening a mail program. All
+of these need the Preview permission on top of reading (`/parts/{id}` needs Download unless it is `inline`, and Save
+to Matter needs Download on the email and Write on its folder), and answer `404 not-an-email` for a document that
+isn't an email, `404 not-found` first for one the caller can't read, and `403 forbidden` for one protected by a
+password.
+
+| Route | Answers |
+|---|---|
+| `GET /documents/{docNumber}/message` | The subject, From, To, Cc, Sent and Received, the attachments (`index`, `name`, `type`, `size`, `message`, and the `docNumber` of a document already filed from it that the caller can read), and the `body` address. Pictures the body shows aren't attachments |
+| `GET /documents/{docNumber}/message/body?pictures=` | The body as a page of its own, `text/html;charset=utf-8` |
+| `GET /documents/{docNumber}/message/parts/{id}` | An attachment, by its `index`, as a download: `Content-Disposition: attachment`, recorded as a download of the email. With `?inline=true`, a PDF or a picture every browser draws (JPEG, PNG, GIF, WebP, BMP or SVG), known by its type or by its name, to show in place as that type, under Preview, recorded as nothing; any other, a TIFF or a HEIC included, is `404 no-preview` |
+| `POST /documents/{docNumber}/message/attachments/{id}/file` | Save to Matter: files the attachment in the email's folder as a document of its own, linked to the email as `attachment`, as `POST /emails` does. It takes the properties the email was filed with (its own values of the properties that can be changed, without the email fields, the legacy doc # and any a new document there can't take now, such as an author whose account was deleted), and an optional JSON body, `{"properties": {…}}`, as `POST /documents` takes them, is laid over them. `201`; saving it again files another copy, but an attached message the matter holds is `409 already-filed` with the copy |
+
+Each of them takes `?version=`, a version from the email's timeline such as `1.0`, as `/preview` does: that version's
+message, its body, its attachments and Save to Matter of one of them. `/message`'s `body` address names it too. A
+version the document doesn't have is `404 not-found`.
+
+The body page is cleaned by the server: no script, event handler, form, `object`, `embed`, `iframe`, `base` or meta
+refresh, no link but `http`, `https` and `mailto` (each opening in a new window, `noopener noreferrer`), and styles
+with no `url()` or `@import`. Pictures the message carries are embedded as `data:` addresses, up to 2 MiB in all
+(a placeholder past that); pictures from the internet are removed unless `pictures=true`. Its own
+`Content-Security-Policy` sandboxes it (`sandbox allow-popups allow-popups-to-escape-sandbox`), allows no fetch but
+embedded pictures (`default-src 'none'`, `img-src data:`, plus `https:` with `pictures=true`) and lets only the
+same origin frame it, so a client shows it in `<iframe sandbox="allow-popups allow-popups-to-escape-sandbox">`, never
+with `allow-scripts` or `allow-same-origin`. It is a `GET` that changes nothing, so the web session may ask for it as
+a frame's address. Every answer that serves stored bytes inline, an attachment with `inline=true` or a picture from
+`/preview`, carries `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox`, so going to one directly
+runs no script.
+
+`/message` pairs each attachment with the document filed from it by the name and size it was filed with (CE numbers a second file of one name, `Name(1).ext`), then by order for identical ones, so two attachments of one name are told apart. The body's answer is `Referrer-Policy: no-referrer`. An inline part (one the body shows) isn't an attachment: `/parts` and Save to Matter answer `404` for it, as `/message` doesn't list it. An `.msg` is read through CE's reader into the same views. It keeps no Content-IDs, so every file in it is an
+attachment and a `cid:` picture in its HTML shows as a placeholder. Its body is its HTML, whatever the HTML starts
+with, or else its text, or else HTML made from its RTF, never the RTF itself, which CE's reader would put before the
+text.
+
 ## Doc IDs in Word and LibreOffice Files
 
 A Word or LibreOffice file (`.docx`, `.docm`, `.dotx`, `.dotm`, `.odt` or `.ott`) that carries the document
@@ -649,6 +694,27 @@ placeholder, and ask again later.
 
 The docs page has each one's fields, rules and errors. Every endpoint makes the checks the web page makes, so a
 document you can't read through the web page doesn't exist through the API either.
+
+## Previews
+
+`GET /documents/{docNumber}/preview` answers what to show of a file in a page: a PDF's own file, the own bytes
+(`image/*`) of a picture every browser draws (JPEG, PNG, GIF, WebP, BMP or SVG), or the PDF conversion of any other
+file, a TIFF or a HEIC included (M1.5's queue makes one in the background for Office files; asking never makes one). `HEAD` answers the headers alone. `?version=` asks for a version's, as
+for `/content`. It needs the Preview permission on top of reading (`403` without it, and for a document protected by a
+password), and isn't recorded as a download, for a picture as for a PDF (it needs no Download permission).
+
+| Answer | When |
+|---|---|
+| `200`, `application/pdf` or `image/*` | There is a PDF, or the file is a picture every browser draws |
+| `202`, with `Retry-After` in seconds (5) and no body | The conversion is queued: ask again after that |
+| `404 no-preview` | The type has none, the conversion failed (the "not available" PDF CE stores counts), or its job was given up on |
+| `404 not-found` | The document or the version isn't there, or the caller can't read it |
+| `503 storage-unreachable` | The file's storage can't be reached, as for `/content` |
+
+A document's `kind` (the one list the File Type filter uses: `word`, `excel`, `powerpoint`, `pdf`, `email`,
+`opendocument`, `picture` and `other`) says how a client previews it. The app draws a `picture` and every
+other kind from `/preview`, a `picture` that isn't one every browser draws as a PDF, and asks again while it is `202`;
+it has no list of types that convert.
 
 ## The Sign-In Throttle
 

@@ -4,12 +4,16 @@
 import { useMemo } from 'react'
 import { ApiError } from '@healdan/api'
 import { t, Table } from '@healdan/ui'
+import { useOpenKey } from '../actions/useOpenKey'
 import { DetailsPanel } from '../details/DetailsPanel'
+import { QuickLook } from '../preview/QuickLook'
+import { ReadingPane } from '../preview/ReadingPane'
+import { usePreviewKey } from '../preview/usePreviewKey'
 import { ErrorPanel } from '../frame/ErrorPanel'
-import { RightRegionView } from '../frame/RightRegion'
+import { RightRegionView, useRegionKind } from '../frame/RightRegion'
 import { useDocument, useLookup } from '../queries'
 import { NotFound } from './NotFound'
-import { listColumns, rowOf } from './listColumns'
+import { listColumns, narrowed, rowOf } from './listColumns'
 import styles from './views.module.css'
 
 export interface DocResultProps {
@@ -60,6 +64,9 @@ function NotFoundNumber({ reference }: { reference: string }) {
 function Found({ docNumber, version }: { docNumber: number; version?: string }) {
   const document = useDocument(docNumber)
   const rows = useMemo(() => (document.data ? [rowOf(document.data)] : []), [document.data])
+  const preview = usePreviewKey(() => {})
+  const openDocument = useOpenKey(document.data ? [document.data] : [], () => {})
+  const columns = useRegionKind({ preview: true, details: true }) === 'preview' ? narrowed(listColumns) : listColumns
   if (document.isError) {
     // The document went away after the lookup found it: the same words as a lookup that found nothing
     if (document.error instanceof ApiError && document.error.status === 404) return <NotFoundNumber reference={String(docNumber)} />
@@ -75,16 +82,22 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
         <h1 className={styles.title}>{t('doc.heading', { n: docNumber })}</h1>
         <Table
           aria-label={t('doc.heading', { n: docNumber })}
-          columns={listColumns}
+          columns={columns}
           rows={rows}
           selectionMode="single"
           // The one row is the selection and stays it: the address is what selects
           selection={new Set(rows.map((row) => row.id))}
           onSelectionChange={() => {}}
+          onOpen={openDocument}
+          onPreview={preview}
           empty={t('common.loading')}
         />
       </div>
-      <RightRegionView details={<DetailsPanel docNumber={docNumber} row={document.data} version={version} context="search" />} />
+      <RightRegionView
+        details={<DetailsPanel docNumber={docNumber} row={document.data} version={version} context="search" />}
+        preview={<ReadingPane docNumber={docNumber} row={document.data} />}
+      />
+      <QuickLook documents={document.data ? [document.data] : []} />
     </section>
   )
 }

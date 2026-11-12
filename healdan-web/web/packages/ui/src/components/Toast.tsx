@@ -16,6 +16,8 @@ import styles from './Toast.module.css'
 
 interface ToastMessage {
   message: string
+  /** Where the part of the message in [square brackets] goes */
+  href?: string
 }
 
 const queue = new ToastQueue<ToastMessage>({ maxVisibleToasts: 3 })
@@ -23,6 +25,29 @@ const queue = new ToastQueue<ToastMessage>({ maxVisibleToasts: 3 })
 /** Shows a message that goes away by itself after 5 seconds (screen readers hear it as a status). */
 export function toast(message: string): void {
   queue.add({ message }, { timeout: 5000 })
+}
+
+/**
+ * Shows a message with a link, which stays for 15 seconds so there's time to follow it. The words in [square brackets]
+ * are the link, to `href`, which opens in a page of its own. The region is above a dialog and outside what it hides, so
+ * a message made while Quick Look is open can be read and reached.
+ */
+export function toastWithLink(message: string, href: string): void {
+  queue.add({ message, href }, { timeout: 15000 })
+}
+
+function Message({ message, href }: ToastMessage) {
+  const match = href ? /^(.*)\[([^\]]+)\](.*)$/s.exec(message) : null
+  if (!match || !href) return <>{message}</>
+  return (
+    <>
+      {match[1]}
+      <a href={href} target="_blank" rel="noopener noreferrer" className={styles.link}>
+        {match[2]}
+      </a>
+      {match[3]}
+    </>
+  )
 }
 
 /** Dismisses every message at once (on sign-out, and between tests). */
@@ -36,7 +61,7 @@ export function Toast({ toast: item }: { toast: QueuedToast<ToastMessage> }) {
     <AriaToast toast={item} className={styles.toast}>
       <ToastContent>
         <Text slot="title" role="status" className={styles.message}>
-          {item.content.message}
+          <Message {...item.content} />
         </Text>
       </ToastContent>
       <Button slot="close" aria-label={t('toast.dismiss')}>

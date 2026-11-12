@@ -1,0 +1,165 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* A filed email as a message: the header, then the body or an attachment, which scrolls on its own. */
+.view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.header {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+  padding: var(--hd-space-4);
+  border-bottom: 1px solid var(--hd-line);
+}
+
+.subject {
+  margin: 0;
+  font-size: var(--hd-font-size-large);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--hd-space-1) var(--hd-space-3);
+  margin: 0;
+  font-size: var(--hd-font-size-small);
+}
+
+/* A row of the grid is a div of its label and its value, which the grid sees through. */
+.detail {
+  display: contents;
+}
+
+.detail dt {
+  color: var(--hd-text-secondary);
+}
+
+.detail dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hd-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-surface);
+}
+
+.chipMain {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  min-width: 0;
+  padding: var(--hd-space-1) var(--hd-space-2);
+  border: 0;
+  border-radius: var(--hd-radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.chipMain:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
+.chipName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chipSize {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  white-space: nowrap;
+}
+
+.saved {
+  padding: 0 var(--hd-space-2);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  white-space: nowrap;
+}
+
+.pictures {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--hd-space-2);
+  padding: var(--hd-space-1) var(--hd-space-4);
+  background: var(--hd-row-alt);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+/* The sender's page is white, whatever the app's colours are: its own colours read as it was made. */
+.frame {
+  flex: 1;
+  min-height: 20rem;
+  border: 0;
+  background: #ffffff;
+}
+
+.attachment {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 20rem;
+}
+
+.back {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--hd-space-2);
+  padding: var(--hd-space-2) var(--hd-space-4);
+  border-bottom: 1px solid var(--hd-line);
+}
+
+/* A link that looks like the quiet button beside it */
+.download {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-1);
+  min-height: 26px;
+  padding: 0 var(--hd-space-2);
+  border-radius: var(--hd-radius);
+  color: inherit;
+  text-decoration: none;
+}
+
+.download:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
+.message {
+  margin: var(--hd-space-6) auto;
+  color: var(--hd-text-secondary);
+  text-align: center;
+}

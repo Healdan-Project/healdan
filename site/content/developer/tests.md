@@ -244,7 +244,11 @@ code is laid out.
   it. The Indexer reads new documents into the index every 30 minutes, so `smoke-test.sh` sets it to every 5 seconds in
   `context.properties` and restarts the app at the start of step 9. Step 9 is the last, so that no other step runs with a fast Indexer, which would read storage document C through Garage and fill the read cache that step 8 checks it never did. The spec asks again until the document shows. Run by hand, `test-web.sh` has no such setting: make it yourself (`sed -i` the `schedule.delay.IndexerTask` and `schedule.interval.IndexerTask` lines of the conf volume's `context.properties` to `5000` and restart the app) and set `HEALDAN_INDEXER_FAST=1`, which only silences the script's warning, or `finding.spec` waits 80 seconds for a document the index doesn't have and fails. WebKit has no
   permission to read the clipboard, so the spec keeps what the page passes to `navigator.clipboard.writeText` on
-  `window` and reads the link from there; Chromium's real clipboard is read as well. Afterwards the script checks with `curl`
+  `window` and reads the link from there; Chromium's real clipboard is read as well. `working.spec.ts` files a one-page
+  PDF into the same folder, and through the page selects it, presses Space and waits for Quick Look to draw page 1 of 1
+  (dark pixels in the canvas), then checks that the page saw no `securitypolicyviolation` event and logged no policy
+  error, which is how a change to PDF.js's settings or its version is caught under `AppServlet`'s policy, and that Esc
+  gives the focus back to the row. It also files an `.eml` with an HTML body, a tracking picture on a host under `.invalid`, a link and a PDF attached, and through the page opens it in Quick Look: the body renders in its frame, no request reaches the tracker until **Show Pictures** and one does after, the link opens a page of its own with no `opener`, and **Save to Matter** on the attachment makes its chip show the new doc #. Afterwards the script checks with `curl`
   that the web session refuses a cross-site sign-out and one without the `X-Healdan-Client` header, and still
   answers `GET`s.
   - It runs in `docker/smoke-test.sh` as step 9, on amd64 and arm64. On a Mac, Docker Desktop doesn't reach the

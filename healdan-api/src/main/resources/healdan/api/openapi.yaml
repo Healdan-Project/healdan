@@ -1031,6 +1031,78 @@ paths:
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/preview:
+    get:
+      operationId: getDocumentPreview
+      summary: A document's preview
+      description: |
+        What to show of a file in a page. A PDF's own file; the own bytes of a
+        picture every browser draws (JPEG, PNG, GIF, WebP, BMP or SVG), as its
+        own content type (`image/*`); and for any other file the PDF made of
+        it: Word, Excel, PowerPoint and OpenDocument files, among others, are
+        converted in the background, and a TIFF or a HEIC has the conversion
+        the Classic Interface's preview made, if it made one. With `version` it is
+        the file of that version, as for `getDocumentContent`.
+
+        It needs the Preview permission on top of reading, and not the
+        Download permission: without Preview the answer is `403 forbidden`,
+        and so it is for a document protected by a password (always refused
+        through the API). A document the caller can't read, or a version it
+        doesn't have, is `404 not-found`. Viewing a preview isn't recorded
+        as a download, for a picture as for a PDF.
+
+        A conversion that isn't made yet is `202`, with `Retry-After` in
+        seconds: ask again after that. A file with no preview, whether its
+        type has none or its conversion failed, is `404 no-preview`. A file
+        in storage that can't be reached right now is `503
+        storage-unreachable`, as for the content, and is answered before any
+        of it is sent. `HEAD` answers with the headers alone.
+
+        A picture's answer is also `X-Content-Type-Options: nosniff` and
+        `Content-Security-Policy: sandbox`, so that going to it directly, an
+        SVG picture say, runs no script.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+        - name: version
+          in: query
+          required: false
+          description: A version from the document's timeline, such as `1.0`. The current file by default.
+          schema:
+            type: string
+            examples: ['1.0']
+      responses:
+        '200':
+          description: The PDF, or the picture
+          headers:
+            Content-Length:
+              description: The size in bytes
+              required: true
+              schema:
+                type: integer
+                minimum: 0
+          content:
+            application/pdf:
+              schema:
+                type: string
+                contentMediaType: application/pdf
+            image/*:
+              schema:
+                type: string
+                contentMediaType: image/*
+        '202':
+          description: The preview is still being made
+          headers:
+            Retry-After:
+              description: How many seconds to wait before asking again
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/documents/{docNumber}/thumbnail:
     get:
       operationId: getDocumentThumbnail
@@ -1064,6 +1136,228 @@ paths:
               schema:
                 type: string
                 contentMediaType: image/png
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/message:
+    get:
+      operationId: getDocumentMessage
+      summary: A filed email as a message
+      description: |
+        What the app shows of an email filed as `.eml` or `.msg`: the
+        subject, the sender, To and Cc, when it was sent and received, its
+        attachments, and the address of its body (`getDocumentMessageBody`).
+        The attachments are the files that came with it, not the pictures its
+        body shows. Each says the doc # of a document already filed from it
+        (`fileMessageAttachment`) that the caller can read, or `null`.
+
+        It needs the Preview permission on top of reading. A document the
+        caller can't read is `404 not-found`, checked first; one that isn't
+        an email, or whose file can't be read as one, is `404
+        not-an-email`; one protected by a password is `403 forbidden`, as for
+        the content. A file in storage that can't be reached right now is
+        `503 storage-unreachable`.
+
+        With `version` it is that version's message, and the body's address
+        names the version too.
+      tags: [Emails]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+        - $ref: '#/components/parameters/EmailVersion'
+      responses:
+        '200':
+          description: The message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/message/body:
+    get:
+      operationId: getDocumentMessageBody
+      summary: An email's body, made safe, as a page of its own
+      description: |
+        The body as a page for a sandboxed frame. The server cleans it: no
+        script, no event handler, no form, no `object`, `embed` or `iframe`,
+        no `base`, no meta refresh, no link but `http`, `https` and `mailto`,
+        and links that open in a new window without an opener. Pictures the
+        message carries are embedded as `data:` addresses, up to 2 MiB in
+        all, and a placeholder stands in for one over that. Pictures from the
+        internet are removed unless `pictures` is `true`, so the sender's
+        trackers don't learn that the message was opened. A message with no
+        HTML body is its text, escaped, in a `pre`.
+
+        The page carries its own `Content-Security-Policy`, which sandboxes it
+        (no script, even if the cleaning failed), and lets pictures from the
+        internet load, over `https:`, only with `pictures=true`. It is a
+        `GET` that changes nothing, so the web session may ask for it as a
+        frame's address.
+
+        The answer is also `Referrer-Policy: no-referrer`, and so is the page's
+        own meta tag, so a picture loaded with `pictures=true` doesn't tell
+        its host which server the message is on. A signed (S/MIME) message
+        shows its content as any other does; an encrypted one has no body.
+
+        The checks are those of `getDocumentMessage`.
+      tags: [Emails]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+        - name: pictures
+          in: query
+          required: false
+          description: '`true` to keep pictures from the internet. `false` by default.'
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/EmailVersion'
+      responses:
+        '200':
+          description: The page
+          headers:
+            Content-Security-Policy:
+              description: |
+                `sandbox allow-popups allow-popups-to-escape-sandbox;
+                default-src 'none'; style-src 'unsafe-inline'; img-src data:`,
+                with ` https:` after `data:` for `pictures=true`;
+                `font-src data:; frame-ancestors 'self'`.
+              required: true
+              schema:
+                type: string
+            X-Content-Type-Options:
+              required: true
+              schema:
+                type: string
+                enum: [nosniff]
+            Content-Length:
+              required: true
+              schema:
+                type: integer
+                minimum: 0
+          content:
+            text/html;charset=utf-8:
+              schema:
+                type: string
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/message/parts/{id}:
+    get:
+      operationId: getDocumentMessagePart
+      summary: An attachment of an email
+      description: |
+        One attachment's bytes, by the `index` that `getDocumentMessage`
+        gave it. By default it is a download: the Download permission is
+        needed, the answer is `Content-Disposition: attachment`, and CE
+        records a download of the email, as `getDocumentContent` does.
+
+        With `inline=true` a PDF or a picture every browser draws (JPEG, PNG,
+        GIF, WebP, BMP or SVG), known by its type or, as many mailers send any
+        file as `application/octet-stream`, by its name, is answered to show
+        in place, as that type: the Preview permission is needed instead, the
+        answer is `Content-Disposition: inline`, and nothing is recorded. Any
+        other attachment, a TIFF or a HEIC included, is `404 no-preview`.
+
+        Every answer is `X-Content-Type-Options: nosniff`, and an inline one is
+        also `Content-Security-Policy: sandbox`, so that going to one directly,
+        an SVG picture say, runs no script.
+
+        An index the email doesn't have is `404 not-found`; the other checks
+        are those of `getDocumentMessage`. `HEAD` answers with the headers
+        alone.
+      tags: [Emails]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+        - name: id
+          in: path
+          required: true
+          description: The attachment's `index`
+          schema:
+            type: integer
+            minimum: 0
+        - name: inline
+          in: query
+          required: false
+          description: '`true` to show a PDF or a picture in place instead of downloading it.'
+          schema:
+            type: boolean
+            default: false
+        - $ref: '#/components/parameters/EmailVersion'
+      responses:
+        '200':
+          description: The attachment
+          headers:
+            Content-Length:
+              required: true
+              schema:
+                type: integer
+                minimum: 0
+            X-Content-Type-Options:
+              required: true
+              schema:
+                type: string
+                enum: [nosniff]
+            Content-Security-Policy:
+              description: '`sandbox`, on an inline answer'
+              required: false
+              schema:
+                type: string
+          content:
+            '*/*':
+              schema:
+                type: string
+                contentMediaType: application/octet-stream
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/message/attachments/{id}/file:
+    post:
+      operationId: fileMessageAttachment
+      summary: Save an attachment to the matter
+      description: |
+        Files an attachment of a filed email as a document of its own: in the
+        email's folder, with its own doc #, taking the properties the email
+        was filed with (its own values of the properties that can be changed,
+        not its email fields or its legacy doc #, nor any a new document there
+        can't take now, such as an author whose account was deleted), then the
+        properties sent, which win; the folder's are inherited for any left
+        out. It is linked
+        to the email as
+        `attachment`, as filing from Outlook does. Filing it again files
+        another copy, as any upload does; an attached message the email's
+        matter already holds is `409 already-filed` with the copy as
+        `document`, and nothing is filed.
+
+        It needs the Download permission on the email, and the Write
+        permission on its folder, as `fileDocument` does. The upload limits
+        and the properties' rules are those of `fileDocument`.
+      tags: [Emails]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+        - name: id
+          in: path
+          required: true
+          description: The attachment's `index`
+          schema:
+            type: integer
+            minimum: 0
+        - $ref: '#/components/parameters/EmailVersion'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewAttachment'
+      responses:
+        '201':
+          description: The attachment's document
+          headers:
+            Location:
+              description: The document's address
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentView'
         default:
           $ref: '#/components/responses/Problem'
   /v1/documents/{docNumber}/checkout:
@@ -1750,6 +2044,17 @@ components:
         type: integer
         format: int64
         minimum: 0
+    EmailVersion:
+      name: version
+      in: query
+      required: false
+      description: |
+        A version from the email's timeline, such as `1.0`, whose message to
+        read; a version the document doesn't have is `404 not-found`. The
+        current file by default.
+      schema:
+        type: string
+        examples: ['1.0']
     Offset:
       name: offset
       in: query
@@ -1934,7 +2239,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, web-session-refused, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, web-session-refused, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, no-preview, not-an-email, server-error]
         fields:
           type: array
           items:
@@ -2338,7 +2643,7 @@ components:
     DocumentView:
       type: object
       additionalProperties: false
-      required: [type, docNumber, name, size, version, fileVersion, reference, folder, matter, author, dateFiled, lastModified, hold, canEdit, canOpen]
+      required: [type, docNumber, name, kind, size, version, fileVersion, reference, folder, matter, author, dateFiled, lastModified, hold, canEdit, canOpen]
       properties:
         type:
           type: string
@@ -2349,6 +2654,15 @@ components:
         name:
           type: string
           description: The file name
+        kind:
+          type: string
+          enum: [word, excel, powerpoint, pdf, email, opendocument, picture, other]
+          description: |
+            The kind of file its extension makes, the one list the File Type
+            filter also uses. It says how a client previews it: a `picture`
+            as its own bytes from `getDocumentPreview`, an `email` as a
+            message, and every other kind as the PDF `getDocumentPreview`
+            gives, which answers `404 no-preview` for a type that has none.
         size:
           type: integer
           format: int64
@@ -2854,7 +3168,7 @@ components:
         client renders any form from these, without knowing the properties
         in advance.
       additionalProperties: false
-      required: [name, label, type, required, editable, value, source, inheritedFrom, options]
+      required: [name, label, type, required, editable, value, source, inheritedFrom, overrides, options]
       properties:
         name:
           type: string
@@ -2903,6 +3217,18 @@ components:
             - $ref: '#/components/schemas/FolderRef'
             - type: 'null'
           description: The folder an inherited value comes from, or null
+        overrides:
+          oneOf:
+            - $ref: '#/components/schemas/FolderRef'
+            - type: 'null'
+          description: |
+            For a `local` value, the folder whose value it takes the place of:
+            the nearest folder that sets the property, which the document
+            would inherit it from if its own value went (`null` sent to
+            `setProperties` makes it so). Null for a `local` value no folder
+            would supply, such as Author, Comments or a value no folder sets,
+            for every value that isn't `local`, and always in the filing form.
+            A client shows a value as overridden only when this isn't null.
         options:
           type: [array, 'null']
           description: The values to pick from, in order; null when the property isn't picked from a list
@@ -3095,6 +3421,88 @@ components:
           description: One item for each different Message-ID asked for, in order.
           items:
             $ref: '#/components/schemas/EmailCopy'
+    MessageView:
+      type: object
+      additionalProperties: false
+      description: A filed email as the app shows it.
+      required: [subject, from, to, cc, sent, received, attachments, body]
+      properties:
+        subject:
+          type: [string, 'null']
+        from:
+          type: [string, 'null']
+          description: The sender, as `Name <address>`.
+          examples: ['Ann Smith <ann@example.com>']
+        to:
+          type: [string, 'null']
+          description: The To recipients, each as `from` is, joined with `, `.
+        cc:
+          type: [string, 'null']
+          description: The Cc recipients, the same way.
+        sent:
+          type: [string, 'null']
+          format: date-time
+        received:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            From the most recent hop's `Received` header, or `Delivery-Date`;
+            an `.msg` has one date, which it gives for both.
+        attachments:
+          type: array
+          description: |
+            The attachments in order, not the pictures the body shows.
+          items:
+            type: object
+            additionalProperties: false
+            required: [index, name, type, size, message, docNumber]
+            properties:
+              index:
+                type: integer
+                minimum: 0
+                description: |
+                  The attachment's number, which the routes under `message/parts`
+                  and `message/attachments` take.
+              name:
+                type: string
+                examples: [Contract.pdf]
+              type:
+                type: string
+                description: Its media type, in lower case.
+                examples: [application/pdf]
+              size:
+                type: integer
+                format: int64
+                minimum: 0
+                description: The length of its content in bytes.
+              message:
+                type: boolean
+                description: '`true` for an attached message (`message/rfc822`).'
+              docNumber:
+                type: [integer, 'null']
+                format: int64
+                description: |
+                  The doc # of a document already filed from it that the
+                  caller can read; the lowest when there are several.
+        body:
+          type: string
+          description: |
+            The address of the body as a page of its own
+            (`getDocumentMessageBody`), without pictures from the internet.
+          examples: [/api/v1/documents/1042/message/body]
+    NewAttachment:
+      type: object
+      additionalProperties: false
+      description: The optional body of `fileMessageAttachment`.
+      properties:
+        properties:
+          type: [object, 'null']
+          description: |
+            Values for the properties, by name, as `NewDocument.properties`
+            takes them. They are laid over the properties the email was filed
+            with, which the attachment takes unless one is sent.
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyValue'
     NewEmail:
       type: object
       additionalProperties: false

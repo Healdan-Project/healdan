@@ -43,10 +43,12 @@ import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.NewDocument;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.docnumber.LegacyDocNumbers;
+import com.logicaldoc.healdan.email.MediaTypes;
 import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.listing.FileKinds;
 import com.logicaldoc.healdan.navigation.RecentDocuments;
 import com.logicaldoc.healdan.navigation.RecentDocuments.RecentDocument;
+import com.logicaldoc.healdan.preview.PreviewState;
 import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.token.DeviceHolds;
 import com.logicaldoc.healdan.util.StorageUnreachableException;
@@ -84,6 +86,12 @@ public class DocumentResource {
 
 	/** The media type of a thumbnail, as CE's {@code ThumbnailManager} makes it */
 	private static final String PNG = "image/png";
+
+	/** The media type of a preview */
+	private static final String PDF = "application/pdf";
+
+	/** How long a client waits before asking again for a preview that's still being made */
+	private static final int PREVIEW_RETRY_SECONDS = 5;
 
 	/** As in {@code ServletUtil.saveHistory}: a download within this many seconds of the last is not recorded again */
 	private static final int DEDUPLICATE_SECONDS = 30;
@@ -269,16 +277,9 @@ public class DocumentResource {
 
 			refuseProtected(document, caller.session(), docNumber);
 
-			String fileVersion = document.getFileVersion();
-			String fileName = document.getFileName();
-			if (StringUtils.isNotBlank(version)) {
-				Version found = VersionDAO.get().findByVersion(document.getId(), version.strip());
-				if (found == null)
-					throw ApiProblem.notFound("Document #%d has no version %s".formatted(docNumber, version.strip()));
-				fileVersion = found.getFileVersion();
-				if (StringUtils.isNotBlank(found.getFileName()))
-					fileName = found.getFileName();
-			}
+			FileOfVersion asked = fileOf(document, version, docNumber);
+			String fileVersion = asked.fileVersion();
+			String fileName = asked.fileName();
 
 			// The store is the truth: the size recorded in the database can be wrong
 			StoreResource resource = StoreResource.builder().docId(document.getId()).fileVersion(fileVersion).build();
@@ -309,15 +310,105 @@ public class DocumentResource {
 	}
 
 	/**
+	 * @param document the document
+	 * @param version a version from its timeline, such as {@code 1.0}; blank for the current file
+	 * @return the file version that holds that version's file, and the file's name
+	 * @throws ApiProblem {@code 404} if the document has no such version
+	 */
+	static FileOfVersion fileOf(Document document, String version, long docNumber) throws PersistenceException {
+		if (StringUtils.isBlank(version))
+			return new FileOfVersion(document.getFileVersion(), document.getFileName());
+		Version found = VersionDAO.get().findByVersion(document.getId(), version.strip());
+		if (found == null)
+			throw ApiProblem.notFound("Document #%d has no version %s".formatted(docNumber, version.strip()));
+		return new FileOfVersion(found.getFileVersion(),
+				StringUtils.isNotBlank(found.getFileName()) ? found.getFileName() : document.getFileName());
+	}
+
+	record FileOfVersion(String fileVersion, String fileName) {
+	}
+
+	/**
 	 * @return the file's stream
 	 * @throws IllegalStateException if it can't be opened; storage that can't be reached is its cause, and answered
 	 *         {@code 503} by {@link ProblemMapper}
 	 */
-	private static InputStream openStream(StoreResource resource) {
+	static InputStream openStream(StoreResource resource) {
 		try {
 			return Store.get().getStream(resource);
 		} catch (IOException e) {
 			throw new IllegalStateException("Can't read the file of document #" + resource.getDocId(), e);
+		}
+	}
+
+	/**
+	 * A document's preview (M6 spec section 9.3): what to show of one version's file in a page. A picture every browser
+	 * draws is its own bytes, as its own content type; a PDF is its own file; any other file's, a TIFF or a HEIC
+	 * included, is its PDF conversion ({@link PreviewState}), which Healdan makes in the background for Office files. Read through the checks of the old UI's preview: the Preview permission on
+	 * top of reading, and not for a document protected by a password. It is not recorded as a download, and needs no
+	 * Download permission.
+	 *
+	 * @param docNumber the doc #
+	 * @param version a version of the document, such as {@code 1.0}; the current file by default
+	 * @return {@code 200} with the PDF or the picture; {@code 202} with {@code Retry-After} while a conversion is made
+	 * @throws ApiProblem {@code 404 not-found} for a document the caller can't read or a version it doesn't have,
+	 *         {@code 404 no-preview} for a file with no preview, {@code 403} without the Preview permission, and
+	 *         {@code 503} while the file's storage can't be reached
+	 */
+	@GET
+	@Path("{docNumber: [0-9]+}/preview")
+	@Produces(MediaType.WILDCARD)
+	public Response preview(@PathParam("docNumber") long docNumber, @QueryParam("version") String version,
+			@Context Request request) {
+		// JAX-RS answers HEAD with this method too: the headers alone
+		boolean head = HttpMethod.HEAD.equals(request.getMethod());
+		Caller caller = Caller.current();
+		try {
+			Document document = readable(docNumber, caller.user());
+			if (!AccessChecks.allowed(caller.user(), Permission.PREVIEW, document))
+				throw ApiProblem.forbidden("You may not preview document #%d.".formatted(docNumber));
+			refuseProtected(document, caller.session(), docNumber);
+
+			FileOfVersion asked = fileOf(document, version, docNumber);
+			String extension = FilenameUtils.getExtension(asked.fileName());
+			// A TIFF or a HEIC isn't shown as itself: most browsers can't draw it, and Safari draws a TIFF's first page only
+			boolean picture = MediaTypes.isDrawnPicture(extension);
+			boolean pdf = "pdf".equalsIgnoreCase(extension);
+			if (!picture) {
+				PreviewState state = PreviewState.of(document, asked.fileVersion(), asked.fileName());
+				if (state == PreviewState.PENDING)
+					return Response.status(Response.Status.ACCEPTED)
+							.header(HttpHeaders.RETRY_AFTER, PREVIEW_RETRY_SECONDS).build();
+				if (state == PreviewState.NONE)
+					throw new ApiProblem(404, "no-preview", "Document #%d has no preview.".formatted(docNumber));
+			}
+
+			// A picture and a PDF are shown as they are; any other file by its conversion
+			StoreResource resource = picture || pdf
+					? StoreResource.builder().docId(document.getId()).fileVersion(asked.fileVersion()).build()
+					: PreviewState.conversion(document.getId(), asked.fileVersion());
+			if (!Store.get().exists(resource))
+				throw new ApiProblem(500, "server-error", "The document's file is missing from storage.");
+			long size = Store.get().size(resource);
+			// Opened before the answer starts, as the content's is: an outage is a 503, never a 200 that stops short.
+			// A HEAD opens nothing, which would be left unclosed
+			InputStream in = head ? null : openStream(resource);
+			StreamingOutput body = head ? out -> {
+				// No body: CXF would send the file itself, and a missing entity would make it send Content-Length 0
+			} : out -> {
+				try (in) {
+					in.transferTo(out);
+				}
+			};
+			Response.ResponseBuilder response = Response
+					.ok(body, picture ? MimeType.getByFilename(asked.fileName()) : PDF)
+					.header(HttpHeaders.CONTENT_LENGTH, size).header(HttpHeaders.CONTENT_DISPOSITION, "inline");
+			if (picture)
+				// Its own bytes, served inline
+				InlineHeaders.apply(response);
+			return response.build();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't read the preview of document #" + docNumber, e);
 		}
 	}
 
@@ -407,7 +498,7 @@ public class DocumentResource {
 	 * the same document and less than 30 seconds old. As there, a failure to
 	 * record it is logged and doesn't stop the download.
 	 */
-	private static void recordDownload(Document document, User user, Session session) {
+	static void recordDownload(Document document, User user, Session session) {
 		try {
 			DocumentHistory history = new DocumentHistory();
 			history.setDocument(document);

@@ -7,8 +7,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 import com.logicaldoc.healdan.api.WebSessionRoute;
@@ -45,7 +49,18 @@ public class AppServlet extends HttpServlet {
 
 	private static final Pattern SAFE = Pattern.compile("[A-Za-z0-9._/-]+");
 
-	private static final Pattern HASHED = Pattern.compile(".*-[A-Za-z0-9_-]{8,}\\..*");
+	/** Vite's own output under {@link #ASSETS}, which carries a content hash in its name, so it is cached for good */
+	private static final Pattern HASHED = Pattern.compile("assets/.*-[A-Za-z0-9_-]{8,}\\..*");
+
+	/**
+	 * Where the build puts PDF.js's data (CMaps, standard fonts, its JavaScript image decoders), named as PDF.js names
+	 * them, so not versioned by name: the browser keeps them and asks each time whether they changed, which only an
+	 * upgrade of PDF.js does
+	 */
+	private static final String PDFJS = "pdfjs/";
+
+	/** The ETag of each of PDF.js's data files, by resource, made once: the jar's files don't change while it runs */
+	private static final Map<String, String> TAGS = new ConcurrentHashMap<>();
 
 	private static final Map<String, String> TYPES = Map.ofEntries(Map.entry("html", "text/html;charset=UTF-8"),
 			Map.entry("js", "text/javascript;charset=UTF-8"), Map.entry("mjs", "text/javascript;charset=UTF-8"),
@@ -145,9 +160,19 @@ public class AppServlet extends HttpServlet {
 
 			String extension = name.substring(name.lastIndexOf('.') + 1);
 			response.setContentType(TYPES.getOrDefault(extension, "application/octet-stream"));
-			response.setHeader("Cache-Control", file && name.startsWith(ASSETS) && HASHED.matcher(name).matches()
-					? "public, max-age=31536000, immutable"
-					: "no-store");
+			if (file && HASHED.matcher(name).matches()) {
+				response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+			} else if (file && name.startsWith(PDFJS)) {
+				String tag = tag(root() + name);
+				response.setHeader("Cache-Control", "no-cache");
+				response.setHeader("ETag", tag);
+				if (matches(request.getHeader("If-None-Match"), tag)) {
+					response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+					return;
+				}
+			} else {
+				response.setHeader("Cache-Control", "no-store");
+			}
 			if ("GET".equals(request.getMethod())) {
 				try (OutputStream out = response.getOutputStream()) {
 					in.transferTo(out);
@@ -158,6 +183,35 @@ public class AppServlet extends HttpServlet {
 
 	private InputStream open(String name) {
 		return AppServlet.class.getClassLoader().getResourceAsStream(name);
+	}
+
+	/** @return a strong ETag of the resource's bytes, which the caller knows it has */
+	private String tag(String resource) throws IOException {
+		String known = TAGS.get(resource);
+		if (known != null)
+			return known;
+		try (InputStream in = open(resource)) {
+			byte[] hash = MessageDigest.getInstance("SHA-256").digest(in.readAllBytes());
+			String tag = "\"" + Base64.getUrlEncoder().withoutPadding().encodeToString(hash) + "\"";
+			TAGS.put(resource, tag);
+			return tag;
+		} catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException("No SHA-256", e);
+		}
+	}
+
+	/** @return whether an {@code If-None-Match} header names the tag, weakly or not, or is {@code *} */
+	static boolean matches(String ifNoneMatch, String tag) {
+		if (ifNoneMatch == null)
+			return false;
+		for (String one : ifNoneMatch.split(",")) {
+			String given = one.strip();
+			if (given.startsWith("W/"))
+				given = given.substring(2);
+			if ("*".equals(given) || tag.equals(given))
+				return true;
+		}
+		return false;
 	}
 
 	private static boolean exists(String name) {

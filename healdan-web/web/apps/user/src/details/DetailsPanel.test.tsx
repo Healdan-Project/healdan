@@ -42,11 +42,11 @@ describe('DetailsPanel', () => {
     expect(within(panel).getByText('# 10388 · Version 2.1 · 209 KB')).toBeTruthy()
     const thumbnail = panel.querySelector('img')
     expect(thumbnail?.getAttribute('src')).toBe('/api/v1/documents/10388/thumbnail')
-    // Open, Download, Edit and Preview wait for the tasks that build them; Copy Link works now
-    for (const name of ['Preview', 'Open', 'Download', 'Edit']) {
-      expect((within(panel).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true)
+    // Edit is for a document whose properties the person may change: none of these fields says it may be
+    expect((within(panel).getByRole('button', { name: 'Edit' }) as HTMLButtonElement).disabled).toBe(true)
+    for (const name of ['Open', 'Download', 'Preview', 'Copy Link']) {
+      expect((within(panel).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false)
     }
-    expect((within(panel).getByRole('button', { name: 'Copy Link' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('lists the properties in order, without Location outside search results and without the email fields of a document', async () => {

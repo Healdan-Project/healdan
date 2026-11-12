@@ -106,6 +106,49 @@ describe('createApi', () => {
     expect(await createApi().send('DELETE', '/v1/me/favorites/5')).toBeUndefined()
   })
 
+  it('resolves undefined for a successful answer with no body, such as an empty 202', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 202, headers: { 'Retry-After': '5' } }))
+    expect(await createApi().get('/v1/documents/1/preview')).toBeUndefined()
+    fetchMock.mockResolvedValue(new Response('', { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    expect(await createApi().get('/v1/me')).toBeUndefined()
+  })
+
+  it('throws ApiError for a successful answer that is not JSON', async () => {
+    fetchMock.mockResolvedValue(new Response('<html>Welcome</html>', { status: 200, headers: { 'Content-Type': 'text/html' } }))
+    const error = await createApi().get('/v1/me').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(ApiError)
+    expect(error).toMatchObject({ status: 200, code: 'server-error' })
+  })
+
+  it('hands back the response itself for a binary answer, with the same sign-out and problem handling', async () => {
+    const onSignedOut = vi.fn()
+    const api = createApi({ onSignedOut })
+    fetchMock.mockResolvedValue(new Response('%PDF', { status: 200, headers: { 'Content-Type': 'application/pdf' } }))
+    const pdf = await api.getResponse('/v1/documents/1/preview', { version: '1.0' })
+    expect(await pdf.text()).toBe('%PDF')
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/documents/1/preview?version=1.0')
+
+    // A 202 has no body and says when to ask again
+    fetchMock.mockResolvedValue(new Response(null, { status: 202, headers: { 'Retry-After': '5' } }))
+    const pending = await api.getResponse('/v1/documents/1/preview')
+    expect(pending.status).toBe(202)
+    expect(pending.headers.get('Retry-After')).toBe('5')
+
+    fetchMock.mockResolvedValue(json({ status: 404, code: 'no-preview', detail: 'No preview' }, 404, 'application/problem+json'))
+    expect(await api.getResponse('/v1/documents/1/preview').catch((e: unknown) => e)).toMatchObject({ status: 404, code: 'no-preview' })
+
+    fetchMock.mockResolvedValue(json({ status: 401, code: 'unauthorized', detail: 'Sign in' }, 401, 'application/problem+json'))
+    await api.getResponse('/v1/documents/1/preview').catch(() => undefined)
+    expect(onSignedOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('hands a signal to fetch for a binary answer too', async () => {
+    fetchMock.mockResolvedValue(new Response('x'))
+    const controller = new AbortController()
+    await createApi().getResponse('/v1/documents/1/content', undefined, { signal: controller.signal })
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal).toBe(controller.signal)
+  })
+
   it('builds URLs for links and images', () => {
     expect(createApi().url('/v1/documents/1/content', { version: '1.0' })).toBe('/api/v1/documents/1/content?version=1.0')
     expect(createApi().url('/v1/me')).toBe('/api/v1/me')

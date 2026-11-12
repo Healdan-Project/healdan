@@ -8,3 +8,8 @@
   border-inline-start: 1px solid var(--hd-line);
   background: var(--hd-window);
 }
+
+/* A page needs more room than a document's details do */
+.wide {
+  width: clamp(360px, 42vw, 640px);
+}
