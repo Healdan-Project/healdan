@@ -28,7 +28,7 @@ Your administrator can add more properties.
 Choose **Edit** in a document's details. The properties become a form, made from the profile, so your firm's own
 properties are in it.
 
-![The details of Service Charge Budget 2026–27.xlsx, # 30, with its properties as a form: Client and Matter, Author and Typist Jamie Clarke as text, Class (required) Finance, Subclass Statement, Comments and Legacy doc # as fields, and the Save and Cancel buttons](edit-properties.png)
+![The details of Service Charge Budget 2026–27.xlsx, # 30, with its properties as a form: Client and Matter as text; Author with "Pri" typed and its list open, offering Jamie Clarke, the person it has now, first, then Priya Nair; Class (required) Finance, Subclass Statement, Comments and Legacy doc # as fields; and the Save and Cancel buttons](edit-properties.png)
 
 - **A required property has a \* after its name.** Class is required.
 - **A property picked from a list offers only its options.** A Subclass offers only the ones that belong to the Class
