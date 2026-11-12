@@ -33,7 +33,7 @@ public class Language implements Comparable<Language> {
 
 	private String analyzerClass;
 
-	private SnowballProgram stemmer;
+	private volatile Constructor<?> stemmerConstructor;
 
 	public Language(Locale locale) {
 		this.locale = locale;
@@ -151,21 +151,30 @@ public class Language implements Comparable<Language> {
 			return toString().compareToIgnoreCase(o.toString());
 	}
 
+	/**
+	 * Gives a new stemmer of this language, or null when it has none.
+	 * <p>
+	 * A Snowball program keeps the word it is stemming in its own fields, so
+	 * it can't be shared by threads: each call makes its own instance. Only
+	 * the constructor lookup is kept.
+	 */
 	public SnowballProgram getStemmer() {
-		if (stemmer == null) {
+		if (stemmerConstructor == null) {
 			String stemmerClass = "org.tartarus.snowball.ext.%sStemmer".formatted(getLocale().getDisplayName(Locale.ENGLISH));
 
 			try {
 				Class<?> clazz = Class.forName(stemmerClass);
-				if (clazz != null) {
-					Constructor<?> constructor = clazz.getConstructor();
-					if (constructor != null)
-						stemmer = (SnowballProgram) constructor.newInstance();
-				}
+				if (clazz != null)
+					stemmerConstructor = clazz.getConstructor();
 			} catch (Exception t) {
 				// Nothing to do
 			}
 		}
-		return stemmer;
+
+		try {
+			return stemmerConstructor != null ? (SnowballProgram) stemmerConstructor.newInstance() : null;
+		} catch (Exception t) {
+			return null;
+		}
 	}
 }

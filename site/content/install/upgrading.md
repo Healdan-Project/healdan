@@ -148,6 +148,28 @@ After the upgrade, the Indexer reads them at its next run, as it kept trying the
   their words. [Reschedule all for indexing](../../admin/system/search-and-indexing/#indexing-again) to have them
   read.
 
+## Words Indexed Under a Wrong Stem
+
+Until November 2026, LogicalDOC's code that cuts a word down to its stem for the full-text index (so that "leases"
+finds "lease") kept one working copy per language, which every thread that indexed or searched used at once. Two
+threads using it together could confuse each other. The Indexer, which works on two documents at a time, could
+store a word under the wrong stem or fail a document, and a search that ran while another did could answer
+with no hits. A search from the User app, which asks for its list and its Filters' counts together, met this most
+often.
+
+The fix gives each thread its own copy, so no new damage is done. Documents indexed before it may hold a few words
+under a wrong stem, and a search for those words won't find them. After the upgrade, rebuild the index once:
+
+1. Open **Administration**, **System**, then [Search and Indexing](../../admin/system/search-and-indexing/#indexing-again).
+2. Click **Reschedule all for indexing**, which marks every indexed document to be indexed again.
+3. Leave the server running. The Indexer works through the documents on its next runs, and each one's new entry
+   replaces its old.
+
+This costs the Indexer's time, in proportion to the number of documents and their size. Searches keep working
+meanwhile, but until the Indexer has finished, one may still miss a document it hasn't reached. Choose a quiet time.
+The page's **Indexing queue** tab lists what is still waiting. **Drop index** would do the same after emptying the
+index, which makes searches find less than they should for longer, so it isn't needed.
+
 ## Emails Filed Before the Outlook Add-in
 
 The upgrade that brings [Filing Email from Outlook](../../user/office/filing-email/) also starts keeping each email's
