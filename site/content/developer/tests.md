@@ -213,7 +213,13 @@ at the end of the `Smoke test` step of the `Test (amd64)` or `Test (arm64)` job:
 - **Garage's last 40 lines of output, and its setup's,** for the stand-in S3 server.
 - **The run's warnings and errors from `dms.log`,** the last 200 lines of them. Each keeps its exception's message
   and `Caused by` lines, without the stack frames.
+- **The last three API requests that failed with a `500`,** with their stack frames (80 lines each at most), which say
+  where in the server they failed.
 - **`dms.log`'s last 40 lines.**
+
+When a browser test in step 9 fails, `docker/tests/test-web.sh` also prints the page of each failed test as Playwright
+saw it (its `error-context.md`), before the container that ran them goes. It's in the step's output, after the line
+that names the failed tests.
 
 `dms.log` covers the whole run. Step 8 replaces the container but keeps the volume, so its restart doesn't lose the
 earlier steps' lines. Every `FAIL` line ends with its time in UTC, and the smoke stack logs in UTC, so the log's

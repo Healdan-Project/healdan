@@ -52,6 +52,14 @@ show_server_log() {
   echo "== dms.log: the last 200 lines of the run's $(grep -cE '^[0-9.]{10} [0-9:,]{12} (WARN|ERROR|FATAL)' \
     "$dir/run.log") warnings and errors (times in UTC)"
   tail -n 200 "$dir/problems.log" | cut -c 1-400
+  # A request that failed with a 500 keeps its frames, which say where: the last three, 80 lines each at most
+  awk '/^[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9][0-9][0-9] / { n++; keep = /API request failed/; lines = 0 }
+       keep && lines++ < 80 { print n "\t" $0 }' "$dir/run.log" > "$dir/failed.log"
+  if [ -s "$dir/failed.log" ]; then
+    echo "== dms.log: the last three requests that failed, with their frames"
+    last=$(cut -f1 "$dir/failed.log" | uniq | tail -n 3 | head -1)
+    awk -F'\t' -v from="$last" '$1 >= from { sub(/^[^\t]*\t/, ""); print }' "$dir/failed.log" | cut -c 1-300
+  fi
   echo "== dms.log: its last 40 lines"
   tail -n 40 "$dir/run.log" | cut -c 1-400
 }

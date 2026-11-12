@@ -43,7 +43,10 @@ browsers() {
   docker run --rm --network "$WEB_NETWORK" --ipc=host -e BASE="$WEB_BROWSER_BASE" -e WEBUSER_PASSWORD \
     -v "$PWD/healdan-web/web:/src:ro" "mcr.microsoft.com/playwright:v${version}-noble" \
     bash -c "$PROXY "'mkdir /work && cd /src && tar cf - --exclude=node_modules --exclude=dist --exclude=e2e-results . | tar xf - -C /work \
-      && cd /work && npm ci --ignore-scripts --no-audit --no-fund && npx playwright test --reporter=line'
+      && cd /work && npm ci --ignore-scripts --no-audit --no-fund && { npx playwright test --reporter=line || { status=$?
+        # The container goes with its results: the page of each failed test, as Playwright saw it, says what was on screen
+        for f in e2e-results/*/error-context.md; do [ -f "$f" ] && { echo "== $f"; head -c 8000 "$f"; echo; }; done
+        exit $status; }; }'
 }
 check "every spec in healdan-web/web/e2e/, in Chromium and WebKit" browsers
 
