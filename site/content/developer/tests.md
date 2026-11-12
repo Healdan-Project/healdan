@@ -274,9 +274,10 @@ code is laid out.
   - `a11y.spec.ts` runs axe on each main view in the light theme and again in the dark one (a browser context with
     Playwright's `colorScheme`, signed in once per theme): Recent's four lists, a matter, a folder with details and the
     properties form, Filters (with one in use, and while the counts are held open with `page.route`, since busy states keep
-    AA contrast), the list while it is asked for again, the filing tray and the File Documents form, the rename field, the
+    AA contrast and the last answer's counts must stay, never zeros), the list while it is asked for again, the filing tray and the File Documents form, the rename field, the
     delete question, the Help menu, search results for a word with their Filters, a document's page, Quick Look on a PDF and
-    on an email, the reading pane, New Folder, More and Move To…, the person menu, Signed-in Devices with the Revoke question
+    on an email, the reading pane, New Folder, More and Move To… (a matter's client starts clear of it), the person menu, Signed-in Devices (whole in its dialog, with
+    no sideways scroll, every Revoke inside it and a name of at most two lines at 1280, and again at 768) with the Revoke question
     and its refusal (and a real revoke, whose focus must stay in the dialog), at 768 × 1024 the folded top bar with the left
     pane, the empty region and the details opened over the list, and last the signed-out screen (the session is ended with
     `DELETE /api/v1/session` from the page). Colour contrast is checked here, as jsdom can't. axe-core is the workspace's own

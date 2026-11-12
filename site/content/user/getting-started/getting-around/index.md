@@ -55,11 +55,16 @@ Select a document in a folder's list, in search results or in a Recent list, and
 - **A thumbnail** of the first page, when the document has one. Without one, a plain icon for the kind of file shows
   instead.
 - **The name,** and under it the doc #, the version and the size: `# 10388 · Version 2 · 209 KB`.
-- **Open, Download and Edit,** which are greyed out until they come to the app, and **Copy Link**, which works now:
-  see [Copying a Link](../../finding-documents/finding-by-doc-number/#copying-a-link).
+- **Open** opens the document in its app through the Healdan Helper: see [Opening
+  Documents](../../office/opening-documents/#from-the-app-open). **Download** saves a copy of its file: see
+  [Downloading Documents](../../documents/downloading-documents/#one-document-in-the-app). **Edit** turns the
+  properties into a form: see [Properties](../../working-with-matters/properties/#editing-in-the-app). **Copy Link**
+  puts the document's address on your clipboard: see [Copying a Link](../../finding-documents/finding-by-doc-number/#copying-a-link).
+- **Check Out** and, once it's checked out to you, **Check In** and **Release**, with who has the document: see
+  [Checking Out and Checking In](../../documents/checking-out-and-checking-in/#in-the-app).
 - **Properties:** Client, Matter, Class, Subclass, Author, Typist and Date Filed, and, for an email, From, To, Sent
   and Received. In search results and Recent lists there is also **Location**, the document's folder, which you can
-  click. You can read them here; to change them, use the Classic Interface for now.
+  click. Choose **Edit** to change them.
 - **Versions:** the document's timeline, newest first, with who saved each and when.
 
 Click another document to see its details instead, or select several and the details close.
@@ -85,7 +90,7 @@ once the list has the focus.
 
 ## A Narrower Window
 
-On a window narrower than about 1,000 pixels, such as a tablet, the left pane and the details, Filters or preview fold
+On a window narrower than 1,024 pixels, such as a tablet, the left pane and the details, Filters or preview fold
 away so the list has the room. Two buttons in the top bar, **Navigation** and **Details and Filters**, open them over
 the list, and Esc or choosing a link closes them again. A phone's screen is too small for the app.
 

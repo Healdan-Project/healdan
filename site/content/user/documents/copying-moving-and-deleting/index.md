@@ -28,8 +28,8 @@ The rename is in the document's [history](../document-history/) and makes its ne
 
 ## Moving Documents in the App
 
-Select the documents, then choose **More**, then **Move To…**. A window opens that starts from your **Recent Matters** and
-**My Matters**. Type in **Find a Matter** to search for another by its number or name.
+Select the documents, then choose **More**, then **Move To…**. A window opens that lists your **Recent Matters**, then your
+**My Matters** other than those, so a matter in both is listed once, under Recent. Type in **Find a Matter** to search for another by its number or name.
 
 1. Choose the matter. The window lists its folders.
 2. Open the folders until you're in the one to move into. **Up One Level** goes back a folder, and **Back to Matters**
@@ -39,7 +39,7 @@ Select the documents, then choose **More**, then **Move To…**. A window opens 
 
 The window never lists Stores, only matters and the folders inside them.
 
-![The Move 1 Document window inside the Drafts folder of matter 1003.2 – Licence Review, with Up One Level, "Folders in Drafts", "No folders in here.", and the Move Here and Cancel buttons](move-to.png)
+![The Move 1 Document window at its first step: the Find a Matter field, then Recent Matters, each with its client after it, 1003.1 – Series A Investment Kestrel Software Ltd, 1002.1 – Commercial Lease Brightwell Bakeries Ltd, 1001.1 – Charter Dispute – MV Northern Star Saltmarsh Shipping Ltd, 1003.2 – Licence Review Kestrel Software Ltd and 1002.2 – Employment Tribunal Brightwell Bakeries Ltd, and a Cancel button](move-to.png)
 
 You can also **drag** the selected rows onto a folder in **My Matters** in the left pane. The folder lights up while you're
 over it. Dragging a row that isn't selected moves only that one. A drag can't be done from the keyboard: use **Move To…**.
