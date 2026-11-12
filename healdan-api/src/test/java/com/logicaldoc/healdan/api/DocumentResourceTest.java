@@ -124,6 +124,9 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertTrue(doc.path("dateFiled").textValue(), doc.path("dateFiled").textValue().endsWith("Z"));
 		assertTrue(doc.path("lastModified").textValue().endsWith("Z"));
 		assertTrue(doc.path("hold").toString(), doc.path("hold").isNull());
+		// The Author is the uploader until someone says otherwise
+		assertEquals("boss", doc.path("author").path("username").textValue());
+		assertEquals("boss boss", doc.path("author").path("displayName").textValue());
 		assertTrue(doc.path("canEdit").booleanValue());
 		assertTrue(doc.path("canOpen").booleanValue());
 
@@ -462,5 +465,25 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertEquals(200, get("/api/v1/documents/" + number(d) + "/content").token(signIn(clerk)).send().status());
 		assertThrows(IllegalStateException.class, Caller::current);
 		assertNull(SecurityContextHolder.getContext().getAuthentication());
+	}
+
+	@Test
+	public void testRecentEmails() throws Exception {
+		file("a.docx", "Lease draft");
+		Document mail = file("note.eml", "Subject: hello");
+		Document outlook = file("other.msg", "binary");
+		String token = signIn(boss);
+
+		assertEquals(3, get("/api/v1/documents/recent").token(token).send().json().path("items").size());
+
+		ApiResponse emails = get("/api/v1/documents/recent?kind=email").token(token).send();
+		assertEquals(emails.toString(), 200, emails.status());
+		java.util.Set<Long> numbers = new java.util.HashSet<>();
+		emails.json().path("items").forEach(i -> numbers.add(i.path("docNumber").asLong()));
+		assertEquals(java.util.Set.of(number(mail), number(outlook)), numbers);
+
+		ApiResponse other = get("/api/v1/documents/recent?kind=other").token(token).send();
+		assertEquals(other.toString(), 400, other.status());
+		assertEquals("bad-request", other.code());
 	}
 }

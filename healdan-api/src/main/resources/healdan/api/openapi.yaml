@@ -292,6 +292,37 @@ paths:
           description: Removed
         default:
           $ref: '#/components/responses/Problem'
+  /v1/me/matters/{folderId}:
+    put:
+      operationId: addMyMatter
+      summary: Add a matter to My Matters
+      description: |
+        Adds the matter whose workspace folder this is. Adding one already in
+        the list is still `204`. A folder that isn't a matter's workspace, one
+        the caller can't read and one that doesn't exist are all `404` with
+        the same answer.
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/FolderIdPath'
+      responses:
+        '204':
+          description: Added
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: removeMyMatter
+      summary: Remove a matter from My Matters
+      description: |
+        Removes the matter whose workspace folder this is. A matter that
+        isn't in the list is still `204`.
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/FolderIdPath'
+      responses:
+        '204':
+          description: Removed
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/users:
     get:
       operationId: findUsers
@@ -691,14 +722,63 @@ paths:
                 $ref: '#/components/schemas/FiledEmail'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/suggest:
+    get:
+      operationId: suggest
+      summary: Suggestions for the search box
+      description: |
+        What to offer as the caller types: up to 5 matters whose number
+        (`998.1` or a bare number) or name matches, as the Matters scope of
+        search finds them, then up to 5 documents whose title has every word
+        typed, the last as the start of a word. Only what the caller can read
+        and what is published to the caller. Fewer than two characters, or
+        none, answers two empty lists. Punctuation in `q` never makes an
+        error: the full-text engine sees only its letters and digits.
+      tags: [Search]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: What has been typed
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/clients/recent:
+    get:
+      operationId: listRecentClients
+      summary: Recent Clients
+      description: |
+        The clients of the caller's Recent Matters and My Matters, each once,
+        by name, then number. Healdan has no list of clients, and a client
+        appears only through a matter the caller can read. A plain array, not
+        a page.
+      tags: [Matters]
+      responses:
+        '200':
+          description: The clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecentClient'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/search:
     get:
       operationId: search
       summary: Search, as the search box does
       description: |
         Runs the old web page's searches. The hits are only what the caller
-        can read and what is published to the caller. `total` is always
-        `null`: a page with fewer than `limit` items is the last one.
+        can read and what is published to the caller, best first.
 
         - `documents`: documents, without emails. A `q` like `#1234`, `#1234.2`
           or `#1234v2` returns just that document, as the old web page does.
@@ -716,11 +796,31 @@ paths:
 
         A leading wildcard, such as `*report` or `?ar`, is accepted.
 
-        The full-text scopes (`documents`, `emails`, `all`) get at most about
-        1000 hits from the search engine, which is its own limit; hits the
-        caller can't see are dropped from those, so a page can come up short
-        of the full count. The other scopes look at the first 10,000 hits.
-        Pages are filled from the hits that follow the ones skipped.
+        The `documents`, `emails` and `all` scopes page to the last hit, up to
+        the first 10,000 hits the search engine finds, each hit on one page
+        only. They read at least the engine's first 2,500 hits, so `total` is
+        the real count when the search found every hit; when it stopped before
+        the last, `total` is `null` and `totalAtLeast` says how many it found,
+        with more to come. They take the filters (`type`, `author`, `class`,
+        `client`, `matter`, `edited`, `from`, `to`), applied in the database
+        after the read check, so a filter finds its matches among those first
+        10,000 hits. With `sort`, they read the first 10,000 hits and sort the
+        ones the caller can read as a folder's documents are; past 10,000
+        hits, the sort is among the 10,000 most relevant, and the answer has
+        `totalAtLeast`. `order` without `sort` is `400`: without `sort`, the
+        best hits come first. `facets` adds the counts, taken over the hits
+        the caller can read that rank above the engine's 2,500th hit,
+        whatever the page, and `partial` when the engine has more than
+        2,500. When fewer than 1,250 rank above it, as when most hits score
+        the same, they're taken over the readable hits among the first 2,500
+        the search read instead, and can then differ slightly from page to
+        page. No count includes a document the caller can't read.
+
+        The `folders`, `matters` and `clients` scopes look at the first 10,000
+        hits; their `total` is always `null`, and a page with fewer than
+        `limit` items is the last one. They take no filters, `sort` or
+        `facets`: any is `400`. Pages are filled from the hits that follow the
+        ones skipped.
 
         With `within`, the `folders` and `documents` scopes return only what
         is inside that folder, at any depth. A `#` lookup in the `documents`
@@ -755,6 +855,30 @@ paths:
             type: integer
             format: int64
             minimum: 0
+        - name: type
+          in: query
+          required: false
+          description: |
+            The file kinds to keep. Only for the `documents`, `emails` and
+            `all` scopes, as are the other filters and `facets`; anything else
+            is `400`.
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [word, excel, powerpoint, pdf, email, opendocument, picture, other]
+        - $ref: '#/components/parameters/ListSort'
+        - $ref: '#/components/parameters/ListOrder'
+        - $ref: '#/components/parameters/AuthorFilter'
+        - $ref: '#/components/parameters/ClassFilter'
+        - $ref: '#/components/parameters/ClientFilter'
+        - $ref: '#/components/parameters/MatterFilter'
+        - $ref: '#/components/parameters/EditedFilter'
+        - $ref: '#/components/parameters/EditedFrom'
+        - $ref: '#/components/parameters/EditedTo'
+        - $ref: '#/components/parameters/FacetsWanted'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -774,7 +898,8 @@ paths:
         Resolves `#1234`, `#1234.2`, `#1234v2` and `#1234.2.1` to the document
         and version. Input that isn't a doc # is `400`. A document that
         doesn't exist, can't be read by the caller, isn't published to the
-        caller, or has no such version is `404` with the old web page's
+        caller, is outside the Stores or a legacy shortcut, or has no such
+        version is `404` with the old web page's
         message, such as "No document #1234".
       tags: [Search]
       parameters:
@@ -802,8 +927,17 @@ paths:
         The documents the caller filed, changed, checked in or out, or
         downloaded lately and can still read, newest first. "Lately" is the
         `recentmatters.days` setting, 30 days by default. At most 50, in one
-        page.
+        page. With `kind=email` only emails (`.eml` and `.msg` files) are
+        listed, and the 50 are taken from them.
       tags: [Documents]
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          description: "`email` for the emails alone; every document by default. Any other value is `400`."
+          schema:
+            type: string
+            enum: [email]
       responses:
         '200':
           description: The list
@@ -820,7 +954,9 @@ paths:
       description: |
         Addressed by its doc #. A document the caller can't read, one that
         isn't published to them, one outside the Stores (like the folders
-        there) and one that doesn't exist are all `404` with the same answer.
+        there), a legacy shortcut (a document row from before Healdan that
+        points to another document) and one that doesn't exist are all
+        `404` with the same answer.
         Lists, search and lookup leave out the same documents.
       tags: [Documents]
       parameters:
@@ -1382,10 +1518,17 @@ paths:
       description: |
         A matter's workspace or a folder gives the subfolders the caller can
         read (by name, ignoring case), then the documents the caller can read
-        (by name). Hidden folders and aliases are left out, and an alias
-        asked for by its own id is `404`. A search folder
-        gives its documents, newest change first, at most 1000. `total` is
-        the full count.
+        (by title unless `sort` says otherwise). Hidden folders and aliases
+        are left out, and an alias asked for by its own id is `404`. A search
+        folder gives its documents, newest change first unless `sort` says
+        otherwise, at most 1000. `total` is the full count, after the
+        filters, and `documents` the documents among them.
+
+        The filters keep documents: with any of them, the subfolders are left
+        out. Values of one filter are alternatives (`type=pdf&type=word`),
+        and the filters all apply together. `facets` adds counts of what each
+        option would leave, over the documents the caller can read: each
+        facet applies every filter but its own.
 
         A Store gives `409 not-browsable` and lists nothing: find a matter by
         search, My Matters or Recent Matters.
@@ -1395,10 +1538,26 @@ paths:
         - name: type
           in: query
           required: false
-          description: '`folder` for the subfolders alone. Anything else is `400`.'
+          description: |
+            `folder` for the subfolders alone, which takes no filters or
+            facets; or the file kinds to keep. Anything else is `400`.
+          style: form
+          explode: true
           schema:
-            type: string
-            const: folder
+            type: array
+            items:
+              type: string
+              enum: [folder, word, excel, powerpoint, pdf, email, opendocument, picture, other]
+        - $ref: '#/components/parameters/ListSort'
+        - $ref: '#/components/parameters/ListOrder'
+        - $ref: '#/components/parameters/AuthorFilter'
+        - $ref: '#/components/parameters/ClassFilter'
+        - $ref: '#/components/parameters/ClientFilter'
+        - $ref: '#/components/parameters/MatterFilter'
+        - $ref: '#/components/parameters/EditedFilter'
+        - $ref: '#/components/parameters/EditedFrom'
+        - $ref: '#/components/parameters/EditedTo'
+        - $ref: '#/components/parameters/FacetsWanted'
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -1564,6 +1723,15 @@ paths:
           $ref: '#/components/responses/Problem'
 components:
   parameters:
+    FolderIdPath:
+      name: folderId
+      in: path
+      required: true
+      description: A matter's workspace folder, which is `folderId` in the matter
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
     FolderId:
       name: id
       in: path
@@ -1599,6 +1767,112 @@ components:
         type: integer
         minimum: 1
         maximum: 200
+    ListSort:
+      name: sort
+      in: query
+      required: false
+      description: |
+        What to sort the documents by: `title` (the file name, ignoring
+        case), `docNumber` (as a number), `version` (the file version,
+        `fileVersion`, as a list shows it: by its major, then its minor
+        number), `author` (by name) or `edited` (the last change). Ties
+        go by the document's age, so pages never overlap, and documents with
+        no value to sort by come last either way. Anything else is `400`.
+      schema:
+        type: string
+        enum: [title, docNumber, version, author, edited]
+    ListOrder:
+      name: order
+      in: query
+      required: false
+      description: '`asc` (the default) or `desc`.'
+      schema:
+        type: string
+        enum: [asc, desc]
+    AuthorFilter:
+      name: author
+      in: query
+      required: false
+      description: The Authors to keep, by username.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+    ClassFilter:
+      name: class
+      in: query
+      required: false
+      description: The classes to keep.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+    ClientFilter:
+      name: client
+      in: query
+      required: false
+      description: The clients to keep, by number, such as `998`.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+          pattern: '^[0-9]{1,18}$'
+    MatterFilter:
+      name: matter
+      in: query
+      required: false
+      description: The matters to keep, by client and matter number, such as `998.1`.
+      style: form
+      explode: true
+      schema:
+        type: array
+        items:
+          type: string
+          pattern: '^[0-9]{1,18}\.[0-9]{1,18}$'
+    EditedFilter:
+      name: edited
+      in: query
+      required: false
+      description: |
+        Documents last changed `today`, in the last 7 days (`7d`, today and
+        the six before), the last 30 (`30d`) or this `year`, in the server's
+        time zone. Not with `from` or `to`.
+      schema:
+        type: string
+        enum: [today, 7d, 30d, year]
+    EditedFrom:
+      name: from
+      in: query
+      required: false
+      description: Documents last changed on this day or later, in the server's time zone.
+      schema:
+        type: string
+        format: date
+    EditedTo:
+      name: to
+      in: query
+      required: false
+      description: Documents last changed on this day or before, in the server's time zone.
+      schema:
+        type: string
+        format: date
+    FacetsWanted:
+      name: facets
+      in: query
+      required: false
+      description: |
+        The counts to add to the answer, as a comma list of `type`, `author`,
+        `class`, `client` and `matter`. Without it the answer has no
+        `facets`.
+      schema:
+        type: string
+        examples: ['type,author,class']
   securitySchemes:
     bearerAuth:
       type: http
@@ -1981,6 +2255,18 @@ components:
           description: The matter as people read it, such as `998.1 - Healdan Demo`, with an en dash
         client:
           $ref: '#/components/schemas/ClientRef'
+    AuthorRef:
+      type: object
+      description: A document's Author
+      additionalProperties: false
+      required: [username, displayName]
+      properties:
+        username:
+          type: string
+          description: The username, which the `author` filter takes
+        displayName:
+          type: string
+          description: The Author's name, to show; the username when the Author is no longer a user
     HoldView:
       type: object
       description: Who has a document checked out or locked
@@ -2052,7 +2338,7 @@ components:
     DocumentView:
       type: object
       additionalProperties: false
-      required: [type, docNumber, name, size, version, fileVersion, reference, folder, matter, dateFiled, lastModified, hold, canEdit, canOpen]
+      required: [type, docNumber, name, size, version, fileVersion, reference, folder, matter, author, dateFiled, lastModified, hold, canEdit, canOpen]
       properties:
         type:
           type: string
@@ -2091,6 +2377,11 @@ components:
           oneOf:
             - $ref: '#/components/schemas/MatterRef'
             - type: 'null'
+        author:
+          oneOf:
+            - $ref: '#/components/schemas/AuthorRef'
+            - type: 'null'
+          description: The document's Author property; null when it has none
         dateFiled:
           type: string
           format: date-time
@@ -2183,6 +2474,79 @@ components:
           format: int64
         name:
           type: string
+    RecentClient:
+      type: object
+      description: A client in Recent Clients
+      additionalProperties: false
+      required: [number, name]
+      properties:
+        number:
+          type: integer
+          format: int64
+        name:
+          type: string
+    SuggestView:
+      type: object
+      description: What the search box offers as the caller types
+      additionalProperties: false
+      required: [matters, documents]
+      properties:
+        matters:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, number, name, client]
+            properties:
+              id:
+                type: integer
+                format: int64
+              number:
+                type: integer
+                format: int64
+                description: The matter number within its client
+              name:
+                type: string
+              client:
+                type: object
+                additionalProperties: false
+                required: [number, name]
+                properties:
+                  number:
+                    type: integer
+                    format: int64
+                  name:
+                    type: string
+        documents:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: false
+            required: [docNumber, name, matter]
+            properties:
+              docNumber:
+                type: integer
+                format: int64
+              name:
+                type: string
+                description: The file name
+              matter:
+                type: object
+                additionalProperties: false
+                required: [id, number, display]
+                properties:
+                  id:
+                    type: integer
+                    format: int64
+                  number:
+                    type: integer
+                    format: int64
+                    description: The matter number within its client
+                  display:
+                    type: string
+                    description: The matter as people read it, such as `998.1 - Healdan Demo`, with an en dash
     ClientRef:
       type: object
       description: A client named in another object
@@ -2377,11 +2741,29 @@ components:
                     document: '#/components/schemas/DocumentView'
                     folder: '#/components/schemas/FolderView'
                     matter: '#/components/schemas/MatterView'
+            totalAtLeast:
+              type: integer
+              minimum: 0
+              description: |
+                For the `documents`, `emails` and `all` scopes, when the search
+                stopped before its last hit: how many it found that pass the
+                filters. There are more; `total` is then `null`. Left out when
+                `total` is the real count.
+            facets:
+              $ref: '#/components/schemas/Facets'
       unevaluatedProperties: false
     FolderChildPage:
       allOf:
         - $ref: '#/components/schemas/Page'
-        - properties:
+        - required: [documents]
+          properties:
+            documents:
+              type: integer
+              minimum: 0
+              description: |
+                How many of the items are documents: `total` less the
+                subfolders, which come first. With a filter, or in a search
+                folder, it is `total`.
             items:
               type: array
               items:
@@ -2393,7 +2775,78 @@ components:
                   mapping:
                     folder: '#/components/schemas/FolderView'
                     document: '#/components/schemas/DocumentView'
+            facets:
+              $ref: '#/components/schemas/Facets'
       unevaluatedProperties: false
+    Facets:
+      type: object
+      description: |
+        The counts asked for with `facets`, and only those: for each, the
+        options with documents, most first. Each counts the documents the
+        caller can read that pass every filter but the facet's own.
+      additionalProperties: false
+      properties:
+        type:
+          type: array
+          description: The file kinds.
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        author:
+          type: array
+          description: The Authors.
+          items:
+            $ref: '#/components/schemas/AuthorFacetCount'
+        class:
+          type: array
+          description: The classes.
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        client:
+          type: array
+          description: The client numbers.
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        matter:
+          type: array
+          description: The matters, by client and matter number, such as `998.1`.
+          items:
+            $ref: '#/components/schemas/FacetCount'
+        partial:
+          type: boolean
+          const: true
+          description: |
+            A search's counts taken over the results the caller can read
+            that rank above the engine's 2,500th, or, when fewer than 1,250
+            do, among the first 2,500 it read, when the engine has more than
+            2,500. Left out when the counts cover every result, as a folder's
+            always do.
+    FacetCount:
+      type: object
+      additionalProperties: false
+      required: [value, count]
+      properties:
+        value:
+          type: string
+          description: What the filter's parameter takes, such as `pdf`.
+        count:
+          type: integer
+          minimum: 1
+          description: How many documents it would leave.
+    AuthorFacetCount:
+      type: object
+      additionalProperties: false
+      required: [value, displayName, count]
+      properties:
+        value:
+          type: string
+          description: The Author's username, which `author` takes.
+        displayName:
+          type: string
+          description: The Author's name, to show; the username when the Author is no longer a user.
+        count:
+          type: integer
+          minimum: 1
+          description: How many documents it would leave.
     ProfileField:
       type: object
       description: |

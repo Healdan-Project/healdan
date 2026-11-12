@@ -3,6 +3,7 @@
 
 package com.logicaldoc.healdan.api;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -17,8 +18,6 @@ import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.document.Document;
-import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.searchengine.FulltextSearchOptions;
@@ -31,11 +30,11 @@ import com.logicaldoc.core.searchengine.folder.FolderSearchOptions;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserHistory;
 import com.logicaldoc.healdan.HealdanConstants;
-import com.logicaldoc.healdan.api.model.Page;
+import com.logicaldoc.healdan.api.model.SearchPage;
 import com.logicaldoc.healdan.docnumber.DocNumberQuery;
 import com.logicaldoc.healdan.matter.Matter;
-import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.matter.MatterDAO;
+import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.security.AccessChecks;
 
 import jakarta.ws.rs.GET;
@@ -51,6 +50,11 @@ import jakarta.ws.rs.core.MediaType;
  * answers {@code 404}. Search runs
  * CE's own searches, as the old UI's search box does, and shows only what the
  * caller may read and what is published to the caller.
+ * <p>
+ * The documents, emails and all scopes ({@link DocumentSearch}) page through
+ * every hit up to {@link #MAX_WINDOW}, take the filters and a sort, and count
+ * (M6 spec sections 9.2 and 9.5). The other scopes page as the old UI's
+ * search box does, and count nothing.
  */
 @Component
 @Path("/v1/search")
@@ -61,6 +65,14 @@ public class SearchResource {
 	static final int MAX_WINDOW = 10000;
 
 	/**
+	 * The hits a document search reads at least, so that a first page knows its
+	 * total, and the most hits counted: the counts are taken over the readable
+	 * hits that score above the one at this place. Past it, the total is a
+	 * floor and the counts are {@code partial} (Task 10's measurement).
+	 */
+	static final int FACET_WINDOW = 2500;
+
+	/**
 	 * @param scope {@code documents} (the default), {@code emails}, {@code all},
 	 *        {@code folders}, {@code matters} or {@code clients}
 	 * @param q what to look for
@@ -68,13 +80,31 @@ public class SearchResource {
 	 * @param limit the most hits to return
 	 * @param within a folder to search inside, at any depth; only for the
 	 *        {@code folders} and {@code documents} scopes
-	 * @return the hits as documents, folders or matters, best first; the total
-	 *         is not known, and a page shorter than {@code limit} is the last
+	 * @param sort what to sort the documents by, as a folder's are; none for
+	 *        the best hits first
+	 * @param order {@code asc} or {@code desc}, with a sort
+	 * @param type the file kinds to keep ({@link Filters})
+	 * @param author the Authors to keep, by username
+	 * @param docClass the classes to keep
+	 * @param client the clients to keep, by number
+	 * @param matter the matters to keep, such as {@code 998.1}
+	 * @param edited {@code today}, {@code 7d}, {@code 30d} or {@code year}
+	 * @param from the first day of an edit-date range
+	 * @param to the last day of the range
+	 * @param facets the counts to take, as a comma list
+	 * @return the hits as documents, folders or matters, best first; for the
+	 *         documents, emails and all scopes, how many there are, and the
+	 *         counts asked for
 	 */
 	@GET
-	public Page<Object> search(@QueryParam("scope") String scope, @QueryParam("q") String q,
+	public SearchPage search(@QueryParam("scope") String scope, @QueryParam("q") String q,
 			@QueryParam("offset") Integer offset, @QueryParam("limit") Integer limit,
-			@QueryParam("within") Long within) {
+			@QueryParam("within") Long within, @QueryParam("sort") String sort, @QueryParam("order") String order,
+			@QueryParam("type") List<String> type,
+			@QueryParam("author") List<String> author, @QueryParam("class") List<String> docClass,
+			@QueryParam("client") List<String> client, @QueryParam("matter") List<String> matter,
+			@QueryParam("edited") String edited, @QueryParam("from") String from, @QueryParam("to") String to,
+			@QueryParam("facets") String facets) {
 		Paging paging = Paging.of(offset, limit);
 		String chosen = StringUtils.isEmpty(scope) ? "documents" : scope;
 		if (!List.of("documents", "emails", "all", "folders", "matters", "clients").contains(chosen))
@@ -83,6 +113,16 @@ public class SearchResource {
 			throw ApiProblem.badRequest("Say what to search for with q.");
 		if (within != null && !List.of("documents", "folders").contains(chosen))
 			throw ApiProblem.badRequest("Only the documents and folders scopes can search within a folder.");
+		if (StringUtils.isNotEmpty(order) && StringUtils.isEmpty(sort))
+			throw ApiProblem.badRequest("Give a sort with the order. Without one, the best hits come first.");
+		Filters filters = Filters.of(type, sort, order, author, docClass, client, matter, edited, from, to, facets,
+				Clock.systemDefaultZone());
+		if (filters.foldersOnly())
+			throw ApiProblem.badRequest("A search's type is a file kind. Search the folders scope for folders.");
+		boolean documents = List.of("documents", "emails", "all").contains(chosen);
+		if (!documents && (filters.query().filtered() || filters.query().sort() != null
+				|| !filters.facets().isEmpty()))
+			throw ApiProblem.badRequest("Only the documents, emails and all scopes take filters, a sort and facets.");
 
 		Caller caller = Caller.current();
 		User user = caller.user();
@@ -107,34 +147,43 @@ public class SearchResource {
 			if (search == null)
 				throw new ApiProblem(500, "server-error", "The search for scope %s isn't available.".formatted(chosen));
 
-			// CE cuts its hits to a window, and what the caller can't see is dropped after that, so the
-			// window grows until the page is full or CE has no more
-			long wanted = Math.min((long) paging.offset() + paging.limit(), MAX_WINDOW);
-			long window = wanted;
-			List<Object> shown;
-			// Each hit is checked once, however often the window grows
-			Map<Long, Optional<Object>> checked = new HashMap<>();
-			while (true) {
-				options.setMaxHits((int) window);
-				List<Hit> hits = search.search();
-				shown = shown(hits, options.getType(), user, wanted, checked, within);
-				if (shown.size() >= wanted || hits.size() < window || window >= MAX_WINDOW)
-					break;
-				window = Math.min(window * 2, MAX_WINDOW);
-			}
-
-			int from = (int) Math.min(paging.offset(), shown.size());
-			int to = (int) Math.min((long) paging.offset() + paging.limit(), shown.size());
-			List<Object> items = new ArrayList<>();
-			for (Object found : shown.subList(from, to))
-				view(found, user).ifPresent(items::add);
-			return new Page<>(List.copyOf(items), paging.offset(), paging.limit(), null);
+			if (documents)
+				return DocumentSearch.run(search, options, user, filters, paging, within);
+			return others(search, options, user, paging, within);
 		} catch (SearchException e) {
 			// The mapper logs it, and answers 500 server-error
 			throw new IllegalStateException("Search failed", e);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't search", e);
 		}
+	}
+
+	/**
+	 * The folders, matters and clients scopes: the window grows until the page
+	 * is full or the search has no more; the total isn't counted
+	 */
+	private static SearchPage others(Search search, SearchOptions options, User user, Paging paging, Long within)
+			throws SearchException, PersistenceException {
+		long wanted = Math.min((long) paging.offset() + paging.limit(), MAX_WINDOW);
+		long window = wanted;
+		List<Object> shown;
+		// Each hit is checked once, however often the window grows
+		Map<Long, Optional<Object>> checked = new HashMap<>();
+		while (true) {
+			options.setMaxHits((int) window);
+			List<Hit> hits = search.search();
+			shown = shown(hits, options.getType(), user, wanted, checked, within);
+			if (shown.size() >= wanted || hits.size() < window || window >= MAX_WINDOW)
+				break;
+			window = Math.min(window * 2, MAX_WINDOW);
+		}
+
+		int from = (int) Math.min(paging.offset(), shown.size());
+		int to = (int) Math.min((long) paging.offset() + paging.limit(), shown.size());
+		List<Object> items = new ArrayList<>();
+		for (Object found : shown.subList(from, to))
+			view(found, user).ifPresent(items::add);
+		return new SearchPage(List.copyOf(items), paging.offset(), paging.limit(), null, null, null);
 	}
 
 	/**
@@ -155,7 +204,7 @@ public class SearchResource {
 	private static SearchOptions options(String scope, String q, User user) {
 		int type = switch (scope) {
 		case "emails" -> HealdanConstants.SEARCH_EMAILS_ONLY;
-		case "all" -> SearchOptions.TYPE_FULLTEXT;
+		case "all" -> HealdanConstants.SEARCH_ALL_FILES;
 		case "folders" -> SearchOptions.TYPE_FOLDERS;
 		case "matters" -> HealdanConstants.SEARCH_MATTERS;
 		case "clients" -> HealdanConstants.SEARCH_CLIENTS;
@@ -166,6 +215,10 @@ public class SearchResource {
 		if (options == null)
 			throw new ApiProblem(500, "server-error", "The search for scope %s isn't available.".formatted(scope));
 		options.setExpression(q);
+		// The API shows no shortcut (ApiViews.shows refuses it, as its own address is 404); and CE scores the rows it adds for them 0, which its
+		// order of a window's hits can't place consistently among the scored ones
+		if (List.of("documents", "emails", "all").contains(scope))
+			options.setRetrieveAliases(false);
 		if (options instanceof FulltextSearchOptions fulltext)
 			fulltext.setExpressionLanguage(StringUtils.defaultIfBlank(user.getLanguage(), "en"));
 		if (options instanceof FolderSearchOptions folders) {
@@ -187,9 +240,9 @@ public class SearchResource {
 	 * @param checked what earlier windows found for each hit, by id; this
 	 *        window's answers are added
 	 * @param within the folder the hits must be inside, or null
-	 * @return what of the hits the caller may see, as the matters, folders or
-	 *         documents themselves, in the hits' order, at most {@code wanted};
-	 *         the views come later, for the page alone
+	 * @return what of the hits the caller may see, as the matters or folders
+	 *         themselves, in the hits' order, at most {@code wanted}; the views
+	 *         come later, for the page alone
 	 */
 	private static List<Object> shown(List<Hit> hits, int type, User user, long wanted,
 			Map<Long, Optional<Object>> checked, Long within) throws PersistenceException {
@@ -208,9 +261,8 @@ public class SearchResource {
 	}
 
 	/**
-	 * @return the matter, folder or document the hit is, if the caller may see
-	 *         it and, with {@code within}, it is inside that folder at any
-	 *         depth
+	 * @return the matter or folder the hit is, if the caller may see it and,
+	 *         with {@code within}, it is inside that folder at any depth
 	 */
 	private static Optional<Object> check(Hit hit, int type, User user, Long within) throws PersistenceException {
 		if (type == HealdanConstants.SEARCH_MATTERS || type == HealdanConstants.SEARCH_CLIENTS) {
@@ -218,33 +270,19 @@ public class SearchResource {
 			return matter != null && AccessChecks.readableFolder(hit.getId(), user).isPresent() ? Optional.of(matter)
 					: Optional.empty();
 		}
-		if (type == SearchOptions.TYPE_FOLDERS) {
-			Optional<Folder> folder = AccessChecks.readableFolder(hit.getId(), user);
-			// The API shows folders inside Stores only, and no aliases
-			return folder.isPresent() && folder.get().getDeleted() == 0 && folder.get().getType() != Folder.TYPE_ALIAS
-					&& MatterLocator.get().locate(folder.get()).isUnderAStore()
-					&& (within == null || folder.get().getId() != within
-							&& FolderDAO.get().isInPath(within, folder.get().getId()))
-							? Optional.of(folder.get())
-							: Optional.empty();
-		}
-		Optional<Document> document = AccessChecks.readableDocument(DocumentDAO.get().findById(hit.getId()), user);
-		// The full-text searches are limited to the folder already; the doc # lookup is not
-		boolean inside = within == null || type != HealdanConstants.SEARCH_DOC_NUMBER
-				|| document.isPresent() && inside(document.get().getFolder().getId(), within);
-		return document.isPresent() && inside && ApiViews.shows(document.get()) ? Optional.of(document.get())
-				: Optional.empty();
-	}
-
-	private static boolean inside(long folderId, long within) throws PersistenceException {
-		return folderId == within || FolderDAO.get().isInPath(within, folderId);
+		Optional<Folder> folder = AccessChecks.readableFolder(hit.getId(), user);
+		// The API shows folders inside Stores only, and no aliases
+		return folder.isPresent() && folder.get().getDeleted() == 0 && folder.get().getType() != Folder.TYPE_ALIAS
+				&& MatterLocator.get().locate(folder.get()).isUnderAStore()
+				&& (within == null || folder.get().getId() != within
+						&& FolderDAO.get().isInPath(within, folder.get().getId()))
+						? Optional.of(folder.get())
+						: Optional.empty();
 	}
 
 	private static Optional<Object> view(Object found, User user) throws PersistenceException {
 		if (found instanceof Matter matter)
 			return Optional.of(ApiViews.matter(matter, null));
-		if (found instanceof Folder folder)
-			return ApiViews.folder(folder, user).map(Object.class::cast);
-		return Optional.of(ApiViews.document((Document) found, user));
+		return ApiViews.folder((Folder) found, user).map(Object.class::cast);
 	}
 }

@@ -36,6 +36,16 @@ describe('plural', () => {
     expect(plural('documents', 7)).toBe('7 documents')
   })
 
+  it('groups thousands as US English does, in the count and in any other number it is given', () => {
+    expect(plural('documents', 1234)).toBe('1,234 documents')
+    expect(plural('documentsOf', 12500, { shown: 1200 })).toBe('1,200 of 12,500 documents')
+    expect(plural('documentsMoreThan', 10000)).toBe('More than 10,000 documents')
+  })
+
+  it('leaves the numbers t() is given alone, as a doc # is never grouped', () => {
+    expect(t('filters.count', { n: 10388 })).toBe('10388 Filters')
+  })
+
   it('uses the configured label', () => {
     setLabels({ matter: 'Project', matters: 'Projects' })
     expect(plural('matters', 1)).toBe('1 Project')

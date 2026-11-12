@@ -85,3 +85,16 @@
 .loading {
   color: var(--hd-text-secondary);
 }
+
+/* The row's menu sits at its end, shown while the row is hovered or focused, or its menu is open. */
+.menu {
+  display: inline-flex;
+  margin-inline-start: auto;
+  opacity: 0;
+}
+
+.item[data-hovered] .menu,
+.item:focus-within .menu,
+.menu:has([aria-expanded='true']) {
+  opacity: 1;
+}

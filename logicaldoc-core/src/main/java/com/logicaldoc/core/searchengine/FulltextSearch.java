@@ -56,7 +56,8 @@ public class FulltextSearch extends Search {
          * Launch the search
          */
         log.debug("Full-text seach: {}   filters: {}", query, filters);
-        Hits results = SearchEngine.get().search(query.toString(), filters, opt.getExpressionLanguage(), null);
+        // Healdan: a window past the handler's default 1,000 rows reaches Solr, up to 10,000, so search pages to the end (M6 spec 9.5)
+        Hits results = SearchEngine.get().search(query.toString(), filters, opt.getExpressionLanguage(), opt.getMaxHits() > 1000 ? Integer.valueOf(Math.min(opt.getMaxHits(), 10000)) : null);
         log.debug("End of Full-text search");
         log.debug("Fulltext hits count: {}", (results != null ? results.getCount() : 0));
 

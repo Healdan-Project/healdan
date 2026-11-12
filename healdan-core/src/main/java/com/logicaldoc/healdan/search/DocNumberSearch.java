@@ -19,7 +19,13 @@ import com.logicaldoc.healdan.docnumber.LookupResult;
  * {@link DocNumberLookup} finds; input it can't resolve gives no hits and is
  * never searched as full text.
  */
-public class DocNumberSearch extends Search {
+public class DocNumberSearch extends Search implements CountableSearch {
+
+	@Override
+	public boolean isComplete() {
+		// A lookup finds its one document or none
+		return true;
+	}
 
 	@Override
 	protected void internalSearch() throws SearchException {

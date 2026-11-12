@@ -50,6 +50,94 @@ the Classic Interface, are on the stack's address.
    address and answers from a small fake API, and `expectNoAxeViolations`. Add what the fake API doesn't answer to
    `test/fakeApi.ts`, typed from the contract.
 
+The router's types are registered (`router.tsx`), so `Link`, `navigate()` and the search hooks check each address's
+parameters. Build an API path from data with `apiPath`, from `@healdan/api`, which encodes each value as one
+segment: `` apiPath`/v1/folders/${id}/children` ``.
+
+## Lists
+
+A list of documents is `@healdan/ui`'s `Table`: React Aria's Table, virtualised so only the rows on screen are drawn,
+with sortable headings and single or multiple selection. It passes Enter (or a double-click) out as `onOpen`, Space as
+`onPreview`, F2 as `onRename`, and Delete or Backspace (the Mac's delete key) as `onDelete`, for the view to act on.
+It takes those keys only from a row or its cells, so a field inside a row keeps them, and leaves them to the browser
+with ⌘, Ctrl or Option held. A row whose `selectable` is false, such as a folder among documents, opens on a click
+instead. Pass `busy` while the rows shown are about to change, as `useListing`'s `isStale` says while a new order
+loads: the old rows stay, and a screen reader waits for the new ones. Give it `loadMore` and `total`, and it calls `loadMore`
+when the end of the loaded rows comes into view while fewer than `total` are loaded. A folder's list takes its rows
+from `views/useListing.ts`, TanStack Query's infinite query over `GET /folders/{id}/children`, 100 at a time. Offset
+pages shift when the folder changes between them, so it keeps one copy of a row a later page repeats.
+
+The virtualiser places the rows itself, so the Table needs a height: it fills a flex column, as the folder view's is.
+jsdom has no IntersectionObserver, which notices the end of a list, so the tests' setup installs one that sees
+nothing until a test calls `bringObservedIntoView()` from `test/intersection.ts`, as scrolling to the end would.
+
+## Filters and the Right Region
+
+A folder's filters are `?type=pdf&type=word&author=pnair&class=…&edited=7d` (or `from` and `to` as `2026-11-02`) in the
+address: `filters/useFilters.ts` reads them (`readFilters` leaves out what the API would refuse, so a pasted address
+never makes the list an error), counts them for the funnel's badge, and writes them back with `navigate`, replacing the
+entry. The router's `parseSearch` and `stringifySearch` carry the repeated ones as lists, and each route that takes
+filters adds `filterSearch` to its `validateSearch`. `useListing` sends them with every page; `filters/useFacets.ts`
+asks for the counts on their own (`GET /folders/{id}/children` with `facets`, `limit=1`) only while the panel is open,
+and for the folder's count with no filters only while one is in use, which is the "7" of "3 of 7 documents".
+
+The right of a list is one region (`frame/RightRegion.tsx`): `useRightRegion()` gives `show` (`'filters'`, `'details'`,
+`'preview'` or null), `open(kind)` and `close()`. Details are the default while a document is selected; the funnel
+opens Filters over them, and a view opens the details again when a row is clicked with Filters showing. A view renders
+`RightRegionView` beside its list with what each kind shows, and the region isn't in the page at all when there's
+nothing to show. The panel's groups are `@healdan/ui`'s `CheckGroup` and `RadioChoices`, and its dates `DatePicker`
+(React Aria's, taking and giving days as `2026-11-02`). A search view offers the panel with `context="search"`, which
+adds Client and Matter.
+
+## Details and the \# Result
+
+`details/DetailsPanel.tsx` is the region's details: `<DetailsPanel docNumber row version context />` asks for the
+document, its properties and its versions (`useDocument`, `useProperties` and `useVersions` in `queries.ts`; the
+list's row shows at once as the placeholder) and renders the thumbnail, the name, `# n · Version v · size`
+(`formatSize` in `@healdan/ui`), the actions and `Properties` and `Versions`. A search view passes
+`context="search"`, which adds Location, linking to `/app/folders/<id>`. The panel never reads a file: the thumbnail
+is an `<img>` on `/api/v1/documents/{n}/thumbnail`, which the web session's cookie goes with, and an icon of the
+file's kind (`fileIcon.ts`) shows when there's none or the person can't open the document. Properties come from the
+list the server gives, by name; an email's From, To, Sent and Received show when any of them has a value, as the
+server fills them from the message and the browser never parses a file. Open, Download, Edit and Preview are
+disabled until their tasks; **Copy Link** (`actions/copyLink.ts`) writes `location.origin + '/app/doc/' + n` with the
+Clipboard API and shows a Toast, either way.
+
+`/app/doc/10388`, `/app/doc/10388.2` and the other forms of the lookup are `views/DocResult.tsx`: it asks
+`GET /v1/lookup?q=%2310388.2` and shows a list of that one document (`views/listColumns.tsx`, the folder list's
+columns), selected, with its details beside it and the named version marked in Versions. `useSelection` takes the
+number from the address on this route. A `404` shows "No document # 10388 that you can see.", the same for a
+document that isn't there and one that can't be read, and says only the number as typed; a `400` shows the not-found
+view.
+
+## The Search Box and Search Results
+
+`search/SearchBox.tsx` is the top bar's scope picker (`scopes.ts`: the API's six `scope` values, and the four Recent
+kinds, which are scopes too) joined to `@healdan/ui`'s `ComboBox`, React Aria's, with the options the caller gives in
+named sections and not filtered by it. Focus stays in the box and the arrow keys move through the options. Enter with
+none under the arrow keys is `onSubmit`, which React Aria itself never reports (it only commits a custom value), so the
+wrapper reads the focused option from the combobox state. The scope follows the address (the start page and Recent's
+entries are Documents or their kind, `/search` names its own), and so do the words, so Back and a reload show them.
+`/` focuses the box unless the target is a field, an editable element, or the box is hidden from assistive technology,
+which React Aria does to everything outside a modal dialog.
+
+Suggestions (`search/Suggestions.tsx`) are `GET /v1/suggest`, asked 150 ms after the typing stops, from two characters,
+never for a `#`, with the first 100 characters. The request gets TanStack Query's `signal`, which the Api client's
+`get(path, query, { signal })` hands to `fetch`, so a newer ask aborts the older one in flight. Enter on words runs
+`/search?scope=…&q=…`; a `#` and a doc # (`#10388`, `#10388.2`, `#10388 v2.1`) goes to `/doc/<reference>`, made without
+spaces; in the Matters scope a `998.1` asks `GET /search?scope=matters` for that number and opens the matter's
+`folderId`, else shows the results.
+
+`views/SearchView.tsx` is `/app/search`: the scope, words, filters (`useFilters`), `sort`, `order` and `sel` are all in the
+address. `search/useSearchResults.ts` is the infinite query over `GET /search` (100 a page) and the twin of
+`useFacets` for the panel's counts (`facets=type,author,class,client,matter`, `limit=1`); only the Documents, Emails and
+Docs & Emails scopes send filters or a sort, as the API refuses them for the others. A page is the last when the
+answer's `total` is reached, or, when it's `null`, when it's shorter than the 100 asked. `totalAtLeast` is the count's
+"More than". `FiltersPanel` shows no made-up `0` for a ticked value no option offers when the counts are `partial`.
+`views/RecentView.tsx` is the start page and `/recent/<kind>`, a Table each, with `useRowSelection` (the selection of
+document rows, shared with search) putting a document in `?sel=` and its details in the region; a recent client opens
+a Clients search.
+
 ## The Catalogue
 
 Every word the app shows is in one typed catalogue, `packages/ui/src/strings/en-US.ts`, and a view gets it with
@@ -80,3 +168,5 @@ And the build checks these:
   app ships into `apps/user/dist/notices.txt`.
 - **The page's Content-Security-Policy** allows no inline style, so a library that injects one is a problem:
   `scripts/check-dist.mjs` checks the one React Aria would inject, for pressed states, is a linked file.
+- **The libraries are chunks of their own** (`vite.config.ts`): React Aria in one, the rest in another, each named
+  with its hash, which `AppServlet` serves as immutable, so a browser keeps them across the app's updates.

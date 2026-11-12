@@ -259,7 +259,9 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 { "items": [ … ], "offset": 0, "limit": 50, "total": 123 }
 ```
 
-- `total` is `null` for a search, where counting would be slow. A page with fewer than `limit` items is the last.
+- `total` is `null` for the `folders`, `matters` and `clients` searches, where counting would be slow. A page with
+  fewer than `limit` items is the last. The `documents`, `emails` and `all` searches count, up to a point: see
+  [Searching](#searching).
 - Some lists, such as Recent Matters and your check-outs, come back whole, in the same shape, and take no paging
   parameters. The docs page says which.
 
@@ -279,8 +281,12 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 - **A document's or folder's `matter` names its client,** as `{ "id", "display", "client": { "id", "number",
   "name" } }`, so a list can show the client beside the matter without asking for each one. An older server sends
   only `id` and `display`, so a client that may meet one reads `client` as optional.
-- **Field names are camelCase.** A field with no value is `null`, never left out. Timestamps are ISO 8601 in UTC,
-  such as `2026-10-23T14:05:00Z`.
+- **A document's `author`** is its Author property, as `{ "username": "pnair", "displayName": "Priya Nair" }`: the
+  name to show, and the username the `author` filter takes. An Author who is no longer a user shows by the username
+  kept with the property, as the Author counts do. It's `null` for a document with no Author. A folder's list and
+  the search results read their page's Authors in one query.
+- **Field names are camelCase.** A field with no value is `null`, never left out, but for a list's `facets`,
+  which is there only when asked for, and a search's `totalAtLeast`, there only when `total` isn't. Timestamps are ISO 8601 in UTC, such as `2026-10-23T14:05:00Z`.
 - **A doc ID is `#<doc #> v<version>`,** the form of the title bar and the filed files: `#1234 v2.1`.
 - **Nothing caches the answers:** Healdan sends them with `no-store` in `Cache-Control`.
 
@@ -290,10 +296,10 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 |---|---|
 | The server and you | `GET /server`, `GET /me`, `GET /users?q=` for user fields such as Author |
 | Signing in | `POST /auth/tokens`, `GET /auth/tokens`, `DELETE /auth/tokens/current`, `DELETE /auth/tokens/{id}`; `DELETE /session` for the web session |
-| Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
-| Finding | `GET /search?scope=&q=&within=`, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
+| Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /clients/recent`, `PUT` and `DELETE /me/matters/{folderId}`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
+| Finding | `GET /search?scope=&q=&within=`, with filters and `facets`, `GET /suggest?q=` for the search box as someone types, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
-| A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent` |
+| A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone |
 | Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
 | Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
@@ -305,7 +311,18 @@ The sections below say more about the parts a client needs to know before it sta
 - **A typed doc #.** `GET /lookup?q=` takes what a person types and returns the document and version it names:
   `#1234`, `#1234.2`, `#1234v2`, `#1234.2.1`, and the title bar's `#1234 v2.1`, which may have spaces after the
   `#` and before the `v`. Encode the `#` as `%23`. Input that isn't a doc # is `400`; a document the caller can't
-  read, or a version it hasn't got, is `404`.
+  read, a version it hasn't got, and a legacy shortcut (a document row from before Healdan that points to another
+  document) are `404`, and `GET /documents/{docNumber}` of a shortcut's own doc # is the same `404`.
+- **Suggestions as someone types.** `GET /suggest?q=` answers `{ "matters": [...], "documents": [...] }`: up to 5
+  matters whose number or name matches `q` (as the `matters` search scope finds them), then up to 5 documents whose
+  title has every word of `q`, the last as the start of a word. Each matter has `id`, `number`, `name` and its
+  `client` (`number` and `name`); each document has `docNumber`, `name` and its `matter` (`id`, `number` and
+  `display`). It shows only what the caller can read. A `q` of fewer than two characters answers two empty lists.
+  Punctuation never makes an error: only the letters and digits of `q` reach the full-text engine. Documents come
+  in the engine's score order, with a lift for those dated in the last year, and each is checked for the caller
+  until 5 are found, so titles in matters the caller can't read don't crowd out their own. The engine hands back at
+  most 1,000 hits per request: a caller who can read only titles ranked after 1,000 others gets fewer, or none,
+  until the word is longer.
 - **Searching inside a folder.** `GET /search` takes `within`, the id of a folder, usually a matter's workspace
   (its `folderId`) or one of its folders. The `documents` and `folders` scopes then return only what is inside it,
   at any depth, and a `#` lookup keeps its document only if it is in there. A Store as `within` is
@@ -313,6 +330,87 @@ The sections below say more about the parts a client needs to know before it sta
 - **Comments.** Every document has a Comments property (`comments`), free text of up to 4000 characters that comes
   after Subclass in the form and the properties. The `documents` search scope finds a document by its Comments: it
   matches those whose Comments contain every word of `q`, in any case, along with the full-text hits.
+
+## Searching
+
+`GET /search?q=` searches the `scope` given: `documents` (the default, every file but emails), `emails`, `all`,
+`folders`, `matters` or `clients`. The hits are what the caller can read, best first.
+
+- **Paging to the end.** The `documents`, `emails` and `all` scopes page through every hit the full-text engine
+  finds, up to its first 10,000, each on one page only. Past those, a page is empty. The engine ranks hits by a
+  score rounded to a percentage of the best one's, then by file name, so a search cuts a page only from the hits
+  ranked above its window's lowest score, which come in the same order however far it reads, and reads further when
+  those don't reach the page's end. When many hits score the same, a page can read up to 10,000 hits.
+- **How many.** Each of those searches reads at least the engine's first 2,500 hits, more for a page further on.
+  When it has found every hit, `total` says how many there are. When it stopped before the last, `total` is `null`
+  and `totalAtLeast` says how many it found that the caller can read: there are more, so a client shows "more than"
+  that number.
+- **Filters.** The same as a folder's (see [Listing a Folder](#listing-a-folder)): `type` takes file kinds, and
+  `author`, `class`, `client`, `matter`, `edited`, `from` and `to` as there. They're applied in the database, after
+  the read check, to the hits read, so they find their matches among the first 10,000 hits, and `total` and
+  `totalAtLeast` count the hits that pass. `type=folder` is `400`: search the `folders` scope instead.
+- **Sorting.** `sort` and `order` take a folder's values (see [Listing a Folder](#listing-a-folder)), and sort the
+  hits the caller can read the same way. A sorted search reads the engine's first 10,000 hits and sorts those, so
+  past 10,000 hits it sorts the 10,000 most relevant, and answers `totalAtLeast`. Without `sort` the best hits come
+  first, and `order` alone is `400`.
+- **Counts.** `facets=` adds the counts, as for a folder, each applying every filter but its own. They're taken in
+  the database over the hits the caller can read that rank above the engine's 2,500th hit, whatever the page or
+  the sort, never by the full-text engine, whose counts would include documents the caller can't read. When the
+  engine has more than 2,500 hits, `facets` has `"partial": true`, so a client can say the counts come from the
+  first results. When fewer than 1,250 hits rank above the 2,500th, as when most hits score the same, they're taken
+  over the readable hits among the first 2,500 the search read instead, and then can differ slightly from page to
+  page.
+- **The other scopes,** `folders`, `matters` and `clients`, look at the first 10,000 hits, and their `total` is
+  always `null`: a page with fewer than `limit` items is the last. They take no filters, `sort` or `facets`; any
+  is `400 bad-request`.
+
+```json
+{
+  "items": [ … ],
+  "offset": 0, "limit": 100, "total": null, "totalAtLeast": 2500,
+  "facets": {
+    "type": [{ "value": "pdf", "count": 1210 }, { "value": "word", "count": 845 }],
+    "partial": true
+  }
+}
+```
+
+## Listing a Folder
+
+`GET /folders/{id}/children` lists the subfolders the caller can read, by name, then the documents the caller can
+read. A search folder lists its own documents, at most 1,000. The server pages, sorts, filters and counts in the
+database, so a folder of thousands of documents answers as fast as a small one.
+
+- **Sorting.** `sort` is `title` (the file name, ignoring case; the default), `docNumber` (as a number, so #9 comes
+  before #10), `version` (the file version, `fileVersion`, as the list shows it: by its major, then its minor
+  number, so 2.9 comes before 2.10), `author` (by the
+  Author's name as `author.displayName` shows it, not the username) or `edited` (the last change). `order` is `asc` (the default) or `desc`.
+  Documents with nothing to sort by, such as no Author, come last either way, and ties go by the document's age,
+  so no document shows on two pages. Subfolders always come first, by name. A search folder keeps its own order,
+  newest change first, unless `sort` says otherwise.
+- **Filters.** `type` takes file kinds: `word`, `excel`, `powerpoint`, `pdf`, `email`, `opendocument`, `picture`
+  and `other`, for any extension the others don't name. `author` takes usernames, `class` classes, `client` client
+  numbers such as `998`, and `matter` matters such as `998.1`. `edited` is `today`, `7d`, `30d` or `year`; or give
+  `from` and `to`, either or both, as days such as `2026-06-01`, both included. The days are the server's.
+  Repeat a parameter for more than one value, `type=pdf&type=word`: any value passes, and the filters all apply
+  together. With any filter set, the list holds documents alone, and `total` counts the documents that pass.
+- **How many.** `total` counts the subfolders and the documents, and `documents` the documents alone, so a client
+  can say "7 documents" without asking twice. With a filter set, or in a search folder, the two are the same.
+- **`type=folder`** still lists the subfolders alone, for a folder tree. It takes no filters or `facets`.
+- **Counts.** `facets=type,author,class,client,matter`, or any of them, adds `facets` to the answer: for each one
+  asked for, its options, most documents first, each with how many documents it would leave. Each facet applies
+  every filter but its own, so ticking Word leaves the File Type counts as they were and narrows the others. They
+  count only documents the caller can read. Without `facets` the answer has none.
+
+```json
+"facets": {
+  "type": [{ "value": "pdf", "count": 12 }, { "value": "word", "count": 7 }],
+  "author": [{ "value": "pnair", "displayName": "Priya Nair", "count": 9 }]
+}
+```
+
+An Author's `value` is the username, which `author` takes, and `displayName` the name to show. A value the
+filters don't take, such as `sort=size` or `type=docx`, is `400 bad-request`.
 
 ## Creating a Folder
 
@@ -329,6 +427,17 @@ The user's bookmarks in LogicalDOC, apart from those on matters' workspaces, whi
 exactly one of `folderId` and `docNumber`, and answers `201`; adding a favorite twice answers `201` with the
 existing one. `DELETE /me/favorites/{id}` takes the bookmark's `id` from the list. A matter's workspace is `400`,
 and what the user can't read is `404`.
+
+## My Matters and Recent Clients
+
+`PUT /me/matters/{folderId}` adds a matter to the caller's My Matters, taking the matter's workspace folder
+(`folderId` in a matter) and answering `204`; adding one already there is `204` too. A folder that isn't a matter's
+workspace, one the caller can't read and one that doesn't exist are all `404`. `DELETE /me/matters/{folderId}`
+removes it, and `204` is the answer when it wasn't there. `GET /matters/mine` lists the result.
+
+`GET /clients/recent` lists the clients of the caller's Recent Matters and My Matters, each once, by name then
+number, as a plain array of `number` and `name`. Healdan has no list of all clients, and a client of a matter the
+caller can no longer read isn't listed.
 
 ## Check-Outs and Devices
 

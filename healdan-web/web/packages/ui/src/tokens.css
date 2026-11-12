@@ -15,6 +15,11 @@
   --hd-row-alt: #f4f5f5;
   --hd-pill: #e1e1e6;
   --hd-selection-inactive: #dcdcdc;
+  /* A pressed (toggled on) button: a face for --hd-text, and an edge that shows on the surface and on the face */
+  --hd-pressed: #dcdcdc;
+  --hd-pressed-edge: #6e6e73;
+  /* Rows that are about to change are dimmed, so a sighted person sees the list is updating */
+  --hd-busy-opacity: 0.7;
 
   --hd-text: #1d1d1f;
   --hd-text-secondary: #6e6e73;
@@ -29,6 +34,9 @@
      fill alike (the gap is the surface; the edge is 5.3:1 or better on every surface), plus the helper's soft ring. */
   --hd-focus-outline: 2px solid var(--hd-focus-edge);
   --hd-focus-offset: 2px;
+  /* For what can't be set off, such as a list's rows, which touch: the same edge inside it, then a gap of the surface,
+     so it shows on a selected row's accent fill and on the rows around it alike. */
+  --hd-focus-inset: inset 0 0 0 2px var(--hd-focus-edge), inset 0 0 0 4px var(--hd-window);
 
   --hd-field: #ffffff;
   --hd-field-line: #c7c7cc;
@@ -42,6 +50,8 @@
   --hd-caution-text: #9a5b00;
   --hd-required: #d70015;
   --hd-star: #f59f00;
+  /* The filled star's edge: the amber alone is 2:1 on a light page, too pale to show the state (tokens.test.ts). */
+  --hd-star-edge: #b35c00;
 
   --hd-font: -apple-system, blinkmacsystemfont, "Segoe UI", system-ui, sans-serif;
   --hd-font-size: 13px;
@@ -78,6 +88,8 @@
     --hd-row-alt: #232325;
     --hd-pill: #3a3a3c;
     --hd-selection-inactive: #464646;
+    --hd-pressed: #464646;
+    --hd-pressed-edge: #aeaeb2;
 
     --hd-text: #f2f2f7;
     --hd-text-secondary: #aeaeb2;
@@ -99,6 +111,7 @@
     --hd-caution-text: #f5a623;
     --hd-required: #ff6961;
     --hd-star: #fcc419;
+    --hd-star-edge: #fcc419;
 
     --hd-shadow-popup: 0 6px 24px rgb(0 0 0 / 55%), 0 0 0 1px var(--hd-line);
     --hd-scrim: rgb(0 0 0 / 55%);

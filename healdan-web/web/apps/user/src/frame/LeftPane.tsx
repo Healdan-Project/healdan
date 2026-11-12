@@ -1,15 +1,15 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useQueries } from '@tanstack/react-query'
+import { useQueries, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useId, useState, type ReactNode } from 'react'
-import type { Api, components } from '@healdan/api'
-import { Icon, Tree, t, type IconName, type TreeNode } from '@healdan/ui'
-import { keys, useFavorites, useMyMatters, useRecentMatters } from '../queries'
+import { apiPath, type Api, type components } from '@healdan/api'
+import { Button, Icon, Menu, MenuItem, Tree, t, toast, type IconName, type TreeNode } from '@healdan/ui'
+import { idFrom, keys, useFavorites, useFolder, useMyMatters, useRecentMatters } from '../queries'
 import type { PageOf } from '../pages'
 import { useApi } from '../services'
-import { recentKinds } from '../views/RecentKind'
+import { recentKinds } from '../search/scopes'
 import { ErrorPanel } from './ErrorPanel'
 import { messageFor } from './errors'
 import styles from './LeftPane.module.css'
@@ -23,21 +23,26 @@ const recentIcons: Record<(typeof recentKinds)[number], IconName> = {
   clients: 'building',
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   const id = useId()
   return (
     <section aria-labelledby={id} className={styles.section}>
-      <h2 id={id} className={styles.heading}>
-        {title}
-      </h2>
+      <div className={styles.headingRow}>
+        <h2 id={id} className={styles.heading}>
+          {title}
+        </h2>
+        {action}
+      </div>
       {children}
     </section>
   )
 }
 
-// What a section shows when its list isn't ready, is empty or failed; undefined when the list is there to show.
-function stateOf(query: { isError: boolean; error: unknown; refetch: () => unknown }, empty: boolean): ReactNode {
+// What a section shows when its list isn't ready, is empty or failed; undefined when the list is there to show. While
+// it's on its way the section says so, rather than draw an empty list or tree.
+function stateOf(query: { isPending: boolean; isError: boolean; error: unknown; refetch: () => unknown }, empty: boolean): ReactNode {
   if (query.isError) return <ErrorPanel error={query.error} onRetry={() => void query.refetch()} />
+  if (query.isPending) return <p className={styles.none}>{t('common.loading')}</p>
   return empty ? <p className={styles.none}>{t('common.none')}</p> : undefined
 }
 
@@ -52,6 +57,26 @@ function MatterLabel({ matter }: { matter: S['MatterView'] }) {
 
 function currentFolder(pathname: string): string | undefined {
   return /^\/folders\/([^/]+)/.exec(pathname)?.[1]
+}
+
+/** The open folder, when the address is one's, so the pane can find its matter */
+function useCurrentFolder() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  return useFolder(idFrom(currentFolder(pathname))).data
+}
+
+/** A change to My Matters, then the list asked again; a refusal is said in a toast. */
+function useMyMattersChange() {
+  const api = useApi()
+  const queryClient = useQueryClient()
+  return async (method: 'PUT' | 'DELETE', folderId: number) => {
+    try {
+      await api.send(method, apiPath`/v1/me/matters/${folderId}`)
+      await queryClient.invalidateQueries({ queryKey: keys.myMatters })
+    } catch (error) {
+      toast(messageFor(error))
+    }
+  }
 }
 
 function RecentSection() {
@@ -136,7 +161,24 @@ function MyMattersSection() {
   const navigate = useNavigate()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const mine = useMyMatters()
+  const change = useMyMattersChange()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const matters = mine.data?.items ?? []
+
+  // The open folder's matter, from its path: the workspace's folder is what My Matters holds.
+  const here = useCurrentFolder()
+  const path = here?.path ?? []
+  const top = path.findIndex((step) => step.kind === 'matter')
+  const workspace = top >= 0 ? path[top]!.id : undefined
+  const kept = mine.isSuccess && matters.some((matter) => matter.folderId === workspace)
+
+  // The tree opens to the open folder: each folder above it, from its matter down, is expanded once it's known.
+  const trail = kept ? path.slice(top, -1).map((step) => String(step.id)) : []
+  const [opened, setOpened] = useState('')
+  if (trail.join('/') !== opened) {
+    setOpened(trail.join('/'))
+    if (trail.some((id) => !expanded.has(id))) setExpanded(new Set([...expanded, ...trail]))
+  }
 
   // A node's subfolders are asked for when it is first expanded; the answer stays for the cache's 30 seconds.
   const open = [...expanded]
@@ -169,7 +211,6 @@ function MyMattersSection() {
     }
   }
 
-  const matters = mine.data?.items ?? []
   const nodes: TreeNode[] = matters.map((matter) => {
     const id = String(matter.folderId)
     return {
@@ -185,11 +226,26 @@ function MyMattersSection() {
       ),
       expandable: true,
       children: expanded.has(id) ? childrenOf(id) : undefined,
+      menu: (
+        <Menu variant="quiet" label={<Icon name="dots" />} aria-label={t('tree.more', { name: matter.display })}>
+          <MenuItem id="remove" onAction={() => void change('DELETE', matter.folderId)}>
+            {t('myMatters.remove')}
+          </MenuItem>
+        </Menu>
+      ),
     }
   })
 
+  // + adds the open folder's matter, when it's in one that isn't in My Matters yet.
+  const add =
+    workspace !== undefined && mine.isSuccess && !kept ? (
+      <Button variant="quiet" aria-label={t('myMatters.add')} onPress={() => void change('PUT', workspace)}>
+        <Icon name="plus" size={14} />
+      </Button>
+    ) : undefined
+
   return (
-    <Section title={t('myMatters.title')}>
+    <Section title={t('myMatters.title')} action={add}>
       {stateOf(mine, mine.isSuccess && matters.length === 0) ?? (
         <Tree
           aria-label={t('myMatters.tree')}

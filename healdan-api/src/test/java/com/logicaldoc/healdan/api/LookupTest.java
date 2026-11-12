@@ -153,6 +153,36 @@ public class LookupTest extends ApiTestCase {
 		assertEquals("No document #" + number(hidden), response.json().path("detail").textValue());
 	}
 
+	/** A legacy shortcut is no document of its own: its doc # answers as one that doesn't exist (R43). */
+	@Test
+	public void testShortcutIsNotFound() throws Exception {
+		Document shortcut = fx.legacyShortcut(DocumentDAO.get().findById(doc.getId()), documents);
+		long n = Long.parseLong(shortcut.getCustomId());
+		ApiResponse missing = lookup("#999999");
+
+		for (String typed : new String[] { "#" + n, "#" + n + ".1" }) {
+			ApiResponse response = lookup(typed);
+			assertEquals(typed + " " + response, 404, response.status());
+			assertEquals("not-found", response.json().path("code").textValue());
+		}
+		ApiResponse bare = lookup("#" + n);
+		assertEquals("No document #" + n, bare.json().path("detail").textValue());
+		// Every refusal reads like a nonexistent document, a version that isn't there included
+		for (String typed : new String[] { "#" + n + ".1", "#" + n + ".9" })
+			assertEquals(typed, "No document #" + n, lookup(typed).json().path("detail").textValue());
+		assertEquals(missing.json().path("title"), bare.json().path("title"));
+		assertEquals(missing.json().path("type"), bare.json().path("type"));
+
+		ApiResponse direct = get("/api/v1/documents/" + n).token(signIn(clerk)).send();
+		assertEquals(direct.toString(), 404, direct.status());
+		assertEquals("No document #" + n, direct.json().path("detail").textValue());
+		assertEquals(missing.json().path("code"), direct.json().path("code"));
+
+		// The document it points to is still there
+		assertEquals(200, lookup("#" + number(doc)).status());
+		assertEquals(200, get("/api/v1/documents/" + number(doc)).token(signIn(clerk)).send().status());
+	}
+
 	@Test
 	public void testLegacyDocNumber() throws Exception {
 		Document first = file(documents, "a.docx", "ABC-1");

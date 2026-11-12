@@ -11,8 +11,12 @@ describe('focus style', () => {
   it('finds the components stylesheets', () => {
     expect(Object.keys(sheets).sort()).toEqual([
       './Button.module.css',
+      './Choices.module.css',
+      './ComboBox.module.css',
+      './DatePicker.module.css',
       './Dialog.module.css',
       './Menu.module.css',
+      './Table.module.css',
       './Toast.module.css',
       './Tree.module.css',
     ])
@@ -26,6 +30,11 @@ describe('focus style', () => {
         return
       }
       expect(rules.length).toBeGreaterThan(0)
+      if (file === './Table.module.css') {
+        // Rows touch, and an outline set off outside them would be cut off by the box they scroll in
+        for (const [, selector, body] of rules) expect(body, selector).toContain('box-shadow: var(--hd-focus-inset)')
+        return
+      }
       for (const [, selector, body] of rules) {
         expect(body, selector).toContain('outline: var(--hd-focus-outline)')
         expect(body, selector).toContain('outline-offset: var(--hd-focus-offset)')

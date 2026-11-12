@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest'
 import css from './tokens.css?raw'
+import buttonCss from './components/Button.module.css?raw'
 
 
 function block(source: string): Record<string, string> {
@@ -53,5 +54,22 @@ describe('tokens.css', () => {
     it.each(FOCUS_SURFACES)(`${scheme}: the focus edge shows on --hd-%s`, (bg) => {
       expect(contrast(tokens['--hd-focus-edge']!, tokens[`--hd-${bg}`]!)).toBeGreaterThanOrEqual(3)
     })
+
+    // The filled star keeps the helper's amber, which is too pale on light surfaces to show by itself: its edge does
+    // (WCAG 1.4.11's 3:1 for what shows a control's state).
+    it.each(PLAIN)(`${scheme}: the filled star's edge shows on --hd-%s`, (bg) => {
+      expect(contrast(tokens['--hd-star-edge']!, tokens[`--hd-${bg}`]!)).toBeGreaterThanOrEqual(3)
+    })
+
+    // A pressed button's face is pale, so its state shows by an edge too, 3:1 against the surface and the face
+    it(`${scheme}: a pressed button's edge shows on the window and on its face`, () => {
+      expect(contrast(tokens['--hd-pressed-edge']!, tokens['--hd-window']!)).toBeGreaterThanOrEqual(3)
+      expect(contrast(tokens['--hd-pressed-edge']!, tokens['--hd-pressed']!)).toBeGreaterThanOrEqual(3)
+      expect(contrast(tokens['--hd-text']!, tokens['--hd-pressed']!)).toBeGreaterThanOrEqual(4.5)
+    })
   }
+
+  it('gives only the plain and quiet buttons a pressed face, never the accent one', () => {
+    expect(buttonCss).toMatch(/\.button:not\(\.default\)\[aria-pressed='true'\]\s*\{(?=[^}]*var\(--hd-pressed\))(?=[^}]*var\(--hd-pressed-edge\))/)
+  })
 })

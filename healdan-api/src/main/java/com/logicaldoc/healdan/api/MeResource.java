@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.stereotype.Component;
@@ -26,13 +27,17 @@ import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.api.model.NewFavorite;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.UserView;
+import com.logicaldoc.healdan.listing.DocumentAuthors;
+import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.navigation.Favorites;
+import com.logicaldoc.healdan.navigation.MyMatters;
 import com.logicaldoc.healdan.security.AccessChecks;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
+import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
@@ -43,7 +48,8 @@ import jakarta.ws.rs.core.Response;
  * {@code GET /v1/me}: who the token signs in as (spec section 6.1), and
  * {@code GET /v1/me/checkouts}: the documents the caller has checked out
  * (section 6.4), and the caller's Favorites under {@code /v1/me/favorites}
- * (section 9.3).
+ * (section 9.3), and My Matters' adding and removing under
+ * {@code /v1/me/matters} (M6 spec section 9.1).
  */
 @Component
 @Path("/v1/me")
@@ -65,13 +71,18 @@ public class MeResource {
 		User caller = Caller.current().user();
 		try {
 			// The partial documents the DAO returns are only good for their ids
-			List<DocumentView> views = new ArrayList<>();
+			List<Document> documents = new ArrayList<>();
 			for (Document partial : DocumentDAO.get().findByLockUserAndStatus(caller.getId(),
 					DocumentStatus.CHECKEDOUT)) {
 				Document document = DocumentDAO.get().findById(partial.getId());
 				if (AccessChecks.readableDocument(document, caller).isPresent() && ApiViews.shows(document))
-					views.add(ApiViews.document(document, caller));
+					documents.add(document);
 			}
+			// The Authors in one query, not one a row
+			Map<Long, Author> authors = ApiViews.authors(documents);
+			List<DocumentView> views = new ArrayList<>();
+			for (Document document : documents)
+				views.add(ApiViews.document(document, caller, authors));
 			views.sort(Comparator.comparing(MeResource::since, Comparator.nullsLast(Comparator.reverseOrder()))
 					.thenComparing(Comparator.comparingLong(DocumentView::docNumber).reversed()));
 			return Page.whole(views);
@@ -95,9 +106,13 @@ public class MeResource {
 	public Page<FavoriteView> favorites() {
 		User caller = Caller.current().user();
 		try {
+			List<Bookmark> bookmarks = Favorites.get().list(caller.getId());
+			// The documents' Authors in one query, not one a favorite
+			Map<Long, Author> authors = DocumentAuthors.get().of(bookmarks.stream()
+					.filter(b -> b.getType() != Bookmark.Type.FOLDER).map(Bookmark::getTargetId).toList());
 			List<FavoriteView> views = new ArrayList<>();
-			for (Bookmark bookmark : Favorites.get().list(caller.getId())) {
-				FavoriteView view = view(bookmark, caller);
+			for (Bookmark bookmark : bookmarks) {
+				FavoriteView view = view(bookmark, caller, authors);
 				if (view != null)
 					views.add(view);
 			}
@@ -136,7 +151,9 @@ public class MeResource {
 				Document document = DocumentResource.readable(body.docNumber(), caller);
 				bookmark = Favorites.get().addDocument(caller.getId(), document.getId());
 			}
-			FavoriteView view = view(bookmark, caller);
+			FavoriteView view = view(bookmark, caller,
+					bookmark.getType() == Bookmark.Type.FOLDER ? Map.of()
+							: DocumentAuthors.get().of(List.of(bookmark.getTargetId())));
 			if (view == null)
 				throw new IllegalStateException("The new favorite can't be shown");
 			return Response.status(Response.Status.CREATED).entity(view).build();
@@ -168,8 +185,54 @@ public class MeResource {
 		}
 	}
 
-	/** @return the bookmark's view, or null if its target can't be read or isn't shown */
-	private static FavoriteView view(Bookmark bookmark, User caller) throws PersistenceException {
+	/**
+	 * Adds a matter to the caller's My Matters; one already there stays as it
+	 * is.
+	 *
+	 * @param folderId the matter's workspace folder
+	 * @return {@code 204}, or {@code 404} if the folder isn't a matter the
+	 *         caller can read
+	 */
+	@PUT
+	@Path("matters/{folderId: [0-9]+}")
+	public Response addMatter(@PathParam("folderId") long folderId) {
+		User caller = Caller.current().user();
+		try {
+			// A folder that is no matter, one the caller can't read and one that isn't there answer alike
+			Optional<Folder> folder = AccessChecks.readableFolder(folderId, caller);
+			Optional<FolderView> view = folder.isPresent() ? ApiViews.folder(folder.get(), caller) : Optional.empty();
+			if (view.isEmpty() || !"matter".equals(view.get().kind()))
+				throw ApiProblem.notFound("No matter " + folderId);
+			MyMatters.get().add(caller.getId(), folderId);
+			return Response.noContent().build();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't add the matter", e);
+		}
+	}
+
+	/**
+	 * Removes a matter from the caller's My Matters.
+	 *
+	 * @param folderId the matter's workspace folder
+	 * @return {@code 204}, also when it wasn't there
+	 */
+	@DELETE
+	@Path("matters/{folderId: [0-9]+}")
+	public Response removeMatter(@PathParam("folderId") long folderId) {
+		try {
+			MyMatters.get().remove(Caller.current().user().getId(), folderId);
+			return Response.noContent().build();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't remove the matter", e);
+		}
+	}
+
+	/**
+	 * @param authors the Authors of the favorites' documents, by id, read at once
+	 * @return the bookmark's view, or null if its target can't be read or isn't shown
+	 */
+	private static FavoriteView view(Bookmark bookmark, User caller, Map<Long, Author> authors)
+			throws PersistenceException {
 		if (bookmark.getType() == Bookmark.Type.FOLDER) {
 			Optional<Folder> folder = AccessChecks.readableFolder(bookmark.getTargetId(), caller);
 			if (folder.isEmpty())
@@ -181,7 +244,7 @@ public class MeResource {
 				caller);
 		if (document.isEmpty() || !ApiViews.shows(document.get()))
 			return null;
-		return new FavoriteView(bookmark.getId(), "document", ApiViews.document(document.get(), caller));
+		return new FavoriteView(bookmark.getId(), "document", ApiViews.document(document.get(), caller, authors));
 	}
 
 }

@@ -4,7 +4,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { expectNoAxeViolations } from './test/axe'
-import { problem } from './test/fakeApi'
+import { folder, problem } from './test/fakeApi'
 import { renderApp } from './test/renderApp'
 
 describe('the addresses', () => {
@@ -12,19 +12,27 @@ describe('the addresses', () => {
     ['/recent/emails', 'Recent Emails'],
     ['/recent/folders', 'Recent Folders'],
     ['/recent/clients', 'Recent Clients'],
-    ['/folders/110', 'Folder'],
-    ['/search?scope=documents&q=charter', 'Search'],
-    ['/doc/10388', 'Document'],
-    ['/doc/10388.2', 'Document'],
-  ])('%s shows a view that is coming', async (path, title) => {
+    ['/search?scope=documents&q=charter', '"charter"'],
+  ])('%s shows its view', async (path, title) => {
     await renderApp(path)
     expect(await screen.findByRole('heading', { level: 1, name: title })).toBeTruthy()
-    expect(screen.getByText('Coming soon.')).toBeTruthy()
   })
 
   it('reads an unknown Recent kind or address as not found', async () => {
     await renderApp('/recent/bogus')
     expect(await screen.findByText("Not found, or you can't see it.")).toBeTruthy()
+  })
+
+  it('/folders/110 shows the folder', async () => {
+    await renderApp('/folders/110', { 'GET /v1/folders/110': folder({ id: 110, name: '1001.1 – Charter Dispute', kind: 'matter' }) })
+    expect(await screen.findByRole('heading', { level: 1, name: '1001.1 – Charter Dispute' })).toBeTruthy()
+    expect(await within(screen.getByRole('main')).findByRole('grid')).toBeTruthy()
+  })
+
+  it.each(['/folders/abc', '/folders/1e3', '/folders/1234567890123456789', '/folders/9007199254740993'])('reads %s, which is no folder id, as not found without asking', async (path) => {
+    const { api } = await renderApp(path)
+    expect(within(screen.getByRole('main')).getByText("Not found, or you can't see it.")).toBeTruthy()
+    expect(api.callsTo('GET /v1/folders/*')).toEqual([])
   })
 
   it.each(['/zzz', '/folders/', '/recent', '/doc'])('keeps the frame around %s, which matches no route', async (path) => {
@@ -43,7 +51,7 @@ describe('the addresses', () => {
 
   it('passes axe on the start page, fully loaded', async () => {
     const { view } = await renderApp('/')
-    await screen.findByRole('list', { name: 'Recent Documents' })
+    await within(screen.getByRole('main')).findByRole('grid')
     await screen.findByRole('treegrid', { name: 'My Matters' })
     await screen.findByRole('button', { name: 'Priya Nair' })
     await expectNoAxeViolations(view.container)

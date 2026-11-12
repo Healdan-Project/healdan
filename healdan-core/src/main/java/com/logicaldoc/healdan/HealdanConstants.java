@@ -85,6 +85,9 @@ public final class HealdanConstants {
 
 	public static final int SEARCH_EMAILS_ONLY = 105;
 
+	/** The API's {@code all} scope: every file, as CE's full-text search, with Healdan's filters and window */
+	public static final int SEARCH_ALL_FILES = 106;
+
 	private HealdanConstants() {
 	}
 }

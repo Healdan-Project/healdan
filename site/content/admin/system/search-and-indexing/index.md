@@ -10,8 +10,9 @@ Settings → Search and Indexing**.
 
 ## How a Document Gets Indexed
 
-The [Indexer](../scheduled-tasks/) reads the text of new and changed documents into the index every 30 minutes, so
-a document's words can be searched for after its first run since the document was filed.
+The [Indexer](../scheduled-tasks/) reads the text of new and changed documents into the index every 30 minutes to
+begin with, so a document's words can be searched for after its first run since the document was filed.
+[Finding New Documents Sooner](../scheduled-tasks/#finding-new-documents-sooner) says how to run it more often.
 
 | Files | How their text is read |
 |---|---|

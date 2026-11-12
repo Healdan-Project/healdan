@@ -18,6 +18,7 @@ import java.util.Date;
  * @param reference the doc # and the file version, such as {@code 1234.2.1}
  * @param folder the folder the document is in
  * @param matter the matter the document is in, or null outside one
+ * @param author the document's Author, or null when it has none
  * @param dateFiled when the document was filed
  * @param lastModified when the document last changed
  * @param hold who has the document checked out or locked, or null if it's
@@ -27,6 +28,6 @@ import java.util.Date;
  *        its content and thumbnail ask
  */
 public record DocumentView(String type, long docNumber, String name, long size, String version, String fileVersion,
-		String reference, FolderRef folder, MatterRef matter, Date dateFiled, Date lastModified, HoldView hold,
-		boolean canEdit, boolean canOpen) {
+		String reference, FolderRef folder, MatterRef matter, AuthorRef author, Date dateFiled, Date lastModified,
+		HoldView hold, boolean canEdit, boolean canOpen) {
 }

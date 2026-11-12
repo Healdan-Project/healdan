@@ -29,8 +29,14 @@ describe('Button', () => {
     expect(onPress).not.toHaveBeenCalled()
   })
 
+  it('has a quiet face for an icon in a row, named by its label', () => {
+    render(<Button variant="quiet" aria-label="Add to Favorites">★</Button>)
+    const button = screen.getByRole('button', { name: 'Add to Favorites' })
+    expect(button.className).toContain('quiet')
+  })
+
   it('passes axe', async () => {
-    const { container } = render(<><Button>Cancel</Button><Button variant="default">Save</Button></>)
+    const { container } = render(<><Button>Cancel</Button><Button variant="default">Save</Button><Button variant="quiet" aria-label="More">⋯</Button></>)
     await expectNoAxeViolations(container)
   })
 })

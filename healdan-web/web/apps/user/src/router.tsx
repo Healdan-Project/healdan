@@ -2,22 +2,32 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { createRootRoute, createRoute, createRouter, type RouterHistory } from '@tanstack/react-router'
-import { t } from '@healdan/ui'
 import { Frame } from './frame/Frame'
+import { filterSearch, multiFilters, type Filters } from './filters/useFilters'
+import { idFrom } from './queries'
+import { DocResult } from './views/DocResult'
+import { FolderView } from './views/FolderView'
 import { NotFound } from './views/NotFound'
-import { NotYet } from './views/NotYet'
-import { RecentDocuments } from './views/RecentDocuments'
-import { RecentKindView } from './views/RecentKind'
+import { RecentView } from './views/RecentView'
+import { SearchView } from './views/SearchView'
+import { isSearchScope } from './search/scopes'
+import { isSortColumn, type ListingOrder, type SortColumn } from './views/useListing'
 
 // Addresses carry plain strings (?sel=10388, not ?sel="10388"), which the default JSON-aware search handling would quote.
-function parseSearch(search: string): Record<string, string> {
-  return Object.fromEntries(new URLSearchParams(search))
+// A filter can repeat (?type=pdf&type=word), so those come as lists; anything else repeated keeps its last value.
+function parseSearch(search: string): Record<string, string | string[]> {
+  const params = new URLSearchParams(search)
+  const parsed: Record<string, string | string[]> = Object.fromEntries(params)
+  for (const name of multiFilters) if (params.has(name)) parsed[name] = params.getAll(name)
+  return parsed
 }
 
 function stringifySearch(search: Record<string, unknown>): string {
   const params = new URLSearchParams()
   for (const [name, value] of Object.entries(search)) {
-    if (value !== undefined && value !== null && value !== '') params.set(name, String(value))
+    for (const one of Array.isArray(value) ? value : [value]) {
+      if (one !== undefined && one !== null && one !== '') params.append(name, String(one))
+    }
   }
   const text = params.toString()
   return text ? `?${text}` : ''
@@ -34,38 +44,64 @@ const rootRoute = createRootRoute({
   }),
 })
 
-const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: RecentDocuments })
+const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <RecentView kind="documents" /> })
 
 const recentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'recent/$kind',
   component: function RecentRoute() {
-    return <RecentKindView kind={recentRoute.useParams().kind} />
+    return <RecentView kind={recentRoute.useParams().kind} />
   },
 })
 
+// A folder keeps its sort in the address, as Back and a pasted link should show it the same way.
 const foldersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'folders/$id',
-  component: () => <NotYet title={t('notYet.folder')} />,
+  validateSearch: (search: Record<string, unknown>): { sort?: SortColumn; order?: ListingOrder } & Partial<Filters> => ({
+    sort: isSortColumn(search.sort) ? search.sort : undefined,
+    order: search.order === 'asc' || search.order === 'desc' ? search.order : undefined,
+    ...filterSearch(search),
+  }),
+  component: function FolderRoute() {
+    const { id } = foldersRoute.useParams()
+    const { sort, order } = foldersRoute.useSearch()
+    const folderId = idFrom(id)
+    if (folderId === undefined) return <NotFound />
+    // A view of its own for each folder, so nothing chosen in one is carried to the next
+    return <FolderView key={folderId} folderId={folderId} sort={sort} order={order} />
+  },
 })
 
 const searchRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'search',
-  validateSearch: (search: Record<string, unknown>): { scope?: string; q?: string; type?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { scope?: string; q?: string; sort?: SortColumn; order?: ListingOrder } & Partial<Filters> => ({
     scope: text(search.scope),
     q: text(search.q),
-    type: text(search.type),
+    sort: isSortColumn(search.sort) ? search.sort : undefined,
+    order: search.order === 'asc' || search.order === 'desc' ? search.order : undefined,
+    ...filterSearch(search),
   }),
-  component: () => <NotYet title={t('notYet.search')} />,
+  component: function SearchRoute() {
+    const { scope, q, sort, order } = searchRoute.useSearch()
+    // A scope the API doesn't know is the default, Documents, as an address without one is
+    const where = isSearchScope(scope) ? scope : 'documents'
+    // A view of its own for each search, so a selection made in one isn't carried to the next; filters and sorting
+    // change the same search and keep it.
+    return <SearchView key={`${where}\u0000${q ?? ''}`} scope={where} q={q} sort={sort} order={order} />
+  },
 })
 
 // /doc/10388 and /doc/10388.2: the # handle (§10.1).
 const docRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'doc/$ref',
-  component: () => <NotYet title={t('notYet.document')} />,
+  component: function DocRoute() {
+    // A view of its own for each address, so what one shows isn't carried to the next
+    const { ref } = docRoute.useParams()
+    return <DocResult key={ref} reference={ref} />
+  },
 })
 
 const routeTree = rootRoute.addChildren([indexRoute, recentRoute, foldersRoute, searchRoute, docRoute])
@@ -73,4 +109,11 @@ const routeTree = rootRoute.addChildren([indexRoute, recentRoute, foldersRoute, 
 // The app lives under /app, served by AppServlet. Only the root context is supported in M6.
 export function createAppRouter(history?: RouterHistory) {
   return createRouter({ routeTree, basepath: '/app', history, parseSearch, stringifySearch })
+}
+
+// Links, navigate() and the search hooks are typed from the routes above.
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: ReturnType<typeof createAppRouter>
+  }
 }

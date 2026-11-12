@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.api;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,7 @@ import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.api.model.AuthorRef;
 import com.logicaldoc.healdan.api.model.ClientRef;
 import com.logicaldoc.healdan.api.model.DeviceView;
 import com.logicaldoc.healdan.api.model.DocumentView;
@@ -38,6 +40,8 @@ import com.logicaldoc.healdan.api.model.MatterView;
 import com.logicaldoc.healdan.api.model.StoreRef;
 import com.logicaldoc.healdan.api.model.UserRef;
 import com.logicaldoc.healdan.api.model.UserView;
+import com.logicaldoc.healdan.listing.DocumentAuthors;
+import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.ClientDAO;
 import com.logicaldoc.healdan.matter.FolderPosition;
@@ -92,12 +96,25 @@ public final class ApiViews {
 	/**
 	 * @param d a document
 	 * @return whether the API shows it: it has a numeric doc # and is in a
-	 *         Store, like every folder the API shows. Elsewhere it answers like
-	 *         one that doesn't exist.
+	 *         Store, like every folder the API shows, and is no legacy shortcut
+	 *         (a row with {@code ld_docref}, whose own address is
+	 *         {@code 404}). Elsewhere it answers like one that doesn't exist.
 	 * @throws PersistenceException error at data layer
 	 */
 	public static boolean shows(Document d) throws PersistenceException {
-		return hasDocNumber(d) && MatterLocator.get().locate(d.getFolder().getId()).isUnderAStore();
+		return shows(d, MatterLocator.get().locate(d.getFolder().getId()));
+	}
+
+	/**
+	 * As {@link #shows(Document)}, for a caller that knows where the
+	 * document's folder sits, such as a search checking many hits
+	 *
+	 * @param d a document
+	 * @param folder where the document's folder sits
+	 * @return whether the API shows it
+	 */
+	static boolean shows(Document d, FolderPosition folder) {
+		return d.getDocRef() == null && hasDocNumber(d) && folder.isUnderAStore();
 	}
 
 	/**
@@ -109,8 +126,30 @@ public final class ApiViews {
 	 * @throws PersistenceException error at data layer
 	 */
 	public static DocumentView document(Document d, User caller) throws PersistenceException {
+		return document(d, caller, authors(List.of(d)));
+	}
+
+	/**
+	 * As {@link #document(Document, User)}, for a list that read its
+	 * documents' Authors at once ({@link #authors})
+	 *
+	 * @param d a document the caller may read
+	 * @param caller the signed-in user, with its groups
+	 * @param authors the Authors of the list's documents, by id
+	 * @return the document's view
+	 * @throws PersistenceException error at data layer
+	 */
+	static DocumentView document(Document d, User caller, Map<Long, Author> authors) throws PersistenceException {
 		FolderPosition position = MatterLocator.get().locate(d.getFolder().getId());
-		return document(d, caller, folderKind(position), matterOf(position));
+		return document(d, caller, folderKind(position), matterOf(position), authors);
+	}
+
+	/**
+	 * @param documents the documents of a list
+	 * @return their Authors, by id, read in one go
+	 */
+	static Map<Long, Author> authors(Collection<Document> documents) {
+		return DocumentAuthors.get().of(documents.stream().map(Document::getId).toList());
 	}
 
 	/**
@@ -118,11 +157,12 @@ public final class ApiViews {
 	 * @param caller the signed-in user, with its groups
 	 * @param folderKind the kind of the document's folder
 	 * @param matter the matter of the document's folder, or null
+	 * @param authors the Authors of the list's documents, by id
 	 * @return the document's view, for a listing that knows its folder
 	 * @throws PersistenceException error at data layer
 	 */
-	static DocumentView document(Document d, User caller, String folderKind, MatterRef matter)
-			throws PersistenceException {
+	static DocumentView document(Document d, User caller, String folderKind, MatterRef matter,
+			Map<Long, Author> authors) throws PersistenceException {
 		long folderId = d.getFolder().getId();
 		HoldView hold = hold(d, caller);
 		Caller current = Caller.current();
@@ -137,9 +177,11 @@ public final class ApiViews {
 		// As the content and the thumbnail decide
 		boolean canOpen = allowed.contains(Permission.DOWNLOAD) && unprotected;
 		long docNumber = Long.parseLong(d.getCustomId());
+		Author author = authors.get(d.getId());
 		return new DocumentView("document", docNumber, d.getFileName(), d.getFileSize(), d.getVersion(),
 				d.getFileVersion(), docNumber + "." + d.getFileVersion(),
-				new FolderRef(folderId, d.getFolder().getName(), folderKind), matter, d.getCreation(),
+				new FolderRef(folderId, d.getFolder().getName(), folderKind), matter,
+				author == null ? null : new AuthorRef(author.username(), author.displayName()), d.getCreation(),
 				d.getLastModified(), hold, canEdit, canOpen);
 	}
 

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { ApiError, type Api, type components } from '@healdan/api'
+import type { PageOf } from '../pages'
 
 type S = components['schemas']
 
@@ -51,6 +52,7 @@ export function document(over: Partial<S['DocumentView']> = {}): S['DocumentView
     reference: '10388',
     folder: { id: 111, name: 'Correspondence', kind: 'folder' },
     matter: { id: 11, display: '1001.1 – Charter Dispute', client: client() },
+    author: { username: 'jclarke', displayName: 'Jamie Clarke' },
     dateFiled: '2026-09-29T09:40:00Z',
     lastModified: '2026-09-29T09:40:00Z',
     hold: null,
@@ -60,12 +62,30 @@ export function document(over: Partial<S['DocumentView']> = {}): S['DocumentView
   }
 }
 
+/** One property of a document, as GET /documents/{n}/properties lists it. */
+export function field(over: Partial<S['ProfileField']> = {}): S['ProfileField'] {
+  return { name: 'docclass', label: 'Class', type: 'string', required: false, editable: false, value: null, source: null, inheritedFrom: null, options: null, ...over }
+}
+
+/** One row of GET /documents/{n}/versions. */
+export function versionRow(over: Partial<S['VersionView']> = {}): S['VersionView'] {
+  return { version: '1.0', fileVersion: '1.0', kind: 'version', date: '2026-09-29T09:40:00Z', by: { id: 3, name: 'Jamie Clarke' }, comment: null, event: 'event.stored', ...over }
+}
+
 export function favorite(item: S['FolderView'] | S['DocumentView'], id = 900): S['FavoriteView'] {
   return { id, type: item.type, item }
 }
 
 export function page<T>(items: T[]): { items: T[]; offset: number; limit: number; total: number } {
   return { items, offset: 0, limit: items.length, total: items.length }
+}
+
+type Child = S['FolderView'] | S['DocumentView']
+
+/** A folder's children as GET /folders/{id}/children answers: `documents` counts the documents among them. */
+export function children(items: Child[], over: { offset?: number; limit?: number; total?: number; documents?: number } = {}) {
+  const documents = items.filter((item) => item.type === 'document').length
+  return { items, offset: 0, limit: 100, total: items.length, documents, ...over } satisfies PageOf<Child> & { documents: number }
 }
 
 export const me: S['UserView'] = {
@@ -85,9 +105,11 @@ export interface Call {
   method: string
   path: string
   query?: Record<string, unknown>
+  /** The signal a get was given: a request nobody waits for any more has it aborted */
+  signal?: AbortSignal
 }
 
-type Handler = (request: { params: string[]; query?: Record<string, unknown>; body?: unknown }) => unknown
+type Handler = (request: { params: string[]; query?: Record<string, unknown>; body?: unknown; signal?: AbortSignal }) => unknown
 
 export type Routes = Record<string, unknown | Handler>
 
@@ -107,7 +129,10 @@ export function defaultRoutes(): Routes {
       favorite(document({ docNumber: 10500, name: 'Cap Table.xlsx' }), 901),
       favorite(folder({ id: 130, name: 'Due Diligence' }), 902),
     ]),
-    'GET /v1/folders/*/children': page([
+    'GET /v1/suggest': { matters: [], documents: [] },
+    'GET /v1/folders/recent': page([folder({ id: 111, name: 'Correspondence' })]),
+    'GET /v1/clients/recent': [{ number: 1001, name: 'Saltmarsh Shipping Ltd' }],
+    'GET /v1/folders/*/children': children([
       folder({ id: 111, name: 'Correspondence' }),
       folder({ id: 112, name: 'My Recent Docs Here', kind: 'searchFolder' }),
     ]),
@@ -134,14 +159,14 @@ export function fakeApi(over: Routes = {}, onSignedOut?: () => void): FakeApi {
   const routes = { ...defaultRoutes(), ...over }
   const calls: Call[] = []
 
-  async function answer<T>(method: string, path: string, query?: Record<string, unknown>, body?: unknown): Promise<T> {
-    calls.push({ method, path, query })
+  async function answer<T>(method: string, path: string, query?: Record<string, unknown>, body?: unknown, signal?: AbortSignal): Promise<T> {
+    calls.push({ method, path, query, signal })
     // The newest override wins, so a test's route comes before a default one it also matches.
     for (const key of Object.keys(routes).reverse()) {
       const match = matcher(key).exec(`${method} ${path}`)
       if (!match) continue
       const value = routes[key]
-      const result = typeof value === 'function' ? (value as Handler)({ params: match.slice(1), query, body }) : value
+      const result = typeof value === 'function' ? (value as Handler)({ params: match.slice(1), query, body, signal }) : value
       if (result instanceof ApiError && result.status === 401) onSignedOut?.()
       if (result instanceof Error) throw result
       return result as T
@@ -152,7 +177,7 @@ export function fakeApi(over: Routes = {}, onSignedOut?: () => void): FakeApi {
   return {
     calls,
     callsTo: (pattern) => calls.filter((c) => matcher(pattern).test(`${c.method} ${c.path}`)),
-    get: (path, query) => answer('GET', path, query),
+    get: (path, query, options) => answer('GET', path, query, undefined, options?.signal),
     send: (method, path, body) => answer(method, path, undefined, body),
     url: (path) => `/api${path}`,
   }

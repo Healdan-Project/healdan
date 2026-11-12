@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
+import { Menu, MenuItem } from './Menu'
 import { Tree, type TreeNode } from './Tree'
 
 const nodes: TreeNode[] = [
@@ -95,6 +96,36 @@ describe('Tree', () => {
     fireEvent.keyDown(first, { key: 'ArrowLeft' })
     expect(screen.queryByRole('row', { name: /Correspondence/ })).toBeNull()
     expect(tree).toBeTruthy()
+  })
+
+  it('puts a row\'s menu at its end, reached with Right once the row is open, and pressing it opens no row', async () => {
+    const onAction = vi.fn()
+    const onRemove = vi.fn()
+    function WithMenu() {
+      const [expanded, setExpanded] = useState<Set<string>>(new Set())
+      const withMenu: TreeNode[] = nodes.map((node) => ({
+        ...node,
+        menu: (
+          <Menu variant="quiet" label="⋯" aria-label={`More for ${node.textValue}`}>
+            <MenuItem id="remove" onAction={() => onRemove(node.id)}>
+              Remove
+            </MenuItem>
+          </Menu>
+        ),
+      }))
+      return <Tree aria-label="My Matters" nodes={withMenu} expanded={expanded} onExpandedChange={setExpanded} onAction={onAction} />
+    }
+    render(<WithMenu />)
+    const first = screen.getByRole('row', { name: /1001\.1/ })
+    act(() => first.focus())
+    fireEvent.keyDown(first, { key: 'ArrowRight' }) // opens it
+    fireEvent.keyDown(first, { key: 'ArrowRight' }) // then into the row
+    const more = screen.getByRole('button', { name: 'More for 1001.1 Charter Dispute' })
+    expect(document.activeElement).toBe(more)
+    fireEvent.click(more)
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Remove' }))
+    expect(onRemove).toHaveBeenCalledExactlyOnceWith('m1')
+    expect(onAction).not.toHaveBeenCalled()
   })
 
   it('shows Loading while an expanded node has no children yet', () => {

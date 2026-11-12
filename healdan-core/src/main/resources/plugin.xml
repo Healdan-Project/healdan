@@ -219,6 +219,12 @@
 		<parameter id="options" value="com.logicaldoc.core.searchengine.FulltextSearchOptions" />
 	</extension>
 
+	<extension plugin-id="logicaldoc-core" point-id="Search" id="healdanAllFilesSearch">
+		<parameter id="type" value="106" />
+		<parameter id="class" value="com.logicaldoc.healdan.search.AllFilesSearch" />
+		<parameter id="options" value="com.logicaldoc.core.searchengine.FulltextSearchOptions" />
+	</extension>
+
 	<!-- CE has no extractor for these formats; Healdan's Parser extensions add them (M1 spec §9) -->
 	<extension plugin-id="logicaldoc-core" point-id="Parser" id="healdanParserDocx">
 		<parameter id="extension" value="docx" />

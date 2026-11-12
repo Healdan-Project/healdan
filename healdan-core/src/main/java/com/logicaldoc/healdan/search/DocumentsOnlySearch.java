@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.search;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.apache.commons.lang3.StringUtils;
@@ -47,16 +48,26 @@ public class DocumentsOnlySearch extends ExtensionFilteredSearch {
 
 	private void addCommentsHits() throws PersistenceException {
 		int maxHits = options.getMaxHits();
-		if (StringUtils.isBlank(options.getExpression()) || (maxHits > 0 && hits.size() >= maxHits))
+		if (StringUtils.isBlank(options.getExpression()))
 			return;
+		if (maxHits > 0 && hits.size() >= maxHits) {
+			// The Comments weren't looked at, so there may be more, which a wider window would look at
+			setWindowFull();
+			return;
+		}
 		User user = UserDAO.get().findById(options.getUserId(), true);
 		if (user == null)
 			return;
 
 		Set<Long> seen = new HashSet<>();
 		hits.forEach(hit -> seen.add(hit.getId()));
-		for (Long id : CommentsMatch.documentIds(options.getExpression(), user.getTenantId(), COMMENTS_WINDOW,
-				options.getFolderId(), options.isSearchInSubPath())) {
+		List<Long> matches = CommentsMatch.documentIds(options.getExpression(), user.getTenantId(), COMMENTS_WINDOW,
+				options.getFolderId(), options.isSearchInSubPath());
+		// The Comments may match more than their window, whatever the search's: the total is a floor, but widening
+		// would find the same matches again
+		if (matches.size() >= COMMENTS_WINDOW)
+			setIncomplete();
+		for (Long id : matches) {
 			if (seen.contains(id))
 				continue;
 			Document document = AccessChecks.readableDocument(DocumentDAO.get().findById(id, true), user)
@@ -65,6 +76,7 @@ public class DocumentsOnlySearch extends ExtensionFilteredSearch {
 				continue;
 			if (maxHits > 0 && hits.size() >= maxHits) {
 				moreHitsPresent = true;
+				setWindowFull();
 				break;
 			}
 			// A new hit with the document's values, so that nothing done to the hit reaches the document
