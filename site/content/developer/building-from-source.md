@@ -16,6 +16,9 @@ builds it for you. This page is for working on the code.
   `https://repo.terracotta.org/maven2`. `docker/maven-settings.xml` lists them. CI and the Docker build copy it to
   `~/.m2/settings.xml`; copy it there for local builds.
 - **`~/logicaldoc-dev.properties`.** Spring-based tests fail in `setUp` without it. An empty file works.
+- **On x86-64, a processor with AVX2** (the x86-64-v3 level). `healdan-web`'s build runs Vite, whose bundler,
+  Rolldown, ships a native program that stops with `Illegal instruction` (exit code 132) without it.
+  `-Dhealdan.web.skip=true` skips that build, and a 64-bit Arm machine needs nothing more.
 
 ## Commands
 

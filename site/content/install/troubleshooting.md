@@ -11,6 +11,35 @@ docker compose logs app
 
 Healdan's own log is `repository/logs/dms.log`, in the repository volume.
 
+## The Build Stops with "Illegal Instruction"
+
+When `docker compose up -d --build` stops while building `healdan-web` with these lines, the processor lacks
+instructions the build needs:
+
+```text
+Illegal instruction (core dumped)
+npm error code 132
+```
+
+The User app is built with Vite, whose bundler, Rolldown, runs a native program that needs AVX2 (the x86-64-v3 level)
+on an x86-64 processor. Only the build needs it: the image Healdan runs from doesn't. The app that was running keeps
+running, as Compose replaces it only once a build has worked.
+
+To see whether the processor has AVX2, run this on the machine:
+
+```bash
+grep -q -w avx2 /proc/cpuinfo && echo "AVX2: yes" || echo "AVX2: no"
+```
+
+- **On a virtual machine,** the hypervisor decides which instructions the guest sees, and the default types offer
+  too few. In Proxmox, open the VM's **Hardware**, edit **Processors** and set **Type** to `host`, or to `x86-64-v3`
+  if you move VMs between hosts. Shut the VM down and start it again, then build again. Other hypervisors have a
+  setting like it, often called host passthrough.
+- **On a processor without AVX2,** such as Intel's before 2013 and some low-power chips, build the image on another
+  x86-64 machine that has it, with `docker build -t logicaldoc-community:local .` in a checkout of the same commit.
+  Copy it across with `docker save logicaldoc-community:local | ssh <server> docker load`, then start the stack on
+  the server with `docker compose up -d`, without `--build`, so Compose uses the image it has.
+
 ## Messages and What They Mean
 
 | Message | What it means |

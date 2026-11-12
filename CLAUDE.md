@@ -36,7 +36,7 @@ This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of Logi
 
 ## Build and test
 
-You need JDK 25 and Maven 3.9+. The JDK is the one the `Dockerfile`'s `MAVEN_IMAGE` and `TOMCAT_IMAGE` name; CI's `build` check reads it from there and fails if the two differ. `source.level` in `logicaldoc-parent/pom.xml` sets the Java language level, and the GWT client compiles at source level 17. Some dependencies aren't on Maven Central. They come from Healdan's copies at `https://maven.healdan.com/` and from `https://repo.terracotta.org/maven2`, which `docker/maven-settings.xml` lists. CI and the Docker build copy it to `~/.m2/settings.xml`; copy it there for local builds.
+You need JDK 25 and Maven 3.9+, and on x86-64 a processor with AVX2 (x86-64-v3): `healdan-web`'s build runs Vite 8, whose Rolldown binary dies with `Illegal instruction` (exit 132) without it, as it did on a Proxmox VM with QEMU's default processor type on 2026-11-12 (the Install manual's Troubleshooting has the fix; `-Dhealdan.web.skip=true` skips that build). The JDK is the one the `Dockerfile`'s `MAVEN_IMAGE` and `TOMCAT_IMAGE` name; CI's `build` check reads it from there and fails if the two differ. `source.level` in `logicaldoc-parent/pom.xml` sets the Java language level, and the GWT client compiles at source level 17. Some dependencies aren't on Maven Central. They come from Healdan's copies at `https://maven.healdan.com/` and from `https://repo.terracotta.org/maven2`, which `docker/maven-settings.xml` lists. CI and the Docker build copy it to `~/.m2/settings.xml`; copy it there for local builds.
 
 ```bash
 mvn -B -ntp -DskipTests install                          # full reactor build (what the Docker image runs)
