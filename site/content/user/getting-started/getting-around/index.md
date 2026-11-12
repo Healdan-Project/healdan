@@ -6,7 +6,7 @@ weight: 2
 Healdan's web page has a top bar across the top, a left pane down the left side and the main area beside it. The
 colours follow your browser's light or dark setting.
 
-![Healdan's web page in the Due Diligence folder of matter 1002.1 – Commercial Lease: the top bar with the Healdan name, the Documents search box, the ? button and the PN menu; the left pane with Recent, Recent Matters, My Matters opened to the matter's folders, and My Favorites; the folder's two documents, Service Charge Budget 2026–27.xlsx and Site Plan – Unit 4 Weir Lane.odg, with the second selected; and its details at the right, with the thumbnail of the plan, Open, Download, Edit, Copy Link and Check Out, its properties and its version](whole-window.png)
+![Healdan's web page in the Due Diligence folder of matter 1002.1 – Commercial Lease: the top bar with the Healdan name, the Documents search box, the ? button and the PN menu; the left pane with Recent, Recent Matters, My Matters opened to the matter's folders, and My Favorites; the folder's two documents, Service Charge Budget 2026–27.xlsx and Site Plan – Unit 4 Weir Lane.odg, with the second selected; and its details at the right, with the thumbnail of the plan, its name with the Favorites star beside it, Open, Download, Edit, Copy Link and Check Out, its properties and its version](whole-window.png)
 
 ## The Top Bar
 

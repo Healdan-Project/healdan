@@ -8,7 +8,7 @@ Clients are saved from their own window, without Save. Two tabs sit beside them:
 in through a provider, such as Microsoft Entra ID (see [Sign-In Providers](#sign-in-providers)), and **Storage**,
 which sets up where each Store keeps its files (see [The Storage Tab](#the-storage-tab)).
 
-![The Healdan settings panel, with the Sign-In tab beside it: matter labels, numbering, default Class, the Recent Matters window, the next doc #, the two device sign-in limits, API origins allowed (CORS), and the client list with Add client and Edit, holding seven clients from 998 Ashcombe Reeve LLP to 1006 Oliver and Grace Pemberton](healdan-settings.png)
+![The Healdan settings panel, with the Sign-In and Storage tabs beside it: matter labels, numbering, default Class, the Recent Matters window, the next doc #, Start In set to User App, the two device sign-in limits, API origins allowed (CORS), and the client list with Add client and Edit, holding seven clients from 998 Ashcombe Reeve LLP to 1006 Oliver and Grace Pemberton](healdan-settings.png)
 
 | Setting | What it does |
 |---|---|

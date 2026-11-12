@@ -40,7 +40,7 @@ takes its subject, and the form says so. While a form is open the page behind it
 it appears get a form of their own, which opens when the first closes. This is the same form as
 **Edit** in a document's details: see [Properties](../properties/).
 
-![The File Documents form for three files going into the Correspondence folder of matter 1002.1: a title field for each of Note of Call – Hale.docx, Letter to Cardew Hollis.docx and Lease Plan Notes.txt, then Client 1002 – Brightwell Bakeries Ltd, Matter 1002.1 – Commercial Lease, Author and Typist Priya Nair, Class Correspondence, Subclass Letter, Comments and Legacy doc #, and the File 3 Items and Cancel buttons](filing-form.png)
+![The File Documents form for three files going into the Correspondence folder of matter 1002.1: a title field for each of Note of Call – Hale.docx, Letter to Cardew Hollis.docx and Lease Plan Notes.txt, then Client 1002 – Brightwell Bakeries Ltd, Matter 1002.1 – Commercial Lease, Author and Typist as people to pick, each holding Priya Nair, Class Correspondence, Subclass Letter, Comments and Legacy doc #, and the File 3 Items and Cancel buttons](filing-form.png)
 
 ### The Tray
 
