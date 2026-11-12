@@ -11,9 +11,12 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 
 import org.apache.commons.io.FileUtils;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -57,6 +60,22 @@ public class FolderResourceTest extends ApiTestCase {
 	private Folder workspace;
 
 	private Folder documents;
+
+	private static TimeZone zone;
+
+	// The test context has Hibernate write dates in Europe/Rome, and the listing's "today" is the JVM's zone, as in
+	// production, where the two are the same. With any other zone the two disagree on the day for some hours of it, so
+	// the class runs in Rome's, whatever the machine's.
+	@BeforeClass
+	public static void inRome() {
+		zone = TimeZone.getDefault();
+		TimeZone.setDefault(TimeZone.getTimeZone("Europe/Rome"));
+	}
+
+	@AfterClass
+	public static void backToTheMachinesZone() {
+		TimeZone.setDefault(zone);
+	}
 
 	@Before
 	public void createLayout() throws Exception {
