@@ -45,7 +45,14 @@ export interface TableColumn<T extends TableRow> {
   align?: 'start' | 'end'
   /** A share of the width left (`'3fr'`) or pixels */
   width?: number | `${number}fr`
+  /** The least width in pixels, which the other columns give way for */
+  minWidth?: number
   cell: (row: T) => ReactNode
+}
+
+/** A cell that is only text goes in a box of its own: a flex cell clips its text with no ellipsis, a box with `text-overflow` doesn't. The whole text stays in it. */
+function textual(content: ReactNode): ReactNode {
+  return typeof content === 'string' || typeof content === 'number' ? <span className={styles.text}>{content}</span> : content
 }
 
 export interface TableSort {
@@ -228,6 +235,7 @@ export function Table<T extends TableRow>({
                 isRowHeader={column.isRowHeader}
                 allowsSorting={column.allowsSorting && onSort !== undefined}
                 width={column.width}
+                minWidth={column.minWidth}
                 textValue={column.name}
                 className={`${styles.column} ${column.align === 'end' ? styles.end : ''}`}
               >
@@ -244,7 +252,7 @@ export function Table<T extends TableRow>({
             <Collection items={rows} dependencies={[columns]}>
               {(row) => (
                 <Row ref={draggable(row)} id={row.id} textValue={row.textValue} columns={columns} dependencies={[columns]} className={styles.row} data-row-key={row.id} data-flash={row.flash || undefined} data-dropping={row.dropping || undefined}>
-                  {(column) => <Cell className={`${styles.cell} ${column.align === 'end' ? styles.end : ''}`}>{column.cell(row)}</Cell>}
+                  {(column) => <Cell className={`${styles.cell} ${column.align === 'end' ? styles.end : ''}`}>{textual(column.cell(row))}</Cell>}
                 </Row>
               )}
             </Collection>

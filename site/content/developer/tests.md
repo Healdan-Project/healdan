@@ -272,19 +272,21 @@ code is laid out.
     Cloud would write through Garage after step 8 has checked its read cache. A step that can't be done by keys is a bug in the
     app.
   - `a11y.spec.ts` runs axe on each main view in the light theme and again in the dark one (a browser context with
-    Playwright's `colorScheme`, signed in once per theme): Recent's four lists, a matter, a folder with details and the
-    properties form, Filters (with one in use, and while the counts are held open with `page.route`, since busy states keep
-    AA contrast and the last answer's counts must stay, never zeros), the list while it is asked for again, the filing tray and the File Documents form, the rename field, the
-    delete question, the Help menu, search results for a word with their Filters, a document's page, Quick Look on a PDF and
-    on an email, the reading pane, New Folder, More and Move To… (a matter's client starts clear of it), the person menu, Signed-in Devices (whole in its dialog, with
-    no sideways scroll, every Revoke inside it and a name of at most two lines at 1280, and again at 768) with the Revoke question
-    and its refusal (and a real revoke, whose focus must stay in the dialog), at 768 × 1024 the folded top bar with the left
-    pane, the empty region and the details opened over the list, and last the signed-out screen (the session is ended with
-    `DELETE /api/v1/session` from the page). Colour contrast is checked here, as jsdom can't. axe-core is the workspace's own
-    development dependency: `e2e/axe.ts` reads its file from `node_modules` and runs it with `page.evaluate`, which the
-    browser's debugging protocol does and the page's Content-Security-Policy doesn't govern, so the policy stays as the app
-    ships it. No spec turns it off: `addScriptTag` with the source in it would be blocked by `script-src 'self'`, and
-    `bypassCSP` would test a page the app never serves.
+    Playwright's `colorScheme`, signed in once per theme): Recent's four lists, a matter, a folder with details (its
+    toolbar buttons all one height) and the properties form, Filters (with one in use, and while the counts are held open
+    with `page.route`, since busy states keep AA contrast and the last answer's counts must stay, never zeros), the list
+    while it is asked for again, the filing tray and the File Documents form, the rename field, the delete question, the
+    Help menu, search results for a word with their Filters (Title keeps 200 pixels, and text that doesn't fit ends in an
+    ellipsis), a document's page, Quick Look on a PDF and on an email, the reading pane, New Folder, More and Move To… (a
+    matter's client starts clear of it, drawn smaller), the person menu, Signed-in Devices (whole in its dialog, with no
+    sideways scroll, every Revoke inside it and a name of at most two lines at 1280, and again at 768) with the Revoke
+    question and its refusal (and a real revoke, whose focus must stay in the dialog), at 768 × 1024 the folded top bar
+    with the left pane, the empty region and the details opened over the list, and last the signed-out screen (the session
+    is ended with `DELETE /api/v1/session` from the page). Colour contrast is checked here, as jsdom can't. axe-core is
+    the workspace's own development dependency: `e2e/axe.ts` reads its file from `node_modules` and runs it with
+    `page.evaluate`, which the browser's debugging protocol does and the page's Content-Security-Policy doesn't govern, so
+    the policy stays as the app ships it. No spec turns it off: `addScriptTag` with the source in it would be blocked by
+    `script-src 'self'`, and `bypassCSP` would test a page the app never serves.
   - It runs in `docker/smoke-test.sh` as step 9, on amd64 and arm64. On a Mac, Docker Desktop doesn't reach the
     host's ports from the default `--network host`: set `WEB_NETWORK=bridge`. The browser then still opens
     `http://127.0.0.1:<port>`, which a small proxy in its container forwards to `host.docker.internal`, because the web

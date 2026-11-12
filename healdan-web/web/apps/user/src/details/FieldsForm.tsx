@@ -10,8 +10,9 @@ import styles from './details.module.css'
 type S = components['schemas']
 type Field = S['ProfileField']
 
-// Client and Matter come from the matter, and the email fields from the message: never edited here, whatever `editable` says
-const NEVER = new Set(['client', 'matter', 'emailfrom', 'emailto', 'emailcc', 'emailsubject', 'emailsent', 'emailreceived'])
+// Client and Matter come from the matter, and the email fields from the message: never edited here, whatever `editable` says.
+// The Message-ID is the server's alone (it is read from the message and indexed), so no form shows it, as the read view doesn't
+const NEVER = new Set(['client', 'matter', 'emailmessageid', 'emailfrom', 'emailto', 'emailcc', 'emailsubject', 'emailsent', 'emailreceived'])
 const FORM_TYPES = new Set<Field['type']>(['string', 'integer', 'decimal', 'date', 'boolean'])
 
 export const isEditable = (field: Field) => field.editable && !NEVER.has(field.name) && FORM_TYPES.has(field.type)
@@ -142,6 +143,7 @@ export function FieldsForm({ fields, matter, submitLabel, children, onSubmit, on
     <form className={styles.form} onSubmit={(event) => void submit(event)} noValidate>
       {children}
       {fields.map((field) => {
+        if (field.name === 'emailmessageid') return null
         if (field.name === 'client') return <dl key="client" className={styles.formReadOnly}>{readOnly(field, matter ? `${matter.client.number} – ${matter.client.name}` : textOf(byName.get('client')))}</dl>
         if (field.name === 'matter') return <dl key="matter" className={styles.formReadOnly}>{readOnly(field, matter ? matter.display : textOf(byName.get('matter')))}</dl>
         if (!isEditable(field)) {

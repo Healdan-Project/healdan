@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ApiError, type components } from '@healdan/api'
@@ -102,6 +102,17 @@ describe('Editing properties', () => {
     expect(within(panel).queryByRole('textbox', { name: /Matter/ })).toBeNull()
     expect(within(panel).getByText('Client').nextElementSibling?.textContent).toBe('1001 – Saltmarsh Shipping Ltd')
     expect(within(panel).getByText('Matter').nextElementSibling?.textContent).toBe('1001.1 – Charter Dispute')
+  })
+
+  it('leaves the Message-ID out of the form, for an email and for a document that is none', async () => {
+    const withId = (value: string | null) => [...profile(), field({ name: 'emailmessageid', label: 'Message-ID', type: 'string', editable: true, value, source: 'local' })]
+    for (const value of [null, 'abc123@mail.example']) {
+      await renderApp('/folders/7?sel=10388', routes(withId(value)))
+      const panel = await edit()
+      expect(within(panel).queryByText('Message-ID')).toBeNull()
+      expect(within(panel).queryByRole('textbox', { name: /Message-ID/ })).toBeNull()
+      cleanup()
+    }
   })
 
   it('has Edit disabled when the API says none of the properties may be changed', async () => {

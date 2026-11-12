@@ -66,7 +66,10 @@ function MatterChoices({ matters, onChoose }: { matters: S['MatterView'][]; onCh
     <ul className={styles.list}>
       {matters.map((matter) => (
         <Choice key={matter.id} onPress={() => onChoose(matter.folderId)}>
-          <Icon name="briefcase" /> {matter.display} <span className={styles.client}>{matter.client.name}</span>
+          <Icon name="briefcase" />
+          <span className={styles.matter}>
+            {matter.display} <span className={styles.client} data-client>{matter.client.name}</span>
+          </span>
         </Choice>
       ))}
     </ul>
@@ -105,7 +108,10 @@ function Matters({ onChoose }: { onChoose: (folderId: number) => void }) {
           <ul className={styles.list} aria-label={t('matters.title')}>
             {found?.matters.map((matter) => (
               <Choice key={matter.id} onPress={() => void open(matter.id)}>
-                <Icon name="briefcase" /> {matter.client.number}.{matter.number} – {matter.name} <span className={styles.client}>{matter.client.name}</span>
+                <Icon name="briefcase" />
+                <span className={styles.matter}>
+                  {matter.client.number}.{matter.number} – {matter.name} <span className={styles.client} data-client>{matter.client.name}</span>
+                </span>
               </Choice>
             ))}
           </ul>

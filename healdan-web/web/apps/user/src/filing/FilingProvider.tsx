@@ -50,6 +50,7 @@ interface PendingForm {
   files: File[]
   place: Place
   fields: S['ProfileField'][]
+  matter?: S['DocumentView']['matter']
 }
 
 interface PendingVersion {
@@ -114,7 +115,13 @@ export function FilingProvider({ children }: { children: ReactNode }) {
         queryFn: () => api.get<PageOf<S['ProfileField']>>(apiPath`/v1/folders/${place.id}/form`),
         staleTime: 0,
       })
-      if (alt || missingRequired(answer.items).length > 0) setForms((now) => [...now, { files, place, fields: answer.items }])
+      if (alt || missingRequired(answer.items).length > 0) {
+        // The form shows the matter as the properties form does; the folder is almost always cached, and its absence isn't a reason not to file
+        const where = await queryClient
+          .fetchQuery({ queryKey: keys.folder(place.id), queryFn: () => api.get<S['FolderView']>(apiPath`/v1/folders/${place.id}`), staleTime: 60_000 })
+          .catch(() => undefined)
+        setForms((now) => [...now, { files, place, fields: answer.items, matter: where?.matter ?? undefined }])
+      }
       else uploads.enqueue(named(files), place.id, undefined, { folderName: place.name, labels: labelsOf(answer.items) })
     } catch (error) {
       toast(messageFor(error))
@@ -158,6 +165,7 @@ export function FilingProvider({ children }: { children: ReactNode }) {
           key={forms.length + form.files.map((file) => file.name).join('/')}
           files={form.files}
           fields={form.fields}
+          matter={form.matter}
           onFile={(files, properties) => {
             uploads.enqueue(files, form.place.id, properties, { folderName: form.place.name, labels: labelsOf(form.fields) })
             setForms((now) => now.slice(1))

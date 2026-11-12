@@ -177,6 +177,31 @@ describe('SearchView', () => {
     expect(within(main()).getByRole('group', { name: 'Filters in Use' })).toBeTruthy()
   })
 
+  it("keeps the last answer's groups and counts on screen, dimmed, while a recount is held, never zeros", async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    await renderApp(
+      '/search?scope=documents&q=charter',
+      routes({
+        'GET /v1/search': async ({ query }: { query?: Record<string, unknown> }) => {
+          // The recount for the ticked type is held; the list and the first count answer at once
+          if (query?.facets && query?.type) await gate
+          return { ...hits(found), ...(query?.facets ? { facets } : {}) }
+        },
+      }),
+    )
+    await rows()
+    await userEvent.click(funnel())
+    const region = await screen.findByRole('region', { name: 'Filters' })
+    await userEvent.click(await within(region).findByRole('checkbox', { name: 'Word, 1' }))
+    await waitFor(() => expect(region.querySelector('[aria-busy="true"]')).toBeTruthy())
+    for (const group of ['File Type', 'Author', 'Class', 'Client', 'Matter']) expect(within(region).getByRole('group', { name: group })).toBeTruthy()
+    expect(within(region).getByRole('checkbox', { name: 'Word, 1' })).toBeTruthy()
+    expect([...region.querySelectorAll('[data-count]')].map((one) => one.textContent)).not.toContain('0')
+    release()
+    await waitFor(() => expect(region.querySelector('[aria-busy="true"]')).toBeNull())
+  })
+
   it('says when the counts come from the most relevant matches only, and offers a ticked value without a made-up count', async () => {
     await renderApp(
       '/search?scope=documents&q=charter&type=excel',

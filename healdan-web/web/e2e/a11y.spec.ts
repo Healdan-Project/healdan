@@ -5,31 +5,34 @@ import { expect, test, type APIRequestContext, type BrowserContext, type Locator
 import { expectNoViolations } from './axe'
 import { PASSWORD, USERNAME, authorized, call, deviceToken, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
 
-// An axe pass on each main view of the User app (M6 spec sections 5 and 15.1), in the light theme and in the dark one, which
-// Playwright's `colorScheme` switches as the system's setting would. A real browser draws the page, so this is where colour
-// contrast is checked (the Vitest checks run in jsdom, which has no colours). The documents are this run's own, in a folder
-// of its own inside E2E, a folder of matter 1.1's Documents folder (which the smoke fixture makes) that the specs which make
-// folders share.
 // Signed-in Devices fits its dialog: nothing scrolls sideways, every Revoke is inside the dialog, and at 1280 a device's name
 // takes no more than two lines (the dialog is as wide as its table needs; at 768 a name may wrap between words further)
 async function expectDevicesFit(dialog: Locator, width: number) {
   const fit = await dialog.evaluate((box) => {
     const edge = box.getBoundingClientRect()
     const area = box.querySelector('table')!.parentElement!
-    const cell = box.querySelector('tbody th')!
+    const range = document.createRange()
+    range.selectNodeContents(box.querySelector('tbody th')!)
     return {
       sideways: area.scrollWidth > area.clientWidth,
       outside: [...box.querySelectorAll('[data-revoke]')].filter((one) => {
         const at = one.getBoundingClientRect()
         return at.left < edge.left || at.right > edge.right
       }).length,
-      lines: cell.getBoundingClientRect().height / parseFloat(getComputedStyle(cell).lineHeight),
+      // The name's own line boxes, not the cell's height, which holds padding, a border and the row the Revoke button sets
+      lines: new Set([...range.getClientRects()].map((one) => Math.round(one.top))).size,
     }
   })
   expect(fit.sideways, `the table scrolls sideways at ${width}`).toBe(false)
   expect(fit.outside, `Revoke buttons outside the dialog at ${width}`).toBe(0)
-  if (width >= 1280) expect(fit.lines, 'a name takes at most two lines').toBeLessThanOrEqual(2.5)
+  if (width >= 1280) expect(fit.lines, 'a name takes at most two lines').toBeLessThanOrEqual(2)
 }
+
+// An axe pass on each main view of the User app (M6 spec sections 5 and 15.1), in the light theme and in the dark one, which
+// Playwright's `colorScheme` switches as the system's setting would. A real browser draws the page, so this is where colour
+// contrast is checked (the Vitest checks run in jsdom, which has no colours). The documents are this run's own, in a folder
+// of its own inside E2E, a folder of matter 1.1's Documents folder (which the smoke fixture makes) that the specs which make
+// folders share.
 
 const RUN = `a11y${Date.now().toString(36)}`
 const PDF = `Accessible ${RUN}.pdf`
@@ -142,6 +145,9 @@ for (const scheme of ['light', 'dark'] as const) {
       await row.getByRole('rowheader').click()
       await expect(page.getByRole('region', { name: 'Details' }).getByRole('heading', { name: TEXT })).toBeVisible()
       await check('the details')
+      // Every toolbar button is one height: a label never wraps, and a bar too narrow for its buttons wraps them whole
+      const heights = await page.getByRole('toolbar').first().getByRole('button').evaluateAll((buttons) => buttons.map((one) => Math.round(one.getBoundingClientRect().height)))
+      expect(new Set(heights).size, `toolbar buttons' heights ${heights.join(', ')}`).toBe(1)
       // The form that edits the properties
       await page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Edit' }).click()
       await expect(page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Save' })).toBeVisible()
@@ -240,6 +246,16 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.getByRole('region', { name: 'Filters' })).toBeVisible()
       await expect(page.getByRole('region', { name: 'Filters' }).locator('[aria-busy="true"]')).toHaveCount(0)
       await check('document search Filters')
+      // With Filters open the list is narrow: Title keeps the room it needs, and any text that doesn't fit ends in an ellipsis
+      const cells = await main().getByRole('row').nth(1).evaluate((row) => {
+        const holders = [...row.querySelectorAll('[role="gridcell"], [role="rowheader"]')].map((cell) => {
+          const own = [...cell.querySelectorAll('*')].reverse().find((one) => [...one.childNodes].some((node) => node.nodeType === 3 && node.textContent!.trim())) ?? cell
+          return { clipped: own.scrollWidth > own.clientWidth + 1 || cell.scrollWidth > cell.clientWidth + 1, ellipsis: getComputedStyle(own).textOverflow === 'ellipsis' && getComputedStyle(own).display !== 'flex', title: cell.getAttribute('role') === 'rowheader' ? cell.getBoundingClientRect().width : 0 }
+        })
+        return { unclipped: holders.filter((one) => one.clipped && !one.ellipsis).length, title: Math.max(...holders.map((one) => one.title)) }
+      })
+      expect(cells.unclipped, 'cells whose text is cut with no ellipsis').toBe(0)
+      expect(cells.title, "the Title column's width").toBeGreaterThanOrEqual(200)
     })
 
     test('search results, in the Matters scope', async () => {
@@ -291,7 +307,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.getByRole('dialog', { name: 'Move 1 Document' })).toBeVisible()
       await check('the Move To… picker')
       // The matter, then its client, with room between them: a button is a flex box, which drops the space of its text
-      const apart = await page.getByRole('dialog', { name: 'Move 1 Document' }).locator('[class*="client"]').first().evaluate((client) => {
+      const apart = await page.getByRole('dialog', { name: 'Move 1 Document' }).locator('[data-client]').first().evaluate((client) => {
         // The text before it is the matter's: the one just ahead that isn't only the space a flex box drops
         let text = client.previousSibling
         while (text && !(text.textContent ?? '').trim()) text = text.previousSibling

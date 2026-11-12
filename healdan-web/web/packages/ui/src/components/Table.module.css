@@ -136,6 +136,13 @@
   outline: none;
 }
 
+.text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .cell svg {
   flex: none;
   color: var(--hd-text-secondary);

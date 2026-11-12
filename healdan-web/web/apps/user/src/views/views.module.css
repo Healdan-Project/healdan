@@ -144,6 +144,7 @@
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--hd-space-2);
   min-height: 28px;
@@ -171,6 +172,10 @@
 
 /* A hit's matter: the number, then the client, muted. Selected rows keep the text colour, as secondary text fails AA there. */
 .matterCell {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

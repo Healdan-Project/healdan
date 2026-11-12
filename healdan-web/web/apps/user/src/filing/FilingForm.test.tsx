@@ -11,6 +11,21 @@ import * as t from './testing'
 const { emptyForm, file, data, dropWithOption, routes, grid, tray } = t
 
 describe('The form that comes first', () => {
+  it("shows Client and Matter as the Edit form does, from the folder's matter, and no Message-ID", async () => {
+    const form = page([
+      ...emptyForm.items,
+      field({ name: 'matter', label: 'Matter', value: '1' }),
+      field({ name: 'emailmessageid', label: 'Message-ID', editable: true, value: null }),
+    ])
+    const { all } = routes({}, { form })
+    await renderApp('/folders/7', all)
+    fireEvent.drop(await grid(), { dataTransfer: data([file('Lease.docx')]) })
+    const dialog = await screen.findByRole('dialog', { name: 'File Documents' })
+    expect(within(dialog).getByText('Client').nextElementSibling?.textContent).toBe('1001 – Saltmarsh Shipping Ltd')
+    expect(within(dialog).getByText('Matter').nextElementSibling?.textContent).toBe('1001.1 – Charter Dispute')
+    expect(within(dialog).queryByText('Message-ID')).toBeNull()
+  })
+
   it('shows the form first when a required field has no default, with the files\' titles and one form, and its button counts the files', async () => {
     const { all, sent } = routes({}, { form: emptyForm })
     await renderApp('/folders/7', all)

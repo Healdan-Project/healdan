@@ -3,6 +3,8 @@
 
 .button {
   min-height: 26px;
+  /* A label never wraps: a narrow bar wraps its buttons whole instead */
+  white-space: nowrap;
   padding: 0 var(--hd-space-4);
   border: 1px solid var(--hd-button-secondary-line);
   border-radius: var(--hd-radius);

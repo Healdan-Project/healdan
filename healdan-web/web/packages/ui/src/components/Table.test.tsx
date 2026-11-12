@@ -304,4 +304,13 @@ describe('Table highlights', () => {
     expect(fireEvent.dragStart(screen.getByRole('textbox', { name: 'Name' }), { dataTransfer: data })).toBe(true)
     expect(data.setData).not.toHaveBeenCalled()
   })
+
+  it('puts a text cell in a box that ends in an ellipsis, with the whole text still in it', () => {
+    render(<Harness rows={[{ id: 'd1', textValue: 'A long name', name: 'A very long name that will not fit in its cell' }]} />)
+    const text = screen.getByText('A very long name that will not fit in its cell')
+    // Not the cell itself (a flex box, which clips its text with no ellipsis), but a box of its own
+    expect(text.closest('[role="rowheader"], [role="gridcell"]')).not.toBe(text)
+    expect(text.className).toMatch(/text/)
+    expect(tableCss).toMatch(/\.text \{[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap/)
+  })
 })

@@ -84,7 +84,8 @@ export function hitColumns(scope: SearchScope): TableColumn<ListRow>[] {
     ]
   }
   if (scope === 'folders') return [title, matterColumn()]
-  return [title, docNumber, version, matterColumn(), author, edited]
+  // Title first: the others are narrower here than in a folder, and each ends in an ellipsis when it doesn't fit
+  return [{ ...title, minWidth: 220 }, { ...docNumber, width: 80 }, { ...version, width: 70 }, { ...matterColumn(), width: 130 }, author, { ...edited, width: 116 }]
 }
 
 /** What a list keeps while the reading pane is open and the list is narrow (spec section 6.4): Title, Doc # and Edit Date. */

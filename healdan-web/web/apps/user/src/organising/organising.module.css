@@ -40,20 +40,25 @@
   overflow: auto;
 }
 
-.choice {
-  width: 100%;
-  justify-content: flex-start;
-  text-align: start;
-}
-
+/* The client, smaller and paler after the matter, as in the left pane (LeftPane.module.css) */
 .client {
+  margin-inline-start: var(--hd-space-1);
   color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
 }
 
-/* The buttons are flex boxes, which drop the space between the icon, the name and the client: a gap puts one back */
+/* The buttons are flex boxes, which drop the space between the icon and the name: a gap puts one back. The matter and its client
+   are one text, so the space between them is the text's own. */
 .list button {
   gap: var(--hd-space-2);
   text-align: start;
+}
+
+.matter {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .note {

@@ -35,17 +35,15 @@ describe('The Move To… picker', () => {
     expect(api.callsTo('GET /v1/folders/2')).toHaveLength(0)
   })
 
-  it("names each matter and its client apart, as the left pane's rows do", async () => {
+  it("names each matter and its client apart, in the exact form the left pane's rows are named", async () => {
     const { all } = routes()
     await renderApp('/folders/7', all)
     await select(/Lease/)
     const dialog = await openPicker()
     const recent = await within(dialog).findByRole('region', { name: 'Recent Matters' })
-    const option = within(recent).getByRole('button', { name: /1002\.1 – Commercial Lease/ })
-    // A space between the matter and its client in the name, and a box of its own for the client to sit apart in
-    expect(option.textContent).toMatch(/1002\.1 – Commercial Lease\s+\S/)
-    expect(option.querySelector('span')?.textContent).toBeTruthy()
-    expect(option.querySelector('span')?.previousSibling?.textContent).toMatch(/\s$/)
+    // The matter, a space, then its client: one name, which a screen reader reads as it is drawn
+    expect(within(recent).getByRole('button', { name: '1002.1 – Commercial Lease Brightwell' })).toBeTruthy()
+    expect(within(recent).getByRole('button', { name: '1002.1 – Commercial Lease Brightwell' }).querySelector('[data-client]')?.textContent).toBe('Brightwell')
   })
 
   it('leaves the focus on the list once the documents are moved, on the row that follows them, not on the page', async () => {

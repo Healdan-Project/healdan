@@ -18,6 +18,8 @@ export interface FilingFormProps {
   files: File[]
   /** The folder's form: the properties a new document filed into it would have */
   fields: S['ProfileField'][]
+  /** The matter of the folder they go into, which Client and Matter show as the properties form of a document does */
+  matter?: S['DocumentView']['matter']
   onFile: (files: FilingFile[], properties?: Record<string, S['PropertyValue']>) => void
   onCancel: () => void
 }
@@ -27,7 +29,7 @@ export interface FilingFormProps {
  * title each, and one form of properties for them all, which is the properties form of a document (`FieldsForm`)
  * made from the folder's. Its button says how many it will file.
  */
-export function FilingForm({ files, fields, onFile, onCancel }: FilingFormProps) {
+export function FilingForm({ files, fields, matter, onFile, onCancel }: FilingFormProps) {
   const [titles, setTitles] = useState(() => named(files).map((one) => one.name))
   const [errors, setErrors] = useState<Set<number>>(() => new Set())
 
@@ -47,7 +49,7 @@ export function FilingForm({ files, fields, onFile, onCancel }: FilingFormProps)
 
   return (
     <Dialog title={t('filing.formTitle')} isOpen onOpenChange={(open) => !open && onCancel()}>
-      <FieldsForm fields={fields} submitLabel={plural('filingButton', files.length)} onSubmit={submit} onCancel={onCancel}>
+      <FieldsForm fields={fields} matter={matter} submitLabel={plural('filingButton', files.length)} onSubmit={submit} onCancel={onCancel}>
         <fieldset className={styles.titles}>
           <legend className={styles.legend}>{t('filing.titles')}</legend>
           {files.map((file, i) =>
