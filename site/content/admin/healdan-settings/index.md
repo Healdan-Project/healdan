@@ -68,7 +68,8 @@ services.
   address.
 - **A password that has to change counts as right when it is.** After you set someone's password, after **Lost
   your password?**, or once a password has expired, signing in with it asks for a new one. Typed right, that clears
-  the count as a successful sign-in does. Typed wrong, it counts like any other wrong password.
+  the count as a successful sign-in does. Typed wrong, it counts like any other wrong password. The same goes for a
+  sign-in that asks the person to confirm legal documents first.
 - **A new password lifts its username's block.** When an account gets a new password, by your **Change Password**,
   the person's own or **Lost your password?**, its username's count is cleared, and a block it's in lifts at once.
   The wrong passwords were for a password the account no longer has. The address's count stays, as the address may

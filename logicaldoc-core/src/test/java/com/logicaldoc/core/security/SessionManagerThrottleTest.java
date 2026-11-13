@@ -609,6 +609,8 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 		try (Connection con = getConnection(); Statement st = con.createStatement()) {
 			st.executeUpdate("update ld_user set ld_passwordexpired = 1 where ld_id = 4");
 		}
+		// The edit went round Hibernate, so a copy of author it already holds would say otherwise
+		UserDAO.get().evict(User.class, 4L);
 	}
 
 	// Gives author a password the way the password screens do, through the user DAO
@@ -672,6 +674,7 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 			ps.setTimestamp(1, Timestamp.valueOf(LocalDateTime.now(ZoneId.of("Europe/Rome")).minusDays(100)));
 			ps.executeUpdate();
 		}
+		UserDAO.get().evict(User.class, 4L);
 		for (int i = 0; i < 4; i++)
 			assertThrows(PasswordExpiredException.class, () -> signIn("author", "wrong", outside));
 
@@ -690,6 +693,52 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 		assertThrows(PasswordExpiredException.class, () -> signIn("author", PASSWORD, outside));
 
 		assertEquals(List.of(), awaitAlerts(0));
+	}
+
+	// Signing in first loads author into Hibernate's cache, which mustChange's edit then has to reach
+	@Test
+	public void testPasswordMarkedAfterASignInMustChange() throws SQLException {
+		assertNotNull(signIn("author", PASSWORD, outside));
+		mustChange();
+
+		assertThrows(PasswordExpiredException.class, () -> signIn("author", PASSWORD, outside));
+	}
+
+	// The right password is neither counted against the address nor clears a count the address added recently, as
+	// one account's sign-in mustn't reset an attack on others from the same address
+	@Test
+	public void testRightPasswordThatMustChangeKeepsARecentAddressCount() throws SQLException {
+		failFrom(outside, 4);
+		String counter = LoginThrottle.LOGINFAIL_IP + outside.getAddress();
+		assertEquals(4L, count(counter));
+		mustChange();
+
+		assertThrows(PasswordExpiredException.class, () -> signIn("author", PASSWORD, outside));
+
+		assertEquals(4L, count(counter));
+	}
+
+	// The chain checks the password of the name before an impersonation's '>', so that's the account cleared
+	@Test
+	public void testImpersonationFormClearsItsAccountsCount() throws SQLException {
+		mustChange();
+		for (int i = 0; i < 4; i++)
+			assertThrows(PasswordExpiredException.class, () -> signIn("author>admin", "wrong", outside));
+		String counter = LoginThrottle.LOGINFAIL_USERNAME + "author";
+		assertEquals(4L, count(counter));
+
+		assertThrows(PasswordExpiredException.class, () -> signIn("author>admin", PASSWORD, outside));
+
+		assertEquals(-1L, count(counter));
+	}
+
+	// With no client the refusal is still counted, rather than failing on the missing address
+	@Test
+	public void testRefusalWithNoClientIsCounted() throws SQLException {
+		assertThrows(WrongPasswordException.class,
+				() -> SessionManager.get().newSession("author", "wrong", (Client) null));
+
+		assertEquals(1L, count(LoginThrottle.LOGINFAIL_USERNAME + "author"));
 	}
 
 	// With a key the chain's refusal may stand for the key, which the password can't vouch for: counted as before

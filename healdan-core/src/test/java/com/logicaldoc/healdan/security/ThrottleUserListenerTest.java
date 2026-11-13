@@ -10,6 +10,8 @@ import static org.junit.Assert.assertThrows;
 import java.util.Date;
 
 import org.junit.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.Client;
@@ -109,6 +111,42 @@ public class ThrottleUserListenerTest extends AbstractHealdanTestCase {
 		user = UserDAO.get().findByUsername("clerk", true);
 		user.setDecodedPassword(HealdanFixtures.PASSWORD);
 		UserDAO.get().store(user);
+
+		assertEquals(3L, count(LoginThrottle.LOGINFAIL_USERNAME + "clerk"));
+	}
+
+	// The count goes once the new password is really saved, not while the save could still roll back
+	@Test
+	public void testResetClearsOnceItCommits() throws Exception {
+		fx.user("clerk");
+		fail("clerk", 3);
+		String counter = LoginThrottle.LOGINFAIL_USERNAME + "clerk";
+
+		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+			try {
+				reset("clerk");
+				assertEquals(3L, count(counter));
+			} catch (Exception e) {
+				throw new IllegalStateException(e);
+			}
+		});
+
+		assertEquals(-1L, count(counter));
+	}
+
+	@Test
+	public void testRolledBackResetKeepsTheCount() throws Exception {
+		fx.user("clerk");
+		fail("clerk", 3);
+
+		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+			try {
+				reset("clerk");
+			} catch (Exception e) {
+				throw new IllegalStateException(e);
+			}
+			status.setRollbackOnly();
+		});
 
 		assertEquals(3L, count(LoginThrottle.LOGINFAIL_USERNAME + "clerk"));
 	}

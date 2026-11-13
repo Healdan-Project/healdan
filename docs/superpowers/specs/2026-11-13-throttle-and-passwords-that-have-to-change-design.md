@@ -49,11 +49,17 @@ then never count, and such an account would be outside the throttle.
 ### 3.1 A right password that has to change isn't counted (call)
 
 In `SessionManager.newSession(username, password, key, client)`, a refusal goes to the fork-owned
-`HealdanThrottle.failed` instead of `LoginThrottle.recordFailure`. When the refusal is a `PasswordExpiredException`,
-no key came, and the password given is the account's, it isn't counted, and the counts are cleared as after a sign-in
-(`HealdanThrottle.succeeded`: the username's, and the address's once its last failure is older than the wait). The
-refusal is still logged as a failed login (`LoginThrottle.recordFailedLogin`), which the old sign-in page reads to say
-why. Anything else goes to `recordFailure` as before.
+`HealdanThrottle.failed` instead of `LoginThrottle.recordFailure`. When the refusal is one the sign-in page finishes
+(a `PasswordExpiredException`, or an `UnconfirmedLegalsException`, which `validateUser` reaches only once the password
+needn't change), no key came, and the password given is the account's, it isn't counted, and the counts are cleared as
+after a sign-in (`HealdanThrottle.succeeded`: the username's, and the address's once its last failure is older than the
+wait). The refusal is still logged as a failed login (`LoginThrottle.recordFailedLogin`), which the old sign-in page
+reads to say why. Anything else goes to `recordFailure` as before, with an empty `Client` for a null one, as CE's
+`recordFailure` reads its address unchecked.
+
+- **Other refusals of a right password are counted,** as before: a disabled, expired or inactive account, one outside
+  its working time, or a type that can't sign in. The person can't finish those sign-ins at the sign-in page, and
+  clearing the count would tell someone guessing that the password was right.
 
 - **The password check** is `DefaultAuthenticator`'s: the SHA-256 of the password given against the stored one, for
   the account `HealdanThrottle.account` names (the name before an impersonation's `>`, trimmed, in lower case when
@@ -93,10 +99,15 @@ The reasons:
 - **A new account** clears its username's count too: attempts on a name nobody had were guesses at no password.
 
 `healdan-core`'s new `ThrottleUserListener` (a `UserListener` at position 115, after the device tokens' at 110) notes
-in `beforeSave` whether the account's password differs from the stored one, as `TokenUserListener` does, a new account
-counting as a change. In `afterSave` it calls `HealdanThrottle.passwordSet` with the stored username, which clears the
-count `HealdanThrottle.account` names for it. A failure is logged and never stops the save. `HealdanThrottle` becomes a
-public class for that one public method; its other methods stay package-private. No upstream file changes for §3.2.
+in `beforeSave` whether the account's password differs from the stored one, a new account counting as a change. It
+reads the stored one through `StoredPassword`, which `TokenUserListener` now uses too, and which reads it once per save
+and keeps it in the save's dictionary. Once the save has committed, it calls `HealdanThrottle.passwordSet` with the
+stored username, in a transaction of its own, which clears the count `HealdanThrottle.account` names for it. A save
+that rolls back clears nothing, and the clear's write to `ld_sequence` can't fail the save, or hold a row lock that a
+sign-in counting under `SessionManager`'s lock would wait for. A failure is logged and never stops the save.
+`HealdanThrottle` becomes a public class for `passwordSet` and `isPassword`, which `healdan-api`'s `AuthResource` now
+asks for its `password-expired` answer instead of its own copy; its other methods stay package-private. No upstream
+file changes for §3.2.
 
 ## 4. Upstream edits
 
@@ -104,9 +115,10 @@ public class for that one public method; its other methods stay package-private.
 |---|---|---|
 | `logicaldoc-core/src/main/java/com/logicaldoc/core/security/SessionManager.java` | in `newSession(username, password, key, client)`'s `catch`, `HealdanThrottle.failed(account, password, key, client, e)` instead of `LoginThrottle.recordFailure(account, key, client, e)`, marked `Healdan:` | §3.1 |
 
-Fork-owned files it changes: `logicaldoc-core`'s `HealdanThrottle.java` (public, with `failed` and `passwordSet`) and
-`SessionManagerThrottleTest.java`, `healdan-core`'s `ThrottleUserListener.java` (new), its `plugin.xml` (the listener's
-extension, `healdanThrottle`) and `ThrottleUserListenerTest.java` (new), and the docs pages in §6.
+Fork-owned files it changes: `logicaldoc-core`'s `HealdanThrottle.java` (public, with `failed`, `passwordSet` and
+`isPassword`) and `SessionManagerThrottleTest.java`, `healdan-core`'s `ThrottleUserListener.java` and
+`StoredPassword.java` (new), `TokenUserListener.java`, its `plugin.xml` (the listener's extension, `healdanThrottle`)
+and `ThrottleUserListenerTest.java` (new), `healdan-api`'s `AuthResource.java`, and the docs pages in §6.
 
 ## 5. Tests
 
@@ -118,7 +130,11 @@ extension, `healdanThrottle`) and `ThrottleUserListenerTest.java` (new), and the
 - the right password that has to change clears a count of four, for the stored flag and for a password that expired
   by age, and sends no alert;
 - a wrong password for such an account is still counted, five of them block the username, and so is the right one
-  with a key.
+  with a key;
+- the right password keeps the address's recent count as it was, neither counted nor cleared, and the impersonation
+  form (`author>admin`) clears its account's count;
+- a refusal with no client is counted, and a password marked as one that has to change after a sign-in has loaded the
+  account is still refused as `passwordexpired`.
 
 `ThrottleUserListenerTest` (`healdan-core`):
 
@@ -126,7 +142,8 @@ extension, `healdanThrottle`) and `ThrottleUserListenerTest.java` (new), and the
 - a reset clears the username's count and keeps the address's;
 - a save that changes something else, or sets the same password again, keeps the count;
 - a new account's username starts with no count;
-- with `login.ignorecase`, the count cleared is the lower-case one the throttle keeps.
+- with `login.ignorecase`, the count cleared is the lower-case one the throttle keeps;
+- a reset inside a transaction clears the count only once it commits, and one that rolls back keeps it.
 
 ## 6. Docs
 
@@ -134,9 +151,9 @@ extension, `healdanThrottle`) and `ThrottleUserListenerTest.java` (new), and the
 - The User Guide's Signing In (the blocked username) and Your Profile and Password (Five Wrong Passwords) pages: a new
   password lifts a block.
 - The Developer Guide's API page, The Sign-In Throttle: `401 password-expired` with the right password isn't counted.
+- The Developer Guide's Tests page and `CLAUDE.md`'s Tests section: a new password, or an account created after the
+  failures, clears a test's block.
 
 ## 7. Later
 
 - **Tell LogicalDOC,** with the case in §1. (call)
-- **`AuthResource.passwordMatches`** checks the password the same way for its answer. It could ask `HealdanThrottle`,
-  but that's another module's public surface for one line, so it stays. (call)
