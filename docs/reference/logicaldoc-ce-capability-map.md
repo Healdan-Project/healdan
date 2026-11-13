@@ -232,7 +232,8 @@ Healdan hides Dropbox (80): its GUI shows only with menu `-2070`, which the `hid
 - **Folder evaluation.** `HibernateFolderDAO.getAllowedPermissions` ORs every row for the user's groups.
   - **There are no deny entries.**
   - **Members of the `admin` group bypass everything.**
-- **Document evaluation.** `HibernateDocumentDAO.getAllowedPermissions` uses the document's ACL only if the user matches one of its rows; otherwise it falls back to the folder. So a document ACL can't exclude anyone.
+- **Document evaluation.** `HibernateDocumentDAO.getAllowedPermissions` uses the document's ACL only if the rows of the user's groups grant something; otherwise, a row with nothing ticked included, it falls back to the folder. So a document ACL can't keep out anyone it doesn't name, and a row that grants nothing keeps no one out. A row that grants something but not READ does take READ from its group.
+  - **CE's lists disagree.** The Classic folder list (`DocumentsDataServlet.getForbiddenDocumentIds`) and the searches (`Search.getDeniedDocIds`, `TagSearch`) hide a document with an `ld_read = 0` row for one of the user's groups, so a row that grants nothing hid a document that still opened. Healdan refuses to save such a row and removed the old ones (`docs/superpowers/specs/2026-11-13-document-rows-that-grant-nothing-design.md`).
 - **Search filtering** (`findFolderIdByUserId*`) also works only from allow sets.
 - **Each user has a personal group.** Memberships are in `ld_usergroup`.
 

@@ -36,6 +36,13 @@ A document can be given to someone who can't see its folder, as a one-off or for
 doc # or a link, but not by browsing. The rule that folders only narrow doesn't apply to documents. See
 [Document Permissions](../../user/working-with-matters/document-permissions/).
 
+A row with nothing ticked on a document doesn't keep anyone out. LogicalDOC reads it as no row, so its group keeps
+the folder's access, though LogicalDOC's folder list and search hide the document from them. Healdan
+refuses to save such a row, on the **Security** tab and through LogicalDOC's REST API, and the upgrade that brought
+this removed the ones already there (see
+[Upgrading](../../install/upgrading/#document-permissions-with-nothing-ticked)). To keep someone out of a document,
+move it to a folder they can't read.
+
 ## What These Rules Don't Do
 
 Permissions are checked when they're saved, so two changes aren't checked:
