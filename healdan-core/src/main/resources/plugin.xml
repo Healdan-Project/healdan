@@ -164,6 +164,12 @@
 		<parameter id="class" value="com.logicaldoc.healdan.email.OncePerMatterListener" />
 	</extension>
 
+	<!-- After the rules (100); refuses a save of a document's permissions with a row that grants nothing -->
+	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanDocumentPermissions">
+		<parameter id="position" value="110" />
+		<parameter id="class" value="com.logicaldoc.healdan.security.PermissionsDocumentListener" />
+	</extension>
+
 	<!-- After the rules (100), so that it checks only stores the structure rules let through -->
 	<extension plugin-id="logicaldoc-core" point-id="FolderListener" id="healdanPermissions">
 		<parameter id="position" value="110" />

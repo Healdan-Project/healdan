@@ -277,6 +277,33 @@ public class HealdanFixtures {
 	}
 
 	/**
+	 * Writes a row of a document's own ACL with JDBC, past the listeners, as
+	 * CE's copy of a folder's rows does. It is how a test makes a row that
+	 * grants nothing, which a save of the document's permissions refuses.
+	 *
+	 * @param docId the document
+	 * @param groupId the group
+	 * @param permissions the permissions the row grants, none for a row that
+	 *        grants nothing
+	 */
+	public void documentRow(long docId, long groupId, Permission... permissions) {
+		List<String> columns = List.of("ld_read", "ld_write", "ld_security", "ld_immutable", "ld_delete",
+				"ld_rename", "ld_sign", "ld_archive", "ld_workflow", "ld_download", "ld_calendar", "ld_subscription",
+				"ld_print", "ld_password", "ld_move", "ld_email", "ld_automation", "ld_readingreq", "ld_preview",
+				"ld_customid", "ld_revision");
+		List<Permission> granted = List.of(permissions);
+		Object[] values = new Object[columns.size() + 2];
+		values[0] = docId;
+		values[1] = groupId;
+		for (int i = 0; i < columns.size(); i++)
+			values[i + 2] = granted
+					.contains(Permission.valueOf(columns.get(i).substring(3).toUpperCase(java.util.Locale.ROOT))) ? 1
+							: 0;
+		new JdbcTemplate(Context.get(DataSource.class)).update("insert into ld_document_acl (ld_docid, ld_groupid, "
+				+ String.join(", ", columns) + ") values (?, ?" + ", ?".repeat(columns.size()) + ")", values);
+	}
+
+	/**
 	 * @param folder where to put the document
 	 * @param fileName the file name
 	 * @param text the content

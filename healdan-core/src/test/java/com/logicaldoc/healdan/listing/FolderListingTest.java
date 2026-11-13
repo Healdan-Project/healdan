@@ -244,6 +244,11 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 
 	/** Replaces the document's ACL with one row */
 	private void own(long docId, Group group, Permission... permissions) throws Exception {
+		if (permissions.length == 0) {
+			// A save of the document's permissions refuses a row that grants nothing; the document has no rows yet
+			fx.documentRow(docId, group.getId());
+			return;
+		}
 		Document current = DocumentDAO.get().findById(docId, true);
 		current.getAccessControlList().clear();
 		DocumentAccessControlEntry ace = new DocumentAccessControlEntry(group.getId());
