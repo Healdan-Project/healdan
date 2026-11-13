@@ -91,8 +91,9 @@ others use, sign out of the provider too: the next person to choose the button m
   can send email. Otherwise your administrator can reset it.
 - **"Your username is temporarily blocked. Try after 15 minutes."** After five wrong passwords in a row, Healdan
   refuses that username for 15 minutes, even with the right password, wherever you sign in. Wait, then sign in
-  again. Your account isn't disabled, and trying again while you wait doesn't make the wait longer. If the wrong
-  passwords weren't yours, tell your administrator.
+  again. Your account isn't disabled, and trying again while you wait doesn't make the wait longer. A new password,
+  from your administrator or from **Lost your password?**, lifts the block at once. If the wrong passwords weren't
+  yours, tell your administrator.
 - **"Your IP is temporarily blocked. Try after 15 minutes."** Twenty failed sign-ins in a row from your network
   address block it for 15 minutes, for everyone signing in from it. Wait, then sign in again. If it keeps
   happening, tell your administrator.

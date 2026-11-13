@@ -20,6 +20,7 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,11 +41,15 @@ import com.logicaldoc.core.security.apikey.ApiKey;
 import com.logicaldoc.core.security.apikey.ApiKeyDAO;
 import com.logicaldoc.core.security.authentication.ApiKeyBlockedException;
 import com.logicaldoc.core.security.authentication.IPBlockedException;
+import com.logicaldoc.core.security.authentication.PasswordExpiredException;
 import com.logicaldoc.core.security.authentication.UsernameBlockedException;
 import com.logicaldoc.core.security.authentication.WrongPasswordException;
 import com.logicaldoc.core.security.spring.LDAuthenticationDetails;
 import com.logicaldoc.core.security.spring.LDAuthenticationProvider;
+import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserEvent;
+import com.logicaldoc.core.security.user.UserHistory;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.crypt.Encrypter;
 import com.logicaldoc.util.plugin.PluginException;
@@ -597,6 +602,105 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 		assertEquals(1, events.size());
 		assertEquals("Can't read the row {} of ld_apikey", events.get(0).getMessage().getFormattedMessage());
 		assertTrue(events.get(0).getThrown() instanceof PersistenceException);
+	}
+
+	// Marks author's password as one that has to change, as an administrator's reset does
+	private void mustChange() throws SQLException {
+		try (Connection con = getConnection(); Statement st = con.createStatement()) {
+			st.executeUpdate("update ld_user set ld_passwordexpired = 1 where ld_id = 4");
+		}
+	}
+
+	// Gives author a password the way the password screens do, through the user DAO
+	private void setPassword(String password, boolean mustChange) throws Exception {
+		User user = UserDAO.get().findById(4L, true);
+		user.setDecodedPassword(password);
+		user.setPasswordChanged(new Date());
+		user.setPasswordExpired(mustChange);
+		UserHistory history = new UserHistory();
+		history.setUser(user);
+		history.setEvent(UserEvent.PASSWORDCHANGED);
+		UserDAO.get().store(user, history);
+	}
+
+	// The owner's walkthrough of 2026-11-13: four mistakes, an administrator's reset, then the reset password, which
+	// has to change. It was counted as the fifth failure, so the password the person then chose was refused.
+	@Test
+	public void testResetPasswordAfterMistakesSignsIn() throws Exception {
+		for (int i = 0; i < 4; i++)
+			fail("author", outside);
+		setPassword("Res3t-By-Admin!", true);
+
+		assertThrows(PasswordExpiredException.class, () -> signIn("author", "Res3t-By-Admin!", outside));
+		// The old login page reads why from the last LOGIN_FAILED comment
+		assertEquals("passwordexpired", lastFailure(4L));
+
+		setPassword("Ch0sen-By-Them!", false);
+		assertNotNull(signIn("author", "Ch0sen-By-Them!", outside));
+	}
+
+	// The right password, which has to change, clears the count as a sign-in does
+	@Test
+	public void testRightPasswordThatMustChangeClearsTheCount() throws SQLException {
+		mustChange();
+		for (int i = 0; i < 4; i++)
+			assertThrows(PasswordExpiredException.class, () -> signIn("author", "wrong", outside));
+		String counter = LoginThrottle.LOGINFAIL_USERNAME + "author";
+		assertEquals(4L, count(counter));
+
+		assertThrows(PasswordExpiredException.class, () -> signIn("author", PASSWORD, outside));
+
+		assertEquals(-1L, count(counter));
+	}
+
+	// CE's chain reports a password that has to change whatever password was given, so a wrong one still counts
+	@Test
+	public void testWrongPasswordThatMustChangeIsCounted() throws SQLException {
+		mustChange();
+		for (int i = 0; i < 5; i++)
+			assertThrows(PasswordExpiredException.class, () -> signIn("author", "wrong", outside));
+
+		assertThrows(UsernameBlockedException.class, () -> signIn("author", PASSWORD, outside));
+	}
+
+	// A password that expired by age, which nothing marks, is treated as one an administrator marked
+	@Test
+	public void testRightPasswordThatExpiredByAgeClearsTheCount() throws SQLException {
+		try (Connection con = getConnection();
+				PreparedStatement ps = con.prepareStatement(
+						"update ld_user set ld_passwordexpires = 1, ld_passwordchanged = ? where ld_id = 4")) {
+			ps.setTimestamp(1, Timestamp.valueOf(LocalDateTime.now(ZoneId.of("Europe/Rome")).minusDays(100)));
+			ps.executeUpdate();
+		}
+		for (int i = 0; i < 4; i++)
+			assertThrows(PasswordExpiredException.class, () -> signIn("author", "wrong", outside));
+
+		assertThrows(PasswordExpiredException.class, () -> signIn("author", PASSWORD, outside));
+
+		assertEquals(-1L, count(LoginThrottle.LOGINFAIL_USERNAME + "author"));
+	}
+
+	// It isn't the failure that starts a block, so nobody is alerted
+	@Test
+	public void testRightPasswordThatMustChangeSendsNoAlert() throws Exception {
+		mustChange();
+		for (int i = 0; i < 4; i++)
+			assertThrows(PasswordExpiredException.class, () -> signIn("author", "wrong", outside));
+
+		assertThrows(PasswordExpiredException.class, () -> signIn("author", PASSWORD, outside));
+
+		assertEquals(List.of(), awaitAlerts(0));
+	}
+
+	// With a key the chain's refusal may stand for the key, which the password can't vouch for: counted as before
+	@Test
+	public void testPasswordThatMustChangeWithAKeyIsCounted() throws SQLException {
+		mustChange();
+		for (int i = 0; i < 5; i++)
+			assertThrows(PasswordExpiredException.class,
+					() -> SessionManager.get().newSession("author", PASSWORD, "123456", outside));
+
+		assertThrows(UsernameBlockedException.class, () -> signIn("author", PASSWORD, outside));
 	}
 
 	@Test

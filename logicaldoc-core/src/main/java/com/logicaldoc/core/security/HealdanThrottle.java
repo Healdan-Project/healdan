@@ -16,6 +16,7 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.apikey.ApiKey;
 import com.logicaldoc.core.security.apikey.ApiKeyDAO;
 import com.logicaldoc.core.security.authentication.AuthenticationException;
+import com.logicaldoc.core.security.authentication.PasswordExpiredException;
 import com.logicaldoc.core.security.user.HibernateUserDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
@@ -29,11 +30,14 @@ import com.logicaldoc.util.spring.Context;
 /**
  * How {@link SessionManager#newSession} runs CE's {@link LoginThrottle} on
  * every sign-in route (M2 spec section 5.7), and refuses there the API keys of
- * accounts that sign in through a provider (M4 spec section 7.3).
+ * accounts that sign in through a provider (M4 spec section 7.3). A right
+ * password that has to change isn't counted, and a new password clears its
+ * username's count (the spec of 2026-11-13 on passwords that have to change).
  * <p>
  * Healdan addition: lives in its own file so upstream merges don't touch it.
+ * It's public for {@link #passwordSet(String)} only.
  */
-final class HealdanThrottle {
+public final class HealdanThrottle {
 
     private static final Logger log = LoggerFactory.getLogger(HealdanThrottle.class);
 
@@ -144,6 +148,69 @@ final class HealdanThrottle {
             return;
         String address = client != null ? client.getAddress() : null;
         LoginThrottle.clearFailures(account, failedRecently(address) ? null : address);
+    }
+
+    /**
+     * Counts a refused sign-in, as CE's {@code recordFailure} does, unless it
+     * was refused only because the password has to change and the password
+     * given is the account's. CE's chain checks the account again after its
+     * authenticators, and that check's refusal replaces theirs, so a
+     * {@link PasswordExpiredException} comes for a wrong password too. A right
+     * one is a sign-in the person has to finish by changing the password: it
+     * isn't counted, and clears the counts as {@link #succeeded} does. It's
+     * still logged as a failed login, which the old login page reads to say
+     * why.
+     * <p>
+     * With a key the refusal may stand for the key, which the password can't
+     * vouch for, so it's counted as before.
+     *
+     * @param account the account, as {@link #account(String)} gives it
+     * @param password the password given, possibly null
+     * @param key the key presented, possibly null
+     * @param client the client, possibly null
+     * @param refusal why the chain refused the sign-in
+     */
+    static void failed(String account, String password, String key, Client client, AuthenticationException refusal) {
+        if (refusal instanceof PasswordExpiredException && StringUtils.isEmpty(key)
+                && isPassword(account, password)) {
+            LoginThrottle.recordFailedLogin(account, client, refusal.getMessage());
+            succeeded(account, key, client);
+            return;
+        }
+        LoginThrottle.recordFailure(account, key, client, refusal);
+    }
+
+    /**
+     * Clears the failure count of an account given a new password, whoever
+     * gave it: the failures were guesses at a password it no longer has. Only
+     * the username's: the address may be shared, and its count may be of
+     * attempts on other accounts.
+     *
+     * @param username the account's username, as stored
+     */
+    public static void passwordSet(String username) {
+        String account = account(username);
+        if (StringUtils.isNotEmpty(account))
+            LoginThrottle.clearFailures(account, null);
+    }
+
+    /**
+     * Whether the password is the account's, checked as
+     * {@code DefaultAuthenticator} checks it. An account with no password,
+     * such as one that signs in through a provider, never matches.
+     */
+    private static boolean isPassword(String account, String password) {
+        if (StringUtils.isEmpty(account) || StringUtils.isEmpty(password))
+            return false;
+        try {
+            User user = UserDAO.get().getUser(account);
+            return user != null && user.getPassword() != null
+                    && user.getPassword().equals(Encrypter.encryptSHA256(password));
+        } catch (PersistenceException | NoSuchAlgorithmException e) {
+            // Counted, rather than let a sign-in off unchecked
+            log.warn("{}", e.getMessage(), e);
+            return false;
+        }
     }
 
     /**
