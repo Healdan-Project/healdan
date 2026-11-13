@@ -23,8 +23,6 @@ import java.util.Locale;
 import java.util.Map;
 
 import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.mock.web.MockHttpSession;
@@ -552,12 +550,7 @@ public class SignInResourceTest extends ApiTestCase {
 	public void testNeverLogsSecrets() throws Exception {
 		List<Class<?>> sources = List.of(SignInResource.class, PendingSignIns.class, ProviderClient.class,
 				SignInAccounts.class, SessionManager.class);
-		Map<String, Level> levels = new HashMap<>();
-		for (Class<?> source : sources) {
-			levels.put(source.getName(), LogManager.getLogger(source).getLevel());
-			Configurator.setLevel(source.getName(), Level.ALL);
-		}
-		List<LogCapture> captures = sources.stream().map(LogCapture::of).toList();
+		List<LogCapture> captures = sources.stream().map(source -> LogCapture.of(source, Level.ALL)).toList();
 		List<String> secrets = new ArrayList<>(List.of(FakeProvider.SECRET));
 		try {
 			// A sign-in that works
@@ -605,7 +598,6 @@ public class SignInResourceTest extends ApiTestCase {
 					assertFalse("A log line holds a secret: " + line, secret != null && line.contains(secret));
 		} finally {
 			captures.forEach(LogCapture::close);
-			levels.forEach(Configurator::setLevel);
 		}
 	}
 

@@ -53,11 +53,11 @@ show_server_log() {
     "$dir/run.log") warnings and errors (times in UTC)"
   tail -n 200 "$dir/problems.log" | cut -c 1-400
   # A request that failed with a 500 keeps its frames, which say where: the last three, 80 lines each at most. A
-  # client that went away (Tomcat's ClientAbortException anywhere in the entry) isn't one, though a server from
-  # before ProblemMapper knew it logged it as one.
+  # client that went away (Tomcat's ClientAbortException as the exception or one of its causes, as ProblemMapper
+  # checks, not one suppressed) isn't one, though a server from before ProblemMapper knew it logged it as one.
   awk 'function flush() { if (keep && !gone) printf "%s", entry; entry = "" }
        /^[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9][0-9][0-9] / { flush(); n++; keep = /API request failed/; gone = 0; lines = 0 }
-       keep && /org\.apache\.catalina\.connector\.ClientAbortException/ { gone = 1 }
+       keep && /^(Caused by: )?org\.apache\.catalina\.connector\.ClientAbortException/ { gone = 1 }
        keep && lines++ < 80 { entry = entry n "\t" $0 "\n" }
        END { flush() }' "$dir/run.log" > "$dir/failed.log"
   if [ -s "$dir/failed.log" ]; then

@@ -16,8 +16,8 @@ server you're talking to.
 ## The Description File and the Docs Page
 
 - **`/api/v1/openapi.yaml`** describes every endpoint, in OpenAPI 3.1. It's the contract: Healdan's tests check
-  every answer they get against it, and fail on an endpoint it leaves out. Generate your client's types from
-  it. Its paths start at `/api`, so `/v1/server` in the file is `/api/v1/server`.
+  every answer an endpoint gives them against it, and fail on an endpoint it leaves out. Generate your client's
+  types from it. Its paths start at `/api`, so `/v1/server` in the file is `/api/v1/server`.
 - **`/api/docs/`** shows the file as a page you can browse, with **Try it out** on each endpoint. Healdan serves the
   page itself, so it loads nothing from the internet. To call an endpoint that needs a sign-in, sign in with
   `POST /v1/auth/tokens` first, then paste the token into **Authorize**.
@@ -251,7 +251,8 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 503 | `storage-unreachable` | A file is in storage that can't be reached right now (cloud storage, or a local backend such as a network share), and isn't among the recently read files the server keeps. `detail` names the Store and can be shown as it is. Nothing is wrong with the file: ask again later |
 
 Other client errors, such as `405` for a method an address doesn't take, keep their status, with the code
-`bad-request`.
+`bad-request`. A request whose connection broke, or stalled past the server's timeout, while the server read it or
+answered it gets an empty `500`, not a problem.
 
 `storage-unreachable` is sent before any of the file, never as a `200` that stops short. A thumbnail that can't be read
 for the same reason is `404 not-found`, as one that isn't made yet is, so clients show their placeholder.

@@ -8,6 +8,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.apache.cxf.jaxrs.utils.JAXRSUtils;
+import org.apache.cxf.message.Message;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,7 +32,7 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 
 /**
- * Turns every exception into an RFC 9457 problem (spec section 4.4):
+ * Turns exceptions into RFC 9457 problems (spec section 4.4):
  * <ul>
  * <li>an {@link ApiProblem} as it is;</li>
  * <li>the once-per-matter rule's refusal as {@code 409 already-filed}, with
@@ -46,8 +49,10 @@ import jakarta.ws.rs.ext.ExceptionMapper;
  * message;</li>
  * <li>but a client that went away, which Tomcat reports as a
  * {@code ClientAbortException} while its answer is written or its request
- * read, isn't a failure of the server's: logged at debug, and answered with
- * an empty {@code 500}, not a problem, as nobody reads it.</li>
+ * read, isn't a failure of the server's: logged in one line at info, with its
+ * frames at debug, and answered with an empty {@code 500}, not a problem.
+ * Tomcat reports a client that stalled past its timeout the same way, which
+ * the line's cause tells apart.</li>
  * </ul>
  */
 public class ProblemMapper implements ExceptionMapper<Throwable> {
@@ -70,6 +75,9 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 	@Override
 	public Response toResponse(Throwable exception) {
 		if (clientGone(exception)) {
+			// One line: the request may have done its work, such as a save, before its answer was lost
+			List<Throwable> causes = ExceptionUtils.getThrowableList(exception);
+			log.info("API client went away or stalled during {}: {}", request(), causes.getLast().toString());
 			log.debug("API client went away before its answer was sent", exception);
 			return Response.serverError().build();
 		}
@@ -138,12 +146,18 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 	 *         the client went away
 	 */
 	static boolean clientGone(Throwable exception) {
-		// Bounded, in case of a loop of causes
-		Throwable t = exception;
-		for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause())
-			if (CLIENT_ABORT.equals(t.getClass().getName()))
-				return true;
-		return false;
+		// Safe from a loop of causes
+		return ExceptionUtils.getThrowableList(exception).stream()
+				.anyMatch(t -> CLIENT_ABORT.equals(t.getClass().getName()));
+	}
+
+	/**
+	 * @return the method and path of the request being answered, for the log
+	 */
+	private static String request() {
+		Message message = JAXRSUtils.getCurrentMessage();
+		Message in = message != null && message.getExchange() != null ? message.getExchange().getInMessage() : null;
+		return in == null ? "a request" : in.get(Message.HTTP_REQUEST_METHOD) + " " + in.get(Message.REQUEST_URI);
 	}
 
 	/**

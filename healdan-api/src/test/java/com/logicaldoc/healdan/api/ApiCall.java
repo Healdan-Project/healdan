@@ -98,10 +98,13 @@ public class ApiCall {
 	}
 
 	/**
-	 * Doesn't check the response against {@code openapi.yaml}: for an answer
-	 * nobody reads, such as one to a client that went away.
+	 * Doesn't check the response against {@code openapi.yaml}, on a test-only
+	 * route under {@code /api/v1/test/} only: for an answer nobody reads, such
+	 * as one to a client that went away.
 	 */
 	public ApiCall withoutContract() {
+		if (!path.startsWith(SERVLET_PATH + "/v1/test/"))
+			throw new IllegalStateException("Only a test-only route under /api/v1/test/ skips the contract: " + path);
 		contract = false;
 		return this;
 	}

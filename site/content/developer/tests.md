@@ -54,7 +54,8 @@ in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests 
 - **They drive the real `ApiServlet`** through Spring's servlet mocks, with its filters and providers, so a test
   goes through the token check, CORS and the error mapping as a client's request does.
 - **Every answer is checked against `openapi.yaml`** (`Contract`), so a test fails when the server and the file
-  disagree.
+  disagree. Only a test-only route under `/api/v1/test/` can skip it, with `ApiCall.withoutContract()`, for an answer
+  no client reads, such as one to a client that went away.
 - **`RouteCoverageTest`** fails when the file describes an operation the server doesn't have, or the server answers
   a `/v1` route the file leaves out. `OpenApiFileTest` checks that the file parses.
 - **`ApiPluginXmlTest`** checks that JPF accepts the module's `plugin.xml`, which it would otherwise drop without an
@@ -216,7 +217,8 @@ at the end of the `Smoke test` step of the `Test (amd64)` or `Test (arm64)` job:
   and `Caused by` lines, without the stack frames.
 - **The last three API requests that failed with a `500`,** with their stack frames (80 lines each at most), which say
   where in the server they failed. A request whose client went away before its answer was sent isn't one: the API
-  logs it only at debug, and the dump skips one that an older server logged as a failure.
+  logs it in one line at info, with its frames at debug, and the dump skips one that an older server logged as a
+  failure.
 - **`dms.log`'s last 40 lines.**
 
 When a browser test in step 9 fails, `docker/tests/test-web.sh` also prints the page of each failed test as Playwright

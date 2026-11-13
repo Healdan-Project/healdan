@@ -16,8 +16,6 @@ import java.util.function.Supplier;
 
 import org.apache.catalina.connector.ClientAbortException;
 import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.Test;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -187,7 +185,7 @@ public class ProblemMapperTest extends ApiTestCase {
 
 		// Nothing more is written to a client that went away: no problem after what it was sent
 		assertEquals("[", logged.response().text());
-		assertNoFailureLogged(logged);
+		assertNoFailureLogged(logged, "GET /api/v1/test/gone", "java.io.IOException: Broken pipe");
 	}
 
 	@Test
@@ -198,7 +196,7 @@ public class ProblemMapperTest extends ApiTestCase {
 		assertEquals(response.toString(), 0, response.body().length);
 		assertFalse(response.toString(),
 				String.valueOf(response.header("Content-Type")).startsWith(ProblemMapper.PROBLEM_JSON));
-		assertNoFailureLogged(logged);
+		assertNoFailureLogged(logged, "GET /api/v1/test/gone-wrapped", "java.io.IOException: Connection reset by peer");
 	}
 
 	@Test
@@ -253,23 +251,23 @@ public class ProblemMapperTest extends ApiTestCase {
 	}
 
 	private static Logged logged(Supplier<ApiResponse> call) {
-		String name = ProblemMapper.class.getName();
-		Level level = LogManager.getLogger(name).getLevel();
-		Configurator.setLevel(name, Level.DEBUG);
-		try (LogCapture log = LogCapture.of(ProblemMapper.class)) {
+		try (LogCapture log = LogCapture.of(ProblemMapper.class, Level.DEBUG)) {
 			ApiResponse response = call.get();
 			return new Logged(response, log.lines());
-		} finally {
-			Configurator.setLevel(name, level);
 		}
 	}
 
-	/** A client that went away is logged at debug, and not as a failure */
-	private static void assertNoFailureLogged(Logged logged) {
+	/**
+	 * A client that went away is logged in one line at info, which names the
+	 * request and the cause, with its frames at debug, and not as a failure
+	 */
+	private static void assertNoFailureLogged(Logged logged, String request, String cause) {
 		List<String> lines = logged.lines();
+		assertEquals(lines.toString(), 1, lines.stream()
+				.filter(line -> line.startsWith("INFO ") && line.contains(request) && line.contains(cause)).count());
 		assertTrue(lines.toString(), lines.stream().anyMatch(line -> line.startsWith("DEBUG ")));
 		assertTrue(lines.toString(), lines.stream().noneMatch(line -> line.startsWith("ERROR ")
-				|| line.startsWith("WARN ") || line.startsWith("INFO ") || line.contains("API request failed")));
+				|| line.startsWith("WARN ") || line.contains("API request failed")));
 	}
 
 	private static void assertProblem(ApiResponse response, int status, String code) {
