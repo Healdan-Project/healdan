@@ -3,6 +3,7 @@
 
 package com.logicaldoc.healdan.rules;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentAccessControlEntry;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
@@ -34,6 +36,7 @@ import com.logicaldoc.healdan.profile.ProfileSchema;
 import com.logicaldoc.healdan.profile.Propagation;
 import com.logicaldoc.healdan.profile.StoredProfile;
 import com.logicaldoc.healdan.security.PermissionRules;
+import com.logicaldoc.healdan.security.PermissionsDocumentListener;
 import com.logicaldoc.healdan.util.CacheEvictor;
 
 import com.logicaldoc.util.spring.Context;
@@ -320,6 +323,16 @@ public class HealdanHooksImpl implements HealdanHooks {
 		Vetoes.check(Vetoes.ids(rootId), List.of(),
 				() -> PermissionRules.get().checkApplyToTree(rootId, FilingRules.actor(transaction)));
 		PermissionRules.get().afterApplySecurityToTree(rootId);
+	}
+
+	/**
+	 * The Classic bulk Update's permission rows, refused before any document
+	 * changes when one grants nothing (spec
+	 * 2026-11-13-document-rows-that-grant-nothing)
+	 */
+	@Override
+	public void beforeDocumentPermissions(Collection<DocumentAccessControlEntry> rows) throws PersistenceException {
+		PermissionsDocumentListener.check(rows);
 	}
 
 	/**

@@ -242,18 +242,21 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 		super.tearDown();
 	}
 
-	/** Replaces the document's ACL with one row */
+	/**
+	 * Replaces the document's ACL with one row. A row that grants nothing,
+	 * which a save refuses, is written with JDBC instead, so it's added to the
+	 * rows the document has: give it to a document with none.
+	 */
 	private void own(long docId, Group group, Permission... permissions) throws Exception {
 		if (permissions.length == 0) {
-			// A save of the document's permissions refuses a row that grants nothing; the document has no rows yet
+			// A save of the document's permissions refuses a row that grants nothing
 			fx.documentRow(docId, group.getId());
 			return;
 		}
 		Document current = DocumentDAO.get().findById(docId, true);
 		current.getAccessControlList().clear();
 		DocumentAccessControlEntry ace = new DocumentAccessControlEntry(group.getId());
-		ace.grantPermissions(permissions.length == 0 ? EnumSet.noneOf(Permission.class)
-				: EnumSet.copyOf(List.of(permissions)));
+		ace.grantPermissions(EnumSet.copyOf(List.of(permissions)));
 		current.addAccessControlEntry(ace);
 		DocumentHistory history = fx.documentHistory(admin);
 		history.setEvent(DocumentEvent.PERMISSION);

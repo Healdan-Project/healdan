@@ -43,9 +43,10 @@ public final class AccessChecks {
 
 	/**
 	 * Every permission column of {@code ld_document_acl}, as CE's
-	 * {@code getAllowedPermissions} reads them
+	 * {@code getAllowedPermissions} reads them, each {@code ld_} and its
+	 * {@code Permission}'s name in lower case
 	 */
-	private static final List<String> ANY_PERMISSION = List.of("ld_read", "ld_write", "ld_security", "ld_immutable",
+	public static final List<String> PERMISSION_COLUMNS = List.of("ld_read", "ld_write", "ld_security", "ld_immutable",
 			"ld_delete", "ld_rename", "ld_sign", "ld_archive", "ld_workflow", "ld_download", "ld_calendar",
 			"ld_subscription", "ld_print", "ld_password", "ld_move", "ld_email", "ld_automation", "ld_readingreq",
 			"ld_preview", "ld_customid", "ld_revision");
@@ -124,7 +125,7 @@ public final class AccessChecks {
 	 *         grants anything
 	 */
 	public static String anyPermission(String alias) {
-		return ANY_PERMISSION.stream().map(column -> alias + column).collect(Collectors.joining(" + "));
+		return PERMISSION_COLUMNS.stream().map(column -> alias + column).collect(Collectors.joining(" + "));
 	}
 
 	/**

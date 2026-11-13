@@ -21,7 +21,9 @@ Security permission on that document.
 ## Keeping Someone Out
 
 A row with nothing ticked doesn't keep anyone out: it would leave that person or group with whatever the folder gives
-them. So Healdan won't save one, and says whose row has nothing ticked. Tick what they may do, or remove the row.
+them. So Healdan won't save one, and says whose row has nothing ticked. Tick what they may do, or remove the row. A
+read-only account can't have Write, Delete, Move or the other permissions that change a document, so a row for one
+needs something else ticked, such as Read.
 
 To keep someone out of a document, move it to a folder they can't read, such as a restricted folder inside the
 matter (see below).

@@ -19,7 +19,8 @@ import com.logicaldoc.util.spring.Context;
  * permissions now refuses ({@code PermissionsDocumentListener}). CE's
  * {@code getAllowedPermissions} reads such a row as no row, so a document
  * opens for the same people afterwards; CE's folder list and searches, which
- * hid it from the row's group, then show it to them too.
+ * hid it from the row's group, then show it to them too. Each row is logged
+ * before it goes, so an admin can find the documents to review.
  */
 @Component
 public class DocumentRowsGrantingNothingSeed implements SeedStep {
@@ -34,6 +35,18 @@ public class DocumentRowsGrantingNothingSeed implements SeedStep {
 	@Override
 	public void run() throws Exception {
 		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
+		jdbc.query("""
+				select a.ld_docid, d.ld_customid, a.ld_groupid, g.ld_name
+				  from ld_document_acl a
+				  left join ld_document d on d.ld_id = a.ld_docid
+				  left join ld_group g on g.ld_id = a.ld_groupid
+				 where (%s) = 0
+				 order by a.ld_docid, a.ld_groupid
+				""".formatted(AccessChecks.anyPermission("a.")),
+				rs -> {
+					log.info("Removing a document permission row that granted nothing: document {} (doc # {}), "
+							+ "group {} ({})", rs.getLong(1), rs.getString(2), rs.getLong(3), rs.getString(4));
+				});
 		int count = jdbc.update("delete from ld_document_acl where (%s) = 0".formatted(AccessChecks.anyPermission("")));
 		log.info("Document permission rows that granted nothing, removed: {}", count);
 	}

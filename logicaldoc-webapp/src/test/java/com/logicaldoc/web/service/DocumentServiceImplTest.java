@@ -18,6 +18,7 @@ import java.sql.SQLException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -31,6 +32,8 @@ import org.mockito.junit.MockitoJUnitRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.logicaldoc.core.HealdanHooks;
+import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.communication.EMail;
 import com.logicaldoc.core.communication.EMailSender;
@@ -1675,6 +1678,38 @@ public class DocumentServiceImplTest extends AbstractWPTestCase {
         } catch (ServerException e) {
             fail("Unexpected exception was thrown");
         }
+    }
+
+    @Test
+    public void testBulkUpdateChecksThePermissionsFirst() throws Exception {
+        // Healdan: the rows are checked once, before any document is changed, as the loop logs a refusal and goes on
+        String comment = docDao.findById(4L).getComment();
+        GUIDocument vo = new GUIDocument();
+        vo.setComment("Bulk");
+        vo.setAccessControlList(List.of(new GUIAccessControlEntry(2L, "read", "add")));
+
+        List<Set<Permission>> checked = new ArrayList<>();
+        HealdanHooks previous = HealdanHooks.get();
+        HealdanHooks.register(new HealdanHooks() {
+            @Override
+            public void beforeDocumentPermissions(Collection<DocumentAccessControlEntry> rows)
+                    throws PersistenceException {
+                for (DocumentAccessControlEntry row : rows)
+                    checked.add(row.grantedPermissions());
+                throw new HealdanVetoException("Nothing is ticked for Author.");
+            }
+        });
+        try {
+            ServerException e = assertThrows(ServerException.class,
+                    () -> testSubject.bulkUpdate(List.of(4L, 5L), vo, true));
+            assertEquals("Nothing is ticked for Author.", e.getMessage());
+        } finally {
+            HealdanHooks.register(previous);
+        }
+
+        // As saveACL makes it: a document's row has no ADD
+        assertEquals(List.of(Set.of(Permission.READ)), checked);
+        assertEquals(comment, docDao.findById(4L).getComment());
     }
 
     @Test

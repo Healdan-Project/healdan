@@ -4,14 +4,13 @@
 package com.logicaldoc.healdan.security;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.ThreadPoolExecutor;
 
 import javax.sql.DataSource;
 
@@ -21,6 +20,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentAccessControlEntry;
 import com.logicaldoc.core.document.DocumentDAO;
@@ -32,9 +32,9 @@ import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
-import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.support.HealdanFixtures;
@@ -47,6 +47,10 @@ import com.logicaldoc.util.spring.Context;
  * 2026-11-13-document-rows-that-grant-nothing).
  */
 public class PermissionsDocumentListenerTest extends AbstractHealdanTestCase {
+
+	private static final String KEEPS_NO_ONE_OUT = " A row that grants nothing keeps no one out: they'd still have the "
+			+ "folder's access. Tick what they may do, or remove the row. To keep someone out of a document, move it "
+			+ "to a folder they can't read.";
 
 	private final HealdanFixtures fx = new HealdanFixtures();
 
@@ -71,14 +75,14 @@ public class PermissionsDocumentListenerTest extends AbstractHealdanTestCase {
 				.findById(fx.matter(fx.client(998, "Healdan"), 1, "Demo", store, "Documents").getFolderId());
 		Folder documents = FolderDAO.get().findByName(workspace, "Documents", Tenant.DEFAULT_ID, true).get(0);
 		doc = fx.upload(documents, "will.txt", "the will", admin);
-		awaitAsyncWork();
+		HealdanFixtures.awaitVersionSaves();
 	}
 
 	@After
 	@Override
 	public void tearDown() throws IOException {
 		try {
-			awaitAsyncWork();
+			HealdanFixtures.awaitVersionSaves();
 		} catch (Exception e) {
 			// The database goes anyway
 		}
@@ -87,27 +91,53 @@ public class PermissionsDocumentListenerTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testRefusesARowThatGrantsNothing() throws Exception {
+		savePermissions(row(litigation, Permission.READ));
 		try {
 			savePermissions(row(demo.getUserGroup()));
 			fail("A row that grants nothing was saved");
 		} catch (HealdanRuleException e) {
-			assertEquals("Nothing is ticked for " + demo.getFullName() + ", and a row with nothing ticked keeps no "
-					+ "one out: they'd still have the folder's access. To keep someone out of a document, move it to "
-					+ "a folder they can't read.", e.getMessage());
+			assertEquals("Nothing is ticked for " + demo.getFullName() + "." + KEEPS_NO_ONE_OUT, e.getMessage());
 		}
-		assertEquals(0, rows());
+		// The refused save left the rows as they were
+		assertEquals(1, rows());
+		assertEquals(List.of(litigation.getId()), groupsThatRead());
 	}
 
 	@Test
 	public void testNamesEveryRowThatGrantsNothing() throws Exception {
+		savePermissions(row(litigation, Permission.READ, Permission.WRITE));
 		try {
 			savePermissions(row(litigation), row(demo.getUserGroup()), row(admin.getUserGroup(), Permission.READ));
 			fail("Rows that grant nothing were saved");
 		} catch (HealdanRuleException e) {
-			assertTrue(e.getMessage(), e.getMessage()
-					.startsWith("Nothing is ticked for " + demo.getFullName() + " and Litigation, and"));
+			assertEquals("Nothing is ticked for " + demo.getFullName() + " and Litigation." + KEEPS_NO_ONE_OUT,
+					e.getMessage());
+		}
+		assertEquals(1, rows());
+		assertEquals(List.of(litigation.getId()), groupsThatRead());
+	}
+
+	@Test
+	public void testRefusesAReadOnlyAccountsRowWithOnlyChangesTicked() throws Exception {
+		User reader = fx.user("reader");
+		reader.setType(User.Type.READONLY);
+		UserDAO.get().store(reader);
+
+		// CE takes Write and Move off a read-only account's row before the listeners see it
+		try {
+			savePermissions(row(reader.getUserGroup(), Permission.WRITE, Permission.MOVE));
+			fail("A read-only account's row that grants nothing it can have was saved");
+		} catch (HealdanRuleException e) {
+			assertEquals("Nothing is ticked for " + reader.getFullName() + " that a read-only account can have: "
+					+ "Write, Delete, Move and the other changes don't count for one." + KEEPS_NO_ONE_OUT,
+					e.getMessage());
 		}
 		assertEquals(0, rows());
+
+		savePermissions(row(reader.getUserGroup(), Permission.READ, Permission.WRITE));
+		assertEquals(List.of(reader.getUserGroup().getId()), groupsThatRead());
+		assertEquals(0, (int) jdbc().queryForObject("select ld_write from ld_document_acl where ld_docid = ?",
+				Integer.class, doc.getId()));
 	}
 
 	@Test
@@ -130,10 +160,33 @@ public class PermissionsDocumentListenerTest extends AbstractHealdanTestCase {
 		DocumentHistory history = fx.documentHistory(admin);
 		history.setEvent(DocumentEvent.CHANGED);
 		DocumentDAO.get().store(current, history);
-		awaitAsyncWork();
+		HealdanFixtures.awaitVersionSaves();
 
 		assertEquals("Signed copy", DocumentDAO.get().findById(doc.getId()).getComment());
 		assertEquals(1, rows());
+	}
+
+	/**
+	 * The Classic Bulk Update's loop logs a refusal and goes on, so it checks
+	 * its rows first through the hook, before CE has taken anything off a
+	 * guest's row
+	 */
+	@Test
+	public void testTheHookChecksRowsBeforeTheyAreStored() throws Exception {
+		User reader = fx.user("reader");
+		reader.setType(User.Type.READONLY);
+		UserDAO.get().store(reader);
+
+		HealdanRuleException e = assertThrows(HealdanRuleException.class,
+				() -> HealdanHooks.get().beforeDocumentPermissions(List.of(row(litigation, Permission.READ),
+						row(demo.getUserGroup()), row(reader.getUserGroup(), Permission.WRITE, Permission.MOVE))));
+		assertEquals("Nothing is ticked for " + demo.getFullName() + ". Nothing is ticked for " + reader.getFullName()
+				+ " that a read-only account can have: Write, Delete, Move and the other changes don't count for one."
+				+ KEEPS_NO_ONE_OUT, e.getMessage());
+
+		HealdanHooks.get().beforeDocumentPermissions(
+				List.of(row(litigation, Permission.READ), row(reader.getUserGroup(), Permission.READ, Permission.WRITE)));
+		assertEquals(0, rows());
 	}
 
 	private static DocumentAccessControlEntry row(Group group, Permission... permissions) {
@@ -152,7 +205,7 @@ public class PermissionsDocumentListenerTest extends AbstractHealdanTestCase {
 		DocumentHistory history = fx.documentHistory(admin);
 		history.setEvent(DocumentEvent.PERMISSION);
 		DocumentDAO.get().store(current, history);
-		awaitAsyncWork();
+		HealdanFixtures.awaitVersionSaves();
 	}
 
 	private int rows() {
@@ -160,17 +213,14 @@ public class PermissionsDocumentListenerTest extends AbstractHealdanTestCase {
 				doc.getId());
 	}
 
-	private static JdbcTemplate jdbc() {
-		return new JdbcTemplate(Context.get(DataSource.class));
+	/** @return the groups whose stored row grants Read */
+	private List<Long> groupsThatRead() {
+		return jdbc().queryForList(
+				"select ld_groupid from ld_document_acl where ld_docid = ? and ld_read = 1 order by ld_groupid",
+				Long.class, doc.getId());
 	}
 
-	private static void awaitAsyncWork() throws Exception {
-		ThreadPoolExecutor pool = ThreadPools.get().getPool("VersionSave");
-		long deadline = System.currentTimeMillis() + 20000L;
-		while (!pool.getQueue().isEmpty() || pool.getActiveCount() > 0) {
-			if (System.currentTimeMillis() > deadline)
-				fail("Background version saves didn't finish");
-			Thread.sleep(50);
-		}
+	private static JdbcTemplate jdbc() {
+		return new JdbcTemplate(Context.get(DataSource.class));
 	}
 }
