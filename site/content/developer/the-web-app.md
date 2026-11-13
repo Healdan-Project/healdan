@@ -82,6 +82,41 @@ The virtualiser places the rows itself, so the Table needs a height: it fills a 
 jsdom has no IntersectionObserver, which notices the end of a list, so the tests' setup installs one that sees
 nothing until a test calls `bringObservedIntoView()` from `test/intersection.ts`, as scrolling to the end would.
 
+## Keeping the Page Up to Date
+
+The app has no push updates yet (M6's spec §16). Instead it asks again for what's on screen each time the person comes
+back to its window, as well as after their own changes. The rules are in `queryClient.ts`, where the one `QueryClient`
+is made:
+
+- **An answer stays fresh for 30 seconds** (`staleTime`), so moving between views doesn't ask again.
+- **A return asks again however fresh the answer is** (`refetchOnWindowFocus: 'always'`). A document opened in Excel
+  through the helper is checked out a few seconds after the click, and saved to minutes later, so an answer from just
+  before would show it free, or at its old version.
+- **A return is the window getting the focus back, or a hidden tab showing again.** TanStack Query listens only for
+  `visibilitychange`, which moving from Excel back to a browser window that stayed on screen doesn't fire.
+  `createQueryClient` gives `focusManager.setEventListener` the app's own `listenForReturn`, which listens for the
+  window's own `focus` too (not a field's), and only while the page isn't hidden. A tab's return fires both, and a
+  request already under way isn't sent twice.
+- **The person's own changes** call `invalidateDocumentLists` (`actions/refresh.ts`) when they're done, which asks again
+  for the document, its properties and versions, the folders' lists, search results, Recent, My Favorites, Recent Matters
+  and Recent Clients.
+- **Open in App** calls `markDocumentListsStale` instead, which marks the same as stale without asking now
+  (`refetchType: 'none'`): the helper's check-out comes later, so an answer now would stay fresh for 30 seconds and show
+  the document free. The return to the window asks again, and so does any view moved to.
+
+A new query asks again on every return unless it says otherwise. Those that do:
+
+| Query | Setting | Why |
+|---|---|---|
+| Search results and their counts (`search/useSearchResults.ts`) | `refetchOnWindowFocus: false` | Each page and each count runs the whole search on the server; a search is asked again when it's run again |
+| The search box's suggestions and the people picker (`search/Suggestions.tsx`, `details/UserField.tsx`) | `refetchOnWindowFocus: false` | They're asked as the person types |
+| An email's message, a picture and a PDF in Quick Look (`preview/`) | `refetchOnWindowFocus: false`, `staleTime: Infinity` | They're read once for each file version, and a new version has a key of its own |
+| My Matters' tree (`frame/LeftPane.tsx`) | `refetchOnWindowFocus: true` | Folders change seldom, and a tree with many open would ask for each at every return, so a return asks only for answers over 30 seconds old |
+
+Thumbnails aren't queries: each is an `<img>` addressed by its file version. A test comes back to the window by
+dispatching a `focus` event on `window`, as `queryClient.test.tsx` does, and `e2e/working.spec.ts` does the same in
+both browsers after checking a document out and saving to it through the API with a device token.
+
 ## Filters and the Right Region
 
 A folder's filters are `?type=pdf&type=word&author=pnair&class=…&edited=7d` (or `from` and `to` as `2026-11-02`) in the
@@ -137,7 +172,8 @@ view.
   `healdan://open/<doc #>?server=<host>` for the kinds the helper opens, and downloads any other. `OpenInAppProvider`,
   in the frame, shows the notice ("If nothing opened, install the Healdan Helper") as a toast with a link, for 15
   seconds (`toastWithLink` in `@healdan/ui`; the Toast region is above Quick Look and outside what its dialog hides), and gives `useOpenInApp()` to
-  Open buttons, Quick Look and the lists. Double-click and Enter on a row go through `useOpenKey`, on every list of
+  Open buttons, Quick Look and the lists. It then marks the document and the lists stale, for the return to the window
+  to ask again (see [Keeping the Page Up to Date](#keeping-the-page-up-to-date)). Double-click and Enter on a row go through `useOpenKey`, on every list of
   documents, as Space goes through `usePreviewKey`; a document the person can't download (`canOpen`) is only selected.
 - **Download** (`download.ts`) is `launch` on `GET /v1/documents/{n}/content`, with `?version=` for a version. The web
   session carries it, as it does for an email's attachment chip. A refusal the server makes after the click (a

@@ -73,6 +73,13 @@ Select a document in a folder's list, in search results or in a Recent list, and
 
 Click another document to see its details instead, or select several and the details close.
 
+## Keeping Up to Date
+
+The web page brings what it shows up to date each time you come back to it: when you click back into its window from
+another app, such as Word or Excel, or switch back to its tab. So a document you opened in Excel shows as checked out
+to you, and each save you make there shows as a new version, without reloading the page. Search results are the
+exception: they stay as they were until you search again.
+
 ## The Keyboard
 
 In the left pane's tree, the up and down arrow keys move between rows, the right arrow opens a matter or folder, the
