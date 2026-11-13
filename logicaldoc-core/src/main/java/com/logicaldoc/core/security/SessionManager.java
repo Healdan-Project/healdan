@@ -176,7 +176,8 @@ public class SessionManager extends ConcurrentHashMap<String, Session> {
                 return session;
             }
         } catch (AuthenticationException e) {
-            LoginThrottle.recordFailure(account, key, client, e);
+            // Healdan: the right password that has to change isn't counted
+            HealdanThrottle.failed(account, password, key, client, e);
             throw e;
         }
     }

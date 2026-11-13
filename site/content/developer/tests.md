@@ -17,7 +17,8 @@ The tests use JUnit 4. [Building from Source](../building-from-source/) has the 
   `getPluginArchives()`. Those jars are kept by hand; they aren't built from source.
 - Tests write their stores, indexes and temporary files under `target/`.
 - **The sign-in throttle is on in every `healdan-core` and `healdan-api` test,** as on a real install. A test that
-  gets one user's password wrong five times blocks that user for the rest of the test.
+  gets one user's password wrong five times blocks that user for the rest of the test, unless the test then gives
+  that user a new password, or creates the account after the failures: either clears its username's count.
 - **The demo firm's test.** `DemoFixtureSeedTest` also runs the real manifest and files in `docker/demo/` on the
   test database, which takes about two and a half minutes. A step its user can't do, or a file the manifest names
   that's missing, fails the build. See [A Demo Firm for Screenshots](../development-stack/#a-demo-firm-for-screenshots).

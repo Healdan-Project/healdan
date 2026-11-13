@@ -72,8 +72,8 @@ after you last changed it.
 ### Five Wrong Passwords
 
 Five wrong passwords in a row block your username for 15 minutes, wherever you sign in: the web page, the
-[Healdan Helper](../../office/) and the rest. See
-[Signing In](../signing-in/#if-you-cant-sign-in).
+[Healdan Helper](../../office/) and the rest. A new password from your administrator, or from **Lost your
+password?**, lifts the block at once. See [Signing In](../signing-in/#if-you-cant-sign-in).
 
 ## Last Logins
 

@@ -54,6 +54,15 @@ fails, because the app's image is built here and can't be pulled.
   [Changes to LogicalDOC's Tables](#changes-to-logicaldocs-tables). If one is missing, the app stops as it starts,
   and its log names the tables and columns the database lacks.
 
+## The Build Needs AVX2, Since the User App
+
+Healdan's build has needed AVX2 on an x86-64 processor (the x86-64-v3 level) since the User app arrived, in November
+2026. A server whose processor offers less, as a virtual machine with its hypervisor's default processor type often
+does, builds as before until then, and then stops while building `healdan-web` with "Illegal instruction". The app
+that was running keeps running. [The Build Stops with "Illegal
+Instruction"](../troubleshooting/#the-build-stops-with-illegal-instruction) says how to check the processor, and
+what to change.
+
 ## Changes to LogicalDOC's Tables
 
 Healdan upgrades its own tables when it starts, but never LogicalDOC's. So when a new version needs a change to them,

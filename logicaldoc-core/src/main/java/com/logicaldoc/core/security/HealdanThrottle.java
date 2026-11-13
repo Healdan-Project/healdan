@@ -16,6 +16,8 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.apikey.ApiKey;
 import com.logicaldoc.core.security.apikey.ApiKeyDAO;
 import com.logicaldoc.core.security.authentication.AuthenticationException;
+import com.logicaldoc.core.security.authentication.PasswordExpiredException;
+import com.logicaldoc.core.security.authentication.UnconfirmedLegalsException;
 import com.logicaldoc.core.security.user.HibernateUserDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
@@ -29,11 +31,16 @@ import com.logicaldoc.util.spring.Context;
 /**
  * How {@link SessionManager#newSession} runs CE's {@link LoginThrottle} on
  * every sign-in route (M2 spec section 5.7), and refuses there the API keys of
- * accounts that sign in through a provider (M4 spec section 7.3).
+ * accounts that sign in through a provider (M4 spec section 7.3). A right
+ * password that has to change, or whose account has legals to confirm, isn't
+ * counted, and a new password clears its username's count (the spec of
+ * 2026-11-13 on passwords that have to change).
  * <p>
  * Healdan addition: lives in its own file so upstream merges don't touch it.
+ * It's public for {@link #passwordSet(String)} and
+ * {@link #isPassword(String, String)} only.
  */
-final class HealdanThrottle {
+public final class HealdanThrottle {
 
     private static final Logger log = LoggerFactory.getLogger(HealdanThrottle.class);
 
@@ -144,6 +151,91 @@ final class HealdanThrottle {
             return;
         String address = client != null ? client.getAddress() : null;
         LoginThrottle.clearFailures(account, failedRecently(address) ? null : address);
+    }
+
+    /**
+     * Counts a refused sign-in, as CE's {@code recordFailure} does, unless the
+     * sign-in page can finish it ({@link #finishable}) and the password given
+     * is the account's. CE's chain checks the account again after its
+     * authenticators, and that check's refusal replaces theirs, so a
+     * {@link PasswordExpiredException} comes for a wrong password too. A right
+     * one is a sign-in the person finishes by changing the password, or by
+     * confirming the legals: it isn't counted, and clears the counts as
+     * {@link #succeeded} does. It's still logged as a failed login, which the
+     * old login page reads to say why.
+     * <p>
+     * With a key the refusal may stand for the key, which the password can't
+     * vouch for, so it's counted as before. So is a right password refused for
+     * anything else, such as a disabled account: the person can't finish that
+     * sign-in, and clearing the count would tell someone guessing that the
+     * password was right.
+     *
+     * @param account the account, as {@link #account(String)} gives it
+     * @param password the password given, possibly null
+     * @param key the key presented, possibly null
+     * @param client the client, possibly null
+     * @param refusal why the chain refused the sign-in
+     */
+    static void failed(String account, String password, String key, Client client, AuthenticationException refusal) {
+        if (finishable(refusal) && StringUtils.isEmpty(key) && isPassword(account, password)) {
+            LoginThrottle.recordFailedLogin(account, client, refusal.getMessage());
+            succeeded(account, key, client);
+            return;
+        }
+        // CE's recordFailure reads the client's address unchecked; an empty client is logged as null would be
+        LoginThrottle.recordFailure(account, key, client != null ? client : new Client(), refusal);
+    }
+
+    /**
+     * Whether the sign-in page finishes a sign-in the chain refused this way,
+     * once the password is right: it asks for a new password, or for the
+     * legals to be confirmed, then signs in again. The legals' refusal comes
+     * only once the password needn't change, so it can follow a change.
+     */
+    private static boolean finishable(AuthenticationException refusal) {
+        return refusal instanceof PasswordExpiredException || refusal instanceof UnconfirmedLegalsException;
+    }
+
+    /**
+     * Clears the failure count of an account given a new password, whoever
+     * gave it: the failures were guesses at a password it no longer has. Only
+     * the username's: the address may be shared, and its count may be of
+     * attempts on other accounts.
+     *
+     * @param username the account's username, as stored
+     */
+    public static void passwordSet(String username) {
+        String account = account(username);
+        if (StringUtils.isNotEmpty(account))
+            LoginThrottle.clearFailures(account, null);
+    }
+
+    /**
+     * Whether the password is the account's, checked as
+     * {@code DefaultAuthenticator} checks it. An account with no password,
+     * such as one that signs in through a provider, never matches. The API's
+     * sign-in asks it too, so that its {@code password-expired} answer and
+     * the throttle agree.
+     *
+     * @param username the username as given, which names its account as
+     *        {@link #account(String)} does
+     * @param password the password given, possibly null
+     *
+     * @return true when the password is the account's
+     */
+    public static boolean isPassword(String username, String password) {
+        String account = account(username);
+        if (StringUtils.isEmpty(account) || StringUtils.isEmpty(password))
+            return false;
+        try {
+            User user = UserDAO.get().getUser(account);
+            return user != null && user.getPassword() != null
+                    && user.getPassword().equals(Encrypter.encryptSHA256(password));
+        } catch (PersistenceException | NoSuchAlgorithmException e) {
+            // Counted, rather than let a sign-in off unchecked
+            log.warn("{}", e.getMessage(), e);
+            return false;
+        }
     }
 
     /**
