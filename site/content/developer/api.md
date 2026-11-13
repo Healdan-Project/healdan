@@ -759,6 +759,8 @@ limits ([Healdan Settings](../../admin/healdan-settings/#the-sign-in-throttle)).
   again, such as "Too many failed sign-ins. Try again in 15 minutes.", so show it to the person.
 - **Attempts during a block don't count,** so they don't make it longer. Still, don't retry by yourself: ask the
   person.
+- **`401 password-expired`** comes only for the right password, and doesn't count: it clears the count as a
+  sign-in does. The person changes the password in the web page, then signs in with the new one.
 - **A request with a token** can get `429` too, while its network address is blocked.
 - **A token that no longer works** doesn't count against anyone, so an old token left in a client doesn't block
   its user.
