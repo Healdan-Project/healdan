@@ -58,6 +58,20 @@ The Docker build keeps its own copy, which the `maven:3.9` image both writes and
 It keeps npm's cache for the User app's packages beside it, keyed on `healdan-web/web/package-lock.json`, and only
 `master`'s amd64 job saves either.
 
+### Room for the Caches
+
+The repository has 10 GB of Actions caches. Past that, GitHub deletes the caches used least recently, whatever
+saved them, and `gh cache list --repo Healdan-Project/healdan` shows what's there. The Docker build's own layer
+cache, which pushes to `master` write and pull requests read, is the largest. It keeps only the final image's layers
+(`mode=min`), of which the WAR's, about 0.4 GB per architecture, is the large one a push changes.
+
+It used to keep every stage's layers (`mode=max`), the Maven stage's 1.8 GB per architecture included, so each push
+to `master` wrote about 5 GB. On 12 November 2026 two pushes in a row filled the space, GitHub deleted the shards'
+Maven repository copy, and the next day every shard of a pull request downloaded every dependency again, and one
+failed when a download did. The Maven stage's layers only helped a pull request that left the Maven build's inputs
+alone, changing only `docker/`, the `Dockerfile` or the workflows, which now runs the Maven build again: about 3.5
+minutes per architecture. Before adding a cache that's large or saved often, check it fits beside the others.
+
 ## What a Pull Request Runs
 
 `.github/scripts/code-changed.sh` lists the files a pull request changes and writes three answers. `code` is false
