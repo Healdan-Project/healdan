@@ -22,4 +22,9 @@ site
 compose*.yaml
 # The demo stack's sources and files: the overlay mounts them, and the image doesn't need them
 docker/demo
+# The desktop clients no module builds, so a change to one doesn't re-run Maven. clients/office/ stays: healdan-api
+# packages the Office add-in into its jar.
+clients/helper
+clients/libreoffice
+clients/icons
 **/node_modules

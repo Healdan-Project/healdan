@@ -13,7 +13,8 @@ ARG TOMCAT_IMAGE=tomcat:11.0-jre25-temurin
 FROM ${MAVEN_IMAGE} AS build
 WORKDIR /src
 COPY docker/maven-settings.xml /root/.m2/settings.xml
-# Container files, the Dockerfile itself and top-level docs are excluded so editing them does not re-run Maven.
+# Container files, the Dockerfile itself and top-level docs are excluded so editing them does not re-run Maven on a
+# builder that has this stage cached. CI's layer cache keeps only the final image's layers, so CI runs it again.
 COPY --exclude=docker --exclude=Dockerfile --exclude=.dockerignore --exclude=.gitignore --exclude=*.md . .
 # The cache mount keeps only third-party dependencies: the reactor's own artifacts (com/logicaldoc, about half its
 # size) are rebuilt every time. Docker CI saves the mount between runs (.github/workflows/docker-image.yml).
