@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { setLabels } from '@healdan/ui'
@@ -87,6 +87,19 @@ describe('LeftPane', () => {
     fireEvent.click(within(tree).getByRole('button', { name: /collapse/i }))
     fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
     await within(tree).findByRole('row', { name: /Correspondence/ })
+    expect(api.callsTo('GET /v1/folders/110/children')).toHaveLength(1)
+  })
+
+  it("asks again for the lists when the person comes back to the window, but not an open matter's folders under 30 seconds old", async () => {
+    const { api } = await renderApp('/folders/1')
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
+    await within(tree).findByRole('row', { name: /Correspondence/ })
+    const mine = api.callsTo('GET /v1/matters/mine').length
+
+    act(() => void window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(api.callsTo('GET /v1/matters/mine').length).toBe(mine + 1))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
     expect(api.callsTo('GET /v1/folders/110/children')).toHaveLength(1)
   })
 

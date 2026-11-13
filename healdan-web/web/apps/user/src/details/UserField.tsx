@@ -41,6 +41,8 @@ export function UserField({ label, required, error, value, onChange }: UserField
     enabled: settled !== '',
     retry: false,
     staleTime: 30_000,
+    // What's typed is asked as it's typed, not again on each return to the window
+    refetchOnWindowFocus: false,
     placeholderData: (previous) => previous,
   })
   const options = q === '' ? [] : (people.data?.items ?? []).map((person) => ({ id: String(person.id), label: person.name }))

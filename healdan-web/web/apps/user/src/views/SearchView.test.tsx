@@ -232,6 +232,23 @@ describe('SearchView', () => {
     expect(await within(region).findByText('Location')).toBeTruthy()
   })
 
+  // Each page and each count runs the whole search on the server (R96)
+  it('asks again for what else is on screen when the person comes back to the window, but not the search or its counts', async () => {
+    const { api } = await renderApp('/search?scope=documents&q=charter', routes())
+    await rows()
+    await userEvent.click(funnel())
+    const region = await screen.findByRole('region', { name: 'Filters' })
+    await within(region).findByRole('checkbox', { name: 'Word, 1' })
+    const searches = api.callsTo('GET /v1/search').length
+    const me = api.callsTo('GET /v1/me').length
+    expect(me).toBeGreaterThan(0)
+
+    act(() => void window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(api.callsTo('GET /v1/me').length).toBe(me + 1))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+    expect(api.callsTo('GET /v1/search')).toHaveLength(searches)
+  })
+
   it('says so when nothing is found, with filters or without', async () => {
     await renderApp('/search?scope=documents&q=zzz', routes({ 'GET /v1/search': hits([]) }))
     expect(await within(main()).findByText('Nothing found.')).toBeTruthy()

@@ -3,7 +3,7 @@
 
 import { readFile } from 'node:fs/promises'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { PASSWORD, authorized, deviceToken, fileDocument, matterFolders, minimalPdf, signIn } from './helpers'
+import { PASSWORD, authorized, call, deviceToken, fileDocument, matterFolders, minimalPdf, signIn } from './helpers'
 
 // Working in the User app (M6 spec sections 6.4 to 6.6): Quick Look, reading an email, opening, downloading and checking out;
 // filing, organising and the keys have specs of their own. The documents are made here, through the API with a device token, in matter 1.1's
@@ -22,6 +22,8 @@ const LINK = `https://link.invalid/report-${RUN}`
 // bytes can be compared with what was filed
 const WORK_NAME = `Working-${RUN}.txt`
 const WORK_TEXT = `The text of ${RUN}`
+// Checked out and saved to through the API, as the helper does after Open in App, while the page shows it
+const RETURN_NAME = `Returning-${RUN}.txt`
 
 /** An email with an HTML body, a tracking picture and a link, and a PDF attached, as an .eml */
 function trackingEmail(): Buffer {
@@ -63,6 +65,7 @@ function trackingEmail(): Buffer {
 let api: APIRequestContext | undefined
 let token = ''
 let documentsFolder = 0
+let returning = 0
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
@@ -72,6 +75,7 @@ test.beforeAll(async ({ playwright }, testInfo) => {
   await fileDocument(api, token, documentsFolder, PDF_NAME, 'application/pdf', minimalPdf(`Quick Look ${RUN}`))
   await fileDocument(api, token, documentsFolder, `${SUBJECT}.eml`, 'message/rfc822', trackingEmail())
   await fileDocument(api, token, documentsFolder, WORK_NAME, 'text/plain', Buffer.from(WORK_TEXT))
+  returning = await fileDocument(api, token, documentsFolder, RETURN_NAME, 'text/plain', Buffer.from(`The first text of ${RUN}`))
 })
 
 test.afterAll(async () => {
@@ -204,17 +208,17 @@ test('Quick Look shows an email as a message, with the sender\'s picture blocked
   await expect(dialog.getByRole('button', { name: `Save to Matter: ${ATTACHMENT_NAME}` })).toBeHidden()
 })
 
-/** Signs in, opens the folder and selects the working document, whose details then show */
-async function selectWorkingDocument(page: Page) {
+/** Signs in, opens the folder and selects a document (the working one unless named), whose details then show */
+async function selectWorkingDocument(page: Page, name = WORK_NAME) {
   await page.goto('/login.jsp')
   await signIn(page)
   await expect(page.getByRole('heading', { name: 'Recent Documents' })).toBeVisible()
   await page.goto(folderPath())
-  const row = main(page).getByRole('row', { name: new RegExp(WORK_NAME.replace('.', '\\.')) })
+  const row = main(page).getByRole('row', { name: new RegExp(name.replace('.', '\\.')) })
   await expect(row).toBeVisible()
   await row.getByRole('rowheader').click()
   const details = page.getByRole('region', { name: 'Details' })
-  await expect(details.getByRole('heading', { name: WORK_NAME })).toBeVisible()
+  await expect(details.getByRole('heading', { name })).toBeVisible()
   return details
 }
 
@@ -256,4 +260,42 @@ test('Edit changes a property in place, and the new value is there when it is ed
   await expect(details.getByRole('textbox', { name: 'Comments' })).toHaveValue(`Chase on Monday ${RUN}`)
   await details.getByRole('button', { name: 'Cancel' }).click()
   await expect(details.getByRole('textbox', { name: 'Comments' })).toBeHidden()
+})
+
+// Row 7 of M6's walkthrough (spec 10.2): Open in App hands the document to the helper, which checks it out on its computer
+// and saves to it from Excel, while the browser's window stays on screen behind Excel's. Coming back to it fires the
+// window's focus, not visibilitychange, and what was asked a moment before is under 30 seconds old: the page asks again
+// all the same. The browser here never leaves its window, so the test fires the focus the return would.
+test('Coming back to the window shows a check-out and a save made on a computer, as the helper makes them', async ({ page }) => {
+  const details = await selectWorkingDocument(page, RETURN_NAME)
+  const meta = (version: string) => details.getByText(new RegExp(`^# ${returning} · Version ${version.replace('.', '\\.')} · `))
+  const held = details.getByText(new RegExp(`^Checked out by you on e2e ${RUN} since `))
+  const comeBack = () => page.evaluate(() => void window.dispatchEvent(new Event('focus')))
+  await expect(meta('1')).toBeVisible()
+  await expect(details.getByRole('button', { name: 'Check Out' })).toBeVisible()
+
+  // The helper's check-out, held on its device, which the page isn't told of
+  await call(api!.post(`/api/v1/documents/${returning}/checkout`, { ...authorized(token), data: {} }), 'checking out on the device')
+  await comeBack()
+  await expect(held).toBeVisible()
+  await expect(details.getByRole('button', { name: 'Check Out' })).toBeHidden()
+
+  // Excel's save while editing: the next snapshot, still checked out on the device
+  const version = { kind: 'snapshot', name: RETURN_NAME, keepCheckedOut: true, ifHeld: true }
+  await call(
+    api!.post(`/api/v1/documents/${returning}/versions`, {
+      ...authorized(token),
+      multipart: {
+        version: { name: 'version.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(version)) },
+        file: { name: RETURN_NAME, mimeType: 'text/plain', buffer: Buffer.from(`The second text of ${RUN}`) },
+      },
+    }),
+    'saving on the device',
+  )
+  await comeBack()
+  await expect(meta('1.1')).toBeVisible()
+  await expect(details.getByRole('listitem').filter({ hasText: /^Version 1\.1/ })).toBeVisible()
+  await expect(held).toBeVisible()
+
+  await call(api!.delete(`/api/v1/documents/${returning}/checkout`, authorized(token)), 'releasing on the device')
 })
