@@ -24,8 +24,6 @@ import java.util.Map;
 import java.util.Set;
 
 import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
@@ -645,12 +643,7 @@ public class HelperSignInTest extends ApiTestCase {
 		List<Class<?>> sources = List.of(SignInResource.class, AuthResource.class, OneTimeCodes.class,
 				PendingSignIns.class, ProviderClient.class, SignInAccounts.class, SignIns.class, ApiTokens.class,
 				SessionManager.class);
-		Map<String, Level> levels = new HashMap<>();
-		for (Class<?> source : sources) {
-			levels.put(source.getName(), LogManager.getLogger(source).getLevel());
-			Configurator.setLevel(source.getName(), Level.ALL);
-		}
-		List<LogCapture> captures = sources.stream().map(LogCapture::of).toList();
+		List<LogCapture> captures = sources.stream().map(source -> LogCapture.of(source, Level.ALL)).toList();
 		String helperState = ApiTokens.randomPart();
 		List<String> secrets = new ArrayList<>(List.of(FakeProvider.SECRET, helperState, VERIFIER, CHALLENGE));
 		try {
@@ -701,7 +694,6 @@ public class HelperSignInTest extends ApiTestCase {
 					assertFalse("A log line holds a secret: " + line, secret != null && line.contains(secret));
 		} finally {
 			captures.forEach(LogCapture::close);
-			levels.forEach(Configurator::setLevel);
 		}
 	}
 

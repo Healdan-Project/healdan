@@ -52,9 +52,14 @@ show_server_log() {
   echo "== dms.log: the last 200 lines of the run's $(grep -cE '^[0-9.]{10} [0-9:,]{12} (WARN|ERROR|FATAL)' \
     "$dir/run.log") warnings and errors (times in UTC)"
   tail -n 200 "$dir/problems.log" | cut -c 1-400
-  # A request that failed with a 500 keeps its frames, which say where: the last three, 80 lines each at most
-  awk '/^[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9][0-9][0-9] / { n++; keep = /API request failed/; lines = 0 }
-       keep && lines++ < 80 { print n "\t" $0 }' "$dir/run.log" > "$dir/failed.log"
+  # A request that failed with a 500 keeps its frames, which say where: the last three, 80 lines each at most. A
+  # client that went away (Tomcat's ClientAbortException as the exception or one of its causes, as ProblemMapper
+  # checks, not one suppressed) isn't one, though a server from before ProblemMapper knew it logged it as one.
+  awk 'function flush() { if (keep && !gone) printf "%s", entry; entry = "" }
+       /^[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9][0-9][0-9] / { flush(); n++; keep = /API request failed/; gone = 0; lines = 0 }
+       keep && /^(Caused by: )?org\.apache\.catalina\.connector\.ClientAbortException/ { gone = 1 }
+       keep && lines++ < 80 { entry = entry n "\t" $0 "\n" }
+       END { flush() }' "$dir/run.log" > "$dir/failed.log"
   if [ -s "$dir/failed.log" ]; then
     echo "== dms.log: the last three requests that failed, with their frames"
     last=$(cut -f1 "$dir/failed.log" | uniq | tail -n 3 | head -1)

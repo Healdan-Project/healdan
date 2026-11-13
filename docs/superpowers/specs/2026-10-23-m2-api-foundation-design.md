@@ -157,6 +157,8 @@ Errors use **RFC 9457 problem details** (`application/problem+json`):
 
 Other 4xx errors that JAX-RS raises itself, such as `405` and `415`, keep their status and get the code `bad-request`. (changed in the build: plan correction 14)
 
+A request whose client went away, or stalled past Tomcat's timeout, while its body was read or its answer written (Tomcat's `ClientAbortException`) gets an empty `500`, not a problem, and isn't logged as a failure. (changed after the build, in #231)
+
 ### 4.5 Paging (call)
 
 Lists take `offset` (default 0) and `limit` (default 50, at most 200), and return:

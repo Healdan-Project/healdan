@@ -7,15 +7,21 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
+import org.apache.catalina.connector.ClientAbortException;
+import org.apache.logging.log4j.Level;
 import org.junit.Test;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.api.model.FieldError;
+import com.logicaldoc.healdan.support.LogCapture;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
@@ -24,6 +30,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.StreamingOutput;
 
 public class ProblemMapperTest extends ApiTestCase {
 
@@ -54,6 +61,34 @@ public class ProblemMapperTest extends ApiTestCase {
 		@Path("crash")
 		public String crash() {
 			throw new RuntimeException("secret");
+		}
+
+		@GET
+		@Public
+		@Path("pipe")
+		public String pipe() throws IOException {
+			// A connection of the server's own that broke, which is a failure
+			throw new IOException("Broken pipe");
+		}
+
+		@GET
+		@Public
+		@Path("gone")
+		public StreamingOutput gone() {
+			// As Tomcat's connector throws when the client closed the connection while the answer was written
+			return out -> {
+				out.write('[');
+				out.flush();
+				throw new ClientAbortException(new IOException("Broken pipe"));
+			};
+		}
+
+		@GET
+		@Public
+		@Path("gone-wrapped")
+		public String goneWrapped() {
+			// As a read of a body whose client went away, wrapped on its way out
+			throw new UncheckedIOException(new ClientAbortException(new IOException("Connection reset by peer")));
 		}
 
 		@GET
@@ -134,6 +169,37 @@ public class ProblemMapperTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testFailureIsLogged() {
+		// Including an IOException that says what a client's going away says, but from a connection of the server's
+		for (String path : List.of("/api/v1/test/crash", "/api/v1/test/pipe")) {
+			Logged logged = logged(() -> get(path).send());
+
+			assertProblem(logged.response(), 500, "server-error");
+			assertTrue(path + ": " + logged.lines(), logged.lines().contains("ERROR API request failed"));
+		}
+	}
+
+	@Test
+	public void testClientGoneWhileWritingIsNoFailure() {
+		Logged logged = logged(() -> get("/api/v1/test/gone").withoutContract().send());
+
+		// Nothing more is written to a client that went away: no problem after what it was sent
+		assertEquals("[", logged.response().text());
+		assertNoFailureLogged(logged, "GET /api/v1/test/gone", "java.io.IOException: Broken pipe");
+	}
+
+	@Test
+	public void testClientGoneInCauseIsNoFailure() {
+		Logged logged = logged(() -> get("/api/v1/test/gone-wrapped").withoutContract().send());
+
+		ApiResponse response = logged.response();
+		assertEquals(response.toString(), 0, response.body().length);
+		assertFalse(response.toString(),
+				String.valueOf(response.header("Content-Type")).startsWith(ProblemMapper.PROBLEM_JSON));
+		assertNoFailureLogged(logged, "GET /api/v1/test/gone-wrapped", "java.io.IOException: Connection reset by peer");
+	}
+
+	@Test
 	public void testProblemExtras() {
 		ApiResponse held = get("/api/v1/test/held").send();
 		assertProblem(held, 409, "checked-out");
@@ -178,6 +244,30 @@ public class ProblemMapperTest extends ApiTestCase {
 
 		assertEquals(200, response.status());
 		assertTrue(response.header("Content-Type"), response.header("Content-Type").startsWith("application/json"));
+	}
+
+	/** A response, and what {@link ProblemMapper} logged, debug included, while it was made */
+	private record Logged(ApiResponse response, List<String> lines) {
+	}
+
+	private static Logged logged(Supplier<ApiResponse> call) {
+		try (LogCapture log = LogCapture.of(ProblemMapper.class, Level.DEBUG)) {
+			ApiResponse response = call.get();
+			return new Logged(response, log.lines());
+		}
+	}
+
+	/**
+	 * A client that went away is logged in one line at info, which names the
+	 * request and the cause, with its frames at debug, and not as a failure
+	 */
+	private static void assertNoFailureLogged(Logged logged, String request, String cause) {
+		List<String> lines = logged.lines();
+		assertEquals(lines.toString(), 1, lines.stream()
+				.filter(line -> line.startsWith("INFO ") && line.contains(request) && line.contains(cause)).count());
+		assertTrue(lines.toString(), lines.stream().anyMatch(line -> line.startsWith("DEBUG ")));
+		assertTrue(lines.toString(), lines.stream().noneMatch(line -> line.startsWith("ERROR ")
+				|| line.startsWith("WARN ") || line.contains("API request failed")));
 	}
 
 	private static void assertProblem(ApiResponse response, int status, String code) {
