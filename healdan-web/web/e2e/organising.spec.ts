@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
+import { PASSWORD, authorized, call, deviceToken, escape, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
 
 // Organising in the User app (M6 spec section 6.7): a folder made with New Folder, a document renamed in place, one moved
 // by the picker, two moved by dragging them onto a folder of the tree, and two deleted after the question. Playwright can't
@@ -59,7 +59,6 @@ test.afterAll(async () => {
 
 const main = (page: Page) => page.getByRole('main')
 const folderPath = () => `/app/folders/${workFolder}?sort=edited&order=desc`
-const escape = (text: string) => new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
 
 async function open(page: Page) {
   await page.goto('/login.jsp')

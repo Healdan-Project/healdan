@@ -5,6 +5,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { launch } from '../actions/launch'
+import { comeBack, settle } from '../test/comeBack'
 import { detailsRoutes } from '../test/details'
 import { children, document, folder, page, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
@@ -134,22 +135,26 @@ describe('coming back after Open in App', () => {
   }
 
   // The helper checks the document out a few seconds after the link, and saves to it later still, out of the page's sight:
-  // what the page has is marked stale, so the return to its window, and any view moved to after it, asks again
+  // what the page has is marked stale, so the return to its window, and any view moved to after it, asks again. A return
+  // alone leaves Recent Matters to its 30 seconds, so its asking again is the marking's
   it('marks the document and the lists stale, without asking again until the person comes back', async () => {
     const { api, queryClient } = await renderApp('/folders/7?sel=10431', routes)
     const bar = within(await screen.findByRole('toolbar', { name: 'Folder Actions' }))
     await waitFor(() => expect((bar.getByRole('button', { name: 'Open' }) as HTMLButtonElement).disabled).toBe(false))
-    const asked = () => [api.callsTo('GET /v1/documents/10431').length, api.callsTo('GET /v1/folders/7/children').length]
+    const asked = () => ['GET /v1/documents/10431', 'GET /v1/folders/7/children', 'GET /v1/matters/recent'].map((route) => api.callsTo(route).length)
     const before = asked()
+    expect(before[2]).toBeGreaterThan(0)
 
     await userEvent.click(bar.getByRole('button', { name: 'Open' }))
     expect(launch).toHaveBeenLastCalledWith(link(10431))
     expect(queryClient.getQueryState(['documents', 10431])?.isInvalidated).toBe(true)
-    expect(queryClient.getQueryCache().findAll({ queryKey: ['folders', 7, 'children'] }).every((query) => query.state.isInvalidated)).toBe(true)
-    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+    const lists = queryClient.getQueryCache().findAll({ queryKey: ['folders', 7, 'children'] })
+    expect(lists.length).toBeGreaterThan(0)
+    expect(lists.every((query) => query.state.isInvalidated)).toBe(true)
+    await settle()
     expect(asked()).toEqual(before)
 
-    act(() => void window.dispatchEvent(new Event('focus')))
-    await waitFor(() => expect(asked()).toEqual([before[0]! + 1, before[1]! + 1]))
+    comeBack()
+    await waitFor(() => expect(asked()).toEqual(before.map((n) => n + 1)))
   })
 })

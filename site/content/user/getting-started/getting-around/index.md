@@ -80,7 +80,9 @@ Click another document to see its details instead, or select several and the det
 The web page brings what it shows up to date each time you come back to it: when you click back into its window from
 another app, such as Word or Excel, or switch back to its tab. So a document you opened in Excel shows as checked out
 to you, with the pencil in the list, and each save you make there shows as a new version, without reloading the page. Search results are the
-exception: they stay as they were until you search again.
+exception: they stay as they were until you search again. A search folder, and a list you've scrolled past its first
+100 documents, are brought up to date on coming back only once what they show is over 30 seconds old, or after you
+open a document in an app from the page, as each update runs the search again, or asks for every 100 documents.
 
 ## The Keyboard
 

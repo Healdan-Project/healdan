@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
+import { comeBack, settle } from '../test/comeBack'
 import { folder, matter, page, problem } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
@@ -90,16 +91,20 @@ describe('LeftPane', () => {
     expect(api.callsTo('GET /v1/folders/110/children')).toHaveLength(1)
   })
 
-  it("asks again for the lists when the person comes back to the window, but not an open matter's folders under 30 seconds old", async () => {
+  it("asks again for the folder's list when the person comes back to the window, but not My Matters or an open matter's folders", async () => {
     const { api } = await renderApp('/folders/1')
     const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
     fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
     await within(tree).findByRole('row', { name: /Correspondence/ })
+    const listed = () => api.callsTo('GET /v1/folders/1/children').filter((call) => call.query?.type !== 'folder').length
+    const before = listed()
+    expect(before).toBeGreaterThan(0)
     const mine = api.callsTo('GET /v1/matters/mine').length
 
-    act(() => void window.dispatchEvent(new Event('focus')))
-    await waitFor(() => expect(api.callsTo('GET /v1/matters/mine').length).toBe(mine + 1))
-    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+    comeBack()
+    await waitFor(() => expect(listed()).toBe(before + 1))
+    await settle()
+    expect(api.callsTo('GET /v1/matters/mine')).toHaveLength(mine)
     expect(api.callsTo('GET /v1/folders/110/children')).toHaveLength(1)
   })
 

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { readFile } from 'node:fs/promises'
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, fileDocument, matterFolders, minimalPdf, signIn } from './helpers'
+import { expect, test, type APIRequestContext, type Page, type Request } from '@playwright/test'
+import { PASSWORD, authorized, call, deviceToken, escape, escaped, fileDocument, matterFolders, minimalPdf, signIn } from './helpers'
 
 // Working in the User app (M6 spec sections 6.4 to 6.6): Quick Look, reading an email, opening, downloading and checking out;
 // filing, organising and the keys have specs of their own. The documents are made here, through the API with a device token, in matter 1.1's
@@ -81,6 +81,8 @@ test.beforeAll(async ({ playwright }, testInfo) => {
 test.afterAll(async () => {
   // beforeAll may have failed before there was anything to clean up
   if (!api) return
+  // Released however the test that holds it ended, before its device's token goes; already free, it answers a problem
+  if (token && returning) await api.delete(`/api/v1/documents/${returning}/checkout`, authorized(token))
   if (token) await api.delete('/api/v1/auth/tokens/current', authorized(token))
   await api.dispose()
 })
@@ -214,7 +216,7 @@ async function selectWorkingDocument(page: Page, name = WORK_NAME) {
   await signIn(page)
   await expect(page.getByRole('heading', { name: 'Recent Documents' })).toBeVisible()
   await page.goto(folderPath())
-  const row = main(page).getByRole('row', { name: new RegExp(name.replace('.', '\\.')) })
+  const row = main(page).getByRole('row', { name: escape(name) })
   await expect(row).toBeVisible()
   await row.getByRole('rowheader').click()
   const details = page.getByRole('region', { name: 'Details' })
@@ -267,17 +269,29 @@ test('Edit changes a property in place, and the new value is there when it is ed
 // window's focus, not visibilitychange, and what was asked a moment before is under 30 seconds old: the page asks again
 // all the same. The browser here never leaves its window, so the test fires the focus the return would.
 test('Coming back to the window shows a check-out and a save made on a computer, as the helper makes them', async ({ page }) => {
+  // The details draw from the row while the document's own answer comes, and a return while an answer is on its way is met
+  // by that answer, from before the change: each change through the API waits until the page has every answer it asked for
+  const asking = new Set<Request>()
+  page.on('request', (request) => {
+    if (request.resourceType() === 'fetch') asking.add(request)
+  })
+  const answered = (request: Request) => void asking.delete(request)
+  page.on('requestfinished', answered)
+  page.on('requestfailed', answered)
+  const settled = () => expect.poll(() => asking.size).toBe(0)
+
   const details = await selectWorkingDocument(page, RETURN_NAME)
-  const meta = (version: string) => details.getByText(new RegExp(`^# ${returning} · Version ${version.replace('.', '\\.')} · `))
+  const meta = (version: string) => details.getByText(new RegExp(`^# ${returning} · Version ${escaped(version)} · `))
   const held = details.getByText(new RegExp(`^Checked out by you on e2e ${RUN} since `))
   // The row's marker says the same, without where it's released
-  const marker = main(page).getByRole('row', { name: new RegExp(RETURN_NAME.replace('.', '\\.')) }).getByRole('img', { name: new RegExp(`^Checked out by you on e2e ${RUN} since [^.]+\\.$`) })
+  const marker = main(page).getByRole('row', { name: escape(RETURN_NAME) }).getByRole('img', { name: new RegExp(`^Checked out by you on e2e ${RUN} since [^.]+\\.$`) })
   const comeBack = () => page.evaluate(() => void window.dispatchEvent(new Event('focus')))
   await expect(meta('1')).toBeVisible()
   await expect(details.getByRole('button', { name: 'Check Out' })).toBeVisible()
   await expect(marker).toHaveCount(0)
 
   // The helper's check-out, held on its device, which the page isn't told of
+  await settled()
   await call(api!.post(`/api/v1/documents/${returning}/checkout`, { ...authorized(token), data: {} }), 'checking out on the device')
   await comeBack()
   await expect(held).toBeVisible()
@@ -285,6 +299,7 @@ test('Coming back to the window shows a check-out and a save made on a computer,
   await expect(marker).toBeVisible()
 
   // Excel's save while editing: the next snapshot, still checked out on the device
+  await settled()
   const version = { kind: 'snapshot', name: RETURN_NAME, keepCheckedOut: true, ifHeld: true }
   await call(
     api!.post(`/api/v1/documents/${returning}/versions`, {
@@ -301,6 +316,4 @@ test('Coming back to the window shows a check-out and a save made on a computer,
   await expect(details.getByRole('listitem').filter({ hasText: /^Version 1\.1/ })).toBeVisible()
   await expect(held).toBeVisible()
   await expect(marker).toBeVisible()
-
-  await call(api!.delete(`/api/v1/documents/${returning}/checkout`, authorized(token)), 'releasing on the device')
 })

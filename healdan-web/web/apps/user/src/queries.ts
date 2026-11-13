@@ -5,6 +5,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo } from 'react'
 import { apiPath, type Api, type components } from '@healdan/api'
 import type { PageOf } from './pages'
+import { ASK_ON_RETURN } from './queryClient'
 import { useApi } from './services'
 
 type S = components['schemas']
@@ -74,6 +75,7 @@ export function useRecentDocuments(kind?: 'email') {
   return useQuery({
     queryKey: kind ? keys.recentEmails : keys.recentDocuments,
     queryFn: () => api.get<PageOf<S['DocumentView']>>('/v1/documents/recent', kind ? { kind } : undefined),
+    meta: ASK_ON_RETURN,
   })
 }
 
@@ -110,6 +112,7 @@ export function useDocument(docNumber: number, placeholder?: S['DocumentView']) 
     queryKey: keys.document(docNumber),
     queryFn: () => api.get<S['DocumentView']>(apiPath`/v1/documents/${docNumber}`),
     placeholderData: placeholder?.docNumber === docNumber ? placeholder : undefined,
+    meta: ASK_ON_RETURN,
   })
 }
 
@@ -118,6 +121,7 @@ export function useProperties(docNumber: number) {
   return useQuery({
     queryKey: keys.properties(docNumber),
     queryFn: () => api.get<PageOf<S['ProfileField']>>(apiPath`/v1/documents/${docNumber}/properties`),
+    meta: ASK_ON_RETURN,
   })
 }
 
@@ -138,6 +142,7 @@ export function useVersions(docNumber: number, wanted?: string) {
       const loaded = all.reduce((n, page) => n + page.items.length, 0)
       return last.items.length > 0 && loaded < (last.total ?? 0) ? loaded : undefined
     },
+    meta: ASK_ON_RETURN,
   })
   const items = useMemo(() => query.data?.pages.flatMap((page) => page.items), [query.data])
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query

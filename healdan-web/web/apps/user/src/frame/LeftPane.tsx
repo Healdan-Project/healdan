@@ -168,15 +168,12 @@ function MyMattersSection() {
     if (trail.some((id) => !expanded.has(id))) setExpanded(new Set([...expanded, ...trail]))
   }
 
-  // A node's subfolders are asked for when it is first expanded; the answer stays for the cache's 30 seconds. Folders
-  // change seldom, and a tree with many open would ask for each at every return to the window, so a return asks only for
-  // answers older than that.
+  // A node's subfolders are asked for when it is first expanded; the answer stays for the cache's 30 seconds.
   const open = [...expanded]
   const loaded = useQueries({
     queries: open.map((id) => ({
       queryKey: keys.subfolders(Number(id)),
       queryFn: () => fetchSubfolders(api, id),
-      refetchOnWindowFocus: true,
     })),
   })
   const answers = new Map(open.map((id, i) => [id, loaded[i]]))

@@ -53,8 +53,6 @@ export function useSuggestions(text: string): S['SuggestView'] | undefined {
     retry: false,
     // A new search of the same words is a fresh look; but a keystroke back and forth needn't ask twice
     staleTime: 10_000,
-    // What's typed is asked as it's typed, not again on each return to the window
-    refetchOnWindowFocus: false,
     placeholderData: (previous) => previous,
   })
   // Nothing to show once the text is too short or a #, whatever the last answer was

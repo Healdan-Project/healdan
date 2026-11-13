@@ -7,6 +7,11 @@ import { expect, type APIRequestContext, type Locator, type Page } from '@playwr
 export const USERNAME = 'webuser'
 export const PASSWORD = process.env.WEBUSER_PASSWORD ?? ''
 
+/** The text with the characters a regular expression takes for its own escaped */
+export const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+/** A pattern that finds the text anywhere in a name */
+export const escape = (text: string) => new RegExp(escaped(text))
+
 // Fills the old UI's sign-in page and submits it. The page is a GWT app, so its fields have no labels to find them by.
 export async function signIn(page: Page) {
   // The page keeps hidden copies of its fields, so only the visible ones count.

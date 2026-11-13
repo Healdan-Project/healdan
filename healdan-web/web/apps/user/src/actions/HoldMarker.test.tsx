@@ -7,6 +7,7 @@ import { formatDateTime } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
 import { children, document, folder, page, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
+import actionsCss from './actions.module.css?raw'
 
 // Each document row in a list says, with a small icon beside its name, that the document is checked out or locked, and
 // by whom (the owner's call after walkthrough row 7)
@@ -41,6 +42,15 @@ describe('the hold marker on a row', () => {
     expect(icon?.getAttribute('aria-label')).toBe(`Checked out by Alex Marsh since ${when}.`)
     expect(icon?.getAttribute('title')).toBe(`Checked out by Alex Marsh since ${when}.`)
     expect(icon?.querySelector('svg.tabler-icon-pencil')).toBeTruthy()
+  })
+
+  // A tooltip alone can't be reached by keyboard. jsdom draws no style, so the stylesheet is read.
+  it('has the same words as text, which the row shows when it has the keyboard focus, or the pointer', async () => {
+    await renderApp('/folders/7', routes)
+    const target = await row(/Letter to Dunmere/)
+    expect(marker(target)?.textContent).toBe(`Checked out by Alex Marsh since ${when}.`)
+    expect(actionsCss).toMatch(/\[role='row'\]:focus-within\)\s+\.holdText/)
+    expect(actionsCss).toMatch(/\[role='row'\]:hover\)\s+\.holdText/)
   })
 
   it('names the computer for your own check-out on one, without where to release it', async () => {

@@ -51,7 +51,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const asked = sort && { column: sort, direction: order === 'desc' ? ('descending' as const) : ('ascending' as const) }
   // The folder and its list are asked for at once: the list doesn't wait for the folder.
   const { filters, active, change, remove, clear } = useFilters()
-  const listing = useListing({ folderId, sort: asked, filters, enabled: !store })
+  const listing = useListing({ folderId, sort: asked, filters, enabled: !store, searchFolder: view?.kind === 'searchFolder' })
   const region = useRightRegion()
   const funnel = useRef<HTMLButtonElement>(null)
   const filtersOpen = region.show === 'filters'

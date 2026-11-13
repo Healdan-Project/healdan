@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import type { QueryClient } from '@tanstack/react-query'
+import type { Query, QueryClient } from '@tanstack/react-query'
 
 // Everything that shows a document's state: the document and its properties and versions, a folder's list, search results
 // and Recent; My Favorites, which names documents; and Recent Matters and Recent Clients, which a change to a document of
@@ -20,7 +20,10 @@ export function invalidateDocumentLists(queryClient: QueryClient): Promise<unkno
  * Marks the same as stale without asking now, for a change that comes later and out of the page's sight: Open in App's
  * helper checks the document out seconds after the link, and saves to it later still. Asked now, the answer would show the
  * document free, and stay fresh for 30 seconds; marked, the return to the window asks again, as does any view moved to.
+ * My Matters' folders are left as they are: a document's state doesn't change them, and a tree with many open would ask
+ * for each.
  */
 export function markDocumentListsStale(queryClient: QueryClient): void {
-  for (const root of DOCUMENT_LISTS) void queryClient.invalidateQueries({ queryKey: [root], refetchType: 'none' })
+  const predicate = (query: Query) => query.queryKey[2] !== 'subfolders'
+  for (const root of DOCUMENT_LISTS) void queryClient.invalidateQueries({ queryKey: [root], predicate, refetchType: 'none' })
 }

@@ -81,9 +81,11 @@ pages shift when the folder changes between them, so it keeps one copy of a row 
 Every list of documents takes its Title column from `views/listColumns.tsx`, whose cell ends with `HoldMarker`
 (`actions/HoldMarker.tsx`) for a document whose `hold` isn't null: Check Out's pencil for a check-out, or the padlock for
 a lock, in a `role="img"` span whose name and `title` are `holdLabel`'s. That's who has it and since when, from the `hold.*`
-strings the details use, without where it's released, which `holdSentence` adds for the details. The Table colours a
-cell's icons `--hd-text-secondary`, and the row's own text colour on a selected row, so the marker meets contrast in both
-themes.
+strings the details use, without where it's released, which `holdSentence` adds for the details. The same words are in
+the span as text, drawn away, which a hovered row, or one with the keyboard's focus, shows after the icon
+(`actions.module.css`), as `MatterCell` shows a matter's name: a tooltip alone can't be reached by keyboard. Only a held
+row asks who the person is (`useMe`), to tell their own holds from others'. The Table colours a cell's icons
+`--hd-text-secondary`, and the row's own text colour on a selected row, so the marker meets contrast in both themes.
 
 The virtualiser places the rows itself, so the Table needs a height: it fills a flex column, as the folder view's is.
 jsdom has no IntersectionObserver, which notices the end of a list, so the tests' setup installs one that sees
@@ -95,34 +97,45 @@ The app has no push updates yet (M6's spec §16). Instead it asks again for what
 back to its window, as well as after their own changes. The rules are in `queryClient.ts`, where the one `QueryClient`
 is made:
 
-- **An answer stays fresh for 30 seconds** (`staleTime`), so moving between views doesn't ask again.
-- **A return asks again however fresh the answer is** (`refetchOnWindowFocus: 'always'`). A document opened in Excel
-  through the helper is checked out a few seconds after the click, and saved to minutes later, so an answer from just
-  before would show it free, or at its old version.
+- **An answer stays fresh for 30 seconds** (`staleTime`), so moving between views doesn't ask again, and a return asks
+  again for what's on screen and older than that (TanStack Query's `refetchOnWindowFocus: true`).
+- **A return asks again for what shows a document's state, however fresh the answer is.** A query that shows it carries
+  `meta: ASK_ON_RETURN`: the document, its properties and versions and Recent (`queries.ts`), and a folder's list
+  (`views/useListing.ts`). The return marks them stale (`invalidateQueries` with `refetchType: 'none'`) before it tells
+  TanStack Query, which then asks for them as for any stale answer. A document opened in Excel through the helper is
+  checked out a few seconds after the click, and saved to minutes later, so an answer from just before would show it
+  free, or at its old version. A new query keeps to the 30 seconds unless it carries the same `meta`.
 - **A return is the window getting the focus back, or a hidden tab showing again.** TanStack Query listens only for
   `visibilitychange`, which moving from Excel back to a browser window that stayed on screen doesn't fire.
   `createQueryClient` gives `focusManager.setEventListener` the app's own `listenForReturn`, which listens for the
-  window's own `focus` too (not a field's), and only while the page isn't hidden. A tab's return fires both, and a
+  window's own `focus` too. The focus coming back to the page from a frame in it, an email's body, fires that as well,
+  and is no return: the window's `blur` notes whether the focus went into an `<iframe>`. A tab's return fires both, and a
   request already under way isn't sent twice.
 - **The person's own changes** call `invalidateDocumentLists` (`actions/refresh.ts`) when they're done, which asks again
   for the document, its properties and versions, the folders' lists, search results, Recent, My Favorites, Recent Matters
   and Recent Clients.
 - **Open in App** calls `markDocumentListsStale` instead, which marks the same as stale without asking now
-  (`refetchType: 'none'`): the helper's check-out comes later, so an answer now would stay fresh for 30 seconds and show
-  the document free. The return to the window asks again, and so does any view moved to.
+  (`refetchType: 'none'`), but for My Matters' folders, which a tree with many open would ask for one by one: the
+  helper's check-out comes later, so an answer now would stay fresh for 30 seconds and show the document free. The return
+  to the window asks again for what's on screen, and so does any view moved to.
+- **A failed refresh keeps what's shown.** `DetailsPanel` gives way to an error only when the document or its properties
+  never answered, or the document is gone (`404`), so an open properties form keeps what's typed in it.
 
-A new query asks again on every return unless it says otherwise. Those that do:
+What shows a document's state but isn't asked again on every return:
 
 | Query | Setting | Why |
 |---|---|---|
+| A search folder's list (`views/FolderView.tsx`) | `useListing`'s `searchFolder`, which leaves out `ASK_ON_RETURN` | Each page runs the folder's saved search on the server, as its counts do |
+| A list scrolled past its first page (`askedOnReturn` in `queryClient.ts`) | Not marked stale on a return | A return would ask for every page it has, one after another |
 | Search results and their counts (`search/useSearchResults.ts`) | `refetchOnWindowFocus: false` | Each page and each count runs the whole search on the server; a search is asked again when it's run again |
-| The search box's suggestions and the people picker (`search/Suggestions.tsx`, `details/UserField.tsx`) | `refetchOnWindowFocus: false` | They're asked as the person types |
 | An email's message, a picture and a PDF in Quick Look (`preview/`) | `refetchOnWindowFocus: false`, `staleTime: Infinity` | They're read once for each file version, and a new version has a key of its own |
-| My Matters' tree (`frame/LeftPane.tsx`) | `refetchOnWindowFocus: true` | Folders change seldom, and a tree with many open would ask for each at every return, so a return asks only for answers over 30 seconds old |
 
-Thumbnails aren't queries: each is an `<img>` addressed by its file version. A test comes back to the window by
-dispatching a `focus` event on `window`, as `queryClient.test.tsx` does, and `e2e/working.spec.ts` does the same in
-both browsers after checking a document out and saving to it through the API with a device token.
+The first two are asked again on a return once their answer is over 30 seconds old, as everything else is. Thumbnails
+aren't queries: each is an `<img>` addressed by its file version. A test comes back to the window with `comeBack()` from
+`src/test/comeBack.ts`, which dispatches a `focus` event on `window`, and `settle()` gives what would be asked a moment
+before the test checks it wasn't. `e2e/working.spec.ts` dispatches the same in both browsers after checking a document
+out and saving to it through the API with a device token, each once the page has every answer it asked for: a return
+while one is on its way is met by that answer, from before the change.
 
 ## Filters and the Right Region
 
