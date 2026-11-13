@@ -9,6 +9,10 @@ from nothing to signing in.
 You need Docker with Compose v2.24.4 or newer, and at least 8 GB of memory for Docker. The first start builds
 Healdan from source, which takes 5 to 30 minutes depending on your machine and network.
 
+The build needs a 64-bit Arm processor, or an x86-64 one with AVX2 (the x86-64-v3 level). On a virtual machine, give
+it a processor type that passes AVX2 through, such as `host` or `x86-64-v3` in Proxmox, as the default types don't:
+see [The Build Stops with "Illegal Instruction"](../troubleshooting/#the-build-stops-with-illegal-instruction).
+
 {{% steps %}}
 
 ### Get the Code
