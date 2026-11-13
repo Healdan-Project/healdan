@@ -3,7 +3,6 @@
 
 package com.logicaldoc.healdan.token;
 
-import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -11,9 +10,9 @@ import org.slf4j.LoggerFactory;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.user.User;
-import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserHistory;
 import com.logicaldoc.core.security.user.UserListener;
+import com.logicaldoc.healdan.security.StoredPassword;
 
 /**
  * Revokes a user's device tokens when their password changes or they are
@@ -41,9 +40,8 @@ public class TokenUserListener implements UserListener {
 		if (user.getId() == 0)
 			return;
 		try {
-			List<String> stored = UserDAO.get().queryForList(
-					"select ld_password from ld_user where ld_id = " + user.getId(), String.class);
-			if (!stored.isEmpty() && stored.get(0) != null && !stored.get(0).equals(user.getPassword()))
+			String stored = StoredPassword.before(user, dictionary);
+			if (stored != null && !stored.equals(user.getPassword()))
 				dictionary.put(PASSWORD_CHANGED, Boolean.TRUE);
 		} catch (RuntimeException | PersistenceException e) {
 			log.warn("Couldn't check whether the password of user {} changed", user.getId(), e);

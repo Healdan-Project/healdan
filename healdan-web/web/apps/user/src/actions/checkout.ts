@@ -28,8 +28,8 @@ export function holdState(hold: S['HoldView'] | null, meId: number | undefined):
   return { kind: 'theirs', hold }
 }
 
-/** Who has it and since when, and where it's released; nothing for a free document. */
-export function holdSentence(state: HoldState): string | undefined {
+/** Who has it and since when, as a list row's marker says it; nothing for a free document. */
+export function holdLabel(state: HoldState): string | undefined {
   if (state.kind === 'free') return undefined
   const { hold } = state
   const since = hold.since ? formatDateTime(hold.since) : undefined
@@ -38,12 +38,26 @@ export function holdSentence(state: HoldState): string | undefined {
     case 'yours':
       return since ? t('hold.yours', { since }) : t('hold.yoursUndated')
     case 'yourDevice':
-      return [since ? t('hold.yourDevice', { device: hold.device?.name ?? '', since }) : t('hold.yourDeviceUndated', { device: hold.device?.name ?? '' }), t('hold.releaseOnDevice')].join(' ')
+      return since ? t('hold.yourDevice', { device: hold.device?.name ?? '', since }) : t('hold.yourDeviceUndated', { device: hold.device?.name ?? '' })
     case 'theirs':
-      return [since ? t('hold.theirs', { who, since }) : t('hold.theirsUndated', { who }), t('hold.releaseTheirs')].join(' ')
+      return since ? t('hold.theirs', { who, since }) : t('hold.theirsUndated', { who })
     case 'locked':
-      return [state.mine ? (since ? t('hold.lockedYou', { since }) : t('hold.lockedYouUndated')) : since ? t('hold.locked', { who, since }) : t('hold.lockedUndated', { who }), t('hold.unlock')].join(' ')
+      return state.mine ? (since ? t('hold.lockedYou', { since }) : t('hold.lockedYouUndated')) : since ? t('hold.locked', { who, since }) : t('hold.lockedUndated', { who })
   }
+}
+
+// Where each kind of hold is released, which the details say after who has it
+const RELEASED: Partial<Record<HoldState['kind'], Parameters<typeof t>[0]>> = {
+  yourDevice: 'hold.releaseOnDevice',
+  theirs: 'hold.releaseTheirs',
+  locked: 'hold.unlock',
+}
+
+/** Who has it and since when, and where it's released; nothing for a free document. */
+export function holdSentence(state: HoldState): string | undefined {
+  const label = holdLabel(state)
+  const released = RELEASED[state.kind]
+  return label && released ? `${label} ${t(released)}` : label
 }
 
 export function checkOut(api: Api, docNumber: number): Promise<S['DocumentView']> {

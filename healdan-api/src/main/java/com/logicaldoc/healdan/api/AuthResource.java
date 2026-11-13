@@ -3,7 +3,6 @@
 
 package com.logicaldoc.healdan.api;
 
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -16,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.HealdanThrottle;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.authentication.ApiKeyBlockedException;
@@ -39,7 +39,6 @@ import com.logicaldoc.healdan.signin.SignInProviders;
 import com.logicaldoc.healdan.signin.SignIns;
 import com.logicaldoc.healdan.token.ApiToken;
 import com.logicaldoc.healdan.token.ApiTokens;
-import com.logicaldoc.util.crypt.Encrypter;
 import com.logicaldoc.util.spring.Context;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -402,7 +401,7 @@ public class AuthResource {
 		if (throttled != null)
 			return throttled;
 		// CE's chain reports an expired password whatever the password given, so only the right one hears it
-		if (e instanceof PasswordExpiredException && passwordMatches(username, password))
+		if (e instanceof PasswordExpiredException && HealdanThrottle.isPassword(username, password))
 			return new ApiProblem(401, "password-expired", PASSWORD_EXPIRED);
 		return signInFailed();
 	}
@@ -425,16 +424,5 @@ public class AuthResource {
 		int minutes = Context.get().getConfig().getInt(waitKey, 15);
 		return new ApiProblem(429, "too-many-attempts", "Too many failed sign-ins. Try again in %s."
 				.formatted(minutes == 1 ? "1 minute" : minutes + " minutes"));
-	}
-
-	private static boolean passwordMatches(String username, String password) {
-		try {
-			User user = UserDAO.get().getUser(username);
-			return user != null && user.getPassword() != null
-					&& user.getPassword().equals(Encrypter.encryptSHA256(password));
-		} catch (PersistenceException | NoSuchAlgorithmException e) {
-			log.warn("Can't check the password of {}", username, e);
-			return false;
-		}
 	}
 }

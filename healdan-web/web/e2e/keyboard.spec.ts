@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, fileDocument, matterFolders, minimalPdf, signIn, specsFolder, tabTo } from './helpers'
+import { PASSWORD, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, signIn, specsFolder, tabTo } from './helpers'
 
 // The User app by keyboard alone (M6 spec section 15.2, rows 3 to 9; section 10.5): after the sign-in page, every step is a
 // key (`page.keyboard`), and where a control is reached it is by Tab (`tabTo`). `focus()` only starts a step at a place the
@@ -112,7 +112,6 @@ function newContext(browser: Browser, use: Record<string, unknown>) {
 
 const main = () => page.getByRole('main')
 const list = () => main().getByRole('grid')
-const escape = (text: string) => new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
 // The folder's own star, not a selected document's, which the details beside it have
 const FOLDER_STAR = /^(Add to|Remove from) Favorites$/
 const row = (name: string) => list().getByRole('row', { name: escape(name) })

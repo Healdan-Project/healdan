@@ -31,6 +31,18 @@ A check-out from the app or the Classic Interface belongs to no computer: it's y
 Select a document, and its details show who has it, if anyone. **Check Out** is in the details, and in the toolbar
 above the list.
 
+### In the Lists
+
+Every list of documents marks one that's held, at the end of its title: a pencil for a check-out, and a padlock for a
+lock. That's a folder, search results, Recent and the result of a `#` search. Point at the row, or move to it with the
+arrow keys, and the mark says who has the document and since when, such as "Checked out by Alex Marsh since" the date
+and time, or "Checked out by you on" a computer's name. A screen reader reads the same. A free document has no mark.
+
+The marks are brought up to date with the rest of the page, each time you come back to it (see
+[Keeping Up to Date](../../getting-started/getting-around/#keeping-up-to-date)): a document you open in Word shows the
+pencil when you click back into the web page. Search results are the exception: their marks stay as they were until
+you search again.
+
 ### Checking Out
 
 Choose **Check Out**. Healdan checks the document out to you, and the details say "Checked out by you since" and the

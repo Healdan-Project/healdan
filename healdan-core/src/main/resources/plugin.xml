@@ -136,6 +136,12 @@
 		<parameter id="class" value="com.logicaldoc.healdan.token.TokenUserListener" />
 	</extension>
 
+	<!-- A new password clears its username's sign-in failures (the 2026-11-13 throttle spec, section 3.2) -->
+	<extension plugin-id="logicaldoc-core" point-id="UserListener" id="healdanThrottle">
+		<parameter id="position" value="115" />
+		<parameter id="class" value="com.logicaldoc.healdan.security.ThrottleUserListener" />
+	</extension>
+
 	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanRules">
 		<parameter id="position" value="100" />
 		<parameter id="class" value="com.logicaldoc.healdan.rules.RulesDocumentListener" />

@@ -3,9 +3,10 @@
 
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
+import { comeBack, settle } from '../test/comeBack'
 import { client, document, folder, matter, problem, zone, type Routes } from '../test/fakeApi'
 import { detailsRoutes } from '../test/details'
 import { bringObservedIntoView } from '../test/intersection'
@@ -230,6 +231,27 @@ describe('SearchView', () => {
     await waitFor(() => expect(new URLSearchParams(router.history.location.search).get('sel')).toBe('10392'))
     const region = await screen.findByRole('region', { name: 'Details' })
     expect(await within(region).findByText('Location')).toBeTruthy()
+  })
+
+  // Each page and each count runs the whole search on the server (R96)
+  it('asks again for what else is on screen when the person comes back to the window, but not the search or its counts, however old', async () => {
+    const { api } = await renderApp('/search?scope=documents&q=charter', routes())
+    await rows()
+    await userEvent.click(funnel())
+    const region = await screen.findByRole('region', { name: 'Filters' })
+    await within(region).findByRole('checkbox', { name: 'Word, 1' })
+    const searches = api.callsTo('GET /v1/search').length
+    const me = api.callsTo('GET /v1/me').length
+    expect(me).toBeGreaterThan(0)
+
+    // Every answer is over the 30 seconds that keep it fresh, so the return asks again for what doesn't say otherwise
+    const now = Date.now() + 31_000
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+    onTestFinished(() => void vi.restoreAllMocks())
+    comeBack()
+    await waitFor(() => expect(api.callsTo('GET /v1/me').length).toBe(me + 1))
+    await settle()
+    expect(api.callsTo('GET /v1/search')).toHaveLength(searches)
   })
 
   it('says so when nothing is found, with filters or without', async () => {

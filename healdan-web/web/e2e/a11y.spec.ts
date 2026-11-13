@@ -3,7 +3,7 @@
 
 import { expect, test, type APIRequestContext, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import { expectNoViolations } from './axe'
-import { PASSWORD, USERNAME, authorized, call, deviceToken, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
+import { PASSWORD, USERNAME, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
 
 // Signed-in Devices fits its dialog: nothing scrolls sideways, every Revoke is inside the dialog, and at 1280 a device's name
 // takes no more than two lines (the dialog is as wide as its table needs; at 768 a name may wrap between words further)
@@ -39,6 +39,8 @@ const PDF = `Accessible ${RUN}.pdf`
 const TEXT = `Plain ${RUN}.txt`
 const SUBJECT = `Accessible email ${RUN}`
 const WORK = `Access ${RUN}`
+// Checked out through the API, so a held row, with its marker, is on screen while axe looks
+const HELD = `Held ${RUN}.txt`
 
 function email(): Buffer {
   return Buffer.from(
@@ -64,6 +66,7 @@ let workFolder = 0
 let matterFolder = 0
 let pdfNumber = 0
 let emailNumber = 0
+let heldNumber = 0
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
@@ -77,10 +80,14 @@ test.beforeAll(async ({ playwright }, testInfo) => {
   pdfNumber = await fileDocument(api, token, workFolder, PDF, 'application/pdf', minimalPdf(`Accessible ${RUN}`))
   await fileDocument(api, token, workFolder, TEXT, 'text/plain', Buffer.from(`plain ${RUN}`))
   emailNumber = await fileDocument(api, token, workFolder, `${SUBJECT}.eml`, 'message/rfc822', email())
+  heldNumber = await fileDocument(api, token, workFolder, HELD, 'text/plain', Buffer.from(`held ${RUN}`))
+  await call(api.post(`/api/v1/documents/${heldNumber}/checkout`, { ...authorized(token), data: {} }), 'checking the held document out')
 })
 
 test.afterAll(async () => {
   if (!api) return
+  // Released before its device's token goes, so no run leaves a row held that nobody can release from the app
+  if (token && heldNumber) await api.delete(`/api/v1/documents/${heldNumber}/checkout`, authorized(token))
   if (token) await api.delete('/api/v1/auth/tokens/current', authorized(token))
   await api.dispose()
 })
@@ -141,6 +148,11 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.goto(`/app/folders/${workFolder}?sort=title&order=asc`)
       const row = main().getByRole('row', { name: new RegExp(TEXT.replace('.', '\\.')) })
       await expect(row).toBeVisible()
+      // The held row's marker is on screen for axe, and the row keeps the list's height
+      const heldRow = main().getByRole('row', { name: escape(HELD) })
+      await expect(heldRow.getByRole('img', { name: new RegExp(`^Checked out by you on e2e ${RUN} since `) })).toBeVisible()
+      const rowHeights = await Promise.all([row, heldRow].map(async (one) => Math.round((await one.boundingBox())!.height)))
+      expect(rowHeights, 'a free row and a held row').toEqual([34, 34])
       await check('a folder')
       await row.getByRole('rowheader').click()
       await expect(page.getByRole('region', { name: 'Details' }).getByRole('heading', { name: TEXT })).toBeVisible()

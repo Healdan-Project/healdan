@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useEffect, useRef, useState } from 'react'
-import { apiPath, type components } from '@healdan/api'
+import { ApiError, apiPath, type components } from '@healdan/api'
 import { Button, formatSize, formatVersion, Icon, t } from '@healdan/ui'
 import { CheckoutControls } from '../actions/CheckoutControls'
 import { copyLink } from '../actions/copyLink'
@@ -62,7 +62,7 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
     if (asked && loaded) clearEditRequest()
   }, [asked, loaded])
 
-  if (document.isError) return <ErrorPanel error={document.error} onRetry={() => void document.refetch()} />
+  if (failed(document)) return <ErrorPanel error={document.error} onRetry={() => void document.refetch()} />
   if (!doc) return <p className={styles.note}>{t('common.loading')}</p>
 
   return (
@@ -81,7 +81,7 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
         <Button onPress={() => void copyLink(doc.docNumber)}>{t('details.copyLink')}</Button>
       </div>
       <CheckoutControls document={doc} />
-      {properties.isError ? (
+      {failed(properties) ? (
         <Section title={t('details.properties')}>
           <p className={styles.note}>{t('details.propertiesUnavailable')}</p>
         </Section>
@@ -122,6 +122,14 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
       )}
     </div>
   )
+}
+
+/**
+ * Whether a query has nothing to show: it never answered, or the document is gone or no longer readable (404). A refresh
+ * that fails otherwise, as one on a return to the window can, keeps what's shown, and an open form with what's typed in it.
+ */
+function failed(query: { isError: boolean; data: unknown; error: unknown }): boolean {
+  return query.isError && (query.data === undefined || (query.error instanceof ApiError && query.error.status === 404))
 }
 
 /** How long a missing thumbnail waits before it's asked for again, and how many times */
