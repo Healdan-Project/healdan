@@ -77,6 +77,8 @@ public class ApiCall {
 
 	private final String boundary = "healdan-" + UUID.randomUUID();
 
+	private boolean contract = true;
+
 	ApiCall(ApiServlet servlet, ServletContext context, String method, String uri) {
 		if (!uri.equals(SERVLET_PATH) && !uri.startsWith(SERVLET_PATH + "/") && !uri.startsWith(SERVLET_PATH + "?"))
 			throw new IllegalArgumentException("Not an API path: " + uri);
@@ -93,6 +95,15 @@ public class ApiCall {
 	 */
 	public ApiCall token(String token) {
 		return header("Authorization", "Bearer " + token);
+	}
+
+	/**
+	 * Doesn't check the response against {@code openapi.yaml}: for an answer
+	 * nobody reads, such as one to a client that went away.
+	 */
+	public ApiCall withoutContract() {
+		contract = false;
+		return this;
 	}
 
 	public ApiCall header(String name, String value) {
@@ -288,7 +299,8 @@ public class ApiCall {
 		if (response.getContentType() != null)
 			responseHeaders.putIfAbsent("Content-Type", List.of(response.getContentType()));
 		ApiResponse result = new ApiResponse(response.getStatus(), responseHeaders, response.getContentAsByteArray());
-		Contract.check(method, path, result);
+		if (contract)
+			Contract.check(method, path, result);
 		return result;
 	}
 

@@ -214,7 +214,8 @@ at the end of the `Smoke test` step of the `Test (amd64)` or `Test (arm64)` job:
 - **The run's warnings and errors from `dms.log`,** the last 200 lines of them. Each keeps its exception's message
   and `Caused by` lines, without the stack frames.
 - **The last three API requests that failed with a `500`,** with their stack frames (80 lines each at most), which say
-  where in the server they failed.
+  where in the server they failed. A request whose client went away before its answer was sent isn't one: the API
+  logs it only at debug, and the dump skips one that an older server logged as a failure.
 - **`dms.log`'s last 40 lines.**
 
 When a browser test in step 9 fails, `docker/tests/test-web.sh` also prints the page of each failed test as Playwright

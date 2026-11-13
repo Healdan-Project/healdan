@@ -43,7 +43,11 @@ import jakarta.ws.rs.ext.ExceptionMapper;
  * {@code 401 unauthenticated}, {@code 403 forbidden}, {@code 413 too-large}
  * and {@code bad-request} for any other 4xx, such as 405 and 415;</li>
  * <li>anything else as {@code 500 server-error}, logged, and never with its
- * message.</li>
+ * message;</li>
+ * <li>but a client that went away, which Tomcat reports as a
+ * {@code ClientAbortException} while its answer is written or its request
+ * read, isn't a failure of the server's: logged at debug, and answered with
+ * an empty {@code 500}, not a problem, as nobody reads it.</li>
  * </ul>
  */
 public class ProblemMapper implements ExceptionMapper<Throwable> {
@@ -55,10 +59,21 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 
 	private static final String SERVER_ERROR = "Something went wrong on the server.";
 
+	/**
+	 * What Tomcat's connector throws when the client has gone away, known by
+	 * name as healdan-api doesn't compile against Tomcat
+	 */
+	private static final String CLIENT_ABORT = "org.apache.catalina.connector.ClientAbortException";
+
 	private static final Logger log = LoggerFactory.getLogger(ProblemMapper.class);
 
 	@Override
 	public Response toResponse(Throwable exception) {
+		if (clientGone(exception)) {
+			log.debug("API client went away before its answer was sent", exception);
+			return Response.serverError().build();
+		}
+
 		if (exception instanceof ApiProblem problem)
 			return problem(problem);
 
@@ -116,6 +131,19 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 					&& !HttpHeaders.CONTENT_LENGTH.equalsIgnoreCase(header.getKey()))
 				header.getValue().forEach(value -> builder.header(header.getKey(), value));
 		return builder.build();
+	}
+
+	/**
+	 * @return whether the exception is, or was caused by, Tomcat's report that
+	 *         the client went away
+	 */
+	static boolean clientGone(Throwable exception) {
+		// Bounded, in case of a loop of causes
+		Throwable t = exception;
+		for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause())
+			if (CLIENT_ABORT.equals(t.getClass().getName()))
+				return true;
+		return false;
 	}
 
 	/**
