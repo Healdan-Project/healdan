@@ -39,6 +39,8 @@ const PDF = `Accessible ${RUN}.pdf`
 const TEXT = `Plain ${RUN}.txt`
 const SUBJECT = `Accessible email ${RUN}`
 const WORK = `Access ${RUN}`
+// Checked out through the API, so a held row, with its marker, is on screen while axe looks
+const HELD = `Held ${RUN}.txt`
 
 function email(): Buffer {
   return Buffer.from(
@@ -77,6 +79,8 @@ test.beforeAll(async ({ playwright }, testInfo) => {
   pdfNumber = await fileDocument(api, token, workFolder, PDF, 'application/pdf', minimalPdf(`Accessible ${RUN}`))
   await fileDocument(api, token, workFolder, TEXT, 'text/plain', Buffer.from(`plain ${RUN}`))
   emailNumber = await fileDocument(api, token, workFolder, `${SUBJECT}.eml`, 'message/rfc822', email())
+  const held = await fileDocument(api, token, workFolder, HELD, 'text/plain', Buffer.from(`held ${RUN}`))
+  await call(api.post(`/api/v1/documents/${held}/checkout`, { ...authorized(token), data: {} }), 'checking the held document out')
 })
 
 test.afterAll(async () => {
@@ -141,6 +145,11 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.goto(`/app/folders/${workFolder}?sort=title&order=asc`)
       const row = main().getByRole('row', { name: new RegExp(TEXT.replace('.', '\\.')) })
       await expect(row).toBeVisible()
+      // The held row's marker is on screen for axe, and the row keeps the list's height
+      const heldRow = main().getByRole('row', { name: new RegExp(HELD.replace('.', '\\.')) })
+      await expect(heldRow.getByRole('img', { name: new RegExp(`^Checked out by you on e2e ${RUN} since `) })).toBeVisible()
+      const rowHeights = await Promise.all([row, heldRow].map(async (one) => Math.round((await one.boundingBox())!.height)))
+      expect(rowHeights, 'a free row and a held row').toEqual([34, 34])
       await check('a folder')
       await row.getByRole('rowheader').click()
       await expect(page.getByRole('region', { name: 'Details' }).getByRole('heading', { name: TEXT })).toBeVisible()

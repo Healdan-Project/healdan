@@ -34,3 +34,9 @@
   stroke-width: 2;
   stroke-linejoin: round;
 }
+
+/* A list row's hold marker, at the end of the title cell; the cell's own rule colours the icon (Table.module.css). */
+.holdMarker {
+  display: inline-flex;
+  flex: none;
+}

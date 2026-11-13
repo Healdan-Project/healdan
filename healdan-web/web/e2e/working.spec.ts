@@ -270,15 +270,19 @@ test('Coming back to the window shows a check-out and a save made on a computer,
   const details = await selectWorkingDocument(page, RETURN_NAME)
   const meta = (version: string) => details.getByText(new RegExp(`^# ${returning} · Version ${version.replace('.', '\\.')} · `))
   const held = details.getByText(new RegExp(`^Checked out by you on e2e ${RUN} since `))
+  // The row's marker says the same, without where it's released
+  const marker = main(page).getByRole('row', { name: new RegExp(RETURN_NAME.replace('.', '\\.')) }).getByRole('img', { name: new RegExp(`^Checked out by you on e2e ${RUN} since [^.]+\\.$`) })
   const comeBack = () => page.evaluate(() => void window.dispatchEvent(new Event('focus')))
   await expect(meta('1')).toBeVisible()
   await expect(details.getByRole('button', { name: 'Check Out' })).toBeVisible()
+  await expect(marker).toHaveCount(0)
 
   // The helper's check-out, held on its device, which the page isn't told of
   await call(api!.post(`/api/v1/documents/${returning}/checkout`, { ...authorized(token), data: {} }), 'checking out on the device')
   await comeBack()
   await expect(held).toBeVisible()
   await expect(details.getByRole('button', { name: 'Check Out' })).toBeHidden()
+  await expect(marker).toBeVisible()
 
   // Excel's save while editing: the next snapshot, still checked out on the device
   const version = { kind: 'snapshot', name: RETURN_NAME, keepCheckedOut: true, ifHeld: true }
@@ -296,6 +300,7 @@ test('Coming back to the window shows a check-out and a save made on a computer,
   await expect(meta('1.1')).toBeVisible()
   await expect(details.getByRole('listitem').filter({ hasText: /^Version 1\.1/ })).toBeVisible()
   await expect(held).toBeVisible()
+  await expect(marker).toBeVisible()
 
   await call(api!.delete(`/api/v1/documents/${returning}/checkout`, authorized(token)), 'releasing on the device')
 })
