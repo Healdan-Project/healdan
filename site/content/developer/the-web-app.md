@@ -78,6 +78,13 @@ when the end of the loaded rows comes into view while fewer than `total` are loa
 from `views/useListing.ts`, TanStack Query's infinite query over `GET /folders/{id}/children`, 100 at a time. Offset
 pages shift when the folder changes between them, so it keeps one copy of a row a later page repeats.
 
+Every list of documents takes its Title column from `views/listColumns.tsx`, whose cell ends with `HoldMarker`
+(`actions/HoldMarker.tsx`) for a document whose `hold` isn't null: Check Out's pencil for a check-out, or the padlock for
+a lock, in a `role="img"` span whose name and `title` are `holdLabel`'s. That's who has it and since when, from the `hold.*`
+strings the details use, without where it's released, which `holdSentence` adds for the details. The Table colours a
+cell's icons `--hd-text-secondary`, and the row's own text colour on a selected row, so the marker meets contrast in both
+themes.
+
 The virtualiser places the rows itself, so the Table needs a height: it fills a flex column, as the folder view's is.
 jsdom has no IntersectionObserver, which notices the end of a list, so the tests' setup installs one that sees
 nothing until a test calls `bringObservedIntoView()` from `test/intersection.ts`, as scrolling to the end would.

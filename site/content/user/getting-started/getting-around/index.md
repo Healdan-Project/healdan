@@ -42,7 +42,9 @@ Projects.
 ## The Main Area
 
 When you sign in, the main area shows **Recent Documents**: the documents you filed, changed, checked in or out, or
-downloaded lately, newest first, as a list with each one's matter. Click one to select it. Its doc # goes into the
+downloaded lately, newest first, as a list with each one's matter. A pencil at the end of a document's title means it's
+checked out, and a padlock that it's locked: point at it to see who has it (see
+[In the Lists](../../documents/checking-out-and-checking-in/#in-the-lists)). Click one to select it. Its doc # goes into the
 page's address, so the link you copy takes someone to the same place, and Back and Reload keep it. See
 [Recent](../../finding-documents/my-matters-and-recent-matters/#recent).
 
@@ -77,7 +79,7 @@ Click another document to see its details instead, or select several and the det
 
 The web page brings what it shows up to date each time you come back to it: when you click back into its window from
 another app, such as Word or Excel, or switch back to its tab. So a document you opened in Excel shows as checked out
-to you, and each save you make there shows as a new version, without reloading the page. Search results are the
+to you, with the pencil in the list, and each save you make there shows as a new version, without reloading the page. Search results are the
 exception: they stay as they were until you search again.
 
 ## The Keyboard
