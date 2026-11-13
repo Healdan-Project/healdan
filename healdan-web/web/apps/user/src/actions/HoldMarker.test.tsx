@@ -53,6 +53,14 @@ describe('the hold marker on a row', () => {
     expect(actionsCss).toMatch(/\[role='row'\]:hover\)\s+\.holdText/)
   })
 
+  // Drawn away, the words are clipped to a pixel, and text cut short ends in an ellipsis in every list (a11y.spec.ts checks
+  // the first row of a search's results, which can be a held document's): the ellipsis holds while they're hidden too
+  it('ends its hidden words in an ellipsis, as any clipped text in a row does', () => {
+    const hidden = /(?:^|\n)\.holdText\s*\{([^}]*)\}/.exec(actionsCss)?.[1] ?? ''
+    expect(hidden).toMatch(/overflow:\s*hidden/)
+    expect(hidden).toMatch(/text-overflow:\s*ellipsis/)
+  })
+
   it('names the computer for your own check-out on one, without where to release it', async () => {
     await renderApp('/folders/7', routes)
     const icon = marker(await row(/Cap Table/))
