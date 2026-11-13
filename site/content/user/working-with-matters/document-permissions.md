@@ -18,6 +18,16 @@ open it, preview it, download it, and see its properties and versions, as their 
 To change a document's permissions, select it and open its **Security** tab. The tab appears only if you have the
 Security permission on that document.
 
+## Keeping Someone Out
+
+A row with nothing ticked doesn't keep anyone out: it would leave that person or group with whatever the folder gives
+them. So Healdan won't save one, and says whose row has nothing ticked. Tick what they may do, or remove the row. A
+read-only account can't have Write, Delete, Move or the other permissions that change a document, so a row for one
+needs something else ticked, such as Read.
+
+To keep someone out of a document, move it to a folder they can't read, such as a restricted folder inside the
+matter (see below).
+
 ## Folders Work Differently
 
 A folder can be more restricted than the folder above it, but never less. So a document can be shared beyond its

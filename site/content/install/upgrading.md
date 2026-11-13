@@ -218,3 +218,17 @@ theirs in the background:
 
   `email.index` is `done` once every email filed before the upgrade has been read, and `email.index.cursor` is the
   last document it has read so far.
+
+## Document Permissions with Nothing Ticked
+
+Until November 2026, a document's **Security** tab saved a row with nothing ticked. It looked as if it kept that person
+or group out, and LogicalDOC's folder list and search did hide the document from them, but they could still open it,
+by its doc #, a link or the User app, with whatever its folder gave them. Healdan now refuses to save such a row (see
+[Permissions](../../admin/permissions/#one-off-grants-on-a-document)).
+
+The first start after the upgrade deletes the rows of that kind already there, once. Its log names each row before
+it goes, with its document's id and doc # and its group's id and name, in a line beginning `Removing a document
+permission row that granted nothing:`, then says how many, in a line beginning `Document permission rows that granted
+nothing, removed:`. A person's own group is named `_user_` and the person's user id. Who can open each document
+doesn't change. A document those rows hid shows in the Classic Interface's folder list and in searches to the people
+who could already open it. If one of them should be kept from someone, move it to a folder they can't read.

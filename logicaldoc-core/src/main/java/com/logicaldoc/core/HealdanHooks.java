@@ -3,7 +3,10 @@
 
 package com.logicaldoc.core;
 
+import java.util.Collection;
+
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentAccessControlEntry;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderHistory;
@@ -178,6 +181,19 @@ public interface HealdanHooks {
      * @throws PersistenceException to refuse the change
      */
     default void beforeApplySecurityToTree(long rootId, FolderHistory transaction) throws PersistenceException {
+        // No check by default
+    }
+
+    /**
+     * Called first in {@code DocumentServiceImpl.bulkUpdate}, before any
+     * document is changed, with the permission rows it will give each one: its
+     * loop logs a refusal and goes on
+     *
+     * @param rows the rows, as {@code saveACL} makes them
+     *
+     * @throws PersistenceException to refuse the update
+     */
+    default void beforeDocumentPermissions(Collection<DocumentAccessControlEntry> rows) throws PersistenceException {
         // No check by default
     }
 

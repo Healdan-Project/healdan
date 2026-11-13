@@ -2201,6 +2201,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     public List<GUIDocument> bulkUpdate(List<Long> ids, GUIDocument vo, boolean ignoreEmptyFields)
             throws ServerException {
         Session session = validateSession();
+        // Healdan: a permission row that grants nothing is refused before any document is changed
+        HealdanRpcChecks.documentPermissions(vo.getAccessControlList());
 
         List<GUIDocument> updatedDocs = new ArrayList<>();
         for (long docId : ids) {

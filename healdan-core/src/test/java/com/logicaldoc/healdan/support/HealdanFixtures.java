@@ -5,7 +5,10 @@ package com.logicaldoc.healdan.support;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import javax.sql.DataSource;
 
@@ -26,6 +29,7 @@ import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
+import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.matter.Client;
@@ -33,6 +37,7 @@ import com.logicaldoc.healdan.matter.ClientDAO;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterService;
 import com.logicaldoc.healdan.matter.NewMatter;
+import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.security.AclMath;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.util.CacheEvictor;
@@ -274,6 +279,53 @@ public class HealdanFixtures {
 		ace.grantPermissions(java.util.Set.of(permissions));
 		current.addAccessControlEntry(ace);
 		FolderDAO.get().store(current, folderHistory());
+	}
+
+	/**
+	 * Writes a row of a document's own ACL with JDBC, past the listeners, as
+	 * CE's copy of a folder's rows does. It is how a test makes a row that
+	 * grants nothing, which a save of the document's permissions refuses.
+	 *
+	 * @param docId the document
+	 * @param groupId the group
+	 * @param permissions the permissions the row grants, none for a row that
+	 *        grants nothing
+	 * @throws IllegalArgumentException for a permission a document's row
+	 *         hasn't, such as {@code ADD}
+	 */
+	public void documentRow(long docId, long groupId, Permission... permissions) {
+		List<String> columns = AccessChecks.PERMISSION_COLUMNS;
+		List<String> granted = new ArrayList<>();
+		for (Permission permission : permissions) {
+			String column = "ld_" + permission.name().toLowerCase(Locale.ROOT);
+			if (!columns.contains(column))
+				throw new IllegalArgumentException("A document's row has no " + permission);
+			granted.add(column);
+		}
+		Object[] values = new Object[columns.size() + 2];
+		values[0] = docId;
+		values[1] = groupId;
+		for (int i = 0; i < columns.size(); i++)
+			values[i + 2] = granted.contains(columns.get(i)) ? 1 : 0;
+		new JdbcTemplate(Context.get(DataSource.class)).update("insert into ld_document_acl (ld_docid, ld_groupid, "
+				+ String.join(", ", columns) + ") values (?, ?" + ", ?".repeat(columns.size()) + ")", values);
+	}
+
+	/**
+	 * Waits for CE's background version saves, which run after a store's
+	 * transaction, so a test's next step or the next test's database doesn't
+	 * meet one half done
+	 *
+	 * @throws Exception if CE's pool is missing or the wait is interrupted
+	 */
+	public static void awaitVersionSaves() throws Exception {
+		ThreadPoolExecutor pool = ThreadPools.get().getPool("VersionSave");
+		long deadline = System.currentTimeMillis() + 20000L;
+		while (!pool.getQueue().isEmpty() || pool.getActiveCount() > 0) {
+			if (System.currentTimeMillis() > deadline)
+				throw new AssertionError("Background version saves didn't finish");
+			Thread.sleep(50L);
+		}
 	}
 
 	/**

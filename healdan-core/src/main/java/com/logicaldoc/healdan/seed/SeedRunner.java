@@ -27,8 +27,9 @@ public class SeedRunner {
 			"search-attributes", "search-client-column", "search-docnumber-column", "reindex-office",
 			"queue-office-previews", "count-office-pages", "throttle-signin", "api-settings", "throttle-alert",
 			"apikey-counters", "profile-comments", "queue-drawing-previews", "hide-dropbox", "signin-settings",
-			"storage-settings", "storage-record-original", "storage-hide-stores", "profile-message-id", "smoke-fixture",
-			"smoke-organising", "smoke-signin", "smoke-storage", "demo-fixture", "smoke-api-user", "smoke-web-user");
+			"storage-settings", "storage-record-original", "storage-hide-stores", "profile-message-id",
+			"document-rows-granting-nothing", "smoke-fixture", "smoke-organising", "smoke-signin", "smoke-storage",
+			"demo-fixture", "smoke-api-user", "smoke-web-user");
 
 	private static final String MARKER_PREFIX = "seed.";
 

@@ -6,6 +6,7 @@ package com.logicaldoc.web.service;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,7 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Bookmark;
 import com.logicaldoc.core.document.BookmarkDAO;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentAccessControlEntry;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentLink;
@@ -43,6 +45,7 @@ import com.logicaldoc.core.ticket.Ticket;
 import com.logicaldoc.core.ticket.TicketDAO;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
+import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
 import com.logicaldoc.gui.common.client.beans.GUIDocumentNote;
 import com.logicaldoc.gui.common.client.beans.GUIMenu;
 import com.logicaldoc.gui.common.client.beans.GUIUser;
@@ -637,6 +640,37 @@ public final class HealdanRpcChecks {
             for (Long docId : docIds)
                 if (docId != null)
                     HealdanHooks.get().beforeDocumentRestore(docId, folderId, transaction);
+        } catch (PersistenceException e) {
+            throw new ServerException(e.getMessage(), e);
+        }
+    }
+
+    /**
+     * The Classic bulk Update gives every document the same permission rows,
+     * and its loop logs a refusal and goes on, so they're checked once before
+     * any document is changed
+     *
+     * @param rows the rows, as the Update dialog sends them
+     *
+     * @throws ServerException the refusal
+     */
+    public static void documentPermissions(List<GUIAccessControlEntry> rows) throws ServerException {
+        if (rows == null)
+            return;
+        List<DocumentAccessControlEntry> acl = new ArrayList<>();
+        for (GUIAccessControlEntry row : rows) {
+            Set<String> allowed = row.getAllowedPermissions();
+            EnumSet<Permission> granted = EnumSet.noneOf(Permission.class);
+            for (Permission permission : Permission.values())
+                if (allowed.contains(permission.name()))
+                    granted.add(permission);
+            // As saveACL's row: a document's row keeps only the permissions a document has
+            DocumentAccessControlEntry ace = new DocumentAccessControlEntry(row.getEntityId());
+            ace.grantPermissions(granted);
+            acl.add(ace);
+        }
+        try {
+            HealdanHooks.get().beforeDocumentPermissions(acl);
         } catch (PersistenceException e) {
             throw new ServerException(e.getMessage(), e);
         }
