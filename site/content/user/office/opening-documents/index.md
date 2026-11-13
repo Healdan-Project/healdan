@@ -22,6 +22,9 @@ on it. The document opens in the app you've chosen for its kind in the helper's 
   [Installing the Healdan Helper](../installing-the-helper/). If the document did open, ignore it. It stays for 15
   seconds, or until you dismiss it, and shows over Quick Look too.
 - **Use one address,** as below.
+- **Come back to the web page** to see the document checked out to you, on the computer you opened it on, and each
+  save you make in the app as a new version. The page brings what it shows up to date each time you click back into
+  its window or switch back to its tab, so you don't need to reload it.
 
 ![The notice at the bottom right of the web page after Open: "If nothing opened, install the Healdan Helper.", with a link to install it and a close button, over the end of a document's details](open-notice.png)
 

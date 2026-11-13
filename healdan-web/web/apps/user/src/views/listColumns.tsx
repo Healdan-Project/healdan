@@ -3,6 +3,7 @@
 
 import type { components } from '@healdan/api'
 import { formatDate, formatVersion, Icon, t, type IconName, type TableColumn, type TableRow } from '@healdan/ui'
+import { HoldMarker } from '../actions/HoldMarker'
 import type { SearchScope } from '../search/scopes'
 import { fileIcon } from '../fileIcon'
 import { matterParts } from '../matterDisplay'
@@ -26,7 +27,8 @@ function iconOf(item: Hit): IconName {
   return fileIcon(item.name)
 }
 
-// Title shows the file name: CE has no title of its own, and the server sorts Title by it (plan correction 7).
+// Title shows the file name: CE has no title of its own, and the server sorts Title by it (plan correction 7). A held
+// document's row ends it with the hold's marker.
 const title: TableColumn<ListRow> = {
   id: 'title',
   name: t('list.title'),
@@ -37,6 +39,7 @@ const title: TableColumn<ListRow> = {
     <>
       <Icon name={iconOf(item)} />
       {item.type === 'document' ? <DocumentTitle document={item} className={styles.name} /> : <span className={styles.name}>{item.type === 'matter' ? item.display : item.name}</span>}
+      {item.type === 'document' && <HoldMarker document={item} />}
     </>
   ),
 }

@@ -98,5 +98,7 @@ export function useSearchFacets({ scope, q, filters, enabled }: { scope: SearchS
     select: (answer) => answer.facets,
     enabled: enabled && q !== '' && searchesDocuments(scope),
     placeholderData: keepPreviousData,
+    // As for the results beside them: each count runs the whole search on the server, so a return to the window asks nothing
+    refetchOnWindowFocus: false,
   })
 }

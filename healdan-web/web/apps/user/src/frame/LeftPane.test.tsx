@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
+import { comeBack, settle } from '../test/comeBack'
 import { folder, matter, page, problem } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
@@ -87,6 +88,23 @@ describe('LeftPane', () => {
     fireEvent.click(within(tree).getByRole('button', { name: /collapse/i }))
     fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
     await within(tree).findByRole('row', { name: /Correspondence/ })
+    expect(api.callsTo('GET /v1/folders/110/children')).toHaveLength(1)
+  })
+
+  it("asks again for the folder's list when the person comes back to the window, but not My Matters or an open matter's folders", async () => {
+    const { api } = await renderApp('/folders/1')
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
+    await within(tree).findByRole('row', { name: /Correspondence/ })
+    const listed = () => api.callsTo('GET /v1/folders/1/children').filter((call) => call.query?.type !== 'folder').length
+    const before = listed()
+    expect(before).toBeGreaterThan(0)
+    const mine = api.callsTo('GET /v1/matters/mine').length
+
+    comeBack()
+    await waitFor(() => expect(listed()).toBe(before + 1))
+    await settle()
+    expect(api.callsTo('GET /v1/matters/mine')).toHaveLength(mine)
     expect(api.callsTo('GET /v1/folders/110/children')).toHaveLength(1)
   })
 

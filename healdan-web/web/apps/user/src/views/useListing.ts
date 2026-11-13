@@ -7,6 +7,7 @@ import { apiPath, type components } from '@healdan/api'
 import type { TableSort } from '@healdan/ui'
 import { filterParams, noFilters, type Filters } from '../filters/useFilters'
 import { keys } from '../queries'
+import { ASK_ON_RETURN } from '../queryClient'
 import { useApi } from '../services'
 
 type S = components['schemas']
@@ -36,6 +37,8 @@ export interface ListingOptions {
   filters?: Filters
   /** False asks nothing, as for a Store, which has no list */
   enabled?: boolean
+  /** A search folder's list runs its saved search at each ask, so a return to the window asks again only after 30 seconds */
+  searchFolder?: boolean
 }
 
 export interface Listing {
@@ -57,7 +60,7 @@ export interface Listing {
 }
 
 /** A folder's children, paged: TanStack Query's infinite query over GET /folders/{id}/children. */
-export function useListing({ folderId, sort, filters = noFilters, enabled = true }: ListingOptions): Listing {
+export function useListing({ folderId, sort, filters = noFilters, enabled = true, searchFolder = false }: ListingOptions): Listing {
   const api = useApi()
   const params = {
     ...(sort ? { sort: sort.column, order: sort.direction === 'descending' ? 'desc' : 'asc' } : {}),
@@ -76,6 +79,7 @@ export function useListing({ folderId, sort, filters = noFilters, enabled = true
     enabled,
     // A new order keeps the old rows on screen until its first page comes
     placeholderData: keepPreviousData,
+    ...(searchFolder ? {} : { meta: ASK_ON_RETURN }),
   })
 
   const pages = query.data?.pages
