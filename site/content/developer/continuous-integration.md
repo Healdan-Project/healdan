@@ -65,12 +65,16 @@ saved them, and `gh cache list --repo Healdan-Project/healdan` shows what's ther
 cache, which pushes to `master` write and pull requests read, is the largest. It keeps only the final image's layers
 (`mode=min`), of which the WAR's, about 0.4 GB per architecture, is the large one a push changes.
 
-It used to keep every stage's layers (`mode=max`), the Maven stage's 1.8 GB per architecture included, so each push
-to `master` wrote about 5 GB. On 12 November 2026 two pushes in a row filled the space, GitHub deleted the shards'
-Maven repository copy, and the next day every shard of a pull request downloaded every dependency again, and one
-failed when a download did. The Maven stage's layers only helped a pull request that left the Maven build's inputs
-alone, changing only `docker/`, the `Dockerfile` or the workflows, which now runs the Maven build again: about 3.5
-minutes per architecture. Before adding a cache that's large or saved often, check it fits beside the others.
+It used to keep every stage's layers (`mode=max`), including the Maven stage's 2.1 GB per architecture (its build
+output and a second copy of the WAR), so each push to `master` wrote about 5 GB. On 12 November 2026 two pushes in a
+row filled the space, GitHub deleted the shards' Maven repository copy, and the next day every shard of a pull
+request downloaded every dependency again, and one failed when a download did. The Maven stage's layers spared the
+Maven build to any run that left its inputs alone, changing only `docker/`, the `Dockerfile` or the workflows: such a
+pull request, the push to `master` that merges it, a `v*` tag of a commit `master` already built, and any re-run of a
+`master` job. Each of those now runs the Maven build again, about 4 to 6 minutes per architecture. The clients no
+module builds (`clients/helper/`, `clients/libreoffice/` and `clients/icons/`) stay out of the build context
+(`.dockerignore`), so changing one doesn't run it. Before adding a cache that's large or saved often, check it fits
+beside the others.
 
 ## What a Pull Request Runs
 

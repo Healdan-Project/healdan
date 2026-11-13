@@ -182,8 +182,8 @@ jobs:
       # download only what the POMs add. As in docker-image.yml, only master saves, from the shard the plan picks
       # (the first that tests logicaldoc-webapp, so the cache holds its dependencies too). The second restore key finds
       # the copies setup-java saved: the cache version hashes the path as written, so it stays absolute, like
-      # setup-java's. GitHub evicts the caches used least recently once a repository's pass 10 GB, and this one went
-      # on 2026-11-12, when the Docker build's layer cache filled the space; docker-image.yml now keeps that small.
+      # setup-java's. GitHub evicts the caches used least recently once a repository's caches pass 10 GB, and this one
+      # went on 2026-11-12, when the Docker build's layer cache filled the space; docker-image.yml now keeps that small.
       - name: Maven repository cache
         if: env.SAVE_M2 == 'true'
         uses: actions/cache@v6

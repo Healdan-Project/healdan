@@ -154,7 +154,8 @@ jobs:
           # step above found no exact match: a master push whose POMs or the User app's lockfile changed.
           skip-extraction: ${{ env.SAVE_M2 != 'true' || steps.m2.outputs.cache-hit == 'true' && steps.npm.outputs.cache-hit == 'true' }}
 
-      # Runs the Maven build too (tools builds on it). The image build below reuses it from the builder's cache.
+      # Runs the Maven build too (tools builds on it). The image build below reuses it from the builder's cache. Nothing
+      # here can come from the layer cache, which keeps only the final image's layers (see "Build image").
       - name: Init tool and WAR parser tests (docker build --target tools)
         if: steps.changes.outputs.code == 'true'
         uses: docker/build-push-action@v7
@@ -163,7 +164,6 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           target: tools
           outputs: type=cacheonly
-          cache-from: type=gha,scope=${{ matrix.arch }}
 
       - name: Build image
         if: steps.changes.outputs.code == 'true'
@@ -177,13 +177,15 @@ jobs:
             VERSION=${{ steps.meta.outputs.version }}
             REVISION=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.arch }}
-          # mode=min keeps only the final image's layers. mode=max kept the Maven stage too, about 2.5 GB more per
-          # architecture: each master push wrote about 5 GB and spent 5 to 13 more minutes exporting it, and on
-          # 2026-11-12 two pushes in a row filled the repository's 10 GB of Actions caches, so GitHub evicted the
-          # caches used least recently, the Java build's Maven repository (m2-) among them. The cost: a pull request
-          # that leaves the Maven build's inputs alone (only docker/, the Dockerfile or the workflows) runs the Maven
-          # build again, about 3.5 minutes per architecture. Only pushes write the cache, and pull requests read
-          # what master's pushes wrote: other pull requests can't read a pull request's cache anyway.
+          # mode=min keeps only the final image's layers. mode=max kept the Maven stage too, about 2.1 GB more per
+          # architecture (its build output and a second copy of the WAR): each master push wrote about 5 GB and spent
+          # 5 to 13 more minutes exporting it, and on 2026-11-12 two pushes in a row filled the repository's 10 GB of
+          # Actions caches, so GitHub evicted the caches used least recently, the Java build's Maven repository (m2-)
+          # among them. The cost: a run that leaves the Maven build's inputs alone (only docker/, the Dockerfile or
+          # the workflows) runs the Maven build again, about 4 to 6 minutes per architecture. That's such a pull
+          # request, the master push that merges it, a v* tag of a commit master already built, and any re-run of a
+          # master job. Only pushes write the cache, and pull requests read what master's pushes wrote: other pull
+          # requests can't read a pull request's cache anyway.
           cache-to: ${{ github.event_name == 'push' && format('type=gha,scope={0},mode=min,ignore-error=true', matrix.arch) || '' }}
 
       # The smoke test's step 5d runs the helper's stack tests (clients/helper, StackCycleTests and
