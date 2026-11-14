@@ -46,6 +46,9 @@ test.afterAll(async () => {
 const main = (page: Page) => page.getByRole('main')
 const tree = (page: Page) => page.getByRole('treegrid', { name: 'My Matters' })
 const field = (page: Page, name: string) => page.getByRole('textbox', { name: `New Name of ${name}` })
+// The field closes only once its save has answered. Its typed text proves nothing: Playwright names a row or a heading by
+// what is in it, an open field's value included, so either matches the new name before the server has it
+const saved = (page: Page) => expect(page.getByRole('textbox', { name: /^New Name of / })).toHaveCount(0)
 const nameOf = async (id: number) => (await call<{ name: string }>(api!.get(`/api/v1/folders/${id}`, authorized(token)), `folder ${id}`)).name
 
 async function open(page: Page, folderId: number) {
@@ -73,6 +76,7 @@ test('F2 renames a folder row in place, refuses a taken name beside the field, a
   await page.keyboard.press('Enter')
   await expect(main(page).getByRole('grid').getByRole('row', { name: escape(renamed) })).toBeVisible()
   await expect(tree(page).getByRole('row', { name: escape(renamed) })).toBeVisible()
+  await saved(page)
   expect(await nameOf(ids.byF2)).toBe(renamed)
 })
 
@@ -89,6 +93,7 @@ test("renames a folder from the tree's ⋯, and the tree, the heading and the br
   await expect(tree(page).getByRole('row', { name: escape(renamed) })).toBeVisible()
   await expect(main(page).getByRole('heading', { level: 1, name: renamed })).toBeVisible()
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).locator('[aria-current="page"]')).toHaveText(renamed)
+  await saved(page)
   expect(await nameOf(ids.byTree)).toBe(renamed)
 })
 
@@ -103,6 +108,7 @@ test("renames the open folder from the ⋯ beside its name, and the heading, the
   await expect(main(page).getByRole('heading', { level: 1, name: renamed })).toBeVisible()
   await expect(tree(page).getByRole('row', { name: escape(renamed) })).toBeVisible()
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).locator('[aria-current="page"]')).toHaveText(renamed)
+  await saved(page)
   expect(await nameOf(ids.byHeading)).toBe(renamed)
 })
 
@@ -116,6 +122,7 @@ test('renames a folder from the menu a right-click opens', async ({ page }) => {
   await field(page, NAMES.byMenu).fill(renamed)
   await page.keyboard.press('Enter')
   await expect(main(page).getByRole('grid').getByRole('row', { name: escape(renamed) })).toBeVisible()
+  await saved(page)
   expect(await nameOf(ids.byMenu)).toBe(renamed)
 })
 
@@ -132,6 +139,7 @@ test('renames a folder by keyboard alone', async ({ page }) => {
   await page.keyboard.type(renamed)
   await page.keyboard.press('Enter')
   await expect(main(page).getByRole('grid').getByRole('row', { name: escape(renamed) })).toBeFocused()
+  await saved(page)
   expect(await nameOf(ids.keyTarget)).toBe(renamed)
 })
 
