@@ -98,6 +98,15 @@ public class DocumentLocks {
 	}
 
 	/**
+	 * @param docId the document's id, or what else the instance locks by
+	 * @return whether a request waits for its lock now, for the tests
+	 */
+	boolean waitedFor(long docId) {
+		Entry entry = locks.get(docId);
+		return entry != null && entry.lock.hasQueuedThreads();
+	}
+
+	/**
 	 * @return how many documents have a lock now, held or waited for
 	 */
 	int size() {

@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import type { components } from '@healdan/api'
 import { t } from '@healdan/ui'
-import { invalidateDocumentLists } from '../actions/refresh'
+import { invalidateDocumentLists, invalidateFolderNames } from '../actions/refresh'
 import { extensionOf, folderRenameRefusal, renameDocument, renameFolder, renameRefusal } from '../actions/rename'
 import type { Movable } from '../actions/batch'
 import { useMe } from '../queries'
@@ -21,16 +21,30 @@ type S = components['schemas']
  * (spec 6.7). It keeps its extension, so the name without it is selected.
  */
 export function DocumentTitle({ document, className }: { document: Movable; className?: string }) {
-  const { renaming, stopRename } = useOrganising()
+  const { renaming } = useOrganising()
+  if (renaming?.key !== `d${document.docNumber}` || renaming.place !== 'row') return <span className={className}>{document.name}</span>
+  return <DocumentRenameField document={document} />
+}
+
+/** The field alone asks for the API and who is signed in: every row of a list draws a title, and one at most a field */
+function DocumentRenameField({ document }: { document: Movable }) {
+  const { stopRename } = useOrganising()
   const api = useApi()
   const me = useMe()
-  if (renaming?.key !== `d${document.docNumber}` || renaming.place !== 'row') return <span className={className}>{document.name}</span>
+  const queryClient = useQueryClient()
   const extension = extensionOf(document.name)
   return (
     <RenameField
       name={document.name}
       selected={extension ? document.name.length - extension.length - 1 : document.name.length}
-      save={(name) => renameDocument(api, document.docNumber, name)}
+      save={async (name) => {
+        try {
+          await renameDocument(api, document.docNumber, name)
+        } finally {
+          // Whether it worked or not, what shows the document is asked again
+          void invalidateDocumentLists(queryClient)
+        }
+      }}
       refusal={(error) => renameRefusal(error, document.name, me.data?.id)}
       onDone={stopRename}
     />
@@ -42,14 +56,24 @@ export function DocumentTitle({ document, className }: { document: Movable; clas
  * renamed there a field in its place (folder rename spec 5.3), with all of the name selected.
  */
 export function FolderName({ folder, place, className }: { folder: S['FolderView']; place: RenamePlace; className?: string }) {
-  const { renaming, stopRename } = useOrganising()
-  const api = useApi()
+  const { renaming } = useOrganising()
   if (renaming?.key !== `f${folder.id}` || renaming.place !== place) return <span className={className}>{folder.name}</span>
+  return <FolderRenameField folder={folder} place={place} />
+}
+
+function FolderRenameField({ folder, place }: { folder: S['FolderView']; place: RenamePlace }) {
+  const { stopRename } = useOrganising()
+  const api = useApi()
+  const queryClient = useQueryClient()
   return (
     <RenameField
       name={folder.name}
       selected={folder.name.length}
-      save={(name) => renameFolder(api, folder.id, name)}
+      save={async (name) => {
+        await renameFolder(api, folder.id, name)
+        // What shows folder names is asked again; a refusal changed none
+        void invalidateFolderNames(queryClient)
+      }}
       refusal={folderRenameRefusal}
       onDone={stopRename}
       // The tree is narrow: what is wrong goes below the field there
@@ -63,8 +87,8 @@ interface RenameFieldProps {
   name: string
   /** How much of the name, from its start, is selected when the field opens */
   selected: number
-  /** Saves the new name; a refusal throws */
-  save: (name: string) => Promise<unknown>
+  /** Saves the new name, and asks again for what shows it; a refusal throws */
+  save: (name: string) => Promise<void>
   /** What to say of a refusal; `typed` is the name sent */
   refusal: (error: unknown, typed: string) => string
   /** The rename is over; `focusBack`: the field had the focus, which goes back where the rename began */
@@ -75,24 +99,16 @@ interface RenameFieldProps {
 
 /**
  * Enter saves, Esc cancels, and leaving the field saves what was changed. A refusal keeps the field open with what is
- * wrong beside it (`useNameField`, which a favorite's name in My Favorites shares). Whether it worked or not, what shows
- * names is asked for again.
+ * wrong beside it (`useNameField`, which a favorite's name in My Favorites shares).
  */
 function RenameField({ name, selected, save, refusal, onDone, stacked = false }: RenameFieldProps) {
-  const queryClient = useQueryClient()
   /** `fromKey`: Enter saved, so the focus is the field's to give back; a save on leaving leaves it where the person put it */
   function submit(fromKey: boolean) {
     const typed = field.text.trim()
     if (typed === name) return field.stop(fromKey)
     void field.run(
       fromKey,
-      async () => {
-        try {
-          await save(typed)
-        } finally {
-          void invalidateDocumentLists(queryClient)
-        }
-      },
+      () => save(typed),
       (failure) => refusal(failure, typed),
     )
   }

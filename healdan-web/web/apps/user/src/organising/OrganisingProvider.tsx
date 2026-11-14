@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { createContext, useContext, useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { createContext, useContext, useState, type DragEvent, type ReactNode } from 'react'
 import { plural, t, toast } from '@healdan/ui'
 import { refusalLines, type Movable, type Outcome } from '../actions/batch'
 import { moveDocuments } from '../actions/move'
@@ -94,11 +94,6 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
   const me = useMe()
   const { selected, select } = useSelection()
   const [renaming, setRenaming] = useState<Renaming | undefined>()
-  // The rename open now, as drawn: a field's stopRename is the one it was drawn with, which a save that ends later still calls
-  const latest = useRef<Renaming | undefined>(undefined)
-  useEffect(() => {
-    latest.current = renaming
-  }, [renaming])
   const [deleting, setDeleting] = useState<Movable[] | undefined>()
   const [moving, setMoving] = useState<Movable[] | undefined>()
   const [parent, setParent] = useState<Place | undefined>()
@@ -138,14 +133,13 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
   const value: Organising = {
     renaming,
     startRename: (key, place = 'row') => setRenaming({ key, place }),
+    // Only a field that is drawn calls this: one that has gone (another rename began while it saved) never does (useNameField)
     stopRename: (focusBack = true) => {
       const done = renaming
-      // Another rename may have begun while this one saved (F2 elsewhere): that one stays open, and keeps the focus
-      const current = done !== undefined && latest.current === done
-      setRenaming((now) => (now === done ? undefined : now))
+      setRenaming(undefined)
       // The field is gone once this has rendered; where the rename began is where the focus belongs, unless the person put
       // it elsewhere
-      if (focusBack && current) requestAnimationFrame(() => renameOrigin(done)?.focus())
+      if (focusBack && done) requestAnimationFrame(() => renameOrigin(done)?.focus())
     },
     askDelete: setDeleting,
     askMove: setMoving,

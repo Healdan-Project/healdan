@@ -16,6 +16,15 @@ export function invalidateDocumentLists(queryClient: QueryClient): Promise<unkno
   return Promise.all(DOCUMENT_LISTS.map((root) => queryClient.invalidateQueries({ queryKey: [root] })))
 }
 
+// Everything that shows a folder's name: the folder, its lists and the tree's subfolders (all under 'folders'), search
+// results, My Favorites, and the documents, whose views carry their folder's path. A matter's or a client's list names none.
+const FOLDER_NAMES = ['folders', 'search', 'favorites', 'documents']
+
+/** Asks again for everything that shows a folder's name, once a rename has changed it (a refusal changed nothing) */
+export function invalidateFolderNames(queryClient: QueryClient): Promise<unknown> {
+  return Promise.all(FOLDER_NAMES.map((root) => queryClient.invalidateQueries({ queryKey: [root] })))
+}
+
 /**
  * Marks the same as stale without asking now, for a change that comes later and out of the page's sight: Open in App's
  * helper checks the document out seconds after the link, and saves to it later still. Asked now, the answer would show the

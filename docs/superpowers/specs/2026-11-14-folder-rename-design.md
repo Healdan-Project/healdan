@@ -69,11 +69,13 @@ It refuses, checking in this order:
 | `409 not-renamable` | A Store, or a matter's own folder, which takes the matter's name through Edit Matter. Admins get it too |
 | `403 forbidden` | No Rename permission on the folder |
 | `403 admins-only` | A folder directly in a matter's workspace, search folders included, when the caller isn't an admin |
-| `422 validation` on `name` | `required`; `too-long`, over 255 characters (`Uploads.MAX_NAME_LENGTH`); `invalid`, for `/`, `\`, a control character, a character the database can't store (`BasicPlane`), or markup that CE's sanitiser would change, so the name stored is the name typed (changed in the build: or any HTML tag, the ones CE's sanitiser keeps included) |
-| `409 name-taken` | Another live folder in the same parent, an alias included, has the name, compared without regard to case. The folder itself doesn't count, so changing only the case of its own name works |
+| `422 validation` on `name` | `required`; `too-long`, over 255 characters (`Uploads.MAX_NAME_LENGTH`); `invalid`, for `/`, `\`, a control character, a character the database can't store (`BasicPlane`), or markup that CE's sanitiser would change, so the name stored is the name typed (changed in the build: or any HTML tag, the ones CE's sanitiser keeps included; changed in the review: through `Uploads.checkText`, as a document's and a favourite's name, with the tag check beside it; `required` for a name of characters that show nothing, such as U+200B, and `invalid` for the direction controls U+202A to U+202E and U+2066 to U+2069, and for a character reference such as `&amp;`, which CE's sanitiser turns into its character) |
+| `409 name-taken` | Another live folder in the same parent, an alias included, has the name, compared without regard to case. The folder itself doesn't count, so changing only the case of its own name works (changed in the review: only one the caller can see counts; a hidden folder, or one the caller can't read, isn't the caller's to learn of, as unreadable is `404` elsewhere and the once-per-matter rule counts only copies the caller can read) |
 | `409 refused` | A veto from Healdan's listeners that the checks above didn't foresee, as New Folder answers one (changed in the build: or the folder moved to another parent while it was being renamed, which the lock below finds) |
 
-- **The same name** answers `200` and writes nothing.
+- **The same name** answers `200` and writes nothing. (changed in the review: the folder's own name is compared before the
+  `422` checks, after `admins-only`, so a name CE gave it that a new name couldn't have, such as one with a b tag, which
+  CE's sanitiser keeps, answers `200` too.)
 - **The name check and the write** run under a lock in the JVM, one per parent folder, so two renames at the same moment
   can't both take a name. Healdan runs one node. CE's own New Folder, which adds a counter to a taken name, isn't under
   that lock, so a rename and a New Folder of the same name at the same moment could still make two. (changed in the build:
@@ -90,7 +92,8 @@ A new required boolean: whether `PATCH /v1/folders/{id}` would rename the folder
 permissions on the folder as `canFile` (one `getAllowedPermissions` in place of `isWriteAllowed`). (changed in the build:
 that isn't quite "no more queries than today". It costs one permission lookup per folder, search folders included, whose
 `canFile` used to be false without one, and an admin check for a folder directly in a matter's workspace that the caller
-has Rename on.) Every `FolderView` carries it: a folder, its children, Recent › Folders, My Favorites, and the folders in
+has Rename on. Changed in the review: the admin check is asked once for a page of a folder's children, and the rename's
+own refusals read `canRename` rather than working the rule out again.) Every `FolderView` carries it: a folder, its children, Recent › Folders, My Favorites, and the folders in
 search results.
 
 ## 5. The app

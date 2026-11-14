@@ -468,10 +468,13 @@ refused` for an immutable document, unless the caller is an administrator, as CE
 this order: `400 bad-request` for a body that isn't the JSON expected; `404` for a folder you can't read; `409
 not-renamable` for a Store or a matter's own folder, which takes the matter's name through Edit Matter; `403 forbidden`
 without the Rename permission; `403 admins-only` for a folder directly in a matter's workspace, search folders
-included, unless you're an administrator; `422 validation` for the name (`required`, `too-long`, `invalid`: `/`, `\`, a
-control character, an emoji or another character the database can't store, or HTML tags); `409 name-taken` when
-another folder beside it has the name, without regard to case; and `409 refused` when one of Healdan's rules refuses, or
-when the folder moved to another folder while it was being renamed (try again).
+included, unless you're an administrator; `422 validation` for the name (`required`, also for a name of characters that
+show nothing, such as U+200B; `too-long`; `invalid`: `/`, `\`, a control character, an emoji or another character the
+database can't store, a character that changes the text's direction, HTML tags, or a character reference such as
+`&amp;`); `409 name-taken` when another folder beside it that you can see has the name, without regard to case (a hidden
+folder, or one you can't read, doesn't count); and `409 refused` when one of Healdan's rules refuses, or when the folder
+moved to another folder while it was being renamed (try again). The folder's own name, sent back, changes nothing and
+answers `200`, even one a new name couldn't have.
 Every folder carries `canRename`, which says whether the call would rename it for you.
 
 ## Favorites

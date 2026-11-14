@@ -1980,8 +1980,10 @@ paths:
       description: |
         Renames a folder inside a matter through the same call the old UI's
         Rename uses, and returns it. Spaces at either end are taken off, and
-        the same name changes nothing. A folder's `canRename` says whether
-        this would rename it.
+        the folder's own name changes nothing, after the checks up to
+        `admins-only` and before the name's own, so a name a new one couldn't
+        have answers `200` too. A folder's `canRename` says whether this would
+        rename it.
 
         The checks run in this order:
 
@@ -1994,13 +1996,16 @@ paths:
         4. `403 forbidden` without the Rename permission on the folder.
         5. `403 admins-only` for a folder directly in a matter's workspace,
            search folders included, unless the caller is an administrator.
-        6. `422 validation` for the field `name`: `required`, `too-long`
-           (over 255 characters) and `invalid` (a `/`, a `\`, a control
-           character, one the database can't store, such as an emoji, or
-           any HTML tag).
-        7. `409 name-taken` when another folder in the same folder has the
-           name, compared without regard to case. Changing only the case of
-           the folder's own name works.
+        6. `422 validation` for the field `name`: `required` (also for a
+           name of characters that show nothing, such as U+200B),
+           `too-long` (over 255 characters) and `invalid` (a `/`, a `\`, a
+           control character, one the database can't store, such as an
+           emoji, one that changes the text's direction, any HTML tag, or a
+           character reference such as `&amp;`).
+        7. `409 name-taken` when another folder in the same folder that the
+           caller can see has the name, compared without regard to case: a
+           hidden folder, or one the caller can't read, doesn't count.
+           Changing only the case of the folder's own name works.
         8. `409 refused` when one of Healdan's rules refuses, or when the
            folder moved to another folder while it was being renamed: try
            again.

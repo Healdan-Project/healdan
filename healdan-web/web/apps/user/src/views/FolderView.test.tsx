@@ -345,6 +345,36 @@ describe("The open folder's heading", () => {
     await waitFor(() => expect(globalThis.document.activeElement?.closest('[data-rename-menu]')?.getAttribute('data-rename-menu')).toBe('f111'))
   })
 
+  it('closes the field once its save answers, though Rename was chosen again while it saved', async () => {
+    let name = 'Correspondence'
+    let answer: () => void = () => {}
+    const open = () => folder({ id: 111, name, path: [store, workspace, { id: 111, name, kind: 'folder' }] })
+    await renderApp('/folders/111', {
+      'GET /v1/folders/111': () => open(),
+      'GET /v1/folders/111/children': children([]),
+      // The save waits until the test lets it end
+      'PATCH /v1/folders/*': ({ body }: { body?: unknown }) =>
+        new Promise((resolve) => {
+          answer = () => {
+            name = (body as { name: string }).name
+            resolve(open())
+          }
+        }),
+    })
+    const more = await within(main()).findByRole('button', { name: 'More for Correspondence' })
+    fireEvent.click(more)
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }))
+    const input = await screen.findByRole('textbox', { name: 'New Name of Correspondence' })
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(input))
+    await userEvent.keyboard('Letters{Enter}')
+    // Rename again, from the ⋯ beside the field, while the save is under way
+    fireEvent.click(more)
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }))
+    answer()
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: /New Name of/ })).toBeNull())
+    expect(await within(main()).findByRole('heading', { level: 1, name: 'Letters' })).toBeTruthy()
+  })
+
   it("greys Rename out on a matter's own heading", async () => {
     await renderApp('/folders/110', {
       'GET /v1/folders/110': folder({ id: 110, name: '1001.1 – Charter Dispute', kind: 'matter', canRename: false, canFile: false, path: [store, workspace] }),

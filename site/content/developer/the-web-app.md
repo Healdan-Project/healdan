@@ -115,7 +115,9 @@ is made:
   request already under way isn't sent twice.
 - **The person's own changes** call `invalidateDocumentLists` (`actions/refresh.ts`) when they're done, which asks again
   for the document, its properties and versions, the folders' lists, search results, Recent, My Favorites, Recent Matters
-  and Recent Clients.
+  and Recent Clients. A folder's rename that worked calls `invalidateFolderNames` instead, which asks again for what shows
+  a folder's name: the folders, their lists and My Matters' subfolders, search results, My Favorites and the documents,
+  whose views carry their folder's path. A refused one asks again for nothing.
 - **Open in App** calls `markDocumentListsStale` instead, which marks the same as stale without asking now
   (`refetchType: 'none'`), but for My Matters' folders, which a tree with many open would ask for one by one: the
   helper's check-out comes later, so an answer now would stay fresh for 30 seconds and show the document free. The return

@@ -9,6 +9,11 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -18,12 +23,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderEvent;
+import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.support.DbSnapshot;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Renaming a folder, {@code PATCH /v1/folders/{id}}, and {@code canRename} on
@@ -220,6 +227,12 @@ public class FolderRenameTest extends ApiTestCase {
 		assertField(rename(letters, "<b>Draft</b>", clerk), "invalid");
 		assertField(rename(letters, "<i>Privileged</i>", clerk), "invalid");
 		assertField(rename(letters, "x".repeat(256), clerk), "too-long");
+		// Characters that show nothing make no name, and one that turns the text round shows it as another
+		assertField(rename(letters, "\u200B", clerk), "required");
+		assertField(rename(letters, "\u200B\uFEFF\u00A0", clerk), "required");
+		assertField(rename(letters, "Invoice\u202Efdp.exe", clerk), "invalid");
+		// CE's folder DAO would store the character a reference stands for
+		assertField(rename(letters, "R&amp;D", clerk), "invalid");
 		before.assertUnchangedExcept("hd_api_token");
 		assertProblem(patch("/api/v1/folders/" + letters.getId()).token(signIn(clerk)).json(Map.of()).send(), 400,
 				"bad-request");
@@ -227,7 +240,9 @@ public class FolderRenameTest extends ApiTestCase {
 
 	@Test
 	public void testNamesThatAreKeptAsTyped() throws Exception {
-		for (String name : List.of("Smith & Co", "Q&A 2026", "Notes (old)", "Lease \u2013 Draft", "x".repeat(255))) {
+		// A zero-width non-joiner is part of Persian words, and stays
+		for (String name : List.of("Smith & Co", "Q&A 2026", "Notes (old)", "Lease \u2013 Draft", "x".repeat(255),
+				"\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645")) {
 			ApiResponse response = rename(letters, name, clerk);
 			assertEquals(name + ": " + response, 200, response.status());
 			assertEquals(name, FolderDAO.get().findById(letters.getId()).getName());
@@ -240,6 +255,99 @@ public class FolderRenameTest extends ApiTestCase {
 		assertProblem(rename(letters, "Drafts", clerk), 409, "name-taken");
 		assertProblem(rename(letters, "drafts", clerk), 409, "name-taken");
 		before.assertUnchangedExcept("hd_api_token");
+	}
+
+	@Test
+	public void testAFolderTheCallerCantSeeDoesntTakeTheName() throws Exception {
+		Folder walled = fx.folder(documents, "Acme Merger");
+		// Its own permissions, which leave Clerk out
+		Folder own = FolderDAO.get().findById(walled.getId(), true);
+		own.setSecurityRef(null);
+		FolderDAO.get().store(own, fx.folderHistory(boss));
+		fx.grant(walled, boss.getUserGroup(), Permission.READ);
+		Folder hidden = FolderDAO.get().findById(fx.folder(documents, "Archive").getId(), true);
+		hidden.setHidden(true);
+		FolderDAO.get().store(hidden, fx.folderHistory(boss));
+
+		ApiResponse response = rename(letters, "acme merger", clerk);
+		assertEquals(response.toString(), 200, response.status());
+		response = rename(drafts, "Archive", clerk);
+		assertEquals(response.toString(), 200, response.status());
+		// An administrator reads them both
+		Folder spare = fx.folder(documents, "Spare");
+		assertProblem(rename(spare, "Acme Merger", boss), 409, "name-taken");
+	}
+
+	@Test
+	public void testItsOwnNameChangesNothingWhateverTheRulesSay() throws Exception {
+		// CE's cleaning keeps a b tag (and takes the slash out), which a new name can't have
+		Folder bold = fx.folder(documents, "<b>Draft</b>");
+		String stored = FolderDAO.get().findById(bold.getId()).getName();
+		assertTrue(stored, stored.startsWith("<b>"));
+		assertField(rename(letters, stored, clerk), "invalid");
+		DbSnapshot before = fx.snapshot();
+		ApiResponse response = rename(bold, " " + stored + " ", clerk);
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(stored, response.json().path("name").textValue());
+		before.assertUnchangedExcept("hd_api_token");
+	}
+
+	@Test
+	public void testTheParentsLockKeepsTwoRenamesToOneName() throws Exception {
+		ApiCall late = patch("/api/v1/folders/" + letters.getId()).token(signIn(clerk)).json(Map.of("name", "Post"));
+		ApiResponse response = whileTheParentIsLocked(late, () -> {
+			// A rename that holds the lock gives Drafts the name meanwhile
+			Folder other = FolderDAO.get().findById(drafts.getId(), true);
+			other.setName("Post");
+			FolderHistory renamed = fx.folderHistory(boss);
+			renamed.setEvent(FolderEvent.RENAMED);
+			FolderDAO.get().store(other, renamed);
+		});
+		assertProblem(response, 409, "name-taken");
+		assertEquals("Letters", FolderDAO.get().findById(letters.getId()).getName());
+	}
+
+	@Test
+	public void testAFolderMovedWhileItWaitsIsRefused() throws Exception {
+		ApiCall late = patch("/api/v1/folders/" + letters.getId()).token(signIn(clerk)).json(Map.of("name", "Post"));
+		ApiResponse response = whileTheParentIsLocked(late, () -> {
+			FolderHistory moved = fx.folderHistory(boss);
+			moved.setEvent(FolderEvent.MOVED);
+			FolderDAO.get().move(FolderDAO.get().findById(letters.getId()), drafts, moved);
+		});
+		assertProblem(response, 409, "refused");
+		assertEquals("Letters", FolderDAO.get().findById(letters.getId()).getName());
+	}
+
+	/** What a change made while it holds the lock is */
+	private interface Meanwhile {
+		void run() throws Exception;
+	}
+
+	/**
+	 * Sends the rename of a folder in Documents while the test holds
+	 * Documents' lock, makes the change once the rename waits for it, and
+	 * lets the rename go on
+	 */
+	private ApiResponse whileTheParentIsLocked(ApiCall rename, Meanwhile meanwhile) throws Exception {
+		DocumentLocks parents = Context.get(FolderResource.class).renames.parents;
+		ExecutorService pool = Executors.newSingleThreadExecutor();
+		try {
+			Future<ApiResponse> sent = parents.withLock(documents.getId(), () -> {
+				Future<ApiResponse> waiting = pool.submit((Callable<ApiResponse>) rename::send);
+				long until = System.currentTimeMillis() + 30_000;
+				while (!parents.waitedFor(documents.getId())) {
+					if (System.currentTimeMillis() > until)
+						throw new AssertionError("The rename never waited for the parent's lock");
+					Thread.sleep(10);
+				}
+				meanwhile.run();
+				return waiting;
+			});
+			return sent.get(60, TimeUnit.SECONDS);
+		} finally {
+			pool.shutdownNow();
+		}
 	}
 
 	@Test

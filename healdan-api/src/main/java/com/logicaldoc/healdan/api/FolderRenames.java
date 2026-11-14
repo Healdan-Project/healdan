@@ -20,12 +20,9 @@ import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.api.model.FieldError;
-import com.logicaldoc.healdan.api.model.FolderRef;
 import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.rules.StoredRows;
-import com.logicaldoc.healdan.security.AccessChecks;
-import com.logicaldoc.healdan.util.BasicPlane;
-import com.logicaldoc.util.html.HTMLSanitizer;
+import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
 
 /**
  * Renaming a folder (folder rename spec section 4.1), through CE's folder DAO
@@ -36,8 +33,10 @@ import com.logicaldoc.util.html.HTMLSanitizer;
  * ({@code 409 not-renamable}); without the Rename permission
  * ({@code 403 forbidden}); directly in a matter's workspace, unless the caller
  * is an administrator ({@code 403 admins-only}); a name that isn't allowed
- * ({@code 422 validation}); a name another live folder in the parent has,
- * without regard to case ({@code 409 name-taken}). A veto of Healdan's
+ * ({@code 422 validation}); a name another live folder in the parent that the
+ * caller can see has, without regard to case ({@code 409 name-taken}). The
+ * folder's own name, sent back, changes nothing, whatever the rules for a new
+ * name say of it. A veto of Healdan's
  * listeners is {@code 409 refused}, as the ProblemMapper answers one.
  */
 final class FolderRenames {
@@ -47,9 +46,10 @@ final class FolderRenames {
 	 * the check. {@link DocumentLocks} is a lock per id; the ids here are the
 	 * parents'. It is this server's alone, as Healdan runs one node, and CE's
 	 * New Folder and folder moves don't take it, so a rename checks again
-	 * inside it that the folder is still in the parent it locked.
+	 * inside it that the folder is still in the parent it locked. Package
+	 * private for FolderRenameTest, which holds it.
 	 */
-	private final DocumentLocks parents = new DocumentLocks();
+	final DocumentLocks parents = new DocumentLocks();
 
 	/**
 	 * @param id the folder's id
@@ -65,10 +65,12 @@ final class FolderRenames {
 		try {
 			FolderView view = FolderResource.view(id, user);
 			refuse(view, user);
-			String name = name(requested);
 			Folder folder = FolderDAO.get().findById(id);
-			if (name.equals(folder.getName()))
+			// Its own name changes nothing, before the rules for a new one: CE's routes can give a folder a name they
+			// refuse, such as one with a b tag, which CE's cleaning keeps
+			if (StringUtils.strip(requested).equals(folder.getName()))
 				return view;
+			String name = name(requested);
 			long parentId = folder.getParentId();
 			return parents.withLock(parentId, failure, () -> {
 				FolderDAO folders = FolderDAO.get();
@@ -84,7 +86,7 @@ final class FolderRenames {
 				refuse(now, user);
 				if (name.equals(current.getName()))
 					return now;
-				if (taken(current, name))
+				if (taken(current, name, user))
 					throw ApiProblem.conflict("name-taken",
 							"Another folder in folder %d is called %s.".formatted(current.getParentId(), name));
 
@@ -103,54 +105,65 @@ final class FolderRenames {
 		}
 	}
 
+	/**
+	 * Refuses what the view's {@code canRename} refuses ({@link ApiViews#canRename}
+	 * is the rule), with the code for its reason
+	 */
 	private static void refuse(FolderView view, User user) throws PersistenceException {
 		if ("store".equals(view.kind()))
 			throw ApiProblem.conflict("not-renamable", "A Store isn't renamed here.");
 		if ("matter".equals(view.kind()))
 			throw ApiProblem.conflict("not-renamable",
 					"A matter's own folder takes the matter's name: an administrator changes it with Edit Matter.");
-		if (!AccessChecks.allowed(user, Permission.RENAME, FolderDAO.get().findById(view.id())))
+		if (view.canRename())
+			return;
+		if (!FolderDAO.get().isPermissionAllowed(Permission.RENAME, view.id(), user.getId()))
 			throw ApiProblem.forbidden("You may not rename folder %d.".formatted(view.id()));
-		if (topLevel(view) && !AccessChecks.isAdmin(user))
-			throw new ApiProblem(403, "admins-only", "Only administrators can rename a matter's top-level folders.");
-	}
-
-	/** Directly in a matter's workspace: the step above it in its path is the matter's own folder */
-	private static boolean topLevel(FolderView view) {
-		List<FolderRef> path = view.path();
-		return path.size() >= 2 && "matter".equals(path.get(path.size() - 2).kind());
+		// With the Rename permission, the other reason is a top-level folder and a caller who isn't an administrator
+		throw new ApiProblem(403, "admins-only", "Only administrators can rename a matter's top-level folders.");
 	}
 
 	/**
 	 * @param requested the name sent
 	 * @return the name to store: the one sent, without spaces at either end
 	 * @throws ApiProblem {@code 422 validation} for the field {@code name}:
-	 *         {@code required}, {@code too-long}, {@code invalid} (a slash, a
-	 *         backslash, a control character, one the database can't store,
-	 *         markup CE's folder DAO would take out, or any HTML tag)
+	 *         {@code required}, also for a name of characters that show
+	 *         nothing; {@code too-long}; {@code invalid} (a slash, a
+	 *         backslash, a control character, one the database can't store, one
+	 *         that changes the text's direction, any HTML tag, or a character
+	 *         reference such as {@code &amp;}, which CE's folder DAO would turn
+	 *         into its character)
 	 */
 	static String name(String requested) {
 		String sent = StringUtils.strip(requested);
-		if (StringUtils.isBlank(sent))
+		// Spaces alone, or characters that show nothing (such as U+200B and U+FEFF), make no name
+		if (sent.codePoints().allMatch(c -> Character.isWhitespace(c) || Character.isSpaceChar(c)
+				|| Character.getType(c) == Character.FORMAT))
 			throw ApiProblem.validation(List.of(new FieldError("name", "required", "Give the folder a name.")));
 
 		List<FieldError> errors = new ArrayList<>();
-		if (sent.chars().anyMatch(c -> c == '/' || c == '\\' || Character.isISOControl(c)))
-			errors.add(new FieldError("name", "invalid", "A name can't contain /, \\ or control characters."));
-		// CE's tables hold only the Basic Multilingual Plane, and strict MariaDB refuses the rest at the write
-		else if (!BasicPlane.holds(sent))
-			errors.add(new FieldError("name", "invalid",
-					"A name can't contain emoji or other characters the database can't store."));
-		// CE's folder DAO cleans the name of markup as it stores it, so a name it would change isn't the name typed; and
-		// the tags CE's cleaning keeps (b, em, i, strong and u) are refused too, as a name has no HTML tags at all
-		else if (!sent.equals(HTMLSanitizer.sanitizeSimpleText(sent)) || !sent.equals(withoutTags(sent)))
-			errors.add(new FieldError("name", "invalid", "A name can't contain HTML tags."));
-		if (sent.length() > Uploads.MAX_NAME_LENGTH)
-			errors.add(new FieldError("name", Uploads.TOO_LONG,
-					"A name can't be longer than %d characters.".formatted(Uploads.MAX_NAME_LENGTH)));
+		// As a document's and a favourite's name: no slash, backslash or control character, nothing outside the Basic
+		// Multilingual Plane, and at most 255 characters
+		Uploads.checkText(sent, "name", Uploads.MAX_NAME_LENGTH, false, errors);
+		boolean invalid = errors.stream().anyMatch(error -> "invalid".equals(error.code()));
+		// A direction override shows a name as another, such as "Invoice", U+202E, then "fdp.exe" as "Invoiceexe.pdf"
+		if (!invalid && sent.codePoints().anyMatch(FolderRenames::directionControl))
+			errors.add(0, new FieldError("name", "invalid",
+					"A name can't contain characters that change the direction of the text."));
+		// CE's folder DAO cleans the name of markup and character references as it stores it, so a name it would change
+		// isn't the name typed; and the tags CE's cleaning keeps (b, em, i, strong and u) are refused too, as a name has
+		// no HTML tags at all
+		else if (!invalid && !sent.equals(withoutTags(sent)))
+			errors.add(0, new FieldError("name", "invalid",
+					"A name can't contain HTML tags or character references such as &amp;."));
 		if (!errors.isEmpty())
 			throw ApiProblem.validation(errors);
 		return sent;
+	}
+
+	/** The embeddings, overrides and isolates (U+202A to U+202E, U+2066 to U+2069); the marks a script needs are fine */
+	private static boolean directionControl(int c) {
+		return (c >= 0x202A && c <= 0x202E) || (c >= 0x2066 && c <= 0x2069);
 	}
 
 	/** The text with every HTML tag taken out, built as CE's {@code HTMLSanitizer.sanitizeSimpleText} builds its own */
@@ -159,9 +172,21 @@ final class FolderRenames {
 		return StringEscapeUtils.unescapeHtml(Jsoup.clean(text, "", Safelist.none(), settings));
 	}
 
-	/** Whether another live folder in the folder's parent, an alias included, has the name, without regard to case */
-	private static boolean taken(Folder folder, String name) {
-		return StoredRows.get().children(folder.getParentId()).stream()
-				.anyMatch(row -> row.id() != folder.getId() && name.equalsIgnoreCase(row.name()));
+	/**
+	 * Whether another live folder in the folder's parent, an alias included, has
+	 * the name, without regard to case. Only one the caller can see counts: a
+	 * hidden one, or one the caller can't read, isn't the caller's to learn of,
+	 * as one the caller can't read is {@code 404} elsewhere.
+	 */
+	private static boolean taken(Folder folder, String name, User user) throws PersistenceException {
+		FolderDAO folders = FolderDAO.get();
+		for (FolderRow row : StoredRows.get().children(folder.getParentId())) {
+			if (row.id() == folder.getId() || !name.equalsIgnoreCase(row.name()))
+				continue;
+			Folder sibling = folders.findById(row.id());
+			if (sibling != null && !sibling.isHidden() && folders.isReadAllowed(row.id(), user.getId()))
+				return true;
+		}
+		return false;
 	}
 }

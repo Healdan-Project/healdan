@@ -72,7 +72,8 @@ import jakarta.ws.rs.core.UriInfo;
 @Produces(MediaType.APPLICATION_JSON)
 public class FolderResource {
 
-	private final FolderRenames renames = new FolderRenames();
+	/** Package private for FolderRenameTest, which holds its lock */
+	final FolderRenames renames = new FolderRenames();
 
 	/** The most documents a search folder shows */
 	static final int SEARCH_FOLDER_CAP = 1000;
@@ -236,11 +237,12 @@ public class FolderResource {
 
 			// A filter keeps documents; no subfolder has a type, an author or an edit date
 			List<Folder> subfolders = query.filtered() ? List.of() : subfolders(folder, caller);
+			ApiViews.AdminCheck admin = new ApiViews.AdminCheck(caller);
 			if (filters.foldersOnly()) {
 				Page<Folder> slice = paging.slice(subfolders);
 				List<Object> items = new ArrayList<>();
 				for (Folder f : slice.items())
-					items.add(ApiViews.subfolder(f, view, caller));
+					items.add(ApiViews.subfolder(f, view, caller, admin));
 				return new FolderChildPage(items, slice.offset(), slice.limit(), slice.total(), 0, null);
 			}
 
@@ -249,7 +251,7 @@ public class FolderResource {
 			int folderTo = (int) Math.min((long) paging.offset() + paging.limit(), subfolders.size());
 			List<Object> items = new ArrayList<>();
 			for (Folder f : subfolders.subList(folderFrom, folderTo))
-				items.add(ApiViews.subfolder(f, view, caller));
+				items.add(ApiViews.subfolder(f, view, caller, admin));
 			int documentOffset = Math.max(0, paging.offset() - subfolders.size());
 			ListedPage listed = FolderListing.get().page(folder, caller,
 					query.page(documentOffset, paging.limit() - items.size()));
