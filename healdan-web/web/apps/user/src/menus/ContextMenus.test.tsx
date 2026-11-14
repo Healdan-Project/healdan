@@ -200,12 +200,13 @@ describe("a folder row's menu", () => {
 })
 
 describe("the left pane's menus", () => {
-  it('My Favorites: Open, Open in New Tab and Remove from Favorites', async () => {
+  it('My Favorites: Open, Open in New Tab, Rename… and Remove from Favorites', async () => {
     const { api, router } = await renderApp('/folders/7', { ...routes().all, 'DELETE /v1/me/favorites/*': undefined })
     const link = await within(pane()).findByRole('link', { name: 'Cap Table.xlsx' })
     expect(fireEvent.contextMenu(link)).toBe(false)
     expect(await screen.findByRole('menu', { name: 'Actions for Cap Table.xlsx' })).toBeTruthy()
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Remove from Favorites'])
+    // Use Original Name only once it has a name of its own (FavoriteNames.test.tsx)
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename…', 'Remove from Favorites'])
     expect((await item('Open in New Tab')).getAttribute('href')).toBe('/app/doc/10500')
     await userEvent.click(await item('Remove from Favorites'))
     await waitFor(() => expect(api.callsTo('DELETE /v1/me/favorites/901')).toHaveLength(1))

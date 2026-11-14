@@ -32,6 +32,17 @@ opens in the folder tree, and a document is selected in its folder. Right-click 
 
 A bookmark on a document or folder that's been deleted isn't listed.
 
+## A Bookmark's Name
+
+A bookmark's name is the name of its favourite in the app's **My Favorites**, so a name you give it with **Edit**
+shows there, and one you give a favourite with **Rename…** shows here. See
+[A Favourite's Own Name](../../getting-started/getting-around/#a-favourites-own-name).
+
+A bookmark starts with its document's or folder's name. While it still has that name, it takes the new one when the
+document or folder is renamed, wherever it's renamed. A bookmark you've given a name of its own keeps it. A bookmark
+whose document or folder was renamed before Healdan kept bookmarks up to date still has the old name: give it the new
+one with **Edit**, or with **Use Original Name** in the app.
+
 ## Favorites in LibreOffice
 
 Your bookmarks are the **Favorites** of the [Healdan Helper](../../office/)'s windows, apart from your matters, which

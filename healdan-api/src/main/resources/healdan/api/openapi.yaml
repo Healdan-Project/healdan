@@ -233,8 +233,9 @@ paths:
       description: |
         The caller's bookmarks in LogicalDOC, except those on matters'
         workspaces, which are My Matters (`GET /v1/matters/mine`). Folders
-        first, then documents, each by name. What the caller can't read, or
-        the API doesn't show, is left out. In one page.
+        first, then documents, each by the favorite's `name`, without regard
+        to case. What the caller can't read, or the API doesn't show, is left
+        out. In one page.
       tags: [Users]
       responses:
         '200':
@@ -271,6 +272,47 @@ paths:
         default:
           $ref: '#/components/responses/Problem'
   /v1/me/favorites/{id}:
+    patch:
+      operationId: renameFavorite
+      summary: Give a favorite a name of its own
+      description: |
+        Sets the favorite's `name`, which only the caller sees: the
+        bookmark's title, which the Classic Interface's Bookmarks section
+        shows and edits too. The folder or document keeps its own name. A
+        `name` that is null, empty or only spaces puts back the item's own
+        name as it is now; spaces around a name are dropped.
+
+        A favorite whose name is its item's follows the item when it's
+        renamed, by any route. One with a name of its own keeps it. A
+        favorite whose item was renamed before Healdan followed renames
+        keeps the name it had, as a name of its own.
+
+        The checks run in this order:
+
+        1. `400 bad-request` for a body that isn't the JSON expected.
+        2. `404 not-found` if the caller has no such favorite, which
+           includes another user's, or can no longer read its item.
+        3. `422 validation` for the field `name`: `invalid` for a control
+           character or one the database can't store, such as an emoji, and
+           `too-long` over 255 characters.
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/FavoriteIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FavoriteRename'
+      responses:
+        '200':
+          description: The favorite, renamed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteView'
+        default:
+          $ref: '#/components/responses/Problem'
     delete:
       operationId: removeFavorite
       summary: Remove a favorite
@@ -279,14 +321,7 @@ paths:
         user's.
       tags: [Users]
       parameters:
-        - name: id
-          in: path
-          required: true
-          description: The favorite's id
-          schema:
-            type: integer
-            format: int64
-            minimum: 0
+        - $ref: '#/components/parameters/FavoriteIdPath'
       responses:
         '204':
           description: Removed
@@ -2152,6 +2187,15 @@ paths:
           $ref: '#/components/responses/Problem'
 components:
   parameters:
+    FavoriteIdPath:
+      name: id
+      in: path
+      required: true
+      description: The favorite's id
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
     FolderIdPath:
       name: folderId
       in: path
@@ -3127,15 +3171,22 @@ components:
     FavoriteView:
       type: object
       additionalProperties: false
-      required: [id, type, item]
+      required: [id, type, name, item]
       properties:
         id:
           type: integer
           format: int64
-          description: The bookmark's id, for removing it
+          description: The bookmark's id, for renaming and removing it
         type:
           type: string
           enum: [folder, document]
+        name:
+          type: string
+          description: |
+            The favorite's name, which only the caller sees: the item's own
+            name (`item.name`), until the caller gives it one of its own with
+            `renameFavorite`. It differs from `item.name` when it's one of its
+            own.
         item:
           oneOf:
             - $ref: '#/components/schemas/FolderView'
@@ -3150,6 +3201,17 @@ components:
               items:
                 $ref: '#/components/schemas/FavoriteView'
       unevaluatedProperties: false
+    FavoriteRename:
+      type: object
+      additionalProperties: false
+      required: [name]
+      description: The body of `renameFavorite`.
+      properties:
+        name:
+          type: [string, 'null']
+          description: |
+            The favorite's own name, at most 255 characters. Null, empty or
+            only spaces puts back the item's own name.
     NewFavorite:
       type: object
       additionalProperties: false

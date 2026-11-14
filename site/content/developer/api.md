@@ -308,7 +308,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 | A document | `GET /documents/{docNumber}`, `/content`, `/preview`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone; `PATCH /documents/{docNumber}` to rename, `POST /documents/{docNumber}/move` and `DELETE /documents/{docNumber}` |
 | Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are; `GET /documents/{docNumber}/message` and its `/body`, `/parts/{id}` and `POST /attachments/{id}/file` for reading a filed email |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
-| Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
+| Favorites | `GET` and `POST /me/favorites`, `PATCH` and `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
 
 The sections below say more about the parts a client needs to know before it starts.
 
@@ -466,10 +466,26 @@ refused` for an immutable document, unless the caller is an administrator, as CE
 ## Favorites
 
 The user's bookmarks in LogicalDOC, apart from those on matters' workspaces, which are My Matters.
-`GET /me/favorites` lists them in one page, folders first, then documents, each by name. `POST /me/favorites` takes
-exactly one of `folderId` and `docNumber`, and answers `201`; adding a favorite twice answers `201` with the
+`GET /me/favorites` lists them in one page, folders first, then documents, each by its `name`. `POST /me/favorites`
+takes exactly one of `folderId` and `docNumber`, and answers `201`; adding a favourite twice answers `201` with the
 existing one. `DELETE /me/favorites/{id}` takes the bookmark's `id` from the list. A matter's workspace is `400`,
 and what the user can't read is `404`.
+
+- **A favourite's name.** Each favourite has a `name` beside its `item`: the bookmark's title, which the Classic
+  Interface's Bookmarks section shows and edits too, and which only its owner sees. It's the item's own name
+  (`item.name`) until the user gives it one of its own, and differs from `item.name` once they have.
+- **`PATCH /me/favorites/{id}`** with `{ "name": "Smith Real Estate Docs" }` gives it one and answers `200` with the
+  favourite. A `name` that is `null`, empty or only spaces puts back the item's own name; a body without `name` is
+  `400`. Another user's favourite, one that doesn't exist and one whose item the user can no longer read are `404`.
+  A name over 255 characters is `422 validation` with `too-long`, and one with a control character, or a character
+  the database can't store such as an emoji, is `invalid`. A `/` is fine: it's a label, not a file name.
+- **Renames follow.** A favourite whose name is still its item's takes the item's new name when the folder or
+  document is renamed, by any route: the API, the Classic Interface, a check-in under another file name, WebDAV, CMIS
+  or REST. Every one of them stores the folder or document through LogicalDOC's DAO, whose listeners
+  `FavoriteNamesDocumentListener` and `FavoriteNamesFolderListener` (in `healdan-core`, last of Healdan's) compare the
+  name before the store with each bookmark's title, exactly, and give the new name to those that match, in the
+  store's transaction. A favourite with a name of its own keeps it. Bookmarks whose item was renamed before Healdan
+  did this can't be told from ones their owners named, so they keep the names they have.
 
 ## My Matters and Recent Clients
 

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
@@ -21,7 +22,9 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.security.authorization.PermissionException;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.api.model.DocumentView;
+import com.logicaldoc.healdan.api.model.FavoriteRename;
 import com.logicaldoc.healdan.api.model.FavoriteView;
+import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.api.model.NewFavorite;
@@ -32,10 +35,12 @@ import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.navigation.Favorites;
 import com.logicaldoc.healdan.navigation.MyMatters;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.util.BasicPlane;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -48,7 +53,8 @@ import jakarta.ws.rs.core.Response;
  * {@code GET /v1/me}: who the token signs in as (spec section 6.1), and
  * {@code GET /v1/me/checkouts}: the documents the caller has checked out
  * (section 6.4), and the caller's Favorites under {@code /v1/me/favorites}
- * (section 9.3), and My Matters' adding and removing under
+ * (section 9.3; their names, M6 spec section 6.1), and My Matters' adding and
+ * removing under
  * {@code /v1/me/matters} (M6 spec section 9.1).
  */
 @Component
@@ -96,9 +102,12 @@ public class MeResource {
 		return hold == null ? null : hold.since();
 	}
 
+	/** The longest name a favorite keeps ({@code ld_bookmark.ld_title}) */
+	static final int MAX_FAVORITE_NAME = 255;
+
 	/**
 	 * @return the caller's bookmarks other than My Matters, folders first and
-	 *         then by title, leaving out what the caller can't read or the API
+	 *         then by name, leaving out what the caller can't read or the API
 	 *         doesn't show
 	 */
 	@GET
@@ -186,6 +195,78 @@ public class MeResource {
 	}
 
 	/**
+	 * Gives one of the caller's Favorites a name of its own, or puts back its
+	 * item's (M6 spec section 6.1, changed after M6: the owner's dogfooding
+	 * punch list, 2026-11-14). Only the caller sees it, and CE's Bookmarks
+	 * section shows the same name.
+	 *
+	 * @param id the bookmark's id
+	 * @param body the name; null or blank for the folder's or document's own
+	 * @return the favorite, renamed; {@code 404} if the caller has no such
+	 *         favorite, or can no longer read its item; {@code 422 validation}
+	 *         for a name over 255 characters, or with a control character or
+	 *         one the database can't store
+	 */
+	@PATCH
+	@Path("favorites/{id: [0-9]+}")
+	@Consumes(MediaType.APPLICATION_JSON)
+	public FavoriteView renameFavorite(@PathParam("id") long id, FavoriteRename body) {
+		// A missing name is a mistake, not a request for the item's own: that is null
+		if (body == null || body.name() == null || !(body.name().isTextual() || body.name().isNull()))
+			throw ApiProblem.badRequest("Say what to call the favorite with name, or send null for its own name.");
+		String requested = body.name().isNull() ? null : body.name().textValue();
+		User caller = Caller.current().user();
+		try {
+			// Through the list, so another user's bookmark and a matter's answer like none, as a remove does
+			Bookmark bookmark = Favorites.get().list(caller.getId()).stream().filter(b -> b.getId() == id).findFirst()
+					.orElseThrow(() -> ApiProblem.notFound("You have no favorite with this id."));
+			Map<Long, Author> authors = bookmark.getType() == Bookmark.Type.FOLDER ? Map.of()
+					: DocumentAuthors.get().of(List.of(bookmark.getTargetId()));
+			// What the list leaves out can't be renamed either
+			if (view(bookmark, caller, authors) == null)
+				throw ApiProblem.notFound("You have no favorite with this id.");
+			Bookmark renamed = Favorites.get().rename(caller.getId(), id, favoriteName(requested));
+			FavoriteView view = view(renamed, caller, authors);
+			if (view == null)
+				throw ApiProblem.notFound("You have no favorite with this id.");
+			return view;
+		} catch (PermissionException e) {
+			throw ApiProblem.notFound("You have no favorite with this id.");
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't rename the favorite", e);
+		}
+	}
+
+	/**
+	 * @param requested the name sent
+	 * @return the name stripped of the spaces around it; null when there's
+	 *         nothing else, for the item's own name
+	 * @throws ApiProblem {@code 422 validation} for the field {@code name}:
+	 *         {@code invalid} for a control character or one the database
+	 *         can't store, such as an emoji, and {@code too-long} over 255
+	 *         characters
+	 */
+	static String favoriteName(String requested) {
+		String name = StringUtils.strip(requested);
+		if (StringUtils.isEmpty(name))
+			return null;
+		// A label, not a file name: a / or a \ is fine, as in "Smith / Jones"
+		List<FieldError> errors = new ArrayList<>();
+		if (name.chars().anyMatch(Character::isISOControl))
+			errors.add(new FieldError("name", "invalid", "A name can't contain control characters."));
+		// CE's tables hold only the Basic Multilingual Plane, and strict MariaDB refuses the rest at the write
+		else if (!BasicPlane.holds(name))
+			errors.add(new FieldError("name", "invalid",
+					"A name can't contain emoji or other characters the database can't store."));
+		if (name.length() > MAX_FAVORITE_NAME)
+			errors.add(new FieldError("name", Uploads.TOO_LONG,
+					"A name can't be longer than %d characters.".formatted(MAX_FAVORITE_NAME)));
+		if (!errors.isEmpty())
+			throw ApiProblem.validation(errors);
+		return name;
+	}
+
+	/**
 	 * Adds a matter to the caller's My Matters; one already there stays as it
 	 * is.
 	 *
@@ -237,14 +318,23 @@ public class MeResource {
 			Optional<Folder> folder = AccessChecks.readableFolder(bookmark.getTargetId(), caller);
 			if (folder.isEmpty())
 				return null;
-			return ApiViews.folder(folder.get(), caller).map(v -> new FavoriteView(bookmark.getId(), "folder", v))
-					.orElse(null);
+			return ApiViews.folder(folder.get(), caller)
+					.map(v -> new FavoriteView(bookmark.getId(), "folder", name(bookmark, v.name()), v)).orElse(null);
 		}
 		Optional<Document> document = AccessChecks.readableDocument(DocumentDAO.get().findById(bookmark.getTargetId()),
 				caller);
 		if (document.isEmpty() || !ApiViews.shows(document.get()))
 			return null;
-		return new FavoriteView(bookmark.getId(), "document", ApiViews.document(document.get(), caller, authors));
+		DocumentView item = ApiViews.document(document.get(), caller, authors);
+		return new FavoriteView(bookmark.getId(), "document", name(bookmark, item.name()), item);
+	}
+
+	/**
+	 * @return the bookmark's title, or the item's name when the title is blank,
+	 *         as the Classic Interface can leave it
+	 */
+	private static String name(Bookmark bookmark, String itemName) {
+		return StringUtils.isBlank(bookmark.getTitle()) ? itemName : bookmark.getTitle();
 	}
 
 }

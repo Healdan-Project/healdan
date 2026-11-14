@@ -3,9 +3,10 @@
 
 import { useQueries } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
-import { useId, useState, type ReactNode } from 'react'
+import { useId, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, t, type IconName, type ItemMenu, type TreeNode } from '@healdan/ui'
+import { favoriteTooltip } from '../actions/favoriteName'
 import { useMyMattersChange } from '../actions/myMatters'
 import { carriesRows, placeOf, takesDrag, type Place } from '../filing/dropTargets'
 import { useFiling } from '../filing/FilingProvider'
@@ -16,6 +17,7 @@ import { useApi } from '../services'
 import { recentKinds } from '../search/scopes'
 import { ErrorPanel } from './ErrorPanel'
 import { messageFor } from './errors'
+import { FavoriteNameField } from './FavoriteNameField'
 import styles from './LeftPane.module.css'
 
 type S = components['schemas']
@@ -286,17 +288,38 @@ function MyMattersSection() {
   )
 }
 
+/**
+ * My Favorites, by each favorite's own name, in the server's order (changed after M6: the owner's dogfooding punch list,
+ * 2026-11-14). Its tooltip says what it really is and where, and F2 or its menu's Rename… makes the name a field.
+ */
 function FavoritesSection() {
   const favorites = useFavorites()
+  // The favorite whose name is a field now
+  const [renaming, setRenaming] = useState<number>()
   const items = favorites.data?.items ?? []
   const favoriteAt = (href: string) =>
     items.find(({ item }) => (item.type === 'document' ? item.docNumber === linkedId(href, 'doc') : item.id === linkedId(href, 'folders')))
   const menu: ItemMenu = {
-    label: (href) => t('menu.for', { name: favoriteAt(href)?.item.name ?? '' }),
+    label: (href) => t('menu.for', { name: favoriteAt(href)?.name ?? '' }),
     items: (href) => {
       const favorite = favoriteAt(href)
-      return favorite && <FavoriteMenuItems favorite={favorite} />
+      return favorite && <FavoriteMenuItems favorite={favorite} onRename={() => setRenaming(favorite.id)} />
     },
+  }
+  const entry = (favorite: S['FavoriteView']) => ({
+    className: styles.entry,
+    title: favoriteTooltip(favorite),
+    'data-favorite': favorite.id,
+    onKeyDown: (event: KeyboardEvent) => {
+      if (event.key !== 'F2' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+      event.preventDefault()
+      setRenaming(favorite.id)
+    },
+  })
+  function renamed(id: number, focusLink: boolean) {
+    setRenaming(undefined)
+    // The link is back once this has rendered, in its new place if the name moved it
+    if (focusLink) requestAnimationFrame(() => globalThis.document.querySelector<HTMLElement>(`[data-favorite="${id}"]`)?.focus())
   }
   return (
     <Section title={t('favorites.mine')} menu={menu}>
@@ -304,15 +327,17 @@ function FavoritesSection() {
         <ul className={styles.list}>
           {items.map((favorite) => (
             <li key={favorite.id}>
-              {favorite.item.type === 'document' ? (
-                <Link to="/doc/$ref" params={{ ref: String(favorite.item.docNumber) }} className={styles.entry}>
+              {renaming === favorite.id ? (
+                <FavoriteNameField favorite={favorite} onDone={(focusLink) => renamed(favorite.id, focusLink)} />
+              ) : favorite.item.type === 'document' ? (
+                <Link to="/doc/$ref" params={{ ref: String(favorite.item.docNumber) }} {...entry(favorite)}>
                   <Icon name="star" />
-                  <span className={styles.text}>{favorite.item.name}</span>
+                  <span className={styles.text}>{favorite.name}</span>
                 </Link>
               ) : (
-                <Link to="/folders/$id" params={{ id: String(favorite.item.id) }} className={styles.entry}>
+                <Link to="/folders/$id" params={{ id: String(favorite.item.id) }} {...entry(favorite)}>
                   <Icon name="star" />
-                  <span className={styles.text}>{favorite.item.name}</span>
+                  <span className={styles.text}>{favorite.name}</span>
                 </Link>
               )}
             </li>

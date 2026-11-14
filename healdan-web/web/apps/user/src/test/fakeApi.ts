@@ -114,8 +114,9 @@ export function versionRow(over: Partial<S['VersionView']> = {}): S['VersionView
   return { version: '1.0', fileVersion: '1.0', kind: 'version', date: '2026-09-29T09:40:00Z', by: { id: 3, name: 'Jamie Clarke' }, comment: null, event: 'event.stored', ...over }
 }
 
-export function favorite(item: S['FolderView'] | S['DocumentView'], id = 900): S['FavoriteView'] {
-  return { id, type: item.type, item }
+/** A favorite, with its item's own name unless it's given one of its own */
+export function favorite(item: S['FolderView'] | S['DocumentView'], id = 900, name = item.name): S['FavoriteView'] {
+  return { id, type: item.type, name, item }
 }
 
 export function page<T>(items: T[]): { items: T[]; offset: number; limit: number; total: number } {

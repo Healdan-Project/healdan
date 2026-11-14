@@ -33,11 +33,31 @@ The left pane scrolls on its own when it's longer than the window. From the top 
   folders, and open a folder to see its own folders. A search folder has its own icon. The tree opens to the folder
   you're in, and **+** beside the heading adds the matter you're in.
 - **My Favorites:** documents and folders you've added as favourites, with the star beside a folder's name or beside
-  a document's name in its details.
+  a document's name in its details, folders first and then by name. A favourite can have a name of its own: see
+  [A Favourite's Own Name](#a-favourites-own-name).
 
 [My Matters and Recent Matters](../../finding-documents/my-matters-and-recent-matters/) explains the first two.
 If your firm calls matters something else, such as projects, the headings use its word: Recent Projects and My
 Projects.
+
+### A Favourite's Own Name
+
+Four matters' **Documents** folders all look the same in **My Favorites**. Give each favourite a name of its own,
+such as "Smith Real Estate Docs" or "Acme Acquisition Discovery Docs", and only you see it: the folder or document
+keeps its own name for everyone, you included, everywhere else. Point at a favourite to see what it really is and
+where, such as "Documents · 1001.1 – Harbour Lease".
+
+To rename a favourite, right-click it and choose **Rename…**, or press F2 on it. Type the name and press Enter, or
+press Esc to leave it as it was. To give it back its folder's or document's own name, clear the name and press Enter,
+or right-click it and choose **Use Original Name**, which shows only while it has a name of its own.
+
+A favourite that still has its folder's or document's name takes the new one when that folder or document is
+renamed, wherever it's renamed: here, in the Classic Interface, or from another program. One you've given a name of
+its own keeps it. A favourite whose folder or document was renamed before Healdan kept favourites up to date still has
+the old name, as Healdan can't tell it from one you named; choose **Use Original Name** to bring it up to date.
+
+A favourite's name is its bookmark's name in the Classic Interface, so a name you give it in one shows in the other:
+see [Bookmarks](../../documents/bookmarks/).
 
 ## The Main Area
 
@@ -98,7 +118,8 @@ is a shortcut, never the only way.
   make one (inside a matter, and never in a search folder), and **Add to Favorites** or **Remove from Favorites**.
 - **A matter,** in **My Matters**, **Recent Matters** or a search for matters: **Open**, **Open in New Tab**, and
   **Add to My Matters** or **Remove from My Matters**.
-- **An item in My Favorites:** **Open**, **Open in New Tab** and **Remove from Favorites**.
+- **An item in My Favorites:** **Open** and **Open in New Tab**; **Rename…**, and **Use Original Name** when it has a
+  name of its own (see [A Favourite's Own Name](#a-favourites-own-name)); and **Remove from Favorites**.
 
 Right-clicking a document that isn't selected selects it first, in place of what was selected, as the Finder does.
 Right-clicking one of several selected documents keeps them all selected, and the menu then acts on all of them: only
@@ -127,7 +148,7 @@ once the list has the focus.
 | Up and down arrows | Move through the list |
 | Enter | Opens the document in its app (the Healdan Helper), or a folder |
 | Space | Opens Quick Look; Esc closes it |
-| F2 | Renames the selected document in place |
+| F2 | Renames the selected document in place, or in **My Favorites** the favourite with the focus |
 | Delete | Moves the selected documents to the Trash, after asking |
 | Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row or tree item with the focus; Esc closes it |
 | Option-Enter on **Upload** | Files with the form first |
