@@ -281,7 +281,10 @@ describe('LeftPane', () => {
     const matterRow = within(tree).getByRole('row', { name: /1001\.1/ })
     fireEvent.click(within(tree).getByRole('button', { name: 'More for 1001.1 – Charter Dispute' }))
     expect((await screen.findByRole('menuitem', { name: 'Rename' })).getAttribute('aria-disabled')).toBe('true')
+    // Esc goes to the menu only once it has the focus
+    await waitFor(() => expect(document.activeElement?.closest('[role="menu"]')).not.toBeNull())
     await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
     matterRow.focus()
     await userEvent.keyboard('{F2}')
     expect(await screen.findByText(/own folder takes the matter's name/)).toBeTruthy()
@@ -298,7 +301,10 @@ describe('LeftPane', () => {
     const target = await within(tree).findByRole('row', { name: /Correspondence/ })
     fireEvent.click(within(tree).getByRole('button', { name: 'More for Correspondence' }))
     expect((await screen.findByRole('menuitem', { name: 'Rename' })).getAttribute('aria-disabled')).toBe('true')
+    // Esc goes to the menu only once it has the focus
+    await waitFor(() => expect(document.activeElement?.closest('[role="menu"]')).not.toBeNull())
     await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
     target.focus()
     await userEvent.keyboard('{F2}')
     // The fake /v1/me isn't an admin, and Correspondence is at the matter's top level

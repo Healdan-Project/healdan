@@ -313,5 +313,7 @@ describe('the other lists', () => {
     const grid = await within(screen.getByRole('main')).findByRole('grid')
     fireEvent.contextMenu(await within(grid).findByRole('row', { name: /1002\.1/ }))
     expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to My Matters'])
+    // A matter's own folder takes the matter's name: Rename is greyed out
+    expect((await item('Rename')).getAttribute('aria-disabled')).toBe('true')
   })
 })
