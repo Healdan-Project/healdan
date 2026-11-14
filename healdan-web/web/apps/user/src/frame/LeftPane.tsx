@@ -3,9 +3,10 @@
 
 import { useQueries } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
-import { useId, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, t, type ItemMenu, type TreeNode } from '@healdan/ui'
+import { favoriteTooltip } from '../actions/favoriteName'
 import { useMyMattersChange } from '../actions/myMatters'
 import { carriesRows, placeOf, takesDrag, type Place } from '../filing/dropTargets'
 import { useFiling } from '../filing/FilingProvider'
@@ -17,6 +18,7 @@ import { fileIcon, folderIcon, matterIcon } from '../kindIcons'
 import { recentKinds, scopeIcons } from '../search/scopes'
 import { ErrorPanel } from './ErrorPanel'
 import { messageFor } from './errors'
+import { FavoriteNameField } from './FavoriteNameField'
 import styles from './LeftPane.module.css'
 
 type S = components['schemas']
@@ -278,33 +280,72 @@ function MyMattersSection() {
   )
 }
 
+/** A favorite's icon: its item's kind */
+function favoriteIcon(favorite: S['FavoriteView']): ReactNode {
+  const item = favorite.item
+  return item.type === 'document' ? <Icon {...fileIcon(item.name)} /> : <Icon {...folderIcon(item.kind)} />
+}
+
+/**
+ * My Favorites, by each favorite's own name, in the server's order (changed after M6: the owner's dogfooding punch list,
+ * 2026-11-14). Its tooltip says what it really is and where, and F2 or its menu's Rename Favorite makes the name a field.
+ */
 function FavoritesSection() {
   const favorites = useFavorites()
+  // The favorite whose name is a field now
+  const [renaming, setRenaming] = useState<number>()
   const items = favorites.data?.items ?? []
   // Each link carries its bookmark's id as its key
   const favoriteAt = (key: string) => items.find((favorite) => String(favorite.id) === key)
   const menu: ItemMenu = {
-    label: (key) => t('menu.for', { name: favoriteAt(key)?.item.name ?? '' }),
+    label: (key) => t('menu.for', { name: favoriteAt(key)?.name ?? '' }),
     items: (key) => {
       const favorite = favoriteAt(key)
-      return favorite && <FavoriteMenuItems favorite={favorite} />
+      return favorite && <FavoriteMenuItems favorite={favorite} onRename={() => setRenaming(favorite.id)} />
     },
   }
+  const list = useRef<HTMLUListElement>(null)
+  const entry = (favorite: S['FavoriteView']) => ({
+    className: styles.entry,
+    title: favoriteTooltip(favorite),
+    'data-menu-key': String(favorite.id),
+    onKeyDown: (event: KeyboardEvent) => {
+      if (event.key !== 'F2' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+      event.preventDefault()
+      setRenaming(favorite.id)
+    },
+  })
+  // The favorite whose link takes the focus back once the field has given way to it
+  const refocus = useRef<number | undefined>(undefined)
+  function renamed(id: number, focusLink: boolean) {
+    refocus.current = focusLink ? id : undefined
+    setRenaming(undefined)
+  }
+  // After the render that draws the link again, not in the next frame: after a save, React draws it in a task of its own,
+  // which a frame can come before, and the link then wasn't there to focus (in Chromium and WebKit alike)
+  useEffect(() => {
+    const id = refocus.current
+    if (id === undefined || renaming !== undefined) return
+    refocus.current = undefined
+    list.current?.querySelector<HTMLElement>(`[data-menu-key="${id}"]`)?.focus()
+  }, [renaming])
   return (
     <Section title={t('favorites.mine')} menu={menu}>
       {stateOf(favorites, favorites.isSuccess && items.length === 0) ?? (
-        <ul className={styles.list}>
+        <ul ref={list} className={styles.list}>
           {items.map((favorite) => (
             <li key={favorite.id}>
-              {favorite.item.type === 'document' ? (
-                <Link to="/doc/$ref" params={{ ref: String(favorite.item.docNumber) }} data-menu-key={String(favorite.id)} className={styles.entry}>
-                  <Icon {...fileIcon(favorite.item.name)} />
-                  <span className={styles.text}>{favorite.item.name}</span>
+              {renaming === favorite.id ? (
+                <FavoriteNameField favorite={favorite} icon={favoriteIcon(favorite)} onDone={(focusLink) => renamed(favorite.id, focusLink)} />
+              ) : favorite.item.type === 'document' ? (
+                <Link to="/doc/$ref" params={{ ref: String(favorite.item.docNumber) }} {...entry(favorite)}>
+                  {favoriteIcon(favorite)}
+                  <span className={styles.text}>{favorite.name}</span>
                 </Link>
               ) : (
-                <Link to="/folders/$id" params={{ id: String(favorite.item.id) }} data-menu-key={String(favorite.id)} className={styles.entry}>
-                  <Icon {...folderIcon(favorite.item.kind)} />
-                  <span className={styles.text}>{favorite.item.name}</span>
+                <Link to="/folders/$id" params={{ id: String(favorite.item.id) }} {...entry(favorite)}>
+                  {favoriteIcon(favorite)}
+                  <span className={styles.text}>{favorite.name}</span>
                 </Link>
               )}
             </li>

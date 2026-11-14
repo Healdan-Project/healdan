@@ -4,6 +4,7 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Api;
+using Healdan.Helper.Core.Browse;
 using Healdan.Helper.Core.Tests.Browse;
 using static Healdan.Helper.Core.Tests.Browse.Views;
 
@@ -31,7 +32,7 @@ public class WindowCallsTests
     [Fact]
     public async Task ListsReadFoldersDocumentsMattersAndFavorites()
     {
-        _routes.Answer("GET /v1/me/favorites", Page(Favorite(7, Folder(12)), Favorite(8, Doc(1229, "Engagement letter.docx"))));
+        _routes.Answer("GET /v1/me/favorites", Page(Favorite(7, Folder(12)), Favorite(8, Doc(1229, "Engagement letter.docx"), "Acme Engagement")));
         _routes.Answer("GET /v1/search?scope=clients&q=998&limit=50", Page(MatterView(3, 10)));
 
         var favorites = await Api().ListAsync("v1/me/favorites");
@@ -39,6 +40,9 @@ public class WindowCallsTests
 
         Assert.Equal((7L, 12L), (favorites.Items[0].FavoriteId!.Value, favorites.Items[0].Folder!.Id));
         Assert.Equal((8L, 1229L), (favorites.Items[1].FavoriteId!.Value, favorites.Items[1].Document!.DocNumber));
+        // A favourite's own name is what its row shows, as the server sorts by it
+        Assert.Equal("Acme Engagement", new Entry(favorites.Items[1], null).Title);
+        Assert.Equal(new Entry(new ListItem(favorites.Items[0].Folder, null, null, null), null).Title, new Entry(favorites.Items[0], null).Title);
         Assert.Equal(10, hits.Items[0].Matter!.FolderId);
     }
 

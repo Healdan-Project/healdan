@@ -100,7 +100,7 @@ public class ProfileFolderListener implements FolderListener {
 
 		long id = folder.getId();
 		String event = transaction != null ? transaction.getEvent() : null;
-		FolderRow stored = StoredRows.get().folder(id);
+		FolderRow stored = StoredRows.get().folder(id, dictionary);
 		boolean moved = stored == null || stored.parentId() != parentId || stored.deleted() != 0
 				|| FolderEvent.MOVED.toString().equals(event) || FolderEvent.RESTORED.toString().equals(event);
 		boolean edit = !moved && FolderEvent.CHANGED.toString().equals(event);

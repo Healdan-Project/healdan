@@ -27,9 +27,9 @@
 | M2 | 31 | 6 | 3 | 40 |
 | M3 | 3 | 1 | 1 | 5 |
 | M5 | 0 | 0 | 0 | 0 |
-| M6 | 9 | 1 | 2 | 12 |
+| M6 | 10 | 1 | 2 | 13 |
 | M7 | 0 | 0 | 0 | 0 |
-| Later | 74 | 17 | 7 | 98 |
+| Later | 73 | 17 | 7 | 97 |
 | Admin | 122 | 20 | 3 | 145 |
 | none | 236 | 7 | 7 | 250 |
 | **all** | 475 | 52 | 23 | 550 |
@@ -92,6 +92,7 @@ M6 built every endpoint in this table, for the User app ([M6 spec](../superpower
 | `SecurityService.logout`, on the web page | `DELETE /session`, on the web session only |
 | `HealdanMatterService.addToMyMatters`, `removeFromMyMatters` | `PUT /me/matters/{folderId}`, `DELETE /me/matters/{folderId}` |
 | `DocumentService.rename` | `PATCH /documents/{docNumber}` |
+| `DocumentService.updateBookmark`, a bookmark's name | `PATCH /me/favorites/{id}`, and `name` in `FavoriteView` (built after M6: the owner's dogfooding punch list, 2026-11-14) |
 | `DocumentService.delete` | `DELETE /documents/{docNumber}` |
 | `FolderService.paste`, a cut's move | `POST /documents/{docNumber}/move` |
 | `DocumentService.extractEmail`, `saveEmailAttachment` | `GET /documents/{docNumber}/message`, `GET /documents/{docNumber}/message/body`, `POST /documents/{docNumber}/message/attachments/{id}/file` |
@@ -126,7 +127,7 @@ M6 built every endpoint in this table, for the User app ([M6 spec](../superpower
 | ContactService | 5 |  |  |  |  |  |  |  | 5 |
 | DashletService | 7 |  |  |  |  |  |  | 3 | 4 |
 | DocuSignService | 6 |  |  |  |  |  |  |  | 6 |
-| DocumentService | 72 | 12 | 2 |  | 4 |  | 33 | 7 | 14 |
+| DocumentService | 72 | 12 | 2 |  | 5 |  | 32 | 7 | 14 |
 | EmailAccountService | 8 |  |  |  |  |  |  |  | 8 |
 | FolderService | 27 | 2 | 1 |  | 1 |  | 15 | 7 | 1 |
 | FormService | 6 |  |  |  |  |  |  |  | 6 |
@@ -376,8 +377,8 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/frontend/client/services/DocumentService.java`; RPC URL `/frontend/document` (`@RemoteServiceRelativePath("document")`)
 - Server impl: **DocumentServiceImpl**
-- Methods: 72 (M2 12, M3 2, M6 4, Later 33, Admin 7, none 14)
-- Lands in: `/documents/{docNumber}`, `/documents/{docNumber}/checkout`, `/documents/{docNumber}/versions`, `/documents/{docNumber}/properties`, `POST /documents` (M2); `/me/favorites` (M3); `PATCH` and `DELETE /documents/{docNumber}`, and `/documents/{docNumber}/message` (M6); `/documents/{docNumber}/…` for notes, links, tickets and permissions, a favourite's name, and `/trash` (Later); `/admin/documents` (Admin)
+- Methods: 72 (M2 12, M3 2, M6 5, Later 32, Admin 7, none 14)
+- Lands in: `/documents/{docNumber}`, `/documents/{docNumber}/checkout`, `/documents/{docNumber}/versions`, `/documents/{docNumber}/properties`, `POST /documents` (M2); `/me/favorites` (M3); `PATCH` and `DELETE /documents/{docNumber}`, `/documents/{docNumber}/message`, and `PATCH /me/favorites/{id}` for a favourite's name (M6, after M6); `/documents/{docNumber}/…` for notes, links, tickets and permissions, a bookmark's description, and `/trash` (Later); `/admin/documents` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
@@ -404,7 +405,7 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 | `saveACL`, `applyParentFolderSecurity` | Edit a document's ACL; reset to the folder's. | Later |
 | `makeImmutable` | Make documents immutable (read-only forever). | Later |
 | `addBookmarks`, `deleteBookmarks` | Favorites (bookmarks). Healdan uses folder bookmarks as My Matters. Built as `POST` and `DELETE /me/favorites`. | M3 |
-| `updateBookmark` | A bookmark's own name and description. | Later |
+| `updateBookmark` | A bookmark's own name and description. Its name is built as `PATCH /me/favorites/{id}` with `{ name }` (after M6: the owner's dogfooding punch list, 2026-11-14); its description waits for its phase. | M6 |
 | `linkDocuments`, `deleteLinks`, `updateLink`, `replaceAlias` | Document links; turn an alias into a real document. | Later |
 | `saveNote`, `getNotes`, `getNote`, `saveNotes`, `deleteNotes` | Annotations/notes on a document or version. | Later |
 | `createTicket`, `setTicketPassword`, `deleteTickets`, `enableTickets`, `disableTickets` | Download/view tickets (shareable links; served by /download-ticket). | Later |
