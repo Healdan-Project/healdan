@@ -104,9 +104,9 @@ export type IconName = keyof typeof icons
 export const iconKinds = ['wordProcessing', 'spreadsheet', 'presentation', 'pdf', 'email', 'picture', 'folder', 'matter', 'client'] as const
 export type IconKind = (typeof iconKinds)[number]
 
-// Icons are decoration: the control around one carries the label. A kind's icon carries `data-kind`, by which a surface
-// that draws its icons in its own colour, such as a selected row's accent fill, finds it (icons.module.css).
+// Icons are decoration: the control around one carries the label. Every icon keeps its size beside text that is cut
+// short, and a kind's icon carries `data-kind`, by which a list tells it from the icons it mutes (icons.module.css).
 export function Icon({ name, size = 16, kind, className, ...rest }: { name: IconName; size?: number; kind?: IconKind } & SVGAttributes<SVGElement>) {
-  const props: IconProps & { 'data-kind'?: IconKind } = { size, stroke: 1.75, 'aria-hidden': true, 'data-kind': kind, className: [kind && styles[kind], className].filter(Boolean).join(' ') || undefined, ...rest }
+  const props: IconProps & { 'data-kind'?: IconKind } = { size, stroke: 1.75, 'aria-hidden': true, 'data-kind': kind, className: [styles.icon, kind && styles[kind], className].filter(Boolean).join(' '), ...rest }
   return createElement(icons[name], props)
 }

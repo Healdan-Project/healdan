@@ -5,7 +5,7 @@ import type { components } from '@healdan/api'
 import { formatDate, formatVersion, Icon, t, type TableColumn, type TableRow } from '@healdan/ui'
 import { HoldMarker } from '../actions/HoldMarker'
 import type { SearchScope } from '../search/scopes'
-import { fileIcon, folderIcon, matterIcon, type KindIcon } from '../kindIcons'
+import { itemIcon } from '../kindIcons'
 import { matterParts } from '../matterDisplay'
 import { DocumentTitle } from '../organising/RenameField'
 import { childKey, type Hit } from './useListing'
@@ -21,13 +21,6 @@ export function rowOf(item: Hit): ListRow {
   return { id: childKey(item), textValue: item.type === 'matter' ? item.display : item.name, selectable: item.type === 'document', item }
 }
 
-/** A row's icon, in its kind's colour */
-function iconOf(item: Hit): KindIcon {
-  if (item.type === 'matter') return matterIcon
-  if (item.type === 'folder') return folderIcon(item.kind)
-  return fileIcon(item.name)
-}
-
 // Title shows the file name: CE has no title of its own, and the server sorts Title by it (plan correction 7). A held
 // document's row ends it with the hold's marker.
 const title: TableColumn<ListRow> = {
@@ -38,7 +31,7 @@ const title: TableColumn<ListRow> = {
   width: '3fr',
   cell: ({ item }) => (
     <>
-      <Icon {...iconOf(item)} />
+      <Icon {...itemIcon(item)} />
       {item.type === 'document' ? <DocumentTitle document={item} className={styles.name} /> : <span className={styles.name}>{item.type === 'matter' ? item.display : item.name}</span>}
       {item.type === 'document' && <HoldMarker document={item} />}
     </>

@@ -436,16 +436,24 @@ An icon that stands for a kind of item is drawn in that kind's colour: `--hd-kin
 `--hd-kind-spreadsheet`, `--hd-kind-presentation`, `--hd-kind-pdf`, `--hd-kind-email`, `--hd-kind-picture`,
 `--hd-kind-folder` (the accent, `--hd-accent-text`, as the Healdan Helper draws folders), `--hd-kind-matter` and
 `--hd-kind-client`. A view gets the icon and its kind together from `apps/user/src/kindIcons.ts` and passes both to
-`@healdan/ui`'s `Icon`, as `<Icon {...fileIcon(name)} />`. `fileIcon` goes by the file's extension alone, which decides
-the icon and the colour, and gives LibreOffice's formats their Office counterparts' colours: an `.odt` is word
-processing's blue, an `.ods` spreadsheets' green and an `.odp` presentations' orange-red, each with the plain icon of its
-kind, where Office's own formats have Tabler's DOCX, DOC, XLS, CSV and PPT icons. Any other file, a drawing included, is
-the plain document with no kind, and keeps the colour of what it sits in, as action and frame icons do.
+`@healdan/ui`'s `Icon`, as `<Icon {...fileIcon(name)} />`, or `itemIcon` for a list's row. `fileIcon` goes by the
+file's extension alone, which decides the icon and the colour. Its extensions are the server's kinds of file
+(`FileKinds` in `healdan-core`, which the File Type filter uses), which `kindIcons.test.ts` reads from the Java source
+and compares, so an extension added there fails the test until it has its colour here. LibreOffice's formats take their
+Office counterparts' colours: an `.odt` is word processing's blue, an `.ods` spreadsheets' green and an `.odp`
+presentations' orange-red, each with the plain icon of its kind, where Office's own formats have Tabler's DOCX, DOC, XLS
+and PPT icons. A CSV, Other to the server, has Tabler's CSV icon in no kind's colour. Any other file, a drawing included,
+is the plain document with no kind, and keeps the colour of what it sits in, as action and frame icons do. A matter's own
+folder, as a favourite or a Folders search's hit may be, is the matter's briefcase (`folderIcon`).
 
-`Icon` gives a kind's icon a class from `icons.module.css` and a `data-kind` attribute. Each class is a class alone, so
-a surface that draws its icons in its own colour wins with a rule for `svg`: the accent fill of a selected row in a list
-that has the focus (`Table.module.css`) and of the option the keys are on in a menu or the search box's suggestions
-(`Menu.module.css`, `ComboBox.module.css`) draw them in `--hd-accent-on-fill`, as the text. On Inactive selection and
+`Icon` gives every icon `flex: none`, so it keeps its size beside text that a row cuts short, and a kind's icon a class
+from `icons.module.css` and a `data-kind` attribute. A kind's colour fails on the accent fill (the folders' is the accent
+itself), so each class draws in `var(--hd-icon-on-fill, <the kind's colour>)`, and every accent fill with text on it sets
+`--hd-icon-on-fill` to `currentColor`, the text's own: a selected row in a list that has the focus (`Table.module.css`),
+the item or option the keys are on in a menu or the search box's suggestions (`Menu.module.css`,
+`ComboBox.module.css`), the accent button, a ticked box, and a date field's focused part and chosen day.
+`icons.test.tsx` finds every rule in the components' stylesheets that fills with `--hd-accent-fill` and colours with
+`--hd-accent-on-fill`, and fails on one that doesn't set it, so a new fill does too. On Inactive selection and
 `--hd-pill` a kind's icon keeps its colour, and the Table leaves `[data-kind]` out of its muted icons with `:not()`.
 
 The kind colours are icons, not text, so `tokens.test.ts` asks each for the 3:1 of WCAG 1.4.11, not text's 4.5:1, on

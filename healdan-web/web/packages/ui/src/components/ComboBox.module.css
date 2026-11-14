@@ -48,14 +48,14 @@
 }
 
 /* The arrow keys' choice is a filled bar; secondary text fails AA on it, so it takes the bar's own colour, and so does a
-   kind's icon (icons.module.css). */
+   kind's icon (--hd-icon-on-fill, icons.module.css). */
 .option[data-focused] {
   background: var(--hd-accent-fill);
   color: var(--hd-accent-on-fill);
+  --hd-icon-on-fill: currentColor;
 }
 
-.option[data-focused] .meta,
-.option[data-focused] svg {
+.option[data-focused] .meta {
   color: inherit;
 }
 
