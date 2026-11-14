@@ -167,6 +167,10 @@ export const enUS = {
   'frame.navigation': 'Navigation',
   'frame.side': 'Details and Filters',
   'frame.sideEmpty': 'Select a document to see its details, or open Filters from the list.',
+  // A divider's name, for the pane it resizes: Navigation, Details, Filters or Preview
+  'frame.resize': 'Resize {name}',
+  // What a divider's value is: the pane's width
+  'splitter.value': '{n} pixels',
   'recent.title': 'Recent',
   'recent.actions': 'Recent Actions',
   'recent.documents': 'Documents',
