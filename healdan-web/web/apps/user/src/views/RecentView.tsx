@@ -144,7 +144,9 @@ function RecentFolders() {
   const columns = useMemo(() => hitColumns('folders'), [])
   // A folder's row is never selected, so its menu leaves the (empty) selection as it is
   const menu = useListMenu({ rows: items ?? [], selection: NONE, selected: [] })
-  return <RecentList kind="folders" columns={columns} rows={rows} query={recent} contextMenu={menu} onOpen={(key) => void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })} />
+  // F2 renames the focused folder
+  const organising = useOrganisingTable(items ?? [], NONE)
+  return <RecentList kind="folders" columns={columns} rows={rows} query={recent} contextMenu={menu} organising={{ onRename: organising.tableProps.onRename }} onOpen={(key) => void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })} />
 }
 
 interface ClientRow extends TableRow {

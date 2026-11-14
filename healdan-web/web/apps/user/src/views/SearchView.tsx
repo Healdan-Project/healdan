@@ -125,7 +125,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               onSelectionChange={changeSelection}
               onOpen={open}
               onPreview={documents ? preview : undefined}
-              {...(documents ? organising.tableProps : {})}
+              {...(documents ? organising.tableProps : scope === 'folders' ? { onRename: organising.tableProps.onRename } : {})}
               contextMenu={organising.contextMenu}
               loadMore={results.loadMore}
               isLoadingMore={results.isLoadingMore}

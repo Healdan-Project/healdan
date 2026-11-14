@@ -18,12 +18,21 @@ import { NewFolderDialog } from './NewFolder'
 import { Refusals, type RefusalsProps } from './Refusals'
 import { readRows } from './rows'
 
+/** Where a rename's field is: a list's row, the My Matters tree, or the open folder's heading */
+export type RenamePlace = 'row' | 'tree' | 'heading'
+
+/** What is being renamed: its row key (`d10388` for a document, `f45` for a folder) and where its field is */
+export interface Renaming {
+  key: string
+  place: RenamePlace
+}
+
 export interface Organising {
-  /** The doc # whose title is a field now */
-  renaming: number | undefined
-  startRename: (docNumber: number) => void
-  /** Ends the rename (saved or not) and gives the focus back to the row, unless `focusRow` is false (the person left the field) */
-  stopRename: (docNumber: number, focusRow?: boolean) => void
+  /** What is a field now, and where */
+  renaming: Renaming | undefined
+  startRename: (key: string, place?: RenamePlace) => void
+  /** Ends the rename (saved or not) and gives the focus back where it began, unless `focusBack` is false (the person left the field) */
+  stopRename: (focusBack?: boolean) => void
   /** Asks first, then moves the documents to the trash */
   askDelete: (documents: Movable[]) => void
   /** Opens the picker, then moves the documents where it's told */
@@ -44,9 +53,12 @@ export function useOrganising(): Organising {
   return organising
 }
 
-/** The row of a document in the open list, if it's drawn */
-function rowOf(docNumber: number): HTMLElement | null {
-  return globalThis.document.querySelector<HTMLElement>(`[data-row-key="d${docNumber}"]`)
+/** Where the focus goes back to once a rename is over: the row, the tree's folder, or the heading's ⋯ */
+function renameOrigin({ key, place }: Renaming): HTMLElement | null {
+  const found = globalThis.document
+  if (place === 'row') return found.querySelector<HTMLElement>(`[role="grid"] [data-row-key="${key}"]`)
+  if (place === 'tree') return found.querySelector<HTMLElement>(`[role="treegrid"] [data-node-id="${key.slice(1)}"]`)
+  return found.querySelector<HTMLElement>(`[data-rename-menu="${key}"] button`)
 }
 
 /** The key of the row that follows the documents' rows in the list drawn now, else the one before them, else none */
@@ -70,7 +82,7 @@ function focusLater(key: string | undefined) {
 }
 
 /**
- * Renaming, moving and deleting documents, and making folders (spec 6.7): what is being renamed, the dialogs that ask
+ * Renaming documents and folders, moving and deleting documents, and making folders (spec 6.7): what is being renamed, the dialogs that ask
  * and the one that says what was refused. Each document is its own call, so a refusal leaves the others done.
  */
 export function OrganisingProvider({ children }: { children: ReactNode }) {
@@ -78,7 +90,7 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const me = useMe()
   const { selected, select } = useSelection()
-  const [renaming, setRenaming] = useState<number | undefined>()
+  const [renaming, setRenaming] = useState<Renaming | undefined>()
   const [deleting, setDeleting] = useState<Movable[] | undefined>()
   const [moving, setMoving] = useState<Movable[] | undefined>()
   const [parent, setParent] = useState<Place | undefined>()
@@ -117,11 +129,12 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
 
   const value: Organising = {
     renaming,
-    startRename: setRenaming,
-    stopRename: (docNumber, focusRow = true) => {
+    startRename: (key, place = 'row') => setRenaming({ key, place }),
+    stopRename: (focusBack = true) => {
+      const done = renaming
       setRenaming(undefined)
-      // The field is gone once this has rendered; the row is where the focus belongs, unless the person put it elsewhere
-      if (focusRow) requestAnimationFrame(() => rowOf(docNumber)?.focus())
+      // The field is gone once this has rendered; where the rename began is where the focus belongs, unless the person put it elsewhere
+      if (focusBack && done) requestAnimationFrame(() => renameOrigin(done)?.focus())
     },
     askDelete: setDeleting,
     askMove: setMoving,
