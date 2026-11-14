@@ -210,7 +210,7 @@ export const enUS = {
   'favorites.remove': 'Remove from Favorites',
   'favorites.addDocument': 'Add Document to Favorites',
   'favorites.removeDocument': 'Remove Document from Favorites',
-  'favorites.rename': 'Rename…',
+  'favorites.rename': 'Rename Favorite',
   'favorites.useOriginalName': 'Use Original Name',
   'favorites.renameField': 'Name of Favorite {name}',
   'favorites.where': '{name} · {where}',

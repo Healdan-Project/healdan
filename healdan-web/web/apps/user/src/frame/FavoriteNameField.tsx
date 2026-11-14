@@ -13,7 +13,7 @@ import styles from './LeftPane.module.css'
 type S = components['schemas']
 
 /**
- * A favorite's name being changed in My Favorites (F2, or the favorite's Rename…), in place of its link, as a document's
+ * A favorite's name being changed in My Favorites (F2, or the favorite's Rename Favorite), in place of its link, as a document's
  * title is in a list (spec 6.1, 6.7). Enter saves, and with nothing in it puts back the item's own name; Esc cancels;
  * leaving the field saves a new name. A refusal keeps the field open with what is wrong under it. `onDone` is told whether
  * the focus is the field's to give back to the link.

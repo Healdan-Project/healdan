@@ -61,8 +61,8 @@ test('a favorite folder renamed from its menu shows its own name, and Use Origin
 
   await original.click({ button: 'right' })
   const menu = page.getByRole('menu', { name: `Actions for ${FOLDER}` })
-  await expect(menu.getByRole('menuitem')).toHaveText(['Open', 'Open in New Tab', 'Rename…', 'Remove from Favorites'])
-  await menu.getByRole('menuitem', { name: 'Rename…' }).click()
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open', 'Open in New Tab', 'Rename Favorite', 'Remove from Favorites'])
+  await menu.getByRole('menuitem', { name: 'Rename Favorite' }).click()
   const field = page.getByRole('textbox', { name: `Name of Favorite ${FOLDER}` })
   await expect(field).toBeFocused()
   await field.fill(OWN)
