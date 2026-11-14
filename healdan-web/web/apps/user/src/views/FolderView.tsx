@@ -4,7 +4,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useId, useMemo, useRef } from 'react'
 import { ApiError } from '@healdan/api'
-import { t, Table, type TableSort } from '@healdan/ui'
+import { Icon, Menu, MenuItem, t, Table, type TableSort } from '@healdan/ui'
 import { FilterChips } from '../filters/FilterChips'
 import { FiltersButton } from '../filters/FiltersButton'
 import { FiltersPanel } from '../filters/FiltersPanel'
@@ -19,6 +19,8 @@ import { SelectionActions } from '../actions/SelectionActions'
 import { useOpenKey } from '../actions/useOpenKey'
 import { placeOf } from '../filing/dropTargets'
 import { NewFolderButton } from '../organising/NewFolder'
+import { useOrganising } from '../organising/OrganisingProvider'
+import { FolderName } from '../organising/RenameField'
 import { useOrganisingTable } from '../organising/useOrganisingTable'
 import { useFiling } from '../filing/FilingProvider'
 import { UploadButton } from '../filing/UploadButton'
@@ -61,6 +63,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const navigate = useNavigate()
   const headingId = useId()
   const { selected, selection, change: changeSelection } = useRowSelection(listing.rows)
+  const { startRename } = useOrganising()
   const organising = useOrganisingTable(listing.rows, selection, changeSelection)
   // What was just filed flashes in the list, and the row the files are over is lit
   const { fresh } = useFiling()
@@ -141,10 +144,20 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
         <Breadcrumb folder={view} />
         <div className={styles.heading}>
           <h1 id={headingId} className={styles.title}>
-            {view.name}
+            <FolderName folder={view} place="heading" />
           </h1>
           {/* A matter goes in My Matters (the + in the left pane), not in Favorites */}
           {view.kind !== 'matter' && !store && <FavoriteStar what={{ folderId }} add={t('favorites.add')} remove={t('favorites.remove')} />}
+          {/* Rename is greyed out where the server says it can't be done: a matter's own folder, a top-level folder for someone who isn't an admin */}
+          {!store && (
+            <span data-rename-menu={`f${view.id}`}>
+              <Menu variant="quiet" label={<Icon name="dots" />} aria-label={t('folder.more', { name: view.name })}>
+                <MenuItem id="rename" isDisabled={!view.canRename} onAction={() => startRename(`f${view.id}`, 'heading')}>
+                  {t('rename.menu')}
+                </MenuItem>
+              </Menu>
+            </span>
+          )}
         </div>
         {store ? (
           <p>{t('problems.not-browsable')}</p>
