@@ -135,8 +135,10 @@ is a shortcut, never the only way.
   it out on the web page; **Rename**, **Move To…** and **Delete**; **Copy Link** and **Add to Favorites** (or **Remove
   from Favorites**). They work as the toolbar's buttons and its **⋯** (More) menu do.
 - **A folder,** in a list or in the **My Matters** tree: **Open**, **Open in New Tab**, **New Folder** where you can
-  make one (inside a matter, and never in a search folder), and **Add to Favorites** or **Remove from Favorites**.
-- **A matter,** in **My Matters**, **Recent Matters** or a search for matters: **Open**, **Open in New Tab**, and
+  make one (inside a matter, and never in a search folder), **Rename** (greyed out where you can't rename the folder,
+  and on a matter's own folder), and **Add to Favorites** or **Remove from Favorites**.
+- **A matter,** in **My Matters**, **Recent Matters** or a search for matters: **Open**, **Open in New Tab**,
+  **Rename**, which is always greyed out (a matter takes its name from **Edit Matter…** in the Classic Interface), and
   **Add to My Matters** or **Remove from My Matters**.
 - **An item in My Favorites:** **Open**, **Open in New Tab** and **Remove from Favorites**.
 

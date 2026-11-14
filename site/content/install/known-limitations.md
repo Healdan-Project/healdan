@@ -132,7 +132,7 @@ weight: 12
   - your profile and password, and your messages;
   - making and editing search folders;
   - choosing and reordering the list's columns, and setting properties on many documents at once;
-  - renaming, moving and deleting folders, copying documents, and locking them;
+  - moving and deleting folders, copying documents, and locking them;
   - tags, and a bookmark's own name and description (the Bookmarks section; the app's My Favorites adds and removes
     them).
 

@@ -39,7 +39,7 @@ A modern web UI for everyday work, built without Java and branded Healdan (roadm
 
 ### 2.2 Non-goals
 
-- **The features left to later phases** (§16): the Trash, permissions, history, notes and links, sharing, your profile and password, making search folders, choosing columns, setting properties on many documents, folder rename, move and delete, copying, locking, push updates and the Compact setting. Each is one click away in the Classic Interface meanwhile.
+- **The features left to later phases** (§16): the Trash, permissions, history, notes and links, sharing, your profile and password, making search folders, choosing columns, setting properties on many documents, moving and deleting folders (renaming them came forward on 2026-11-14: the [folder rename spec](2026-11-14-folder-rename-design.md)), copying, locking, push updates and the Compact setting. Each is one click away in the Classic Interface meanwhile.
 - **Healdan's own sign-in page** (owner). CE's `login.jsp` stays for M6 (§8). Healdan's page comes in the phase before the old UI retires.
 - **The Admin app and the Walls app.** Admin stays in the backlog; Walls is M7. Both will build on `packages/ui` (§7.1).
 - **Phones.** The app is designed for screens 1,280 pixels wide and works on a tablet's 768; a phone needs a design of its own (owner).
@@ -114,7 +114,8 @@ The test for each feature was whether the owner would reach for it on an ordinar
 | | Moving documents between folders and matters | new | yes |
 | | Deleting to the trash | new | yes |
 | | The Trash: restoring and purging | new | later |
-| | Renaming, moving and deleting folders | new | later |
+| | Renaming folders | new | yes (owner, 2026-11-14: brought forward; [folder rename spec](2026-11-14-folder-rename-design.md)) |
+| | Moving and deleting folders | new | later |
 | | Copying documents, links between documents, notes | new | later |
 | **Sharing** | Permissions on a document or folder | new | later |
 | | Shared links (tickets), emailing from the server, zip export | new | later |
@@ -204,13 +205,14 @@ The owner reviewed the layout in the browser, from mockups drawn with the demo f
 - **New Folder** inside a matter (not at its top level, which stays admins' (M1)).
 - **Rename** (F2, or More › Rename) edits the title in place. It keeps the document's extension: `Lease` becomes `Lease.docx`. Another extension is refused as `422 validation` with the cause `extension`, as a new version is, and `invalid` is kept for `/`, `\`, control characters and a character the database can't store (changed in the build: R74; the app shows each cause's own message, where it had guessed the extension rule from `invalid`). A refusal for a hold says who holds the document and since when (changed after M6: the owner's dogfooding punch list, 2026-11-14; it also said where the hold is released).
 - **Move:** drag rows onto a folder in the tree, or More › Move To…, which opens a picker that starts from Recent Matters and My Matters and searches matters (no Store browsing). Moving into another matter re-stamps the document's properties (M1), and once per matter applies (M5). Rows drag with the browser's own drag and drop, carrying a token of the page the drag began in, so a drop from another page moves nothing; Move To… is the keyboard's way (Task 20).
+- **Renaming a folder** (brought forward on 2026-11-14) works the same way, in a list's row with F2, in the My Matters tree from its ⋯ or F2, and from the open folder's heading; see the [folder rename spec](2026-11-14-folder-rename-design.md).
 - **Delete** (the Delete key, or More › Delete) moves to the trash after a confirmation that names the documents. Restoring is the Trash's phase (§16); the confirmation says the Classic Interface has the Trash. A document checked out, by anyone, the person included, is refused, as the Classic Interface greys Delete out (changed in the build, Task 20).
 - **Delete and Move act on the whole selection,** each document its own call, so what's refused is said per document while the rest is done; Rename takes one (changed in the build: R72). They work in a folder, in search results, on Recent's Documents and Emails and on the `#` result (changed in the build: R95, from the final review).
 - **Copy Link** copies the document's `/app/doc/n` address (§10.1). It is in the details panel (R44) and More.
 - **Right-click menus** (changed after M6: the owner's dogfooding punch list, 2026-11-14) replace the browser's own on these, and only these:
   - a document's row, in a folder, search results, Recent's Documents and Emails and the `#` result: Open, Preview and Open in New Tab; Download and Check Out (Check In and Release instead, for the person's own check-out from the web page); Rename, Move To… and Delete; Copy Link and Add to Favorites (or Remove from Favorites). They are the toolbar's and More's actions with the same rules, from one hook (`useDocumentActions`), and Favorites is the star's (`useFavorite`); a check-out or a change to Favorites that is under way disables them in every control that offers them. A right-click on a row that isn't selected selects it first, in place of the selection, as Finder does; one inside a selection of several keeps it, and only Move To… and Delete are then enabled;
-  - a folder's row, or a folder in My Matters' tree: Open, Open in New Tab, New Folder where the toolbar offers it (inside a matter, never a search folder), and Add to or Remove from Favorites. Renaming, moving and deleting folders stay §16's;
-  - a matter in My Matters, Recent Matters or a search's matters: Open, Open in New Tab, and Add to or Remove from My Matters;
+  - a folder's row, or a folder in My Matters' tree: Open, Open in New Tab, New Folder where the toolbar offers it (inside a matter, never a search folder), Rename (greyed out where the folder can't be renamed), and Add to or Remove from Favorites. Moving and deleting folders stay §16's;
+  - a matter in My Matters, Recent Matters or a search's matters: Open, Open in New Tab, Rename (always greyed out: a matter takes its name from Edit Matter) and Add to or Remove from My Matters;
   - an item of My Favorites: Open, Open in New Tab, and Remove from Favorites.
 
   Open in New Tab ends the menu's first group wherever the item has an app address (`/app/doc/n`, `/app/folders/{id}`), as the browser's own menu offered it for the left pane's links. Everywhere else the browser's menu stays: fields, the search box, an email's body (its frame), Quick Look's and the reading pane's text and pages, a list's empty space and headings, the top bar and the details. Every action stays on the toolbar or beside its item too. The menu is `packages/ui`'s `ContextMenu`, React Aria's Menu in a Popover placed at the pointer (`getTargetRect`), or at the focused item for the keyboard (§10.5); no package was added. A Mac's Control-click is its right-click, and doesn't select the row it lands on.
@@ -410,7 +412,7 @@ One typed catalogue, `en-US`, in `packages/ui`. Plurals use the browser's `Intl.
 
 ### 10.5 Keyboard
 
-`/` jumps to the search box. The arrow keys move through the list. Enter opens in the app. Space opens Quick Look; Esc closes it. F2 renames. Delete moves to the trash, after the confirmation. The tree, menus and dialogs follow React Aria's standard keys. These work on every document list: a folder, search results, Recent's Documents and Emails, and the `#` result (changed in the build: R52, R63, R95). ⌥ with Upload opens the filing form, and Move To… is the keyboard's way to move, as rows drag only with the mouse. After a click React Aria focuses the cell, and arrows then move cell by cell (React Aria's grid pattern; the walkthrough judges it, Task 12). Shift+F10, or the menu key some keyboards have, opens the focused row's, tree item's or left-pane link's right-click menu (§6.7) with its first item focused; Esc closes it and the focus goes back where it was (changed after M6: the owner's dogfooding punch list, 2026-11-14).
+`/` jumps to the search box. The arrow keys move through the list. Enter opens in the app. Space opens Quick Look; Esc closes it. F2 renames a document, or a folder in a list or the tree. Delete moves to the trash, after the confirmation. The tree, menus and dialogs follow React Aria's standard keys. These work on every document list: a folder, search results, Recent's Documents and Emails, and the `#` result (changed in the build: R52, R63, R95). ⌥ with Upload opens the filing form, and Move To… is the keyboard's way to move, as rows drag only with the mouse. After a click React Aria focuses the cell, and arrows then move cell by cell (React Aria's grid pattern; the walkthrough judges it, Task 12). Shift+F10, or the menu key some keyboards have, opens the focused row's, tree item's or left-pane link's right-click menu (§6.7) with its first item focused; Esc closes it and the focus goes back where it was (changed after M6: the owner's dogfooding punch list, 2026-11-14).
 
 ### 10.6 Open in App
 
@@ -544,7 +546,7 @@ Later phases, each designed when its turn comes, move features off the old UI (o
 - making and editing search folders;
 - choosing and reordering columns;
 - setting properties on many documents;
-- renaming, moving and deleting folders;
+- moving and deleting folders;
 - copying and locking documents;
 - push updates (Server-Sent Events at `/api/v1/events`, M2 §9);
 - Healdan's own sign-in page;
