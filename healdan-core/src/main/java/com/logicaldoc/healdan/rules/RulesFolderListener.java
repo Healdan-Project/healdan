@@ -37,7 +37,7 @@ public class RulesFolderListener implements FolderListener {
 	@Override
 	public void beforeStore(Folder folder, FolderHistory transaction, Map<String, Object> dictionary)
 			throws PersistenceException {
-		FolderRow stored = folder.getId() != 0L ? StoredRows.get().folder(folder.getId()) : null;
+		FolderRow stored = folder.getId() != 0L ? StoredRows.get().folder(folder.getId(), dictionary) : null;
 		try (MatterLocator.Remembering remembering = MatterLocator.remember(dictionary)) {
 			Vetoes.check(Vetoes.ids(folder.getId(), folder.getParentId(), stored != null ? stored.parentId() : null),
 					List.of(), () -> check(folder, stored, transaction));

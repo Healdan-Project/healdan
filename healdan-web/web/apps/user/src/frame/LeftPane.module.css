@@ -88,3 +88,22 @@
   margin: 0 var(--hd-space-3);
   color: var(--hd-text-secondary);
 }
+
+/* A favorite being renamed: the field in place of its link (organising.module.css's .renameInput, a document title's), and
+   a refusal under it. */
+.renaming {
+  padding: var(--hd-space-1) var(--hd-space-3);
+}
+
+.renamingRow {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+}
+
+.renameError {
+  display: block;
+  margin-top: var(--hd-space-1);
+  color: var(--hd-required);
+  font-size: var(--hd-font-size-small);
+}

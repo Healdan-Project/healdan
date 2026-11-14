@@ -163,9 +163,12 @@ public sealed record MatterView(
     long FolderId,
     DateTimeOffset? LastChange);
 
-/// <summary>A favourite: a folder or a document (<see cref="Type"/>), with the bookmark's id for removing it.</summary>
+/// <summary>
+/// A favourite: a folder or a document (<see cref="Type"/>), with the bookmark's id for removing it and its name, which
+/// is its item's until the person gives it one of its own (the server sorts by it).
+/// </summary>
 [Schema("FavoriteView")]
-public sealed record FavoriteView(long Id, string Type, JsonElement Item)
+public sealed record FavoriteView(long Id, string Type, JsonElement Item, string? Name = null)
 {
     public FolderView? Folder() => Type == "folder" ? Item.Deserialize<FolderView>(HealdanApi.Json) : null;
 

@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import type { components } from '@healdan/api'
-import { MenuItem, MenuSeparator, t } from '@healdan/ui'
+import { MenuItem, MenuSeparator, t, toast } from '@healdan/ui'
 import { ActionItem } from '../actions/ActionControls'
+import { favoriteNameRefusal, hasOwnName, renameFavorite } from '../actions/favoriteName'
 import { useFavorite, type Starred } from '../actions/FavoriteStar'
 import { useMyMattersChange } from '../actions/myMatters'
 import { favoriteAction, newTabAction, useDocumentActions } from '../actions/useDocumentActions'
@@ -12,7 +14,8 @@ import { docHref, folderHref } from '../addresses'
 import { placeOf } from '../filing/dropTargets'
 import { mayMakeFolderIn } from '../organising/NewFolder'
 import { useOrganising } from '../organising/OrganisingProvider'
-import { useMe, useMyMatters } from '../queries'
+import { keys, useMe, useMyMatters } from '../queries'
+import { useApi } from '../services'
 
 type S = components['schemas']
 
@@ -107,12 +110,16 @@ export function MatterMenuItems({ folderId }: { folderId: number }) {
   )
 }
 
-/** An item of My Favorites: Open, as its link does, and Remove from Favorites (its star's change, which follows its state) */
-export function FavoriteMenuItems({ favorite }: { favorite: S['FavoriteView'] }) {
+/**
+ * An item of My Favorites: Open, as its link does; Rename Favorite, as F2 does, and Use Original Name once it has a name of its
+ * own; and Remove from Favorites (its star's change, which follows its state)
+ */
+export function FavoriteMenuItems({ favorite, onRename }: { favorite: S['FavoriteView']; onRename: () => void }) {
   const navigate = useNavigate()
   const item = favorite.item
   const star: Starred = item.type === 'document' ? { docNumber: item.docNumber } : { folderId: item.id }
   const bookmark = useFavorite(star)
+  const original = useOriginalName(favorite)
   const open = () =>
     item.type === 'document' ? void navigate({ to: '/doc/$ref', params: { ref: String(item.docNumber) } }) : void navigate({ to: '/folders/$id', params: { id: String(item.id) } })
   return (
@@ -122,9 +129,38 @@ export function FavoriteMenuItems({ favorite }: { favorite: S['FavoriteView'] })
       </MenuItem>
       <ActionItem action={newTabAction(item.type === 'document' ? docHref(item.docNumber) : folderHref(item.id))} />
       <MenuSeparator />
+      <MenuItem id="rename" isDisabled={original.isPending} onAction={onRename}>
+        {t('favorites.rename')}
+      </MenuItem>
+      {hasOwnName(favorite) && (
+        <MenuItem id="originalName" isDisabled={original.isPending} onAction={() => void original.put()}>
+          {t('favorites.useOriginalName')}
+        </MenuItem>
+      )}
       <ActionItem action={favoriteAction(bookmark)} />
     </>
   )
+}
+
+/** Use Original Name: the favorite takes its item's name back, and follows it again */
+function useOriginalName(favorite: S['FavoriteView']) {
+  const api = useApi()
+  const queryClient = useQueryClient()
+  const key = ['favoriteName', favorite.id] as const
+  const isPending = useIsMutating({ mutationKey: key }) > 0
+  const mutation = useMutation({
+    mutationKey: key,
+    mutationFn: async () => {
+      try {
+        await renameFavorite(api, favorite.id, null)
+      } catch (error) {
+        toast(favoriteNameRefusal(error))
+      } finally {
+        await queryClient.invalidateQueries({ queryKey: keys.favorites })
+      }
+    },
+  })
+  return { isPending, put: () => mutation.mutateAsync() }
 }
 
 /** A folder of any kind: a matter's top level has the matter's menu, and a Store, which opens as no folder, has none */

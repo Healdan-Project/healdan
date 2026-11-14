@@ -200,6 +200,18 @@
 		<parameter id="class" value="com.logicaldoc.healdan.preview.PreviewDocumentListener" />
 	</extension>
 
+	<!-- Last, once every listener that could refuse the store has let it through: favorites that still have the document's old name take its new one; never refuses a save -->
+	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanFavoriteNames">
+		<parameter id="position" value="160" />
+		<parameter id="class" value="com.logicaldoc.healdan.navigation.FavoriteNamesDocumentListener" />
+	</extension>
+
+	<!-- Last, as healdanFavoriteNames is for documents -->
+	<extension plugin-id="logicaldoc-core" point-id="FolderListener" id="healdanFolderFavoriteNames">
+		<parameter id="position" value="130" />
+		<parameter id="class" value="com.logicaldoc.healdan.navigation.FavoriteNamesFolderListener" />
+	</extension>
+
 	<!-- The search types are HealdanConstants.SEARCH_* -->
 	<extension plugin-id="logicaldoc-core" point-id="Search" id="healdanDocNumberSearch">
 		<parameter id="type" value="101" />

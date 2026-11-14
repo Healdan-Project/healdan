@@ -122,7 +122,7 @@ test('removes a favorite from its menu in My Favorites', async ({ page }) => {
   const link = favorites.getByRole('link', { name: NAMES.favorite })
   await link.click({ button: 'right' })
   const menu = page.getByRole('menu', { name: `Actions for ${NAMES.favorite}` })
-  await expect(menu.getByRole('menuitem')).toHaveText(['Open', 'Open in New Tab', 'Remove from Favorites'])
+  await expect(menu.getByRole('menuitem')).toHaveText(['Open', 'Open in New Tab', 'Rename Favorite', 'Remove from Favorites'])
   await menu.getByRole('menuitem', { name: 'Remove from Favorites' }).click()
   await expect(link).toHaveCount(0)
   expect((await favoriteIds()).some((favorite) => favorite.item.docNumber === numbers.favorite)).toBe(false)

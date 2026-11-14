@@ -85,7 +85,7 @@ public class PermissionsFolderListener implements FolderListener {
 		if (!workspace && !underRoot && !inTemplates && !parent.isInsideMatter())
 			return;
 
-		FolderRow stored = folder.getId() != 0L ? StoredRows.get().folder(folder.getId()) : null;
+		FolderRow stored = folder.getId() != 0L ? StoredRows.get().folder(folder.getId(), dictionary) : null;
 		boolean created = stored == null;
 		boolean moved = !created && (stored.parentId() != folder.getParentId() || stored.deleted() != 0);
 		boolean refChanged = !created && !Objects.equals(stored.securityRef(), folder.getSecurityRef());

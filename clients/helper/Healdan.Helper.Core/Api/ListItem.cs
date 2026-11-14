@@ -7,9 +7,9 @@ namespace Healdan.Helper.Core.Api;
 
 /// <summary>
 /// One item of a list the windows show: a folder, a document or a matter, by its <c>type</c>, as search, a folder's
-/// children and the recent lists return them. A favourite's item carries the favourite's id too.
+/// children and the recent lists return them. A favourite's item carries the favourite's id and name too.
 /// </summary>
-public sealed record ListItem(FolderView? Folder, DocumentView? Document, MatterView? Matter, long? FavoriteId)
+public sealed record ListItem(FolderView? Folder, DocumentView? Document, MatterView? Matter, long? FavoriteId, string? FavoriteName = null)
 {
     /// <summary>The item, or null for a type the helper doesn't show.</summary>
     public static ListItem? From(JsonElement item)
@@ -19,8 +19,8 @@ public sealed record ListItem(FolderView? Folder, DocumentView? Document, Matter
         if (item.TryGetProperty("item", out _))
         {
             var favorite = item.Deserialize<FavoriteView>(HealdanApi.Json)!;
-            return favorite.Folder() is { } folder ? new ListItem(folder, null, null, favorite.Id)
-                : favorite.Document() is { } doc ? new ListItem(null, doc, null, favorite.Id)
+            return favorite.Folder() is { } folder ? new ListItem(folder, null, null, favorite.Id, favorite.Name)
+                : favorite.Document() is { } doc ? new ListItem(null, doc, null, favorite.Id, favorite.Name)
                 : null;
         }
         var type = item.TryGetProperty("type", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;

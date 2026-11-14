@@ -92,6 +92,24 @@ public class StoredRows implements PreUpdateEventListener {
 	}
 
 	/**
+	 * A document's row, as far as the listeners compare it
+	 *
+	 * @param folderId its folder
+	 * @param fileName its file name
+	 */
+	public record DocumentRow(Long folderId, String fileName) {
+
+		/**
+		 * @param document the document
+		 * @return its row as the document holds it now
+		 */
+		public static DocumentRow of(Document document) {
+			return new DocumentRow(document.getFolder() != null ? document.getFolder().getId() : null,
+					document.getFileName());
+		}
+	}
+
+	/**
 	 * The documents directly in a folder
 	 *
 	 * @param documents how many
@@ -104,8 +122,11 @@ public class StoredRows implements PreUpdateEventListener {
 
 	private static final Logger log = LoggerFactory.getLogger(StoredRows.class);
 
-	/** Key in a listener dictionary of the document's folder before the store */
-	private static final String DOCUMENT_FOLDER = StoredRows.class.getName() + ".documentFolder";
+	/** Key in a listener dictionary of the document's row before the store */
+	private static final String DOCUMENT_ROW = StoredRows.class.getName() + ".documentRow";
+
+	/** Key in a listener dictionary of the folder's row before the store */
+	private static final String FOLDER_ROW = StoredRows.class.getName() + ".folderRow";
 
 	private static final String FOLDER_COLUMNS = "ld_id, ld_parentid, ld_name, ld_type, ld_foldref, ld_deleted, ld_securityref";
 
@@ -121,8 +142,8 @@ public class StoredRows implements PreUpdateEventListener {
 	/** Each session's folder rows, from before the session wrote them */
 	private final Map<Object, Map<Long, FolderRow>> folders = Collections.synchronizedMap(new WeakHashMap<>());
 
-	/** Each session's document folders, from before the session wrote them */
-	private final Map<Object, Map<Long, Long>> documentFolders = Collections.synchronizedMap(new WeakHashMap<>());
+	/** Each session's document rows, from before the session wrote them */
+	private final Map<Object, Map<Long, DocumentRow>> documentRows = Collections.synchronizedMap(new WeakHashMap<>());
 
 	/** Each persister's property names */
 	private final Map<String, List<String>> propertyNames = Collections.synchronizedMap(new HashMap<>());
@@ -169,8 +190,8 @@ public class StoredRows implements PreUpdateEventListener {
 				sessionMap(folders, event.getSession()).putIfAbsent(id, row);
 			} else {
 				Folder folder = (Folder) old[names.indexOf("folder")];
-				sessionMap(documentFolders, event.getSession()).putIfAbsent(id,
-						folder != null ? folder.getId() : null);
+				sessionMap(documentRows, event.getSession()).putIfAbsent(id, new DocumentRow(
+						folder != null ? folder.getId() : null, (String) old[names.indexOf("fileName")]));
 			}
 		} catch (RuntimeException e) {
 			log.warn("Cannot record the row of {} {} before its update", entity.getClass().getSimpleName(), id, e);
@@ -194,17 +215,29 @@ public class StoredRows implements PreUpdateEventListener {
 	}
 
 	/**
+	 * {@link #folder(long)}, read once for all the listeners of one store, as
+	 * {@link #document(long, Map)} is
+	 *
+	 * @param folderId the folder being stored
+	 * @param dictionary the dictionary CE passes the listeners of the store
+	 * @return its row before the store, null if there is none
+	 */
+	public FolderRow folder(long folderId, Map<String, Object> dictionary) {
+		if (dictionary.containsKey(FOLDER_ROW))
+			return (FolderRow) dictionary.get(FOLDER_ROW);
+		FolderRow row = folder(folderId);
+		dictionary.put(FOLDER_ROW, row);
+		return row;
+	}
+
+	/**
 	 * @param documentId the document
 	 * @return its folder before the store being checked, null if there is no
 	 *         row
 	 */
 	public Long documentFolder(long documentId) {
-		Map<Long, Long> written = currentMap(documentFolders);
-		if (written != null && written.containsKey(documentId))
-			return written.get(documentId);
-		List<Long> found = jdbc.queryForList("select ld_folderid from ld_document where ld_id = ?", Long.class,
-				documentId);
-		return found.isEmpty() ? null : found.get(0);
+		DocumentRow row = document(documentId);
+		return row != null ? row.folderId() : null;
 	}
 
 	/**
@@ -216,11 +249,40 @@ public class StoredRows implements PreUpdateEventListener {
 	 * @return its folder before the store, null if there is no row
 	 */
 	public Long documentFolder(long documentId, Map<String, Object> dictionary) {
-		if (dictionary.containsKey(DOCUMENT_FOLDER))
-			return (Long) dictionary.get(DOCUMENT_FOLDER);
-		Long folder = documentFolder(documentId);
-		dictionary.put(DOCUMENT_FOLDER, folder);
-		return folder;
+		DocumentRow row = document(documentId, dictionary);
+		return row != null ? row.folderId() : null;
+	}
+
+	/**
+	 * @param documentId the document
+	 * @return its row before the store being checked, null if there is none
+	 */
+	public DocumentRow document(long documentId) {
+		Map<Long, DocumentRow> written = currentMap(documentRows);
+		if (written != null && written.containsKey(documentId))
+			return written.get(documentId);
+		List<DocumentRow> found = jdbc.query("select ld_folderid, ld_filename from ld_document where ld_id = ?",
+				(rs, i) -> {
+					long folderId = rs.getLong(1);
+					return new DocumentRow(rs.wasNull() ? null : folderId, rs.getString(2));
+				}, documentId);
+		return found.isEmpty() ? null : found.get(0);
+	}
+
+	/**
+	 * {@link #document(long)}, read once for all the listeners of one store,
+	 * as {@link #documentFolder(long, Map)} is
+	 *
+	 * @param documentId the document being stored
+	 * @param dictionary the dictionary CE passes the listeners of the store
+	 * @return its row before the store, null if there is none
+	 */
+	public DocumentRow document(long documentId, Map<String, Object> dictionary) {
+		if (dictionary.containsKey(DOCUMENT_ROW))
+			return (DocumentRow) dictionary.get(DOCUMENT_ROW);
+		DocumentRow row = document(documentId);
+		dictionary.put(DOCUMENT_ROW, row);
+		return row;
 	}
 
 	/**
@@ -258,9 +320,9 @@ public class StoredRows implements PreUpdateEventListener {
 	 * @param document the document
 	 */
 	public void stored(Document document) {
-		Map<Long, Long> map = currentMap(documentFolders, true);
+		Map<Long, DocumentRow> map = currentMap(documentRows, true);
 		if (map != null && document.getId() != 0L)
-			map.put(document.getId(), document.getFolder() != null ? document.getFolder().getId() : null);
+			map.put(document.getId(), DocumentRow.of(document));
 	}
 
 	/**

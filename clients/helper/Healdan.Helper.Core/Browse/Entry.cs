@@ -21,7 +21,8 @@ public sealed class Entry : INotifyPropertyChanged
         if (item.Document is { } doc)
         {
             Kind = EntryKind.Document;
-            Title = doc.Name;
+            // A favourite shows its own name, as the web app does, and the server sorts by it
+            Title = item.FavoriteName ?? doc.Name;
             Version = doc.FileVersion;
             DocNumber = doc.DocNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
             MatterText = MatterNumber(doc.Matter?.Display);
@@ -38,8 +39,9 @@ public sealed class Entry : INotifyPropertyChanged
         else
         {
             Kind = EntryKind.Folder;
-            Title = item.Folder!.Kind == "matter" && item.Folder.Matter is { } m ? m.Display : item.Folder.Name;
-            ClientText = item.Folder.Kind == "matter" ? Matters.ClientNote(item.Folder.Matter?.Client) : "";
+            var folder = item.Folder!;
+            Title = item.FavoriteName ?? (folder.Kind == "matter" && folder.Matter is { } m ? m.Display : folder.Name);
+            ClientText = folder.Kind == "matter" ? Matters.ClientNote(folder.Matter?.Client) : "";
         }
     }
 
