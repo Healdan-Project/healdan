@@ -6,7 +6,11 @@ package com.logicaldoc.healdan.api;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document.OutputSettings;
+import org.jsoup.safety.Safelist;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.folder.Folder;
@@ -42,7 +46,8 @@ final class FolderRenames {
 	 * One lock per parent folder, so two renames to one name can't both pass
 	 * the check. {@link DocumentLocks} is a lock per id; the ids here are the
 	 * parents'. It is this server's alone, as Healdan runs one node, and CE's
-	 * New Folder doesn't take it.
+	 * New Folder and folder moves don't take it, so a rename checks again
+	 * inside it that the folder is still in the parent it locked.
 	 */
 	private final DocumentLocks parents = new DocumentLocks();
 
@@ -64,12 +69,21 @@ final class FolderRenames {
 			Folder folder = FolderDAO.get().findById(id);
 			if (name.equals(folder.getName()))
 				return view;
-			return parents.withLock(folder.getParentId(), failure, () -> {
+			long parentId = folder.getParentId();
+			return parents.withLock(parentId, failure, () -> {
 				FolderDAO folders = FolderDAO.get();
-				// Read again, initialised as CE's rename reads it: another request may have renamed it meanwhile
+				// Read again, initialised as CE's rename reads it: another request may have renamed it meanwhile, or
+				// taken it away from the caller (404)
+				FolderView now = FolderResource.view(id, user);
 				Folder current = folders.findById(id, true);
+				// Or moved it, out from under the parent's lock, which then guards the wrong folder's names
+				if (current.getParentId() != parentId)
+					throw ApiProblem.conflict("refused",
+							"Folder %d moved while it was being renamed. Try again.".formatted(id));
+				// And the checks again, on the folder as it is stored now: its permissions may have changed
+				refuse(now, user);
 				if (name.equals(current.getName()))
-					return FolderResource.view(id, user);
+					return now;
 				if (taken(current, name))
 					throw ApiProblem.conflict("name-taken",
 							"Another folder in folder %d is called %s.".formatted(current.getParentId(), name));
@@ -113,7 +127,7 @@ final class FolderRenames {
 	 * @throws ApiProblem {@code 422 validation} for the field {@code name}:
 	 *         {@code required}, {@code too-long}, {@code invalid} (a slash, a
 	 *         backslash, a control character, one the database can't store,
-	 *         or markup CE's folder DAO would take out)
+	 *         markup CE's folder DAO would take out, or any HTML tag)
 	 */
 	static String name(String requested) {
 		String sent = StringUtils.strip(requested);
@@ -127,8 +141,9 @@ final class FolderRenames {
 		else if (!BasicPlane.holds(sent))
 			errors.add(new FieldError("name", "invalid",
 					"A name can't contain emoji or other characters the database can't store."));
-		// CE's folder DAO cleans the name of markup as it stores it, so a name it would change isn't the name typed
-		else if (!sent.equals(HTMLSanitizer.sanitizeSimpleText(sent)))
+		// CE's folder DAO cleans the name of markup as it stores it, so a name it would change isn't the name typed; and
+		// the tags CE's cleaning keeps (b, em, i, strong and u) are refused too, as a name has no HTML tags at all
+		else if (!sent.equals(HTMLSanitizer.sanitizeSimpleText(sent)) || !sent.equals(withoutTags(sent)))
 			errors.add(new FieldError("name", "invalid", "A name can't contain HTML tags."));
 		if (sent.length() > Uploads.MAX_NAME_LENGTH)
 			errors.add(new FieldError("name", Uploads.TOO_LONG,
@@ -136,6 +151,12 @@ final class FolderRenames {
 		if (!errors.isEmpty())
 			throw ApiProblem.validation(errors);
 		return sent;
+	}
+
+	/** The text with every HTML tag taken out, built as CE's {@code HTMLSanitizer.sanitizeSimpleText} builds its own */
+	private static String withoutTags(String text) {
+		OutputSettings settings = new OutputSettings().indentAmount(0).prettyPrint(false);
+		return StringEscapeUtils.unescapeHtml(Jsoup.clean(text, "", Safelist.none(), settings));
 	}
 
 	/** Whether another live folder in the folder's parent, an alias included, has the name, without regard to case */

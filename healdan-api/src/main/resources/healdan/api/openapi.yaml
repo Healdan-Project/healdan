@@ -1962,11 +1962,13 @@ paths:
         6. `422 validation` for the field `name`: `required`, `too-long`
            (over 255 characters) and `invalid` (a `/`, a `\`, a control
            character, one the database can't store, such as an emoji, or
-           HTML tags, which the server would take out).
+           any HTML tag).
         7. `409 name-taken` when another folder in the same folder has the
            name, compared without regard to case. Changing only the case of
            the folder's own name works.
-        8. `409 refused` when one of Healdan's rules refuses.
+        8. `409 refused` when one of Healdan's rules refuses, or when the
+           folder moved to another folder while it was being renamed: try
+           again.
       tags: [Folders]
       parameters:
         - $ref: '#/components/parameters/FolderId'

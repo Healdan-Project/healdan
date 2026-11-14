@@ -102,6 +102,12 @@ public class FolderRenameTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testCanRenameOnAFolderSearchHit() throws Exception {
+		assertTrue(folderHit("Letters", clerk).path("canRename").booleanValue());
+		assertFalse("no Rename permission", folderHit("Letters", reader).path("canRename").booleanValue());
+	}
+
+	@Test
 	public void testCanRenameInRecentFolders() throws Exception {
 		// A folder is recent once the caller files into it, as ListsTest's recent folders are
 		fx.upload(letters, "first.docx", "Healdan first", clerk);
@@ -153,6 +159,29 @@ public class FolderRenameTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testASearchFolderBelowTheTopLevel() throws Exception {
+		// A search folder may be anywhere inside a matter (FilingRules' placement rule); below the top level it is
+		// renamed with the Rename permission alone, as the listener agrees
+		Folder watched = fx.searchFolder(documents, "Watched");
+		assertTrue(folder(watched, clerk).path("canRename").booleanValue());
+
+		ApiResponse response = rename(watched, "Watched Letters", clerk);
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("Watched Letters", FolderDAO.get().findById(watched.getId()).getName());
+	}
+
+	@Test
+	public void testAFolderInTheTemplatesStoreIsNotFound() throws Exception {
+		// The Templates Store isn't a Store the API shows, so its folders are 404, for an admin too
+		Folder template = fx.storeTemplate(store);
+		Folder inside = fx.folder(template, "Correspondence");
+		DbSnapshot before = fx.snapshot();
+		assertProblem(rename(template, "Renamed", boss), 404, "not-found");
+		assertProblem(rename(inside, "Renamed", boss), 404, "not-found");
+		before.assertUnchangedExcept("hd_api_token");
+	}
+
+	@Test
 	public void testAMattersOwnFolderAndAStoreAreNotRenamedHere() throws Exception {
 		DbSnapshot before = fx.snapshot();
 		assertProblem(rename(workspace, "Renamed", boss), 409, "not-renamable");
@@ -187,6 +216,9 @@ public class FolderRenameTest extends ApiTestCase {
 		// CE's folder DAO would take the tags out, so the name stored wouldn't be the name typed
 		assertField(rename(letters, "Draft <v2>", clerk), "invalid");
 		assertField(rename(letters, "<script>alert(1)</script>Notes", clerk), "invalid");
+		// Tags CE's sanitiser keeps are refused too: a name has no HTML tags at all
+		assertField(rename(letters, "<b>Draft</b>", clerk), "invalid");
+		assertField(rename(letters, "<i>Privileged</i>", clerk), "invalid");
 		assertField(rename(letters, "x".repeat(256), clerk), "too-long");
 		before.assertUnchangedExcept("hd_api_token");
 		assertProblem(patch("/api/v1/folders/" + letters.getId()).token(signIn(clerk)).json(Map.of()).send(), 400,
@@ -263,6 +295,16 @@ public class FolderRenameTest extends ApiTestCase {
 		ApiResponse response = get("/api/v1/folders/" + f.getId()).token(signIn(as)).send();
 		assertEquals(response.toString(), 200, response.status());
 		return response.json();
+	}
+
+	/** The Folders search's hit with the name */
+	private JsonNode folderHit(String name, User as) {
+		ApiResponse response = get("/api/v1/search?scope=folders&q=" + name).token(signIn(as)).send();
+		assertEquals(response.toString(), 200, response.status());
+		for (JsonNode item : response.json().path("items"))
+			if (name.equals(item.path("name").textValue()))
+				return item;
+		throw new AssertionError("No hit called " + name + ": " + response);
 	}
 
 	/** The subfolders' canRename by name */

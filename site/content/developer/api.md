@@ -470,7 +470,8 @@ not-renamable` for a Store or a matter's own folder, which takes the matter's na
 without the Rename permission; `403 admins-only` for a folder directly in a matter's workspace, search folders
 included, unless you're an administrator; `422 validation` for the name (`required`, `too-long`, `invalid`: `/`, `\`, a
 control character, an emoji or another character the database can't store, or HTML tags); `409 name-taken` when
-another folder beside it has the name, without regard to case; and `409 refused` when one of Healdan's rules refuses.
+another folder beside it has the name, without regard to case; and `409 refused` when one of Healdan's rules refuses, or
+when the folder moved to another folder while it was being renamed (try again).
 Every folder carries `canRename`, which says whether the call would rename it for you.
 
 ## Favorites

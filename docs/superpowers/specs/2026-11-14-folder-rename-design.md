@@ -69,14 +69,16 @@ It refuses, checking in this order:
 | `409 not-renamable` | A Store, or a matter's own folder, which takes the matter's name through Edit Matter. Admins get it too |
 | `403 forbidden` | No Rename permission on the folder |
 | `403 admins-only` | A folder directly in a matter's workspace, search folders included, when the caller isn't an admin |
-| `422 validation` on `name` | `required`; `too-long`, over 255 characters (`Uploads.MAX_NAME_LENGTH`); `invalid`, for `/`, `\`, a control character, a character the database can't store (`BasicPlane`), or markup that CE's sanitiser would change, so the name stored is the name typed |
+| `422 validation` on `name` | `required`; `too-long`, over 255 characters (`Uploads.MAX_NAME_LENGTH`); `invalid`, for `/`, `\`, a control character, a character the database can't store (`BasicPlane`), or markup that CE's sanitiser would change, so the name stored is the name typed (changed in the build: or any HTML tag, the ones CE's sanitiser keeps included) |
 | `409 name-taken` | Another live folder in the same parent, an alias included, has the name, compared without regard to case. The folder itself doesn't count, so changing only the case of its own name works |
-| `409 refused` | A veto from Healdan's listeners that the checks above didn't foresee, as New Folder answers one |
+| `409 refused` | A veto from Healdan's listeners that the checks above didn't foresee, as New Folder answers one (changed in the build: or the folder moved to another parent while it was being renamed, which the lock below finds) |
 
 - **The same name** answers `200` and writes nothing.
 - **The name check and the write** run under a lock in the JVM, one per parent folder, so two renames at the same moment
   can't both take a name. Healdan runs one node. CE's own New Folder, which adds a counter to a taken name, isn't under
-  that lock, so a rename and a New Folder of the same name at the same moment could still make two.
+  that lock, so a rename and a New Folder of the same name at the same moment could still make two. (changed in the build:
+  inside the lock the folder is read again, and refused as `409 refused` if it moved out of the parent locked, and the
+  `not-renamable`, `forbidden` and `admins-only` checks run again on it as stored then.)
 - **Where the rule's text and the API's codes meet:** the API checks the three refusals of M1's rules (`not-renamable`,
   `admins-only` and the Templates Store, which isn't in a Store and so is `404`) itself, before writing, to give them codes.
   The listener stays the rule on every route.
@@ -85,9 +87,11 @@ It refuses, checking in this order:
 
 A new required boolean: whether `PATCH /v1/folders/{id}` would rename the folder for the caller, by the `not-renamable`,
 `forbidden` and `admins-only` rows. The app greys Rename out from it. It is worked out in the same lookup of the caller's
-permissions on the folder as `canFile` (one `getAllowedPermissions` in place of `isWriteAllowed`), so a folder listing
-makes no more queries than it does today. Every `FolderView` carries it: a folder, its children, Recent › Folders, My
-Favorites, and the folders in search results.
+permissions on the folder as `canFile` (one `getAllowedPermissions` in place of `isWriteAllowed`). (changed in the build:
+that isn't quite "no more queries than today". It costs one permission lookup per folder, search folders included, whose
+`canFile` used to be false without one, and an admin check for a folder directly in a matter's workspace that the caller
+has Rename on.) Every `FolderView` carries it: a folder, its children, Recent › Folders, My Favorites, and the folders in
+search results.
 
 ## 5. The app
 
