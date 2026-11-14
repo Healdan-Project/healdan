@@ -57,6 +57,9 @@ async function open(page: Page, folderId: number) {
 
 test('F2 renames a folder row in place, refuses a taken name beside the field, and the tree follows', async ({ page }) => {
   await open(page, ids.home)
+  // The tree draws the open folder unexpanded, so open it to see this folder, which the rename has to refresh
+  await tree(page).locator(`[data-tree-key="${ids.home}"]`).getByRole('button', { name: /expand/i }).click()
+  await expect(tree(page).getByRole('row', { name: escape(NAMES.byF2) })).toBeVisible()
   const row: Locator = main(page).getByRole('grid').getByRole('row', { name: escape(NAMES.byF2) })
   // A click on a folder's row would open it
   await row.focus()
