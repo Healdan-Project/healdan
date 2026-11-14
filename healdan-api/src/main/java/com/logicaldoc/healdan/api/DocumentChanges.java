@@ -161,7 +161,7 @@ final class DocumentChanges {
 				// A checked-out document isn't deleted, whoever holds it, as the Classic Interface greys Delete out
 				HoldView hold = ApiViews.hold(document);
 				if (hold != null && "checkout".equals(hold.kind()))
-					throw CheckoutResource.conflict(hold, docNumber, user);
+					throw CheckoutResource.conflict(document, hold, docNumber, user);
 
 				DocumentDAO documents = DocumentDAO.get();
 				List<Long> shortcuts = documents.findAliasIds(id);

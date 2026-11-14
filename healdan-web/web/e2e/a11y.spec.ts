@@ -150,7 +150,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(row).toBeVisible()
       // The held row's marker is on screen for axe, and the row keeps the list's height
       const heldRow = main().getByRole('row', { name: escape(HELD) })
-      await expect(heldRow.getByRole('img', { name: new RegExp(`^Checked out by you on e2e ${RUN} since `) })).toBeVisible()
+      await expect(heldRow.getByRole('img', { name: 'Checked out by you', exact: true })).toBeVisible()
       const rowHeights = await Promise.all([row, heldRow].map(async (one) => Math.round((await one.boundingBox())!.height)))
       expect(rowHeights, 'a free row and a held row').toEqual([34, 34])
       await check('a folder')
@@ -161,10 +161,20 @@ for (const scheme of ['light', 'dark'] as const) {
       const heights = await page.getByRole('toolbar').first().getByRole('button').evaluateAll((buttons) => buttons.map((one) => Math.round(one.getBoundingClientRect().height)))
       expect(new Set(heights).size, `toolbar buttons' heights ${heights.join(', ')}`).toBe(1)
       // The form that edits the properties
-      await page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Edit' }).click()
+      await page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Edit Properties' }).click()
       await expect(page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Save' })).toBeVisible()
       await check('the properties form')
       await page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Cancel' }).click()
+      // A held document's Check-Out Info, a shaded box above the tabs, whose text axe checks for contrast in each theme
+      const details = page.getByRole('region', { name: 'Details' })
+      await heldRow.getByRole('rowheader').click()
+      await expect(details.getByRole('group', { name: 'Check-Out Info' })).toBeVisible()
+      await check('the details of a held document')
+      // The Versions tab, then back to Properties, where the later tests expect the details to be
+      await details.getByRole('tab', { name: /^Versions/ }).click()
+      await expect(details.getByRole('listitem').first()).toBeVisible()
+      await check('the Versions tab')
+      await details.getByRole('tab', { name: 'Properties' }).click()
     })
 
     test('Filters, with one in use', async () => {

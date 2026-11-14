@@ -26,7 +26,8 @@ take it: see [Filing a Document](../../working-with-matters/filing-a-document/#d
 
 ## Where to See Them
 
-- **In the app,** select a document and look at **Versions** in its details. It lists the whole timeline, newest
+- **In the app,** select a document and choose the **Versions** tab in its details, which says how many there are in
+  brackets, such as **Versions (4)**. It lists the whole timeline, newest
   first, every snapshot included, with who made each and when, and the comment they left. Each has its own **Preview**,
   which opens [Quick Look](../previews/) on that version, and **Download**, which saves that version's file (see
   [Downloading Documents](../downloading-documents/)). Quick Look's bar says which version it shows; **Open** is greyed
@@ -37,7 +38,7 @@ take it: see [Filing a Document](../../working-with-matters/filing-a-document/#d
 - **To go back to an earlier snapshot,** promote it from the Versions tab in the Classic Interface. That saves it as
   the latest.
 
-![The details of Subscription Agreement – Draft.docx, # 31, selected in a folder's list: its name with the filled Favorites star, as it's one of your favourites, then Open, Download, Edit, Copy Link and Check Out, its properties (Client 1003 – Kestrel Software Ltd, Matter 1003.1 – Series A Investment, Class Agreements, Subclass Draft, Author Helen Ashcombe, Typist Chris Doyle, Date Filed 16 Oct 2026), and its versions, newest first: Version 2 by Helen Ashcombe on 29 Oct 2026 at 16:00, Version 1.1 by Priya Nair on 23 Oct 2026 at 15:30, and Version 1 by Chris Doyle on 16 Oct 2026 at 14:30, each with Preview and Download](versions.png)
+![The details of Subscription Agreement – Draft.docx, # 31, selected in a folder's list: its name with the filled Favorites star, as it's one of your favourites, then Open, Download, Copy Link and Check Out, and the Versions (3) tab chosen, listing its versions newest first: Version 2 by Helen Ashcombe on 31 Oct 2026 at 16:00, Version 1.1 by Priya Nair on 25 Oct 2026 at 15:30, and Version 1 by Chris Doyle on 18 Oct 2026 at 14:30, each with Preview and Download](versions.png)
 
 ## Finding a Version by Number
 

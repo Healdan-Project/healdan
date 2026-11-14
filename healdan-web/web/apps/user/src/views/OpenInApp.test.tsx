@@ -111,7 +111,7 @@ describe("the toolbar's Open, Preview, Download and Check Out", () => {
   })
 
   it('checks the selected document out', async () => {
-    const { api } = await renderApp('/folders/7?sel=10431', { ...routes, 'POST /v1/documents/10431/checkout': () => document({ ...word, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null } }) })
+    const { api } = await renderApp('/folders/7?sel=10431', { ...routes, 'POST /v1/documents/10431/checkout': () => document({ ...word, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null, heldOn: null } }) })
     const bar = await toolbar()
     await waitFor(() => expect((bar.getByRole('button', { name: 'Check Out' }) as HTMLButtonElement).disabled).toBe(false))
     await userEvent.click(bar.getByRole('button', { name: 'Check Out' }))
@@ -119,7 +119,7 @@ describe("the toolbar's Open, Preview, Download and Check Out", () => {
   })
 
   it('is disabled for a document held by someone else', async () => {
-    const held = document({ ...word, canEdit: false, hold: { kind: 'checkout', by: { id: 9, name: 'Alex Marsh' }, since: null, device: null } })
+    const held = document({ ...word, canEdit: false, hold: { kind: 'checkout', by: { id: 9, name: 'Alex Marsh' }, since: null, device: null, heldOn: null } })
     await renderApp('/folders/7?sel=10431', { ...routes, 'GET /v1/folders/7/children': children([held]), ...withDetails(held) })
     const bar = await toolbar()
     await waitFor(() => expect((bar.getByRole('button', { name: 'Open' }) as HTMLButtonElement).disabled).toBe(false))

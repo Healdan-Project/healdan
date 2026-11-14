@@ -2,11 +2,9 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { Link } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { formatDate, formatDateTime, formatDay, t } from '@healdan/ui'
-import { Section } from './Section'
-import styles from './details.module.css'
+import { PropertyList, type PropertyRow } from './PropertyList'
 
 type S = components['schemas']
 
@@ -30,11 +28,6 @@ export function textOf(field: S['ProfileField'] | undefined): string {
   return value.name ?? t('details.unnamedUser')
 }
 
-interface Entry {
-  label: string
-  value: ReactNode
-}
-
 /**
  * A document's properties, read only (the form that edits them is `PropertiesForm`): Location in search results; Client, Matter,
  * Class, Subclass, Author, Typist and Date Filed; and an email's From, To, Sent and Received. Names and labels come
@@ -42,7 +35,7 @@ interface Entry {
  */
 export function Properties({ document, fields, context }: { document: S['DocumentView']; fields: S['ProfileField'][]; context: DetailsContext }) {
   const byName = new Map(fields.map((field) => [field.name, field]))
-  const entries: Entry[] = []
+  const entries: PropertyRow[] = []
   const labelOf = (name: string, fallback: string) => byName.get(name)?.label ?? fallback
   const add = (name: string) => {
     const field = byName.get(name)
@@ -69,16 +62,6 @@ export function Properties({ document, fields, context }: { document: S['Documen
   entries.push({ label: t('details.dateFiled'), value: formatDate(document.dateFiled) })
   if (emailFields.some((name) => textOf(byName.get(name)) !== '')) for (const name of emailFields) add(name)
 
-  return (
-    <Section title={t('details.properties')}>
-      <dl className={styles.properties}>
-        {entries.map((entry, i) => (
-          <div key={i} className={styles.property}>
-            <dt>{entry.label}</dt>
-            <dd>{entry.value || t('details.none')}</dd>
-          </div>
-        ))}
-      </dl>
-    </Section>
-  )
+  // The Properties tab names them (DetailsPanel)
+  return <PropertyList rows={entries} />
 }
