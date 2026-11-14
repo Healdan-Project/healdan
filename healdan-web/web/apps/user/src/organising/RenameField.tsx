@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect } from 'react'
 import type { components } from '@healdan/api'
 import { t } from '@healdan/ui'
 import { invalidateDocumentLists } from '../actions/refresh'
@@ -12,6 +12,7 @@ import { useMe } from '../queries'
 import { useApi } from '../services'
 import { useOrganising, type RenamePlace } from './OrganisingProvider'
 import styles from './organising.module.css'
+import { useNameField } from './useNameField'
 
 type S = components['schemas']
 
@@ -74,90 +75,63 @@ interface RenameFieldProps {
 
 /**
  * Enter saves, Esc cancels, and leaving the field saves what was changed. A refusal keeps the field open with what is
- * wrong beside it. Whether it worked or not, what shows names is asked for again.
+ * wrong beside it (`useNameField`, which a favorite's name in My Favorites shares). Whether it worked or not, what shows
+ * names is asked for again.
  */
 function RenameField({ name, selected, save, refusal, onDone, stacked = false }: RenameFieldProps) {
   const queryClient = useQueryClient()
-  const [text, setText] = useState(name)
-  const [error, setError] = useState<string>()
-  const input = useRef<HTMLInputElement>(null)
-  const errorId = useId()
-  // Enter saves and the field goes, which makes it lose the focus: that must not save again
-  const finished = useRef(false)
-  const saving = useRef(false)
+  /** `fromKey`: Enter saved, so the focus is the field's to give back; a save on leaving leaves it where the person put it */
+  function submit(fromKey: boolean) {
+    const typed = field.text.trim()
+    if (typed === name) return field.stop(fromKey)
+    void field.run(
+      fromKey,
+      async () => {
+        try {
+          await save(typed)
+        } finally {
+          void invalidateDocumentLists(queryClient)
+        }
+      },
+      (failure) => refusal(failure, typed),
+    )
+  }
+  const field = useNameField({
+    initial: name,
+    onEnter: () => {
+      if (field.text.trim() === '') field.setError(t('fields.required'))
+      else submit(true)
+    },
+    onLeave: () => submit(false),
+    onDone,
+  })
+  const input = field.input
 
   useEffect(() => {
-    const field = input.current
-    if (!field) return
+    const element = input.current
+    if (!element) return
     // React Aria's tree sends a focus that enters it from outside (the ⋯ menu's popover) to its focused row, which can be
     // another one: the field's own row takes the focus first, as a right-click menu's does when it opens
-    if (globalThis.document.activeElement !== field) field.closest<HTMLElement>('[role="treegrid"] [role="row"]')?.focus({ preventScroll: true })
-    field.focus()
-    field.setSelectionRange(0, selected)
-  }, [selected])
-
-  /** `fromKey`: Enter saved, so the focus is the field's to give back; a save on leaving leaves it where the person put it */
-  async function submit(fromKey: boolean) {
-    if (finished.current || saving.current) return
-    const typed = text.trim()
-    if (typed === name) return stop(fromKey)
-    saving.current = true
-    try {
-      await save(typed)
-      stop(fromKey)
-    } catch (failure) {
-      setError(refusal(failure, typed))
-      if (fromKey) input.current?.focus()
-    } finally {
-      saving.current = false
-      void invalidateDocumentLists(queryClient)
-    }
-  }
-
-  function stop(focusBack = true) {
-    finished.current = true
-    onDone(focusBack)
-  }
+    if (globalThis.document.activeElement !== element) element.closest<HTMLElement>('[role="treegrid"] [role="row"]')?.focus({ preventScroll: true })
+    element.focus()
+    element.setSelectionRange(0, selected)
+  }, [selected, input])
 
   return (
     <span className={stacked ? `${styles.rename} ${styles.stacked}` : styles.rename}>
       <input
-        ref={input}
+        {...field.props}
         className={styles.renameInput}
-        value={text}
         aria-label={t('rename.field', { name })}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
-        onChange={(event) => {
-          setText(event.target.value)
-          setError(undefined)
-        }}
-        onKeyDown={(event) => {
-          // Not the list's or the tree's: Space, Delete, the arrows and typing are the field's own while it has the focus
-          event.stopPropagation()
-          if (event.key === 'Enter') {
-            event.preventDefault()
-            if (text.trim() === '') setError(t('fields.required'))
-            else void submit(true)
-          } else if (event.key === 'Escape') {
-            event.preventDefault()
-            stop()
-          }
-        }}
-        onBlur={() => {
-          // Leaving the field with nothing changed, nothing in it, or a refusal showing is a cancel; with a new name, a save
-          if (text.trim() === '' || error) stop(false)
-          else void submit(false)
-        }}
         // A press or a double-click in the field is the field's: it doesn't select the row, open it or open the tree's folder
         onPointerDown={(event) => event.stopPropagation()}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
         onDoubleClick={(event) => event.stopPropagation()}
       />
-      {error && (
-        <span id={errorId} role="alert" className={styles.renameError}>
-          {error}
+      {field.error && (
+        <span id={field.errorId} role="alert" className={styles.renameError}>
+          {field.error}
         </span>
       )}
     </span>

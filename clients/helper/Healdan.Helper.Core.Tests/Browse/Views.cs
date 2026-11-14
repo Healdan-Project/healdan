@@ -78,9 +78,9 @@ public static class Views
         ["items"] = new JsonArray(items.Select(i => i.DeepClone()).ToArray()), ["offset"] = 0, ["limit"] = 50, ["total"] = items.Length
     };
 
-    public static JsonObject Favorite(long id, JsonObject item) => new()
+    public static JsonObject Favorite(long id, JsonObject item, string? name = null) => new()
     {
-        ["id"] = id, ["type"] = (string)item["type"]!, ["item"] = item.DeepClone()
+        ["id"] = id, ["type"] = (string)item["type"]!, ["name"] = name ?? (string?)item["name"], ["item"] = item.DeepClone()
     };
 
     public static JsonObject User() => new()

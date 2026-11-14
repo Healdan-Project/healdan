@@ -278,7 +278,7 @@ for the toolbar's More menu (`actions/MoreMenu.tsx`).
   keeps going when one is refused, so what was done stays done; the refusals come back as lines, each the document's name
   and why, from the catalogue (`filing/refusal.ts`: a hold says who holds it, an `already-filed` names the copy).
 - **Renaming folders** uses the same field. `RenameField.tsx` holds one field for documents and folders
-  (`DocumentTitle`, `FolderName`), and `OrganisingProvider`'s `renaming` is a row key and a place (`row`, `tree`,
+  (`DocumentTitle`, `FolderName`), built on `useNameField`, which a favourite's name in My Favorites shares, and `OrganisingProvider`'s `renaming` is a row key and a place (`row`, `tree`,
   `heading`), where the focus goes back once it's done. F2 on a folder's row in a list or in the My Matters tree, the
   tree's ⋯, the ⋯ beside the open folder's name and the folder's right-click menu all start it, and `canRename` on the
   folder decides whether **Rename** is greyed out. A save that ends after another rename began leaves that one open. In
