@@ -124,8 +124,9 @@
 }
 
 /* A row being edited in place, with a field in its label, keeps its menu out of sight and out of the pointer's way: it would
-   cover the field's end */
-.row:has(input) .menu {
+   cover the field's end. The field has the focus then, so this has to outweigh the show rules above (0,3,1 against 0,3,0),
+   and it hides only by opacity, so the ⋯ stays focusable while the rename takes the focus from its menu. */
+.item .row:has(input) .menu {
   opacity: 0;
   pointer-events: none;
 }
