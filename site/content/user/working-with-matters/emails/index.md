@@ -24,7 +24,7 @@ email. From Outlook on your Mac you can file a message without saving it first: 
 Select a filed email and press **Space**, or dock the preview as the reading pane (see
 [Previews](../../documents/previews/)). The new interface shows it as a message, not as a file.
 
-![Quick Look on the email Unit 4 Weir Lane – site plan to check.eml, # 26: its subject, From Priya Nair, To Martin Hale, Cc Helen Ashcombe, Sent 14 Oct 2026, 14:05, and Received 14 Oct 2026, 14:25, then its attachment brightwell-site-plan.png, 81 KB, with Save to Matter, the notice that pictures from the internet are blocked with Show Pictures, and the start of the message, "Dear Martin"](email-quick-look.png)
+![Quick Look on the email Unit 4 Weir Lane – site plan to check.eml, # 26: its subject, From Priya Nair, To Martin Hale, Cc Helen Ashcombe, Sent 16 Oct 2026, 14:05, and Received 16 Oct 2026, 14:25, then its attachment brightwell-site-plan.png, 81 KB, with Save to Matter, the notice that pictures from the internet are blocked with Show Pictures, and the start of the message, "Dear Martin"](email-quick-look.png)
 
 - **The top of it** is the subject, then **From**, **To**, **Cc**, **Sent** and **Received**. A line the message
   doesn't have is left out.

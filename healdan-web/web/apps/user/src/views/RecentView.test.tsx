@@ -122,6 +122,7 @@ describe('Recent Clients', () => {
     const [row] = await rows()
     expect(row!.textContent).toContain('Saltmarsh Shipping Ltd')
     expect(row!.textContent).toContain('1001')
+    expect(row!.querySelector('.tabler-icon-building')!.getAttribute('data-kind')).toBe('client')
     fireEvent.keyDown(row!, { key: 'Enter' })
     fireEvent.keyUp(row!, { key: 'Enter' })
     await waitFor(() => expect(router.history.location.pathname + router.history.location.search).toBe('/app/search?scope=clients&q=1001'))

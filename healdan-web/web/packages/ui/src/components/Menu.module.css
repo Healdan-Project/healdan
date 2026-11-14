@@ -24,9 +24,12 @@
   cursor: default;
 }
 
+/* The item the keys are on: its text and icons, a kind's too (icons.module.css), take the fill's own colour, as only it
+   passes there. */
 .item[data-focused] {
   background: var(--hd-accent-fill);
   color: var(--hd-accent-on-fill);
+  --hd-icon-on-fill: currentColor;
 }
 
 .item[data-focus-visible] {

@@ -53,6 +53,21 @@
   /* The filled star's edge: the amber alone is 2:1 on a light page, too pale to show the state (tokens.test.ts). */
   --hd-star-edge: #b35c00;
 
+  /* The colours of the icons that stand for a kind of item (icons.ts): a file's kind, from its extension, with
+     LibreOffice's formats in their Office counterparts' colours, then folders, matters and clients. They are icons, not
+     text, so each is 3:1 on every surface such an icon sits on (tokens.test.ts); on the accent fill they take
+     --hd-accent-on-fill, as the text does. A plain document has none and keeps the colour of what it sits in. Folders
+     are the accent, as the Healdan Helper draws them, and follow it into dark. */
+  --hd-kind-word-processing: #2b579a;
+  --hd-kind-spreadsheet: #1d7044;
+  --hd-kind-presentation: #c43e1c;
+  --hd-kind-pdf: #c4161c;
+  --hd-kind-email: #0f6cbd;
+  --hd-kind-picture: #8e44ad;
+  --hd-kind-folder: var(--hd-accent-text);
+  --hd-kind-matter: #8a5a00;
+  --hd-kind-client: #5b5fc7;
+
   --hd-font: -apple-system, blinkmacsystemfont, "Segoe UI", system-ui, sans-serif;
   --hd-font-size: 13px;
   --hd-font-size-small: 12px;
@@ -112,6 +127,15 @@
     --hd-required: #ff6961;
     --hd-star: #fcc419;
     --hd-star-edge: #fcc419;
+
+    --hd-kind-word-processing: #7aa7ec;
+    --hd-kind-spreadsheet: #5cc489;
+    --hd-kind-presentation: #f2896a;
+    --hd-kind-pdf: #ff7a70;
+    --hd-kind-email: #4fb0ff;
+    --hd-kind-picture: #c9a0dc;
+    --hd-kind-matter: #e0a84a;
+    --hd-kind-client: #a3a6ff;
 
     --hd-shadow-popup: 0 6px 24px rgb(0 0 0 / 55%), 0 0 0 1px var(--hd-line);
     --hd-scrim: rgb(0 0 0 / 55%);

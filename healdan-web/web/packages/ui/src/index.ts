@@ -18,7 +18,7 @@ export { PickField, type PickFieldOption, type PickFieldProps } from './componen
 export { Tray, type TrayItem, type TrayProps, type TrayState } from './components/Tray'
 export { Toast, ToastRegion, clearToasts, toast, toastWithLink } from './components/Toast'
 export { RESIZING_ATTRIBUTE, Splitter, clampWidth, type SplitterProps } from './components/Splitter'
-export { Icon, type IconName } from './icons'
+export { Icon, iconKinds, type IconKind, type IconName } from './icons'
 export { formatDate, formatDateTime, formatDay, formatList, formatSize, formatVersion } from './format'
 export { plural, setLabels, strings, t } from './strings'
 export type { PluralKey, StringKey } from './strings'
