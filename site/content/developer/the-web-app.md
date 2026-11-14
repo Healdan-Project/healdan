@@ -86,6 +86,8 @@ the span as text, drawn away, which a hovered row, or one with the keyboard's fo
 (`actions.module.css`), as `MatterCell` shows a matter's name: a tooltip alone can't be reached by keyboard. Only a held
 row asks who the person is (`useMe`), to tell their own holds from others'. The Table colours a cell's icons
 `--hd-text-secondary`, and the row's own text colour on a selected row, so the marker meets contrast in both themes.
+An icon that stands for a kind of item keeps its kind's colour (see [Kind Colours](#kind-colours)) but on the accent fill
+of a selected row in a list that has the focus, where it takes the text's colour too.
 
 The virtualiser places the rows itself, so the Table needs a height: it fills a flex column, as the folder view's is.
 jsdom has no IntersectionObserver, which notices the end of a list, so the tests' setup installs one that sees
@@ -167,7 +169,7 @@ list's row shows at once as the placeholder) and renders the thumbnail, the name
 (`formatSize` in `@healdan/ui`), the actions and `Properties` and `Versions`. A search view passes
 `context="search"`, which adds Location, linking to `/app/folders/<id>`. The panel never reads a file: the thumbnail
 is an `<img>` on `/api/v1/documents/{n}/thumbnail`, which the web session's cookie goes with, and an icon of the
-file's kind (`fileIcon.ts`) shows when there's none or the person can't open the document. Properties come from the
+file's kind (`kindIcons.ts`) shows when there's none or the person can't open the document. Properties come from the
 list the server gives, by name; an email's From, To, Sent and Received show when any of them has a value, as the
 server fills them from the message and the browser never parses a file. **Preview** opens Quick Look (see Previews,
 below), and **Copy Link** (`actions/copyLink.ts`) writes `location.origin + '/app/doc/' + n` with the Clipboard API
@@ -401,7 +403,7 @@ Both themes are defined as custom properties in `tokens.css` and chosen by the b
 Anything that isn't a custom property is on purpose: the brand mark's blues (`frame/Mark.tsx`) and the white paper a PDF
 page or a sender's email is drawn on (`preview/preview.module.css`, `preview/email.module.css`), which keep their own
 colours so a document reads as it was made. `tokens.test.ts` checks every text colour on every background it may sit
-on, in both themes. jsdom draws no colours, so `e2e/a11y.spec.ts` runs axe in a real browser in both, where contrast is
+on, and every kind colour on every surface its icons sit on, in both themes. jsdom draws no colours, so `e2e/a11y.spec.ts` runs axe in a real browser in both, where contrast is
 checked on what is drawn.
 
 ## The Keyboard
@@ -427,6 +429,31 @@ They are CSS custom properties, prefixed `--hd-`, in `packages/ui/src/tokens.css
 them, never a colour of its own. Light and dark are both defined there, and follow the browser's setting. A test
 checks the contrast of every text colour on every background it may sit on, so a new colour goes into that test's
 lists as well.
+
+### Kind Colours
+
+An icon that stands for a kind of item is drawn in that kind's colour: `--hd-kind-word-processing`,
+`--hd-kind-spreadsheet`, `--hd-kind-presentation`, `--hd-kind-pdf`, `--hd-kind-email`, `--hd-kind-picture`,
+`--hd-kind-folder` (the accent, `--hd-accent-text`, as the Healdan Helper draws folders), `--hd-kind-matter` and
+`--hd-kind-client`. A view gets the icon and its kind together from `apps/user/src/kindIcons.ts` and passes both to
+`@healdan/ui`'s `Icon`, as `<Icon {...fileIcon(name)} />`. `fileIcon` goes by the file's extension alone, which decides
+the icon and the colour, and gives LibreOffice's formats their Office counterparts' colours: an `.odt` is word
+processing's blue, an `.ods` spreadsheets' green and an `.odp` presentations' orange-red, each with the plain icon of its
+kind, where Office's own formats have Tabler's DOCX, DOC, XLS, CSV and PPT icons. Any other file, a drawing included, is
+the plain document with no kind, and keeps the colour of what it sits in, as action and frame icons do.
+
+`Icon` gives a kind's icon a class from `icons.module.css` and a `data-kind` attribute. Each class is a class alone, so
+a surface that draws its icons in its own colour wins with a rule for `svg`: the accent fill of a selected row in a list
+that has the focus (`Table.module.css`) and of the option the keys are on in a menu or the search box's suggestions
+(`Menu.module.css`, `ComboBox.module.css`) draw them in `--hd-accent-on-fill`, as the text. On Inactive selection and
+`--hd-pill` a kind's icon keeps its colour, and the Table leaves `[data-kind]` out of its muted icons with `:not()`.
+
+The kind colours are icons, not text, so `tokens.test.ts` asks each for the 3:1 of WCAG 1.4.11, not text's 4.5:1, on
+every surface such an icon sits on, in both themes: `--hd-window`, `--hd-row-alt`, `--hd-sidebar`, `--hd-line`,
+`--hd-pill`, `--hd-selection-inactive` and `--hd-field`. A new kind needs its token, light and dark, its class in
+`icons.module.css`, its name in `iconKinds` and, if it sits on a new surface, that surface in the test's list. jsdom
+works out a computed colour from the stylesheets and the tokens, so a component test can check what colour an icon
+takes (`Table.test.tsx`, `Menu.test.tsx`, `ComboBox.test.tsx`), though only a real browser draws it.
 
 ## The Dependency Rules
 

@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import type { components } from '@healdan/api'
-import { formatDate, formatVersion, Icon, t, type IconName, type TableColumn, type TableRow } from '@healdan/ui'
+import { formatDate, formatVersion, Icon, t, type TableColumn, type TableRow } from '@healdan/ui'
 import { HoldMarker } from '../actions/HoldMarker'
 import type { SearchScope } from '../search/scopes'
-import { fileIcon } from '../fileIcon'
+import { fileIcon, folderIcon, matterIcon, type KindIcon } from '../kindIcons'
 import { matterParts } from '../matterDisplay'
 import { DocumentTitle } from '../organising/RenameField'
 import { childKey, type Hit } from './useListing'
@@ -21,9 +21,10 @@ export function rowOf(item: Hit): ListRow {
   return { id: childKey(item), textValue: item.type === 'matter' ? item.display : item.name, selectable: item.type === 'document', item }
 }
 
-function iconOf(item: Hit): IconName {
-  if (item.type === 'matter') return 'briefcase'
-  if (item.type === 'folder') return item.kind === 'searchFolder' ? 'folderSearch' : 'folder'
+/** A row's icon, in its kind's colour */
+function iconOf(item: Hit): KindIcon {
+  if (item.type === 'matter') return matterIcon
+  if (item.type === 'folder') return folderIcon(item.kind)
   return fileIcon(item.name)
 }
 
@@ -37,7 +38,7 @@ const title: TableColumn<ListRow> = {
   width: '3fr',
   cell: ({ item }) => (
     <>
-      <Icon name={iconOf(item)} />
+      <Icon {...iconOf(item)} />
       {item.type === 'document' ? <DocumentTitle document={item} className={styles.name} /> : <span className={styles.name}>{item.type === 'matter' ? item.display : item.name}</span>}
       {item.type === 'document' && <HoldMarker document={item} />}
     </>

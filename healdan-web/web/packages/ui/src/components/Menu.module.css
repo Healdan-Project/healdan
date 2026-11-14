@@ -29,6 +29,11 @@
   color: var(--hd-accent-on-fill);
 }
 
+/* A kind's icon (icons.module.css) takes the fill's own colour too, as only it passes there. */
+.item[data-focused] svg {
+  color: inherit;
+}
+
 .item[data-focus-visible] {
   outline: var(--hd-focus-outline);
   outline-offset: var(--hd-focus-offset);

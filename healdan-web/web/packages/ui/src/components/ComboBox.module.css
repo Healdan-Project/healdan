@@ -47,13 +47,15 @@
   font-size: var(--hd-font-size-small);
 }
 
-/* The arrow keys' choice is a filled bar; secondary text fails AA on it, so it takes the bar's own colour. */
+/* The arrow keys' choice is a filled bar; secondary text fails AA on it, so it takes the bar's own colour, and so does a
+   kind's icon (icons.module.css). */
 .option[data-focused] {
   background: var(--hd-accent-fill);
   color: var(--hd-accent-on-fill);
 }
 
-.option[data-focused] .meta {
+.option[data-focused] .meta,
+.option[data-focused] svg {
   color: inherit;
 }
 

@@ -143,12 +143,19 @@
   white-space: nowrap;
 }
 
+/* A cell's icons are muted, but an icon that stands for a kind of item keeps its kind's colour (icons.module.css). */
 .cell svg {
   flex: none;
+}
+
+.cell svg:not([data-kind]) {
   color: var(--hd-text-secondary);
 }
 
-.row[data-selected] .cell svg {
+/* On the accent fill every icon takes the text's colour, as only it passes there. On Inactive selection only the muted
+   ones do: a kind's colour is 3:1 there, which an icon needs (tokens.test.ts). */
+.table:focus-within .row[data-selected] .cell svg,
+.row[data-selected] .cell svg:not([data-kind]) {
   color: inherit;
 }
 

@@ -36,6 +36,11 @@ describe('LeftPane', () => {
       Folders: '/app/recent/folders',
       Clients: '/app/recent/clients',
     })
+    // Each entry's icon is in its kind's colour, but Documents', which takes in every kind
+    const kinds = Object.fromEntries(
+      ['Documents', 'Emails', 'Folders', 'Clients'].map((name) => [name, within(pane()).getByRole('link', { name }).querySelector('svg')!.getAttribute('data-kind')]),
+    )
+    expect(kinds).toEqual({ Documents: null, Emails: 'email', Folders: 'folder', Clients: 'client' })
   })
 
   it('shows Recent Matters with the client apart from the number and name', async () => {
@@ -55,8 +60,9 @@ describe('LeftPane', () => {
     fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
     const folder = await within(tree).findByRole('row', { name: /Correspondence/ })
     const search = within(tree).getByRole('row', { name: /My Recent Docs Here/ })
-    expect(folder.querySelector('.tabler-icon-folder')).toBeTruthy()
-    expect(search.querySelector('.tabler-icon-folder-search')).toBeTruthy()
+    expect(folder.querySelector('.tabler-icon-folder')!.getAttribute('data-kind')).toBe('folder')
+    expect(search.querySelector('.tabler-icon-folder-search')!.getAttribute('data-kind')).toBe('folder')
+    expect(within(tree).getByRole('row', { name: /1001\.1/ }).querySelector('.tabler-icon-briefcase')!.getAttribute('data-kind')).toBe('matter')
     expect(api.callsTo('GET /v1/folders/110/children')).toEqual([
       { method: 'GET', path: '/v1/folders/110/children', query: { type: 'folder', limit: 200, offset: 0 } },
     ])

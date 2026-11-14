@@ -6,6 +6,11 @@ weight: 2
 Healdan's web page has a top bar across the top, a left pane down the left side and the main area beside it. The
 colours follow your browser's light or dark setting.
 
+Each kind of item has its icon in a colour of its own, so a matter's briefcase, a folder, a client's building and a
+document's kind are easy to tell apart: word-processing documents are blue, spreadsheets green, presentations
+orange-red, PDFs red, emails blue and pictures purple. LibreOffice's documents take the colours of their Microsoft
+Office counterparts, and any other kind of file, such as a drawing, has the plain document icon.
+
 ![Healdan's web page in the Due Diligence folder of matter 1002.1 – Commercial Lease: the top bar with the Healdan name, the Documents search box, the ? button and the PN menu; the left pane with Recent, Recent Matters, My Matters opened to the matter's folders, and My Favorites; the folder's two documents, Service Charge Budget 2026–27.xlsx and Site Plan – Unit 4 Weir Lane.odg, with the second selected; and its details at the right, with the thumbnail of the plan, its name with the Favorites star beside it, Open, Download, Edit, Copy Link and Check Out, its properties and its version](whole-window.png)
 
 ## The Top Bar
@@ -56,7 +61,7 @@ Matter](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matte
 Select a document in a folder's list, in search results or in a Recent list, and its **Details** open at the right, in the same place as
 [Filters](../../finding-documents/searching/#filters). They show:
 
-- **A thumbnail** of the first page, when the document has one. Without one, a plain icon for the kind of file shows
+- **A thumbnail** of the first page, when the document has one. Without one, the icon for the kind of file shows
   instead.
 - **The name,** with a star beside it that adds the document to **My Favorites** and takes it off again, and under it
   the doc #, the version and the size: `# 10388 · Version 2 · 209 KB`.

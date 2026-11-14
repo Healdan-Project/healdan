@@ -1,0 +1,41 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* An icon that stands for a kind of item draws in that kind's colour (tokens.css). Each rule is a class alone, so a
+   surface that draws its icons in its own colour, such as a selected row's accent fill or a focused option's, wins with
+   a rule of its own for `svg` (Table.module.css, Menu.module.css, ComboBox.module.css). */
+.wordProcessing {
+  color: var(--hd-kind-word-processing);
+}
+
+.spreadsheet {
+  color: var(--hd-kind-spreadsheet);
+}
+
+.presentation {
+  color: var(--hd-kind-presentation);
+}
+
+.pdf {
+  color: var(--hd-kind-pdf);
+}
+
+.email {
+  color: var(--hd-kind-email);
+}
+
+.picture {
+  color: var(--hd-kind-picture);
+}
+
+.folder {
+  color: var(--hd-kind-folder);
+}
+
+.matter {
+  color: var(--hd-kind-matter);
+}
+
+.client {
+  color: var(--hd-kind-client);
+}

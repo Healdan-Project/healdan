@@ -4,6 +4,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
+import '../tokens.css'
+import { Icon } from '../icons'
 import { Menu, MenuItem } from './Menu'
 
 function setup(onAction = vi.fn()) {
@@ -43,6 +45,30 @@ describe('Menu', () => {
     fireEvent.keyUp(menu, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
     await waitFor(() => expect(document.activeElement).toBe(trigger))
+  })
+
+  it('draws a kind\'s icon in its colour, and in the fill\'s own on the item the keys are on', async () => {
+    render(
+      <Menu label="Scope">
+        <MenuItem id="emails" textValue="Emails">
+          <Icon name="email" kind="email" />
+          Emails
+        </MenuItem>
+        <MenuItem id="folders" textValue="Folders">
+          <Icon name="folder" kind="folder" />
+          Folders
+        </MenuItem>
+      </Menu>,
+    )
+    const trigger = screen.getByRole('button', { name: 'Scope' })
+    trigger.focus()
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    fireEvent.keyUp(trigger, { key: 'ArrowDown' })
+    const emails = await screen.findByRole('menuitem', { name: 'Emails' })
+    await waitFor(() => expect(emails.hasAttribute('data-focused')).toBe(true))
+    const colour = (name: string) => getComputedStyle(screen.getByRole('menuitem', { name }).querySelector('svg')!).color
+    expect(colour('Emails')).toBe('rgb(255, 255, 255)')
+    expect(colour('Folders')).toBe('rgb(12, 105, 192)')
   })
 
   it('can be disabled, so its button opens nothing', () => {

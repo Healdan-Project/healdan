@@ -20,8 +20,12 @@ import {
   IconEye,
   IconFileSpreadsheet,
   IconFileText,
+  IconFileTypeCsv,
+  IconFileTypeDoc,
   IconFileTypeDocx,
   IconFileTypePdf,
+  IconFileTypePpt,
+  IconFileTypeXls,
   IconFilter,
   IconFolder,
   IconFolderPlus,
@@ -42,7 +46,9 @@ import {
   IconX,
   IconZoomIn,
   IconZoomOut,
+  type IconProps,
 } from '@tabler/icons-react'
+import styles from './icons.module.css'
 
 export const icons = {
   arrowDown: IconArrowDown,
@@ -62,9 +68,13 @@ export const icons = {
   email: IconMail,
   external: IconExternalLink,
   eye: IconEye,
+  fileCsv: IconFileTypeCsv,
+  fileDoc: IconFileTypeDoc,
+  fileDocx: IconFileTypeDocx,
   filePdf: IconFileTypePdf,
+  filePpt: IconFileTypePpt,
+  fileXls: IconFileTypeXls,
   filter: IconFilter,
-  fileWord: IconFileTypeDocx,
   folder: IconFolder,
   folderPlus: IconFolderPlus,
   folderSearch: IconFolderSearch,
@@ -87,7 +97,16 @@ export const icons = {
 
 export type IconName = keyof typeof icons
 
-// Icons are decoration: the control around one carries the label.
-export function Icon({ name, size = 16, ...rest }: { name: IconName; size?: number } & SVGAttributes<SVGElement>) {
-  return createElement(icons[name], { size, stroke: 1.75, 'aria-hidden': true, ...rest })
+/**
+ * The kinds of item an icon can stand for, each drawn in its own colour (`--hd-kind-*` in tokens.css). An icon that
+ * stands for no kind, a plain document or an action, keeps the colour of what it sits in.
+ */
+export const iconKinds = ['wordProcessing', 'spreadsheet', 'presentation', 'pdf', 'email', 'picture', 'folder', 'matter', 'client'] as const
+export type IconKind = (typeof iconKinds)[number]
+
+// Icons are decoration: the control around one carries the label. A kind's icon carries `data-kind`, by which a surface
+// that draws its icons in its own colour, such as a selected row's accent fill, finds it (icons.module.css).
+export function Icon({ name, size = 16, kind, className, ...rest }: { name: IconName; size?: number; kind?: IconKind } & SVGAttributes<SVGElement>) {
+  const props: IconProps & { 'data-kind'?: IconKind } = { size, stroke: 1.75, 'aria-hidden': true, 'data-kind': kind, className: [kind && styles[kind], className].filter(Boolean).join(' ') || undefined, ...rest }
+  return createElement(icons[name], props)
 }

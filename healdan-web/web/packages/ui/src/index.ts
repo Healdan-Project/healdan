@@ -17,7 +17,7 @@ export { ComboBox, type ComboBoxOption, type ComboBoxProps, type ComboBoxSection
 export { PickField, type PickFieldOption, type PickFieldProps } from './components/PickField'
 export { Tray, type TrayItem, type TrayProps, type TrayState } from './components/Tray'
 export { Toast, ToastRegion, clearToasts, toast, toastWithLink } from './components/Toast'
-export { Icon, type IconName } from './icons'
+export { Icon, iconKinds, type IconKind, type IconName } from './icons'
 export { formatDate, formatDateTime, formatDay, formatList, formatSize, formatVersion } from './format'
 export { plural, setLabels, strings, t } from './strings'
 export type { PluralKey, StringKey } from './strings'
