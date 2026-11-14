@@ -4,10 +4,10 @@
 package com.logicaldoc.healdan.api.model;
 
 /**
- * The body of {@code PATCH /v1/documents/{docNumber}}.
+ * The body of {@code PATCH /v1/documents/{docNumber}} and {@code PATCH
+ * /v1/folders/{id}}.
  *
- * @param name the document's new file name; without the document's extension
- *        it keeps the extension
+ * @param name the new name; a document's without its extension keeps it
  */
 public record RenameRequest(String name) {
 }

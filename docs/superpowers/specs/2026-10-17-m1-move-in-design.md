@@ -113,7 +113,7 @@ On a fresh Docker install, the owner, signed in as an ordinary **non-admin** use
   - These skip the listeners because they're plain JDBC: `deleteTree` (every folder delete: GUI, SOAP/REST and WebDAV), `restore` (which accepts any parent), and `applySecurityToTree`.
 - **Permission checks in CE's RPCs.** These validate only the session:
   - `FolderServiceImpl.saveACL` and `inheritACL`, and `DocumentServiceImpl.saveACL`, don't check SECURITY;
-  - `FolderServiceImpl.rename` doesn't check RENAME;
+  - `FolderServiceImpl.rename` doesn't check RENAME (since fixed upstream: it checks it now, as the folder rename spec §3 found on 2026-11-14);
   - `FolderServiceImpl.restore` checks nothing.
 
   SOAP/REST `create` makes a folder of whatever type the caller asks for. PR #15 fixes only the GUI `create`.

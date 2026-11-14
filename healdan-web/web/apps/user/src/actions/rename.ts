@@ -12,6 +12,39 @@ export function renameDocument(api: Api, docNumber: number, name: string): Promi
   return api.send('PATCH', apiPath`/v1/documents/${docNumber}`, { name })
 }
 
+export function renameFolder(api: Api, id: number, name: string): Promise<S['FolderView']> {
+  return api.send('PATCH', apiPath`/v1/folders/${id}`, { name })
+}
+
+/** Directly in a matter's workspace: the step above it in its path is the matter's own folder */
+export function isTopLevel(folder: Pick<S['FolderView'], 'path'>): boolean {
+  return folder.path.at(-2)?.kind === 'matter'
+}
+
+/**
+ * Why the person can't rename the folder, for F2 to say (folder rename spec 5.2); undefined when they can. The server
+ * decides, in `canRename`; this says which of its reasons it is, from what the app already knows.
+ */
+export function whyNotRename(folder: Pick<S['FolderView'], 'canRename' | 'kind' | 'path'>, admin: boolean | undefined): string | undefined {
+  if (folder.canRename) return undefined
+  if (folder.kind === 'matter') return t('rename.matterFolder')
+  if (isTopLevel(folder) && !admin) return t('rename.adminsOnly')
+  return t('rename.noPermission')
+}
+
+/** What to tell the person of a refused folder rename, from the catalogue: `typed` is the name that was sent */
+export function folderRenameRefusal(error: unknown, typed: string): string {
+  if (error instanceof ApiError) {
+    if (error.code === 'name-taken') return t('rename.taken', { name: typed })
+    if (error.code === 'admins-only') return t('rename.adminsOnly')
+    if (error.code === 'not-renamable') return t('rename.matterFolder')
+    if (error.code === 'forbidden') return t('rename.noPermission')
+    const named = fieldErrors(error).get('name')
+    if (named) return named
+  }
+  return messageFor(error)
+}
+
 /** What follows the last dot of a name that has something before it */
 export function extensionOf(name: string): string | undefined {
   const dot = name.lastIndexOf('.')

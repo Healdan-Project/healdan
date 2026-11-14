@@ -23,6 +23,10 @@ import org.springframework.stereotype.Component;
  * <p>
  * It is this server's alone: the old web page, WebDAV and another cluster node
  * don't take it.
+ * <p>
+ * {@link FolderRenames} keeps an instance of its own, not this bean, keyed by
+ * parent folder id, which only folder renames take (folder rename spec section
+ * 4.1).
  */
 @Component
 public class DocumentLocks {
@@ -91,6 +95,15 @@ public class DocumentLocks {
 		} catch (Exception e) {
 			throw new IllegalStateException(failure, e);
 		}
+	}
+
+	/**
+	 * @param docId the document's id, or what else the instance locks by
+	 * @return whether a request waits for its lock now, for the tests
+	 */
+	boolean waitedFor(long docId) {
+		Entry entry = locks.get(docId);
+		return entry != null && entry.lock.hasQueuedThreads();
 	}
 
 	/**

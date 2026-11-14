@@ -37,6 +37,7 @@ export function folder(over: Partial<S['FolderView']> = {}): S['FolderView'] {
     store: { id: 2, name: 'Smoke' },
     path: [],
     canFile: true,
+    canRename: true,
     ...over,
   }
 }

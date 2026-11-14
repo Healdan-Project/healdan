@@ -16,7 +16,9 @@ import java.util.List;
  * @param store the Store it is in, or is
  * @param path from the Store down to the folder itself
  * @param canFile whether the caller may file documents into it
+ * @param canRename whether {@code PATCH /v1/folders/{id}} would rename it for
+ *        the caller (folder rename spec section 4.2)
  */
 public record FolderView(String type, long id, String name, String kind, MatterRef matter, StoreRef store,
-		List<FolderRef> path, boolean canFile) {
+		List<FolderRef> path, boolean canFile, boolean canRename) {
 }

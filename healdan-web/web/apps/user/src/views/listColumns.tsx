@@ -7,7 +7,7 @@ import { HoldMarker } from '../actions/HoldMarker'
 import type { SearchScope } from '../search/scopes'
 import { itemIcon } from '../kindIcons'
 import { matterParts } from '../matterDisplay'
-import { DocumentTitle } from '../organising/RenameField'
+import { DocumentTitle, FolderName } from '../organising/RenameField'
 import { childKey, type Hit } from './useListing'
 import styles from './views.module.css'
 
@@ -32,7 +32,13 @@ const title: TableColumn<ListRow> = {
   cell: ({ item }) => (
     <>
       <Icon {...itemIcon(item)} />
-      {item.type === 'document' ? <DocumentTitle document={item} className={styles.name} /> : <span className={styles.name}>{item.type === 'matter' ? item.display : item.name}</span>}
+      {item.type === 'document' ? (
+        <DocumentTitle document={item} className={styles.name} />
+      ) : item.type === 'folder' ? (
+        <FolderName folder={item} place="row" className={styles.name} />
+      ) : (
+        <span className={styles.name}>{item.display}</span>
+      )}
       {item.type === 'document' && <HoldMarker document={item} />}
     </>
   ),

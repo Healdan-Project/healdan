@@ -7,6 +7,9 @@ The folders directly inside a matter's workspace are its skeleton, copied from i
 rename, move or delete them, search folders included. Below the top level, everyone works under the usual
 permissions.
 
+In the app, **Rename** is greyed out on them for anyone who isn't an administrator, and on the workspace folder for
+everyone.
+
 ## The Workspace Folder Itself
 
 - **It can't be renamed directly.** Its name follows the matter's: change the name with **Edit Matter…**. See

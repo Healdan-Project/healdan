@@ -155,8 +155,10 @@ is a shortcut, never the only way.
   it out on the web page; **Rename**, **Move To…** and **Delete**; **Copy Link** and **Add to Favorites** (or **Remove
   from Favorites**). They work as the toolbar's buttons and its **⋯** (More) menu do.
 - **A folder,** in a list or in the **My Matters** tree: **Open**, **Open in New Tab**, **New Folder** where you can
-  make one (inside a matter, and never in a search folder), and **Add to Favorites** or **Remove from Favorites**.
-- **A matter,** in **My Matters**, **Recent Matters** or a search for matters: **Open**, **Open in New Tab**, and
+  make one (inside a matter, and never in a search folder), **Rename** (greyed out where you can't rename the folder,
+  and on a matter's own folder), and **Add to Favorites** or **Remove from Favorites**.
+- **A matter,** in **My Matters**, **Recent Matters** or a search for matters: **Open**, **Open in New Tab**,
+  **Rename**, which is always greyed out (a matter takes its name from **Edit Matter…** in the Classic Interface), and
   **Add to My Matters** or **Remove from My Matters**.
 - **An item in My Favorites:** **Open** and **Open in New Tab**; **Rename Favorite**, and **Use Original Name** when it has a
   name of its own (see [A Favourite's Own Name](#a-favourites-own-name)); and **Remove from Favorites**.
@@ -188,7 +190,7 @@ once the list has the focus.
 | Up and down arrows | Move through the list |
 | Enter | Opens the document in its app (the Healdan Helper), or a folder |
 | Space | Opens Quick Look; Esc closes it |
-| F2 | Renames the selected document in place, or in **My Favorites** the favourite with the focus |
+| F2 | Renames the selected document in place, the folder with the focus in a list or in the **My Matters** tree, or in **My Favorites** the favourite with the focus |
 | Delete | Moves the selected documents to the Trash, after asking |
 | Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row, tree item or left-pane link with the focus; Esc closes it |
 | Option-Enter on **Upload** | Files with the form first |

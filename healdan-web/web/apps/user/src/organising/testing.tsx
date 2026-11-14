@@ -14,13 +14,14 @@ export { correspondence, letter, store, workspace }
 export const lease = document({ docNumber: 10432, name: 'Lease.docx', folder: inFolder })
 export const plan = document({ docNumber: 10433, name: 'Plan.pdf', folder: inFolder })
 export const drafts = folder({ id: 8, name: 'Drafts', path: [store, workspace, { id: 7, name: 'Correspondence', kind: 'folder' }, { id: 8, name: 'Drafts', kind: 'folder' }] })
-export const matterTop = folder({ id: 110, name: '1001.1 – Charter Dispute', kind: 'matter', path: [store, workspace], canFile: false })
+export const matterTop = folder({ id: 110, name: '1001.1 – Charter Dispute', kind: 'matter', path: [store, workspace], canFile: false, canRename: false })
 
 export interface Written {
   renamed: { docNumber: number; name: string }[]
   moved: { docNumber: number; folderId: number }[]
   deleted: number[]
   made: { parentId: number; name: string }[]
+  renamedFolders: { id: number; name: string }[]
 }
 
 /**
@@ -29,16 +30,24 @@ export interface Written {
  */
 export function routes(over: Routes = {}) {
   let docs: S['DocumentView'][] = [letter, lease, plan]
-  const written: Written = { renamed: [], moved: [], deleted: [], made: [] }
+  let subfolders: S['FolderView'][] = [drafts]
+  const written: Written = { renamed: [], moved: [], deleted: [], made: [], renamedFolders: [] }
   const all: Routes = {
     'GET /v1/folders/7': correspondence,
-    'GET /v1/folders/7/children': () => children([drafts, ...docs]),
+    'GET /v1/folders/7/children': () => children([...subfolders, ...docs]),
     'GET /v1/folders/*/form': filledForm,
     'GET /v1/folders/8': drafts,
     'GET /v1/folders/8/children': children([]),
     'GET /v1/folders/110': matterTop,
     'GET /v1/folders/111': folder({ id: 111, name: 'Correspondence', path: [store, workspace, { id: 111, name: 'Correspondence', kind: 'folder' }] }),
     'GET /v1/folders/111/children': children([]),
+    'PATCH /v1/folders/*': ({ params, body }: { params: string[]; body?: unknown }) => {
+      const id = Number(params[0])
+      const name = (body as { name: string }).name
+      written.renamedFolders.push({ id, name })
+      subfolders = subfolders.map((one) => (one.id === id ? { ...one, name } : one))
+      return subfolders.find((one) => one.id === id) ?? folder({ id, name })
+    },
     'PATCH /v1/documents/*': ({ params, body }: { params: string[]; body?: unknown }) => {
       const docNumber = Number(params[0])
       const name = (body as { name: string }).name

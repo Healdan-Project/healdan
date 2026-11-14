@@ -120,7 +120,7 @@ weight: 12
 ## The User App
 
 - **Some things are still in the Classic Interface.** The app at `/app/` finds, previews, files, checks out, edits
-  the properties of (Author and Typist included), renames, moves and deletes documents, makes folders, and adds
+  the properties of (Author and Typist included), renames, moves and deletes documents, makes and renames folders, and adds
   documents and folders to My Favorites and takes them off. Other things are done in the Classic
   Interface, one choice away in the app's menu on the same sign-in: [The Classic
   Interface](../../user/the-classic-interface/) lists them. They are:
@@ -132,7 +132,7 @@ weight: 12
   - your profile and password, and your messages;
   - making and editing search folders;
   - choosing and reordering the list's columns, and setting properties on many documents at once;
-  - renaming, moving and deleting folders, copying documents, and locking them;
+  - moving and deleting folders, copying documents, and locking them;
   - tags, and a bookmark's own name and description (the Bookmarks section; the app's My Favorites adds and removes
     them).
 

@@ -5,14 +5,16 @@ import { useQueries } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
-import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, t, type ItemMenu, type TreeNode } from '@healdan/ui'
+import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, t, toast, type ItemMenu, type TreeNode } from '@healdan/ui'
 import { favoriteTooltip } from '../actions/favoriteName'
 import { useMyMattersChange } from '../actions/myMatters'
+import { whyNotRename } from '../actions/rename'
 import { carriesRows, placeOf, takesDrag, type Place } from '../filing/dropTargets'
 import { useFiling } from '../filing/FilingProvider'
 import { FavoriteMenuItems, folderMenu, MatterMenuItems } from '../menus/ContextMenus'
 import { useOrganising } from '../organising/OrganisingProvider'
-import { fetchSubfolders, idFrom, keys, useFavorites, useFolder, useMyMatters, useRecentMatters } from '../queries'
+import { FolderName } from '../organising/RenameField'
+import { fetchSubfolders, idFrom, keys, useFavorites, useFolder, useMe, useMyMatters, useRecentMatters } from '../queries'
 import { useApi } from '../services'
 import { fileIcon, folderIcon, matterIcon } from '../kindIcons'
 import { recentKinds, scopeIcons } from '../search/scopes'
@@ -141,7 +143,7 @@ function folderLabel(folder: S['FolderView']): ReactNode {
   return (
     <>
       <Icon {...folderIcon(folder.kind)} />
-      <span className={styles.text}>{folder.name}</span>
+      <FolderName folder={folder} place="tree" className={styles.text} />
     </>
   )
 }
@@ -154,6 +156,7 @@ function MyMattersSection() {
   const change = useMyMattersChange()
   const filing = useFiling()
   const organising = useOrganising()
+  const me = useMe()
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const matters = mine.data?.items ?? []
 
@@ -207,6 +210,13 @@ function MyMattersSection() {
       label: folderLabel(folder),
       expandable: folder.kind === 'folder',
       children: expanded.has(id) ? childrenOf(id) : undefined,
+      menu: (
+        <Menu variant="quiet" label={<Icon name="dots" />} aria-label={t('tree.more', { name: folder.name })}>
+          <MenuItem id="rename" isDisabled={!folder.canRename} onAction={() => organising.startRename(`f${folder.id}`, 'tree')}>
+            {t('rename.menu')}
+          </MenuItem>
+        </Menu>
+      ),
     }
   }
 
@@ -228,6 +238,9 @@ function MyMattersSection() {
       children: expanded.has(id) ? childrenOf(id) : undefined,
       menu: (
         <Menu variant="quiet" label={<Icon name="dots" />} aria-label={t('tree.more', { name: matter.display })}>
+          <MenuItem id="rename" isDisabled>
+            {t('rename.menu')}
+          </MenuItem>
           <MenuItem id="remove" onAction={() => void change('DELETE', matter.folderId)}>
             {t('myMatters.remove')}
           </MenuItem>
@@ -259,8 +272,16 @@ function MyMattersSection() {
             items: (id) => {
               if (matters.some((matter) => String(matter.folderId) === id)) return <MatterMenuItems folderId={Number(id)} />
               const folder = folders.get(id)
-              return folder && folderMenu(folder)
+              return folder && folderMenu(folder, 'tree')
             },
+          }}
+          onRename={(id) => {
+            if (matters.some((matter) => String(matter.folderId) === id)) return toast(t('rename.matterFolder'))
+            const folder = folders.get(id)
+            if (!folder) return
+            const why = whyNotRename(folder, me.data?.admin)
+            if (why) toast(why)
+            else organising.startRename(`f${folder.id}`, 'tree')
           }}
           // Files are filed into the folder, and the list's own rows are moved there; both light the folder up
           acceptsDrop={(id, types) => places.has(id) && (takesDrag(types) || carriesRows(types))}
