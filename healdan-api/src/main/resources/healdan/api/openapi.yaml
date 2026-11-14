@@ -1939,6 +1939,54 @@ paths:
                 $ref: '#/components/schemas/FolderView'
         default:
           $ref: '#/components/responses/Problem'
+    patch:
+      operationId: renameFolder
+      summary: Rename a folder
+      description: |
+        Renames a folder inside a matter through the same call the old UI's
+        Rename uses, and returns it. Spaces at either end are taken off, and
+        the same name changes nothing. A folder's `canRename` says whether
+        this would rename it.
+
+        The checks run in this order:
+
+        1. `400 bad-request` for a body that isn't the JSON expected.
+        2. `404 not-found` for a folder the caller can't read, one outside
+           the Stores, and an alias, as `getFolder` answers.
+        3. `409 not-renamable` for a Store, and for a matter's own folder,
+           which takes the matter's name through Edit Matter, administrators
+           included.
+        4. `403 forbidden` without the Rename permission on the folder.
+        5. `403 admins-only` for a folder directly in a matter's workspace,
+           search folders included, unless the caller is an administrator.
+        6. `422 validation` for the field `name`: `required`, `too-long`
+           (over 255 characters) and `invalid` (a `/`, a `\`, a control
+           character, one the database can't store, such as an emoji, or
+           any HTML tag).
+        7. `409 name-taken` when another folder in the same folder has the
+           name, compared without regard to case. Changing only the case of
+           the folder's own name works.
+        8. `409 refused` when one of Healdan's rules refuses, or when the
+           folder moved to another folder while it was being renamed: try
+           again.
+      tags: [Folders]
+      parameters:
+        - $ref: '#/components/parameters/FolderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameRequest'
+      responses:
+        '200':
+          description: The folder, renamed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderView'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/folders/{id}/children:
     get:
       operationId: listFolderChildren
@@ -2397,7 +2445,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, web-session-refused, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, no-preview, not-an-email, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, web-session-refused, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, not-renamable, admins-only, name-taken, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, no-preview, not-an-email, server-error]
         fields:
           type: array
           items:
@@ -3073,7 +3121,7 @@ components:
     FolderView:
       type: object
       additionalProperties: false
-      required: [type, id, name, kind, matter, store, path, canFile]
+      required: [type, id, name, kind, matter, store, path, canFile, canRename]
       properties:
         type:
           type: string
@@ -3102,6 +3150,13 @@ components:
         canFile:
           type: boolean
           description: Whether the caller may file documents into the folder. Only a folder inside a matter can be filed into.
+        canRename:
+          type: boolean
+          description: |
+            Whether `renameFolder` would rename the folder for the caller: a
+            folder or a search folder, never a Store or a matter's own folder;
+            with the Rename permission; and, directly in a matter's workspace,
+            only for an administrator.
     MatterView:
       type: object
       additionalProperties: false
@@ -3195,13 +3250,13 @@ components:
       type: object
       additionalProperties: false
       required: [name]
-      description: The body of `renameDocument`.
+      description: The body of `renameDocument` and `renameFolder`.
       properties:
         name:
           type: string
           description: |
-            The document's new file name, at most 255 characters. Without the
-            document's extension it keeps it.
+            The new name, at most 255 characters. A document's without its
+            extension keeps it.
     MoveRequest:
       type: object
       additionalProperties: false

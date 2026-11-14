@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { setLabels } from '@healdan/ui'
@@ -220,6 +221,94 @@ describe('LeftPane', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Remove from My Matters' }))
     await waitFor(() => expect(within(pane()).queryByRole('treegrid', { name: 'My Matters' })).toBeNull())
     expect(api.callsTo('DELETE /v1/me/matters/110')).toHaveLength(1)
+  })
+
+  it('renames a folder of the tree from its ⋯, in place', async () => {
+    let name = 'Correspondence'
+    const { api } = await renderApp('/folders/1', {
+      'GET /v1/folders/110/children': () => page([folder({ id: 111, name })]),
+      'PATCH /v1/folders/*': ({ body }: { body?: unknown }) => {
+        name = (body as { name: string }).name
+        return folder({ id: 111, name })
+      },
+    })
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
+    await within(tree).findByRole('row', { name: /Correspondence/ })
+    fireEvent.click(within(tree).getByRole('button', { name: 'More for Correspondence' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }))
+    const input = (await screen.findByRole('textbox', { name: 'New Name of Correspondence' })) as HTMLInputElement
+    await waitFor(() => expect(document.activeElement).toBe(input))
+    await userEvent.keyboard('Letters{Enter}')
+    await waitFor(() => expect(api.callsTo('PATCH /v1/folders/111')).toHaveLength(1))
+    expect(await within(tree).findByRole('row', { name: /Letters/ })).toBeTruthy()
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-tree-key')).toBe('111'))
+  })
+
+  it('renames a folder of the tree with F2', async () => {
+    const { api } = await renderApp('/folders/1', {
+      'PATCH /v1/folders/*': () => folder({ id: 111, name: 'Letters' }),
+    })
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
+    const target = await within(tree).findByRole('row', { name: /Correspondence/ })
+    target.focus()
+    await userEvent.keyboard('{F2}')
+    const input = await screen.findByRole('textbox', { name: 'New Name of Correspondence' })
+    await waitFor(() => expect(document.activeElement).toBe(input))
+    await userEvent.keyboard('Letters{Enter}')
+    await waitFor(() => expect(api.callsTo('PATCH /v1/folders/111')).toHaveLength(1))
+  })
+
+  it('renames a folder of the tree from its right-click menu', async () => {
+    const { api } = await renderApp('/folders/1', {
+      'PATCH /v1/folders/*': () => folder({ id: 111, name: 'Letters' }),
+    })
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
+    fireEvent.contextMenu(await within(tree).findByRole('row', { name: /Correspondence/ }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }))
+    const input = await screen.findByRole('textbox', { name: 'New Name of Correspondence' })
+    await waitFor(() => expect(document.activeElement).toBe(input))
+    await userEvent.keyboard('Letters{Enter}')
+    await waitFor(() => expect(api.callsTo('PATCH /v1/folders/111')).toHaveLength(1))
+  })
+
+  it("greys Rename out on a matter, and F2 there says the matter's folder takes its name", async () => {
+    await renderApp('/folders/1')
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    // Found before the menu opens: while it is open the rest of the page is hidden from the accessibility tree
+    const matterRow = within(tree).getByRole('row', { name: /1001\.1/ })
+    fireEvent.click(within(tree).getByRole('button', { name: 'More for 1001.1 – Charter Dispute' }))
+    expect((await screen.findByRole('menuitem', { name: 'Rename' })).getAttribute('aria-disabled')).toBe('true')
+    // Esc goes to the menu only once it has the focus
+    await waitFor(() => expect(document.activeElement?.closest('[role="menu"]')).not.toBeNull())
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    matterRow.focus()
+    await userEvent.keyboard('{F2}')
+    expect(await screen.findByText(/own folder takes the matter's name/)).toBeTruthy()
+    expect(screen.queryByRole('textbox')).toBeNull()
+  })
+
+  it("greys Rename out on a folder the person can't rename, and F2 says why", async () => {
+    await renderApp('/folders/1', {
+      'GET /v1/folders/110/children': () =>
+        page([folder({ id: 111, name: 'Correspondence', canRename: false, path: [{ id: 2, name: 'Smoke', kind: 'store' }, { id: 110, name: '1001.1 – Charter Dispute', kind: 'matter' }, { id: 111, name: 'Correspondence', kind: 'folder' }] })]),
+    })
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
+    const target = await within(tree).findByRole('row', { name: /Correspondence/ })
+    fireEvent.click(within(tree).getByRole('button', { name: 'More for Correspondence' }))
+    expect((await screen.findByRole('menuitem', { name: 'Rename' })).getAttribute('aria-disabled')).toBe('true')
+    // Esc goes to the menu only once it has the focus
+    await waitFor(() => expect(document.activeElement?.closest('[role="menu"]')).not.toBeNull())
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    target.focus()
+    await userEvent.keyboard('{F2}')
+    // The fake /v1/me isn't an admin, and Correspondence is at the matter's top level
+    expect(await screen.findByText("Only administrators can rename a matter's top-level folders.")).toBeTruthy()
   })
 
   it('asks for Recent Clients again when My Matters changes, as its clients come from both', async () => {

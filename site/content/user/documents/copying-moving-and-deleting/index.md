@@ -3,7 +3,7 @@ title: Copying, Moving and Deleting
 weight: 6
 ---
 
-In the app you can rename, move and delete documents, and make folders. Copying a document, and moving, renaming or
+In the app you can rename, move and delete documents, and make and rename folders. Copying a document, and moving or
 deleting a folder, are in the [Classic Interface](../../the-classic-interface/). What you can't do to a document, because of
 its permissions or because it's locked or checked out, is refused with a message in the app, and greyed out in the Classic Interface.
 All of it works in any list of documents in the app: a folder, search results, the Recent lists and a document's own
@@ -80,6 +80,35 @@ takes its parent's properties and permissions, and you need the Add permission o
 
 The button isn't there at the top of a matter, in a search folder or in a Store. Only administrators can add folders to the
 top of a matter's workspace.
+
+## Renaming a Folder in the App
+
+Its name becomes a field, with all of it selected. **Enter** saves, and so does clicking away after you've changed it;
+**Esc** leaves it as it was. There are four ways in:
+
+- **In a list,** move to the folder's row with the arrow keys and press **F2**. That works in a folder, in a
+  **Folders** search and in **Recent › Folders**.
+- **In My Matters** in the left pane, point at the folder and choose its **⋯** button, then **Rename**, or move to
+  it with the arrow keys and press **F2**.
+- **The folder you have open:** choose the **⋯** button beside its name above the list, then **Rename**.
+- **Right-click the folder,** in a list or in My Matters, and choose **Rename** (see
+  [Right-Click Menus](../../getting-started/getting-around/#right-click-menus)).
+
+Some renames aren't allowed, and the app says why:
+
+- **You need the Rename permission** on the folder. Without it, **Rename** is greyed out and **F2** says "You don't
+  have permission to rename this folder."
+- **Only administrators rename the folders at the top of a matter,** such as Correspondence and Drafts, search
+  folders included. For anyone else **Rename** is greyed out there, and **F2** says "Only administrators can rename a
+  matter's top-level folders."
+- **A matter's own folder isn't renamed here.** It takes the matter's name, which an administrator changes with
+  **Edit Matter…** in the Classic Interface, so **Rename** is greyed out on it.
+- **Two folders side by side can't share a name.** Healdan says "There's already a folder called Drafts here." beside
+  the field, which stays open for you to choose another. Changing only the case of the folder's own name, such as
+  `drafts` to `Drafts`, works.
+- **A name can't have** `/`, `\`, emoji or HTML tags in it.
+
+The rename is in the folder's history. Its documents keep their doc #s and properties.
 
 ## In the Classic Interface
 

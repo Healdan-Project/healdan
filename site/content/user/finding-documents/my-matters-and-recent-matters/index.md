@@ -14,6 +14,8 @@ open it in the main area.
 
 - **The tree opens to where you are.** When the folder open in the main area is inside one of your matters, the tree
   opens the folders above it and marks its row.
+- **Rename a folder** with its **⋯** button, shown while you point at it or move to it with the arrow keys, or with
+  **F2**. See [Renaming a Folder in the App](../../documents/copying-moving-and-deleting/#renaming-a-folder-in-the-app).
 - **To add a matter,** open it, or any folder in it, and click **+** beside the **My Matters** heading. The **+**
   shows only while you're in a matter that isn't in the list yet. Or right-click the matter in **Recent Matters**, or in
   a search for matters, and choose **Add to My Matters**.

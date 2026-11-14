@@ -3,31 +3,82 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useRef, useState } from 'react'
+import type { components } from '@healdan/api'
 import { t } from '@healdan/ui'
 import { invalidateDocumentLists } from '../actions/refresh'
-import { extensionOf, renameDocument, renameRefusal } from '../actions/rename'
+import { extensionOf, folderRenameRefusal, renameDocument, renameFolder, renameRefusal } from '../actions/rename'
 import type { Movable } from '../actions/batch'
 import { useMe } from '../queries'
 import { useApi } from '../services'
-import { useOrganising } from './OrganisingProvider'
+import { useOrganising, type RenamePlace } from './OrganisingProvider'
 import styles from './organising.module.css'
+
+type S = components['schemas']
 
 /**
  * A document's title in a list: its name, or while it's being renamed (F2, or More › Rename) a field in its place
- * (spec 6.7). Enter saves, Esc cancels, and leaving the field saves what was changed. A refusal keeps the field open
- * with what is wrong beside it.
+ * (spec 6.7). It keeps its extension, so the name without it is selected.
  */
 export function DocumentTitle({ document, className }: { document: Movable; className?: string }) {
-  const { renaming } = useOrganising()
-  return renaming === document.docNumber ? <RenameField document={document} /> : <span className={className}>{document.name}</span>
+  const { renaming, stopRename } = useOrganising()
+  const api = useApi()
+  const me = useMe()
+  if (renaming?.key !== `d${document.docNumber}` || renaming.place !== 'row') return <span className={className}>{document.name}</span>
+  const extension = extensionOf(document.name)
+  return (
+    <RenameField
+      name={document.name}
+      selected={extension ? document.name.length - extension.length - 1 : document.name.length}
+      save={(name) => renameDocument(api, document.docNumber, name)}
+      refusal={(error) => renameRefusal(error, document.name, me.data?.id)}
+      onDone={stopRename}
+    />
+  )
 }
 
-function RenameField({ document }: { document: Movable }) {
+/**
+ * A folder's name where it shows (a list's row, the My Matters tree, the open folder's heading), or while it's being
+ * renamed there a field in its place (folder rename spec 5.3), with all of the name selected.
+ */
+export function FolderName({ folder, place, className }: { folder: S['FolderView']; place: RenamePlace; className?: string }) {
+  const { renaming, stopRename } = useOrganising()
   const api = useApi()
+  if (renaming?.key !== `f${folder.id}` || renaming.place !== place) return <span className={className}>{folder.name}</span>
+  return (
+    <RenameField
+      name={folder.name}
+      selected={folder.name.length}
+      save={(name) => renameFolder(api, folder.id, name)}
+      refusal={folderRenameRefusal}
+      onDone={stopRename}
+      // The tree is narrow: what is wrong goes below the field there
+      stacked={place === 'tree'}
+    />
+  )
+}
+
+interface RenameFieldProps {
+  /** The name as it is: the field's first text, and its label's */
+  name: string
+  /** How much of the name, from its start, is selected when the field opens */
+  selected: number
+  /** Saves the new name; a refusal throws */
+  save: (name: string) => Promise<unknown>
+  /** What to say of a refusal; `typed` is the name sent */
+  refusal: (error: unknown, typed: string) => string
+  /** The rename is over; `focusBack`: the field had the focus, which goes back where the rename began */
+  onDone: (focusBack: boolean) => void
+  /** What is wrong goes below the field, wrapping, rather than beside it: for a narrow place */
+  stacked?: boolean
+}
+
+/**
+ * Enter saves, Esc cancels, and leaving the field saves what was changed. A refusal keeps the field open with what is
+ * wrong beside it. Whether it worked or not, what shows names is asked for again.
+ */
+function RenameField({ name, selected, save, refusal, onDone, stacked = false }: RenameFieldProps) {
   const queryClient = useQueryClient()
-  const { stopRename } = useOrganising()
-  const me = useMe()
-  const [text, setText] = useState(document.name)
+  const [text, setText] = useState(name)
   const [error, setError] = useState<string>()
   const input = useRef<HTMLInputElement>(null)
   const errorId = useId()
@@ -35,47 +86,46 @@ function RenameField({ document }: { document: Movable }) {
   const finished = useRef(false)
   const saving = useRef(false)
 
-  // The name without its extension is selected, as Finder does
   useEffect(() => {
     const field = input.current
     if (!field) return
+    // React Aria's tree sends a focus that enters it from outside (the ⋯ menu's popover) to its focused row, which can be
+    // another one: the field's own row takes the focus first, as a right-click menu's does when it opens
+    if (globalThis.document.activeElement !== field) field.closest<HTMLElement>('[role="treegrid"] [role="row"]')?.focus({ preventScroll: true })
     field.focus()
-    const extension = extensionOf(document.name)
-    field.setSelectionRange(0, extension ? document.name.length - extension.length - 1 : document.name.length)
-  }, [document.name])
+    field.setSelectionRange(0, selected)
+  }, [selected])
 
   /** `fromKey`: Enter saved, so the focus is the field's to give back; a save on leaving leaves it where the person put it */
-  async function save(fromKey: boolean) {
+  async function submit(fromKey: boolean) {
     if (finished.current || saving.current) return
-    const name = text.trim()
-    if (name === document.name) return stop(fromKey)
+    const typed = text.trim()
+    if (typed === name) return stop(fromKey)
     saving.current = true
     try {
-      await renameDocument(api, document.docNumber, name)
+      await save(typed)
       stop(fromKey)
     } catch (failure) {
-      setError(renameRefusal(failure, document.name, me.data?.id))
+      setError(refusal(failure, typed))
       if (fromKey) input.current?.focus()
     } finally {
       saving.current = false
-      // Whether it worked or not, what shows the document is asked again
       void invalidateDocumentLists(queryClient)
     }
   }
 
-  /** `focusRow`: the field had the focus, which goes to the row; not when the person left the field for somewhere else */
-  function stop(focusRow = true) {
+  function stop(focusBack = true) {
     finished.current = true
-    stopRename(document.docNumber, focusRow)
+    onDone(focusBack)
   }
 
   return (
-    <span className={styles.rename}>
+    <span className={stacked ? `${styles.rename} ${styles.stacked}` : styles.rename}>
       <input
         ref={input}
         className={styles.renameInput}
         value={text}
-        aria-label={t('rename.field', { name: document.name })}
+        aria-label={t('rename.field', { name })}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
         onChange={(event) => {
@@ -83,12 +133,12 @@ function RenameField({ document }: { document: Movable }) {
           setError(undefined)
         }}
         onKeyDown={(event) => {
-          // Not the list's: Space, Delete and the arrows are the field's own while it has the focus
+          // Not the list's or the tree's: Space, Delete, the arrows and typing are the field's own while it has the focus
           event.stopPropagation()
           if (event.key === 'Enter') {
             event.preventDefault()
             if (text.trim() === '') setError(t('fields.required'))
-            else void save(true)
+            else void submit(true)
           } else if (event.key === 'Escape') {
             event.preventDefault()
             stop()
@@ -97,9 +147,9 @@ function RenameField({ document }: { document: Movable }) {
         onBlur={() => {
           // Leaving the field with nothing changed, nothing in it, or a refusal showing is a cancel; with a new name, a save
           if (text.trim() === '' || error) stop(false)
-          else void save(false)
+          else void submit(false)
         }}
-        // A press or a double-click in the field is the field's: it doesn't select the row or open it
+        // A press or a double-click in the field is the field's: it doesn't select the row, open it or open the tree's folder
         onPointerDown={(event) => event.stopPropagation()}
         onMouseDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}

@@ -75,9 +75,11 @@
   min-width: 0;
 }
 
+/* It grows into the room there is, and never shrinks below about ten characters for what is wrong beside it, unless the place
+   itself is narrower */
 .renameInput {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 16ch;
+  min-width: min(10ch, 100%);
   box-sizing: border-box;
   min-height: 24px;
   padding: 0 var(--hd-space-2);
@@ -105,4 +107,16 @@
   white-space: nowrap;
   color: var(--hd-required);
   font-size: var(--hd-font-size-small);
+}
+
+/* In the My Matters tree, which is narrow, what is wrong goes below the field, wrapping, rather than beside it */
+.stacked {
+  flex-wrap: wrap;
+  row-gap: var(--hd-space-1);
+}
+
+.stacked .renameError {
+  flex-basis: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }

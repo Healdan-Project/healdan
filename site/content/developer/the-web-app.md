@@ -277,6 +277,13 @@ for the toolbar's More menu (`actions/MoreMenu.tsx`).
   and `DELETE /documents/{n}`. A change to several documents (`actions/batch.ts`) is a call for each, one after another, which
   keeps going when one is refused, so what was done stays done; the refusals come back as lines, each the document's name
   and why, from the catalogue (`filing/refusal.ts`: a hold says who holds it, an `already-filed` names the copy).
+- **Renaming folders** uses the same field. `RenameField.tsx` holds one field for documents and folders
+  (`DocumentTitle`, `FolderName`), and `OrganisingProvider`'s `renaming` is a row key and a place (`row`, `tree`,
+  `heading`), where the focus goes back once it's done. F2 on a folder's row in a list or in the My Matters tree, the
+  tree's ⋯, the ⋯ beside the open folder's name and the folder's right-click menu all start it, and `canRename` on the
+  folder decides whether **Rename** is greyed out. A save that ends after another rename began leaves that one open. In
+  the tree, which is narrow, a refusal goes below the field (`stacked`), and a row's ⋯ sits over the row's end
+  (`Tree.module.css`), so a hidden one takes none of the name's width.
 - **Rename in place.** `RenameField` replaces the title in the row. Enter saves, Esc cancels, and leaving the field with a
   new name saves it. A refusal keeps the field open with the message beside it (`renameRefusal` words another extension
   as what to do about it), and the focus goes back to the row when the field goes. The field stops its key and pointer
@@ -295,7 +302,7 @@ for the toolbar's More menu (`actions/MoreMenu.tsx`).
   still listed, so once they're deleted or moved F2 and Delete take the focused row.
 
 Test it with `organising/*.test.tsx`; `testing.tsx` has routes for a folder that rename, move and delete as the server
-would, and a `DataTransfer` that keeps what a drag writes. `e2e/organising.spec.ts` does it in a real browser.
+would, and a `DataTransfer` that keeps what a drag writes. `e2e/organising.spec.ts` does it in a real browser, and `e2e/folders.spec.ts` for renaming folders.
 
 ## The Search Box and Search Results
 

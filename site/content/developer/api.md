@@ -303,7 +303,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 |---|---|
 | The server and you | `GET /server`, `GET /me`, `GET /users?q=` for user fields such as Author |
 | Signing in | `POST /auth/tokens`, `GET /auth/tokens`, `DELETE /auth/tokens/current`, `DELETE /auth/tokens/{id}`; `DELETE /session` for the web session |
-| Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /clients/recent`, `PUT` and `DELETE /me/matters/{folderId}`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
+| Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /clients/recent`, `PUT` and `DELETE /me/matters/{folderId}`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`, `PATCH /folders/{id}` to rename; `GET /stores` and `/stores/{id}/matters` for administrators only |
 | Finding | `GET /search?scope=&q=&within=`, with filters and `facets`, `GET /suggest?q=` for the search box as someone types, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
 | A document | `GET /documents/{docNumber}`, `/content`, `/preview`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone; `PATCH /documents/{docNumber}` to rename, `POST /documents/{docNumber}/move` and `DELETE /documents/{docNumber}` |
@@ -463,6 +463,16 @@ refused` for an immutable document, unless the caller is an administrator, as CE
   only the Classic Interface restores from, and the document is `404` from then on. A checked-out document is
   `409 checked-out` for everyone, the caller too: release it first. The document goes first and then its shortcuts, so a rule
   that refuses it leaves them.
+
+`PATCH /api/v1/folders/{id}` with `{ "name": "…" }` renames a folder inside a matter and answers it. Its checks run in
+this order: `400 bad-request` for a body that isn't the JSON expected; `404` for a folder you can't read; `409
+not-renamable` for a Store or a matter's own folder, which takes the matter's name through Edit Matter; `403 forbidden`
+without the Rename permission; `403 admins-only` for a folder directly in a matter's workspace, search folders
+included, unless you're an administrator; `422 validation` for the name (`required`, `too-long`, `invalid`: `/`, `\`, a
+control character, an emoji or another character the database can't store, or HTML tags); `409 name-taken` when
+another folder beside it has the name, without regard to case; and `409 refused` when one of Healdan's rules refuses, or
+when the folder moved to another folder while it was being renamed (try again).
+Every folder carries `canRename`, which says whether the call would rename it for you.
 
 ## Favorites
 

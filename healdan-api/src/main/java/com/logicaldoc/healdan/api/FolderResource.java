@@ -34,6 +34,7 @@ import com.logicaldoc.healdan.api.model.FolderChildPage;
 import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.api.model.NewFolder;
 import com.logicaldoc.healdan.api.model.Page;
+import com.logicaldoc.healdan.api.model.RenameRequest;
 import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.listing.Facets;
 import com.logicaldoc.healdan.listing.FolderListing;
@@ -48,6 +49,7 @@ import com.logicaldoc.healdan.security.AccessChecks;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -69,6 +71,8 @@ import jakarta.ws.rs.core.UriInfo;
 @Path("/v1/folders")
 @Produces(MediaType.APPLICATION_JSON)
 public class FolderResource {
+
+	private final FolderRenames renames = new FolderRenames();
 
 	/** The most documents a search folder shows */
 	static final int SEARCH_FOLDER_CAP = 1000;
@@ -163,6 +167,21 @@ public class FolderResource {
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read folder #" + id, e);
 		}
+	}
+
+	/**
+	 * Renames a folder inside a matter (folder rename spec section 4.1). See
+	 * {@link FolderRenames} for the checks and their order.
+	 *
+	 * @param id the folder's id
+	 * @param request the new name
+	 * @return the folder, renamed
+	 */
+	@PATCH
+	@Path("{id: [0-9]+}")
+	@Consumes(MediaType.APPLICATION_JSON)
+	public FolderView rename(@PathParam("id") long id, RenameRequest request) {
+		return renames.rename(id, request == null ? null : request.name(), Caller.current());
 	}
 
 	/**

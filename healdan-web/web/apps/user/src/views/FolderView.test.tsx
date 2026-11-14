@@ -322,3 +322,41 @@ describe('FolderView', () => {
     await expectNoAxeViolations(main())
   })
 })
+
+describe("The open folder's heading", () => {
+  it('renames the open folder from the ⋯ beside its name', async () => {
+    let name = 'Correspondence'
+    const open = () => folder({ id: 111, name, path: [store, workspace, { id: 111, name, kind: 'folder' }] })
+    const { api } = await renderApp('/folders/111', {
+      'GET /v1/folders/111': () => open(),
+      'GET /v1/folders/111/children': children([]),
+      'PATCH /v1/folders/*': ({ body }: { body?: unknown }) => {
+        name = (body as { name: string }).name
+        return open()
+      },
+    })
+    fireEvent.click(await within(main()).findByRole('button', { name: 'More for Correspondence' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }))
+    const input = await screen.findByRole('textbox', { name: 'New Name of Correspondence' })
+    await waitFor(() => expect(globalThis.document.activeElement).toBe(input))
+    await userEvent.keyboard('Letters{Enter}')
+    await waitFor(() => expect(api.callsTo('PATCH /v1/folders/111')).toHaveLength(1))
+    expect(await within(main()).findByRole('heading', { level: 1, name: 'Letters' })).toBeTruthy()
+    await waitFor(() => expect(globalThis.document.activeElement?.closest('[data-rename-menu]')?.getAttribute('data-rename-menu')).toBe('f111'))
+  })
+
+  it("greys Rename out on a matter's own heading", async () => {
+    await renderApp('/folders/110', {
+      'GET /v1/folders/110': folder({ id: 110, name: '1001.1 – Charter Dispute', kind: 'matter', canRename: false, canFile: false, path: [store, workspace] }),
+      'GET /v1/folders/110/children': children([]),
+    })
+    fireEvent.click(await within(main()).findByRole('button', { name: 'More for 1001.1 – Charter Dispute' }))
+    expect((await screen.findByRole('menuitem', { name: 'Rename' })).getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('has no ⋯ on a Store, which opens as no folder', async () => {
+    await renderApp('/folders/2', { 'GET /v1/folders/2': folder({ id: 2, name: 'Smoke', kind: 'store', matter: null, canRename: false, canFile: false, path: [store] }) })
+    await within(main()).findByRole('heading', { level: 1, name: 'Smoke' })
+    expect(within(main()).queryByRole('button', { name: 'More for Smoke' })).toBeNull()
+  })
+})

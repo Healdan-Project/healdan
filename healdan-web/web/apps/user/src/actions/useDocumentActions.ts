@@ -95,7 +95,7 @@ export function useDocumentActions({ document, documents, preview = document?.do
           }
         : undefined,
     release: document && yours ? { id: 'release', label: t('checkout.release'), isDisabled: checkout.busy, perform: () => void checkout.release() } : undefined,
-    rename: { id: 'rename', label: t('rename.menu'), isDisabled: !one, perform: () => one && organising.startRename(one.docNumber) },
+    rename: { id: 'rename', label: t('rename.menu'), isDisabled: !one, perform: () => one && organising.startRename(`d${one.docNumber}`) },
     move: { id: 'move', label: t('move.menu'), isDisabled: documents.length === 0, perform: () => organising.askMove(documents) },
     delete: { id: 'delete', label: t('delete.menu'), isDisabled: documents.length === 0, perform: () => organising.askDelete(documents) },
     copyLink: { id: 'copyLink', label: t('details.copyLink'), isDisabled: !one, perform: () => one && void copyLink(one.docNumber) },
