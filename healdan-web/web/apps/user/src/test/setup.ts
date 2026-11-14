@@ -20,5 +20,7 @@ afterEach(() => {
   cleanup()
   clearToasts()
   resetViewport()
+  // What a test kept as a preference (the panes' widths) isn't the next one's
+  window.localStorage.clear()
   setLabels({ matter: 'Matter', matters: 'Matters' })
 })

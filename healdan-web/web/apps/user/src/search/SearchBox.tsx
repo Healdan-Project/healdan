@@ -148,7 +148,7 @@ export function SearchBox() {
       <Menu
         label={
           <span className={styles.scope}>
-            <Icon name={scopeIcons[scope]} />
+            <Icon {...scopeIcons[scope]} />
             {scopeName}
             <Icon name="chevronDown" size={13} />
           </span>
@@ -156,7 +156,8 @@ export function SearchBox() {
         aria-label={`${t('search.scope')}: ${scopeName}`}
       >
         {searchScopes.map((one) => (
-          <MenuItem key={one} id={one} onAction={() => setScope(one)}>
+          <MenuItem key={one} id={one} textValue={t(`scope.${one}`)} onAction={() => setScope(one)}>
+            <Icon {...scopeIcons[one]} />
             {t(`scope.${one}`)}
           </MenuItem>
         ))}

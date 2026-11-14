@@ -10,9 +10,19 @@ function block(source: string): Record<string, string> {
   return Object.fromEntries([...source.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2]!.trim()]))
 }
 
+// A token that is another's, `var(--hd-…)`, takes that one's value in the same scheme, as the browser does on :root.
+function resolved(tokens: Record<string, string>): Record<string, string> {
+  const valueOf = (value: string): string => {
+    const other = /^var\((--[\w-]+)\)$/.exec(value)?.[1]
+    return other && tokens[other] ? valueOf(tokens[other]) : value
+  }
+  return Object.fromEntries(Object.entries(tokens).map(([name, value]) => [name, valueOf(value)]))
+}
+
 const dark = block(css.slice(css.indexOf('@media (prefers-color-scheme: dark)')))
-const light = block(css.slice(0, css.indexOf('@media (prefers-color-scheme: dark)')))
-const darkAll = { ...light, ...dark }
+const lightOwn = block(css.slice(0, css.indexOf('@media (prefers-color-scheme: dark)')))
+const light = resolved(lightOwn)
+const darkAll = resolved({ ...lightOwn, ...dark })
 
 function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
@@ -40,15 +50,36 @@ const PAIRS: [string, string][] = [
 // fill never touches it), at the 3:1 that non-text contrast asks for.
 const FOCUS_SURFACES = [...PLAIN, ...TEXT_ONLY]
 
+// The icons that stand for a kind of item (icons.ts) are graphics, so they need the 3:1 of WCAG 1.4.11 on every surface
+// one sits on: a list, a dialog or a popup (window), a hovered row (row-alt), the left pane and the scope picker
+// (sidebar), the left pane's hovered rows (line), its open entry and a row a file is dragged over (pill), a selected row
+// while the list hasn't the focus (selection-inactive), and the details' thumbnail (field). On the accent fill they take
+// --hd-accent-on-fill, which PAIRS checks.
+const KINDS = Object.keys(lightOwn).filter((name) => name.startsWith('--hd-kind-'))
+const KIND_SURFACES = ['window', 'row-alt', 'sidebar', 'line', 'pill', 'selection-inactive', 'field']
+const KIND_PAIRS = KINDS.flatMap((kind) => KIND_SURFACES.map((bg): [string, string] => [kind, `--hd-${bg}`]))
+
 describe('tokens.css', () => {
   it('defines the row height and the same names for dark as light', () => {
     expect(light['--row-height']).toBe('34px')
     for (const name of Object.keys(dark)) expect(light).toHaveProperty([name])
   })
 
+  // Light's colours are too dark for the dark theme: each kind has its own there, unless it is another token, which does
+  it('gives every kind a colour of its own in dark, or one that follows another token', () => {
+    expect(KINDS.length).toBeGreaterThan(0)
+    for (const kind of KINDS) {
+      if (!lightOwn[kind]!.startsWith('var(')) expect(dark).toHaveProperty([kind])
+    }
+  })
+
   for (const [scheme, tokens] of [['light', light], ['dark', darkAll]] as const) {
     it.each(PAIRS)(`${scheme}: %s on %s reaches AA`, (fg, bg) => {
       expect(contrast(tokens[fg]!, tokens[bg]!)).toBeGreaterThanOrEqual(4.5)
+    })
+
+    it.each(KIND_PAIRS)(`${scheme}: the kind colour %s shows on %s`, (fg, bg) => {
+      expect(contrast(tokens[fg]!, tokens[bg]!)).toBeGreaterThanOrEqual(3)
     })
 
     it.each(FOCUS_SURFACES)(`${scheme}: the focus edge shows on --hd-%s`, (bg) => {

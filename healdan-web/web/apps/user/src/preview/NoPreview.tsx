@@ -3,7 +3,7 @@
 
 import { Icon, t } from '@healdan/ui'
 import { OpenDownload } from '../actions/OpenDownload'
-import { fileIcon } from '../fileIcon'
+import { fileIcon } from '../kindIcons'
 import type { components } from '@healdan/api'
 import styles from './preview.module.css'
 
@@ -11,7 +11,7 @@ import styles from './preview.module.css'
 export function NoPreview({ document, message = t('preview.none'), showActions = true, version }: { document: components['schemas']['DocumentView']; message?: string; showActions?: boolean; version?: string }) {
   return (
     <div className={styles.none}>
-      <Icon name={fileIcon(document.name)} size={48} />
+      <Icon {...fileIcon(document.name)} size={48} />
       <p className={styles.noneMessage}>{message}</p>
       {showActions && (
         <div className={styles.noneActions}>

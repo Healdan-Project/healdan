@@ -291,6 +291,29 @@ describe('SearchView', () => {
     await waitFor(() => expect(router.history.location.pathname).toBe('/app/folders/111'))
   })
 
+  it('draws a folder by its kind: a search folder in the folders\' colour, and a matter\'s own folder as the matter', async () => {
+    await renderApp(
+      '/search?scope=folders&q=charter',
+      routes({
+        'GET /v1/search': hits([
+          folder({ id: 111, name: 'Charter Correspondence' }),
+          folder({ id: 112, name: 'Charter Docs Here', kind: 'searchFolder' }),
+          folder({ id: 110, name: '1001.1 – Charter Dispute', kind: 'matter' }),
+        ]),
+      }),
+    )
+    await within(await grid()).findByRole('row', { name: /Charter Docs Here/ })
+    const icons = (await rows()).map((row) => {
+      const svg = row.querySelector('svg')!
+      return [/tabler-icon-([\w-]+)/.exec(svg.getAttribute('class')!)![1], svg.getAttribute('data-kind')]
+    })
+    expect(icons).toEqual([
+      ['folder', 'folder'],
+      ['folder-search', 'folder'],
+      ['briefcase', 'matter'],
+    ])
+  })
+
   it.each(['matters', 'clients'])('shows a %s search as matters, which open at their workspace', async (scope) => {
     const { router, api } = await renderApp(
       `/search?scope=${scope}&q=1001`,

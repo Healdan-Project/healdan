@@ -6,6 +6,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
+import '../tokens.css'
+import { Icon } from '../icons'
 import { ComboBox, type ComboBoxSection } from './ComboBox'
 
 const sections: ComboBoxSection[] = [
@@ -50,6 +52,27 @@ describe('ComboBox', () => {
     fireEvent.keyDown(box, { key: 'Enter' })
     expect(onSelect).toHaveBeenCalledWith('d1')
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('draws a kind\'s icon in its colour, and in the fill\'s own on the option the arrow keys are on', async () => {
+    const withIcons: ComboBoxSection[] = [
+      {
+        id: 'matters',
+        title: 'Matters',
+        options: [
+          { id: 'm1', textValue: '1001.1', icon: <Icon name="briefcase" kind="matter" />, label: '1001.1' },
+          { id: 'm2', textValue: '1001.2', icon: <Icon name="briefcase" kind="matter" />, label: '1001.2' },
+        ],
+      },
+    ]
+    render(<Example shown={withIcons} />)
+    const box = type('10')
+    await screen.findByRole('listbox')
+    fireEvent.keyDown(box, { key: 'ArrowDown' })
+    const colour = (name: string) => getComputedStyle(screen.getByRole('option', { name }).querySelector('svg')!).color
+    await waitFor(() => expect(screen.getByRole('option', { name: '1001.1' }).hasAttribute('data-focused')).toBe(true))
+    expect(colour('1001.1')).toBe('rgb(255, 255, 255)')
+    expect(colour('1001.2')).toBe('rgb(138, 90, 0)')
   })
 
   it('submits the text on Enter when nothing is picked, with or without options showing', async () => {

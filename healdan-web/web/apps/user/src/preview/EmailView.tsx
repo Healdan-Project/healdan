@@ -7,7 +7,7 @@ import { ApiError, apiPath, type components } from '@healdan/api'
 import { Button, formatDateTime, formatSize, Icon, t, toast } from '@healdan/ui'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { messageFor } from '../frame/errors'
-import { fileIcon } from '../fileIcon'
+import { fileIcon } from '../kindIcons'
 import { keys } from '../queries'
 import { useApi } from '../services'
 import { attachmentShownAs } from './drawn'
@@ -58,7 +58,7 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, onPreview }: 
   // The size is beside the control, not in it, so the control's name (an action and the file's name) holds all its visible text
   const label = (
     <>
-      <Icon name={fileIcon(attachment.name)} size={18} />
+      <Icon {...fileIcon(attachment.name)} size={18} />
       <span className={styles.chipName}>{attachment.name}</span>
     </>
   )

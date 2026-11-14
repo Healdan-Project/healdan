@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { Outlet, useRouterState } from '@tanstack/react-router'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { t } from '@healdan/ui'
 import { OpenInAppProvider } from '../actions/OpenInAppState'
 import { DetailsTabProvider } from '../details/DetailsTab'
 import { FilingProvider } from '../filing/FilingProvider'
@@ -11,6 +12,7 @@ import { QuickLookProvider } from '../preview/QuickLookState'
 import { useSignedOut } from '../services'
 import { LeftPane } from './LeftPane'
 import { focusInto, isInnermost, openLayer, useNarrow } from './narrow'
+import { PaneFrame, PaneSplitter } from './PaneWidths'
 import { RightRegionProvider } from './RightRegion'
 import { SignedOut } from './SignedOut'
 import { StorageBanner } from './StorageBanner'
@@ -18,8 +20,9 @@ import { NAVIGATION_BUTTON, TopBar } from './TopBar'
 import styles from './Frame.module.css'
 
 // The top bar, the left pane and the main area, which holds the route's view. Once a request has said the person is
-// signed out, nothing else is worth showing. In a narrow window the left pane folds away behind a button of the top bar and
-// opens over the list (spec 5), where Esc closes it and following a link in it does too.
+// signed out, nothing else is worth showing. In a wide window a divider between the left pane and the main area resizes the
+// pane (PaneWidths.tsx). In a narrow window the left pane folds away behind a button of the top bar and opens over the list
+// (spec 5), where Esc closes it and following a link in it does too.
 export function Frame() {
   const signedOut = useSignedOut()
   if (signedOut) return <SignedOut />
@@ -47,6 +50,7 @@ function Layout() {
   const [openedAt, setOpenedAt] = useState<string>()
   const paneOpen = openedAt === pathname
   const over = useRef<HTMLDivElement>(null)
+  const paneId = useId()
   const setPaneOpen = (open: boolean) => setOpenedAt(open ? pathname : undefined)
 
   // Esc closes the pane, and the focus goes back to the button that opened it. A menu or tree popup in it takes Esc for itself.
@@ -71,17 +75,19 @@ function Layout() {
 
   const open = narrow && paneOpen
   return (
-    <div className={`${styles.frame} ${narrow ? styles.narrow : ''}`}>
+    <PaneFrame className={`${styles.frame} ${narrow ? styles.narrow : ''}`}>
       <TopBar navigation={narrow ? { open, onToggle: () => setPaneOpen(!paneOpen) } : undefined} />
       {(!narrow || open) && (
-        <div ref={over} className={narrow ? styles.over : styles.pane}>
+        <div ref={over} id={paneId} className={narrow ? styles.over : styles.pane}>
           <LeftPane />
         </div>
       )}
       <main className={styles.main}>
+        {/* At the main area's edge, and in its landmark, as all content is; drawn over the pane's edge (Frame.module.css) */}
+        <PaneSplitter name="left" aria-label={t('frame.resize', { name: t('pane.label') })} controls={paneId} className={styles.splitter} />
         <StorageBanner />
         <Outlet />
       </main>
-    </div>
+    </PaneFrame>
   )
 }

@@ -308,6 +308,12 @@ code is laid out.
     `page.evaluate`, which the browser's debugging protocol does and the page's Content-Security-Policy doesn't govern, so
     the policy stays as the app ships it. No spec turns it off: `addScriptTag` with the source in it would be blocked by
     `script-src 'self'`, and `bypassCSP` would test a page the app never serves.
+  - `resizing.spec.ts` files a document into a folder of its own inside `E2E`, and through the page drags the left
+    pane's divider with the mouse and checks the pane's width, its value and that the list's Title column narrowed (the
+    virtualiser measured the narrower list); reloads and finds the width kept; moves it by keys; checks that a window
+    800 pixels wide has no divider and that the width comes back at 1280; and puts it back with Enter. It does the same
+    for the details' divider, with End, Home and Enter. Each test has a browser context of its own, so its storage
+    starts empty.
   - It runs in `docker/smoke-test.sh` as step 9, on amd64 and arm64. On a Mac, Docker Desktop doesn't reach the
     host's ports from the default `--network host`: set `WEB_NETWORK=bridge`. The browser then still opens
     `http://127.0.0.1:<port>`, which a small proxy in its container forwards to `host.docker.internal`, because the web

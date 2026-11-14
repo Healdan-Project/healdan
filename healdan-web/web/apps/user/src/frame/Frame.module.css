@@ -1,10 +1,11 @@
 /* SPDX-FileCopyrightText: 2026 The Healdan Project
    SPDX-License-Identifier: LGPL-3.0-only */
 
+/* --left-width is the left pane's, which its divider sets (PaneWidths.tsx); 248 pixels is the default */
 .frame {
   display: grid;
   grid-template-rows: 52px 1fr;
-  grid-template-columns: 248px 1fr;
+  grid-template-columns: var(--left-width, 248px) 1fr;
   height: 100vh;
 }
 
@@ -12,9 +13,16 @@
   grid-column: 1 / -1;
 }
 
-/* The pane wrapper adds no box of its own: the pane (a nav) is the grid's cell */
+/* The pane's cell, which its divider names as what it resizes; the pane (a nav) fills it */
 .pane {
-  display: contents;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane > nav {
+  flex: 1;
+  min-width: 0;
 }
 
 /* A column, so a view can fill what the banner leaves (a folder's list scrolls inside itself), and any other scrolls. */
@@ -24,6 +32,16 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
+}
+
+/* The left pane's divider is in the main area, which scrolls, so it's fixed to the window, below the top bar, with 1 of its
+   24 pixels over the pane's border (Splitter.module.css) and 23 over the main area's gutter. Its start places it, and its
+   end is left to its width, which Splitter.module.css's inset for a pane before it would otherwise over-constrain. */
+.main > .splitter {
+  position: fixed;
+  inset-block: 52px 0;
+  inset-inline-start: calc(var(--left-width, 248px) - 1px);
+  inset-inline-end: auto;
 }
 
 /* A narrow window: the list has the width, and the left pane opens over it, below the top bar */

@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { t } from '@healdan/ui'
 import { useSelection } from '../selection'
 import { focusInto, isInnermost, openLayer, useNarrow } from './narrow'
+import { PaneSplitter } from './PaneWidths'
 import styles from './RightRegion.module.css'
 
 /** What the right region shows (spec sections 6.1, 6.2 and 6.4) */
@@ -123,11 +124,16 @@ export interface RightRegionProps {
   preview?: ReactNode
 }
 
-/** The region itself, beside a list. It isn't there at all when it has nothing to show, so the list takes its width. */
+/**
+ * The region itself, beside a list. It isn't there at all when it has nothing to show, so the list takes its width. In a wide
+ * window a divider at its edge resizes it: the details and Filters share one width, and the reading pane has its own, as a
+ * page wants more room than the details do.
+ */
 export function RightRegionView({ filters, details, preview }: RightRegionProps) {
   const content = { filters, details, preview }
   const region = useRightRegion()
   const over = useRef<HTMLElement>(null)
+  const id = useId()
   const opened = region.narrow && region.narrowOpen
   useEffect(() => {
     if (!opened) return
@@ -155,9 +161,12 @@ export function RightRegionView({ filters, details, preview }: RightRegionProps)
   }
   if (!kind) return null
   return (
-    <section className={`${styles.region} ${kind === 'preview' ? styles.wide : ''}`} aria-label={labels[kind]()}>
-      {content[kind]}
-    </section>
+    <>
+      <PaneSplitter name={kind === 'preview' ? 'preview' : 'right'} aria-label={t('frame.resize', { name: labels[kind]() })} controls={id} boxClassName={styles.divider} />
+      <section id={id} className={`${styles.region} ${kind === 'preview' ? styles.wide : ''}`} aria-label={labels[kind]()}>
+        {content[kind]}
+      </section>
+    </>
   )
 }
 

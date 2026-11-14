@@ -9,7 +9,7 @@ import { copyLink } from '../actions/copyLink'
 import { FavoriteStar } from '../actions/FavoriteStar'
 import { OpenDownload } from '../actions/OpenDownload'
 import { useOpenInApp } from '../actions/OpenInAppState'
-import { fileIcon } from '../fileIcon'
+import { fileIcon } from '../kindIcons'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { useQuickLook } from '../preview/QuickLookState'
 import { useDocument, useProperties, useVersions } from '../queries'
@@ -188,7 +188,7 @@ function Thumbnail({ document }: { document: S['DocumentView'] }) {
       {document.canOpen && !failed ? (
         <img key={tries} src={api.url(apiPath`/v1/documents/${document.docNumber}/thumbnail`, { v: document.fileVersion })} alt="" className={styles.image} onError={() => setFailed(true)} />
       ) : (
-        <Icon name={fileIcon(document.name)} size={48} />
+        <Icon {...fileIcon(document.name)} size={48} />
       )}
       <div className={styles.preview}>
         <Button onPress={() => quickLook.open(document.docNumber)}>{t('details.preview')}</Button>

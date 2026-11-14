@@ -6,6 +6,12 @@ weight: 2
 Healdan's web page has a top bar across the top, a left pane down the left side and the main area beside it. The
 colours follow your browser's light or dark setting.
 
+Each kind of item has its own icon, drawn in its kind's colour: a matter's briefcase is amber, a client's building
+indigo and a folder blue, and among documents, word-processing documents are blue, spreadsheets green, presentations
+orange-red, PDFs red, emails blue and pictures purple. Some kinds share a blue, so the icon's shape tells them apart.
+LibreOffice's text documents, spreadsheets and presentations take the colours of their Microsoft Office counterparts,
+and any other kind of file, such as a drawing, has the plain document icon in the colour of the text beside it.
+
 ![Healdan's web page in the Due Diligence folder of matter 1002.1 – Commercial Lease: the top bar with the Healdan name, the Documents search box, the ? button and the PN menu; the left pane with Recent, Recent Matters, My Matters opened to the matter's folders, and My Favorites; the folder's two documents, Service Charge Budget 2026–27.xlsx and Site Plan – Unit 4 Weir Lane.odg, with the second selected; and its details at the right, with the thumbnail of the plan, its name with the Favorites star beside it, Open, Download, Edit, Copy Link and Check Out, its properties and its version](whole-window.png)
 
 ## The Top Bar
@@ -32,8 +38,8 @@ The left pane scrolls on its own when it's longer than the window. From the top 
 - **My Matters:** the matters you've chosen to keep at hand, as a tree. Open a matter to see its folders and search
   folders, and open a folder to see its own folders. A search folder has its own icon. The tree opens to the folder
   you're in, and **+** beside the heading adds the matter you're in.
-- **My Favorites:** documents and folders you've added as favourites, with the star beside a folder's name or beside
-  a document's name in its details.
+- **My Favorites:** documents and folders you've added as favourites, each with the icon of its kind, as in the
+  lists. The star beside a folder's name, or beside a document's name in its details, adds one.
 
 [My Matters and Recent Matters](../../finding-documents/my-matters-and-recent-matters/) explains the first two.
 If your firm calls matters something else, such as projects, the headings use its word: Recent Projects and My
@@ -56,7 +62,7 @@ Matter](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matte
 Select a document in a folder's list, in search results or in a Recent list, and its **Details** open at the right, in the same place as
 [Filters](../../finding-documents/searching/#filters). At the top, whichever tab is showing, they have:
 
-- **A thumbnail** of the first page, when the document has one. Without one, a plain icon for the kind of file shows
+- **A thumbnail** of the first page, when the document has one. Without one, the icon for the kind of file shows
   instead.
 - **The name,** with a star beside it that adds the document to **My Favorites** and takes it off again, and under it
   the doc #, the version and the size: `# 10388 · Version 2 · 209 KB`.
@@ -81,6 +87,33 @@ Under them are two tabs, **Properties** and **Versions**:
 The arrow keys move between the tabs once one has the keyboard's focus. Click another document to see its details
 instead, on the same tab, or select several and the details close. The details start on **Properties** each time you
 open or reload the web page.
+
+## Resizing the Panes
+
+The left pane, and the details, Filters or preview at the right, can each be made wider or narrower. Point at the line
+between a pane and the list: the pointer becomes a resize arrow and the line darkens. Drag it to where you want it,
+with the mouse, a finger or a pen. The list takes whatever room the panes leave, and its columns follow.
+
+From the keyboard, Tab to the divider, which a screen reader names **Resize Navigation**, **Resize Details**, **Resize
+Filters** or **Resize Preview** and reads its width in pixels. Then:
+
+| Key | What it does |
+|---|---|
+| Left and right arrows | Move the divider 16 pixels; with Shift, 64 |
+| Home and End | Make the pane as narrow, or as wide, as it goes |
+| Enter | Puts the pane back to its usual width |
+
+Double-clicking the divider puts the pane back to its usual width too.
+
+- **The left pane** goes from 180 to 420 pixels wide. It starts at 248.
+- **The details and Filters** share one width, from 260 pixels to half the window. They start at 300.
+- **The preview,** once docked, keeps a width of its own, as a page needs more room than the details do. Until you
+  change it, it takes a share of the window.
+- **The list keeps at least 481 pixels,** so on a smaller window the panes can't be made as wide.
+
+Healdan remembers each width in this browser, so the panes are as you left them next time, but not in another browser
+or on another computer. A width that doesn't fit a smaller window is drawn as wide as fits, and comes back when the
+window is wide enough again.
 
 ## Keeping Up to Date
 
@@ -114,8 +147,9 @@ once the list has the focus.
 
 On a window narrower than 1,024 pixels, such as a tablet, the left pane and the details, Filters or preview fold away
 so the list has the room. Two buttons in the top bar, the **☰** (Navigation) button and the panel-icon (Details and
-Filters) button, open them over the list, and Esc or choosing a link closes them again. A phone's screen is too small
-for the app.
+Filters) button, open them over the list, and Esc or choosing a link closes them again. They open at their usual
+widths and can't be resized there; the widths you chose come back when the window is wider again. A phone's screen is
+too small for the app.
 
 ![The web page in a window 768 pixels wide: the left pane open over the folder's list, with Recent, Recent Matters, My Matters opened to 1002.1 – Commercial Lease's folders, and My Favorites, below a top bar that has the ☰ (Navigation) and panel-icon (Details and Filters) buttons](narrow-window.png)
 

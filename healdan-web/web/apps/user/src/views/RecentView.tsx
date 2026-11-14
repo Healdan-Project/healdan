@@ -13,6 +13,7 @@ import { ReadingPane } from '../preview/ReadingPane'
 import { usePreviewKey } from '../preview/usePreviewKey'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { RightRegionView, useRegionKind } from '../frame/RightRegion'
+import { clientIcon } from '../kindIcons'
 import { useRecentClients, useRecentDocuments, useRecentFolders } from '../queries'
 import { useOrganisingTable } from '../organising/useOrganisingTable'
 import { isRecentKind, type RecentKind } from '../search/scopes'
@@ -154,7 +155,7 @@ function RecentClients() {
         width: '3fr',
         cell: ({ client }) => (
           <>
-            <Icon name="building" />
+            <Icon {...clientIcon} />
             <span className={styles.name}>{client.name}</span>
           </>
         ),
