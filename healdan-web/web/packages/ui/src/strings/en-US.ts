@@ -203,6 +203,7 @@ export const enUS = {
   'favorites.mine': 'My Favorites',
   'myMatters.add': 'Add This {matter} to My {matters}',
   'myMatters.remove': 'Remove from My {matters}',
+  'myMatters.addMenu': 'Add to My {matters}',
   'tree.more': 'More for {name}',
   'breadcrumb.label': 'Breadcrumb',
   'favorites.add': 'Add to Favorites',
@@ -304,6 +305,8 @@ export const enUS = {
   'tray.collapse': 'Collapse',
   'tray.expand': 'Expand',
   'organising.more': 'More',
+  'menu.for': 'Actions for {name}',
+  'menu.openInNewTab': 'Open in New Tab',
   'organising.refused': '{name}: {reason}',
   'organising.close': 'Close',
   'rename.menu': 'Rename',
@@ -376,6 +379,7 @@ export const enUSPlurals = {
   moved: { one: 'Moved {n} document to {folder}', other: 'Moved {n} documents to {folder}' },
   deleteTitle: { one: 'Move {n} document to the Trash?', other: 'Move {n} documents to the Trash?' },
   deleted: { one: 'Moved {n} document to the Trash', other: 'Moved {n} documents to the Trash' },
+  menuForDocuments: { one: 'Actions for {n} document', other: 'Actions for {n} documents' },
   matters: { one: '{n} {matter}', other: '{n} {matters}' },
 } as const
 

@@ -124,6 +124,34 @@ exception: they stay as they were until you search again. A search folder, and a
 100 documents, are brought up to date on coming back only once what they show is over 30 seconds old, or after you
 open a document in an app from the page, as each update runs the search again, or asks for every 100 documents.
 
+## Right-Click Menus
+
+Right-click a document, a folder or a matter, in a list or in the left pane, for a menu of what you can do with it. On
+a Mac, Control-click does the same. Every choice in these menus is also on the toolbar or beside the item, so the menu
+is a shortcut, never the only way.
+
+- **A document,** in a folder, search results, **Recent Documents**, **Recent Emails** or a doc # result: **Open**,
+  **Preview** and **Open in New Tab**; **Download** and **Check Out**, or **Check In** and **Release** when you checked
+  it out on the web page; **Rename**, **Move To…** and **Delete**; **Copy Link** and **Add to Favorites** (or **Remove
+  from Favorites**). They work as the toolbar's buttons and its **⋯** (More) menu do.
+- **A folder,** in a list or in the **My Matters** tree: **Open**, **Open in New Tab**, **New Folder** where you can
+  make one (inside a matter, and never in a search folder), and **Add to Favorites** or **Remove from Favorites**.
+- **A matter,** in **My Matters**, **Recent Matters** or a search for matters: **Open**, **Open in New Tab**, and
+  **Add to My Matters** or **Remove from My Matters**.
+- **An item in My Favorites:** **Open**, **Open in New Tab** and **Remove from Favorites**.
+
+Right-clicking a document that isn't selected selects it first, in place of what was selected, as the Finder does.
+Right-clicking one of several selected documents keeps them all selected, and the menu then acts on all of them: only
+**Move To…** and **Delete** take several documents, so the rest are greyed out, as they are on the toolbar.
+
+**Open in New Tab** opens the document's or folder's page in a new browser tab. Anywhere else, such as a text box, the
+search box, an email's message, a preview, or the space in a list below its last row, right-clicking shows your
+browser's own menu, so copy, paste and spelling work as usual.
+
+With the keyboard, press Shift-F10, or the menu key if your keyboard has one, to open the menu of the row, tree item or
+link in **Recent Matters** or **My Favorites** that has the focus. The arrow keys move through the menu, Enter chooses, and Esc closes it and puts the focus back where
+it was.
+
 ## The Keyboard
 
 In the left pane's tree, the up and down arrow keys move between rows, the right arrow opens a matter or folder, the
@@ -141,6 +169,7 @@ once the list has the focus.
 | Space | Opens Quick Look; Esc closes it |
 | F2 | Renames the selected document in place |
 | Delete | Moves the selected documents to the Trash, after asking |
+| Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row, tree item or left-pane link with the focus; Esc closes it |
 | Option-Enter on **Upload** | Files with the form first |
 
 ## A Narrower Window

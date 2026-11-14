@@ -53,7 +53,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const facets = useSearchFacets({ scope, q: text, filters, enabled: filtersOpen })
   const { selected, selection, change: changeSelection } = useRowSelection(results.rows)
   const rows = useMemo(() => results.rows.map(rowOf), [results.rows])
-  const organising = useOrganisingTable(results.rows, selection)
+  const organising = useOrganisingTable(results.rows, selection, changeSelection)
   const allColumns = useMemo(() => hitColumns(scope), [scope])
   // The reading pane makes the list narrow: it keeps the columns that fit
   // Only a view that draws the pane narrows for it, as the document scopes do
@@ -126,6 +126,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               onOpen={open}
               onPreview={documents ? preview : undefined}
               {...(documents ? organising.tableProps : {})}
+              contextMenu={organising.contextMenu}
               loadMore={results.loadMore}
               isLoadingMore={results.isLoadingMore}
               total={results.total}

@@ -64,6 +64,9 @@ export function createQueryClient({ retry }: QueryClientOptions = {}): QueryClie
         staleTime: 30_000,
         retry: retry ?? ((count, error) => !(error instanceof ApiError) && count < 2),
       },
+      // A change (a check-out, a favorite) is sent when it's asked for, and fails then if the connection is down, as a
+      // direct request does. TanStack Query would hold it while the browser says it's offline and send it later, on its own.
+      mutations: { networkMode: 'always' },
     },
   })
   focusManager.setEventListener((onFocus) =>

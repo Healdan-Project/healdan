@@ -13,6 +13,8 @@
   outline: none;
 }
 
+/* An item with an href is a link, which the browser would underline and colour as one, visited or not: it looks like
+   every other item in each state. */
 .item {
   display: flex;
   align-items: center;
@@ -20,8 +22,13 @@
   padding: var(--hd-space-2) var(--hd-space-4);
   border-radius: var(--hd-radius-small);
   color: var(--hd-text);
+  text-decoration: none;
   outline: none;
   cursor: default;
+}
+
+.item:visited {
+  color: var(--hd-text);
 }
 
 /* The item the keys are on: its text and icons, a kind's too (icons.module.css), take the fill's own colour, as only it
@@ -40,4 +47,15 @@
 
 .item[data-disabled] {
   color: var(--hd-text-muted);
+}
+
+.separator {
+  height: 1px;
+  margin: var(--hd-space-2) 0;
+  background: var(--hd-line);
+}
+
+/* A context menu's area is only where its events are heard: it draws no box of its own. */
+.area {
+  display: contents;
 }

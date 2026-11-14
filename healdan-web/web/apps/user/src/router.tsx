@@ -3,6 +3,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, type ErrorComponentProps, type RouterHistory } from '@tanstack/react-router'
+import { APP_BASE } from './addresses'
 import { ErrorPanel } from './frame/ErrorPanel'
 import { Frame } from './frame/Frame'
 import { filterSearch, multiFilters, type Filters } from './filters/useFilters'
@@ -125,9 +126,9 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
   )
 }
 
-// The app lives under /app, served by AppServlet. Only the root context is supported in M6.
+// The app lives under /app (APP_BASE), served by AppServlet. Only the root context is supported in M6.
 export function createAppRouter(history?: RouterHistory) {
-  return createRouter({ routeTree, basepath: '/app', history, parseSearch, stringifySearch, defaultErrorComponent: RouteError })
+  return createRouter({ routeTree, basepath: APP_BASE, history, parseSearch, stringifySearch, defaultErrorComponent: RouteError })
 }
 
 // Links, navigate() and the search hooks are typed from the routes above.

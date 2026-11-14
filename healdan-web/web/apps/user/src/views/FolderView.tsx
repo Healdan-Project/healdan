@@ -61,7 +61,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const navigate = useNavigate()
   const headingId = useId()
   const { selected, selection, change: changeSelection } = useRowSelection(listing.rows)
-  const organising = useOrganisingTable(listing.rows, selection)
+  const organising = useOrganisingTable(listing.rows, selection, changeSelection)
   // What was just filed flashes in the list, and the row the files are over is lit
   const { fresh } = useFiling()
   const place = useMemo(() => (view ? placeOf(view) : { id: folderId, kind: 'store' as const }), [view, folderId])
@@ -174,6 +174,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               onOpen={open}
               onPreview={preview}
               {...organising.tableProps}
+              contextMenu={organising.contextMenu}
               loadMore={listing.loadMore}
               isLoadingMore={listing.isLoadingMore}
               total={listing.total}

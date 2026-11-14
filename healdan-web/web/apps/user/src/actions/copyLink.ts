@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { t, toast } from '@healdan/ui'
+import { docHref } from '../addresses'
 
 /**
  * Puts a document's link on the clipboard: its own address, which works in an email too (spec 10.1). A browser has no
@@ -9,7 +10,7 @@ import { t, toast } from '@healdan/ui'
  */
 export async function copyLink(docNumber: number): Promise<void> {
   try {
-    await navigator.clipboard.writeText(`${window.location.origin}/app/doc/${docNumber}`)
+    await navigator.clipboard.writeText(`${window.location.origin}${docHref(docNumber)}`)
     toast(t('details.linkCopied'))
   } catch {
     toast(t('details.linkNotCopied'))

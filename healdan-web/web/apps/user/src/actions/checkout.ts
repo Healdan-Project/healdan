@@ -96,3 +96,9 @@ export function saveVersion(api: Api, document: S['DocumentView'], file: File, o
 export function checkIn(api: Api, document: S['DocumentView'], file: File): Promise<S['DocumentView']> {
   return saveVersion(api, document, file, { kind: 'snapshot', ifHeld: true })
 }
+
+/** What a check-in's file picker offers: the document's extension with its dot, as the server keeps it; anything for a name without one */
+export function checkInAccept(name: string): string | undefined {
+  const dot = name.lastIndexOf('.')
+  return dot > 0 && dot < name.length - 1 ? name.slice(dot) : undefined
+}

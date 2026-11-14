@@ -4,7 +4,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { useId, useMemo, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
-import { Icon, t, Table, type TableColumn, type TableProps, type TableRow } from '@healdan/ui'
+import { Icon, t, Table, type ItemMenu, type TableColumn, type TableProps, type TableRow } from '@healdan/ui'
 import { SelectionActions } from '../actions/SelectionActions'
 import { useOpenKey } from '../actions/useOpenKey'
 import { DetailsPanel } from '../details/DetailsPanel'
@@ -16,6 +16,7 @@ import { RightRegionView, useRegionKind } from '../frame/RightRegion'
 import { clientIcon } from '../kindIcons'
 import { useRecentClients, useRecentDocuments, useRecentFolders } from '../queries'
 import { useOrganisingTable } from '../organising/useOrganisingTable'
+import { useListMenu } from '../menus/useListMenu'
 import { isRecentKind, type RecentKind } from '../search/scopes'
 import { NotFound } from './NotFound'
 import { Toolbar } from './Toolbar'
@@ -24,6 +25,8 @@ import { useRowSelection } from './useRowSelection'
 import styles from './views.module.css'
 
 type S = components['schemas']
+
+const NONE: ReadonlySet<string> = new Set()
 
 /**
  * /recent/<kind> (and the start page, which is Recent Documents): what the person worked on lately, in the order the
@@ -52,9 +55,11 @@ interface ListProps<T extends TableRow> {
   toolbar?: ReactNode
   /** F2, Delete and dragging, for a list of documents */
   organising?: Pick<TableProps<T>, 'onRename' | 'onDelete' | 'drag' | 'undraggable'>
+  /** The rows' right-click menu */
+  contextMenu?: ItemMenu
 }
 
-function RecentList<T extends TableRow>({ kind, columns, rows, query, selection, onOpen, onPreview, region, toolbar, organising }: ListProps<T>) {
+function RecentList<T extends TableRow>({ kind, columns, rows, query, selection, onOpen, onPreview, region, toolbar, organising, contextMenu }: ListProps<T>) {
   const headingId = useId()
   return (
     <section className={styles.withRegion} aria-labelledby={headingId}>
@@ -77,6 +82,7 @@ function RecentList<T extends TableRow>({ kind, columns, rows, query, selection,
               onOpen={onOpen}
               onPreview={onPreview}
               {...organising}
+              contextMenu={contextMenu}
               empty={query.isPending ? t('common.loading') : t(`recent.empty.${kind}`)}
             />
           </>
@@ -99,7 +105,7 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
   const preview = usePreviewKey(change)
   const openDocument = useOpenKey(items ?? [], change)
   // Rename, Move To… and Delete, with F2 and Delete, as in every list of documents (R95)
-  const organising = useOrganisingTable(items ?? [], selection)
+  const organising = useOrganisingTable(items ?? [], selection, change)
   return (
     <RecentList
       kind={kind}
@@ -113,6 +119,7 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
         </Toolbar>
       }
       organising={organising.tableProps}
+      contextMenu={organising.contextMenu}
       // A document opens in its app, or downloads if the helper doesn't open its kind, and is selected
       onOpen={openDocument}
       onPreview={preview}
@@ -135,7 +142,9 @@ function RecentFolders() {
   const items = recent.data?.items
   const rows = useMemo(() => (items ?? []).map(rowOf), [items])
   const columns = useMemo(() => hitColumns('folders'), [])
-  return <RecentList kind="folders" columns={columns} rows={rows} query={recent} onOpen={(key) => void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })} />
+  // A folder's row is never selected, so its menu leaves the (empty) selection as it is
+  const menu = useListMenu({ rows: items ?? [], selection: NONE, selected: [] })
+  return <RecentList kind="folders" columns={columns} rows={rows} query={recent} contextMenu={menu} onOpen={(key) => void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })} />
 }
 
 interface ClientRow extends TableRow {

@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiPath, type components } from '@healdan/api'
 import { Button, Icon, toast } from '@healdan/ui'
 import { messageFor } from '../frame/errors'
@@ -20,32 +19,57 @@ function isIt(favorite: S['FavoriteView'], what: Starred): boolean {
   return item.type === 'document' && item.docNumber === what.docNumber
 }
 
+export interface Favorite {
+  /** The bookmark, while the folder or document is in My Favorites */
+  favorite: S['FavoriteView'] | undefined
+  /** My Favorites isn't known yet, or a change to this one is under way (from the star or a menu alike) */
+  isDisabled: boolean
+  /** Adds it to My Favorites, or takes it out */
+  toggle: () => Promise<void>
+}
+
+/** What marks a change to one favorite while it runs, so the star and a menu that offer it both wait */
+const favoriteKey = (what: Starred | undefined) => ['favorite', what && ('folderId' in what ? `f${what.folderId}` : `d${what.docNumber}`)] as const
+
 /**
- * The star of a folder (beside its name) or of a document (beside its name in the details): in My Favorites or not
- * (spec 4, 6.1). Its state is My Favorites' own list, so the two never disagree.
+ * Whether a folder or a document is in My Favorites, and the change to it: My Favorites' own list is its state, so the
+ * star, a menu and the list never disagree (spec 4, 6.1). Nothing is offered for none.
  */
-export function FavoriteStar({ what, add, remove }: { what: Starred; add: string; remove: string }) {
+export function useFavorite(what: Starred | undefined): Favorite {
   const api = useApi()
   const queryClient = useQueryClient()
   const favorites = useFavorites()
-  const [busy, setBusy] = useState(false)
-  const favorite = favorites.data?.items.find((one) => isIt(one, what))
-
-  async function toggle() {
-    setBusy(true)
-    try {
-      if (favorite) await api.send('DELETE', apiPath`/v1/me/favorites/${favorite.id}`)
-      else await api.send('POST', '/v1/me/favorites', what)
-      await queryClient.invalidateQueries({ queryKey: keys.favorites })
-    } catch (error) {
-      toast(messageFor(error))
-    } finally {
-      setBusy(false)
-    }
+  const favorite = what && favorites.data?.items.find((one) => isIt(one, what))
+  const busy = useIsMutating({ mutationKey: favoriteKey(what) }) > 0 && what !== undefined
+  const mutation = useMutation({
+    mutationKey: favoriteKey(what),
+    mutationFn: async ({ bookmark, star }: { bookmark: S['FavoriteView'] | undefined; star: Starred }) => {
+      try {
+        if (bookmark) await api.send('DELETE', apiPath`/v1/me/favorites/${bookmark.id}`)
+        else await api.send('POST', '/v1/me/favorites', star)
+        await queryClient.invalidateQueries({ queryKey: keys.favorites })
+      } catch (error) {
+        toast(messageFor(error))
+      }
+    },
+  })
+  return {
+    favorite,
+    isDisabled: what === undefined || busy || favorites.isPending,
+    toggle: async () => {
+      if (what) await mutation.mutateAsync({ bookmark: favorite, star: what })
+    },
   }
+}
 
+/**
+ * The star of a folder (beside its name) or of a document (beside its name in the details): in My Favorites or not
+ * (spec 4, 6.1).
+ */
+export function FavoriteStar({ what, add, remove }: { what: Starred; add: string; remove: string }) {
+  const { favorite, isDisabled, toggle } = useFavorite(what)
   return (
-    <Button variant="quiet" aria-label={favorite ? remove : add} isDisabled={busy || favorites.isPending} onPress={() => void toggle()}>
+    <Button variant="quiet" aria-label={favorite ? remove : add} isDisabled={isDisabled} onPress={() => void toggle()}>
       <span className={favorite ? styles.starred : styles.star}>
         <Icon name={favorite ? 'starFilled' : 'star'} size={18} />
       </span>
