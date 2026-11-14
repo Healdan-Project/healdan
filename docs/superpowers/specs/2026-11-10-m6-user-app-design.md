@@ -253,7 +253,7 @@ A first mockup showed whether the helper was running. The browser can't tell whe
 
 ### 7.4 Dependencies
 
-- **At runtime:** React and React DOM; React Aria Components; TanStack Query; TanStack Router; PDF.js (`pdfjs-dist`); Tabler's icons as tree-shaken SVG components. That's all, but for `@internationalized/date`, React Aria's own date library, a direct dependency of `packages/ui` for the date pickers, at the version React Aria already shipped (changed in the build: R41, Apache-2.0, nothing new ships), and `react-aria`, the hooks React Aria Components is built on, a direct dependency of `packages/ui` for the panes' dividers (`useMove`), at the version React Aria Components pins (changed after M6: the owner's dogfooding punch list, 2026-11-14; Apache-2.0, nothing new ships).
+- **At runtime:** React and React DOM; React Aria Components; TanStack Query; TanStack Router; PDF.js (`pdfjs-dist`); Tabler's icons as tree-shaken SVG components. That's all, but for `@internationalized/date`, React Aria's own date library, a direct dependency of `packages/ui` for the date pickers, at the version React Aria already shipped (changed in the build: R41, Apache-2.0, nothing new ships), and `react-aria`, the hooks React Aria Components is built on, a direct dependency of `packages/ui` for the panes' dividers (`useMove`), at the version React Aria Components pins (changed after M6: the owner's dogfooding punch list, 2026-11-14, the owner approving the dependency the same day; Apache-2.0, nothing new ships).
 - **For building and testing only:** Vite, TypeScript, Vitest, Testing Library, axe-core, ESLint, openapi-typescript and Playwright.
 - **The rules:**
   - every version pinned exactly, with `package-lock.json` committed;
