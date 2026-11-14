@@ -395,6 +395,45 @@ it's open. The app is designed for 1,280 pixels and works at a tablet's 768; pho
 - **To test it** in Vitest, `test/viewport.ts` gives jsdom a `matchMedia` for a width (`setViewport(768)` before a
   render, `resize()` after), and `frame/Narrow.test.tsx` has the cases. `e2e/a11y.spec.ts` looks at it at 768 × 1024.
 
+## Resizing the Panes
+
+In a wider window the left pane and the right region each have a divider, which a person drags or moves by keys, and
+the list takes the rest.
+
+- **The divider** is `@healdan/ui`'s `Splitter`: a focusable `role="separator"` with `aria-orientation="vertical"`,
+  whose `aria-valuenow`, `-valuemin` and `-valuemax` are the pane's width and limits, and `aria-controls` the pane. A
+  pointer drags it through `useMove` from `react-aria` (a direct dependency of `packages/ui`, at the version React Aria
+  Components pins), with the pointer captured, so a mouse, a finger or a pen moves it, and an email's frame under the
+  pointer doesn't take its moves. Its own keys replace `useMove`'s: Left and Right by 16 pixels (`SPLITTER_STEP`),
+  64 with Shift, Home and End to the limits, and Enter, like a double-click, calls `onReset`. A drag reports each width
+  with `onResize` and the last with `onResizeEnd`, and a key only `onResizeEnd`. While a drag lasts, the page's root
+  has `data-hd-resizing`, which keeps the cursor and stops text being selected. The visible line is the pane's own
+  hairline edge, drawn over in the accent while dragged or focused; the target is 24 pixels wide, 4 over the pane and
+  20 over the list's gutter, which the view's padding of 24 keeps clear of the list.
+- **The widths** are `frame/PaneWidths.tsx`'s. `PaneFrame` is the frame's element: it holds each pane's width as a
+  custom property, `--left-width`, `--right-width` (the details and Filters) and `--preview-width` (the docked reading
+  pane), which `Frame.module.css`, `RightRegion.module.css` and the top bar's brand read, each with its old width as the
+  fallback. A drag sets them on the element as it goes, so neither the frame nor a view renders again, and React Aria's
+  virtualiser measures the list's new width itself (its scroll view watches its own size). Only the drag's end changes
+  state. In a narrow window it sets none, and `PaneSplitter` draws nothing. The left pane's divider sits in `<main>`,
+  fixed to the window, since axe wants all content in a landmark and the main area scrolls; the right region's is in a
+  box of no width before the region (`RightRegionView`).
+- **The limits** are `frame/paneLayout.ts`'s `layoutFor(windowWidth, chosen)`: the left pane 180 to 420 pixels (248 by
+  default), the right region 260 pixels to half the window (300 by default; the reading pane 42% of the window, from 360
+  to 640), and at least `MAIN_MIN`, 464 pixels, for the list, room for the three columns it keeps beside the reading pane.
+  Room for the region at its narrowest is always left, so the left pane doesn't move as the region opens and closes, and
+  the region takes what the list leaves. A chosen width that doesn't fit is drawn at the limit and not kept again.
+- **What's kept** is `preferences.ts`: numbers in `localStorage` under `healdan.pane.left`, `healdan.pane.right` and
+  `healdan.pane.preview`, each call in `try`, so a browser that refuses storage (or whose `localStorage` getter
+  throws) gets the defaults. Enter forgets the pane's, so the reading pane follows the window again. Preferences are
+  the only thing the browser keeps (M6's spec §2.3).
+- **A PDF waits:** `usePanesResizing()` says a divider is being dragged, and `PdfView` draws its page again only once
+  the drag has ended, as a canvas drawn again at each step would be blank for most of it.
+- **To test it,** `test/viewport.ts` also sets `window.innerWidth` and sends the window's `resize` event, and the test
+  setup clears `localStorage` after each test. `frame/paneLayout.test.ts` has the limits, `preferences.test.ts` storage
+  that throws, `frame/Resizing.test.tsx` the dividers in the app, and `e2e/resizing.spec.ts` drags them in a real
+  browser and reloads.
+
 ## The Look in the Dark
 
 Both themes are defined as custom properties in `tokens.css` and chosen by the browser's `prefers-color-scheme`.
