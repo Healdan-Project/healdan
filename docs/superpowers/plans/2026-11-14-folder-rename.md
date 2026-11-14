@@ -1293,22 +1293,32 @@ git commit -m "Rename folders in place from the User app's lists"
 
 ---
 
-### Task 4: Renaming in the My Matters tree
+### Task 4: Renaming in the My Matters tree, and right-click › Rename
+
+*Changed in the build:* the context menus ([Healdan-Project/healdan#238](https://github.com/Healdan-Project/healdan/pull/238))
+merged before this task, and the branch was rebased on them after Task 3. So this task builds on master's `Tree`
+(whose rows already carry `data-tree-key`, inside `ItemContextMenu`), `LeftPane` (whose tree has a `folders` map and a
+`contextMenu`) and `menus/ContextMenus.tsx` (`FolderMenuItems`, `MatterMenuItems`, `folderMenu`), and it adds the
+right-click Rename that Task 8 was to add.
 
 **Files:**
 - Modify: `healdan-web/web/packages/ui/src/components/Tree.tsx`
 - Modify: `healdan-web/web/apps/user/src/frame/LeftPane.tsx` (`folderLabel`, `MyMattersSection`)
-- Test: `healdan-web/web/packages/ui/src/components/Tree.test.tsx` (if it exists; else in `LeftPane.test.tsx`)
+- Modify: `healdan-web/web/apps/user/src/menus/ContextMenus.tsx` (`FolderMenuItems`, `MatterMenuItems`, `folderMenu`)
+- Modify: `healdan-web/web/apps/user/src/menus/useListMenu.tsx` (`folderMenu(hit, 'row')`)
+- Modify: `healdan-web/web/apps/user/src/organising/OrganisingProvider.tsx` (`renameOrigin`'s tree selector)
 - Test: `healdan-web/web/apps/user/src/frame/LeftPane.test.tsx`
+- Test: `healdan-web/web/apps/user/src/menus/ContextMenus.test.tsx`
 
 **Interfaces:**
-- Consumes: Task 3's `FolderName`, `startRename(key, 'tree')`, `whyNotRename`, `t('rename.matterFolder')`, the focus
-  target `[role="treegrid"] [data-node-id="<id>"]`.
-- Produces: `TreeProps.onRename?: (id: string) => void`; every tree row carries `data-node-id="<node id>"`.
+- Consumes: Task 3's `FolderName({ folder, place, className })`, `startRename(key, place)`, `RenamePlace`,
+  `whyNotRename(folder, admin)`, `t('rename.matterFolder')`, `t('rename.menu')`.
+- Produces: `TreeProps.onRename?: (id: string) => void`; `FolderMenuItems({ folder, renameIn }: { folder; renameIn: RenamePlace })`;
+  `folderMenu(folder, renameIn: RenamePlace)`; the tree's focus target `[role="treegrid"] [data-tree-key="<id>"]`.
 
 - [ ] **Step 1: Write the failing tests**
 
-In `LeftPane.test.tsx` (imports: `userEvent`, and `folder` already imported), after the menu test:
+In `LeftPane.test.tsx` (add `userEvent` to the imports if missing), after the menu test:
 
 ```tsx
   it('renames a folder of the tree from its ⋯, in place', async () => {
@@ -1330,7 +1340,7 @@ In `LeftPane.test.tsx` (imports: `userEvent`, and `folder` already imported), af
     await userEvent.keyboard('Letters{Enter}')
     await waitFor(() => expect(api.callsTo('PATCH /v1/folders/111')).toHaveLength(1))
     expect(await within(tree).findByRole('row', { name: /Letters/ })).toBeTruthy()
-    await waitFor(() => expect(document.activeElement?.getAttribute('data-node-id')).toBe('111'))
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-tree-key')).toBe('111'))
   })
 
   it('renames a folder of the tree with F2', async () => {
@@ -1341,8 +1351,22 @@ In `LeftPane.test.tsx` (imports: `userEvent`, and `folder` already imported), af
     fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
     const target = await within(tree).findByRole('row', { name: /Correspondence/ })
     target.focus()
-    fireEvent.keyDown(target, { key: 'F2' })
+    await userEvent.keyboard('{F2}')
     await screen.findByRole('textbox', { name: 'New Name of Correspondence' })
+    await userEvent.keyboard('Letters{Enter}')
+    await waitFor(() => expect(api.callsTo('PATCH /v1/folders/111')).toHaveLength(1))
+  })
+
+  it('renames a folder of the tree from its right-click menu', async () => {
+    const { api } = await renderApp('/folders/1', {
+      'PATCH /v1/folders/*': () => folder({ id: 111, name: 'Letters' }),
+    })
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
+    fireEvent.contextMenu(await within(tree).findByRole('row', { name: /Correspondence/ }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }))
+    const input = await screen.findByRole('textbox', { name: 'New Name of Correspondence' })
+    await waitFor(() => expect(document.activeElement).toBe(input))
     await userEvent.keyboard('Letters{Enter}')
     await waitFor(() => expect(api.callsTo('PATCH /v1/folders/111')).toHaveLength(1))
   })
@@ -1352,10 +1376,10 @@ In `LeftPane.test.tsx` (imports: `userEvent`, and `folder` already imported), af
     const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
     fireEvent.click(within(tree).getByRole('button', { name: 'More for 1001.1 – Charter Dispute' }))
     expect((await screen.findByRole('menuitem', { name: 'Rename' })).getAttribute('aria-disabled')).toBe('true')
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    await userEvent.keyboard('{Escape}')
     const matterRow = within(tree).getByRole('row', { name: /1001\.1/ })
     matterRow.focus()
-    fireEvent.keyDown(matterRow, { key: 'F2' })
+    await userEvent.keyboard('{F2}')
     expect(await screen.findByText(/own folder takes the matter's name/)).toBeTruthy()
     expect(screen.queryByRole('textbox')).toBeNull()
   })
@@ -1370,24 +1394,51 @@ In `LeftPane.test.tsx` (imports: `userEvent`, and `folder` already imported), af
     const target = await within(tree).findByRole('row', { name: /Correspondence/ })
     fireEvent.click(within(tree).getByRole('button', { name: 'More for Correspondence' }))
     expect((await screen.findByRole('menuitem', { name: 'Rename' })).getAttribute('aria-disabled')).toBe('true')
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    await userEvent.keyboard('{Escape}')
     target.focus()
-    fireEvent.keyDown(target, { key: 'F2' })
+    await userEvent.keyboard('{F2}')
     // The fake /v1/me isn't an admin, and Correspondence is at the matter's top level
     expect(await screen.findByText("Only administrators can rename a matter's top-level folders.")).toBeTruthy()
   })
 ```
 
-If the fake API's default `/v1/folders/110/children` answer or `/v1/me` differs from these assumptions (the test file's
-other tests show them), adjust the routes, not the expectations. If React Aria's menu is closed differently in these
-tests, close it as the file's own menu test does, or skip closing it and focus the row directly.
+In `ContextMenus.test.tsx`, beside its document Rename test, using its own `routes`, `row` and `item` helpers:
+
+```tsx
+  it('renames a folder row in place from Rename', async () => {
+    const { all, written } = routes()
+    await renderApp('/folders/7', all)
+    fireEvent.contextMenu(await row(/Drafts/))
+    await userEvent.click(await item('Rename'))
+    const field = await screen.findByRole('textbox', { name: 'New Name of Drafts' })
+    await waitFor(() => expect(document.activeElement).toBe(field))
+    await userEvent.keyboard('Final Drafts{Enter}')
+    await waitFor(() => expect(written.renamedFolders).toEqual([{ id: 8, name: 'Final Drafts' }]))
+  })
+
+  it("greys Rename out in a folder row's menu where the server says it can't be renamed, and in a matter's", async () => {
+    const { all } = routes({ 'GET /v1/folders/7/children': () => children([{ ...drafts, canRename: false }]) })
+    await renderApp('/folders/7', all)
+    fireEvent.contextMenu(await row(/Drafts/))
+    expect((await item('Rename')).getAttribute('aria-disabled')).toBe('true')
+  })
+```
+
+(`routes`, `drafts` and `renamedFolders` are `organising/testing.tsx`'s, which Task 3 extended; import `children` from
+`../test/fakeApi`.) Find the existing test that opens a matter row's menu (a Recent Matters or search list) and add
+there: `expect((await item('Rename')).getAttribute('aria-disabled')).toBe('true')`. If none opens a matter's menu, add
+one that right-clicks a matter in `/search?scope=matters&q=1001` as `SearchView.test.tsx`'s matters test sets it up.
+
+If the fake API's default `/v1/folders/110/children` answer or `/v1/me` differs from these assumptions (the files'
+other tests show them), adjust the routes, not the expectations. Send F2 with `userEvent.keyboard('{F2}')` after
+`focus()`, as Task 3 found `fireEvent.keyDown` leaves the field blurred at once.
 
 - [ ] **Step 2: Run them to make sure they fail**
 
-Run: `npx vitest run apps/user/src/frame/LeftPane.test.tsx` from `healdan-web/web`.
-Expected: FAIL: no "More for Correspondence" button, no Rename item, F2 does nothing.
+Run from `healdan-web/web`: `npx vitest run apps/user/src/frame/LeftPane.test.tsx apps/user/src/menus/ContextMenus.test.tsx`.
+Expected: FAIL: no "More for Correspondence" button, no Rename item, F2 does nothing in the tree.
 
-- [ ] **Step 3: F2 and the node's id in `Tree`**
+- [ ] **Step 3: F2 in `Tree`**
 
 `Tree.tsx`: add to `TreeProps`:
 
@@ -1396,24 +1447,15 @@ Expected: FAIL: no "More for Correspondence" button, no Rename item, F2 does not
   onRename?: (id: string) => void
 ```
 
-In `item(node)`'s `ref` callback, also mark the row with its node's id, which a rename gives the focus back to:
-
-```tsx
-        ref={(row) => {
-          row?.setAttribute('data-node-id', node.id)
-          if (current === node.id) row?.setAttribute('aria-current', 'page')
-          else row?.removeAttribute('aria-current')
-        }}
-```
-
-and wrap the `AriaTree` so F2 on a row reaches `onRename` ahead of React Aria's keys, as `Table` does (a field inside
-the row stops its own keys, so typing in it never gets here):
+Destructure `onRename` out of the props (so it isn't spread onto `AriaTree`), and catch F2 on a row ahead of React
+Aria's keys, as `Table` does. A field inside the row stops its own keys, so typing in it never gets here. Wrap the
+`AriaTree`, inside `ItemContextMenu`:
 
 ```tsx
   function onKeyDownCapture(event: KeyboardEvent<HTMLDivElement>) {
     const target = event.target instanceof Element ? event.target : null
     if (!onRename || event.key !== 'F2' || target?.getAttribute('role') !== 'row') return
-    const id = target.getAttribute('data-node-id')
+    const id = target.getAttribute('data-tree-key')
     if (!id || id.endsWith(loadingSuffix)) return
     event.preventDefault()
     event.stopPropagation()
@@ -1421,36 +1463,72 @@ the row stops its own keys, so typing in it never gets here):
   }
 
   return (
-    <div className={styles.frame} onKeyDownCapture={onKeyDownCapture}>
-      <AriaTree … as now …>{nodes.map(item)}</AriaTree>
-    </div>
+    <ItemContextMenu attribute="data-tree-key" menu={contextMenu}>
+      <div className={styles.frame} onKeyDownCapture={onKeyDownCapture}>
+        <AriaTree … as now …>{nodes.map(item)}</AriaTree>
+      </div>
+    </ItemContextMenu>
   )
 ```
 
 Add `.frame { display: contents; }` to `Tree.module.css` so the wrapper changes no layout, and `KeyboardEvent` to the
-`react` import. Destructure `onRename` out of the props so it isn't spread onto `AriaTree`.
+`react` import. The rows keep master's `data-tree-key={node.id}`; the loading rows have none.
 
-- [ ] **Step 4: The tree's folders: the field, the ⋯ and F2**
+`OrganisingProvider.tsx`'s `renameOrigin`: the tree's selector becomes
+`` `[role="treegrid"] [data-tree-key="${key.slice(1)}"]` ``.
 
-`LeftPane.tsx`: imports `FolderName` from `'../organising/RenameField'`, `whyNotRename` from `'../actions/rename'` and
-`useMe` from `'../queries'`.
+- [ ] **Step 4: The tree's folders: the field, the ⋯ and F2; and Rename in the menus**
 
-`folderLabel` draws the name through `FolderName`:
+`ContextMenus.tsx`:
+- `FolderMenuItems` takes `renameIn: RenamePlace` (import the type from `'../organising/OrganisingProvider'`), and its
+  middle group holds New Folder (where `mayMakeFolderIn` allows it, as now) and Rename:
 
 ```tsx
-function folderLabel(folder: S['FolderView']): ReactNode {
-  const icon: IconName = folder.kind === 'searchFolder' ? 'folderSearch' : 'folder'
-  return (
-    <>
-      <Icon name={icon} />
-      <FolderName folder={folder} place="tree" className={styles.text} />
-    </>
-  )
-}
+      <MenuSeparator />
+      {mayMakeFolderIn(place, me.data?.admin) && (
+        <MenuItem id="newFolder" onAction={() => organising.askNewFolder(place)}>
+          {t('newFolder.button')}
+        </MenuItem>
+      )}
+      {/* Greyed out where the server says it can't be renamed: F2 says why */}
+      <MenuItem id="rename" isDisabled={!folder.canRename} onAction={() => organising.startRename(`f${folder.id}`, renameIn)}>
+        {t('rename.menu')}
+      </MenuItem>
+      <MenuSeparator />
+      <ActionItem action={favoriteAction(favorite)} />
 ```
 
-In `MyMattersSection`: `const me = useMe()`, a map `const folders = new Map<string, S['FolderView']>()` beside
-`places`, and in `folderNode` `folders.set(id, folder)` and a menu:
+  and its doc comment: "…New Folder where the toolbar offers it…, Rename (greyed out where the folder's `canRename`
+  says no: folder rename spec 5.2), and Favorites, as its star does. Moving and deleting folders are a later phase (M6
+  spec 16)."
+- `MatterMenuItems`: after the Open group's separator, ahead of Add to or Remove from My Matters, a greyed-out Rename,
+  as a matter's own folder takes the matter's name through Edit Matter in the Classic Interface:
+
+```tsx
+      <MenuSeparator />
+      {/* A matter's own folder takes the matter's name: Edit Matter, in the Classic Interface (folder rename spec 5.2) */}
+      <MenuItem id="rename" isDisabled>
+        {t('rename.menu')}
+      </MenuItem>
+      <MenuItem id="myMatters" …as now…>
+```
+
+- `folderMenu(folder, renameIn: RenamePlace)` passes it to `FolderMenuItems`.
+
+`useListMenu.tsx`: `return folderMenu(hit, 'row')`.
+
+`LeftPane.tsx`: import `FolderName` from `'../organising/RenameField'`, `whyNotRename` from `'../actions/rename'` and
+`toast` from `@healdan/ui` where missing.
+
+- `folderLabel` draws the name through `FolderName`, keeping master's icon:
+
+```tsx
+      <FolderName folder={folder} place="tree" className={styles.text} />
+```
+
+  in place of `<span className={styles.text}>{folder.name}</span>`.
+- `folderNode` gives each folder a ⋯ (the `menu` slot `Tree.module.css` shows only while the row is hovered or focused,
+  or its menu is open, as matters' is):
 
 ```tsx
       menu: (
@@ -1462,16 +1540,16 @@ In `MyMattersSection`: `const me = useMe()`, a map `const folders = new Map<stri
       ),
 ```
 
-The matter node's menu gets Rename, greyed out, ahead of Remove (a matter's own folder takes the matter's name):
+- The matter node's ⋯ gets the greyed-out Rename ahead of Remove from My Matters:
 
 ```tsx
           <MenuItem id="rename" isDisabled>
             {t('rename.menu')}
           </MenuItem>
-          <MenuItem id="remove" …as now…>
 ```
 
-And the `Tree` gets:
+- The tree's `contextMenu.items` passes `folderMenu(folder, 'tree')`.
+- The `Tree` gets:
 
 ```tsx
           onRename={(id) => {
@@ -1484,23 +1562,23 @@ And the `Tree` gets:
           }}
 ```
 
-The ⋯ shows only while its row is hovered or has the keyboard's focus, or its menu is open: `Tree.module.css`
-already does that for every node's `menu`.
+  with `const me = useMe()` in `MyMattersSection` if it has none.
 
 - [ ] **Step 5: Run the tests to make sure they pass**
 
-Run: `npx vitest run apps/user/src/frame packages/ui` from `healdan-web/web`. Expected: PASS, the existing tree tests
-and axe checks included. If the field loses the focus to its row (React Aria taking it back when the tree draws its
-nodes again), find what redraws (`folderNode` makes new node objects at each render) and keep the renamed node's
-`label` stable while it's being renamed, or focus the field again in `RenameField`'s effect after a frame
-(`requestAnimationFrame`); say which in the report.
-Then `npm run typecheck && npm run lint && npm test`. Expected: PASS.
+Run: `npx vitest run apps/user/src/frame apps/user/src/menus packages/ui` from `healdan-web/web`. Expected: PASS, the
+existing tree, menu and axe tests included. If the field loses the focus as it opens (React Aria or the context menu
+taking it back when the menu closes, or the tree drawing its nodes again: `folderNode` makes new node objects at each
+render), find which, and either keep the renamed node's `label` stable while it's renamed or focus the field again a
+frame later in `RenameField`'s effect (`requestAnimationFrame`); say which in the report.
+Then `npm run typecheck && npm run lint && npm test`. Expected: PASS (under the machine's load, run any file that times
+out at 5 s alone, and report both).
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add healdan-web/web
-git commit -m "Rename folders from the My Matters tree"
+git commit -m "Rename folders from the My Matters tree and the right-click menus"
 ```
 
 ---
@@ -1796,13 +1874,14 @@ Interface](../../the-classic-interface/)." (keep the rest of the paragraph). Add
 ## Renaming a Folder in the App
 
 Its name becomes a field, with all of it selected. **Enter** saves, and so does clicking away after you've changed it;
-**Esc** leaves it as it was. There are three ways in:
+**Esc** leaves it as it was. There are four ways in:
 
 - **In a list,** move to the folder's row with the arrow keys and press **F2**. That works in a folder, in a
   **Folders** search and in **Recent › Folders**.
 - **In My Matters** in the left pane, point at the folder and choose its **⋯** button, then **Rename**, or move to
   it with the arrow keys and press **F2**.
 - **The folder you have open:** choose the **⋯** button beside its name above the list, then **Rename**.
+- **Right-click the folder,** in a list or in My Matters, and choose **Rename**.
 
 - **You need the Rename permission** on the folder.
 - **Only administrators rename the folders at the top of a matter,** such as Correspondence and Drafts, search
@@ -1817,6 +1896,8 @@ Its name becomes a field, with all of it selected. **Enter** saves, and so does 
 
 The rename is in the folder's history. Its documents keep their doc #s and properties.
 ```
+
+The context menus' pull request ([#238](https://github.com/Healdan-Project/healdan/pull/238)) already changed these pages and says renaming folders is a later phase: change what it says to match.
 
 `my-matters-and-recent-matters/index.md`: where the tree is described, add a bullet: "**Rename a folder** with its
 **⋯** button, shown while you point at it or move to it with the arrow keys, or with **F2**. See [Renaming a Folder in
@@ -1899,11 +1980,10 @@ git commit -m "Document renaming folders in the User app"
 
 ---
 
-### Task 8: Right-click › Rename, the rebase and the pull request
+### Task 8: The last rebase, every check and the pull request
 
-**Files:**
-- Modify: whatever files `claude/m6-context-menus` builds the folder rows' and the tree's right-click menus in, if it
-  has merged.
+*Changed in the build:* the context menus merged after Task 3, and the branch was rebased on them then, so Task 4
+added right-click › Rename. This task is the last rebase, the checks and the pull request.
 
 - [ ] **Step 1: Rebase on master**
 
@@ -1912,27 +1992,11 @@ git fetch origin
 git rebase origin/master
 ```
 
-Resolve conflicts in `LeftPane.tsx` and `listColumns.tsx` (the icon-colour and context-menu branches change them)
-keeping both sides: their icons and menus, this work's `FolderName` and ⋯.
+Resolve any conflicts keeping both sides (for example the details panel's
+[Healdan-Project/healdan#235](https://github.com/Healdan-Project/healdan/pull/235) or the favourites' names'
+[#239](https://github.com/Healdan-Project/healdan/pull/239), if either has merged meanwhile).
 
-- [ ] **Step 2: Add Rename to the context menus, if they have merged**
-
-`gh pr list --repo Healdan-Project/healdan --state merged --search "head:claude/m6-context-menus"`. If it has merged,
-find the folder rows' and the tree's right-click menus (`git log origin/master --stat --grep "context menu" -i`) and
-add a Rename item to each folder menu, as the ⋯ menus have it:
-
-```tsx
-<MenuItem id="rename" isDisabled={!folder.canRename} onAction={() => organising.startRename(`f${folder.id}`, place)}>
-  {t('rename.menu')}
-</MenuItem>
-```
-
-with `place` `'row'` for a list's row and `'tree'` for the tree, and greyed out (`isDisabled`) on a matter's menu.
-Add a test beside theirs that right-click › Rename opens the field. Update the User Guide's three ways in to four,
-with "right-click the folder and choose **Rename**". If it hasn't merged, leave this step for after it lands, and say
-so in the PR's description.
-
-- [ ] **Step 3: Run every check**
+- [ ] **Step 2: Run every check**
 
 ```bash
 cd healdan-web/web && npm ci --ignore-scripts && npm run generate && npm run typecheck && npm run lint && npm test && npm run build
@@ -1944,9 +2008,8 @@ mvn -B -ntp -pl healdan-api -am package -Dgwt.skipCompilation=true -Dmaven.antru
 
 and the docs site's four commands (Task 7, Step 5). Expected: all pass. Run Maven in the background.
 
-- [ ] **Step 4: Open the pull request**
+- [ ] **Step 3: Open the pull request**
 
 Push the branch and open a PR to `master` with `gh pr create --repo Healdan-Project/healdan`, not merged. Its
-description says what changes (the endpoint, `canRename`, the app's four ways in), that no upstream file changes, the
-tests, and whether right-click › Rename is in or waits for the context menus. It ends with
-`🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
+description says what changes (the endpoint, `canRename`, the app's four ways in), that no upstream file changes, and
+the tests. It ends with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
