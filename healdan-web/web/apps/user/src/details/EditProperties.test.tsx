@@ -94,6 +94,26 @@ describe('Editing properties', () => {
 
     expect(await within(panel).findByRole('button', { name: 'Save' })).toBeTruthy()
     expect(within(panel).getByRole('tab', { name: 'Properties' }).getAttribute('aria-selected')).toBe('true')
+    // The form opened showing, so it took the focus in its first field
+    await waitFor(() => expect(globalThis.document.activeElement?.matches('input, select, textarea, [role="spinbutton"]')).toBe(true))
+    expect(within(panel).getByRole('tabpanel', { name: 'Properties' }).contains(globalThis.document.activeElement)).toBe(true)
+  })
+
+  // The form stays mounted while the person looks at Versions: what's typed stays, and coming back doesn't move the focus
+  it('keeps what is typed while the person looks at the Versions tab', async () => {
+    await renderApp('/folders/7?sel=10388', routes(profile()))
+    const panel = await edit()
+    await userEvent.type(within(panel).getByRole('textbox', { name: 'Comments' }), ' Chase on Monday')
+    const typed = (within(panel).getByRole('textbox', { name: 'Comments' }) as HTMLInputElement).value
+    expect(typed).toMatch(/Chase on Monday$/)
+
+    await userEvent.click(within(panel).getByRole('tab', { name: /^Versions/ }))
+    expect(within(panel).queryByRole('textbox', { name: 'Comments' })).toBeNull()
+    const properties = within(panel).getByRole('tab', { name: 'Properties' })
+    await userEvent.click(properties)
+
+    expect((within(panel).getByRole('textbox', { name: 'Comments' }) as HTMLInputElement).value).toBe(typed)
+    expect(globalThis.document.activeElement).toBe(properties)
   })
 
   it('shows a date it may not change as the day the form would edit, not a time in the person\'s zone', async () => {

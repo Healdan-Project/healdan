@@ -85,6 +85,9 @@ public class DeviceHoldsTest extends AbstractHealdanTestCase {
 		assertEquals("LibreOffice", current.getApp());
 		assertEquals(Long.valueOf(mac.getId()), current.getTokenId());
 		assertEquals("Laptop", holds().deviceName(current));
+		DeviceHolds.Held held = holds().held(reload()).orElseThrow();
+		assertEquals(current.getId(), held.row().getId());
+		assertEquals("Laptop", held.name());
 		assertTrue(holds().heldHere(reload(), mac));
 		assertFalse(holds().heldHere(reload(), linux));
 		assertFalse("a token without a device isn't the device", holds().heldHere(reload(), none));

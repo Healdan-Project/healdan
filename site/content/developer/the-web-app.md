@@ -167,7 +167,8 @@ list's row shows at once as the placeholder) and renders a fixed header, with th
 `# n · Version v · size` (`formatSize` in `@healdan/ui`), the actions, and a held document's `HoldInfo` and
 `CheckoutControls`, then `@healdan/ui`'s `Tabs` (React Aria's tabs, drawn as the helper's segmented control): **Properties**,
 with **Edit Properties** at its top and `Properties` or the form under it, and **Versions**, with `useVersions`'s
-`total` in brackets once it's known. Only the selected tab's panel is drawn. The tab is `details/DetailsTab.tsx`'s,
+`total` in brackets once it's known. Only the selected tab's panel is drawn, except Properties while its form is open: `Tabs`' `keepMounted`
+keeps it mounted, hidden and inert, so what's typed in it stays while the person looks at Versions. The tab is `details/DetailsTab.tsx`'s,
 a context in the frame, so it stays as the person left it while each document's panel comes and goes, and a page
 load starts on Properties; a `version` (a `#` that named one) switches it to Versions, and the filing tray's **Edit**
 to Properties. A search view passes
@@ -210,7 +211,8 @@ view.
   `hold`. The web session is no device, so the app never takes over a check-out a device holds (`409
   held-elsewhere`), and offers no button for it. `details/HoldInfo.tsx` is the hold's own section above the tabs,
   **Check-Out Info** or **Lock Info**, a `Section` with `boxed`: User, Check-Out Time (or Lock Time), and, from
-  `hold.heldOn`, Application and Computer, each left out when the API gives no value. The API gives `heldOn` to the
+  `hold.heldOn`, Application and Computer, each but User left out when the API gives no value (User is "Someone"
+  then), in `details/PropertyList.tsx`, which `Properties` draws its rows with too. The API gives `heldOn` to the
   holder and to administrators only, and the app never decides anything by it: `device` still says whether the
   check-out is the person's own on a computer. `holdSentence` says who has it and since when, as a sentence, for the
   drop-on-a-row question and the refusals (`filing/refusal.ts`). A check-in from the app is a file picked into

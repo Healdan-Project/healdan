@@ -12,6 +12,11 @@ export interface TabItem {
   label: string
   /** What the tab shows; only the selected tab's is drawn */
   content: ReactNode
+  /**
+   * Keeps the content mounted, hidden and inert, while another tab is selected, so what's typed in it, and where its
+   * focus was put, stay as they were (a form being edited)
+   */
+  keepMounted?: boolean
 }
 
 export interface TabsProps {
@@ -38,7 +43,14 @@ export function Tabs({ label, tabs, selected, onSelect }: TabsProps) {
         ))}
       </TabList>
       {tabs.map((tab) => (
-        <TabPanel key={tab.id} id={tab.id} className={styles.panel}>
+        <TabPanel
+          key={tab.id}
+          id={tab.id}
+          shouldForceMount={tab.keepMounted}
+          className={styles.panel}
+          // React Aria makes a kept panel inert but leaves it showing
+          style={({ state }) => (state.selectedKey === tab.id ? undefined : { display: 'none' })}
+        >
           {tab.content}
         </TabPanel>
       ))}

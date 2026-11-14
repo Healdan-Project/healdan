@@ -127,6 +127,14 @@ public class DevicesTest extends ApiTestCase {
 		assertTrue(others.path("device").isNull());
 		assertTrue(others.path("heldOn").isNull());
 
+		// A folder's list gives each row's hold on the same terms
+		JsonNode adminsRow = listed(d, admin).path("hold");
+		assertTrue(adminsRow.path("device").isNull());
+		assertHeldOn(adminsRow.path("heldOn"), "Test device", "LibreOffice");
+		JsonNode othersRow = listed(d, other).path("hold");
+		assertTrue(othersRow.path("device").isNull());
+		assertTrue(othersRow.path("heldOn").isNull());
+
 		// A problem's hold says it on the same terms
 		ApiResponse elsewhere = post(checkout(d)).token(linux).send();
 		assertHeldElsewhere(elsewhere, d);
@@ -159,6 +167,21 @@ public class DevicesTest extends ApiTestCase {
 			assertTrue(hold.path("device").isNull());
 			assertTrue(hold.path("heldOn").isNull());
 		}
+		// Nor is it in a 409 locked problem, to an administrator either
+		ApiResponse locked = post(checkout(d)).token(admin).send();
+		assertEquals(locked.toString(), "locked", locked.code());
+		assertTrue(locked.json().path("hold").path("device").isNull());
+		assertTrue(locked.json().path("hold").path("heldOn").isNull());
+	}
+
+	/** @return the document's row in its folder's list, as the token's user sees it */
+	private JsonNode listed(Document d, String token) {
+		ApiResponse response = get("/api/v1/folders/" + documents.getId() + "/children").token(token).send();
+		assertEquals(response.toString(), 200, response.status());
+		for (JsonNode item : response.json().path("items"))
+			if (d.getCustomId().equals(item.path("docNumber").asText()))
+				return item;
+		throw new AssertionError("Document " + d.getCustomId() + " isn't in " + response);
 	}
 
 	@Test

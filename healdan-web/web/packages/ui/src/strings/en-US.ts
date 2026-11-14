@@ -149,6 +149,7 @@ export const enUS = {
   'hold.checkoutInfo': 'Check-Out Info',
   'hold.lockInfo': 'Lock Info',
   'hold.user': 'User',
+  'hold.someoneUser': 'Someone',
   'hold.you': '{name} (You)',
   'hold.youUnnamed': 'You',
   'hold.checkoutTime': 'Check-Out Time',

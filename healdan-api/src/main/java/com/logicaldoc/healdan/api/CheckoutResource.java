@@ -299,10 +299,8 @@ public class CheckoutResource {
 	 *         the {@code hold}, which names the computer a check-out is held
 	 *         on for the holder and administrators
 	 *         ({@link ApiViews#heldOn(HoldView, Document, User)})
-	 * @throws PersistenceException error at data layer
 	 */
-	static ApiProblem conflict(Document document, HoldView hold, long docNumber, User caller)
-			throws PersistenceException {
+	static ApiProblem conflict(Document document, HoldView hold, long docNumber, User caller) {
 		HoldView shown = ApiViews.heldOn(hold, document, caller);
 		String holder = hold.by() != null && hold.by().name() != null ? hold.by().name() : "someone else";
 		if ("checkout".equals(hold.kind()))

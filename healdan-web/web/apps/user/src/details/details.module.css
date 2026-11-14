@@ -74,8 +74,8 @@
   background: var(--hd-sidebar);
 }
 
-/* Check-Out Time is a longer label than the properties' */
-.holdInfo .property {
+/* Check-Out Time is a longer label than the properties' (PropertyList's wideLabels) */
+.wideLabels .property {
   grid-template-columns: 108px 1fr;
 }
 

@@ -379,9 +379,15 @@ describe('Check-Out Info', () => {
     expect(within(await details()).queryByRole('group', { name: 'Check-Out Info' })).toBeNull()
   })
 
-  it('leaves out a row the API gives no value for', async () => {
+  it('leaves out a time or computer the API gives no value for, and says "Someone" when it says no one', async () => {
     const section = await sectionOf(held({ by: null, since: null, heldOn: { name: 'Healdan Helper on MacBook', app: null } }))
-    expect(rows(section)).toEqual({ Computer: 'Healdan Helper on MacBook' })
+    expect(rows(section)).toEqual({ User: 'Someone', Computer: 'Healdan Helper on MacBook' })
+  })
+
+  // As the list's marker says "Checked out by someone": never a box with nothing in it
+  it('has the User row when the API says nothing else', async () => {
+    const section = await sectionOf(held({ by: null, since: null }))
+    expect(rows(section)).toEqual({ User: 'Someone' })
   })
 
   it('sits above the tabs, so it shows on both, and is boxed', async () => {

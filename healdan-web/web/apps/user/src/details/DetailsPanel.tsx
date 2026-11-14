@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, apiPath, type components } from '@healdan/api'
 import { Button, formatSize, formatVersion, Icon, plural, t, Tabs } from '@healdan/ui'
 import { CheckoutControls } from '../actions/CheckoutControls'
@@ -52,27 +52,29 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
   const doc = document.data
   const [editing, setEditing] = useState(false)
   const edit = useRef<HTMLButtonElement>(null)
-  // A # that names a version shows it, in Versions; the tab then stays there, as one the person chose would
-  useEffect(() => {
+  // A # that names a version shows it, in Versions, before the panel is first painted; the tab then stays there, as one
+  // the person chose would
+  useLayoutEffect(() => {
     if (version !== undefined) setTab('versions')
   }, [docNumber, version, setTab])
   // Edit Properties is grey while the form is open, and the keyboard's place is there once it's enabled again, not on the page
   const giveFocusBack = useRef(false)
-  // The filing tray's Edit: once the properties are here, the form opens if the person may change any of them
+  // The filing tray's Edit: once the properties are here, the form opens if the person may change any of them. It opens
+  // once the Properties tab shows, which the request switches to before paint, so the form mounts showing and takes the
+  // focus in its first field.
   const asked = useEditRequest(docNumber)
   const loaded = properties.data?.items
-  if (asked && loaded && !editing && loaded.some(isEditable)) setEditing(true)
+  if (asked && loaded && !editing && tab === 'properties' && loaded.some(isEditable)) setEditing(true)
   useEffect(() => {
     if (editing || !giveFocusBack.current) return
     giveFocusBack.current = false
     edit.current?.focus()
   }, [editing])
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!asked || !loaded) return
-    clearEditRequest()
-    // The form is in the Properties tab
-    setTab('properties')
-  }, [asked, loaded, setTab])
+    if (tab !== 'properties') setTab('properties')
+    else clearEditRequest()
+  }, [asked, loaded, tab, setTab])
 
   if (failed(document)) return <ErrorPanel error={document.error} onRetry={() => void document.refetch()} />
   if (!doc) return <p className={styles.note}>{t('common.loading')}</p>
@@ -99,6 +101,8 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
           {
             id: 'properties',
             label: t('details.properties'),
+            // An open form stays mounted on the Versions tab, with what's typed in it and any refusal of its save
+            keepMounted: editing,
             content: (
               <>
                 <div className={styles.tabTop}>

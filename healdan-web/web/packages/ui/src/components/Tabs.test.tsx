@@ -60,6 +60,36 @@ describe('Tabs', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit Properties' }))
   })
 
+  // A form being edited in a tab keeps what's typed while another tab shows, and doesn't take the focus again on return
+  it('keeps a kept tab mounted, hidden and inert, while another shows', async () => {
+    function Kept() {
+      const [selected, setSelected] = useState('properties')
+      return (
+        <Tabs
+          label="Document Details"
+          selected={selected}
+          onSelect={setSelected}
+          tabs={[
+            { id: 'properties', label: 'Properties', content: <input aria-label="Comments" />, keepMounted: true },
+            { id: 'versions', label: 'Versions', content: <p>Version 2.1</p> },
+          ]}
+        />
+      )
+    }
+    render(<Kept />)
+    await userEvent.type(screen.getByRole('textbox', { name: 'Comments' }), 'Chase on Monday')
+    const field = screen.getByRole('textbox', { name: 'Comments' })
+    await userEvent.click(screen.getByRole('tab', { name: 'Versions' }))
+
+    expect(screen.queryByRole('textbox', { name: 'Comments' })).toBeNull()
+    expect(field.isConnected).toBe(true)
+    expect(field.closest('[inert]')).toBeTruthy()
+    expect(screen.getByRole('tabpanel', { name: 'Versions' }).textContent).toBe('Version 2.1')
+    await userEvent.click(screen.getByRole('tab', { name: 'Properties' }))
+    expect(screen.getByRole('textbox', { name: 'Comments' })).toBe(field)
+    expect((field as HTMLInputElement).value).toBe('Chase on Monday')
+  })
+
   it('starts on the tab it is given', () => {
     render(<Harness initial="versions" />)
     expect(screen.getByRole('tab', { name: 'Versions (3)' }).getAttribute('aria-selected')).toBe('true')
