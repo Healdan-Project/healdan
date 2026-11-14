@@ -342,7 +342,7 @@ git commit -m "Say on every folder whether the caller may rename it"
 - [ ] **Step 1: Write the failing tests**
 
 Add to `FolderRenameTest` (imports: `java.util.List`, `com.logicaldoc.core.folder.FolderEvent`,
-`com.logicaldoc.healdan.support.DbSnapshot`, `static org.junit.Assert.assertNotNull`):
+`com.logicaldoc.healdan.support.DbSnapshot`):
 
 ```java
 	// Renaming
@@ -460,7 +460,7 @@ Add to `FolderRenameTest` (imports: `java.util.List`, `com.logicaldoc.core.folde
 		ApiResponse response = patch("/api/v1/folders/" + letters.getId()).webSession(signInWeb(clerk))
 				.json(Map.of("name", "Post")).send();
 		assertEquals(response.toString(), 200, response.status());
-		assertNotNull(FolderDAO.get().findByName(documents, "Post", Tenant.DEFAULT_ID, true));
+		assertEquals("Post", FolderDAO.get().findById(letters.getId()).getName());
 	}
 
 	private ApiResponse rename(Folder f, String name, User as) {
