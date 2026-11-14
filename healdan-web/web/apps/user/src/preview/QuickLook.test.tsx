@@ -178,6 +178,8 @@ describe('QuickLook', () => {
 
   it('previews a version from the details, and downloads that version; Open is for the current file only', async () => {
     const { api } = await renderApp('/folders/7?sel=10391', routes())
+    // The versions are in the details' Versions tab
+    await userEvent.click(await screen.findByRole('tab', { name: /^Versions/ }))
     await userEvent.click(await screen.findByRole('button', { name: 'Preview Version 2' }))
 
     const dialog = await quickLook('Delta.pdf')

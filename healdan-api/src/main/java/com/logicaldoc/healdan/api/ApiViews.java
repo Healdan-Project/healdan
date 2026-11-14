@@ -35,6 +35,7 @@ import com.logicaldoc.healdan.api.model.DeviceView;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FolderRef;
 import com.logicaldoc.healdan.api.model.FolderView;
+import com.logicaldoc.healdan.api.model.HeldOnView;
 import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.api.model.MatterRef;
 import com.logicaldoc.healdan.api.model.MatterView;
@@ -214,19 +215,54 @@ public final class ApiViews {
 
 	/**
 	 * @param d a document
-	 * @param caller the signed-in user
+	 * @param caller the signed-in user, with its groups
 	 * @return who holds it and since when, or null if it's free, as
 	 *         {@link #hold(Document)}; for the user who has it checked out,
-	 *         also the device that holds the check-out, if one does
+	 *         also the device that holds the check-out, if one does; and for
+	 *         that user or an administrator, the computer and app it's held on
 	 * @throws PersistenceException error at data layer
 	 */
 	public static HoldView hold(Document d, User caller) throws PersistenceException {
 		HoldView hold = hold(d);
-		if (hold == null || !checkedOutBy(d, caller))
-			return hold;
-		DeviceHolds devices = DeviceHolds.get();
-		return devices.current(d).map(row -> new HoldView(hold.kind(), hold.by(), hold.since(),
-				new DeviceView(row.getDevice(), devices.deviceName(row), row.getApp()))).orElse(hold);
+		boolean holder = checkedOutBy(d, caller);
+		return heldWhere(hold, d, caller).map(held -> new HoldView(hold.kind(), hold.by(), hold.since(),
+				holder ? new DeviceView(held.row().getDevice(), held.name(), held.row().getApp()) : null,
+				new HeldOnView(held.name(), held.row().getApp()))).orElse(hold);
+	}
+
+	/**
+	 * The hold as a {@code 409 checked-out} or {@code locked} problem names it
+	 * to the caller: the computer and app a check-out is held on, for the user
+	 * who holds it or an administrator, and never the device, which those
+	 * problems have never carried. {@code 409 held-elsewhere}, which names the
+	 * holder's other device, takes {@link #hold(Document, User)} instead.
+	 *
+	 * @param hold the document's hold, as {@link #hold(Document)} gives it
+	 * @param d the document
+	 * @param caller the signed-in user, with its groups
+	 * @return the hold, with {@code heldOn} when the caller may see it
+	 */
+	static HoldView heldOn(HoldView hold, Document d, User caller) {
+		return heldWhere(hold, d, caller).map(held -> new HoldView(hold.kind(), hold.by(), hold.since(), null,
+				new HeldOnView(held.name(), held.row().getApp()))).orElse(hold);
+	}
+
+	/**
+	 * Who sees where a check-out is held (changed after M6: the owner's
+	 * dogfooding punch list, 2026-11-14): the holder and administrators, so
+	 * an administrator can say which computer to check it in on. Only the
+	 * holder gets the device itself, which a client takes for its own. The
+	 * caller's groups decide who is an administrator, as the API's other
+	 * checks do, so a list asks the database nothing more for a row someone
+	 * else holds.
+	 *
+	 * @return the device's record of the check-out, with its name; empty for
+	 *         anyone else, for a lock, and when no device holds it
+	 */
+	private static Optional<DeviceHolds.Held> heldWhere(HoldView hold, Document d, User caller) {
+		if (hold == null || !"checkout".equals(hold.kind()) || !checkedOutBy(d, caller) && !caller.isAdmin())
+			return Optional.empty();
+		return DeviceHolds.get().held(d);
 	}
 
 	/**
@@ -244,7 +280,7 @@ public final class ApiViews {
 	 * @param d a document
 	 * @return who holds it and since when, or null if it's free; the holder is
 	 *         null when CE's data doesn't say who it is. It never says which
-	 *         device: see {@link #hold(Document, User)}.
+	 *         device, or which computer: see {@link #hold(Document, User)}.
 	 * @throws PersistenceException error at data layer
 	 */
 	public static HoldView hold(Document d) throws PersistenceException {
@@ -270,7 +306,7 @@ public final class ApiViews {
 			if (!latest.isEmpty())
 				since = latest.get(0).getDate();
 		}
-		return new HoldView(kind, userRef(d.getLockUserId(), d.getLockUser()), since, null);
+		return new HoldView(kind, userRef(d.getLockUserId(), d.getLockUser()), since, null, null);
 	}
 
 	/**

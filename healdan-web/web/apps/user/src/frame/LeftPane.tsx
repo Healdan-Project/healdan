@@ -3,7 +3,7 @@
 
 import { useQueries } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, t, type ItemMenu, type TreeNode } from '@healdan/ui'
 import { favoriteTooltip } from '../actions/favoriteName'
@@ -315,12 +315,20 @@ function FavoritesSection() {
       setRenaming(favorite.id)
     },
   })
+  // The favorite whose link takes the focus back once the field has given way to it
+  const refocus = useRef<number | undefined>(undefined)
   function renamed(id: number, focusLink: boolean) {
-    // Only this favorite's field: another may have opened since
-    setRenaming((current) => (current === id ? undefined : current))
-    // The link is back once this has rendered, in its new place if the name moved it
-    if (focusLink) requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-menu-key="${id}"]`)?.focus())
+    refocus.current = focusLink ? id : undefined
+    setRenaming(undefined)
   }
+  // After the render that draws the link again, not in the next frame: after a save, React draws it in a task of its own,
+  // which a frame can come before, and the link then wasn't there to focus (in Chromium and WebKit alike)
+  useEffect(() => {
+    const id = refocus.current
+    if (id === undefined || renaming !== undefined) return
+    refocus.current = undefined
+    list.current?.querySelector<HTMLElement>(`[data-menu-key="${id}"]`)?.focus()
+  }, [renaming])
   return (
     <Section title={t('favorites.mine')} menu={menu}>
       {stateOf(favorites, favorites.isSuccess && items.length === 0) ?? (

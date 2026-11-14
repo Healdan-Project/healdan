@@ -16,21 +16,21 @@ describe('Versions', () => {
   it('marks the version asked for as the current one in the list', () => {
     render(<Versions versions={rows} selected="2.0" />)
 
-    const items = within(screen.getByRole('group', { name: 'Versions' })).getAllByRole('listitem')
+    const items = within(screen.getByRole('list')).getAllByRole('listitem')
     expect(items.map((item) => item.getAttribute('aria-current'))).toEqual([null, 'true', null])
   })
 
   it('marks none when none is asked for', () => {
     render(<Versions versions={rows} />)
 
-    const items = within(screen.getByRole('group', { name: 'Versions' })).getAllByRole('listitem')
+    const items = within(screen.getByRole('list')).getAllByRole('listitem')
     expect(items.every((item) => item.getAttribute('aria-current') === null)).toBe(true)
   })
 
   it("copes with a version nobody saved and one that has no date", () => {
     render(<Versions versions={rows} />)
 
-    const last = within(screen.getByRole('group', { name: 'Versions' })).getAllByRole('listitem')[2]!
+    const last = within(screen.getByRole('list')).getAllByRole('listitem')[2]!
     expect(last.textContent).toBe('Version 1')
   })
 

@@ -129,8 +129,8 @@ describe('a version the server refuses', () => {
   const refusal = () => new ApiError(409, 'already-filed', 'x', { code: 'already-filed' })
   const me = 5
   // What the save left: the document checked out to the person from this page, which is no device
-  const leftMine = document({ docNumber: 10431, hold: { kind: 'checkout', by: { id: me, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null } })
-  const theirs = document({ docNumber: 10431, hold: { kind: 'checkout', by: { id: 3, name: 'Jamie Clarke' }, since: '2026-11-03T10:00:00Z', device: null } })
+  const leftMine = document({ docNumber: 10431, hold: { kind: 'checkout', by: { id: me, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null, heldOn: null } })
+  const theirs = document({ docNumber: 10431, hold: { kind: 'checkout', by: { id: 3, name: 'Jamie Clarke' }, since: '2026-11-03T10:00:00Z', device: null, heldOn: null } })
 
   it('releases the check-out the refusal left behind when the person had none before', async () => {
     const api = fakeApi({ 'POST /v1/documents/10431/versions': refusal(), 'GET /v1/documents/10431': leftMine, 'DELETE /v1/documents/10431/checkout': document({ docNumber: 10431 }) })

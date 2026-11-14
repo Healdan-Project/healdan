@@ -4,22 +4,20 @@
 import { useRef } from 'react'
 import type { components } from '@healdan/api'
 import { Button, t } from '@healdan/ui'
-import { checkInAccept, holdSentence } from './checkout'
+import { checkInAccept } from './checkout'
 import { useCheckout } from './useCheckout'
 import styles from './actions.module.css'
 
 /**
- * The details panel's check-out: who has the document and since when, and what the person can do about it. Check Out
- * when it's free; Check In and Release for the person's own check-out from the web page. A check-out on a computer, someone
- * else's check-out and a lock are only described: they're released on that computer or in the Classic Interface.
+ * The details panel's check-out buttons, under its Check-Out Info (`details/HoldInfo`): Check Out when the document is
+ * free; Check In and Release for the person's own check-out from the web page. A check-out on a computer, someone else's
+ * check-out and a lock have none, as the web page is no device and never takes a check-out over (R14).
  */
 export function CheckoutControls({ document }: { document: components['schemas']['DocumentView'] }) {
   const checkout = useCheckout(document)
   const picker = useRef<HTMLInputElement>(null)
-  const sentence = holdSentence(checkout.state)
   return (
     <>
-      {sentence && <p className={styles.hold}>{sentence}</p>}
       <div className={styles.holdActions}>
         {checkout.state.kind === 'free' && (
           <Button isDisabled={checkout.busy || !document.canEdit} onPress={() => void checkout.checkOut()}>

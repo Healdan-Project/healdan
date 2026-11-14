@@ -95,7 +95,8 @@ describe('Deleting', () => {
 
     const dialog = await screen.findByRole('dialog', { name: "Some Documents Weren't Moved to the Trash" })
     const [line] = within(dialog).getAllByRole('listitem')
-    expect(line!.textContent).toMatch(/^Lease\.docx: It's checked out\. Checked out by Jamie Clarke since .*released on the computer/)
+    expect(line!.textContent).toMatch(/^Lease\.docx: It's checked out\. Checked out by Jamie Clarke since .*\.$/)
+    expect(line!.textContent).not.toMatch(/released|Classic Interface/)
     expect(screen.queryByText(/server sentence/)).toBeNull()
     // The other was deleted all the same
     expect(written.deleted).toEqual([10433])

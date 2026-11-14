@@ -23,6 +23,7 @@ import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
+import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
@@ -37,13 +38,16 @@ import com.logicaldoc.healdan.token.ApiTokens;
 /**
  * Which of a user's computers holds a check-out (spec section 9.4). Clerk
  * signs in twice, from devices {@code mac-1} and {@code linux-2}, and reads,
- * writes and downloads in matter 998.1. Boss is an admin.
+ * writes and downloads in matter 998.1. Boss is an admin. Colleague may do
+ * what clerk may, and isn't an admin.
  */
 public class DevicesTest extends ApiTestCase {
 
 	private User clerk;
 
 	private User boss;
+
+	private User colleague;
 
 	private Folder documents;
 
@@ -54,8 +58,10 @@ public class DevicesTest extends ApiTestCase {
 
 		clerk = fx.user("clerk");
 		boss = fx.user("boss", "admin");
+		colleague = fx.user("colleague");
 		Folder store = fx.store("Client Work");
 		fx.grant(store, clerk.getUserGroup(), Permission.READ, Permission.WRITE, Permission.DOWNLOAD);
+		fx.grant(store, colleague.getUserGroup(), Permission.READ, Permission.WRITE, Permission.DOWNLOAD);
 		Folder workspace = FolderDAO.get()
 				.findById(fx.matter(fx.client(998, "Healdan"), 1, "Demo", store, "Documents").getFolderId());
 		documents = FolderDAO.get().findByName(workspace, "Documents", Tenant.DEFAULT_ID, true).get(0);
@@ -80,10 +86,102 @@ public class DevicesTest extends ApiTestCase {
 		assertTrue(get(document(d)).token(mac).send().json().path("canEdit").booleanValue());
 		assertFalse(get(document(d)).token(linux).send().json().path("canEdit").booleanValue());
 
-		// Others see who holds it, not where
+		// Others see who holds it, not the device
 		JsonNode seen = get(document(d)).token(other).send().json().path("hold");
 		assertEquals(clerk.getId(), seen.path("by").path("id").asLong());
 		assertTrue(seen.path("device").isNull());
+	}
+
+	/**
+	 * Where a check-out is held, for showing (changed after M6: the owner's
+	 * dogfooding punch list, 2026-11-14): the holder and administrators see
+	 * the computer and the app in {@code heldOn}, so an administrator can say
+	 * which computer to check it in on; anyone else sees only who holds it
+	 * and since when. The {@code device}, which the helper takes for its own,
+	 * stays the holder's alone.
+	 */
+	@Test
+	public void testHeldOnForTheHolderAndAdmins() throws Exception {
+		Document d = file();
+		String mac = signIn("mac-1");
+		String linux = signIn("linux-2");
+		String admin = signIn(boss);
+		String other = signIn(colleague);
+		assertEquals(200, post(checkout(d)).token(mac).json(Map.of("app", "LibreOffice")).send().status());
+
+		// The holder, from either of their devices: the device, and where it's held
+		for (String token : List.of(mac, linux)) {
+			JsonNode hold = get(document(d)).token(token).send().json().path("hold");
+			assertDevice(hold.path("device"), "mac-1", "Test device", "LibreOffice");
+			assertHeldOn(hold.path("heldOn"), "Test device", "LibreOffice");
+		}
+		// An administrator who doesn't hold it: where it's held, never the device
+		JsonNode admins = get(document(d)).token(admin).send().json().path("hold");
+		assertEquals(clerk.getId(), admins.path("by").path("id").asLong());
+		assertTrue(admins.path("device").isNull());
+		assertHeldOn(admins.path("heldOn"), "Test device", "LibreOffice");
+		// Anyone else: who holds it and since when
+		JsonNode others = get(document(d)).token(other).send().json().path("hold");
+		assertEquals(clerk.getId(), others.path("by").path("id").asLong());
+		assertTrue(others.toString(), others.path("since").isTextual());
+		assertTrue(others.path("device").isNull());
+		assertTrue(others.path("heldOn").isNull());
+
+		// A folder's list gives each row's hold on the same terms
+		JsonNode adminsRow = listed(d, admin).path("hold");
+		assertTrue(adminsRow.path("device").isNull());
+		assertHeldOn(adminsRow.path("heldOn"), "Test device", "LibreOffice");
+		JsonNode othersRow = listed(d, other).path("hold");
+		assertTrue(othersRow.path("device").isNull());
+		assertTrue(othersRow.path("heldOn").isNull());
+
+		// A problem's hold says it on the same terms
+		ApiResponse elsewhere = post(checkout(d)).token(linux).send();
+		assertHeldElsewhere(elsewhere, d);
+		assertHeldOn(elsewhere.json().path("hold").path("heldOn"), "Test device", "LibreOffice");
+		ApiResponse adminRefused = post(checkout(d)).token(admin).send();
+		assertEquals(adminRefused.toString(), "checked-out", adminRefused.code());
+		assertTrue(adminRefused.json().path("hold").path("device").isNull());
+		assertHeldOn(adminRefused.json().path("hold").path("heldOn"), "Test device", "LibreOffice");
+		ApiResponse otherRefused = post(checkout(d)).token(other).send();
+		assertEquals(otherRefused.toString(), "checked-out", otherRefused.code());
+		assertTrue(otherRefused.json().path("hold").path("device").isNull());
+		assertTrue(otherRefused.json().path("hold").path("heldOn").isNull());
+
+		// A check-out with no device is held on no computer, for the holder and administrators too
+		assertEquals(200, delete(checkout(d)).token(mac).send().status());
+		webPageCheckout(d);
+		for (String token : List.of(mac, admin)) {
+			JsonNode hold = get(document(d)).token(token).send().json().path("hold");
+			assertEquals("checkout", hold.path("kind").textValue());
+			assertTrue(hold.path("device").isNull());
+			assertTrue(hold.path("heldOn").isNull());
+		}
+
+		// Nor is a lock
+		DocumentManager.get().unlock(d.getId(), history(DocumentEvent.UNLOCKED));
+		DocumentManager.get().lock(d.getId(), DocumentStatus.LOCKED, history(DocumentEvent.LOCKED));
+		for (String token : List.of(mac, admin, other)) {
+			JsonNode hold = get(document(d)).token(token).send().json().path("hold");
+			assertEquals("lock", hold.path("kind").textValue());
+			assertTrue(hold.path("device").isNull());
+			assertTrue(hold.path("heldOn").isNull());
+		}
+		// Nor is it in a 409 locked problem, to an administrator either
+		ApiResponse locked = post(checkout(d)).token(admin).send();
+		assertEquals(locked.toString(), "locked", locked.code());
+		assertTrue(locked.json().path("hold").path("device").isNull());
+		assertTrue(locked.json().path("hold").path("heldOn").isNull());
+	}
+
+	/** @return the document's row in its folder's list, as the token's user sees it */
+	private JsonNode listed(Document d, String token) {
+		ApiResponse response = get("/api/v1/folders/" + documents.getId() + "/children").token(token).send();
+		assertEquals(response.toString(), 200, response.status());
+		for (JsonNode item : response.json().path("items"))
+			if (d.getCustomId().equals(item.path("docNumber").asText()))
+				return item;
+		throw new AssertionError("Document " + d.getCustomId() + " isn't in " + response);
 	}
 
 	@Test
@@ -330,6 +428,13 @@ public class DevicesTest extends ApiTestCase {
 		assertEquals(device.toString(), id, device.path("id").textValue());
 		assertEquals(device.toString(), name, device.path("name").textValue());
 		assertEquals(device.toString(), app, device.path("app").textValue());
+	}
+
+	private static void assertHeldOn(JsonNode heldOn, String name, String app) {
+		assertEquals(heldOn.toString(), name, heldOn.path("name").textValue());
+		assertEquals(heldOn.toString(), app, heldOn.path("app").textValue());
+		// For showing: no device id, which a client could take for its own
+		assertFalse(heldOn.toString(), heldOn.has("id"));
 	}
 
 	private String signIn(String device) {

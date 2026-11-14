@@ -80,14 +80,14 @@ pages shift when the folder changes between them, so it keeps one copy of a row 
 
 Every list of documents takes its Title column from `views/listColumns.tsx`, whose cell ends with `HoldMarker`
 (`actions/HoldMarker.tsx`) for a document whose `hold` isn't null: Check Out's pencil for a check-out, or the padlock for
-a lock, in a `role="img"` span whose name and `title` are `holdLabel`'s. That's who has it and since when, from the `hold.*`
-strings the details use, without where it's released, which `holdSentence` adds for the details. The same words are in
-the span as text, drawn away, which a hovered row, or one with the keyboard's focus, shows after the icon
-(`actions.module.css`), as `MatterCell` shows a matter's name: a tooltip alone can't be reached by keyboard. Only a held
-row asks who the person is (`useMe`), to tell their own holds from others'. The Table colours a cell's icons
-`--hd-text-secondary`, and the row's own text colour on a selected row, so the marker meets contrast in both themes.
-An icon that stands for a kind of item keeps its kind's colour (see [Kind Colours](#kind-colours)) but on the accent fill
-of a selected row in a list that has the focus, where it takes the text's colour too.
+a lock, in a `role="img"` span whose name and `title` are `holdLabel`'s: who has it and nothing more, such as "Checked
+out by Priya Nair" or "Locked by you", with no time, computer or full stop. The span holds the icon alone, and no rule of
+a hovered, focused or selected row changes it, so it never moves; a screen reader reads its name, and the details'
+Check-Out Info has the rest. Only a held row asks who the person is (`useMe`), to tell their own holds from others'. The
+Table colours a cell's icons `--hd-text-secondary`, and the row's own text colour on a selected row, so the marker meets
+contrast in both themes. An icon that stands for a kind of item keeps its kind's colour (see
+[Kind Colours](#kind-colours)) but on the accent fill of a selected row in a list that has the focus, where it takes the
+text's colour too.
 
 The virtualiser places the rows itself, so the Table needs a height: it fills a flex column, as the folder view's is.
 jsdom has no IntersectionObserver, which notices the end of a list, so the tests' setup installs one that sees
@@ -165,8 +165,15 @@ adds Client and Matter.
 
 `details/DetailsPanel.tsx` is the region's details: `<DetailsPanel docNumber row version context />` asks for the
 document, its properties and its versions (`useDocument`, `useProperties` and `useVersions` in `queries.ts`; the
-list's row shows at once as the placeholder) and renders the thumbnail, the name, `# n · Version v · size`
-(`formatSize` in `@healdan/ui`), the actions and `Properties` and `Versions`. A search view passes
+list's row shows at once as the placeholder) and renders a fixed header, with the thumbnail, the name,
+`# n · Version v · size` (`formatSize` in `@healdan/ui`), the actions, and a held document's `HoldInfo` and
+`CheckoutControls`, then `@healdan/ui`'s `Tabs` (React Aria's tabs, drawn as the helper's segmented control): **Properties**,
+with **Edit Properties** at its top and `Properties` or the form under it, and **Versions**, with `useVersions`'s
+`total` in brackets once it's known. Only the selected tab's panel is drawn, except Properties while its form is open: `Tabs`' `keepMounted`
+keeps it mounted, hidden and inert, so what's typed in it stays while the person looks at Versions. The tab is `details/DetailsTab.tsx`'s,
+a context in the frame, so it stays as the person left it while each document's panel comes and goes, and a page
+load starts on Properties; a `version` (a `#` that named one) switches it to Versions, and the filing tray's **Edit**
+to Properties. A search view passes
 `context="search"`, which adds Location, linking to `/app/folders/<id>`. The panel never reads a file: the thumbnail
 is an `<img>` on `/api/v1/documents/{n}/thumbnail`, which the web session's cookie goes with, and an icon of the
 file's kind (`kindIcons.ts`) shows when there's none or the person can't open the document. Properties come from the
@@ -177,7 +184,7 @@ and shows a Toast, either way. The other actions are in "Working with a Document
 
 `/app/doc/10388`, `/app/doc/10388.2` and the other forms of the lookup are `views/DocResult.tsx`: it asks
 `GET /v1/lookup?q=%2310388.2` and shows a list of that one document (`views/listColumns.tsx`, the folder list's
-columns), selected, with its details beside it and the named version marked in Versions. `useSelection` takes the
+columns), selected, with its details beside it on the Versions tab and the named version marked. `useSelection` takes the
 number from the address on this route. A `404` shows "No document # 10388 that you can see.", the same for a
 document that isn't there and one that can't be read, and says only the number as typed; a `400` shows the not-found
 view.
@@ -204,9 +211,15 @@ view.
   permission or a password.
 - **Check Out, Check In and Release** (`checkout.ts`, `useCheckout.ts`, `CheckoutControls.tsx`) follow the document's
   `hold`. The web session is no device, so the app never takes over a check-out a device holds (`409
-  held-elsewhere`): it says who has it and since when, and that it's released on that computer or in the Classic
-  Interface. A check-in from the app is a file picked into `POST /v1/documents/{n}/versions` as a snapshot, with
-  `ifHeld` and `ifVersion`. Every outcome asks for the document and the lists again.
+  held-elsewhere`), and offers no button for it. `details/HoldInfo.tsx` is the hold's own section above the tabs,
+  **Check-Out Info** or **Lock Info**, a `Section` with `boxed`: User, Check-Out Time (or Lock Time), and, from
+  `hold.heldOn`, Application and Computer, each but User left out when the API gives no value (User is "Someone"
+  then), in `details/PropertyList.tsx`, which `Properties` draws its rows with too. The API gives `heldOn` to the
+  holder and to administrators only, and the app never decides anything by it: `device` still says whether the
+  check-out is the person's own on a computer. `holdSentence` says who has it and since when, as a sentence, for the
+  drop-on-a-row question and the refusals (`filing/refusal.ts`). A check-in from the app is a file picked into
+  `POST /v1/documents/{n}/versions` as a snapshot, with `ifHeld` and `ifVersion`. Every outcome asks for the document
+  and the lists again.
 - **Editing properties** is `details/PropertiesForm.tsx`, made from `GET /v1/documents/{n}/properties` and saved with
   `PATCH`, sending only the fields that changed. `frame/errors.ts`'s `fieldErrors` gives each field a 422 names its
   message from the catalogue (`fields.<code>`). **Overridden** shows only where the API's `overrides` names the folder a
@@ -463,7 +476,7 @@ Rows 3 to 9 of the spec's manual acceptance run by keyboard in `e2e/keyboard.spe
 page. A step that can't be done by keys is a finding to fix in the app, never to work round in the spec. The keys are in
 the spec's section 10.5: `/` jumps to the search box, the arrow keys move through a list, Enter opens in the app, Space
 opens Quick Look and Esc closes it, F2 renames, Delete moves to the trash after the question, and the tree, menus and
-dialogs follow React Aria's. The properties form (`details/PropertiesForm.tsx`) takes the focus in its first field when **Edit** opens it, since Edit goes grey, cancels on Esc, and gives the focus back to **Edit** when it closes. A list's keys are in `@healdan/ui`'s `Table`, which takes them ahead of React Aria's so
+dialogs follow React Aria's, the details' tabs too (the arrow keys between them, Tab on into the selected one). The properties form (`details/PropertiesForm.tsx`) takes the focus in its first field when **Edit Properties** opens it, since the button goes grey, cancels on Esc, and gives the focus back to **Edit Properties** when it closes. A list's keys are in `@healdan/ui`'s `Table`, which takes them ahead of React Aria's so
 Space previews rather than selects, and leaves them to a field inside a row.
 
 ## The Catalogue

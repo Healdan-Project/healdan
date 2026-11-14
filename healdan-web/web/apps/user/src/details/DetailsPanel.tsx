@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, apiPath, type components } from '@healdan/api'
-import { Button, formatSize, formatVersion, Icon, t } from '@healdan/ui'
+import { Button, formatSize, formatVersion, Icon, plural, t, Tabs } from '@healdan/ui'
 import { CheckoutControls } from '../actions/CheckoutControls'
 import { copyLink } from '../actions/copyLink'
 import { FavoriteStar } from '../actions/FavoriteStar'
@@ -14,11 +14,12 @@ import { ErrorPanel } from '../frame/ErrorPanel'
 import { useQuickLook } from '../preview/QuickLookState'
 import { useDocument, useProperties, useVersions } from '../queries'
 import { useApi } from '../services'
+import { useDetailsTab, type DetailsTab } from './DetailsTab'
 import { isEditable } from './FieldsForm'
 import { clearEditRequest, useEditRequest } from './editRequest'
+import { HoldInfo } from './HoldInfo'
 import { Properties, type DetailsContext } from './Properties'
 import { PropertiesForm } from './PropertiesForm'
-import { Section } from './Section'
 import { Versions } from './Versions'
 import styles from './details.module.css'
 
@@ -35,8 +36,11 @@ export interface DetailsPanelProps {
 }
 
 /**
- * The selected document's details (spec section 6.2): its thumbnail, name, doc #, version and size, the actions, its
- * properties and its versions. Preview opens Quick Look; Edit changes the properties in place.
+ * The selected document's details (spec section 6.2), as the Healdan Helper's Open window has them (changed after M6: the
+ * owner's dogfooding punch list, 2026-11-14): a fixed header, with the thumbnail, the name, the doc #, version and size,
+ * Open, Download and Copy Link, and while it's held its Check-Out Info; then the Properties and Versions tabs. Preview opens
+ * Quick Look; Edit Properties, in the Properties tab, changes them in place. A # that named a version opens Versions with
+ * it marked.
  */
 export function DetailsPanel({ docNumber, row, version, context = 'folder' }: DetailsPanelProps) {
   const document = useDocument(docNumber, row)
@@ -44,23 +48,33 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
   const versions = useVersions(docNumber, version)
   const quickLook = useQuickLook()
   const app = useOpenInApp()
+  const { tab, setTab } = useDetailsTab()
   const doc = document.data
   const [editing, setEditing] = useState(false)
   const edit = useRef<HTMLButtonElement>(null)
-  // Edit is grey while the form is open, and the keyboard's place is there once it's enabled again, not on the page
+  // A # that names a version shows it, in Versions, before the panel is first painted; the tab then stays there, as one
+  // the person chose would
+  useLayoutEffect(() => {
+    if (version !== undefined) setTab('versions')
+  }, [docNumber, version, setTab])
+  // Edit Properties is grey while the form is open, and the keyboard's place is there once it's enabled again, not on the page
   const giveFocusBack = useRef(false)
-  // The filing tray's Edit: once the properties are here, the form opens if the person may change any of them
+  // The filing tray's Edit: once the properties are here, the form opens if the person may change any of them. It opens
+  // once the Properties tab shows, which the request switches to before paint, so the form mounts showing and takes the
+  // focus in its first field.
   const asked = useEditRequest(docNumber)
   const loaded = properties.data?.items
-  if (asked && loaded && !editing && loaded.some(isEditable)) setEditing(true)
+  if (asked && loaded && !editing && tab === 'properties' && loaded.some(isEditable)) setEditing(true)
   useEffect(() => {
     if (editing || !giveFocusBack.current) return
     giveFocusBack.current = false
     edit.current?.focus()
   }, [editing])
-  useEffect(() => {
-    if (asked && loaded) clearEditRequest()
-  }, [asked, loaded])
+  useLayoutEffect(() => {
+    if (!asked || !loaded) return
+    if (tab !== 'properties') setTab('properties')
+    else clearEditRequest()
+  }, [asked, loaded, tab, setTab])
 
   if (failed(document)) return <ErrorPanel error={document.error} onRetry={() => void document.refetch()} />
   if (!doc) return <p className={styles.note}>{t('common.loading')}</p>
@@ -75,51 +89,67 @@ export function DetailsPanel({ docNumber, row, version, context = 'folder' }: De
       <p className={styles.meta}>{t('details.meta', { n: doc.docNumber, version: formatVersion(doc.fileVersion), size: formatSize(doc.size) })}</p>
       <div className={styles.actions}>
         <OpenDownload document={doc} />
-        <Button ref={edit} isDisabled={editing || !properties.data?.items.some((field) => field.editable)} onPress={() => setEditing(true)}>
-          {t('details.edit')}
-        </Button>
         <Button onPress={() => void copyLink(doc.docNumber)}>{t('details.copyLink')}</Button>
       </div>
+      <HoldInfo document={doc} />
       <CheckoutControls document={doc} />
-      {failed(properties) ? (
-        <Section title={t('details.properties')}>
-          <p className={styles.note}>{t('details.propertiesUnavailable')}</p>
-        </Section>
-      ) : properties.data && editing ? (
-        <PropertiesForm
-          document={doc}
-          fields={properties.data.items}
-          onClose={() => {
-            giveFocusBack.current = true
-            setEditing(false)
-          }}
-        />
-      ) : properties.data ? (
-        <Properties document={doc} fields={properties.data.items} context={context} />
-      ) : (
-        <Section title={t('details.properties')}>
-          <p className={styles.note}>{t('common.loading')}</p>
-        </Section>
-      )}
-      {versions.isError ? (
-        <Section title={t('details.versions')}>
-          <p className={styles.note}>{t('details.versionsUnavailable')}</p>
-        </Section>
-      ) : versions.items ? (
-        <Versions
-          versions={versions.items}
-          selected={version}
-          onShowMore={versions.hasMore ? versions.loadMore : undefined}
-          loading={versions.isLoadingMore}
-          canOpen={doc.canOpen}
-          onPreview={(of) => quickLook.open(doc.docNumber, of)}
-          onDownload={(of) => app.download(doc, of)}
-        />
-      ) : (
-        <Section title={t('details.versions')}>
-          <p className={styles.note}>{t('common.loading')}</p>
-        </Section>
-      )}
+      <Tabs
+        label={t('details.tabs')}
+        selected={tab}
+        onSelect={(id) => setTab(id as DetailsTab)}
+        tabs={[
+          {
+            id: 'properties',
+            label: t('details.properties'),
+            // An open form stays mounted on the Versions tab, with what's typed in it and any refusal of its save
+            keepMounted: editing,
+            content: (
+              <>
+                <div className={styles.tabTop}>
+                  <Button ref={edit} isDisabled={editing || !properties.data?.items.some((field) => field.editable)} onPress={() => setEditing(true)}>
+                    {t('details.editProperties')}
+                  </Button>
+                </div>
+                {failed(properties) ? (
+                  <p className={styles.note}>{t('details.propertiesUnavailable')}</p>
+                ) : properties.data && editing ? (
+                  <PropertiesForm
+                    document={doc}
+                    fields={properties.data.items}
+                    onClose={() => {
+                      giveFocusBack.current = true
+                      setEditing(false)
+                    }}
+                  />
+                ) : properties.data ? (
+                  <Properties document={doc} fields={properties.data.items} context={context} />
+                ) : (
+                  <p className={styles.note}>{t('common.loading')}</p>
+                )}
+              </>
+            ),
+          },
+          {
+            id: 'versions',
+            label: versions.total === undefined ? t('details.versions') : plural('versionsTab', versions.total),
+            content: versions.isError ? (
+              <p className={styles.note}>{t('details.versionsUnavailable')}</p>
+            ) : versions.items ? (
+              <Versions
+                versions={versions.items}
+                selected={version}
+                onShowMore={versions.hasMore ? versions.loadMore : undefined}
+                loading={versions.isLoadingMore}
+                canOpen={doc.canOpen}
+                onPreview={(of) => quickLook.open(doc.docNumber, of)}
+                onDownload={(of) => app.download(doc, of)}
+              />
+            ) : (
+              <p className={styles.note}>{t('common.loading')}</p>
+            ),
+          },
+        ]}
+      />
     </div>
   )
 }

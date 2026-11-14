@@ -15,33 +15,58 @@ const you = { id: ME, name: 'Priya Nair' }
 const alex = { id: 9, name: 'Alex Marsh' }
 const macBook = { id: 'mac-1', name: 'Healdan Helper on MacBook', app: 'Excel' }
 
-const checkout = (over: Partial<Hold> = {}): Hold => ({ kind: 'checkout', by: alex, since, device: null, ...over })
+const checkout = (over: Partial<Hold> = {}): Hold => ({ kind: 'checkout', by: alex, since, device: null, heldOn: null, ...over })
 const label = (hold: Hold | null) => holdLabel(holdState(hold, ME))
+const sentence = (hold: Hold | null) => holdSentence(holdState(hold, ME))
 
-// A list row's marker says who has the document and since when, as the details do, without what to do about it
+// A list row's marker says who has the document, and nothing more: no time, no computer and no full stop (the owner's
+// dogfooding punch list, 2026-11-14). The details' Check-Out Info has the rest.
 describe('holdLabel', () => {
   it('is nothing for a free document', () => {
     expect(label(null)).toBeUndefined()
   })
 
-  it('says who has a check-out, and since when', () => {
-    expect(label(checkout())).toBe(`Checked out by Alex Marsh since ${when}.`)
-    expect(label(checkout({ by: you }))).toBe(`Checked out by you since ${when}.`)
-    expect(label(checkout({ by: you, device: macBook }))).toBe(`Checked out by you on Healdan Helper on MacBook since ${when}.`)
-    expect(label(checkout({ since: null }))).toBe('Checked out by Alex Marsh.')
-    expect(label(checkout({ by: null }))).toBe(`Checked out by someone since ${when}.`)
+  it('says who has a check-out', () => {
+    expect(label(checkout())).toBe('Checked out by Alex Marsh')
+    expect(label(checkout({ by: you }))).toBe('Checked out by you')
+    expect(label(checkout({ by: you, device: macBook }))).toBe('Checked out by you')
+    expect(label(checkout({ since: null }))).toBe('Checked out by Alex Marsh')
+    expect(label(checkout({ by: null }))).toBe('Checked out by someone')
+    expect(label(checkout({ by: { id: 9, name: null } }))).toBe('Checked out by someone')
   })
 
-  it('says who has a lock, and since when', () => {
-    expect(label(checkout({ kind: 'lock' }))).toBe(`Locked by Alex Marsh since ${when}.`)
-    expect(label(checkout({ kind: 'lock', by: you }))).toBe(`Locked by you since ${when}.`)
+  it('says who has a lock', () => {
+    expect(label(checkout({ kind: 'lock' }))).toBe('Locked by Alex Marsh')
+    expect(label(checkout({ kind: 'lock', by: you }))).toBe('Locked by you')
+    expect(label(checkout({ kind: 'lock', by: null }))).toBe('Locked by someone')
   })
 
-  it('leaves out where it is released, which the details still say', () => {
+  it('names neither the time nor the computer, nor where the document is released', () => {
     for (const hold of [checkout(), checkout({ by: you, device: macBook }), checkout({ kind: 'lock' })]) {
-      const state = holdState(hold, ME)
-      expect(holdLabel(state)).not.toMatch(/Release|released|Unlock/)
-      expect(holdSentence(state)).toMatch(new RegExp(`^${holdLabel(state)!.replace(/[.()]/g, '\\$&')} (Release|It's released|Unlock)`))
+      expect(label(hold)).not.toMatch(/since|MacBook|Release|released|Unlock|\.$/)
+    }
+  })
+})
+
+// A question or a refusal says why it can't be done: who has it and since when, as a sentence, and never where it's
+// released, which the details no longer say either
+describe('holdSentence', () => {
+  it('is nothing for a free document', () => {
+    expect(sentence(null)).toBeUndefined()
+  })
+
+  it('says who has it and since when', () => {
+    expect(sentence(checkout())).toBe(`Checked out by Alex Marsh since ${when}.`)
+    expect(sentence(checkout({ by: you }))).toBe(`Checked out by you since ${when}.`)
+    expect(sentence(checkout({ by: you, device: macBook }))).toBe(`Checked out by you on Healdan Helper on MacBook since ${when}.`)
+    expect(sentence(checkout({ since: null }))).toBe('Checked out by Alex Marsh.')
+    expect(sentence(checkout({ kind: 'lock' }))).toBe(`Locked by Alex Marsh since ${when}.`)
+    expect(sentence(checkout({ kind: 'lock', by: you }))).toBe(`Locked by you since ${when}.`)
+  })
+
+  it('never says where it is released', () => {
+    for (const hold of [checkout(), checkout({ by: you, device: macBook }), checkout({ kind: 'lock' })]) {
+      expect(sentence(hold)).not.toMatch(/Release|released|Unlock|Classic Interface/)
     }
   })
 })

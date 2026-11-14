@@ -13,7 +13,7 @@ export const correspondence = folder({ id: 7, name: 'Correspondence', path: [sto
 export const inFolder = { id: 7, name: 'Correspondence', kind: 'folder' as const }
 export const letter = document({ docNumber: 10431, name: 'Letter to Dunmere Pryce.docx', version: '3.1', fileVersion: '3.1', folder: inFolder })
 export const jamie = { id: 3, name: 'Jamie Clarke' }
-export const heldByJamie = { kind: 'checkout' as const, by: jamie, since: '2026-11-03T10:00:00Z', device: null }
+export const heldByJamie = { kind: 'checkout' as const, by: jamie, since: '2026-11-03T10:00:00Z', device: null, heldOn: null }
 
 export const classes = [
   { value: 'Letters', label: 'Letters', class: null },

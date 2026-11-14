@@ -38,7 +38,7 @@ required property is marked, and a property picked from a list offers only its c
 are people: type part of a name and pick the person from the list Healdan finds. An email has no title to edit: it
 takes its subject, and the form says so. While a form is open the page behind it takes no drop; files dropped before
 it appears get a form of their own, which opens when the first closes. This is the same form as
-**Edit** in a document's details: see [Properties](../properties/).
+**Edit Properties** in a document's details: see [Properties](../properties/).
 
 ![The File Documents form for three files going into the Correspondence folder of matter 1002.1: a title field for each of Note of Call – Hale.docx, Letter to Cardew Hollis.docx and Lease Plan Notes.txt, then Client 1002 – Brightwell Bakeries Ltd, Matter 1002.1 – Commercial Lease, Author and Typist as people to pick, each holding Priya Nair, Class Correspondence, Subclass Letter, Comments and Legacy doc #, and the File 3 Items and Cancel buttons](filing-form.png)
 
@@ -52,7 +52,7 @@ to leave the page while any are still uploading, the browser asks first.
 
 ![The tray after the three files were filed, headed "3 Filed" with Clear Finished and Collapse: Note of Call – Hale.docx filed as # 66, Letter to Cardew Hollis.docx as # 65 and Lease Plan Notes.txt as # 64, each in Correspondence, with Edit and Dismiss buttons](filing-tray.png)
 
-- **Edit** on a filed file selects the document and opens its properties form in the details.
+- **Edit** on a filed file selects the document and opens its properties form in the details' **Properties** tab.
 - **Show** on an email that is already in the matter opens the copy. See [Emails](../emails/).
 - **Dismiss** (the cross) takes a finished item off the tray.
 
@@ -90,8 +90,8 @@ A file of another kind than the document, and any drop of more than one file, is
 folder, without asking: Healdan keeps a document's extension, so the file can't be its version.
 
 A document that is checked out by someone else, checked out on a computer, or locked can't take a version from the
-page, as the page isn't a computer. The question then says who holds it and since when, and that it's released on the
-computer it's checked out on, or in the Classic Interface (**Unlock**), and offers only **File as a New Document**.
+page, as the page isn't a computer. The question then says who holds it and since when, and offers only **File as a
+New Document**.
 A check-out of your own from the page is checked in by the save. If Healdan refuses a version and leaves the document
 checked out to you, which you hadn't done, it releases it again, and the tray says the version wasn't saved.
 
@@ -102,7 +102,7 @@ checked out to you, which you hadn't done, it releases it again, and the tray sa
 - **It takes its folder's properties:** the client and matter, and anything the folders above it set, such as its
   Class. See [Properties](../properties/).
 - **You're its Author and its Typist,** unless you change them in the form that comes first (hold Option as you drop,
-  or press Option-Enter on **Upload**), or later with **Edit** in its details. Typist is for filing on someone else's
+  or press Option-Enter on **Upload**), or later with **Edit Properties** in its details. Typist is for filing on someone else's
   behalf: a secretary filing a partner's letter makes the partner its Author.
 - **Its Date filed is now.** It records when the document entered Healdan, and can't be changed.
 - **An email gets its sender, recipients, subject and dates** read into its properties. See [Emails](../emails/).

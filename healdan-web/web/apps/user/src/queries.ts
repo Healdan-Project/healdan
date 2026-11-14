@@ -150,7 +150,9 @@ export function useVersions(docNumber: number, wanted?: string) {
   useEffect(() => {
     if (missing && hasNextPage && !isFetchingNextPage) void fetchNextPage()
   }, [missing, hasNextPage, isFetchingNextPage, fetchNextPage])
-  return { items, isError: query.isError, hasMore: hasNextPage, isLoadingMore: isFetchingNextPage, loadMore: () => void fetchNextPage() }
+  // How many there are, for the Versions tab's label: the first page's count, none while it comes
+  const total = query.data?.pages[0]?.total ?? undefined
+  return { items, total, isError: query.isError, hasMore: hasNextPage, isLoadingMore: isFetchingNextPage, loadMore: () => void fetchNextPage() }
 }
 
 /** What a typed # (`10388`, `10388.2`, as the address has it) means: the document and the version it names. */
