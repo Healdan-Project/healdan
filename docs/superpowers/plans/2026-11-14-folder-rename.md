@@ -1647,7 +1647,7 @@ Run: `npx vitest run apps/user/src/views/FolderView.test.tsx`. Expected: FAIL: n
 
 `FolderView.tsx`: import `Icon`, `Menu`, `MenuItem` from `@healdan/ui`, `FolderName` from
 `'../organising/RenameField'` and `useOrganising` from `'../organising/OrganisingProvider'`; add
-`const organising = useOrganising()` with the other hooks (above the early returns). Replace the heading block:
+`const { startRename } = useOrganising()` with the other hooks (above the early returns; `organising` is already `useOrganisingTable`'s). Replace the heading block:
 
 ```tsx
         <div className={styles.heading}>
@@ -1660,7 +1660,7 @@ Run: `npx vitest run apps/user/src/views/FolderView.test.tsx`. Expected: FAIL: n
           {!store && (
             <span data-rename-menu={`f${view.id}`}>
               <Menu variant="quiet" label={<Icon name="dots" />} aria-label={t('folder.more', { name: view.name })}>
-                <MenuItem id="rename" isDisabled={!view.canRename} onAction={() => organising.startRename(`f${view.id}`, 'heading')}>
+                <MenuItem id="rename" isDisabled={!view.canRename} onAction={() => startRename(`f${view.id}`, 'heading')}>
                   {t('rename.menu')}
                 </MenuItem>
               </Menu>
