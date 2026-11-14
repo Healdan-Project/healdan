@@ -5,6 +5,7 @@ import { useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { Button, Tree as AriaTree, TreeItem as AriaTreeItem, TreeItemContent, type Key } from 'react-aria-components'
 import { Icon } from '../icons'
 import { t } from '../strings'
+import { ItemContextMenu, type ItemMenu } from './ContextMenu'
 import styles from './Tree.module.css'
 
 export interface TreeNode {
@@ -34,12 +35,17 @@ export interface TreeProps {
   acceptsDrop?: (id: string, types: readonly string[]) => boolean
   /** Something the node accepts was dropped on it */
   onDrop?: (id: string, event: DragEvent) => void
+  /**
+   * A node's menu, in place of the browser's: a right-click on its row, or Shift+F10 or the menu key while the row has the
+   * focus, opens it (ContextMenu). A node whose `items` are undefined keeps the browser's own.
+   */
+  contextMenu?: ItemMenu
 }
 
 const loadingSuffix = '\u0000loading'
 
 // The caller owns what is expanded and what is loaded, so a node's children can be fetched when it is first expanded.
-export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acceptsDrop, onDrop, ...rest }: TreeProps) {
+export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acceptsDrop, onDrop, contextMenu, ...rest }: TreeProps) {
   // The node something is being dragged over, and takes
   const [over, setOver] = useState<string | undefined>()
   // How many elements of the tree the drag is inside: dragenter and dragleave come in pairs for each element it crosses, and
@@ -86,6 +92,7 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acc
         hasChildItems={node.expandable || (node.children?.length ?? 0) > 0}
         className={styles.item}
         data-current={current === node.id ? 'true' : undefined}
+        data-tree-key={node.id}
         // React Aria's TreeItem doesn't pass aria-current to its row, so it is set on the element.
         ref={(row) => {
           if (current === node.id) row?.setAttribute('aria-current', 'page')
@@ -124,15 +131,17 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acc
   }
 
   return (
-    <AriaTree
-      {...rest}
-      className={styles.tree}
-      selectionMode="none"
-      expandedKeys={expanded}
-      onExpandedChange={(keys) => onExpandedChange(new Set([...keys].map(String)))}
-      onAction={(key: Key) => onAction(String(key))}
-    >
-      {nodes.map(item)}
-    </AriaTree>
+    <ItemContextMenu attribute="data-tree-key" menu={contextMenu}>
+      <AriaTree
+        {...rest}
+        className={styles.tree}
+        selectionMode="none"
+        expandedKeys={expanded}
+        onExpandedChange={(keys) => onExpandedChange(new Set([...keys].map(String)))}
+        onAction={(key: Key) => onAction(String(key))}
+      >
+        {nodes.map(item)}
+      </AriaTree>
+    </ItemContextMenu>
   )
 }

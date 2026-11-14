@@ -8,7 +8,7 @@ import { expectNoAxeViolations } from '../test/axe'
 import '../tokens.css'
 import { Icon } from '../icons'
 import { Menu, MenuItem } from './Menu'
-import { Tree, type TreeNode } from './Tree'
+import { Tree, type TreeNode, type TreeProps } from './Tree'
 
 const nodes: TreeNode[] = [
   {
@@ -24,7 +24,17 @@ const nodes: TreeNode[] = [
   { id: 'm2', textValue: '1002.1 Lease', label: <>1002.1 – Lease</>, expandable: true },
 ]
 
-function Harness({ onAction = vi.fn(), onExpand = vi.fn(), current }: { onAction?: (id: string) => void; onExpand?: (id: string) => void; current?: string }) {
+function Harness({
+  onAction = vi.fn(),
+  onExpand = vi.fn(),
+  current,
+  contextMenu,
+}: {
+  onAction?: (id: string) => void
+  onExpand?: (id: string) => void
+  current?: string
+  contextMenu?: TreeProps['contextMenu']
+}) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   return (
     <Tree
@@ -37,6 +47,7 @@ function Harness({ onAction = vi.fn(), onExpand = vi.fn(), current }: { onAction
         setExpanded(new Set(next))
       }}
       onAction={onAction}
+      contextMenu={contextMenu}
     />
   )
 }
@@ -217,3 +228,31 @@ describe('Tree drops', () => {
   })
 })
 
+describe('Tree right-click menu', () => {
+  const contextMenu = {
+    label: (id: string) => `Actions for ${id}`,
+    // A search folder has none here, so it keeps the browser's menu
+    items: (id: string) => (id === 's1' ? undefined : <MenuItem id="open">Open {id}</MenuItem>),
+  }
+
+  it('opens a node\'s menu on a right-click and on Shift+F10, and opens no node by it', async () => {
+    const onAction = vi.fn()
+    render(<Harness onAction={onAction} contextMenu={contextMenu} />)
+    expect(fireEvent.contextMenu(screen.getByText('1002.1 – Lease'))).toBe(false)
+    expect(await screen.findByRole('menu', { name: 'Actions for m2' })).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    expect(onAction).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getAllByRole('button', { name: /expand/i })[0] as HTMLElement)
+    const folder = screen.getByRole('row', { name: /Correspondence/ })
+    act(() => folder.focus())
+    fireEvent.keyDown(folder, { key: 'F10', shiftKey: true })
+    expect(await screen.findByRole('menu', { name: 'Actions for f1' })).toBeTruthy()
+  })
+
+  it('leaves the browser\'s menu on a node with none', () => {
+    render(<Harness contextMenu={contextMenu} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /expand/i })[0] as HTMLElement)
+    expect(fireEvent.contextMenu(screen.getByRole('row', { name: /My Recent Docs/ }))).toBe(true)
+  })
+})

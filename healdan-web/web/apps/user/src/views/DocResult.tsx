@@ -72,7 +72,8 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
   const selection = useMemo(() => new Set(rows.map((row) => row.id)), [rows])
   const preview = usePreviewKey(() => {})
   const openDocument = useOpenKey(found, () => {})
-  // Rename, Move To… and Delete, with F2 and Delete, as in every list of documents (R95)
+  // Rename, Move To… and Delete, with F2 and Delete, as in every list of documents (R95); the one row is the selection, so its
+  // menu acts on it
   const organising = useOrganisingTable(found, selection)
   const columns = useRegionKind({ preview: true, details: true }) === 'preview' ? narrowed(listColumns) : listColumns
   if (document.isError) {
@@ -101,6 +102,7 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
           onOpen={openDocument}
           onPreview={preview}
           {...organising.tableProps}
+          contextMenu={organising.contextMenu}
           empty={t('common.loading')}
         />
       </div>

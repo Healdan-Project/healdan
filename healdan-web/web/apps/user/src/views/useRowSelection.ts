@@ -10,7 +10,8 @@ export interface RowSelection {
   selected: number | undefined
   /** The Table's selection: the keys of the rows */
   selection: Set<string>
-  change: (next: Set<string>) => void
+  /** Selects the rows, as a click does; `showDetails: false` leaves Filters open where a click would show the details */
+  change: (next: Set<string>, options?: { showDetails?: boolean }) => void
 }
 
 /**
@@ -29,11 +30,12 @@ export function useRowSelection(rows?: readonly { type: string; docNumber?: numb
   const kept = useMemo(() => (several && listed ? new Set([...several].filter((key) => listed.has(key))) : several), [several, listed])
   const selection = kept && selected === undefined ? kept : new Set(selected === undefined ? [] : [`d${selected}`])
 
-  function change(next: Set<string>) {
+  function change(next: Set<string>, { showDetails = true }: { showDetails?: boolean } = {}) {
     const documents = [...next].filter((key) => key.startsWith('d'))
     setSeveral(documents.length > 1 ? new Set(documents) : null)
-    // Clicking a document while Filters are open shows its details, as the owner asked; the funnel brings Filters back.
-    if (documents.length === 1 && region.show === 'filters') region.open('details', { reveal: false })
+    // Clicking a document while Filters are open shows its details, as the owner asked; the funnel brings Filters back. A
+    // right-click, which selects the row for its menu, leaves Filters as they are.
+    if (showDetails && documents.length === 1 && region.show === 'filters') region.open('details', { reveal: false })
     select(documents.length === 1 ? Number(documents[0]!.slice(1)) : undefined)
   }
 

@@ -289,6 +289,12 @@ code is laid out.
     row 9's move into another matter: the smoke fixture's only matter outside Smoke Cloud is 1.1, and a move into Smoke
     Cloud would write through Garage after step 8 has checked its read cache. A step that can't be done by keys is a bug in the
     app.
+  - `context-menu.spec.ts` checks the right-click menus. It files three documents and makes two folders through the API,
+    in a folder of its own inside `E2E`, adds one of the documents to Favorites and the matter to My Matters (the move
+    picker lists My Matters), and through the page: renames a document from the menu a right-click opens on its row, which
+    selects the row first; opens the menu with Shift+F10 on the focused row, closes it with Esc (the focus back in the
+    row) and moves the document with **Move To…**, by keys; and removes the favorite from its menu in **My Favorites**.
+    Afterwards it removes the bookmark, if a failed run left it, and takes the matter out of My Matters again.
   - `a11y.spec.ts` runs axe on each main view in the light theme and again in the dark one (a browser context with
     Playwright's `colorScheme`, signed in once per theme): Recent's four lists, a matter, a folder with details (its
     toolbar buttons all one height, and a document the spec checked out through the API, and releases at the end, whose

@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import type { components } from '@healdan/api'
-import { Button, Icon, t } from '@healdan/ui'
-import { PreviewButton } from '../preview/PreviewButton'
-import { CheckOutButton } from './CheckoutControls'
+import { useSelection } from '../selection'
+import { ActionButton } from './ActionControls'
 import { MoreMenu } from './MoreMenu'
-import { useOpenInApp } from './OpenInAppState'
+import { useDocumentActions } from './useDocumentActions'
 
 /**
  * The toolbar's buttons for the selected document (spec 6.1): Open, Preview, Download and Check Out, all disabled with
- * none or several selected, then More (⋯), which acts on `selected` (the one document by default).
+ * none or several selected, then More (⋯), which acts on `selected` (the one document by default). A row's right-click
+ * menu offers the same actions, from the same rules (useDocumentActions).
  */
 export function SelectionActions({
   document,
@@ -19,19 +19,16 @@ export function SelectionActions({
   document: components['schemas']['DocumentView'] | undefined
   selected?: components['schemas']['DocumentView'][]
 }) {
-  const app = useOpenInApp()
-  const may = document?.canOpen === true
+  // Preview follows the address, as Space does: its document may not be among the rows drawn yet
+  const { selected: inAddress } = useSelection()
+  const actions = useDocumentActions({ document, documents: selected, preview: inAddress })
   return (
     <>
-      <Button isDisabled={!may} onPress={() => document && app.open(document)}>
-        <Icon name="external" size={14} /> {t('details.open')}
-      </Button>
-      <PreviewButton />
-      <Button isDisabled={!may} onPress={() => document && app.download(document)}>
-        <Icon name="download" size={14} /> {t('details.download')}
-      </Button>
-      <CheckOutButton document={document} />
-      <MoreMenu documents={selected} />
+      <ActionButton action={actions.open} />
+      <ActionButton action={actions.preview} />
+      <ActionButton action={actions.download} />
+      <ActionButton action={actions.checkOut} />
+      <MoreMenu actions={actions} isDisabled={selected.length === 0} />
     </>
   )
 }

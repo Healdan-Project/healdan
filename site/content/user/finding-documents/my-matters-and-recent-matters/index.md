@@ -15,10 +15,12 @@ open it in the main area.
 - **The tree opens to where you are.** When the folder open in the main area is inside one of your matters, the tree
   opens the folders above it and marks its row.
 - **To add a matter,** open it, or any folder in it, and click **+** beside the **My Matters** heading. The **+**
-  shows only while you're in a matter that isn't in the list yet.
+  shows only while you're in a matter that isn't in the list yet. Or right-click the matter in **Recent Matters**, or in
+  a search for matters, and choose **Add to My Matters**.
 - **To take a matter off,** point at it in the tree, click the **⋯** at the end of its row, and choose **Remove from
-  My Matters**. From the keyboard, move to the matter's row and press the right arrow: the first press opens the
-  matter, the next moves to **⋯**, and Enter opens its menu.
+  My Matters**, or right-click it and choose the same. From the keyboard, move to the matter's row and press the
+  right arrow: the first press opens the matter, the next moves to **⋯**, and Enter opens its menu; or press
+  Shift-F10 on the row. See [Right-Click Menus](../../getting-started/getting-around/#right-click-menus).
 
 ![The left pane with My Matters opened to the folders of 1002.1 – Commercial Lease, and the menu of 1001.1 – Charter Dispute open beside it, offering Remove from My Matters](my-matters-menu.png)
 

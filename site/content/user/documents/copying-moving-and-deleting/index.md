@@ -11,8 +11,9 @@ page (`/app/doc/` and its doc #).
 
 ## Renaming a Document in the App
 
-Select the document and press **F2**, or choose the **⋯** (More) button in the toolbar above the list, then **Rename**. The title in
-its row becomes a field with the name, not its extension, selected.
+Select the document and press **F2**, or choose the **⋯** (More) button in the toolbar above the list, then **Rename**, or
+right-click the document and choose **Rename** (see [Right-Click Menus](../../getting-started/getting-around/#right-click-menus)).
+The title in its row becomes a field with the name, not its extension, selected.
 
 ![The toolbar above the Drafts folder's list in matter 1002.1 with Lease – Draft for Client.docx selected and the ⋯ (More) button's menu open, offering Rename, Move To…, Delete and Copy Link](more-menu.png)
 
@@ -30,7 +31,8 @@ The rename is in the document's [history](../document-history/) and makes its ne
 
 ## Moving Documents in the App
 
-Select the documents, then choose the **⋯** (More) button, then **Move To…**. A window opens that lists your **Recent Matters**, then your
+Select the documents, then choose the **⋯** (More) button, then **Move To…**, or right-click one of them and choose
+**Move To…**. A window opens that lists your **Recent Matters**, then your
 **My Matters** other than those, so a matter in both is listed once, under Recent. Type in **Find a Matter** to search for another by its number or name.
 
 1. Choose the matter. The window lists its folders.
@@ -62,8 +64,9 @@ nothing. See [Where Documents Can Go](#where-documents-can-go).
 
 ## Deleting Documents in the App
 
-Select them and press **Delete** (on a Mac, the delete key), or choose the **⋯** (More) button, then **Delete**. Healdan asks "Move 2
-documents to the Trash?" and lists each one's name. Choose **Move to Trash**, or **Cancel**, or press **Esc**.
+Select them and press **Delete** (on a Mac, the delete key), or choose the **⋯** (More) button, then **Delete**, or
+right-click one of them and choose **Delete**. Healdan asks "Move 2 documents to the Trash?" and lists each one's name.
+Choose **Move to Trash**, or **Cancel**, or press **Esc**.
 
 - **The Trash is in the Classic Interface,** where you can restore what you deleted: "The Trash is in the Classic
   Interface, where they can be restored." See [The Trash](../the-trash/).

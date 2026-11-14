@@ -4,7 +4,8 @@
 import './tokens.css'
 
 export { Button, type ButtonProps } from './components/Button'
-export { Menu, MenuItem, type MenuProps } from './components/Menu'
+export { Menu, MenuItem, MenuSeparator, type MenuProps } from './components/Menu'
+export { ContextMenu, ItemContextMenu, type ContextMenuProps, type ItemMenu } from './components/ContextMenu'
 export { Tree, type TreeNode, type TreeProps } from './components/Tree'
 export { Table, type TableColumn, type TableProps, type TableRow, type TableSort } from './components/Table'
 export { CheckGroup, type Choice, type CheckGroupProps } from './components/CheckGroup'
