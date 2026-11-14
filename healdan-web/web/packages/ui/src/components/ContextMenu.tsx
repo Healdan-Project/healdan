@@ -15,8 +15,11 @@ export interface ContextMenuProps<T> {
   subjectOf: (element: HTMLElement) => T | undefined
   /** The menu's name for a screen reader */
   label: (subject: T) => string
-  /** The menu's items, drawn again while it's open, so they follow what they act on */
-  items: (subject: T) => ReactNode
+  /**
+   * The menu's items, drawn again while it's open, so they follow what they act on. Undefined once that has gone (a refetch
+   * dropped its row), which closes the menu.
+   */
+  items: (subject: T) => ReactNode | undefined
   /** Called as the menu opens, before it's drawn: a list selects a row that isn't selected */
   onOpen?: (subject: T) => void
   children: ReactNode
@@ -86,6 +89,10 @@ export function ContextMenu<T>({ target, subjectOf, label, items, onOpen, childr
   // The element the menu is for: the popover places itself by it, and React Aria gives the focus back to it on closing
   const anchor = useRef<HTMLElement | null>(null)
   const [opened, setOpened] = useState<Opened<T>>()
+  // What the open menu offers now; none closes it, rather than leaving an empty menu open (adjusting state while rendering
+  // is React's way to follow a changed value)
+  const drawn = opened && items(opened.subject)
+  if (opened && drawn === undefined) setOpened(undefined)
   // React Aria gives the focus back to what had it as the menu opened, once the menu has gone (in the next frame)
   const close = () => setOpened(undefined)
 
@@ -158,7 +165,7 @@ export function ContextMenu<T>({ target, subjectOf, label, items, onOpen, childr
     // Only passes on what the elements inside it are asked; it isn't a control of its own
     <div ref={area} data-context-menu="" className={styles.area} onContextMenu={onContextMenu} onKeyDownCapture={onKeyDownCapture} onPointerDownCapture={onPointerDownCapture} onMouseDownCapture={onPointerDownCapture}>
       {children}
-      {opened && (
+      {opened && drawn !== undefined && (
         <Popover
           ref={popover}
           className={styles.popover}
@@ -173,7 +180,7 @@ export function ContextMenu<T>({ target, subjectOf, label, items, onOpen, childr
           aria-label={label(opened.subject)}
         >
           <AriaMenu className={styles.menu} aria-label={label(opened.subject)} autoFocus={opened.keyboard ? 'first' : true} onClose={close}>
-            {items(opened.subject)}
+            {drawn}
           </AriaMenu>
         </Popover>
       )}

@@ -7,7 +7,6 @@ import { t, Table, type TableSort } from '@healdan/ui'
 import { DetailsPanel } from '../details/DetailsPanel'
 import { SelectionActions } from '../actions/SelectionActions'
 import { useOrganisingTable } from '../organising/useOrganisingTable'
-import { useListMenu } from '../menus/useListMenu'
 import { useOpenKey } from '../actions/useOpenKey'
 import { QuickLook } from '../preview/QuickLook'
 import { ReadingPane } from '../preview/ReadingPane'
@@ -54,8 +53,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const facets = useSearchFacets({ scope, q: text, filters, enabled: filtersOpen })
   const { selected, selection, change: changeSelection } = useRowSelection(results.rows)
   const rows = useMemo(() => results.rows.map(rowOf), [results.rows])
-  const organising = useOrganisingTable(results.rows, selection)
-  const menu = useListMenu({ rows: results.rows, selection, onSelect: changeSelection, selected: organising.selected })
+  const organising = useOrganisingTable(results.rows, selection, changeSelection)
   const allColumns = useMemo(() => hitColumns(scope), [scope])
   // The reading pane makes the list narrow: it keeps the columns that fit
   // Only a view that draws the pane narrows for it, as the document scopes do
@@ -128,7 +126,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               onOpen={open}
               onPreview={documents ? preview : undefined}
               {...(documents ? organising.tableProps : {})}
-              contextMenu={menu}
+              contextMenu={organising.contextMenu}
               loadMore={results.loadMore}
               isLoadingMore={results.isLoadingMore}
               total={results.total}

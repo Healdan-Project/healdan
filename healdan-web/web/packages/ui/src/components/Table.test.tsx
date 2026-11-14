@@ -350,16 +350,20 @@ describe('Table right-click menu', () => {
 
   it('takes a Mac\'s Control-click on a row as its right-click, not as a click that selects', async () => {
     const platform = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
-    const onSelectionChange = vi.fn()
-    render(<Harness initial={['d1', 'd2']} onSelectionChange={onSelectionChange} contextMenu={contextMenu()} />)
-    const target = within(row(/Letter 2/)).getByRole('rowheader')
-    fireEvent.pointerDown(target, { button: 0, ctrlKey: true, pointerType: 'mouse' })
-    fireEvent.mouseDown(target, { button: 0, ctrlKey: true })
-    fireEvent.contextMenu(target, { button: 0, ctrlKey: true })
-    fireEvent.pointerUp(target, { button: 0, ctrlKey: true, pointerType: 'mouse' })
-    fireEvent.mouseUp(target, { button: 0, ctrlKey: true })
-    expect(await screen.findByRole('menu', { name: 'Actions for d2' })).toBeTruthy()
-    expect(onSelectionChange).not.toHaveBeenCalled()
-    platform.mockRestore()
+    // Restored whether the test passes or not, so no later test runs on a Mac
+    try {
+      const onSelectionChange = vi.fn()
+      render(<Harness initial={['d1', 'd2']} onSelectionChange={onSelectionChange} contextMenu={contextMenu()} />)
+      const target = within(row(/Letter 2/)).getByRole('rowheader')
+      fireEvent.pointerDown(target, { button: 0, ctrlKey: true, pointerType: 'mouse' })
+      fireEvent.mouseDown(target, { button: 0, ctrlKey: true })
+      fireEvent.contextMenu(target, { button: 0, ctrlKey: true })
+      fireEvent.pointerUp(target, { button: 0, ctrlKey: true, pointerType: 'mouse' })
+      fireEvent.mouseUp(target, { button: 0, ctrlKey: true })
+      expect(await screen.findByRole('menu', { name: 'Actions for d2' })).toBeTruthy()
+      expect(onSelectionChange).not.toHaveBeenCalled()
+    } finally {
+      platform.mockRestore()
+    }
   })
 })

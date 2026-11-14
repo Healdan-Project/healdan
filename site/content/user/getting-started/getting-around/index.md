@@ -108,8 +108,8 @@ Right-clicking one of several selected documents keeps them all selected, and th
 search box, an email's message, a preview, or the space in a list below its last row, right-clicking shows your
 browser's own menu, so copy, paste and spelling work as usual.
 
-With the keyboard, press Shift-F10, or the menu key if your keyboard has one, to open the menu of the row or tree item
-that has the focus. The arrow keys move through the menu, Enter chooses, and Esc closes it and puts the focus back where
+With the keyboard, press Shift-F10, or the menu key if your keyboard has one, to open the menu of the row, tree item or
+link in **Recent Matters** or **My Favorites** that has the focus. The arrow keys move through the menu, Enter chooses, and Esc closes it and puts the focus back where
 it was.
 
 ## The Keyboard
@@ -129,7 +129,7 @@ once the list has the focus.
 | Space | Opens Quick Look; Esc closes it |
 | F2 | Renames the selected document in place |
 | Delete | Moves the selected documents to the Trash, after asking |
-| Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row or tree item with the focus; Esc closes it |
+| Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row, tree item or left-pane link with the focus; Esc closes it |
 | Option-Enter on **Upload** | Files with the form first |
 
 ## A Narrower Window

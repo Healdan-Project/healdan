@@ -153,6 +153,23 @@ describe('ContextMenu', () => {
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
   })
 
+  it('closes when what it acts on has gone, rather than staying open empty', async () => {
+    const menuFor = (gone: boolean) => (
+      <ContextMenu<string> target="li" subjectOf={() => 'row'} label={() => 'Actions'} items={() => (gone ? undefined : <MenuItem id="open">Open</MenuItem>)}>
+        <ul>
+          <li tabIndex={-1}>Row</li>
+        </ul>
+      </ContextMenu>
+    )
+    const { rerender } = render(menuFor(false))
+    fireEvent.contextMenu(screen.getByText('Row'))
+    expect(await screen.findByRole('menu', { name: 'Actions' })).toBeTruthy()
+    // A refetch drops the row while the menu is open
+    rerender(menuFor(true))
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it('passes axe, open', async () => {
     setup()
     fireEvent.contextMenu(item('alpha'))

@@ -28,8 +28,8 @@ const recentIcons: Record<(typeof recentKinds)[number], IconName> = {
 }
 
 /**
- * A section of the pane. With a `menu`, its links have a right-click menu, by the address they link to (changed after M6:
- * the owner's dogfooding punch list, 2026-11-14).
+ * A section of the pane. With a `menu`, its links have a right-click menu, by the key each carries as `data-menu-key`
+ * (changed after M6: the owner's dogfooding punch list, 2026-11-14).
  */
 function Section({ title, action, menu, children }: { title: string; action?: ReactNode; menu?: ItemMenu; children: ReactNode }) {
   const id = useId()
@@ -42,7 +42,7 @@ function Section({ title, action, menu, children }: { title: string; action?: Re
         {action}
       </div>
       {menu ? (
-        <ItemContextMenu attribute="href" menu={menu}>
+        <ItemContextMenu attribute="data-menu-key" menu={menu}>
           {children}
         </ItemContextMenu>
       ) : (
@@ -79,10 +79,6 @@ function useCurrentFolder() {
   return useFolder(idFrom(currentFolder(pathname))).data
 }
 
-/** The number a link's address ends in after `/folders/` or `/doc/`: what the link opens */
-function linkedId(href: string, kind: 'folders' | 'doc'): number | undefined {
-  return idFrom(new RegExp(`/${kind}/(\\d+)(?:[?#]|$)`).exec(href)?.[1])
-}
 
 function RecentSection() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -109,11 +105,12 @@ function RecentMattersSection() {
   const recent = useRecentMatters()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const items = recent.data?.items ?? []
-  const matterAt = (href: string) => items.find((matter) => matter.folderId === linkedId(href, 'folders'))
+  // Each link carries its matter's folder as its key
+  const matterAt = (key: string) => items.find((matter) => String(matter.folderId) === key)
   const menu: ItemMenu = {
-    label: (href) => t('menu.for', { name: matterAt(href)?.display ?? '' }),
-    items: (href) => {
-      const matter = matterAt(href)
+    label: (key) => t('menu.for', { name: matterAt(key)?.display ?? '' }),
+    items: (key) => {
+      const matter = matterAt(key)
       return matter && <MatterMenuItems folderId={matter.folderId} />
     },
   }
@@ -126,6 +123,7 @@ function RecentMattersSection() {
               <Link
                 to="/folders/$id"
                 params={{ id: String(matter.folderId) }}
+                data-menu-key={String(matter.folderId)}
                 className={styles.entry}
                 aria-current={currentFolder(pathname) === String(matter.folderId) ? 'page' : undefined}
               >
@@ -289,12 +287,12 @@ function MyMattersSection() {
 function FavoritesSection() {
   const favorites = useFavorites()
   const items = favorites.data?.items ?? []
-  const favoriteAt = (href: string) =>
-    items.find(({ item }) => (item.type === 'document' ? item.docNumber === linkedId(href, 'doc') : item.id === linkedId(href, 'folders')))
+  // Each link carries its bookmark's id as its key
+  const favoriteAt = (key: string) => items.find((favorite) => String(favorite.id) === key)
   const menu: ItemMenu = {
-    label: (href) => t('menu.for', { name: favoriteAt(href)?.item.name ?? '' }),
-    items: (href) => {
-      const favorite = favoriteAt(href)
+    label: (key) => t('menu.for', { name: favoriteAt(key)?.item.name ?? '' }),
+    items: (key) => {
+      const favorite = favoriteAt(key)
       return favorite && <FavoriteMenuItems favorite={favorite} />
     },
   }
@@ -305,12 +303,12 @@ function FavoritesSection() {
           {items.map((favorite) => (
             <li key={favorite.id}>
               {favorite.item.type === 'document' ? (
-                <Link to="/doc/$ref" params={{ ref: String(favorite.item.docNumber) }} className={styles.entry}>
+                <Link to="/doc/$ref" params={{ ref: String(favorite.item.docNumber) }} data-menu-key={String(favorite.id)} className={styles.entry}>
                   <Icon name="star" />
                   <span className={styles.text}>{favorite.item.name}</span>
                 </Link>
               ) : (
-                <Link to="/folders/$id" params={{ id: String(favorite.item.id) }} className={styles.entry}>
+                <Link to="/folders/$id" params={{ id: String(favorite.item.id) }} data-menu-key={String(favorite.id)} className={styles.entry}>
                   <Icon name="star" />
                   <span className={styles.text}>{favorite.item.name}</span>
                 </Link>

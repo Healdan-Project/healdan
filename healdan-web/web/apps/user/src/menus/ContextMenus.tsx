@@ -7,7 +7,8 @@ import { MenuItem, MenuSeparator, t } from '@healdan/ui'
 import { ActionItem } from '../actions/ActionControls'
 import { useFavorite, type Starred } from '../actions/FavoriteStar'
 import { useMyMattersChange } from '../actions/myMatters'
-import { useDocumentActions } from '../actions/useDocumentActions'
+import { favoriteAction, newTabAction, useDocumentActions } from '../actions/useDocumentActions'
+import { docHref, folderHref } from '../addresses'
 import { placeOf } from '../filing/dropTargets'
 import { mayMakeFolderIn } from '../organising/NewFolder'
 import { useOrganising } from '../organising/OrganisingProvider'
@@ -20,27 +21,21 @@ type S = components['schemas']
 // anything. Where the item has an address in the app, Open in New Tab ends the menu's first group, as the browser's own
 // menu for a link would have offered it.
 
-/** A link to the item's page in a new tab */
-function NewTab({ href }: { href: string }) {
-  return (
-    <MenuItem id="openInNewTab" href={href} target="_blank" rel="noopener">
-      {t('menu.openInNewTab')}
-    </MenuItem>
-  )
-}
-
 /**
  * A document's row: the toolbar's Open, Preview, Download and Check Out (Check In and Release instead, for the person's
  * own web check-out), More's Rename, Move To…, Delete and Copy Link, and Favorites. With several selected only Move To…
  * and Delete are enabled, as on the toolbar.
  */
 export function DocumentMenuItems({ documents }: { documents: S['DocumentView'][] }) {
-  const actions = useDocumentActions({ document: documents.length === 1 ? documents[0] : undefined, documents })
+  const one = documents.length === 1 ? documents[0] : undefined
+  const actions = useDocumentActions({ document: one, documents })
+  // Only the menu offers these: Favorites is the details' star's change, with one document
+  const favorite = favoriteAction(useFavorite(one && { docNumber: one.docNumber }))
   return (
     <>
       <ActionItem action={actions.open} />
       <ActionItem action={actions.preview} />
-      <ActionItem action={actions.openInNewTab} />
+      <ActionItem action={newTabAction(one && docHref(one.docNumber))} />
       <MenuSeparator />
       <ActionItem action={actions.download} />
       {actions.checkIn ? (
@@ -57,14 +52,9 @@ export function DocumentMenuItems({ documents }: { documents: S['DocumentView'][
       <ActionItem action={actions.delete} />
       <MenuSeparator />
       <ActionItem action={actions.copyLink} />
-      <ActionItem action={actions.favorite} />
+      <ActionItem action={favorite} />
     </>
   )
-}
-
-/** The words of Favorites' item: Add to, or Remove from once it's there */
-function favoriteLabel(favorite: ReturnType<typeof useFavorite>): string {
-  return favorite.favorite ? t('favorites.remove') : t('favorites.add')
 }
 
 /**
@@ -82,7 +72,7 @@ export function FolderMenuItems({ folder }: { folder: S['FolderView'] }) {
       <MenuItem id="open" onAction={() => void navigate({ to: '/folders/$id', params: { id: String(folder.id) } })}>
         {t('details.open')}
       </MenuItem>
-      <NewTab href={`/app/folders/${folder.id}`} />
+      <ActionItem action={newTabAction(folderHref(folder.id))} />
       {mayMakeFolderIn(place, me.data?.admin) && (
         <>
           <MenuSeparator />
@@ -92,9 +82,7 @@ export function FolderMenuItems({ folder }: { folder: S['FolderView'] }) {
         </>
       )}
       <MenuSeparator />
-      <MenuItem id="favorite" isDisabled={favorite.isDisabled} onAction={() => void favorite.toggle()}>
-        {favoriteLabel(favorite)}
-      </MenuItem>
+      <ActionItem action={favoriteAction(favorite)} />
     </>
   )
 }
@@ -110,7 +98,7 @@ export function MatterMenuItems({ folderId }: { folderId: number }) {
       <MenuItem id="open" onAction={() => void navigate({ to: '/folders/$id', params: { id: String(folderId) } })}>
         {t('details.open')}
       </MenuItem>
-      <NewTab href={`/app/folders/${folderId}`} />
+      <ActionItem action={newTabAction(folderHref(folderId))} />
       <MenuSeparator />
       <MenuItem id="myMatters" isDisabled={!mine.isSuccess} onAction={() => void change(kept ? 'DELETE' : 'PUT', folderId)}>
         {kept ? t('myMatters.remove') : t('myMatters.addMenu')}
@@ -119,7 +107,7 @@ export function MatterMenuItems({ folderId }: { folderId: number }) {
   )
 }
 
-/** An item of My Favorites: Open, as its link does, and Remove from Favorites */
+/** An item of My Favorites: Open, as its link does, and Remove from Favorites (its star's change, which follows its state) */
 export function FavoriteMenuItems({ favorite }: { favorite: S['FavoriteView'] }) {
   const navigate = useNavigate()
   const item = favorite.item
@@ -132,11 +120,9 @@ export function FavoriteMenuItems({ favorite }: { favorite: S['FavoriteView'] })
       <MenuItem id="open" onAction={open}>
         {t('details.open')}
       </MenuItem>
-      <NewTab href={item.type === 'document' ? `/app/doc/${item.docNumber}` : `/app/folders/${item.id}`} />
+      <ActionItem action={newTabAction(item.type === 'document' ? docHref(item.docNumber) : folderHref(item.id))} />
       <MenuSeparator />
-      <MenuItem id="favorite" isDisabled={bookmark.isDisabled} onAction={() => void bookmark.toggle()}>
-        {t('favorites.remove')}
-      </MenuItem>
+      <ActionItem action={favoriteAction(bookmark)} />
     </>
   )
 }

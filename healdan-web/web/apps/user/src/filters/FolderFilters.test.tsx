@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
@@ -229,6 +229,21 @@ describe('Filters in a folder', () => {
     // Back to a row: its details again
     await userEvent.click((await dataRows())[0]!)
     expect(await screen.findByRole('region', { name: 'Details' })).toBeTruthy()
+  })
+
+  it('leaves Filters open when a right-click selects a row for its menu', async () => {
+    await open('/folders/7?type=pdf')
+    await userEvent.click(funnel())
+    expect(await screen.findByRole('region', { name: 'Filters' })).toBeTruthy()
+
+    const target = (await dataRows())[1]!
+    fireEvent.contextMenu(target)
+    const menu = await screen.findByRole('menu')
+    await waitFor(() => expect(target.getAttribute('aria-selected')).toBe('true'))
+    fireEvent.keyDown(menu, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    expect(await screen.findByRole('region', { name: 'Filters' })).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Details' })).toBeNull()
   })
 
   it("edits one end of a range without the other being cleared or garbled, typed segment by segment", async () => {
