@@ -30,7 +30,6 @@ import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.security.AccessChecks;
-import com.logicaldoc.healdan.util.BasicPlane;
 
 /**
  * Renaming, moving and deleting a document (M6 spec section 6.7), through
@@ -293,15 +292,7 @@ final class DocumentChanges {
 
 		// What a name can't hold is said first, whatever follows the last dot
 		List<FieldError> errors = new ArrayList<>();
-		if (sent.chars().anyMatch(c -> c == '/' || c == '\\' || Character.isISOControl(c)))
-			errors.add(new FieldError("name", "invalid", "A name can't contain /, \\ or control characters."));
-		// CE's tables hold only the Basic Multilingual Plane, and strict MariaDB refuses the rest at the write
-		else if (!BasicPlane.holds(sent))
-			errors.add(new FieldError("name", "invalid",
-					"A name can't contain emoji or other characters the database can't store."));
-		if (sent.length() > Uploads.MAX_NAME_LENGTH)
-			errors.add(new FieldError("name", Uploads.TOO_LONG,
-					"A name can't be longer than %d characters.".formatted(Uploads.MAX_NAME_LENGTH)));
+		Uploads.checkText(sent, "name", Uploads.MAX_NAME_LENGTH, false, errors);
 		if (!errors.isEmpty())
 			throw ApiProblem.validation(errors);
 

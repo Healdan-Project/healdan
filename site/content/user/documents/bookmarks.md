@@ -51,6 +51,6 @@ are its My Matters:
 - **Save to Healdan** lists your favourite folders, to file into;
 - **Open from Healdan** lists your favourite folders and documents.
 
-They leave out anything you can no longer read. The star in those windows adds a folder or document to your
+They leave out anything you can no longer read, and show each under its bookmark's name. The star in those windows adds a folder or document to your
 favourites, or takes it off, and the web page's Bookmarks section shows the change. See
 [Saving to Healdan](../../office/saving-to-healdan/#favourites).

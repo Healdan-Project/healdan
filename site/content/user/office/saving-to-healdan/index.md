@@ -57,8 +57,8 @@ to file into.
 ### Favourites
 
 The star beside the bar adds the folder shown to your **Favorites**, or takes it off. Your favourites are the same as
-your bookmarks in the web page, apart from your matters, which are My Matters. See
-[Bookmarks](../../documents/bookmarks/).
+your bookmarks in the web page, apart from your matters, which are My Matters, and each shows under its own name if
+you've given it one in the app. See [Bookmarks](../../documents/bookmarks/).
 
 ## The Properties
 

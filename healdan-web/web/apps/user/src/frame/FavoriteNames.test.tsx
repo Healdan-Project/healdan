@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { ApiError, type components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
 import { client, document as doc, favorite, folder, page, type Routes } from '../test/fakeApi'
+import { keys } from '../queries'
 import { renderApp } from '../test/renderApp'
 
 type S = components['schemas']
@@ -114,6 +115,51 @@ describe('My Favorites', () => {
 
     await waitFor(() => expect(sent).toEqual([{ id: 902, name: null }]))
     expect(await link('Documents')).toBeTruthy()
+  })
+
+  it('Esc while the save is under way leaves the field to the save, which closes it', async () => {
+    const { routes } = favoriteRoutes()
+    const patch = routes['PATCH /v1/me/favorites/*'] as (request: { params: string[]; body?: unknown }) => unknown
+    let answer = () => {}
+    routes['PATCH /v1/me/favorites/*'] = (request: { params: string[]; body?: unknown }) =>
+      new Promise((resolve) => {
+        answer = () => resolve(patch(request))
+      })
+    const { api } = await renderApp('/folders/1', routes)
+    ;(await link('Cap Table.xlsx')).focus()
+    await userEvent.keyboard('{F2}')
+    await field('Cap Table.xlsx')
+    await userEvent.keyboard('Acme Cap Table{Enter}')
+    await waitFor(() => expect(api.callsTo('PATCH /v1/me/favorites/901')).toHaveLength(1))
+
+    // The rename can't be taken back, so Esc doesn't pretend to
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('textbox')).toBeTruthy()
+
+    answer()
+    const renamed = await link('Acme Cap Table')
+    expect(screen.queryByRole('textbox')).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(renamed))
+  })
+
+  it('a field left as it opened sends nothing, though its favorite followed a rename meanwhile', async () => {
+    let followed = false
+    const { routes, sent } = favoriteRoutes({
+      'GET /v1/me/favorites': () =>
+        page([favorite(documents, 902, 'Harbour Lease Docs'), followed ? favorite({ ...capTable, name: 'Cap Table 2026.xlsx' }, 901) : favorite(capTable, 901)]),
+    })
+    const { queryClient } = await renderApp('/folders/1', routes)
+    ;(await link('Cap Table.xlsx')).focus()
+    await userEvent.keyboard('{F2}')
+    await field('Cap Table.xlsx')
+
+    // Someone renames the document, and My Favorites is asked again while the field is open
+    followed = true
+    await queryClient.invalidateQueries({ queryKey: keys.favorites })
+    await userEvent.keyboard('{Enter}')
+
+    expect(await link('Cap Table 2026.xlsx')).toBeTruthy()
+    expect(sent).toEqual([])
   })
 
   it("keeps the field open with a refusal under it, in the catalogue's words", async () => {

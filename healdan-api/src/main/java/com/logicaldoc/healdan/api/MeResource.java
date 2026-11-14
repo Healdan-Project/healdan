@@ -35,7 +35,6 @@ import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.navigation.Favorites;
 import com.logicaldoc.healdan.navigation.MyMatters;
 import com.logicaldoc.healdan.security.AccessChecks;
-import com.logicaldoc.healdan.util.BasicPlane;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -105,6 +104,11 @@ public class MeResource {
 	/** The longest name a favorite keeps ({@code ld_bookmark.ld_title}) */
 	static final int MAX_FAVORITE_NAME = 255;
 
+	/** Folders first, then by name without regard to case, as {@link Favorites#list} sorts by title */
+	private static final Comparator<FavoriteView> FAVORITE_ORDER = Comparator
+			.comparing((FavoriteView v) -> "folder".equals(v.type()) ? 0 : 1)
+			.thenComparing(FavoriteView::name, String.CASE_INSENSITIVE_ORDER).thenComparingLong(FavoriteView::id);
+
 	/**
 	 * @return the caller's bookmarks other than My Matters, folders first and
 	 *         then by name, leaving out what the caller can't read or the API
@@ -125,6 +129,8 @@ public class MeResource {
 				if (view != null)
 					views.add(view);
 			}
+			// By the name shown, which is the item's for a bookmark the Classic Interface left without a title
+			views.sort(FAVORITE_ORDER);
 			return Page.whole(views);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list the favorites", e);
@@ -217,9 +223,10 @@ public class MeResource {
 		String requested = body.name().isNull() ? null : body.name().textValue();
 		User caller = Caller.current().user();
 		try {
-			// Through the list, so another user's bookmark and a matter's answer like none, as a remove does
-			Bookmark bookmark = Favorites.get().list(caller.getId()).stream().filter(b -> b.getId() == id).findFirst()
-					.orElseThrow(() -> ApiProblem.notFound("You have no favorite with this id."));
+			// Another user's bookmark and a matter's answer like none, as the list leaves them out
+			Bookmark bookmark = Favorites.get().find(caller.getId(), id);
+			if (bookmark == null)
+				throw ApiProblem.notFound("You have no favorite with this id.");
 			Map<Long, Author> authors = bookmark.getType() == Bookmark.Type.FOLDER ? Map.of()
 					: DocumentAuthors.get().of(List.of(bookmark.getTargetId()));
 			// What the list leaves out can't be renamed either
@@ -252,15 +259,7 @@ public class MeResource {
 			return null;
 		// A label, not a file name: a / or a \ is fine, as in "Smith / Jones"
 		List<FieldError> errors = new ArrayList<>();
-		if (name.chars().anyMatch(Character::isISOControl))
-			errors.add(new FieldError("name", "invalid", "A name can't contain control characters."));
-		// CE's tables hold only the Basic Multilingual Plane, and strict MariaDB refuses the rest at the write
-		else if (!BasicPlane.holds(name))
-			errors.add(new FieldError("name", "invalid",
-					"A name can't contain emoji or other characters the database can't store."));
-		if (name.length() > MAX_FAVORITE_NAME)
-			errors.add(new FieldError("name", Uploads.TOO_LONG,
-					"A name can't be longer than %d characters.".formatted(MAX_FAVORITE_NAME)));
+		Uploads.checkText(name, "name", MAX_FAVORITE_NAME, true, errors);
 		if (!errors.isEmpty())
 			throw ApiProblem.validation(errors);
 		return name;

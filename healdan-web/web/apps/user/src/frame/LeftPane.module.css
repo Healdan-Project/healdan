@@ -89,7 +89,8 @@
   color: var(--hd-text-secondary);
 }
 
-/* A favorite being renamed: the field in place of its link, and a refusal under it. */
+/* A favorite being renamed: the field in place of its link (organising.module.css's .renameInput, a document title's), and
+   a refusal under it. */
 .renaming {
   padding: var(--hd-space-1) var(--hd-space-3);
 }
@@ -98,28 +99,6 @@
   display: flex;
   align-items: center;
   gap: var(--hd-space-3);
-}
-
-.renameInput {
-  flex: 1;
-  min-width: 0;
-  box-sizing: border-box;
-  min-height: 24px;
-  padding: 0 var(--hd-space-2);
-  border: 1px solid var(--hd-field-line);
-  border-radius: var(--hd-radius);
-  background: var(--hd-field);
-  color: var(--hd-text);
-  font: inherit;
-}
-
-.renameInput:focus-visible {
-  outline: var(--hd-focus-outline);
-  outline-offset: var(--hd-focus-offset);
-}
-
-.renameInput[aria-invalid='true'] {
-  border-color: var(--hd-required);
 }
 
 .renameError {

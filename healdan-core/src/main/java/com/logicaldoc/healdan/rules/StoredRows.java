@@ -125,6 +125,9 @@ public class StoredRows implements PreUpdateEventListener {
 	/** Key in a listener dictionary of the document's row before the store */
 	private static final String DOCUMENT_ROW = StoredRows.class.getName() + ".documentRow";
 
+	/** Key in a listener dictionary of the folder's row before the store */
+	private static final String FOLDER_ROW = StoredRows.class.getName() + ".folderRow";
+
 	private static final String FOLDER_COLUMNS = "ld_id, ld_parentid, ld_name, ld_type, ld_foldref, ld_deleted, ld_securityref";
 
 	/** Large id lists are queried in chunks */
@@ -209,6 +212,22 @@ public class StoredRows implements PreUpdateEventListener {
 		List<FolderRow> found = jdbc.query("select %s from ld_folder where ld_id = ?".formatted(FOLDER_COLUMNS),
 				(rs, i) -> row(rs), folderId);
 		return found.isEmpty() ? null : found.get(0);
+	}
+
+	/**
+	 * {@link #folder(long)}, read once for all the listeners of one store, as
+	 * {@link #document(long, Map)} is
+	 *
+	 * @param folderId the folder being stored
+	 * @param dictionary the dictionary CE passes the listeners of the store
+	 * @return its row before the store, null if there is none
+	 */
+	public FolderRow folder(long folderId, Map<String, Object> dictionary) {
+		if (dictionary.containsKey(FOLDER_ROW))
+			return (FolderRow) dictionary.get(FOLDER_ROW);
+		FolderRow row = folder(folderId);
+		dictionary.put(FOLDER_ROW, row);
+		return row;
 	}
 
 	/**

@@ -316,7 +316,8 @@ function FavoritesSection() {
     },
   })
   function renamed(id: number, focusLink: boolean) {
-    setRenaming(undefined)
+    // Only this favorite's field: another may have opened since
+    setRenaming((current) => (current === id ? undefined : current))
     // The link is back once this has rendered, in its new place if the name moved it
     if (focusLink) requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-menu-key="${id}"]`)?.focus())
   }

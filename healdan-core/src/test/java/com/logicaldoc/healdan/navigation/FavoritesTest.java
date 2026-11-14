@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.navigation;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
@@ -34,6 +35,7 @@ import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.matter.Matter;
+import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.spring.Context;
 
@@ -177,6 +179,57 @@ public class FavoritesTest extends AbstractHealdanTestCase {
 
 		assertEquals("Lease Final.docx", DocumentDAO.get().findById(lease.getId()).getFileName());
 		assertEquals("Lease Final.docx", BookmarkDAO.get().findById(alices.getId()).getTitle());
+	}
+
+	@Test
+	public void testRenameWithALongTypeStillFollows() throws Exception {
+		FileUtils.deleteDirectory(((FSStore) Store.get()).getRoot());
+		Document lease = fx.upload(documents, "Lease.docx", "Lease", alice);
+		awaitAsyncWork();
+		Bookmark alices = favorites.addDocument(alice.getId(), lease.getId());
+
+		// What follows the last dot is CE's type, here longer than ld_bookmark.ld_filetype holds
+		String name = "Acme Ltd v. Harbour Board of Trustees witness statement";
+		DocumentManager.get().rename(lease.getId(), name, fx.documentHistory(alice));
+		awaitAsyncWork();
+
+		assertEquals(name, DocumentDAO.get().findById(lease.getId()).getFileName());
+		Bookmark followed = BookmarkDAO.get().findById(alices.getId());
+		assertEquals(name, followed.getTitle());
+		assertNull(followed.getFileType());
+	}
+
+	@Test
+	public void testRolledBackRenameRenamesNoFavorite() throws Exception {
+		Folder letters = fx.folder(documents, "Letters");
+		Bookmark alices = favorites.addFolder(alice.getId(), letters.getId());
+
+		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+			try {
+				Folder folder = FolderDAO.get().findById(letters.getId(), true);
+				folder.setName("Correspondence");
+				FolderDAO.get().store(folder, fx.folderHistory(alice));
+			} catch (Exception e) {
+				throw new IllegalStateException(e);
+			}
+			status.setRollbackOnly();
+		});
+
+		// Read from the database: the rename was rolled back
+		assertEquals("Letters", StoredRows.get().folder(letters.getId()).name());
+		assertEquals("Letters", BookmarkDAO.get().findById(alices.getId()).getTitle());
+	}
+
+	@Test
+	public void testFindOnlyOwnAndNotMyMatters() throws Exception {
+		Bookmark alices = favorites.addFolder(alice.getId(), documents.getId());
+		MyMatters.get().add(alice.getId(), workspace.getId());
+		Bookmark matter = BookmarkDAO.get().findByUserIdAndFolderId(alice.getId(), workspace.getId());
+
+		assertEquals(alices.getId(), favorites.find(alice.getId(), alices.getId()).getId());
+		assertNull(favorites.find(bob.getId(), alices.getId()));
+		assertNull(favorites.find(alice.getId(), matter.getId()));
+		assertNull(favorites.find(alice.getId(), 987654321L));
 	}
 
 	private static void awaitAsyncWork() throws Exception {

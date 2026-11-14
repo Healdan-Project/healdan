@@ -13,6 +13,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.logicaldoc.core.document.Bookmark;
 import com.logicaldoc.core.document.BookmarkDAO;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
@@ -230,5 +231,19 @@ public class FavoriteNamesTest extends ApiTestCase {
 
 		assertEquals(second, items.path(0).path("id").asLong());
 		assertEquals(first, items.path(1).path("id").asLong());
+
+		// A bookmark the Classic Interface left without a title is shown, and sorted, by its folder's name
+		Folder gamma = fx.folder(documents, "Gamma");
+		long third = addFolder(gamma, clerk);
+		Bookmark untitled = BookmarkDAO.get().findById(third);
+		untitled.setTitle("");
+		BookmarkDAO.get().store(untitled);
+
+		items = get(FAVORITES).token(signIn(clerk)).send().json().path("items");
+
+		assertEquals(second, items.path(0).path("id").asLong());
+		assertEquals(third, items.path(1).path("id").asLong());
+		assertEquals("Gamma", items.path(1).path("name").textValue());
+		assertEquals(first, items.path(2).path("id").asLong());
 	}
 }

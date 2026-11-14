@@ -483,8 +483,9 @@ and what the user can't read is `404`.
   document is renamed, by any route: the API, the Classic Interface, a check-in under another file name, WebDAV, CMIS
   or REST. Every one of them stores the folder or document through LogicalDOC's DAO, whose listeners
   `FavoriteNamesDocumentListener` and `FavoriteNamesFolderListener` (in `healdan-core`, last of Healdan's) compare the
-  name before the store with each bookmark's title, exactly, and give the new name to those that match, in the
-  store's transaction. A favourite with a name of its own keeps it. Bookmarks whose item was renamed before Healdan
+  name before the store with each bookmark's title, exactly, and give the new name to those that match once the
+  store's transaction has committed, in a transaction of their own, so a bookmark that can't be renamed never fails
+  the rename. A favourite with a name of its own keeps it. Bookmarks whose item was renamed before Healdan
   did this can't be told from ones their owners named, so they keep the names they have.
 
 ## My Matters and Recent Clients

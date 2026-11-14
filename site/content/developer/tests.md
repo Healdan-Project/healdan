@@ -295,6 +295,12 @@ code is laid out.
     selects the row first; opens the menu with Shift+F10 on the focused row, closes it with Esc (the focus back in the
     row) and moves the document with **Move To…**, by keys; and removes the favorite from its menu in **My Favorites**.
     Afterwards it removes the bookmark, if a failed run left it, and takes the matter out of My Matters again.
+  - `favorite-names.spec.ts` checks a favourite's own name. It makes a folder of its own inside `E2E` through the API,
+    and through the page adds it to **My Favorites** with its star, checks the favourite's tooltip says what it is and
+    where (the folder's name and matter 1.1), renames it from its menu with **Rename Favorite**, Enter and a new name,
+    and checks the new name in **My Favorites** and through the API, the tooltip unchanged and the focus back on the
+    favourite, then gives it the folder's name back with **Use Original Name**. Afterwards it removes the bookmark,
+    if a failed run left it; the folder stays.
   - `a11y.spec.ts` runs axe on each main view in the light theme and again in the dark one (a browser context with
     Playwright's `colorScheme`, signed in once per theme): Recent's four lists, a matter, a folder with details (its
     toolbar buttons all one height, and a document the spec checked out through the API, and releases at the end, whose

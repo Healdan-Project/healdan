@@ -8,7 +8,6 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Bookmark;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentHistory;
@@ -18,21 +17,19 @@ import com.logicaldoc.healdan.rules.StoredRows.DocumentRow;
 
 /**
  * A renamed document's favorites that still have its old name take the new
- * one ({@link Favorites#followRename}). Every route that renames a document
- * stores it through CE's document DAO, which calls its listeners: the app's
- * and the API's rename, the Classic Interface's rename and properties, a
- * check-in under another file name, WebDAV, CMIS and REST. The name before
- * is the row before the store's session first wrote it ({@link StoredRows}),
- * and the name after is the one stored, once CE has made it unique in its
- * folder. Never refuses a store: a favorite that can't be renamed keeps its
- * name. CE creates it by reflection, hence the public no-arg constructor.
+ * one ({@link Favorites#followRenameAfterCommit}), once the store has
+ * committed. Every route that renames a document stores it through CE's
+ * document DAO, which calls its listeners: the app's and the API's rename,
+ * the Classic Interface's rename and properties, a check-in under another
+ * file name, WebDAV, CMIS and REST. The name before is the row before the
+ * store's session first wrote it ({@link StoredRows}), and the name after is
+ * the one stored, once CE has made it unique in its folder. Never refuses a
+ * store: a favorite that can't be renamed keeps its name. CE creates it by
+ * reflection, hence the public no-arg constructor.
  */
 public class FavoriteNamesDocumentListener implements DocumentListener {
 
 	private static final Logger log = LoggerFactory.getLogger(FavoriteNamesDocumentListener.class);
-
-	/** Key in the store's dictionary of the document's file name before it */
-	private static final String BEFORE = FavoriteNamesDocumentListener.class.getName() + ".before";
 
 	public FavoriteNamesDocumentListener() {
 		// Instantiated by CE
@@ -40,22 +37,23 @@ public class FavoriteNamesDocumentListener implements DocumentListener {
 
 	@Override
 	public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
-		if (document.getId() == 0L)
-			return;
-		DocumentRow stored = StoredRows.get().document(document.getId(), dictionary);
-		if (stored != null && stored.fileName() != null)
-			dictionary.put(BEFORE, stored.fileName());
+		// Reads the row before the store into the store's dictionary, where afterStore finds it: by then the rules'
+		// listener has recorded the row as stored, which a read without the dictionary would return
+		if (document.getId() != 0L)
+			StoredRows.get().document(document.getId(), dictionary);
 	}
 
 	@Override
 	public void afterStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
-		String before = (String) dictionary.get(BEFORE);
-		String after = document.getFileName();
-		if (before == null || after == null || before.equals(after))
-			return;
 		try {
-			Favorites.get().followRename(Bookmark.Type.DOCUMENT, document.getId(), before, after, document.getType());
-		} catch (PersistenceException | RuntimeException e) {
+			DocumentRow stored = StoredRows.get().document(document.getId(), dictionary);
+			String before = stored != null ? stored.fileName() : null;
+			String after = document.getFileName();
+			if (before == null || after == null || before.equals(after))
+				return;
+			Favorites.get().followRenameAfterCommit(Bookmark.Type.DOCUMENT, document.getId(), before, after,
+					document.getType());
+		} catch (RuntimeException e) {
 			log.warn("Cannot give the favorites of document {} its new name", document.getId(), e);
 		}
 	}
