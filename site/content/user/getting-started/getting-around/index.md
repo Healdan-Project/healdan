@@ -169,7 +169,7 @@ once the list has the focus.
 | Up and down arrows | Move through the list |
 | Enter | Opens the document in its app (the Healdan Helper), or a folder |
 | Space | Opens Quick Look; Esc closes it |
-| F2 | Renames the selected document in place |
+| F2 | Renames the selected document in place, or the folder with the focus, in a list or in the **My Matters** tree |
 | Delete | Moves the selected documents to the Trash, after asking |
 | Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row, tree item or left-pane link with the focus; Esc closes it |
 | Option-Enter on **Upload** | Files with the form first |

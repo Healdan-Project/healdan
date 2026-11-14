@@ -94,6 +94,8 @@ Its name becomes a field, with all of it selected. **Enter** saves, and so does 
 - **Right-click the folder,** in a list or in My Matters, and choose **Rename** (see
   [Right-Click Menus](../../getting-started/getting-around/#right-click-menus)).
 
+Some renames aren't allowed, and the app says why:
+
 - **You need the Rename permission** on the folder. Without it, **Rename** is greyed out and **F2** says "You don't
   have permission to rename this folder."
 - **Only administrators rename the folders at the top of a matter,** such as Correspondence and Drafts, search
