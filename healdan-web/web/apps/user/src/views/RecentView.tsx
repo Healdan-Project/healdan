@@ -13,6 +13,7 @@ import { ReadingPane } from '../preview/ReadingPane'
 import { usePreviewKey } from '../preview/usePreviewKey'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { RightRegionView, useRegionKind } from '../frame/RightRegion'
+import { clientIcon } from '../kindIcons'
 import { useRecentClients, useRecentDocuments, useRecentFolders } from '../queries'
 import { useOrganisingTable } from '../organising/useOrganisingTable'
 import { useListMenu } from '../menus/useListMenu'
@@ -104,8 +105,7 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
   const preview = usePreviewKey(change)
   const openDocument = useOpenKey(items ?? [], change)
   // Rename, Move To… and Delete, with F2 and Delete, as in every list of documents (R95)
-  const organising = useOrganisingTable(items ?? [], selection)
-  const menu = useListMenu({ rows: items ?? [], selection, onSelect: change, selected: organising.selected })
+  const organising = useOrganisingTable(items ?? [], selection, change)
   return (
     <RecentList
       kind={kind}
@@ -119,7 +119,7 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
         </Toolbar>
       }
       organising={organising.tableProps}
-      contextMenu={menu}
+      contextMenu={organising.contextMenu}
       // A document opens in its app, or downloads if the helper doesn't open its kind, and is selected
       onOpen={openDocument}
       onPreview={preview}
@@ -143,7 +143,7 @@ function RecentFolders() {
   const rows = useMemo(() => (items ?? []).map(rowOf), [items])
   const columns = useMemo(() => hitColumns('folders'), [])
   // A folder's row is never selected, so its menu leaves the (empty) selection as it is
-  const menu = useListMenu({ rows: items ?? [], selection: NONE, onSelect: () => {}, selected: [] })
+  const menu = useListMenu({ rows: items ?? [], selection: NONE, selected: [] })
   return <RecentList kind="folders" columns={columns} rows={rows} query={recent} contextMenu={menu} onOpen={(key) => void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })} />
 }
 
@@ -164,7 +164,7 @@ function RecentClients() {
         width: '3fr',
         cell: ({ client }) => (
           <>
-            <Icon name="building" />
+            <Icon {...clientIcon} />
             <span className={styles.name}>{client.name}</span>
           </>
         ),

@@ -29,6 +29,8 @@ describe('The Move To… picker', () => {
     expect(within(recent).getByRole('button', { name: /1002\.1 – Commercial Lease/ })).toBeTruthy()
     const mine = within(dialog).getByRole('region', { name: 'My Matters' })
     expect(within(mine).getByRole('button', { name: /1001\.1 – Charter Dispute/ })).toBeTruthy()
+    // Each matter with its briefcase in the matters' colour
+    expect(within(mine).getByRole('button', { name: /1001\.1/ }).querySelector('svg')!.getAttribute('data-kind')).toBe('matter')
     expect(within(dialog).getByRole('textbox', { name: 'Find a Matter' })).toBeTruthy()
     await expectNoAxeViolations(dialog)
     // No Store is asked for: a Store's id is 2
@@ -68,7 +70,7 @@ describe('The Move To… picker', () => {
     await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
 
     // A matter's top level takes no documents; a search folder isn't offered
-    expect(await within(dialog).findByRole('button', { name: /Correspondence/ })).toBeTruthy()
+    expect((await within(dialog).findByRole('button', { name: /Correspondence/ })).querySelector('svg')!.getAttribute('data-kind')).toBe('folder')
     expect(within(dialog).queryByRole('button', { name: /My Recent Docs Here/ })).toBeNull()
     expect(within(dialog).getByRole('button', { name: 'Move Here' }).hasAttribute('disabled')).toBe(true)
     expect(within(dialog).getByText('Open a folder inside the matter to move the documents into it.')).toBeTruthy()
@@ -115,7 +117,9 @@ describe('The Move To… picker', () => {
     await select(/Lease/)
     const dialog = await openPicker()
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Find a Matter' }), 'Harbour')
-    await userEvent.click(await within(dialog).findByRole('button', { name: /1003\.3 – Harbour Lease/ }))
+    const found = await within(dialog).findByRole('button', { name: /1003\.3 – Harbour Lease/ })
+    expect(found.querySelector('svg')!.getAttribute('data-kind')).toBe('matter')
+    await userEvent.click(found)
     expect(await within(dialog).findByRole('button', { name: /Contracts/ })).toBeTruthy()
   })
 

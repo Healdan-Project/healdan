@@ -3,11 +3,12 @@
 
 import type { components } from '@healdan/api'
 import { t, type IconName } from '@healdan/ui'
+import { APP_BASE } from '../addresses'
 import { useOrganising } from '../organising/OrganisingProvider'
 import { useQuickLook } from '../preview/QuickLookState'
 import { checkInAccept } from './checkout'
 import { copyLink } from './copyLink'
-import { useFavorite } from './FavoriteStar'
+import type { Favorite } from './FavoriteStar'
 import { useOpenInApp } from './OpenInAppState'
 import { pickFile } from './pickFile'
 import { useCheckout } from './useCheckout'
@@ -45,16 +46,12 @@ export interface DocumentActions {
   move: DocumentAction
   delete: DocumentAction
   copyLink: DocumentAction
-  /** Add to Favorites, or Remove from Favorites once it's there */
-  favorite: DocumentAction
-  /** The document's own page in a new tab */
-  openInNewTab: LinkAction
 }
 
 export interface DocumentActionsOf {
   /** The one document Open, Download and Check Out act on: none with nothing or several selected */
   document: DocumentView | undefined
-  /** The documents Move To… and Delete act on (the selection); Rename, Copy Link and Favorites need exactly one */
+  /** The documents Move To… and Delete act on (the selection); Rename and Copy Link need exactly one */
   documents: DocumentView[]
   /** The document Preview opens, when it isn't `document`'s: the toolbar's is the address's, whose row may not be drawn yet */
   preview?: number
@@ -63,8 +60,9 @@ export interface DocumentActionsOf {
 /**
  * What can be done with the selected documents (spec 6.1, 6.7): the one source of the toolbar's buttons, its More (⋯) and
  * a row's right-click menu, so their labels, the rules that disable them and what they do never differ. Actions on one
- * document are disabled with none or several; Move To… and Delete take any number. While a check-out or a change to
- * Favorites runs, whichever control started it, each control that offers it is disabled.
+ * document are disabled with none or several; Move To… and Delete take any number. While a check-out runs, whichever
+ * control started it, each control that offers it is disabled. Favorites and Open in New Tab are only in the menus, which
+ * make them with favoriteAction and newTabAction, so a toolbar doesn't watch My Favorites for an action it never shows.
  */
 export function useDocumentActions({ document, documents, preview = document?.docNumber }: DocumentActionsOf): DocumentActions {
   const app = useOpenInApp()
@@ -72,7 +70,6 @@ export function useDocumentActions({ document, documents, preview = document?.do
   const organising = useOrganising()
   const checkout = useCheckout(document)
   const one = documents.length === 1 ? documents[0] : undefined
-  const favorite = useFavorite(one && { docNumber: one.docNumber })
   const may = document?.canOpen === true
   const yours = checkout.state.kind === 'yours'
 
@@ -102,12 +99,15 @@ export function useDocumentActions({ document, documents, preview = document?.do
     move: { id: 'move', label: t('move.menu'), isDisabled: documents.length === 0, perform: () => organising.askMove(documents) },
     delete: { id: 'delete', label: t('delete.menu'), isDisabled: documents.length === 0, perform: () => organising.askDelete(documents) },
     copyLink: { id: 'copyLink', label: t('details.copyLink'), isDisabled: !one, perform: () => one && void copyLink(one.docNumber) },
-    favorite: {
-      id: 'favorite',
-      label: favorite.favorite ? t('favorites.remove') : t('favorites.add'),
-      isDisabled: favorite.isDisabled,
-      perform: () => void favorite.toggle(),
-    },
-    openInNewTab: { id: 'openInNewTab', label: t('menu.openInNewTab'), isDisabled: !one, href: one ? `/app/doc/${one.docNumber}` : '/app/' },
   }
+}
+
+/** Add to Favorites, or Remove from Favorites once it's there, as the star (useFavorite) says: every menu's item for it */
+export function favoriteAction(favorite: Favorite): DocumentAction {
+  return { id: 'favorite', label: favorite.favorite ? t('favorites.remove') : t('favorites.add'), isDisabled: favorite.isDisabled, perform: () => void favorite.toggle() }
+}
+
+/** Open in New Tab: the item's own page (docHref, folderHref), disabled with none, as with several documents selected */
+export function newTabAction(href: string | undefined): LinkAction {
+  return { id: 'openInNewTab', label: t('menu.openInNewTab'), isDisabled: href === undefined, href: href ?? `${APP_BASE}/` }
 }

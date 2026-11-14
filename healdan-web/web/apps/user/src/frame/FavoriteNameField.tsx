@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { t } from '@healdan/ui'
 import { favoriteNameRefusal, hasOwnName, renameFavorite } from '../actions/favoriteName'
@@ -18,7 +18,7 @@ type S = components['schemas']
  * leaving the field saves a new name. A refusal keeps the field open with what is wrong under it. `onDone` is told whether
  * the focus is the field's to give back to the link.
  */
-export function FavoriteNameField({ favorite, onDone }: { favorite: S['FavoriteView']; onDone: (focusLink: boolean) => void }) {
+export function FavoriteNameField({ favorite, icon, onDone }: { favorite: S['FavoriteView']; icon: ReactNode; onDone: (focusLink: boolean) => void }) {
   const api = useApi()
   const queryClient = useQueryClient()
   const [text, setText] = useState(favorite.name)
@@ -64,6 +64,7 @@ export function FavoriteNameField({ favorite, onDone }: { favorite: S['FavoriteV
   return (
     <div className={styles.renaming}>
       <div className={styles.renamingRow}>
+        {icon}
         <input
           ref={input}
           className={styles.renameInput}

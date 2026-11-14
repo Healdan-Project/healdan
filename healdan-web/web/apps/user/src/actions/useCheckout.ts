@@ -47,8 +47,9 @@ export function useCheckout(document: DocumentView | undefined): Checkout {
         const [first] = fieldErrors(error).values()
         toast(first ?? messageFor(error))
       } finally {
-        // The folder's list, search results and Recent show the hold too
-        await invalidateDocumentLists(queryClient)
+        // The folder's list, search results and Recent show the hold too. They're asked for again without waiting, so the
+        // controls aren't busy while every open list and tree answers: the document's own answer is set above.
+        void invalidateDocumentLists(queryClient)
       }
     },
   })

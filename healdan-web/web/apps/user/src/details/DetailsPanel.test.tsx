@@ -171,7 +171,8 @@ describe('DetailsPanel', () => {
     fireEvent.error(img)
 
     await waitFor(() => expect(panel.querySelector('img')).toBeNull())
-    expect(panel.querySelector('.thumb svg')).toBeTruthy()
+    // The icon of the file's kind, in its colour
+    expect(panel.querySelector('.thumb svg')!.getAttribute('data-kind')).toBe('pdf')
   })
 
   it('asks for a thumbnail that was missing again a little later, as the server makes it after a filing', async () => {

@@ -6,6 +6,12 @@ weight: 2
 Healdan's web page has a top bar across the top, a left pane down the left side and the main area beside it. The
 colours follow your browser's light or dark setting.
 
+Each kind of item has its own icon, drawn in its kind's colour: a matter's briefcase is amber, a client's building
+indigo and a folder blue, and among documents, word-processing documents are blue, spreadsheets green, presentations
+orange-red, PDFs red, emails blue and pictures purple. Some kinds share a blue, so the icon's shape tells them apart.
+LibreOffice's text documents, spreadsheets and presentations take the colours of their Microsoft Office counterparts,
+and any other kind of file, such as a drawing, has the plain document icon in the colour of the text beside it.
+
 ![Healdan's web page in the Due Diligence folder of matter 1002.1 – Commercial Lease: the top bar with the Healdan name, the Documents search box, the ? button and the PN menu; the left pane with Recent, Recent Matters, My Matters opened to the matter's folders, and My Favorites; the folder's two documents, Service Charge Budget 2026–27.xlsx and Site Plan – Unit 4 Weir Lane.odg, with the second selected; and its details at the right, with the thumbnail of the plan, its name with the Favorites star beside it, Open, Download, Edit, Copy Link and Check Out, its properties and its version](whole-window.png)
 
 ## The Top Bar
@@ -32,9 +38,9 @@ The left pane scrolls on its own when it's longer than the window. From the top 
 - **My Matters:** the matters you've chosen to keep at hand, as a tree. Open a matter to see its folders and search
   folders, and open a folder to see its own folders. A search folder has its own icon. The tree opens to the folder
   you're in, and **+** beside the heading adds the matter you're in.
-- **My Favorites:** documents and folders you've added as favourites, with the star beside a folder's name or beside
-  a document's name in its details, folders first and then by name. A favourite can have a name of its own: see
-  [A Favourite's Own Name](#a-favourites-own-name).
+- **My Favorites:** documents and folders you've added as favourites, each with the icon of its kind, as in the
+  lists, folders first and then by name. The star beside a folder's name, or beside a document's name in its details,
+  adds one. A favourite can have a name of its own: see [A Favourite's Own Name](#a-favourites-own-name).
 
 [My Matters and Recent Matters](../../finding-documents/my-matters-and-recent-matters/) explains the first two.
 If your firm calls matters something else, such as projects, the headings use its word: Recent Projects and My
@@ -76,7 +82,7 @@ Matter](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matte
 Select a document in a folder's list, in search results or in a Recent list, and its **Details** open at the right, in the same place as
 [Filters](../../finding-documents/searching/#filters). They show:
 
-- **A thumbnail** of the first page, when the document has one. Without one, a plain icon for the kind of file shows
+- **A thumbnail** of the first page, when the document has one. Without one, the icon for the kind of file shows
   instead.
 - **The name,** with a star beside it that adds the document to **My Favorites** and takes it off again, and under it
   the doc #, the version and the size: `# 10388 · Version 2 · 209 KB`.
@@ -129,8 +135,8 @@ Right-clicking one of several selected documents keeps them all selected, and th
 search box, an email's message, a preview, or the space in a list below its last row, right-clicking shows your
 browser's own menu, so copy, paste and spelling work as usual.
 
-With the keyboard, press Shift-F10, or the menu key if your keyboard has one, to open the menu of the row or tree item
-that has the focus. The arrow keys move through the menu, Enter chooses, and Esc closes it and puts the focus back where
+With the keyboard, press Shift-F10, or the menu key if your keyboard has one, to open the menu of the row, tree item or
+link in **Recent Matters** or **My Favorites** that has the focus. The arrow keys move through the menu, Enter chooses, and Esc closes it and puts the focus back where
 it was.
 
 ## The Keyboard
@@ -150,7 +156,7 @@ once the list has the focus.
 | Space | Opens Quick Look; Esc closes it |
 | F2 | Renames the selected document in place, or in **My Favorites** the favourite with the focus |
 | Delete | Moves the selected documents to the Trash, after asking |
-| Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row or tree item with the focus; Esc closes it |
+| Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row, tree item or left-pane link with the focus; Esc closes it |
 | Option-Enter on **Upload** | Files with the form first |
 
 ## A Narrower Window

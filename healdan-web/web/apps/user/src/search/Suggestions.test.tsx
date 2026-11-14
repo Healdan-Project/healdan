@@ -31,6 +31,9 @@ describe('suggestionSections', () => {
     expect(sections.map((section) => section.id)).toEqual(['matters', 'documents', 'run'])
     expect(sections[0]!.options[0]).toMatchObject({ id: 'm11', textValue: '1001.1 – Charter Dispute', meta: 'Saltmarsh Shipping Ltd' })
     expect(sections[1]!.options[0]).toMatchObject({ id: 'd10392', textValue: 'Charterparty.docx', meta: '# 10392 · 1001.1' })
+    // Each with the icon of its kind, in its colour
+    expect(sections[0]!.options[0]!.icon).toMatchObject({ props: { name: 'briefcase', kind: 'matter' } })
+    expect(sections[1]!.options[0]!.icon).toMatchObject({ props: { name: 'fileDocx', kind: 'wordProcessing' } })
     expect(sections[2]!.options[0]).toMatchObject({ id: SEARCH_ID, textValue: 'Search Emails for "charter"' })
     expect(sections[2]!.showTitle).toBe(false)
   })

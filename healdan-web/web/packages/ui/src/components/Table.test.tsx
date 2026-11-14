@@ -7,6 +7,8 @@ import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import { bringObservedIntoView } from '../test/intersection'
+import '../tokens.css'
+import { Icon } from '../icons'
 import { Table, type TableColumn, type TableProps, type TableRow, type TableSort } from './Table'
 import tableCss from './Table.module.css?raw'
 import { MenuItem } from './Menu'
@@ -306,6 +308,37 @@ describe('Table highlights', () => {
     expect(data.setData).not.toHaveBeenCalled()
   })
 
+  // jsdom works out the colours from the stylesheets and tokens.css (light), though it draws nothing
+  it('draws a kind\'s icon in its colour, keeps it on Inactive selection, and draws it in the fill\'s own colour while the list has the focus', () => {
+    const withIcons: TableColumn<Item>[] = [
+      {
+        id: 'title',
+        name: 'Title',
+        isRowHeader: true,
+        cell: (one) => (
+          <>
+            <Icon name="filePdf" kind="pdf" />
+            <Icon name="lock" />
+            {one.name}
+          </>
+        ),
+      },
+    ]
+    render(<Harness columns={withIcons} initial={['d1']} />)
+    const colours = (name: RegExp) => [...row(name).querySelectorAll('svg')].map((svg) => getComputedStyle(svg).color)
+    const pdf = 'rgb(196, 22, 28)'
+    const secondary = 'rgb(110, 110, 115)'
+    const text = 'rgb(29, 29, 31)'
+    const onFill = 'rgb(255, 255, 255)'
+    // The PDF's colour, then the padlock muted; selected, the padlock takes the row's text and the PDF keeps its colour
+    expect(colours(/Letter 2/)).toEqual([pdf, secondary])
+    expect(colours(/Letter 1/)).toEqual([pdf, text])
+    act(() => row(/Letter 1/).focus())
+    expect(getComputedStyle(row(/Letter 1/)).backgroundColor).toBe('rgb(12, 105, 192)')
+    expect(colours(/Letter 1/)).toEqual([onFill, onFill])
+    expect(colours(/Letter 2/)).toEqual([pdf, secondary])
+  })
+
   it('puts a text cell in a box that ends in an ellipsis, with the whole text still in it', () => {
     render(<Harness rows={[{ id: 'd1', textValue: 'A long name', name: 'A very long name that will not fit in its cell' }]} />)
     const text = screen.getByText('A very long name that will not fit in its cell')
@@ -350,16 +383,20 @@ describe('Table right-click menu', () => {
 
   it('takes a Mac\'s Control-click on a row as its right-click, not as a click that selects', async () => {
     const platform = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
-    const onSelectionChange = vi.fn()
-    render(<Harness initial={['d1', 'd2']} onSelectionChange={onSelectionChange} contextMenu={contextMenu()} />)
-    const target = within(row(/Letter 2/)).getByRole('rowheader')
-    fireEvent.pointerDown(target, { button: 0, ctrlKey: true, pointerType: 'mouse' })
-    fireEvent.mouseDown(target, { button: 0, ctrlKey: true })
-    fireEvent.contextMenu(target, { button: 0, ctrlKey: true })
-    fireEvent.pointerUp(target, { button: 0, ctrlKey: true, pointerType: 'mouse' })
-    fireEvent.mouseUp(target, { button: 0, ctrlKey: true })
-    expect(await screen.findByRole('menu', { name: 'Actions for d2' })).toBeTruthy()
-    expect(onSelectionChange).not.toHaveBeenCalled()
-    platform.mockRestore()
+    // Restored whether the test passes or not, so no later test runs on a Mac
+    try {
+      const onSelectionChange = vi.fn()
+      render(<Harness initial={['d1', 'd2']} onSelectionChange={onSelectionChange} contextMenu={contextMenu()} />)
+      const target = within(row(/Letter 2/)).getByRole('rowheader')
+      fireEvent.pointerDown(target, { button: 0, ctrlKey: true, pointerType: 'mouse' })
+      fireEvent.mouseDown(target, { button: 0, ctrlKey: true })
+      fireEvent.contextMenu(target, { button: 0, ctrlKey: true })
+      fireEvent.pointerUp(target, { button: 0, ctrlKey: true, pointerType: 'mouse' })
+      fireEvent.mouseUp(target, { button: 0, ctrlKey: true })
+      expect(await screen.findByRole('menu', { name: 'Actions for d2' })).toBeTruthy()
+      expect(onSelectionChange).not.toHaveBeenCalled()
+    } finally {
+      platform.mockRestore()
+    }
   })
 })

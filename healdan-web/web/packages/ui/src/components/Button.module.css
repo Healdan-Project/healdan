@@ -14,10 +14,12 @@
   cursor: default;
 }
 
+/* A kind's icon on it takes its text's colour, as only it passes there (icons.module.css) */
 .button.default {
   border-color: var(--hd-accent-fill);
   background: var(--hd-accent-fill);
   color: var(--hd-accent-on-fill);
+  --hd-icon-on-fill: currentColor;
 }
 
 /* No face: it takes the surface it sits on, which holds any text colour, and the text keeps its own. */

@@ -13,7 +13,6 @@ import { usePreviewKey } from '../preview/usePreviewKey'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { RightRegionView, useRegionKind } from '../frame/RightRegion'
 import { useOrganisingTable } from '../organising/useOrganisingTable'
-import { useListMenu } from '../menus/useListMenu'
 import { useDocument, useLookup } from '../queries'
 import { NotFound } from './NotFound'
 import { Toolbar } from './Toolbar'
@@ -73,10 +72,9 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
   const selection = useMemo(() => new Set(rows.map((row) => row.id)), [rows])
   const preview = usePreviewKey(() => {})
   const openDocument = useOpenKey(found, () => {})
-  // Rename, Move To… and Delete, with F2 and Delete, as in every list of documents (R95)
+  // Rename, Move To… and Delete, with F2 and Delete, as in every list of documents (R95); the one row is the selection, so its
+  // menu acts on it
   const organising = useOrganisingTable(found, selection)
-  // The one row is the selection, so its menu acts on it
-  const menu = useListMenu({ rows: found, selection, onSelect: () => {}, selected: organising.selected })
   const columns = useRegionKind({ preview: true, details: true }) === 'preview' ? narrowed(listColumns) : listColumns
   if (document.isError) {
     // The document went away after the lookup found it: the same words as a lookup that found nothing
@@ -104,7 +102,7 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
           onOpen={openDocument}
           onPreview={preview}
           {...organising.tableProps}
-          contextMenu={menu}
+          contextMenu={organising.contextMenu}
           empty={t('common.loading')}
         />
       </div>

@@ -47,10 +47,6 @@
   max-width: 60%;
 }
 
-.holdMarker svg {
-  flex: none;
-}
-
 /* Clipped to a pixel while hidden, it still ends in an ellipsis, as any text a row cuts short does */
 .holdText {
   position: absolute;

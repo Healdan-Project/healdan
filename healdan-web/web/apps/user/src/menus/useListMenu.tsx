@@ -12,8 +12,8 @@ export interface ListMenuOf {
   rows: readonly Hit[]
   /** The Table's selection, by row key */
   selection: ReadonlySet<string>
-  /** Changes the selection, as a click does */
-  onSelect: (keys: Set<string>) => void
+  /** Changes the selection for a right-click, which leaves Filters open (`showDetails: false`); none where the address selects */
+  onSelect?: (keys: Set<string>, options: { showDetails: boolean }) => void
   /** The selected documents, in the list's order: what the toolbar's More acts on */
   selected: components['schemas']['DocumentView'][]
 }
@@ -25,7 +25,8 @@ function nameOf(hit: Hit): string {
 /**
  * A list's right-click menu, by row (changed after M6: the owner's dogfooding punch list, 2026-11-14). A right-click on a
  * document that isn't selected selects it first, in place of the selection, as Finder does; one inside the selection keeps
- * it, and the menu then acts on all of it. A folder's or a matter's row isn't selected, and leaves the selection alone.
+ * it, and the menu then acts on all of it. A folder's or a matter's row isn't selected, and leaves the selection alone. The
+ * right-click doesn't show the row's details in place of Filters, as a click does: it only asked for a menu.
  */
 export function useListMenu({ rows, selection, onSelect, selected }: ListMenuOf): ItemMenu {
   const byKey = useMemo(() => new Map(rows.map((row) => [childKey(row), row])), [rows])
@@ -45,7 +46,7 @@ export function useListMenu({ rows, selection, onSelect, selected }: ListMenuOf)
       return folderMenu(hit)
     },
     onOpen: (key) => {
-      if (byKey.get(key)?.type === 'document' && !selection.has(key)) onSelect(new Set([key]))
+      if (byKey.get(key)?.type === 'document' && !selection.has(key)) onSelect?.(new Set([key]), { showDetails: false })
     },
   }
 }
