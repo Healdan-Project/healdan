@@ -13,6 +13,9 @@ import java.util.Date;
  * @param since when they took it, or null if the history doesn't say
  * @param device the computer that holds the check-out, for the user who
  *        holds it alone; null for anyone else, and when no device holds it
+ * @param heldOn the computer and app the check-out is held on, for showing
+ *        only, to the user who holds it and to administrators; null for
+ *        anyone else, for a lock, and when no device holds it
  */
-public record HoldView(String kind, UserRef by, Date since, DeviceView device) {
+public record HoldView(String kind, UserRef by, Date since, DeviceView device, HeldOnView heldOn) {
 }

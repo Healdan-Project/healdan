@@ -23,7 +23,7 @@ it makes a good link in an email or a note.
 | `/app/doc/1234.2.1` or `/app/doc/1234v2.1` | exactly snapshot 2.1 |
 
 The page shows a list with just that document in it, already selected, and its details at the right: its properties
-and its versions. For a version or snapshot, that version is marked in **Versions**.
+and its versions. For a version or snapshot, the details open on the **Versions** tab, with that version marked.
 
 ![The page for document # 31 in the web page: the toolbar, with Open, Preview, Download, Check Out and the ⋯ (More) button, above a list with just Subscription Agreement – Draft.docx, version 2, by Helen Ashcombe, selected, and its details at the right with the foot of its thumbnail, its name with the filled Favorites star, its properties in matter 1003.1 – Series A Investment, and its versions, where Version 1.1, saved on 23 Oct 2026 at 15:30 by Priya Nair, is marked](doc-page.png)
 

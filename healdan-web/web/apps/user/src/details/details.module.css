@@ -64,6 +64,28 @@
   margin-top: var(--hd-space-5);
 }
 
+/* Check-Out Info and Lock Info, above the tabs: a border and a light shading, so the hold stands out a little. Every text
+   colour of the panel reaches AA on the sidebar's shading, in both themes (tokens.test.ts). */
+.boxed {
+  margin: 0 0 var(--hd-space-4);
+  padding: var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-sidebar);
+}
+
+/* Check-Out Time is a longer label than the properties' */
+.holdInfo .property {
+  grid-template-columns: 108px 1fr;
+}
+
+/* Edit Properties, at the top right of the Properties tab */
+.tabTop {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--hd-space-4);
+}
+
 .sectionTitle {
   margin: 0 0 var(--hd-space-3);
   color: var(--hd-text-secondary);

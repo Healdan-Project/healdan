@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { cleanup, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ApiError, type components } from '@healdan/api'
+import { requestEdit } from './editRequest'
 import { expectNoAxeViolations } from '../test/axe'
 import { detailsRoutes, letter, propertiesOf } from '../test/details'
 import { children, document, field, folder, page, type Routes } from '../test/fakeApi'
@@ -51,7 +52,7 @@ function routes(fields: S['ProfileField'][], over: Routes = {}): Routes {
 const details = () => screen.findByRole('region', { name: 'Details' })
 async function edit() {
   const panel = await details()
-  const button = await within(panel).findByRole('button', { name: 'Edit' })
+  const button = await within(panel).findByRole('button', { name: 'Edit Properties' })
   await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
   await userEvent.click(button)
   return panel
@@ -69,6 +70,30 @@ describe('Editing properties', () => {
     expect((within(panel).getByRole('checkbox', { name: 'Signed' }) as HTMLInputElement).checked).toBe(false)
     expect(within(panel).getByRole('spinbutton', { name: /month/i }).textContent).toBe('11')
     await expectNoAxeViolations(panel)
+  })
+
+  // Edit Properties is at the top of the Properties tab, not among Open, Download and Copy Link (the owner's dogfooding
+  // punch list, 2026-11-14), and the form opens in the tab, under it
+  it('opens the form in the Properties tab, under Edit Properties, which is grey while it is open', async () => {
+    await renderApp('/folders/7?sel=10388', routes(profile()))
+    const panel = await edit()
+
+    const properties = within(panel).getByRole('tabpanel', { name: 'Properties' })
+    const button = within(properties).getByRole('button', { name: 'Edit Properties' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(within(properties).getByRole('button', { name: 'Save' })).toBeTruthy()
+    expect(button.compareDocumentPosition(within(properties).getByRole('button', { name: 'Save' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  // The filing tray's Edit asks for the form, which is in the Properties tab, whichever tab the details were left on
+  it("opens the form for the filing tray's Edit from the Versions tab too", async () => {
+    await renderApp('/folders/7?sel=10388', routes(profile()))
+    const panel = await details()
+    await userEvent.click(await within(panel).findByRole('tab', { name: /^Versions/ }))
+    act(() => requestEdit(10388))
+
+    expect(await within(panel).findByRole('button', { name: 'Save' })).toBeTruthy()
+    expect(within(panel).getByRole('tab', { name: 'Properties' }).getAttribute('aria-selected')).toBe('true')
   })
 
   it('shows a date it may not change as the day the form would edit, not a time in the person\'s zone', async () => {
@@ -119,7 +144,7 @@ describe('Editing properties', () => {
     await renderApp('/folders/7?sel=10388', routes(profile({}, false)))
     const panel = await details()
     await within(panel).findAllByRole('term')
-    expect((within(panel).getByRole('button', { name: 'Edit' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((within(panel).getByRole('button', { name: 'Edit Properties' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('saves only what changed, and shows the saved properties', async () => {
@@ -251,7 +276,7 @@ describe('Editing properties', () => {
         // The check-out asks for the properties again while the form is open
         'POST /v1/documents/10388/checkout': () => {
           fields = profile({ legacydocnum: { value: 'LEG-2' }, pages: { value: 99 } })
-          return (doc = document({ ...letter, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: null, device: null } }))
+          return (doc = document({ ...letter, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: null, device: null, heldOn: null } }))
         },
         'PATCH /v1/documents/10388/properties': ({ body }: { body?: unknown }) => {
           patched = body
@@ -262,7 +287,7 @@ describe('Editing properties', () => {
     const panel = await edit()
     await userEvent.type(within(panel).getByRole('textbox', { name: 'Comments' }), '!')
     await userEvent.click(within(panel).getByRole('button', { name: 'Check Out' }))
-    await waitFor(() => expect(within(panel).getByText(/Checked out by you/)).toBeTruthy())
+    await waitFor(() => expect(within(panel).getByRole('group', { name: 'Check-Out Info' })).toBeTruthy())
     await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
 
     // Only Comments, which the person edited: not Legacy Doc # or Pages, which changed under the form
@@ -451,7 +476,7 @@ describe('Editing properties', () => {
     await renderApp('/folders/7?sel=10388', routes(profile()))
     await userEvent.click(await screen.findByRole('button', { name: 'Details and Filters' }))
     const panel = await details()
-    const button = await within(panel).findByRole('button', { name: 'Edit' })
+    const button = await within(panel).findByRole('button', { name: 'Edit Properties' })
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
     button.focus()
     await userEvent.keyboard('{Enter}')
@@ -466,7 +491,7 @@ describe('Editing properties', () => {
     // Edit is pressed with Enter, as a person who doesn't point does
     async function editByKey() {
       const panel = await details()
-      const button = await within(panel).findByRole('button', { name: 'Edit' })
+      const button = await within(panel).findByRole('button', { name: 'Edit Properties' })
       await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false))
       button.focus()
       await userEvent.keyboard('{Enter}')

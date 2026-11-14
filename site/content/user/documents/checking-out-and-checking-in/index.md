@@ -28,25 +28,45 @@ A check-out from the app or the Classic Interface belongs to no computer: it's y
 
 ## In the App
 
-Select a document, and its details show who has it, if anyone. **Check Out** is in the details, and in the toolbar
-above the list.
+Select a document, and while someone has it checked out or locked, its details show a shaded box above the
+**Properties** and **Versions** tabs, so it's there on both. **Check Out** is in the details, under that box, and in
+the toolbar above the list.
 
 ### In the Lists
 
 Every list of documents marks one that's held, at the end of its title: a pencil for a check-out, and a padlock for a
-lock. That's a folder, search results, Recent and the result of a `#` search. Point at the row, or move to it with the
-arrow keys, and the mark says who has the document and since when, such as "Checked out by Alex Marsh since" the date
-and time, or "Checked out by you on" a computer's name. A screen reader reads the same. A free document has no mark.
+lock. That's a folder, search results, Recent and the result of a `#` search. The mark is an icon only, and stays put
+when you point at the row, select it or move to it with the arrow keys. Point at the mark, and its tooltip says who has
+the document, such as "Checked out by Alex Marsh", "Checked out by you" or "Locked by Alex Marsh". A screen reader reads
+the same. The details say since when, and on which computer. A free document has no mark.
 
 The marks are brought up to date with the rest of the page, each time you come back to it (see
 [Keeping Up to Date](../../getting-started/getting-around/#keeping-up-to-date)): a document you open in Word shows the
 pencil when you click back into the web page. Search results are the exception: their marks stay as they were until
 you search again.
 
+### Check-Out Info
+
+While the document is checked out, the details show **Check-Out Info**, with a row for each thing Healdan knows:
+
+| Row | What it says |
+|---|---|
+| **User** | Who has it checked out, with "(You)" after your own name |
+| **Check-Out Time** | When they checked it out, or last saved to it from the computer that holds it |
+| **Application** | The app it's open in, such as Excel or LibreOffice |
+| **Computer** | The computer that holds it, by the name of its sign-in, such as "Healdan Helper on MacBook" |
+
+**Application** and **Computer** show only for a check-out made on a computer, through the
+[Healdan Helper](../../office/), and only to the person who has it checked out and to administrators, so an
+administrator can tell someone which computer to check it in on. Everyone else sees **User** and **Check-Out Time**.
+A check-out from the app or the Classic Interface belongs to no computer, so it has neither.
+
+A locked document shows **Lock Info** instead, with **User** and **Lock Time**.
+
 ### Checking Out
 
-Choose **Check Out**. Healdan checks the document out to you, and the details say "Checked out by you since" and the
-time. It doesn't download anything: to edit the file, use **Open** (see
+Choose **Check Out**. Healdan checks the document out to you, and the details show its **Check-Out Info**, with you as
+the **User**. It doesn't download anything: to edit the file, use **Open** (see
 [Opening Documents](../../office/opening-documents/)), or **Download** it (see
 [Downloading Documents](../downloading-documents/)).
 
@@ -68,17 +88,17 @@ To stop editing without saving anything, choose **Release**. The document stays 
 
 ### When Someone Else Has It
 
-The details name who has the document and since when: "Checked out by Alex Marsh since" the date and time. The app
-never takes a check-out over. It's released by the person who made it, on the computer it's checked out on, or by an
-administrator in the Classic Interface, with **Unlock**.
+The details' **Check-Out Info** names who has the document and since when. The app never takes a check-out over, and
+offers no **Check In** or **Release** for it. It's released by the person who made it, on the computer it's checked
+out on, or by an administrator in the Classic Interface, with **Unlock**.
 
 That goes for your own check-out on a computer too. One you made by opening a document from the
-[Healdan Helper](../../office/) belongs to that computer, and the details say "Checked out by you on" its name. Release
-it there, or in the Classic Interface.
+[Healdan Helper](../../office/) belongs to that computer, which **Computer** names. Release it there, or in the
+Classic Interface.
 
 ![The details of Lease – Engrossment.docx, # 48, held on a computer: "Checked out by you on Healdan Helper on Office PC since 12 Nov 2026, 21:14. Release it on that computer, or in the Classic Interface (Unlock).", with Edit greyed out](checked-out-on-computer.png)
 
-A locked document says "Locked by" and who. A lock is taken off in the Classic Interface (see
+A locked document's **Lock Info** says who locked it, and when. A lock is taken off in the Classic Interface (see
 [Locking a Document](../locking-a-document/)).
 
 If the check-out changes under you, or a rule refuses it, the app says so in a few words, such as "It's checked out.",

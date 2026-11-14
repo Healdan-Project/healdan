@@ -54,8 +54,9 @@ describe('Dropping one file on a document\'s row', () => {
     const { api } = await renderApp('/folders/7', all)
     fireEvent.drop(await row(), { dataTransfer: data([file('Draft 2.docx')]) })
     const dialog = await prompt()
-    expect(within(dialog).getByText(/Checked out by Jamie Clarke since/)).toBeTruthy()
-    expect(within(dialog).getByText(/released on the computer it's checked out on, or in the Classic Interface/)).toBeTruthy()
+    expect(within(dialog).getByText(/^Checked out by Jamie Clarke since .*\.$/)).toBeTruthy()
+    // Where it's released isn't said any more (the owner's dogfooding punch list, 2026-11-14)
+    expect(within(dialog).queryByText(/released|Classic Interface/)).toBeNull()
     expect((within(dialog).getByRole('button', { name: 'Save as Version 4' }) as HTMLButtonElement).disabled).toBe(true)
     expect(within(dialog).getByRole('button', { name: 'File as a New Document' })).toBeTruthy()
     expect(api.calls.filter((call) => call.method === 'POST')).toHaveLength(0)
@@ -73,7 +74,7 @@ describe('Dropping one file on a document\'s row', () => {
   })
 
   it('saves into the person\'s own web check-out as its check-in', async () => {
-    const mine = document({ ...letter, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null } })
+    const mine = document({ ...letter, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null, heldOn: null } })
     let sent: FormData | undefined
     const { all } = routes({
       'GET /v1/folders/7/children': children([mine]),

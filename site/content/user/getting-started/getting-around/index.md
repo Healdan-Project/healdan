@@ -54,7 +54,7 @@ Matter](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matte
 ## The Details Panel
 
 Select a document in a folder's list, in search results or in a Recent list, and its **Details** open at the right, in the same place as
-[Filters](../../finding-documents/searching/#filters). They show:
+[Filters](../../finding-documents/searching/#filters). At the top, whichever tab is showing, they have:
 
 - **A thumbnail** of the first page, when the document has one. Without one, a plain icon for the kind of file shows
   instead.
@@ -62,18 +62,25 @@ Select a document in a folder's list, in search results or in a Recent list, and
   the doc #, the version and the size: `# 10388 · Version 2 · 209 KB`.
 - **Open** opens the document in its app through the Healdan Helper, or downloads it when the helper doesn't open that kind
   of file: see [Opening Documents](../../office/opening-documents/#from-the-app-open). **Download** saves a copy of its file: see
-  [Downloading Documents](../../documents/downloading-documents/#one-document-in-the-app). **Edit** turns the
-  properties into a form: see [Properties](../../working-with-matters/properties/#editing-in-the-app). **Copy Link**
+  [Downloading Documents](../../documents/downloading-documents/#one-document-in-the-app). **Copy Link**
   puts the document's address on your clipboard: see [Copying a Link](../../finding-documents/finding-by-doc-number/#copying-a-link).
-- **Check Out** and, once it's checked out to you, **Check In** and **Release**, with who has the document: see
+- **Check-Out Info** or **Lock Info,** in a shaded box, while someone has the document checked out or locked: who has
+  it and since when. Then **Check Out** and, once it's checked out to you, **Check In** and **Release**: see
   [Checking Out and Checking In](../../documents/checking-out-and-checking-in/#in-the-app).
+
+Under them are two tabs, **Properties** and **Versions**:
+
 - **Properties:** Client, Matter, Class, Subclass, Author, Typist and Date Filed, and, for an email, From, To, Sent
   and Received. In search results, Recent lists and a document's own page (`/app/doc/` and its doc #) there is also
-  **Location**, the document's folder, which you can click. Choose **Edit** to change the ones you can, such as Class,
-  Subclass, Author and Typist: see [Properties](../../working-with-matters/properties/#editing-in-the-app).
-- **Versions:** the document's timeline, newest first, with who saved each and when.
+  **Location**, the document's folder, which you can click. Choose **Edit Properties**, at the top of the tab, to
+  change the ones you can, such as Class, Subclass, Author and Typist: see
+  [Properties](../../working-with-matters/properties/#editing-in-the-app).
+- **Versions,** with how many there are in brackets: the document's timeline, newest first, with who saved each and
+  when.
 
-Click another document to see its details instead, or select several and the details close.
+The arrow keys move between the tabs once one has the keyboard's focus. Click another document to see its details
+instead, on the same tab, or select several and the details close. The details start on **Properties** each time you
+open or reload the web page.
 
 ## Keeping Up to Date
 

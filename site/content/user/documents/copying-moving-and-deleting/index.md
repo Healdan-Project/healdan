@@ -22,7 +22,7 @@ its row becomes a field with the name, not its extension, selected.
   such as `Lease.pdf`, and Healdan says "The name has to end in .docx, as the document's does." beside the field, which stays
   open for you to mend it.
 - **You need the Rename permission,** and the document can't be locked or checked out by someone else, or checked out
-  by you on a computer. The message says who has it and where it's released.
+  by you on a computer. The message says who has it and since when.
 - **Only one document at a time.** With several selected, **Rename** is greyed out, and **F2** says "Select one
   document to rename it."
 

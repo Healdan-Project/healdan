@@ -5,7 +5,6 @@ import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { formatDate, formatDateTime, formatDay, t } from '@healdan/ui'
-import { Section } from './Section'
 import styles from './details.module.css'
 
 type S = components['schemas']
@@ -69,16 +68,15 @@ export function Properties({ document, fields, context }: { document: S['Documen
   entries.push({ label: t('details.dateFiled'), value: formatDate(document.dateFiled) })
   if (emailFields.some((name) => textOf(byName.get(name)) !== '')) for (const name of emailFields) add(name)
 
+  // The Properties tab names them (DetailsPanel)
   return (
-    <Section title={t('details.properties')}>
-      <dl className={styles.properties}>
-        {entries.map((entry, i) => (
-          <div key={i} className={styles.property}>
-            <dt>{entry.label}</dt>
-            <dd>{entry.value || t('details.none')}</dd>
-          </div>
-        ))}
-      </dl>
-    </Section>
+    <dl className={styles.properties}>
+      {entries.map((entry, i) => (
+        <div key={i} className={styles.property}>
+          <dt>{entry.label}</dt>
+          <dd>{entry.value || t('details.none')}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }

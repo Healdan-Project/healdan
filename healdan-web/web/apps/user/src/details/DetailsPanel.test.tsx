@@ -8,7 +8,9 @@ import { expectNoAxeViolations } from '../test/axe'
 import { detailsRoutes, letter, propertiesOf as fields } from '../test/details'
 import { children, document, favorite, folder, page, problem, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
+import { formatDateTime } from '@healdan/ui'
 import { THUMBNAIL_RETRY_MS } from './DetailsPanel'
+import detailsCss from './details.module.css?raw'
 import type { components } from '@healdan/api'
 
 type S = components['schemas']
@@ -25,14 +27,15 @@ function routes(over: Routes = {}): Routes {
 }
 
 const details = () => screen.findByRole('region', { name: 'Details' })
-// The groups are there while their answers come, so wait for what they list
+// The tabs are there while their answers come, so wait for what they list. Only the selected tab's panel is drawn.
 async function propertiesOf(panel: HTMLElement) {
   await within(panel).findAllByRole('term')
-  return within(panel).getByRole('group', { name: 'Properties' })
+  return within(panel).getByRole('tabpanel', { name: 'Properties' })
 }
 async function versionsOf(panel: HTMLElement) {
+  await userEvent.click(await within(panel).findByRole('tab', { name: /^Versions/ }))
   await within(panel).findAllByRole('listitem')
-  return within(panel).getByRole('group', { name: 'Versions' })
+  return within(panel).getByRole('tabpanel', { name: /^Versions/ })
 }
 
 afterEach(() => Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true }))
@@ -47,11 +50,14 @@ describe('DetailsPanel', () => {
     const thumbnail = panel.querySelector('img')
     // Addressed by its file version, so a new version's never comes from the browser's cache
     expect(thumbnail?.getAttribute('src')).toBe('/api/v1/documents/10388/thumbnail?v=2.1')
-    // Edit is for a document whose properties the person may change: none of these fields says it may be
-    expect((within(panel).getByRole('button', { name: 'Edit' }) as HTMLButtonElement).disabled).toBe(true)
     for (const name of ['Open', 'Download', 'Preview', 'Copy Link']) {
       expect((within(panel).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false)
     }
+    // Edit Properties is in the Properties tab, not among the actions, where it read as editing the document. It's for
+    // a document whose properties the person may change: none of these fields says it may be.
+    const properties = await propertiesOf(panel)
+    expect((within(properties).getByRole('button', { name: 'Edit Properties' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(panel).queryByRole('button', { name: 'Edit' })).toBeNull()
   })
 
   it('adds the document to Favorites with the star by its name, which Tab reaches, and takes it out again', async () => {
@@ -229,6 +235,7 @@ describe('DetailsPanel', () => {
     const panel = await details()
 
     expect(await within(panel).findByText("The properties aren't available right now.")).toBeTruthy()
+    await userEvent.click(within(panel).getByRole('tab', { name: 'Versions' }))
     expect(await within(panel).findByText("The versions aren't available right now.")).toBeTruthy()
     expect(within(panel).getByRole('heading', { level: 2, name: 'Letter from Dunmere Pryce.pdf' })).toBeTruthy()
   })
@@ -256,11 +263,144 @@ describe('DetailsPanel', () => {
     })
   })
 
-  it('passes axe', async () => {
+  it('passes axe, on either tab', async () => {
     await renderApp('/folders/7?sel=10388', routes())
     const panel = await details()
-    await versionsOf(panel)
     await propertiesOf(panel)
     await expectNoAxeViolations(panel)
+    await versionsOf(panel)
+    await expectNoAxeViolations(panel)
+  })
+})
+
+// The helper's Open window has a fixed header and two tabs, and so do the details (the owner's dogfooding punch list,
+// 2026-11-14)
+describe('the Properties and Versions tabs', () => {
+  const other = document({ docNumber: 10431, name: 'Letter to Dunmere Pryce.docx' })
+  const both = (over: Routes = {}) => routes({ 'GET /v1/folders/7/children': children([letter, other]), ...detailsRoutes(other), ...over })
+  const tab = (panel: HTMLElement, name: string | RegExp) => within(panel).getByRole('tab', { name })
+
+  it('start on Properties, with the versions counted on the Versions tab', async () => {
+    await renderApp('/folders/7?sel=10388', routes())
+    const panel = await details()
+    await propertiesOf(panel)
+
+    expect(within(panel).getByRole('tablist', { name: 'Properties and Versions' })).toBeTruthy()
+    expect(tab(panel, 'Properties').getAttribute('aria-selected')).toBe('true')
+    await waitFor(() => expect(tab(panel, 'Versions (3)').getAttribute('aria-selected')).toBe('false'))
+    // Only the selected tab is drawn
+    expect(within(panel).queryAllByRole('listitem')).toHaveLength(0)
+  })
+
+  it('say only "Versions" while the versions come', async () => {
+    await renderApp('/folders/7?sel=10388', routes({ 'GET /v1/documents/10388/versions': () => new Promise(() => {}) }))
+    const panel = await details()
+    await propertiesOf(panel)
+    expect(tab(panel, 'Versions')).toBeTruthy()
+  })
+
+  it('come after the header, whose actions show on both', async () => {
+    await renderApp('/folders/7?sel=10388', routes())
+    const panel = await details()
+    const list = within(panel).getByRole('tablist')
+    for (const name of ['Open', 'Download', 'Copy Link']) {
+      const button = within(panel).getByRole('button', { name })
+      expect(button.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+    await versionsOf(panel)
+    expect(within(panel).getByRole('button', { name: 'Copy Link' })).toBeTruthy()
+  })
+
+  it('stay on the tab the person left while they select other documents', async () => {
+    await renderApp('/folders/7?sel=10388', both())
+    await versionsOf(await details())
+
+    const row = await within(screen.getByRole('main')).findByRole('row', { name: /Letter to Dunmere/ })
+    await userEvent.click(within(row).getByRole('rowheader'))
+    const panel = await details()
+    await within(panel).findByRole('heading', { level: 2, name: 'Letter to Dunmere Pryce.docx' })
+    expect(tab(panel, /^Versions/).getAttribute('aria-selected')).toBe('true')
+    expect(await within(panel).findAllByRole('listitem')).toHaveLength(3)
+  })
+})
+
+// While the document is held, a section of its own says who has it, since when, and where (the owner's dogfooding punch
+// list, 2026-11-14). The person is Priya Nair (5), as the fake API's /me says.
+describe('Check-Out Info', () => {
+  const since = '2026-11-03T10:00:00Z'
+  const onMac = { name: 'Healdan Helper on MacBook', app: 'Excel' }
+  type Hold = NonNullable<S['DocumentView']['hold']>
+  const held = (hold: Partial<Hold>) => document({ ...letter, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since, device: null, heldOn: null, ...hold } })
+  async function sectionOf(doc: S['DocumentView'], name = 'Check-Out Info') {
+    await renderApp('/folders/7?sel=10388', routes({ 'GET /v1/folders/7/children': children([doc]), ...detailsRoutes(doc) }))
+    return within(await details()).findByRole('group', { name })
+  }
+  const rows = (section: HTMLElement) =>
+    Object.fromEntries(within(section).getAllByRole('term').map((term) => [term.textContent, term.nextElementSibling?.textContent]))
+
+  it('is not there for a free document', async () => {
+    await renderApp('/folders/7?sel=10388', routes())
+    const panel = await details()
+    await propertiesOf(panel)
+    expect(within(panel).queryByRole('group', { name: /Info$/ })).toBeNull()
+  })
+
+  it('shows your own check-out on a computer with all four rows', async () => {
+    const section = await sectionOf(held({ device: { id: 'mac-1', ...onMac }, heldOn: onMac }))
+    expect(rows(section)).toEqual({
+      User: 'Priya Nair (You)',
+      'Check-Out Time': formatDateTime(since),
+      Application: 'Excel',
+      Computer: 'Healdan Helper on MacBook',
+    })
+  })
+
+  it("shows only who has someone else's check-out and since when, as the API tells nobody else where it is", async () => {
+    const section = await sectionOf(held({ by: { id: 9, name: 'Alex Marsh' } }))
+    expect(rows(section)).toEqual({ User: 'Alex Marsh', 'Check-Out Time': formatDateTime(since) })
+  })
+
+  it("shows an administrator where someone else's check-out is held, from heldOn alone", async () => {
+    const section = await sectionOf(held({ by: { id: 9, name: 'Alex Marsh' }, heldOn: onMac }))
+    expect(rows(section)).toEqual({ User: 'Alex Marsh', 'Check-Out Time': formatDateTime(since), Application: 'Excel', Computer: 'Healdan Helper on MacBook' })
+  })
+
+  it('shows your own check-out from the web page with User and Check-Out Time, over Check In and Release', async () => {
+    const section = await sectionOf(held({}))
+    expect(rows(section)).toEqual({ User: 'Priya Nair (You)', 'Check-Out Time': formatDateTime(since) })
+    const checkIn = within(await details()).getByRole('button', { name: 'Check In' })
+    expect(section.compareDocumentPosition(checkIn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(await details()).getByRole('button', { name: 'Release' })).toBeTruthy()
+  })
+
+  it('is Lock Info for a lock, with its Lock Time', async () => {
+    const section = await sectionOf(held({ kind: 'lock', by: { id: 9, name: 'Alex Marsh' } }), 'Lock Info')
+    expect(rows(section)).toEqual({ User: 'Alex Marsh', 'Lock Time': formatDateTime(since) })
+    expect(within(await details()).queryByRole('group', { name: 'Check-Out Info' })).toBeNull()
+  })
+
+  it('leaves out a row the API gives no value for', async () => {
+    const section = await sectionOf(held({ by: null, since: null, heldOn: { name: 'Healdan Helper on MacBook', app: null } }))
+    expect(rows(section)).toEqual({ Computer: 'Healdan Helper on MacBook' })
+  })
+
+  it('sits above the tabs, so it shows on both, and is boxed', async () => {
+    const section = await sectionOf(held({ by: { id: 9, name: 'Alex Marsh' } }))
+    const panel = await details()
+    expect(section.compareDocumentPosition(within(panel).getByRole('tablist')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await versionsOf(panel)
+    expect(within(panel).getByRole('group', { name: 'Check-Out Info' })).toBe(section)
+    expect(section.className).toContain('boxed')
+    // jsdom draws no style, so the stylesheet is read: a border and the sidebar's shading, which every text colour of the
+    // panel reaches AA on, in both themes (tokens.test.ts)
+    const boxed = /\.boxed\s*\{([^}]*)\}/.exec(detailsCss)?.[1] ?? ''
+    expect(boxed).toMatch(/border:\s*1px solid var\(--hd-line\)/)
+    expect(boxed).toMatch(/border-radius:\s*var\(--hd-radius\)/)
+    expect(boxed).toMatch(/background:\s*var\(--hd-sidebar\)/)
+  })
+
+  it('passes axe', async () => {
+    await sectionOf(held({ device: { id: 'mac-1', ...onMac }, heldOn: onMac }))
+    await expectNoAxeViolations(await details())
   })
 })

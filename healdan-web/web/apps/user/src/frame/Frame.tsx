@@ -4,6 +4,7 @@
 import { Outlet, useRouterState } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { OpenInAppProvider } from '../actions/OpenInAppState'
+import { DetailsTabProvider } from '../details/DetailsTab'
 import { FilingProvider } from '../filing/FilingProvider'
 import { OrganisingProvider } from '../organising/OrganisingProvider'
 import { QuickLookProvider } from '../preview/QuickLookState'
@@ -28,7 +29,9 @@ export function Frame() {
         <OpenInAppProvider>
           <FilingProvider>
             <OrganisingProvider>
-              <Layout />
+              <DetailsTabProvider>
+                <Layout />
+              </DetailsTabProvider>
             </OrganisingProvider>
           </FilingProvider>
         </OpenInAppProvider>

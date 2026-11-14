@@ -8,7 +8,7 @@ type S = components['schemas']
 
 /**
  * What a document's `hold` means to the person looking (R14). The web page is no device, so it can't take over a
- * check-out a device holds: it says who holds it and where it's released, and never offers a take-over.
+ * check-out a device holds: it says who holds it, and never offers a take-over.
  */
 export type HoldState =
   | { kind: 'free' }
@@ -28,8 +28,29 @@ export function holdState(hold: S['HoldView'] | null, meId: number | undefined):
   return { kind: 'theirs', hold }
 }
 
-/** Who has it and since when, as a list row's marker says it; nothing for a free document. */
+/**
+ * Who has it, as a list row's marker says it, in its name and its tooltip: "Checked out by Priya Nair", "Locked by you".
+ * No time and no computer, which the details' Check-Out Info has; nothing for a free document.
+ */
 export function holdLabel(state: HoldState): string | undefined {
+  if (state.kind === 'free') return undefined
+  const who = state.hold.by?.name ?? t('hold.someone')
+  switch (state.kind) {
+    case 'yours':
+    case 'yourDevice':
+      return t('hold.checkedOutByYou')
+    case 'theirs':
+      return t('hold.checkedOutBy', { who })
+    case 'locked':
+      return state.mine ? t('hold.lockedByYou') : t('hold.lockedBy', { who })
+  }
+}
+
+/**
+ * Who has it and since when, as a sentence, where a question or a refusal says why something can't be done: "Checked out
+ * by Jamie Clarke since 3 Nov 2026, 10:00."; nothing for a free document.
+ */
+export function holdSentence(state: HoldState): string | undefined {
   if (state.kind === 'free') return undefined
   const { hold } = state
   const since = hold.since ? formatDateTime(hold.since) : undefined
@@ -44,20 +65,6 @@ export function holdLabel(state: HoldState): string | undefined {
     case 'locked':
       return state.mine ? (since ? t('hold.lockedYou', { since }) : t('hold.lockedYouUndated')) : since ? t('hold.locked', { who, since }) : t('hold.lockedUndated', { who })
   }
-}
-
-// Where each kind of hold is released, which the details say after who has it
-const RELEASED: Partial<Record<HoldState['kind'], Parameters<typeof t>[0]>> = {
-  yourDevice: 'hold.releaseOnDevice',
-  theirs: 'hold.releaseTheirs',
-  locked: 'hold.unlock',
-}
-
-/** Who has it and since when, and where it's released; nothing for a free document. */
-export function holdSentence(state: HoldState): string | undefined {
-  const label = holdLabel(state)
-  const released = RELEASED[state.kind]
-  return label && released ? `${label} ${t(released)}` : label
 }
 
 export function checkOut(api: Api, docNumber: number): Promise<S['DocumentView']> {

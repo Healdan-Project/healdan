@@ -166,7 +166,7 @@ public class CheckoutResource {
 					return ApiViews.document(document, user);
 				boolean holder = document.getLockUserId() != null && document.getLockUserId() == user.getId();
 				if (!holder && !user.isMemberOf(Group.GROUP_ADMIN))
-					throw conflict(hold, docNumber, user);
+					throw conflict(document, hold, docNumber, user);
 				refuseElsewhere(document, caller, docNumber);
 
 				unlock(document, caller.session());
@@ -188,7 +188,7 @@ public class CheckoutResource {
 	static void refuseHolds(Document document, User user, long docNumber) throws PersistenceException {
 		HoldView hold = ApiViews.hold(document);
 		if (hold != null && !ApiViews.checkedOutBy(document, user))
-			throw conflict(hold, docNumber, user);
+			throw conflict(document, hold, docNumber, user);
 	}
 
 	/**
@@ -291,21 +291,27 @@ public class CheckoutResource {
 	}
 
 	/**
-	 * @param hold who holds a document
+	 * @param document the document
+	 * @param hold who holds it, as {@link ApiViews#hold(Document)} says
 	 * @param docNumber its doc #
 	 * @param caller the user asking
 	 * @return the problem: {@code 409 checked-out} or {@code 409 locked}, with
-	 *         the {@code hold}
+	 *         the {@code hold}, which names the computer a check-out is held
+	 *         on for the holder and administrators
+	 *         ({@link ApiViews#heldOn(HoldView, Document, User)})
+	 * @throws PersistenceException error at data layer
 	 */
-	static ApiProblem conflict(HoldView hold, long docNumber, User caller) {
+	static ApiProblem conflict(Document document, HoldView hold, long docNumber, User caller)
+			throws PersistenceException {
+		HoldView shown = ApiViews.heldOn(hold, document, caller);
 		String holder = hold.by() != null && hold.by().name() != null ? hold.by().name() : "someone else";
 		if ("checkout".equals(hold.kind()))
 			return ApiProblem.conflict("checked-out", "Document #%d is checked out to %s.".formatted(docNumber, holder))
-					.with("hold", hold);
+					.with("hold", shown);
 		String detail = hold.by() != null && hold.by().id() == caller.getId()
 				? "Document #%d is locked by you. Release it first.".formatted(docNumber)
 				: "Document #%d is locked by %s.".formatted(docNumber, holder);
-		return ApiProblem.conflict("locked", detail).with("hold", hold);
+		return ApiProblem.conflict("locked", detail).with("hold", shown);
 	}
 
 	/**

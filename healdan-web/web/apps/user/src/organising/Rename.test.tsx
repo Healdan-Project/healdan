@@ -114,7 +114,7 @@ describe('Renaming in place', () => {
     expect((await screen.findByRole('alert')).textContent).toBe("It's checked out.")
   })
 
-  it('says who has the document and where it is released, as a move or a delete does', async () => {
+  it('says who has the document and since when, as a move or a delete does', async () => {
     const { all } = routes({
       'PATCH /v1/documents/*': new ApiError(409, 'checked-out', 'A server sentence that must not be shown raw.', { code: 'checked-out', hold: heldByJamie }),
     })
@@ -123,7 +123,10 @@ describe('Renaming in place', () => {
     await userEvent.keyboard('{F2}')
     await field()
     await userEvent.keyboard('Other{Enter}')
-    expect((await screen.findByRole('alert')).textContent).toMatch(/^It's checked out\. Checked out by Jamie Clarke since .*released on the computer/)
+    // Where it's released isn't said any more (the owner's dogfooding punch list, 2026-11-14)
+    const alert = (await screen.findByRole('alert')).textContent
+    expect(alert).toMatch(/^It's checked out\. Checked out by Jamie Clarke since .*\.$/)
+    expect(alert).not.toMatch(/released|Classic Interface/)
   })
 
   it('More › Rename does the same, and works only with one document selected', async () => {

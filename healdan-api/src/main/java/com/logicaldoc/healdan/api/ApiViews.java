@@ -35,6 +35,7 @@ import com.logicaldoc.healdan.api.model.DeviceView;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FolderRef;
 import com.logicaldoc.healdan.api.model.FolderView;
+import com.logicaldoc.healdan.api.model.HeldOnView;
 import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.api.model.MatterRef;
 import com.logicaldoc.healdan.api.model.MatterView;
@@ -50,6 +51,7 @@ import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDisplay;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.token.DeviceHolds;
 
 /**
@@ -217,16 +219,50 @@ public final class ApiViews {
 	 * @param caller the signed-in user
 	 * @return who holds it and since when, or null if it's free, as
 	 *         {@link #hold(Document)}; for the user who has it checked out,
-	 *         also the device that holds the check-out, if one does
+	 *         also the device that holds the check-out, if one does; and for
+	 *         that user or an administrator, the computer and app it's held on
 	 * @throws PersistenceException error at data layer
 	 */
 	public static HoldView hold(Document d, User caller) throws PersistenceException {
-		HoldView hold = hold(d);
-		if (hold == null || !checkedOutBy(d, caller))
+		return shown(hold(d), d, caller, true);
+	}
+
+	/**
+	 * The hold as a problem names it to the caller: the computer and app a
+	 * check-out is held on, for the user who holds it or an administrator,
+	 * and never the device, which a problem gave none of before.
+	 *
+	 * @param hold the document's hold, as {@link #hold(Document)} gives it
+	 * @param d the document
+	 * @param caller the signed-in user
+	 * @return the hold, with {@code heldOn} when the caller may see it
+	 * @throws PersistenceException error at data layer
+	 */
+	static HoldView heldOn(HoldView hold, Document d, User caller) throws PersistenceException {
+		return shown(hold, d, caller, false);
+	}
+
+	/**
+	 * Who sees where a check-out is held (changed after M6: the owner's
+	 * dogfooding punch list, 2026-11-14): the device, which a client takes
+	 * for its own, only the holder; the computer and app, for showing, the
+	 * holder and administrators, as Healdan's rules decide, so an
+	 * administrator can say which computer to check it in on.
+	 */
+	private static HoldView shown(HoldView hold, Document d, User caller, boolean device)
+			throws PersistenceException {
+		if (hold == null || !"checkout".equals(hold.kind()))
+			return hold;
+		boolean holder = checkedOutBy(d, caller);
+		if (!holder && !AccessChecks.isAdmin(caller))
 			return hold;
 		DeviceHolds devices = DeviceHolds.get();
-		return devices.current(d).map(row -> new HoldView(hold.kind(), hold.by(), hold.since(),
-				new DeviceView(row.getDevice(), devices.deviceName(row), row.getApp()))).orElse(hold);
+		return devices.current(d).map(row -> {
+			String name = devices.deviceName(row);
+			return new HoldView(hold.kind(), hold.by(), hold.since(),
+					holder && device ? new DeviceView(row.getDevice(), name, row.getApp()) : hold.device(),
+					new HeldOnView(name, row.getApp()));
+		}).orElse(hold);
 	}
 
 	/**
@@ -244,7 +280,7 @@ public final class ApiViews {
 	 * @param d a document
 	 * @return who holds it and since when, or null if it's free; the holder is
 	 *         null when CE's data doesn't say who it is. It never says which
-	 *         device: see {@link #hold(Document, User)}.
+	 *         device, or which computer: see {@link #hold(Document, User)}.
 	 * @throws PersistenceException error at data layer
 	 */
 	public static HoldView hold(Document d) throws PersistenceException {
@@ -270,7 +306,7 @@ public final class ApiViews {
 			if (!latest.isEmpty())
 				since = latest.get(0).getDate();
 		}
-		return new HoldView(kind, userRef(d.getLockUserId(), d.getLockUser()), since, null);
+		return new HoldView(kind, userRef(d.getLockUserId(), d.getLockUser()), since, null, null);
 	}
 
 	/**

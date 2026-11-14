@@ -26,7 +26,8 @@ take it: see [Filing a Document](../../working-with-matters/filing-a-document/#d
 
 ## Where to See Them
 
-- **In the app,** select a document and look at **Versions** in its details. It lists the whole timeline, newest
+- **In the app,** select a document and choose the **Versions** tab in its details, which says how many there are in
+  brackets, such as **Versions (4)**. It lists the whole timeline, newest
   first, every snapshot included, with who made each and when, and the comment they left. Each has its own **Preview**,
   which opens [Quick Look](../previews/) on that version, and **Download**, which saves that version's file (see
   [Downloading Documents](../downloading-documents/)). Quick Look's bar says which version it shows; **Open** is greyed

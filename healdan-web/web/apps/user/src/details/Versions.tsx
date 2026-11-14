@@ -3,7 +3,6 @@
 
 import type { components } from '@healdan/api'
 import { Button, formatDateTime, formatVersion, t } from '@healdan/ui'
-import { Section } from './Section'
 import styles from './details.module.css'
 
 type S = components['schemas']
@@ -21,10 +20,10 @@ export interface VersionsProps {
   canOpen?: boolean
 }
 
-/** A document's timeline, newest first as the server gives it. */
+/** A document's timeline, newest first as the server gives it; the Versions tab names it (DetailsPanel). */
 export function Versions({ versions, selected, onShowMore, loading = false, onPreview, onDownload, canOpen = true }: VersionsProps) {
   return (
-    <Section title={t('details.versions')}>
+    <>
       {versions.length === 0 ? (
         <p className={styles.note}>{t('details.noVersions')}</p>
       ) : (
@@ -60,6 +59,6 @@ export function Versions({ versions, selected, onShowMore, loading = false, onPr
           </Button>
         </div>
       )}
-    </Section>
+    </>
   )
 }

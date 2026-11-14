@@ -19,6 +19,7 @@ describe('focus style', () => {
       './Menu.module.css',
       './Overlay.module.css',
       './Table.module.css',
+      './Tabs.module.css',
       './Toast.module.css',
       './Tray.module.css',
       './Tree.module.css',

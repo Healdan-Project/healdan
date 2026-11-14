@@ -325,12 +325,14 @@ test('row 7: Enter opens in the app, Check Out and Release are keys, and Edit ch
   const checkOut = details.getByRole('button', { name: 'Check Out' })
   await tabTo(page, checkOut)
   await page.keyboard.press('Enter')
-  await expect(details.getByText(/^Checked out by you since/)).toBeVisible()
+  const info = details.getByRole('group', { name: 'Check-Out Info' })
+  await expect(info).toBeVisible()
   await tabTo(page, details.getByRole('button', { name: 'Release' }))
   await page.keyboard.press('Enter')
-  await expect(details.getByText(/^Checked out by you since/)).toBeHidden()
+  await expect(info).toBeHidden()
 
-  const edit = details.getByRole('button', { name: 'Edit' })
+  // Edit Properties is in the Properties tab, which a page load starts on: Tab goes through the tab strip into it
+  const edit = details.getByRole('button', { name: 'Edit Properties' })
   // Grey while the document is asked for again after the release, and a key on a grey button does nothing
   await expect(edit).toBeEnabled()
   await tabTo(page, edit, { from: row(NAMES.pdf) })

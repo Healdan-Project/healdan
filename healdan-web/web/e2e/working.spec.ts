@@ -241,24 +241,28 @@ test('Download saves the file as a plain link, under the document\'s name', asyn
 test('Check Out holds the document for you, and Release lets it go', async ({ page }) => {
   const details = await selectWorkingDocument(page)
   await details.getByRole('button', { name: 'Check Out' }).click()
-  await expect(details.getByText(/^Checked out by you since/)).toBeVisible()
+  // The hold's own section, above the tabs: who has it and since when; the web page's check-out is on no computer
+  const info = details.getByRole('group', { name: 'Check-Out Info' })
+  await expect(info).toBeVisible()
+  await expect(info.getByRole('definition').first()).toHaveText(/\(You\)$/)
+  await expect(info.getByText('Computer', { exact: true })).toHaveCount(0)
   await expect(details.getByRole('button', { name: 'Check Out' })).toBeHidden()
   await expect(details.getByRole('button', { name: 'Check In' })).toBeVisible()
 
   await details.getByRole('button', { name: 'Release' }).click()
-  await expect(details.getByText(/^Checked out by you since/)).toBeHidden()
+  await expect(info).toBeHidden()
   await expect(details.getByRole('button', { name: 'Check Out' })).toBeVisible()
 })
 
-test('Edit changes a property in place, and the new value is there when it is edited again', async ({ page }) => {
+test('Edit Properties changes a property in place, and the new value is there when it is edited again', async ({ page }) => {
   const details = await selectWorkingDocument(page)
-  await details.getByRole('button', { name: 'Edit' }).click()
+  await details.getByRole('button', { name: 'Edit Properties' }).click()
   const comments = details.getByRole('textbox', { name: 'Comments' })
   await comments.fill(`Chase on Monday ${RUN}`)
   await details.getByRole('button', { name: 'Save' }).click()
   await expect(details.getByRole('button', { name: 'Save' })).toBeHidden()
 
-  await details.getByRole('button', { name: 'Edit' }).click()
+  await details.getByRole('button', { name: 'Edit Properties' }).click()
   await expect(details.getByRole('textbox', { name: 'Comments' })).toHaveValue(`Chase on Monday ${RUN}`)
   await details.getByRole('button', { name: 'Cancel' }).click()
   await expect(details.getByRole('textbox', { name: 'Comments' })).toBeHidden()
@@ -282,9 +286,10 @@ test('Coming back to the window shows a check-out and a save made on a computer,
 
   const details = await selectWorkingDocument(page, RETURN_NAME)
   const meta = (version: string) => details.getByText(new RegExp(`^# ${returning} · Version ${escaped(version)} · `))
-  const held = details.getByText(new RegExp(`^Checked out by you on e2e ${RUN} since `))
-  // The row's marker says the same, without where it's released
-  const marker = main(page).getByRole('row', { name: escape(RETURN_NAME) }).getByRole('img', { name: new RegExp(`^Checked out by you on e2e ${RUN} since [^.]+\\.$`) })
+  // Check-Out Info names the computer, the token's name, for the person who holds it
+  const held = details.getByRole('group', { name: 'Check-Out Info' }).getByText(`e2e ${RUN}`, { exact: true })
+  // The row's marker says who has it, and nothing more
+  const marker = main(page).getByRole('row', { name: escape(RETURN_NAME) }).getByRole('img', { name: 'Checked out by you', exact: true })
   const comeBack = () => page.evaluate(() => void window.dispatchEvent(new Event('focus')))
   await expect(meta('1')).toBeVisible()
   await expect(details.getByRole('button', { name: 'Check Out' })).toBeVisible()
@@ -313,6 +318,7 @@ test('Coming back to the window shows a check-out and a save made on a computer,
   )
   await comeBack()
   await expect(meta('1.1')).toBeVisible()
+  await details.getByRole('tab', { name: /^Versions/ }).click()
   await expect(details.getByRole('listitem').filter({ hasText: /^Version 1\.1/ })).toBeVisible()
   await expect(held).toBeVisible()
   await expect(marker).toBeVisible()
