@@ -144,7 +144,9 @@ describe('My Favorites', () => {
     await userEvent.keyboard('Acme Cap Table{Enter}')
 
     await waitFor(() => expect(sent).toEqual([{ id: 901, name: 'Acme Cap Table' }]))
-    expect(await link('Acme Cap Table')).toBeTruthy()
+    // The focus goes back to the favorite, once its link is drawn again
+    const renamed = await link('Acme Cap Table')
+    await waitFor(() => expect(document.activeElement).toBe(renamed))
   })
 
   it('the menu offers Use Original Name only for a favorite with a name of its own', async () => {
