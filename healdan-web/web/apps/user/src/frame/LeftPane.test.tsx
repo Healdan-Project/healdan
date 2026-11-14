@@ -7,7 +7,7 @@ import type { components } from '@healdan/api'
 import { setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
 import { comeBack, settle } from '../test/comeBack'
-import { folder, matter, page, problem } from '../test/fakeApi'
+import { document as documentView, favorite, folder, matter, page, problem } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
 type S = components['schemas']
@@ -253,6 +253,34 @@ describe('LeftPane', () => {
     const doc = await within(pane()).findByRole('link', { name: /Cap Table/ })
     expect(doc.getAttribute('href')).toBe('/app/doc/10500')
     expect(within(pane()).getByRole('link', { name: /Due Diligence/ }).getAttribute('href')).toBe('/app/folders/130')
+  })
+
+  it('draws each favourite with the icon and colour of its kind, as the lists do, not a star', async () => {
+    await renderApp('/folders/1', {
+      'GET /v1/me/favorites': page([
+        favorite(documentView({ docNumber: 10500, name: 'Cap Table.xlsx' }), 901),
+        favorite(documentView({ docNumber: 10501, name: 'Lease.odt' }), 902),
+        favorite(documentView({ docNumber: 10502, name: 'Site Plan.odg' }), 903),
+        favorite(folder({ id: 130, name: 'Due Diligence' }), 904),
+        favorite(folder({ id: 131, name: 'My Recent Docs', kind: 'searchFolder' }), 905),
+        favorite(folder({ id: 132, name: '1004.1 – Harbour Lease', kind: 'matter' }), 906),
+      ]),
+    })
+    const favorites = within(pane()).getByRole('region', { name: 'My Favorites' })
+    await within(favorites).findByRole('link', { name: /Cap Table/ })
+    const icon = (name: RegExp) => {
+      const svg = within(favorites).getByRole('link', { name }).querySelector('svg')!
+      return [/tabler-icon-([\w-]+)/.exec(svg.getAttribute('class')!)![1], svg.getAttribute('data-kind')]
+    }
+    expect(icon(/Cap Table/)).toEqual(['file-type-xls', 'spreadsheet'])
+    expect(icon(/Lease\.odt/)).toEqual(['file-text', 'wordProcessing'])
+    expect(icon(/Site Plan/)).toEqual(['file-text', null])
+    expect(icon(/Due Diligence/)).toEqual(['folder', 'folder'])
+    expect(icon(/My Recent Docs/)).toEqual(['folder-search', 'folder'])
+    expect(icon(/1004\.1/)).toEqual(['briefcase', 'matter'])
+    expect(favorites.querySelector('.tabler-icon-star')).toBeNull()
+    // The heading is the section's own, as before
+    expect(within(favorites).getByRole('heading', { name: 'My Favorites' })).toBeTruthy()
   })
 
   it('uses the firm\'s word for a matter', async () => {

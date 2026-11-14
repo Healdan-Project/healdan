@@ -38,7 +38,8 @@ export const matterIcon: KindIcon = { name: 'briefcase', kind: 'matter' }
 export const clientIcon: KindIcon = { name: 'building', kind: 'client' }
 export const emailIcon: KindIcon = { name: 'email', kind: 'email' }
 
-/** A folder's, from its kind, a search folder having its own: both in the folders' colour. */
+/** A folder's, from its kind: a search folder has its own, both in the folders' colour, and a matter's own folder is the matter. */
 export function folderIcon(kind: components['schemas']['FolderView']['kind'] = 'folder'): KindIcon {
+  if (kind === 'matter') return matterIcon
   return { name: kind === 'searchFolder' ? 'folderSearch' : 'folder', kind: 'folder' }
 }

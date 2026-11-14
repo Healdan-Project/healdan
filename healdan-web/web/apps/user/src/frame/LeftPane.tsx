@@ -11,7 +11,7 @@ import { useFiling } from '../filing/FilingProvider'
 import { useOrganising } from '../organising/OrganisingProvider'
 import { fetchSubfolders, idFrom, keys, useFavorites, useFolder, useMyMatters, useRecentMatters } from '../queries'
 import { useApi } from '../services'
-import { folderIcon, matterIcon } from '../kindIcons'
+import { fileIcon, folderIcon, matterIcon } from '../kindIcons'
 import { recentKinds, scopeIcons } from '../search/scopes'
 import { ErrorPanel } from './ErrorPanel'
 import { messageFor } from './errors'
@@ -269,12 +269,12 @@ function FavoritesSection() {
             <li key={favorite.id}>
               {favorite.item.type === 'document' ? (
                 <Link to="/doc/$ref" params={{ ref: String(favorite.item.docNumber) }} className={styles.entry}>
-                  <Icon name="star" />
+                  <Icon {...fileIcon(favorite.item.name)} />
                   <span className={styles.text}>{favorite.item.name}</span>
                 </Link>
               ) : (
                 <Link to="/folders/$id" params={{ id: String(favorite.item.id) }} className={styles.entry}>
-                  <Icon name="star" />
+                  <Icon {...folderIcon(favorite.item.kind)} />
                   <span className={styles.text}>{favorite.item.name}</span>
                 </Link>
               )}

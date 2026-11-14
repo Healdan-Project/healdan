@@ -47,6 +47,8 @@ describe('the other kinds', () => {
     expect(folderIcon()).toEqual({ name: 'folder', kind: 'folder' })
     expect(folderIcon('folder')).toEqual({ name: 'folder', kind: 'folder' })
     expect(folderIcon('searchFolder')).toEqual({ name: 'folderSearch', kind: 'folder' })
+    // A matter's own folder, as a favourite may be, is the matter
+    expect(folderIcon('matter')).toEqual(matterIcon)
   })
 
   it('gives each scope, and so each Recent entry, its kind\'s icon; Documents and All take in every kind and have none', () => {

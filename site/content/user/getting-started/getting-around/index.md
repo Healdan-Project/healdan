@@ -37,8 +37,8 @@ The left pane scrolls on its own when it's longer than the window. From the top 
 - **My Matters:** the matters you've chosen to keep at hand, as a tree. Open a matter to see its folders and search
   folders, and open a folder to see its own folders. A search folder has its own icon. The tree opens to the folder
   you're in, and **+** beside the heading adds the matter you're in.
-- **My Favorites:** documents and folders you've added as favourites, with the star beside a folder's name or beside
-  a document's name in its details.
+- **My Favorites:** documents and folders you've added as favourites, each with the icon of its kind, as in the
+  lists. The star beside a folder's name, or beside a document's name in its details, adds one.
 
 [My Matters and Recent Matters](../../finding-documents/my-matters-and-recent-matters/) explains the first two.
 If your firm calls matters something else, such as projects, the headings use its word: Recent Projects and My
