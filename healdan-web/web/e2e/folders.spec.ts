@@ -55,12 +55,13 @@ async function open(page: Page, folderId: number) {
   await page.goto(`/app/folders/${folderId}`)
 }
 
-test('F2 renames a folder row in place, and a taken name is refused beside the field', async ({ page }) => {
+test('F2 renames a folder row in place, refuses a taken name beside the field, and the tree follows', async ({ page }) => {
   await open(page, ids.home)
   const row: Locator = main(page).getByRole('grid').getByRole('row', { name: escape(NAMES.byF2) })
   // A click on a folder's row would open it
   await row.focus()
   await page.keyboard.press('F2')
+  await expect(field(page, NAMES.byF2)).toBeFocused()
   await field(page, NAMES.byF2).fill(NAMES.taken)
   await page.keyboard.press('Enter')
   await expect(page.getByRole('alert')).toHaveText(`There's already a folder called ${NAMES.taken} here.`)
@@ -68,32 +69,37 @@ test('F2 renames a folder row in place, and a taken name is refused beside the f
   await field(page, NAMES.byF2).fill(renamed)
   await page.keyboard.press('Enter')
   await expect(main(page).getByRole('grid').getByRole('row', { name: escape(renamed) })).toBeVisible()
+  await expect(tree(page).getByRole('row', { name: escape(renamed) })).toBeVisible()
   expect(await nameOf(ids.byF2)).toBe(renamed)
 })
 
-test("renames a folder from the tree's ⋯, and the heading and the breadcrumb follow", async ({ page }) => {
+test("renames a folder from the tree's ⋯, and the tree, the heading and the breadcrumb follow", async ({ page }) => {
   await open(page, ids.byTree)
   const node = tree(page).getByRole('row', { name: escape(NAMES.byTree) })
   await node.hover()
   await node.getByRole('button', { name: `More for ${NAMES.byTree}` }).click()
   await page.getByRole('menuitem', { name: 'Rename' }).click()
   const renamed = `Renamed in the Tree ${RUN}`
+  await expect(field(page, NAMES.byTree)).toBeFocused()
   await field(page, NAMES.byTree).fill(renamed)
   await page.keyboard.press('Enter')
   await expect(tree(page).getByRole('row', { name: escape(renamed) })).toBeVisible()
   await expect(main(page).getByRole('heading', { level: 1, name: renamed })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).locator('[aria-current="page"]')).toHaveText(renamed)
   expect(await nameOf(ids.byTree)).toBe(renamed)
 })
 
-test("renames the open folder from the ⋯ beside its name", async ({ page }) => {
+test("renames the open folder from the ⋯ beside its name, and the heading, the tree and the breadcrumb follow", async ({ page }) => {
   await open(page, ids.byHeading)
   await main(page).getByRole('button', { name: `More for ${NAMES.byHeading}` }).click()
   await page.getByRole('menuitem', { name: 'Rename' }).click()
   const renamed = `Renamed by Its Heading ${RUN}`
+  await expect(field(page, NAMES.byHeading)).toBeFocused()
   await field(page, NAMES.byHeading).fill(renamed)
   await page.keyboard.press('Enter')
   await expect(main(page).getByRole('heading', { level: 1, name: renamed })).toBeVisible()
   await expect(tree(page).getByRole('row', { name: escape(renamed) })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).locator('[aria-current="page"]')).toHaveText(renamed)
   expect(await nameOf(ids.byHeading)).toBe(renamed)
 })
 
@@ -115,6 +121,7 @@ test('renames a folder by keyboard alone', async ({ page }) => {
   const row = main(page).getByRole('grid').getByRole('row', { name: escape(NAMES.keyTarget) })
   await tabTo(page, row)
   await page.keyboard.press('F2')
+  await expect(field(page, NAMES.keyTarget)).toBeFocused()
   const renamed = `Renamed by Keys ${RUN}`
   await page.keyboard.press('ControlOrMeta+a')
   await page.keyboard.type(renamed)
@@ -128,7 +135,7 @@ test("greys Rename out on a matter's top-level folder for someone who isn't an a
   await main(page).getByRole('button', { name: 'More for Documents' }).click()
   await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeDisabled()
   await page.keyboard.press('Escape')
-  const node = tree(page).getByRole('row', { name: /^Documents/ })
+  const node = tree(page).locator(`[data-tree-key="${documentsFolder}"]`)
   await node.focus()
   await page.keyboard.press('F2')
   await expect(page.getByText("Only administrators can rename a matter's top-level folders.")).toBeVisible()
