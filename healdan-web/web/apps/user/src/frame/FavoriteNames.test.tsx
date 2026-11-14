@@ -12,7 +12,7 @@ import { renderApp } from '../test/renderApp'
 type S = components['schemas']
 
 // A favorite's own name (changed after M6: the owner's dogfooding punch list, 2026-11-14): My Favorites shows it, its
-// tooltip says what it really is and where, and F2 or its menu's Rename… changes it in place.
+// tooltip says what it really is and where, and F2 or its menu's Rename Favorite changes it in place.
 
 const harbour = { id: 14, display: '1001.4 – Harbour Lease', client: client() }
 const documents = folder({ id: 130, name: 'Documents', matter: harbour })
@@ -132,13 +132,13 @@ describe('My Favorites', () => {
     await expectNoAxeViolations(pane())
   })
 
-  it('the menu offers Rename…, which changes the name in place', async () => {
+  it('the menu offers Rename Favorite, which changes the name in place', async () => {
     const { routes, sent } = favoriteRoutes()
     await renderApp('/folders/1', routes)
     fireEvent.contextMenu(await link('Cap Table.xlsx'))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename…', 'Remove from Favorites'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename Favorite', 'Remove from Favorites'])
 
-    await userEvent.click(await item('Rename…'))
+    await userEvent.click(await item('Rename Favorite'))
     const input = await field('Cap Table.xlsx')
     await waitFor(() => expect(document.activeElement).toBe(input))
     await userEvent.keyboard('Acme Cap Table{Enter}')
@@ -152,12 +152,12 @@ describe('My Favorites', () => {
     await renderApp('/folders/1', routes)
     fireEvent.contextMenu(await link('Harbour Lease Docs'))
     expect(await screen.findByRole('menu', { name: 'Actions for Harbour Lease Docs' })).toBeTruthy()
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename…', 'Use Original Name', 'Remove from Favorites'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename Favorite', 'Use Original Name', 'Remove from Favorites'])
 
     await userEvent.click(await item('Use Original Name'))
 
     await waitFor(() => expect(sent).toEqual([{ id: 902, name: null }]))
     fireEvent.contextMenu(await link('Documents'))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename…', 'Remove from Favorites'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename Favorite', 'Remove from Favorites'])
   })
 })

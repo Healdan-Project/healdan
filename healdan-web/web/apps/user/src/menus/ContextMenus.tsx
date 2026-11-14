@@ -111,7 +111,7 @@ export function MatterMenuItems({ folderId }: { folderId: number }) {
 }
 
 /**
- * An item of My Favorites: Open, as its link does; Rename…, as F2 does, and Use Original Name once it has a name of its
+ * An item of My Favorites: Open, as its link does; Rename Favorite, as F2 does, and Use Original Name once it has a name of its
  * own; and Remove from Favorites (its star's change, which follows its state)
  */
 export function FavoriteMenuItems({ favorite, onRename }: { favorite: S['FavoriteView']; onRename: () => void }) {

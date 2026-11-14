@@ -288,7 +288,7 @@ function favoriteIcon(favorite: S['FavoriteView']): ReactNode {
 
 /**
  * My Favorites, by each favorite's own name, in the server's order (changed after M6: the owner's dogfooding punch list,
- * 2026-11-14). Its tooltip says what it really is and where, and F2 or its menu's Rename… makes the name a field.
+ * 2026-11-14). Its tooltip says what it really is and where, and F2 or its menu's Rename Favorite makes the name a field.
  */
 function FavoritesSection() {
   const favorites = useFavorites()

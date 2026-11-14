@@ -53,7 +53,7 @@ such as "Smith Real Estate Docs" or "Acme Acquisition Discovery Docs", and only 
 keeps its own name for everyone, you included, everywhere else. Point at a favourite to see what it really is and
 where, such as "Documents · 1001.1 – Harbour Lease".
 
-To rename a favourite, right-click it and choose **Rename…**, or press F2 on it. Type the name and press Enter, or
+To rename a favourite, right-click it and choose **Rename Favorite**, or press F2 on it. Type the name and press Enter, or
 press Esc to leave it as it was. To give it back its folder's or document's own name, clear the name and press Enter,
 or right-click it and choose **Use Original Name**, which shows only while it has a name of its own.
 
@@ -151,7 +151,7 @@ is a shortcut, never the only way.
   make one (inside a matter, and never in a search folder), and **Add to Favorites** or **Remove from Favorites**.
 - **A matter,** in **My Matters**, **Recent Matters** or a search for matters: **Open**, **Open in New Tab**, and
   **Add to My Matters** or **Remove from My Matters**.
-- **An item in My Favorites:** **Open** and **Open in New Tab**; **Rename…**, and **Use Original Name** when it has a
+- **An item in My Favorites:** **Open** and **Open in New Tab**; **Rename Favorite**, and **Use Original Name** when it has a
   name of its own (see [A Favourite's Own Name](#a-favourites-own-name)); and **Remove from Favorites**.
 
 Right-clicking a document that isn't selected selects it first, in place of what was selected, as the Finder does.

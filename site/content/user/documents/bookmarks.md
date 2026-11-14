@@ -35,7 +35,7 @@ A bookmark on a document or folder that's been deleted isn't listed.
 ## A Bookmark's Name
 
 A bookmark's name is the name of its favourite in the app's **My Favorites**, so a name you give it with **Edit**
-shows there, and one you give a favourite with **Rename…** shows here. See
+shows there, and one you give a favourite with **Rename Favorite** shows here. See
 [A Favourite's Own Name](../../getting-started/getting-around/#a-favourites-own-name).
 
 A bookmark starts with its document's or folder's name. While it still has that name, it takes the new one when the
