@@ -1,9 +1,11 @@
 /* SPDX-FileCopyrightText: 2026 The Healdan Project
    SPDX-License-Identifier: LGPL-3.0-only */
 
+/* --right-width and --preview-width are the widths the region's divider sets (PaneWidths.tsx), which the frame holds in a
+   wide window only; these fallbacks are the defaults. */
 .region {
   flex: none;
-  width: 300px;
+  width: var(--right-width, 300px);
   overflow: auto;
   border-inline-start: 1px solid var(--hd-line);
   background: var(--hd-window);
@@ -11,18 +13,31 @@
 
 /* A page needs more room than a document's details do */
 .wide {
-  width: clamp(360px, 42vw, 640px);
+  width: var(--preview-width, clamp(360px, 42vw, 640px));
 }
 
-/* In a narrow window the region is folded away, and opens over the list, below the top bar, at the right edge */
+/* The divider's box: no width, at the region's edge, above the list's gutter */
+.divider {
+  position: relative;
+  flex: none;
+  width: 0;
+}
+
+/* In a narrow window the region is folded away, and opens over the list, below the top bar, at the right edge, at its own
+   width whatever the divider set in a wide one */
 .over {
   position: fixed;
   inset-block: 52px 0;
   inset-inline-end: 0;
   z-index: 20;
   box-sizing: border-box;
+  width: 300px;
   max-width: 100%;
   box-shadow: var(--hd-shadow-popup);
+}
+
+.over.wide {
+  width: clamp(360px, 42vw, 640px);
 }
 
 .empty {

@@ -6,6 +6,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, type Api } from '@healdan/api'
 import { Button, Icon, t } from '@healdan/ui'
 import { ErrorPanel } from '../frame/ErrorPanel'
+import { usePanesResizing } from '../frame/PaneWidths'
 import { useApi } from '../services'
 import { NoPreview } from './NoPreview'
 import type { PdfFile } from './pdfEngine'
@@ -32,10 +33,17 @@ async function fetchPreview(api: Api, from: PreviewSource, signal: AbortSignal):
   return { kind: 'ready', bytes: await response.arrayBuffer() }
 }
 
-/** The width of an element, as it changes: give the callback to its `ref`, which may come after the first render */
+/**
+ * The width of an element, as it changes: give the callback to its `ref`, which may come after the first render. While a
+ * pane's divider is dragged it stays the width the page was last drawn at, and the width the drag ends at comes once it's
+ * over: a page drawn again at each step of a drag would be blank for most of it.
+ */
 function useWidth(): [(element: HTMLElement | null) => void, number] {
   const [element, setElement] = useState<HTMLElement | null>(null)
   const [width, setWidth] = useState(0)
+  const resizing = usePanesResizing()
+  const [shown, setShown] = useState(0)
+  if (!resizing && shown !== width) setShown(width)
   useLayoutEffect(() => {
     // An observer says the width when it starts watching, so the first width comes with it
     if (!element || typeof ResizeObserver === 'undefined') return
@@ -43,7 +51,7 @@ function useWidth(): [(element: HTMLElement | null) => void, number] {
     observer.observe(element)
     return () => observer.disconnect()
   }, [element])
-  return [setElement, width]
+  return [setElement, shown]
 }
 
 /**

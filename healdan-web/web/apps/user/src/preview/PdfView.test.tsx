@@ -3,6 +3,7 @@
 
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { PaneFrame, PaneSplitter } from '../frame/PaneWidths'
 import { expectNoAxeViolations } from '../test/axe'
 import { document, problem } from '../test/fakeApi'
 import { pdf, resetPdf } from '../test/fakePdf'
@@ -44,6 +45,45 @@ describe('PdfView', () => {
     await screen.findByText('Page 1 of 3')
     // Pages are 600 wide, and 32 is left round them
     await waitFor(() => expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(2))
+    width.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps the page as it was drawn while a divider is dragged, and draws it at the width the drag ends at', async () => {
+    let room = 632
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => room)
+    const observers: (() => void)[] = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(private callback: () => void) {
+          observers.push(callback)
+        }
+        observe() {
+          this.callback()
+        }
+        disconnect() {}
+      },
+    )
+    renderPreview(
+      <PaneFrame className="">
+        <PaneSplitter name="preview" aria-label="Resize Preview" />
+        <PdfView document={letter} />
+      </PaneFrame>,
+      { [path]: () => pdfResponse() },
+    )
+    await screen.findByText('Page 1 of 3')
+    // Pages are 600 wide, and 32 is left round them
+    await waitFor(() => expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(1))
+    const divider = screen.getByRole('separator', { name: 'Resize Preview' })
+    fireEvent.pointerDown(divider, { pointerId: 1, button: 0, clientX: 600, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 560, pointerType: 'mouse' })
+    room = 932
+    act(() => observers.forEach((callback) => callback()))
+    await new Promise((done) => setTimeout(done, 50))
+    expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(1)
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 560, pointerType: 'mouse' })
+    await waitFor(() => expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(1.5))
     width.mockRestore()
     vi.unstubAllGlobals()
   })
