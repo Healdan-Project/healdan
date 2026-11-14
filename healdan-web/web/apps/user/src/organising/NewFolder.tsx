@@ -16,13 +16,18 @@ import styles from './organising.module.css'
 type S = components['schemas']
 
 /**
- * The toolbar's New Folder: inside a matter's folders, and at a matter's top level only for an administrator, as M1
- * allows. Nothing is offered in a Store or a search folder.
+ * Where New Folder is offered: inside a matter's folders, and at a matter's top level only for an administrator, as M1
+ * allows. Never in a Store or a search folder. The toolbar's button and a folder's right-click menu both ask it.
  */
+export function mayMakeFolderIn(place: Place, admin: boolean | undefined): boolean {
+  return place.kind === 'folder' || (place.kind === 'matter' && admin === true)
+}
+
+/** The toolbar's New Folder, where it's offered (mayMakeFolderIn) */
 export function NewFolderButton({ place }: { place: Place }) {
   const me = useMe()
   const organising = useOrganising()
-  if (place.kind !== 'folder' && !(place.kind === 'matter' && me.data?.admin === true)) return null
+  if (!mayMakeFolderIn(place, me.data?.admin)) return null
   return (
     <Button onPress={() => organising.askNewFolder(place)}>
       <Icon name="folderPlus" size={14} /> {t('newFolder.button')}

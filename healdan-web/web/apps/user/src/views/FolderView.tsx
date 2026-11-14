@@ -20,6 +20,7 @@ import { useOpenKey } from '../actions/useOpenKey'
 import { placeOf } from '../filing/dropTargets'
 import { NewFolderButton } from '../organising/NewFolder'
 import { useOrganisingTable } from '../organising/useOrganisingTable'
+import { useListMenu } from '../menus/useListMenu'
 import { useFiling } from '../filing/FilingProvider'
 import { UploadButton } from '../filing/UploadButton'
 import { useDropZone } from '../filing/useDropZone'
@@ -62,6 +63,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const headingId = useId()
   const { selected, selection, change: changeSelection } = useRowSelection(listing.rows)
   const organising = useOrganisingTable(listing.rows, selection)
+  const menu = useListMenu({ rows: listing.rows, selection, onSelect: changeSelection, selected: organising.selected })
   // What was just filed flashes in the list, and the row the files are over is lit
   const { fresh } = useFiling()
   const place = useMemo(() => (view ? placeOf(view) : { id: folderId, kind: 'store' as const }), [view, folderId])
@@ -174,6 +176,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               onOpen={open}
               onPreview={preview}
               {...organising.tableProps}
+              contextMenu={menu}
               loadMore={listing.loadMore}
               isLoadingMore={listing.isLoadingMore}
               total={listing.total}

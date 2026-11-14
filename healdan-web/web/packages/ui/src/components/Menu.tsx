@@ -7,6 +7,7 @@ import {
   MenuItem as AriaMenuItem,
   MenuTrigger,
   Popover,
+  Separator,
   type MenuItemProps as AriaMenuItemProps,
 } from 'react-aria-components'
 import { Button, type ButtonProps } from './Button'
@@ -37,4 +38,9 @@ export function Menu({ label, children, ...rest }: MenuProps) {
 
 export function MenuItem(props: Omit<AriaMenuItemProps, 'className' | 'style'>) {
   return <AriaMenuItem {...props} className={styles.item} />
+}
+
+/** A line between a menu's groups of items */
+export function MenuSeparator() {
+  return <Separator className={styles.separator} />
 }

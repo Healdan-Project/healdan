@@ -19,6 +19,7 @@ import {
 } from 'react-aria-components'
 import { Icon } from '../icons'
 import { t } from '../strings'
+import { ItemContextMenu, type ItemMenu } from './ContextMenu'
 import styles from './Table.module.css'
 
 /** One row: what the Table needs to know of it, besides the caller's own fields. */
@@ -104,6 +105,11 @@ export interface TableProps<T extends TableRow> {
   undraggable?: string
   /** The rows shown are about to change, as while a new order loads: a screen reader waits for them */
   busy?: boolean
+  /**
+   * A row's menu, in place of the browser's: a right-click on the row, or Shift+F10 or the menu key while it has the focus,
+   * opens it (ContextMenu). Everywhere else in the Table, and on a row whose `items` are undefined, the browser's own stays.
+   */
+  contextMenu?: ItemMenu
 }
 
 function same(keys: Set<Key>, selection: Set<string>): boolean {
@@ -137,6 +143,7 @@ export function Table<T extends TableRow>({
   busy = false,
   drag,
   undraggable,
+  contextMenu,
   ...labels
 }: TableProps<T>) {
   // Rows that can be dragged are draggable, which React Aria's Row has no prop for. A row that is drawn (or drawn again, as a
@@ -212,58 +219,60 @@ export function Table<T extends TableRow>({
   const sortDescriptor: SortDescriptor | undefined = sort && { column: sort.column, direction: sort.direction }
 
   return (
-    // The handler only reads keys the rows inside already take; the wrapper isn't a control of its own.
-    <div ref={frame} className={styles.frame} onKeyDownCapture={onKeyDownCapture} onDragStart={drag ? onDragStart : undefined} aria-busy={busy || undefined}>
-      <Virtualizer layout={TableLayout} layoutOptions={{ rowHeight: ROW_HEIGHT, headingHeight: ROW_HEIGHT, loaderHeight: ROW_HEIGHT }}>
-        <AriaTable
-          {...labels}
-          className={styles.table}
-          selectionMode={selectionMode}
-          selectionBehavior="replace"
-          selectedKeys={selectedKeys}
-          onSelectionChange={changeSelection}
-          disabledKeys={disabledKeys}
-          disabledBehavior="selection"
-          sortDescriptor={sortDescriptor}
-          onSortChange={(next) => onSort?.({ column: String(next.column), direction: next.direction })}
-          onRowAction={onOpen && ((key: Key) => onOpen(String(key)))}
-        >
-          <TableHeader columns={columns}>
-            {(column) => (
-              <Column
-                id={column.id}
-                isRowHeader={column.isRowHeader}
-                allowsSorting={column.allowsSorting && onSort !== undefined}
-                width={column.width}
-                minWidth={column.minWidth}
-                textValue={column.name}
-                className={`${styles.column} ${column.align === 'end' ? styles.end : ''}`}
-              >
-                {({ sortDirection }) => (
-                  <span className={styles.heading}>
-                    {column.name}
-                    {sortDirection && <Icon name={sortDirection === 'ascending' ? 'arrowUp' : 'arrowDown'} size={12} />}
-                  </span>
-                )}
-              </Column>
-            )}
-          </TableHeader>
-          <TableBody renderEmptyState={() => <div className={styles.empty}>{empty}</div>}>
-            <Collection items={rows} dependencies={[columns]}>
-              {(row) => (
-                <Row ref={draggable(row)} id={row.id} textValue={row.textValue} columns={columns} dependencies={[columns]} className={styles.row} data-row-key={row.id} data-flash={row.flash || undefined} data-dropping={row.dropping || undefined}>
-                  {(column) => <Cell className={`${styles.cell} ${column.align === 'end' ? styles.end : ''}`}>{textual(column.cell(row))}</Cell>}
-                </Row>
+    <ItemContextMenu attribute="data-row-key" menu={contextMenu}>
+      {/* The handler only reads keys the rows inside already take; the wrapper isn't a control of its own. */}
+      <div ref={frame} className={styles.frame} onKeyDownCapture={onKeyDownCapture} onDragStart={drag ? onDragStart : undefined} aria-busy={busy || undefined}>
+        <Virtualizer layout={TableLayout} layoutOptions={{ rowHeight: ROW_HEIGHT, headingHeight: ROW_HEIGHT, loaderHeight: ROW_HEIGHT }}>
+          <AriaTable
+            {...labels}
+            className={styles.table}
+            selectionMode={selectionMode}
+            selectionBehavior="replace"
+            selectedKeys={selectedKeys}
+            onSelectionChange={changeSelection}
+            disabledKeys={disabledKeys}
+            disabledBehavior="selection"
+            sortDescriptor={sortDescriptor}
+            onSortChange={(next) => onSort?.({ column: String(next.column), direction: next.direction })}
+            onRowAction={onOpen && ((key: Key) => onOpen(String(key)))}
+          >
+            <TableHeader columns={columns}>
+              {(column) => (
+                <Column
+                  id={column.id}
+                  isRowHeader={column.isRowHeader}
+                  allowsSorting={column.allowsSorting && onSort !== undefined}
+                  width={column.width}
+                  minWidth={column.minWidth}
+                  textValue={column.name}
+                  className={`${styles.column} ${column.align === 'end' ? styles.end : ''}`}
+                >
+                  {({ sortDirection }) => (
+                    <span className={styles.heading}>
+                      {column.name}
+                      {sortDirection && <Icon name={sortDirection === 'ascending' ? 'arrowUp' : 'arrowDown'} size={12} />}
+                    </span>
+                  )}
+                </Column>
               )}
-            </Collection>
-            {more && (
-              <TableLoadMoreItem className={styles.loader} onLoadMore={loadMore} isLoading={isLoadingMore}>
-                {t('common.loading')}
-              </TableLoadMoreItem>
-            )}
-          </TableBody>
-        </AriaTable>
-      </Virtualizer>
-    </div>
+            </TableHeader>
+            <TableBody renderEmptyState={() => <div className={styles.empty}>{empty}</div>}>
+              <Collection items={rows} dependencies={[columns]}>
+                {(row) => (
+                  <Row ref={draggable(row)} id={row.id} textValue={row.textValue} columns={columns} dependencies={[columns]} className={styles.row} data-row-key={row.id} data-flash={row.flash || undefined} data-dropping={row.dropping || undefined}>
+                    {(column) => <Cell className={`${styles.cell} ${column.align === 'end' ? styles.end : ''}`}>{textual(column.cell(row))}</Cell>}
+                  </Row>
+                )}
+              </Collection>
+              {more && (
+                <TableLoadMoreItem className={styles.loader} onLoadMore={loadMore} isLoading={isLoadingMore}>
+                  {t('common.loading')}
+                </TableLoadMoreItem>
+              )}
+            </TableBody>
+          </AriaTable>
+        </Virtualizer>
+      </div>
+    </ItemContextMenu>
   )
 }

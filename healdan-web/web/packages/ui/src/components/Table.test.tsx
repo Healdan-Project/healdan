@@ -9,6 +9,7 @@ import { expectNoAxeViolations } from '../test/axe'
 import { bringObservedIntoView } from '../test/intersection'
 import { Table, type TableColumn, type TableProps, type TableRow, type TableSort } from './Table'
 import tableCss from './Table.module.css?raw'
+import { MenuItem } from './Menu'
 
 interface Item extends TableRow {
   name: string
@@ -312,5 +313,53 @@ describe('Table highlights', () => {
     expect(text.closest('[role="rowheader"], [role="gridcell"]')).not.toBe(text)
     expect(text.className).toMatch(/text/)
     expect(tableCss).toMatch(/\.text \{[^}]*overflow: hidden;[^}]*text-overflow: ellipsis;[^}]*white-space: nowrap/)
+  })
+})
+
+describe('Table right-click menu', () => {
+  const contextMenu = (onOpen = vi.fn()) => ({
+    label: (key: string) => `Actions for ${key}`,
+    // The folder row has none, so it keeps the browser's menu
+    items: (key: string) => (key.startsWith('d') ? <MenuItem id="open">Open {key}</MenuItem> : undefined),
+    onOpen,
+  })
+
+  it('opens a row\'s menu on a right-click, and the right-click selects nothing by itself', async () => {
+    const onSelectionChange = vi.fn()
+    const onOpen = vi.fn()
+    render(<Harness rows={[folderRow, ...items(2)]} initial={['d1', 'd2']} onSelectionChange={onSelectionChange} contextMenu={contextMenu(onOpen)} />)
+    const target = row(/Letter 2/)
+    fireEvent.pointerDown(target, { button: 2, pointerType: 'mouse' })
+    fireEvent.mouseDown(target, { button: 2 })
+    expect(fireEvent.contextMenu(target)).toBe(false)
+    expect(await screen.findByRole('menu', { name: 'Actions for d2' })).toBeTruthy()
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith('d2')
+    expect(onSelectionChange).not.toHaveBeenCalled()
+    expect(target.getAttribute('draggable')).toBe('false')
+  })
+
+  it('opens on Shift+F10 on the focused row, and leaves the browser\'s menu on a header and on a row with none', async () => {
+    render(<Harness rows={[folderRow, ...items(2)]} contextMenu={contextMenu()} />)
+    expect(fireEvent.contextMenu(screen.getByRole('columnheader', { name: 'Title' }))).toBe(true)
+    expect(fireEvent.contextMenu(row(/Pleadings/))).toBe(true)
+    const target = row(/Letter 1/)
+    act(() => target.focus())
+    fireEvent.keyDown(target, { key: 'F10', shiftKey: true })
+    expect(await screen.findByRole('menu', { name: 'Actions for d1' })).toBeTruthy()
+  })
+
+  it('takes a Mac\'s Control-click on a row as its right-click, not as a click that selects', async () => {
+    const platform = vi.spyOn(navigator, 'platform', 'get').mockReturnValue('MacIntel')
+    const onSelectionChange = vi.fn()
+    render(<Harness initial={['d1', 'd2']} onSelectionChange={onSelectionChange} contextMenu={contextMenu()} />)
+    const target = within(row(/Letter 2/)).getByRole('rowheader')
+    fireEvent.pointerDown(target, { button: 0, ctrlKey: true, pointerType: 'mouse' })
+    fireEvent.mouseDown(target, { button: 0, ctrlKey: true })
+    fireEvent.contextMenu(target, { button: 0, ctrlKey: true })
+    fireEvent.pointerUp(target, { button: 0, ctrlKey: true, pointerType: 'mouse' })
+    fireEvent.mouseUp(target, { button: 0, ctrlKey: true })
+    expect(await screen.findByRole('menu', { name: 'Actions for d2' })).toBeTruthy()
+    expect(onSelectionChange).not.toHaveBeenCalled()
+    platform.mockRestore()
   })
 })

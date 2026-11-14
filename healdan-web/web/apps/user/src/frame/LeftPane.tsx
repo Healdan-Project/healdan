@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useQueries, useQueryClient } from '@tanstack/react-query'
+import { useQueries } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useId, useState, type ReactNode } from 'react'
-import { apiPath, type components } from '@healdan/api'
-import { Button, Icon, Menu, MenuItem, Tree, t, toast, type IconName, type TreeNode } from '@healdan/ui'
+import type { components } from '@healdan/api'
+import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, t, type IconName, type ItemMenu, type TreeNode } from '@healdan/ui'
+import { useMyMattersChange } from '../actions/myMatters'
 import { carriesRows, placeOf, takesDrag, type Place } from '../filing/dropTargets'
 import { useFiling } from '../filing/FilingProvider'
+import { FavoriteMenuItems, folderMenu, MatterMenuItems } from '../menus/ContextMenus'
 import { useOrganising } from '../organising/OrganisingProvider'
 import { fetchSubfolders, idFrom, keys, useFavorites, useFolder, useMyMatters, useRecentMatters } from '../queries'
 import { useApi } from '../services'
@@ -25,7 +27,11 @@ const recentIcons: Record<(typeof recentKinds)[number], IconName> = {
   clients: 'building',
 }
 
-function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+/**
+ * A section of the pane. With a `menu`, its links have a right-click menu, by the address they link to (changed after M6:
+ * the owner's dogfooding punch list, 2026-11-14).
+ */
+function Section({ title, action, menu, children }: { title: string; action?: ReactNode; menu?: ItemMenu; children: ReactNode }) {
   const id = useId()
   return (
     <section aria-labelledby={id} className={styles.section}>
@@ -35,7 +41,13 @@ function Section({ title, action, children }: { title: string; action?: ReactNod
         </h2>
         {action}
       </div>
-      {children}
+      {menu ? (
+        <ItemContextMenu attribute="href" menu={menu}>
+          {children}
+        </ItemContextMenu>
+      ) : (
+        children
+      )}
     </section>
   )
 }
@@ -67,19 +79,9 @@ function useCurrentFolder() {
   return useFolder(idFrom(currentFolder(pathname))).data
 }
 
-/** A change to My Matters, then the list asked again; a refusal is said in a toast. */
-function useMyMattersChange() {
-  const api = useApi()
-  const queryClient = useQueryClient()
-  return async (method: 'PUT' | 'DELETE', folderId: number) => {
-    try {
-      await api.send(method, apiPath`/v1/me/matters/${folderId}`)
-      // Recent Clients are those of recent matters and My Matters
-      await Promise.all([queryClient.invalidateQueries({ queryKey: keys.myMatters }), queryClient.invalidateQueries({ queryKey: keys.recentClients })])
-    } catch (error) {
-      toast(messageFor(error))
-    }
-  }
+/** The number a link's address ends in after `/folders/` or `/doc/`: what the link opens */
+function linkedId(href: string, kind: 'folders' | 'doc'): number | undefined {
+  return idFrom(new RegExp(`/${kind}/(\\d+)(?:[?#]|$)`).exec(href)?.[1])
 }
 
 function RecentSection() {
@@ -107,8 +109,16 @@ function RecentMattersSection() {
   const recent = useRecentMatters()
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const items = recent.data?.items ?? []
+  const matterAt = (href: string) => items.find((matter) => matter.folderId === linkedId(href, 'folders'))
+  const menu: ItemMenu = {
+    label: (href) => t('menu.for', { name: matterAt(href)?.display ?? '' }),
+    items: (href) => {
+      const matter = matterAt(href)
+      return matter && <MatterMenuItems folderId={matter.folderId} />
+    },
+  }
   return (
-    <Section title={t('recentMatters.title')}>
+    <Section title={t('recentMatters.title')} menu={menu}>
       {stateOf(recent, recent.isSuccess && items.length === 0) ?? (
         <ul className={styles.list}>
           {items.map((matter) => (
@@ -190,10 +200,13 @@ function MyMattersSection() {
 
   // What each node stands for as a place to drop files: a folder's kind says a search folder refuses, a matter its top level
   const places = new Map<string, Place>()
+  // And what each folder is, for its right-click menu
+  const folders = new Map<string, S['FolderView']>()
 
   function folderNode(folder: S['FolderView']): TreeNode {
     const id = String(folder.id)
     places.set(id, placeOf(folder))
+    folders.set(id, folder)
     return {
       id,
       textValue: folder.name,
@@ -246,6 +259,15 @@ function MyMattersSection() {
           expanded={expanded}
           onExpandedChange={setExpanded}
           current={currentFolder(pathname)}
+          contextMenu={{
+            label: (id) => t('menu.for', { name: matters.find((matter) => String(matter.folderId) === id)?.display ?? folders.get(id)?.name ?? '' }),
+            // A matter has its own menu, as its ⋯ has, and a folder its row's in a list; a folder that failed to load has none
+            items: (id) => {
+              if (matters.some((matter) => String(matter.folderId) === id)) return <MatterMenuItems folderId={Number(id)} />
+              const folder = folders.get(id)
+              return folder && folderMenu(folder)
+            },
+          }}
           // Files are filed into the folder, and the list's own rows are moved there; both light the folder up
           acceptsDrop={(id, types) => places.has(id) && (takesDrag(types) || carriesRows(types))}
           onDrop={(id, event) => {
@@ -267,8 +289,17 @@ function MyMattersSection() {
 function FavoritesSection() {
   const favorites = useFavorites()
   const items = favorites.data?.items ?? []
+  const favoriteAt = (href: string) =>
+    items.find(({ item }) => (item.type === 'document' ? item.docNumber === linkedId(href, 'doc') : item.id === linkedId(href, 'folders')))
+  const menu: ItemMenu = {
+    label: (href) => t('menu.for', { name: favoriteAt(href)?.item.name ?? '' }),
+    items: (href) => {
+      const favorite = favoriteAt(href)
+      return favorite && <FavoriteMenuItems favorite={favorite} />
+    },
+  }
   return (
-    <Section title={t('favorites.mine')}>
+    <Section title={t('favorites.mine')} menu={menu}>
       {stateOf(favorites, favorites.isSuccess && items.length === 0) ?? (
         <ul className={styles.list}>
           {items.map((favorite) => (

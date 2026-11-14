@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import { Menu, MenuItem } from './Menu'
+import menuCss from './Menu.module.css?raw'
 
 function setup(onAction = vi.fn()) {
   const view = render(
@@ -65,5 +66,30 @@ describe('Menu', () => {
     fireEvent.keyUp(trigger, { key: 'Enter' })
     await screen.findByRole('menu')
     await expectNoAxeViolations(document.body)
+  })
+
+  it('draws an item that is a link as every other item: no underline, no pointer, the same colour', async () => {
+    render(
+      <Menu label="Help">
+        <MenuItem id="guide" href="/guide">
+          Guide
+        </MenuItem>
+        <MenuItem id="plain">Plain</MenuItem>
+      </Menu>,
+    )
+    const trigger = screen.getByRole('button', { name: 'Help' })
+    fireEvent.keyDown(trigger, { key: 'Enter' })
+    fireEvent.keyUp(trigger, { key: 'Enter' })
+    const link = await screen.findByRole('menuitem', { name: 'Guide' })
+    expect(link.tagName).toBe('A')
+    const linkStyle = getComputedStyle(link)
+    const plainStyle = getComputedStyle(screen.getByRole('menuitem', { name: 'Plain' }))
+    // jsdom underlines a link and gives it a pointer, as a browser does, unless the item's rule says otherwise
+    expect(linkStyle.textDecorationLine).toBe('none')
+    expect(linkStyle.cursor).toBe(plainStyle.cursor)
+    expect(linkStyle.color).toBe(plainStyle.color)
+    // jsdom has no :visited, so the rule is read: a visited link keeps the item's colour, and no later state sets a decoration
+    expect(menuCss).toMatch(/\.item:visited \{\s*color: var\(--hd-text\);\s*\}/)
+    expect(menuCss.match(/text-decoration[^;]*;/g)).toEqual(['text-decoration: none;'])
   })
 })
