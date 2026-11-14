@@ -281,7 +281,9 @@ for the toolbar's More menu (`actions/MoreMenu.tsx`).
   (`DocumentTitle`, `FolderName`), and `OrganisingProvider`'s `renaming` is a row key and a place (`row`, `tree`,
   `heading`), where the focus goes back once it's done. F2 on a folder's row in a list or in the My Matters tree, the
   tree's ⋯, the ⋯ beside the open folder's name and the folder's right-click menu all start it, and `canRename` on the
-  folder decides whether **Rename** is greyed out.
+  folder decides whether **Rename** is greyed out. A save that ends after another rename began leaves that one open. In
+  the tree, which is narrow, a refusal goes below the field (`stacked`), and a row's ⋯ sits over the row's end
+  (`Tree.module.css`), so a hidden one takes none of the name's width.
 - **Rename in place.** `RenameField` replaces the title in the row. Enter saves, Esc cancels, and leaving the field with a
   new name saves it. A refusal keeps the field open with the message beside it (`renameRefusal` words another extension
   as what to do about it), and the focus goes back to the row when the field goes. The field stops its key and pointer

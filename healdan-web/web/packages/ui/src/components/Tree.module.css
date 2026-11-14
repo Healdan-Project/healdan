@@ -21,13 +21,18 @@
   padding-inline-start: calc((var(--tree-item-level, 1) - 1) * var(--hd-space-6));
 }
 
+/* As tall as a row's ⋯ (Button's 26 pixels) with room for its focus ring, as it was while the ⋯ was in the row's flow. The
+   tree sits on the sidebar, whose background a row has, for the ⋯ that sits over it (.menu). */
 .row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--hd-space-3);
   min-width: 0;
+  min-height: 26px;
   padding: var(--hd-space-2) var(--hd-space-3);
   border-radius: var(--hd-radius);
+  background: var(--hd-sidebar);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -98,10 +103,17 @@
   color: var(--hd-text-secondary);
 }
 
-/* The row's menu sits at its end, shown while the row is hovered or focused, or its menu is open. */
+/* The row's menu sits over the row's end, out of its flow, so a hidden one takes none of the name's width. It is shown while
+   the row is hovered or has the focus within it, or while its menu is open, on the row's own background (whichever it has
+   then: hovered, open or a drop's target), so the name under it doesn't show through. */
 .menu {
-  display: inline-flex;
-  margin-inline-start: auto;
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  display: flex;
+  align-items: center;
+  padding-inline: var(--hd-space-2) var(--hd-space-3);
+  background: inherit;
   opacity: 0;
 }
 
@@ -109,4 +121,11 @@
 .item:focus-within .menu,
 .menu:has([aria-expanded='true']) {
   opacity: 1;
+}
+
+/* A row being edited in place, with a field in its label, keeps its menu out of sight and out of the pointer's way: it would
+   cover the field's end */
+.row:has(input) .menu {
+  opacity: 0;
+  pointer-events: none;
 }

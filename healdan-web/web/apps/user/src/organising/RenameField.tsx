@@ -44,7 +44,17 @@ export function FolderName({ folder, place, className }: { folder: S['FolderView
   const { renaming, stopRename } = useOrganising()
   const api = useApi()
   if (renaming?.key !== `f${folder.id}` || renaming.place !== place) return <span className={className}>{folder.name}</span>
-  return <RenameField name={folder.name} selected={folder.name.length} save={(name) => renameFolder(api, folder.id, name)} refusal={folderRenameRefusal} onDone={stopRename} />
+  return (
+    <RenameField
+      name={folder.name}
+      selected={folder.name.length}
+      save={(name) => renameFolder(api, folder.id, name)}
+      refusal={folderRenameRefusal}
+      onDone={stopRename}
+      // The tree is narrow: what is wrong goes below the field there
+      stacked={place === 'tree'}
+    />
+  )
 }
 
 interface RenameFieldProps {
@@ -58,13 +68,15 @@ interface RenameFieldProps {
   refusal: (error: unknown, typed: string) => string
   /** The rename is over; `focusBack`: the field had the focus, which goes back where the rename began */
   onDone: (focusBack: boolean) => void
+  /** What is wrong goes below the field, wrapping, rather than beside it: for a narrow place */
+  stacked?: boolean
 }
 
 /**
  * Enter saves, Esc cancels, and leaving the field saves what was changed. A refusal keeps the field open with what is
  * wrong beside it. Whether it worked or not, what shows names is asked for again.
  */
-function RenameField({ name, selected, save, refusal, onDone }: RenameFieldProps) {
+function RenameField({ name, selected, save, refusal, onDone, stacked = false }: RenameFieldProps) {
   const queryClient = useQueryClient()
   const [text, setText] = useState(name)
   const [error, setError] = useState<string>()
@@ -108,7 +120,7 @@ function RenameField({ name, selected, save, refusal, onDone }: RenameFieldProps
   }
 
   return (
-    <span className={styles.rename}>
+    <span className={stacked ? `${styles.rename} ${styles.stacked}` : styles.rename}>
       <input
         ref={input}
         className={styles.renameInput}
