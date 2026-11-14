@@ -7,6 +7,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
@@ -16,11 +17,13 @@ import org.junit.Test;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
+import com.logicaldoc.healdan.support.DbSnapshot;
 
 /**
  * Renaming a folder, {@code PATCH /v1/folders/{id}}, and {@code canRename} on
@@ -118,6 +121,140 @@ public class FolderRenameTest extends ApiTestCase {
 		ApiResponse listed = get("/api/v1/me/favorites").token(token).send();
 		assertEquals(listed.toString(), 200, listed.status());
 		assertTrue(listed.json().path("items").path(0).path("item").path("canRename").booleanValue());
+	}
+
+	// Renaming
+
+	@Test
+	public void testRenamesAFolderInsideAMatter() throws Exception {
+		ApiResponse response = rename(letters, "  Correspondence 2026  ", clerk);
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("Correspondence 2026", response.json().path("name").textValue());
+		assertEquals("Correspondence 2026", FolderDAO.get().findById(letters.getId()).getName());
+		awaitAsyncWork();
+		Map<String, Object> history = jdbc().queryForMap(
+				"select ld_event, ld_filenameold from ld_folder_history where ld_folderid = ? order by ld_id desc limit 1",
+				letters.getId());
+		assertEquals(FolderEvent.RENAMED.toString(), history.get("ld_event"));
+		assertEquals("Letters", history.get("ld_filenameold"));
+	}
+
+	@Test
+	public void testATopLevelFolderIsForAdmins() throws Exception {
+		DbSnapshot before = fx.snapshot();
+		assertProblem(rename(documents, "Files", clerk), 403, "admins-only");
+		assertProblem(rename(search, "Latest", clerk), 403, "admins-only");
+		before.assertUnchangedExcept("hd_api_token");
+
+		assertEquals(200, rename(documents, "Files", boss).status());
+		assertEquals(200, rename(search, "Latest", boss).status());
+		assertEquals("Files", FolderDAO.get().findById(documents.getId()).getName());
+	}
+
+	@Test
+	public void testAMattersOwnFolderAndAStoreAreNotRenamedHere() throws Exception {
+		DbSnapshot before = fx.snapshot();
+		assertProblem(rename(workspace, "Renamed", boss), 409, "not-renamable");
+		assertProblem(rename(workspace, "Renamed", clerk), 409, "not-renamable");
+		assertProblem(rename(store, "Renamed", boss), 409, "not-renamable");
+		before.assertUnchangedExcept("hd_api_token");
+	}
+
+	@Test
+	public void testWithoutTheRenamePermission() throws Exception {
+		DbSnapshot before = fx.snapshot();
+		assertProblem(rename(letters, "Post", reader), 403, "forbidden");
+		before.assertUnchangedExcept("hd_api_token");
+	}
+
+	@Test
+	public void testAFolderTheCallerCantReadIsNotFound() throws Exception {
+		assertProblem(rename(letters, "Post", outsider), 404, "not-found");
+		assertProblem(patch("/api/v1/folders/987654").token(signIn(clerk)).json(Map.of("name", "X")).send(), 404,
+				"not-found");
+	}
+
+	@Test
+	public void testNamesThatArentAllowed() throws Exception {
+		DbSnapshot before = fx.snapshot();
+		assertField(rename(letters, "", clerk), "required");
+		assertField(rename(letters, "   ", clerk), "required");
+		assertField(rename(letters, "Smith/Jones", clerk), "invalid");
+		assertField(rename(letters, "Smith\\Jones", clerk), "invalid");
+		assertField(rename(letters, "Tab\there", clerk), "invalid");
+		assertField(rename(letters, "Party \uD83C\uDF89", clerk), "invalid");
+		// CE's folder DAO would take the tags out, so the name stored wouldn't be the name typed
+		assertField(rename(letters, "Draft <v2>", clerk), "invalid");
+		assertField(rename(letters, "<script>alert(1)</script>Notes", clerk), "invalid");
+		assertField(rename(letters, "x".repeat(256), clerk), "too-long");
+		before.assertUnchangedExcept("hd_api_token");
+		assertProblem(patch("/api/v1/folders/" + letters.getId()).token(signIn(clerk)).json(Map.of()).send(), 400,
+				"bad-request");
+	}
+
+	@Test
+	public void testNamesThatAreKeptAsTyped() throws Exception {
+		for (String name : List.of("Smith & Co", "Q&A 2026", "Notes (old)", "Lease \u2013 Draft", "x".repeat(255))) {
+			ApiResponse response = rename(letters, name, clerk);
+			assertEquals(name + ": " + response, 200, response.status());
+			assertEquals(name, FolderDAO.get().findById(letters.getId()).getName());
+		}
+	}
+
+	@Test
+	public void testANameAnotherFolderHasIsRefused() throws Exception {
+		DbSnapshot before = fx.snapshot();
+		assertProblem(rename(letters, "Drafts", clerk), 409, "name-taken");
+		assertProblem(rename(letters, "drafts", clerk), 409, "name-taken");
+		before.assertUnchangedExcept("hd_api_token");
+	}
+
+	@Test
+	public void testChangingOnlyTheCase() throws Exception {
+		ApiResponse response = rename(letters, "LETTERS", clerk);
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("LETTERS", FolderDAO.get().findById(letters.getId()).getName());
+	}
+
+	@Test
+	public void testTheSameNameWritesNothing() throws Exception {
+		DbSnapshot before = fx.snapshot();
+		ApiResponse response = rename(letters, " Letters ", clerk);
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("Letters", response.json().path("name").textValue());
+		before.assertUnchangedExcept("hd_api_token");
+	}
+
+	@Test
+	public void testANameOnlyADeletedFolderHadIsFree() throws Exception {
+		FolderDAO.get().delete(drafts.getId(), fx.folderHistory(boss));
+		ApiResponse response = rename(letters, "Drafts", clerk);
+		assertEquals(response.toString(), 200, response.status());
+	}
+
+	@Test
+	public void testTheWebPageRenamesOnItsSession() throws Exception {
+		ApiResponse response = patch("/api/v1/folders/" + letters.getId()).webSession(signInWeb(clerk))
+				.json(Map.of("name", "Post")).send();
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("Post", FolderDAO.get().findById(letters.getId()).getName());
+	}
+
+	private ApiResponse rename(Folder f, String name, User as) {
+		return patch("/api/v1/folders/" + f.getId()).token(signIn(as)).json(Map.of("name", name)).send();
+	}
+
+	private static void assertProblem(ApiResponse response, int status, String code) {
+		assertEquals(response.toString(), status, response.status());
+		assertEquals(code, response.json().path("code").textValue());
+	}
+
+	private static void assertField(ApiResponse response, String code) {
+		assertEquals(response.toString(), 422, response.status());
+		JsonNode first = response.json().path("fields").path(0);
+		assertEquals("name", first.path("field").textValue());
+		assertEquals(code, first.path("code").textValue());
 	}
 
 	// Helpers
