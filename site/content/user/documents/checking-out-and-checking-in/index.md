@@ -70,7 +70,7 @@ the **User**. It doesn't download anything: to edit the file, use **Open** (see
 [Opening Documents](../../office/opening-documents/)), or **Download** it (see
 [Downloading Documents](../downloading-documents/)).
 
-![The details of Lease – Draft for Client.docx, # 4, after Check Out: "Checked out by you since 12 Nov 2026, 21:14." with Check In and Release buttons, under its name and Favorites star and Open, Download, Edit and Copy Link](checked-out-by-you.png)
+![The details of Lease – Draft for Client.docx, # 4, after Check Out: Check-Out Info, with User Priya Nair (You) and Check-Out Time 14 Nov 2026, 17:23, and the Check In and Release buttons under it, below its name and Favorites star and Open, Download and Copy Link](checked-out-by-you.png)
 
 You need permission to write the document. **Check Out** is greyed out while someone else has the document checked out
 or locked, and for a document you can't write.
@@ -96,7 +96,7 @@ That goes for your own check-out on a computer too. One you made by opening a do
 [Healdan Helper](../../office/) belongs to that computer, which **Computer** names. Release it there, or in the
 Classic Interface.
 
-![The details of Lease – Engrossment.docx, # 48, held on a computer: "Checked out by you on Healdan Helper on Office PC since 12 Nov 2026, 21:14. Release it on that computer, or in the Classic Interface (Unlock).", with Edit greyed out](checked-out-on-computer.png)
+![The details of Lease – Engrossment.docx, # 48, held on a computer: Check-Out Info, with User Priya Nair (You), Check-Out Time 14 Nov 2026, 17:18, Application Word and Computer Healdan Helper on Office PC, and no Check In or Release, below its name and Favorites star and Open, Download and Copy Link](checked-out-on-computer.png)
 
 A locked document's **Lock Info** says who locked it, and when. A lock is taken off in the Classic Interface (see
 [Locking a Document](../locking-a-document/)).

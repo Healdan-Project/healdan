@@ -12,7 +12,7 @@ orange-red, PDFs red, emails blue and pictures purple. Some kinds share a blue, 
 LibreOffice's text documents, spreadsheets and presentations take the colours of their Microsoft Office counterparts,
 and any other kind of file, such as a drawing, has the plain document icon in the colour of the text beside it.
 
-![Healdan's web page in the Due Diligence folder of matter 1002.1 – Commercial Lease: the top bar with the Healdan name, the Documents search box, the ? button and the PN menu; the left pane with Recent, Recent Matters, My Matters opened to the matter's folders, and My Favorites; the folder's two documents, Service Charge Budget 2026–27.xlsx and Site Plan – Unit 4 Weir Lane.odg, with the second selected; and its details at the right, with the thumbnail of the plan, its name with the Favorites star beside it, Open, Download, Edit, Copy Link and Check Out, its properties and its version](whole-window.png)
+![Healdan's web page in the Due Diligence folder of matter 1002.1 – Commercial Lease: the top bar with the Healdan name, the Documents search box, the ? button and the PN menu; the left pane with Recent, Recent Matters, My Matters opened to the matter's folders, and My Favorites; the folder's two documents, Service Charge Budget 2026–27.xlsx and Site Plan – Unit 4 Weir Lane.odg, with the second selected; and its details at the right, with the thumbnail of the plan, its name with the Favorites star beside it, Open, Download, Copy Link and Check Out, then the Properties and Versions (1) tabs, with Properties showing Edit Properties and the plan's properties](whole-window.png)
 
 ## The Top Bar
 
