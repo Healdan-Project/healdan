@@ -97,7 +97,8 @@ test('finds a document by its title, and by its #', async ({ page }) => {
   await expect(main(page).getByRole('heading', { level: 1, name: `"${RUN}"` })).toBeVisible()
   // The suggestions and the first search may come before the index has the documents
   await searchUntilFound(page, RUN, NAMES.alpha)
-  await expect(main(page).getByRole('row', { name: new RegExp(NAMES.beta.replace('.', '\\.')) })).toBeVisible()
+  // The Indexer may have reached one of the two and not yet the other, so the second is waited for in the same way
+  await searchUntilFound(page, RUN, NAMES.beta)
   // The Matter column says where each is
   await expect(main(page).getByRole('row', { name: new RegExp(NAMES.alpha.replace('.', '\\.')) })).toContainText('Smoke Matter')
 
