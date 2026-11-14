@@ -3073,7 +3073,7 @@ components:
     FolderView:
       type: object
       additionalProperties: false
-      required: [type, id, name, kind, matter, store, path, canFile]
+      required: [type, id, name, kind, matter, store, path, canFile, canRename]
       properties:
         type:
           type: string
@@ -3102,6 +3102,13 @@ components:
         canFile:
           type: boolean
           description: Whether the caller may file documents into the folder. Only a folder inside a matter can be filed into.
+        canRename:
+          type: boolean
+          description: |
+            Whether `renameFolder` would rename the folder for the caller: a
+            folder or a search folder, never a Store or a matter's own folder;
+            with the Rename permission; and, directly in a matter's workspace,
+            only for an administrator.
     MatterView:
       type: object
       additionalProperties: false

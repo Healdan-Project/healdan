@@ -51,6 +51,7 @@ import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDisplay;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.token.DeviceHolds;
 
 /**
@@ -366,10 +367,13 @@ public final class ApiViews {
 		String kind = folderKind(position);
 		path.add(new FolderRef(f.getId(), f.getName(), kind));
 
-		boolean canFile = "folder".equals(kind) && position.depth() >= 1
-				&& folders.isWriteAllowed(f.getId(), caller.getId());
+		// One lookup of the caller's permissions serves both flags; a Store and a matter's own folder need none
+		Set<Permission> allowed = renamableKind(kind) ? folders.getAllowedPermissions(f.getId(), caller.getId())
+				: Set.of();
+		boolean canFile = "folder".equals(kind) && position.depth() >= 1 && allowed.contains(Permission.WRITE);
+		boolean canRename = canRename(kind, position.isMatterTopLevel(), allowed, caller);
 		return Optional.of(new FolderView("folder", f.getId(), f.getName(), kind, matterOf(position),
-				storeRef(position.storeId()), List.copyOf(path), canFile));
+				storeRef(position.storeId()), List.copyOf(path), canFile, canRename));
 	}
 
 	/**
@@ -387,9 +391,35 @@ public final class ApiViews {
 		String kind = f.getType() == HealdanConstants.FOLDER_TYPE_SEARCH ? "searchFolder" : "folder";
 		List<FolderRef> path = new ArrayList<>(parent.path());
 		path.add(new FolderRef(f.getId(), f.getName(), kind));
-		boolean canFile = "folder".equals(kind) && FolderDAO.get().isWriteAllowed(f.getId(), caller.getId());
+		Set<Permission> allowed = FolderDAO.get().getAllowedPermissions(f.getId(), caller.getId());
+		boolean canFile = "folder".equals(kind) && allowed.contains(Permission.WRITE);
+		// The parent is a matter's own folder: the subfolder is at the matter's top level
+		boolean canRename = canRename(kind, "matter".equals(parent.kind()), allowed, caller);
 		return new FolderView("folder", f.getId(), f.getName(), kind, parent.matter(), parent.store(),
-				List.copyOf(path), canFile);
+				List.copyOf(path), canFile, canRename);
+	}
+
+	private static boolean renamableKind(String kind) {
+		return "folder".equals(kind) || "searchFolder".equals(kind);
+	}
+
+	/**
+	 * @param kind the folder's kind, as its view has it
+	 * @param topLevel whether it is directly in a matter's workspace
+	 * @param allowed the caller's permissions on it
+	 * @param caller the signed-in user, with its groups
+	 * @return whether {@code PATCH /v1/folders/{id}} would rename it for the
+	 *         caller (folder rename spec section 4.2): a folder or a search
+	 *         folder, never a Store or a matter's own folder; with the Rename
+	 *         permission; and directly in a matter's workspace, only for an
+	 *         administrator
+	 * @throws PersistenceException error at data layer
+	 */
+	static boolean canRename(String kind, boolean topLevel, Set<Permission> allowed, User caller)
+			throws PersistenceException {
+		if (!renamableKind(kind) || !allowed.contains(Permission.RENAME))
+			return false;
+		return !topLevel || AccessChecks.isAdmin(caller);
 	}
 
 	private static StoreRef storeRef(Long storeId) throws PersistenceException {
