@@ -1,0 +1,76 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* A target 24 pixels wide (WCAG 2.5.8) laid over the pane's edge, so it takes no click from the tree's rows, the pane's
+   scrollbar or the list's. A pane before it (the left pane) scrolls with its scrollbar at that edge, inside its 1-pixel
+   border, so the divider covers only the border and lies 23 pixels over the gutter beside it. A pane after it (the right
+   region) has its scrollbar at its far edge, so the divider lies 4 pixels over the pane, inside its padding, and 20 over the
+   gutter. It sits in a box whose inline end (a pane before it) or inline start (a pane after it) is the pane's edge, and
+   takes no room of its own. */
+.splitter {
+  position: absolute;
+  inset-block: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 24px;
+  outline: none;
+  cursor: col-resize;
+  /* A finger or a pen on it drags it, rather than scrolling the page */
+  touch-action: none;
+}
+
+.splitter[data-pane='start'] {
+  inset-inline-end: -23px;
+}
+
+.splitter[data-pane='end'] {
+  inset-inline-start: -20px;
+}
+
+/* The line drawn over the pane's own hairline edge while the divider is pointed at, dragged or focused */
+.splitter::before {
+  position: absolute;
+  inset-block: 0;
+  width: 3px;
+  background: transparent;
+  content: '';
+}
+
+.splitter[data-pane='start']::before {
+  inset-inline-start: 0;
+}
+
+.splitter[data-pane='end']::before {
+  inset-inline-end: 2px;
+}
+
+/* A moment's wait, so a pointer passing over it doesn't flash it */
+.splitter:hover::before {
+  background: var(--hd-pressed-edge);
+  transition: background-color 0s linear 150ms;
+}
+
+.splitter[data-dragging]::before {
+  background: var(--hd-accent-fill);
+  transition: none;
+}
+
+.splitter[data-focus-visible]::before {
+  background: var(--hd-accent-fill);
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+  transition: none;
+}
+
+/* While a divider is dragged the pointer goes where it likes: the cursor stays the divider's, no text is selected, and no
+   frame (an email's body) keeps the pointer's moves from the page */
+:global(html[data-hd-resizing]),
+:global(html[data-hd-resizing]) * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
+:global(html[data-hd-resizing]) iframe {
+  pointer-events: none;
+}

@@ -101,6 +101,33 @@ Select a document in a folder's list, in search results or in a Recent list, and
 
 Click another document to see its details instead, or select several and the details close.
 
+## Resizing the Panes
+
+The left pane, and the details, Filters or preview at the right, can each be made wider or narrower. Point at the line
+between a pane and the list: the pointer becomes a resize arrow and the line darkens. Drag it to where you want it,
+with the mouse, a finger or a pen. The list takes whatever room the panes leave, and its columns follow.
+
+From the keyboard, Tab to the divider, which a screen reader names **Resize Navigation**, **Resize Details**, **Resize
+Filters** or **Resize Preview** and reads its width in pixels. Then:
+
+| Key | What it does |
+|---|---|
+| Left and right arrows | Move the divider 16 pixels; with Shift, 64 |
+| Home and End | Make the pane as narrow, or as wide, as it goes |
+| Enter | Puts the pane back to its usual width |
+
+Double-clicking the divider puts the pane back to its usual width too.
+
+- **The left pane** goes from 180 to 420 pixels wide. It starts at 248.
+- **The details and Filters** share one width, from 260 pixels to half the window. They start at 300.
+- **The preview,** once docked, keeps a width of its own, as a page needs more room than the details do. Until you
+  change it, it takes a share of the window.
+- **The list keeps at least 481 pixels,** so on a smaller window the panes can't be made as wide.
+
+Healdan remembers each width in this browser, so the panes are as you left them next time, but not in another browser
+or on another computer. A width that doesn't fit a smaller window is drawn as wide as fits, and comes back when the
+window is wide enough again.
+
 ## Keeping Up to Date
 
 The web page brings what it shows up to date each time you come back to it: when you click back into its window from
@@ -163,8 +190,9 @@ once the list has the focus.
 
 On a window narrower than 1,024 pixels, such as a tablet, the left pane and the details, Filters or preview fold away
 so the list has the room. Two buttons in the top bar, the **☰** (Navigation) button and the panel-icon (Details and
-Filters) button, open them over the list, and Esc or choosing a link closes them again. A phone's screen is too small
-for the app.
+Filters) button, open them over the list, and Esc or choosing a link closes them again. They open at their usual
+widths and can't be resized there; the widths you chose come back when the window is wider again. A phone's screen is
+too small for the app.
 
 ![The web page in a window 768 pixels wide: the left pane open over the folder's list, with Recent, Recent Matters, My Matters opened to 1002.1 – Commercial Lease's folders, and My Favorites, below a top bar that has the ☰ (Navigation) and panel-icon (Details and Filters) buttons](narrow-window.png)
 

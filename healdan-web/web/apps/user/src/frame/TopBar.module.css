@@ -10,11 +10,13 @@
   background: var(--hd-window);
 }
 
+/* As wide as the left pane, less the bar's padding and the gap after it, so the search box starts where the main area does
+   (--left-width is the pane's, 248 pixels unless its divider moved it) */
 .brand {
   display: flex;
   align-items: center;
   gap: var(--hd-space-3);
-  width: 216px;
+  width: calc(var(--left-width, 248px) - 2 * var(--hd-space-5));
   color: var(--hd-text);
   font-size: 15px;
   font-weight: var(--hd-weight-bold);
