@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { launch } from '../actions/launch'
 import { letter } from '../filing/testing'
-import { lease, plan, routes, row, select, toolbar } from '../organising/testing'
+import { drafts, lease, plan, routes, row, select, toolbar } from '../organising/testing'
 import { expectNoAxeViolations } from '../test/axe'
 import { children, document as doc, folder, matter, page } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
@@ -82,6 +82,24 @@ describe("a document row's menu", () => {
     expect(fireEvent.contextMenu(field)).toBe(true)
     expect(screen.queryByRole('menu')).toBeNull()
     expect(written.renamed).toEqual([])
+  })
+
+  it('renames a folder row in place from Rename', async () => {
+    const { all, written } = routes()
+    await renderApp('/folders/7', all)
+    fireEvent.contextMenu(await row(/Drafts/))
+    await userEvent.click(await item('Rename'))
+    const field = await screen.findByRole('textbox', { name: 'New Name of Drafts' })
+    await waitFor(() => expect(document.activeElement).toBe(field))
+    await userEvent.keyboard('Final Drafts{Enter}')
+    await waitFor(() => expect(written.renamedFolders).toEqual([{ id: 8, name: 'Final Drafts' }]))
+  })
+
+  it("greys Rename out in a folder row's menu where the server says it can't be renamed", async () => {
+    const { all } = routes({ 'GET /v1/folders/7/children': () => children([{ ...drafts, canRename: false }]) })
+    await renderApp('/folders/7', all)
+    fireEvent.contextMenu(await row(/Drafts/))
+    expect((await item('Rename')).getAttribute('aria-disabled')).toBe('true')
   })
 
   it('opens on Shift+F10 and on the menu key at the focused row, its first item focused, and Esc gives the row the focus back', async () => {
@@ -176,7 +194,7 @@ describe("a folder row's menu", () => {
     await renderApp('/folders/7', routes().all)
     await select(/Lease/)
     fireEvent.contextMenu(await row(/Drafts/))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'New Folder', 'Add to Favorites'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'New Folder', 'Rename', 'Add to Favorites'])
     expect((await item('Open in New Tab')).getAttribute('href')).toBe('/app/folders/8')
     expect(selectedRows()).toEqual(['d10432'])
     await userEvent.click(await item('New Folder'))
@@ -188,7 +206,7 @@ describe("a folder row's menu", () => {
     const { all } = routes({ 'GET /v1/folders/7/children': children([recentHere, letter]) })
     await renderApp('/folders/7', all)
     fireEvent.contextMenu(await row(/Recent Here/))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Add to Favorites'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to Favorites'])
   })
 
   it('opens the folder', async () => {
@@ -218,7 +236,7 @@ describe("the left pane's menus", () => {
   it('Recent Matters: Open, Open in New Tab, and Add to My Matters for one that isn’t in it', async () => {
     const { api } = await renderApp('/folders/7', { ...routes().all, 'PUT /v1/me/matters/*': undefined })
     fireEvent.contextMenu(await within(pane()).findByRole('link', { name: /1002\.1/ }))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Add to My Matters'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to My Matters'])
     expect((await item('Open in New Tab')).getAttribute('href')).toBe('/app/folders/120')
     await userEvent.click(await item('Add to My Matters'))
     await waitFor(() => expect(api.callsTo('PUT /v1/me/matters/120')).toHaveLength(1))
@@ -227,7 +245,7 @@ describe("the left pane's menus", () => {
   it('Recent Matters: Remove from My Matters for one that is', async () => {
     await renderApp('/folders/7', { ...routes().all, 'GET /v1/matters/recent': page([matter()]) })
     fireEvent.contextMenu(await within(pane()).findByRole('link', { name: /1001\.1/ }))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Remove from My Matters'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Remove from My Matters'])
   })
 
   it('the tree: a matter’s menu, and its folders’, opened by keys too', async () => {
@@ -235,7 +253,7 @@ describe("the left pane's menus", () => {
     const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
     const matterRow = within(tree).getByRole('row', { name: /1001\.1/ })
     fireEvent.contextMenu(matterRow)
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Remove from My Matters'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Remove from My Matters'])
     await userEvent.click(await item('Remove from My Matters'))
     await waitFor(() => expect(api.callsTo('DELETE /v1/me/matters/110')).toHaveLength(1))
 
@@ -244,12 +262,12 @@ describe("the left pane's menus", () => {
     correspondence.focus()
     await userEvent.keyboard('{Shift>}{F10}{/Shift}')
     expect(await screen.findByRole('menu', { name: 'Actions for Correspondence' })).toBeTruthy()
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'New Folder', 'Add to Favorites'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'New Folder', 'Rename', 'Add to Favorites'])
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(document.activeElement).toBe(correspondence))
 
     fireEvent.contextMenu(within(tree).getByRole('row', { name: /My Recent Docs Here/ }))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Add to Favorites'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to Favorites'])
   })
 
   it('keeps the browser menu on Recent’s links, which open a list of the app', async () => {
@@ -265,7 +283,7 @@ describe("the left pane's menus", () => {
     const matterRow = within(tree).getByRole('row', { name: /1001\.1/ })
     matterRow.focus()
     await userEvent.keyboard('{Shift>}{F10}{/Shift}')
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Remove from My Matters'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Remove from My Matters'])
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
     expect(screen.getByRole('navigation', { name: 'Navigation' })).toBeTruthy()
@@ -294,6 +312,6 @@ describe('the other lists', () => {
     await renderApp('/search?scope=matters&q=lease', { ...routes().all, 'GET /v1/search': page([matter({ id: 12, folderId: 120, display: '1002.1 – Commercial Lease' })]) })
     const grid = await within(screen.getByRole('main')).findByRole('grid')
     fireEvent.contextMenu(await within(grid).findByRole('row', { name: /1002\.1/ }))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Add to My Matters'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to My Matters'])
   })
 })

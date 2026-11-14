@@ -43,7 +43,7 @@ export function useListMenu({ rows, selection, onSelect, selected }: ListMenuOf)
       if (!hit) return undefined
       if (hit.type === 'document') return <DocumentMenuItems documents={documentsFor(key, hit)} />
       if (hit.type === 'matter') return <MatterMenuItems folderId={hit.folderId} />
-      return folderMenu(hit)
+      return folderMenu(hit, 'row')
     },
     onOpen: (key) => {
       if (byKey.get(key)?.type === 'document' && !selection.has(key)) onSelect?.(new Set([key]), { showDetails: false })

@@ -57,7 +57,7 @@ export function useOrganising(): Organising {
 function renameOrigin({ key, place }: Renaming): HTMLElement | null {
   const found = globalThis.document
   if (place === 'row') return found.querySelector<HTMLElement>(`[role="grid"] [data-row-key="${key}"]`)
-  if (place === 'tree') return found.querySelector<HTMLElement>(`[role="treegrid"] [data-node-id="${key.slice(1)}"]`)
+  if (place === 'tree') return found.querySelector<HTMLElement>(`[role="treegrid"] [data-tree-key="${key.slice(1)}"]`)
   return found.querySelector<HTMLElement>(`[data-rename-menu="${key}"] button`)
 }
 

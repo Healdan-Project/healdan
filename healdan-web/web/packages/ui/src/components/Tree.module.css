@@ -1,6 +1,10 @@
 /* SPDX-FileCopyrightText: 2026 The Healdan Project
    SPDX-License-Identifier: LGPL-3.0-only */
 
+.frame {
+  display: contents;
+}
+
 .tree {
   display: flex;
   flex-direction: column;

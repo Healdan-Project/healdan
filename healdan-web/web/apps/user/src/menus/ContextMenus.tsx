@@ -11,7 +11,7 @@ import { favoriteAction, newTabAction, useDocumentActions } from '../actions/use
 import { docHref, folderHref } from '../addresses'
 import { placeOf } from '../filing/dropTargets'
 import { mayMakeFolderIn } from '../organising/NewFolder'
-import { useOrganising } from '../organising/OrganisingProvider'
+import { useOrganising, type RenamePlace } from '../organising/OrganisingProvider'
 import { useMe, useMyMatters } from '../queries'
 
 type S = components['schemas']
@@ -59,9 +59,10 @@ export function DocumentMenuItems({ documents }: { documents: S['DocumentView'][
 
 /**
  * A folder's row or tree item: Open, New Folder where the toolbar offers it (mayMakeFolderIn: inside a matter, never in a
- * search folder), and Favorites, as its star does. Renaming, moving and deleting folders are a later phase (spec 16).
+ * search folder), Rename (greyed out where the folder's `canRename` says no: folder rename spec 5.2), and Favorites, as its
+ * star does. Moving and deleting folders are a later phase (M6 spec 16). `renameIn` is where the field opens.
  */
-export function FolderMenuItems({ folder }: { folder: S['FolderView'] }) {
+export function FolderMenuItems({ folder, renameIn }: { folder: S['FolderView']; renameIn: RenamePlace }) {
   const navigate = useNavigate()
   const me = useMe()
   const organising = useOrganising()
@@ -73,14 +74,16 @@ export function FolderMenuItems({ folder }: { folder: S['FolderView'] }) {
         {t('details.open')}
       </MenuItem>
       <ActionItem action={newTabAction(folderHref(folder.id))} />
+      <MenuSeparator />
       {mayMakeFolderIn(place, me.data?.admin) && (
-        <>
-          <MenuSeparator />
-          <MenuItem id="newFolder" onAction={() => organising.askNewFolder(place)}>
-            {t('newFolder.button')}
-          </MenuItem>
-        </>
+        <MenuItem id="newFolder" onAction={() => organising.askNewFolder(place)}>
+          {t('newFolder.button')}
+        </MenuItem>
       )}
+      {/* Greyed out where the server says it can't be renamed: F2 says why */}
+      <MenuItem id="rename" isDisabled={!folder.canRename} onAction={() => organising.startRename(`f${folder.id}`, renameIn)}>
+        {t('rename.menu')}
+      </MenuItem>
       <MenuSeparator />
       <ActionItem action={favoriteAction(favorite)} />
     </>
@@ -100,6 +103,10 @@ export function MatterMenuItems({ folderId }: { folderId: number }) {
       </MenuItem>
       <ActionItem action={newTabAction(folderHref(folderId))} />
       <MenuSeparator />
+      {/* A matter's own folder takes the matter's name: Edit Matter, in the Classic Interface (folder rename spec 5.2) */}
+      <MenuItem id="rename" isDisabled>
+        {t('rename.menu')}
+      </MenuItem>
       <MenuItem id="myMatters" isDisabled={!mine.isSuccess} onAction={() => void change(kept ? 'DELETE' : 'PUT', folderId)}>
         {kept ? t('myMatters.remove') : t('myMatters.addMenu')}
       </MenuItem>
@@ -128,8 +135,8 @@ export function FavoriteMenuItems({ favorite }: { favorite: S['FavoriteView'] })
 }
 
 /** A folder of any kind: a matter's top level has the matter's menu, and a Store, which opens as no folder, has none */
-export function folderMenu(folder: S['FolderView']) {
+export function folderMenu(folder: S['FolderView'], renameIn: RenamePlace) {
   if (folder.kind === 'store') return undefined
   if (folder.kind === 'matter') return <MatterMenuItems folderId={folder.id} />
-  return <FolderMenuItems folder={folder} />
+  return <FolderMenuItems folder={folder} renameIn={renameIn} />
 }

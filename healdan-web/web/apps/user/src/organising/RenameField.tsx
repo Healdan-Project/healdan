@@ -73,12 +73,17 @@ function RenameField({ name, selected, save, refusal, onDone }: RenameFieldProps
   // Enter saves and the field goes, which makes it lose the focus: that must not save again
   const finished = useRef(false)
   const saving = useRef(false)
+  // A menu that opened the rename gives the focus back to its button as it closes, after the field has mounted: until the
+  // next frames have drawn, a blur is that and not the person leaving, and the field takes the focus again
+  const settling = useRef(true)
 
   useEffect(() => {
     const field = input.current
     if (!field) return
     field.focus()
     field.setSelectionRange(0, selected)
+    const frame = requestAnimationFrame(() => requestAnimationFrame(() => (settling.current = false)))
+    return () => cancelAnimationFrame(frame)
   }, [selected])
 
   /** `fromKey`: Enter saved, so the focus is the field's to give back; a save on leaving leaves it where the person put it */
@@ -130,6 +135,12 @@ function RenameField({ name, selected, save, refusal, onDone }: RenameFieldProps
           }
         }}
         onBlur={() => {
+          if (settling.current && !finished.current) {
+            const field = input.current
+            field?.focus()
+            field?.setSelectionRange(0, selected)
+            return
+          }
           // Leaving the field with nothing changed, nothing in it, or a refusal showing is a cancel; with a new name, a save
           if (text.trim() === '' || error) stop(false)
           else void submit(false)
