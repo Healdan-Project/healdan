@@ -1,8 +1,8 @@
 # Renaming folders in the User app: design
 
 - **Date:** 2026-11-14
-- **Status:** design agreed with the owner on 2026-11-14, question by question and then section by section; written
-  for the owner's review.
+- **Status:** design agreed with the owner on 2026-11-14, question by question and then section by section; the owner
+  approved this written spec the same day.
 - **Inputs:**
   - the owner's dogfooding punch list after M6 (item 13, 2026-11-14): renaming is "a basic feature that really is
     important", so folder rename comes forward from M6's later phases;
