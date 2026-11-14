@@ -29,6 +29,11 @@
   text-overflow: ellipsis;
 }
 
+/* A label's icon keeps its size when the label is cut short: a flex item would shrink it first */
+.row > svg {
+  flex: none;
+}
+
 .item[data-hovered] .row {
   background: var(--hd-line);
 }

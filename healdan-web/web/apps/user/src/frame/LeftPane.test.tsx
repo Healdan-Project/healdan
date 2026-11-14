@@ -50,6 +50,10 @@ describe('LeftPane', () => {
     expect(entry.textContent).toBe('1002.1 – Commercial Lease Brightwell')
     const client = within(entry).getByText('Brightwell')
     expect(client.className).toContain('client')
+    // The matter's briefcase, whole however long the entry, in the matters' colour
+    const icon = entry.querySelector('svg')!
+    expect(icon.getAttribute('data-kind')).toBe('matter')
+    expect(getComputedStyle(icon).flexShrink).toBe('0')
   })
 
   it('shows My Matters as a tree: a matter, and when opened its folders and search folders', async () => {

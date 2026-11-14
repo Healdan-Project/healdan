@@ -51,6 +51,11 @@
   white-space: nowrap;
 }
 
+/* An entry's icon keeps its size when the entry's text is cut short: a flex item would shrink it first */
+.entry > svg {
+  flex: none;
+}
+
 .entry:hover {
   background: var(--hd-line);
 }
