@@ -190,7 +190,7 @@ describe('where the browser keeps its own menu', () => {
 })
 
 describe("a folder row's menu", () => {
-  it('offers Open, Open in New Tab, New Folder and Favorites, and leaves the selection alone', async () => {
+  it('offers Open, Open in New Tab, New Folder, Rename and Favorites, and leaves the selection alone', async () => {
     await renderApp('/folders/7', routes().all)
     await select(/Lease/)
     fireEvent.contextMenu(await row(/Drafts/))
@@ -233,10 +233,11 @@ describe("the left pane's menus", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe('/folders/130'))
   })
 
-  it('Recent Matters: Open, Open in New Tab, and Add to My Matters for one that isn’t in it', async () => {
+  it('Recent Matters: Open, Open in New Tab, Rename greyed out, and Add to My Matters for one that isn’t in it', async () => {
     const { api } = await renderApp('/folders/7', { ...routes().all, 'PUT /v1/me/matters/*': undefined })
     fireEvent.contextMenu(await within(pane()).findByRole('link', { name: /1002\.1/ }))
     expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to My Matters'])
+    expect((await item('Rename')).getAttribute('aria-disabled')).toBe('true')
     expect((await item('Open in New Tab')).getAttribute('href')).toBe('/app/folders/120')
     await userEvent.click(await item('Add to My Matters'))
     await waitFor(() => expect(api.callsTo('PUT /v1/me/matters/120')).toHaveLength(1))

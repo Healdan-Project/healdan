@@ -67,7 +67,7 @@ test('F2 renames a folder row in place, refuses a taken name beside the field, a
   await expect(field(page, NAMES.byF2)).toBeFocused()
   await field(page, NAMES.byF2).fill(NAMES.taken)
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('alert')).toHaveText(`There's already a folder called ${NAMES.taken} here.`)
+  await expect(main(page).getByRole('alert')).toHaveText(`There's already a folder called ${NAMES.taken} here.`)
   const renamed = `Renamed by F2 ${RUN}`
   await field(page, NAMES.byF2).fill(renamed)
   await page.keyboard.press('Enter')
@@ -122,7 +122,9 @@ test('renames a folder from the menu a right-click opens', async ({ page }) => {
 test('renames a folder by keyboard alone', async ({ page }) => {
   await open(page, ids.keys)
   const row = main(page).getByRole('grid').getByRole('row', { name: escape(NAMES.keyTarget) })
-  await tabTo(page, row)
+  // From the heading's ⋯, which Tab reaches from the frame's controls (keyboard.spec.ts walks those): the walk then counts
+  // only the toolbar's, wherever the page load left the focus
+  await tabTo(page, row, { from: main(page).getByRole('button', { name: `More for ${NAMES.keys}` }) })
   await page.keyboard.press('F2')
   await expect(field(page, NAMES.keyTarget)).toBeFocused()
   const renamed = `Renamed by Keys ${RUN}`
@@ -142,5 +144,6 @@ test("greys Rename out on a matter's top-level folder for someone who isn't an a
   await node.focus()
   await page.keyboard.press('F2')
   await expect(page.getByText("Only administrators can rename a matter's top-level folders.")).toBeVisible()
-  await expect(page.getByRole('textbox')).toHaveCount(0)
+  await expect(main(page).getByRole('textbox')).toHaveCount(0)
+  await expect(tree(page).getByRole('textbox')).toHaveCount(0)
 })

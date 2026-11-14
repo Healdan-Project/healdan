@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { createContext, useContext, useState, type DragEvent, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { plural, t, toast } from '@healdan/ui'
 import { refusalLines, type Movable, type Outcome } from '../actions/batch'
 import { moveDocuments } from '../actions/move'
@@ -31,7 +31,10 @@ export interface Organising {
   /** What is a field now, and where */
   renaming: Renaming | undefined
   startRename: (key: string, place?: RenamePlace) => void
-  /** Ends the rename (saved or not) and gives the focus back where it began, unless `focusBack` is false (the person left the field) */
+  /**
+   * Ends the rename (saved or not) and gives the focus back where it began, unless `focusBack` is false (the person left the
+   * field). A save that ends after another rename began leaves that one open, with the focus where it is.
+   */
   stopRename: (focusBack?: boolean) => void
   /** Asks first, then moves the documents to the trash */
   askDelete: (documents: Movable[]) => void
@@ -82,8 +85,8 @@ function focusLater(key: string | undefined) {
 }
 
 /**
- * Renaming documents and folders, moving and deleting documents, and making folders (spec 6.7): what is being renamed, the dialogs that ask
- * and the one that says what was refused. Each document is its own call, so a refusal leaves the others done.
+ * Renaming documents and folders, moving and deleting documents, and making folders (spec 6.7): what is being renamed, the
+ * dialogs that ask and the one that says what was refused. Each document is its own call, so a refusal leaves the others done.
  */
 export function OrganisingProvider({ children }: { children: ReactNode }) {
   const api = useApi()
@@ -91,6 +94,11 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
   const me = useMe()
   const { selected, select } = useSelection()
   const [renaming, setRenaming] = useState<Renaming | undefined>()
+  // The rename open now, as drawn: a field's stopRename is the one it was drawn with, which a save that ends later still calls
+  const latest = useRef<Renaming | undefined>(undefined)
+  useEffect(() => {
+    latest.current = renaming
+  }, [renaming])
   const [deleting, setDeleting] = useState<Movable[] | undefined>()
   const [moving, setMoving] = useState<Movable[] | undefined>()
   const [parent, setParent] = useState<Place | undefined>()
@@ -132,9 +140,12 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     startRename: (key, place = 'row') => setRenaming({ key, place }),
     stopRename: (focusBack = true) => {
       const done = renaming
-      setRenaming(undefined)
-      // The field is gone once this has rendered; where the rename began is where the focus belongs, unless the person put it elsewhere
-      if (focusBack && done) requestAnimationFrame(() => renameOrigin(done)?.focus())
+      // Another rename may have begun while this one saved (F2 elsewhere): that one stays open, and keeps the focus
+      const current = done !== undefined && latest.current === done
+      setRenaming((now) => (now === done ? undefined : now))
+      // The field is gone once this has rendered; where the rename began is where the focus belongs, unless the person put
+      // it elsewhere
+      if (focusBack && current) requestAnimationFrame(() => renameOrigin(done)?.focus())
     },
     askDelete: setDeleting,
     askMove: setMoving,

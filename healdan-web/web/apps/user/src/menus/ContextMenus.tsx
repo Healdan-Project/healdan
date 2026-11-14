@@ -90,7 +90,10 @@ export function FolderMenuItems({ folder, renameIn }: { folder: S['FolderView'];
   )
 }
 
-/** A matter (in My Matters, Recent Matters or a search's list): Open, and Add to or Remove from My Matters, as + and ⋯ do */
+/**
+ * A matter (in My Matters, Recent Matters or a search's list): Open, Open in New Tab, Rename greyed out (a matter's own folder
+ * takes the matter's name), and Add to or Remove from My Matters, as + and ⋯ do
+ */
 export function MatterMenuItems({ folderId }: { folderId: number }) {
   const navigate = useNavigate()
   const mine = useMyMatters()

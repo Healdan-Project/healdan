@@ -5,7 +5,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@healdan/api'
-import { folder, page } from '../test/fakeApi'
+import { children, folder, matter, page } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { drafts, grid, row, routes } from './testing'
 
@@ -82,6 +82,37 @@ describe('Renaming a folder in a list', () => {
     await field()
     await userEvent.keyboard('Final Drafts{Enter}')
     await waitFor(() => expect(written.renamedFolders).toEqual([{ id: 8, name: 'Final Drafts' }]))
+  })
+
+  it('a save that ends after F2 opened another rename leaves that one open, with the focus in it', async () => {
+    const letters = folder({ id: 9, name: 'Letters', path: [...drafts.path.slice(0, -1), { id: 9, name: 'Letters', kind: 'folder' }] })
+    let answer: (value: unknown) => void = () => {}
+    const { all } = routes({
+      'GET /v1/folders/7/children': () => children([drafts, letters]),
+      // The first save waits until the test lets it end
+      'PATCH /v1/folders/8': () => new Promise((resolve) => (answer = resolve)),
+    })
+    await renderApp('/folders/7', all)
+    await pressF2On(/Drafts/)
+    await field()
+    await userEvent.keyboard('Final Drafts{Enter}')
+    // Leaving the field while it saves (the next row takes the focus) saves nothing more, and F2 there opens its rename
+    await pressF2On(/Letters/)
+    expect(document.activeElement).toBe(await field('Letters'))
+
+    answer({ ...drafts, name: 'Final Drafts' })
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'New Name of Letters' }))
+  })
+
+  it("F2 on a matter's row in a Matters search says its folder takes the matter's name, and opens no field", async () => {
+    const { all, written } = routes({ 'GET /v1/search': page([matter()]) })
+    await renderApp('/search?scope=matters&q=charter', all)
+    const target = within(await grid()).getAllByRole('row').find((one) => one.getAttribute('data-row-key') === 'm11')!
+    await pressF2OnRow(target)
+    expect(await screen.findByText("A matter's own folder takes the matter's name: an administrator changes it with Edit Matter… in the Classic Interface.")).toBeTruthy()
+    expect(screen.queryByRole('textbox', { name: /New Name/ })).toBeNull()
+    expect(written.renamedFolders).toEqual([])
   })
 
   it('F2 renames a folder in a Folders search', async () => {

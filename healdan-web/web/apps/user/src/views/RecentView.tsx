@@ -16,7 +16,6 @@ import { RightRegionView, useRegionKind } from '../frame/RightRegion'
 import { clientIcon } from '../kindIcons'
 import { useRecentClients, useRecentDocuments, useRecentFolders } from '../queries'
 import { useOrganisingTable } from '../organising/useOrganisingTable'
-import { useListMenu } from '../menus/useListMenu'
 import { isRecentKind, type RecentKind } from '../search/scopes'
 import { NotFound } from './NotFound'
 import { Toolbar } from './Toolbar'
@@ -142,11 +141,9 @@ function RecentFolders() {
   const items = recent.data?.items
   const rows = useMemo(() => (items ?? []).map(rowOf), [items])
   const columns = useMemo(() => hitColumns('folders'), [])
-  // A folder's row is never selected, so its menu leaves the (empty) selection as it is
-  const menu = useListMenu({ rows: items ?? [], selection: NONE, selected: [] })
-  // F2 renames the focused folder
+  // F2 renames the focused folder. A folder's row is never selected, so its menu leaves the (empty) selection as it is
   const organising = useOrganisingTable(items ?? [], NONE)
-  return <RecentList kind="folders" columns={columns} rows={rows} query={recent} contextMenu={menu} organising={{ onRename: organising.tableProps.onRename }} onOpen={(key) => void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })} />
+  return <RecentList kind="folders" columns={columns} rows={rows} query={recent} contextMenu={organising.contextMenu} organising={{ onRename: organising.tableProps.onRename }} onOpen={(key) => void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })} />
 }
 
 interface ClientRow extends TableRow {

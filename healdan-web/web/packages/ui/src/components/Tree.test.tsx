@@ -29,11 +29,13 @@ function Harness({
   onExpand = vi.fn(),
   current,
   contextMenu,
+  onRename,
 }: {
   onAction?: (id: string) => void
   onExpand?: (id: string) => void
   current?: string
   contextMenu?: TreeProps['contextMenu']
+  onRename?: TreeProps['onRename']
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   return (
@@ -48,6 +50,7 @@ function Harness({
       }}
       onAction={onAction}
       contextMenu={contextMenu}
+      onRename={onRename}
     />
   )
 }
@@ -159,6 +162,19 @@ describe('Tree', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Remove' }))
     expect(onRemove).toHaveBeenCalledExactlyOnceWith('m1')
     expect(onAction).not.toHaveBeenCalled()
+  })
+
+  it('renames the focused row on F2, and leaves F2 with Alt, Ctrl or ⌘ alone, as the Table does', () => {
+    const onRename = vi.fn()
+    render(<Harness onRename={onRename} />)
+    const first = screen.getByRole('row', { name: /1001\.1/ })
+    act(() => first.focus())
+    fireEvent.keyDown(first, { key: 'F2', altKey: true })
+    fireEvent.keyDown(first, { key: 'F2', ctrlKey: true })
+    fireEvent.keyDown(first, { key: 'F2', metaKey: true })
+    expect(onRename).not.toHaveBeenCalled()
+    fireEvent.keyDown(first, { key: 'F2' })
+    expect(onRename).toHaveBeenCalledExactlyOnceWith('m1')
   })
 
   it('shows Loading while an expanded node has no children yet', () => {
