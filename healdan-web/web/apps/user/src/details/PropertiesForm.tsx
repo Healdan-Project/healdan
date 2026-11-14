@@ -10,7 +10,6 @@ import { invalidateDocumentLists } from '../actions/refresh'
 import { keys } from '../queries'
 import { useApi } from '../services'
 import { FieldsForm, isEditable } from './FieldsForm'
-import { Section } from './Section'
 
 type S = components['schemas']
 type Field = S['ProfileField']
@@ -24,7 +23,7 @@ export interface PropertiesFormProps {
 /**
  * A document's properties as a form (spec 6.2): `FieldsForm` over what the server lists. Save sends only what changed,
  * and a 422 marks each field. By keyboard (spec 10.5), the form takes the focus in its first field when it opens, since the
- * Edit that opened it goes grey, and Esc cancels it.
+ * Edit Properties that opened it goes grey, and Esc cancels it. The Properties tab names it (DetailsPanel).
  */
 export function PropertiesForm({ document, fields, onClose }: PropertiesFormProps) {
   const api = useApi()
@@ -53,20 +52,18 @@ export function PropertiesForm({ document, fields, onClose }: PropertiesFormProp
   }
 
   return (
-    <Section title={t('details.properties')}>
-      {/* Esc from a field the form's own keys left alone (an open list takes it first and stops it) */}
-      <div
-        ref={form}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape' && !event.defaultPrevented) {
-            // One Esc closes one layer: this form, not the folded region it is in
-            event.preventDefault()
-            onClose()
-          }
-        }}
-      >
-        <FieldsForm fields={fields} matter={document.matter} submitLabel={t('details.save')} onSubmit={save} onCancel={onClose} />
-      </div>
-    </Section>
+    // Esc from a field the form's own keys left alone (an open list takes it first and stops it)
+    <div
+      ref={form}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !event.defaultPrevented) {
+          // One Esc closes one layer: this form, not the folded region it is in
+          event.preventDefault()
+          onClose()
+        }
+      }}
+    >
+      <FieldsForm fields={fields} matter={document.matter} submitLabel={t('details.save')} onSubmit={save} onCancel={onClose} />
+    </div>
   )
 }

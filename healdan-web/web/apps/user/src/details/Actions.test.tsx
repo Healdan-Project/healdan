@@ -63,7 +63,10 @@ describe('Open and Download in the details', () => {
 
 describe('Check Out, Check In and Release in the details', () => {
   const me = { id: 5, name: 'Priya Nair' }
-  const held = (over: Partial<NonNullable<typeof letter.hold>> = {}) => ({ kind: 'checkout' as const, by: me, since: '2026-11-03T10:00:00Z', device: null, ...over })
+  const held = (over: Partial<NonNullable<typeof letter.hold>> = {}) => ({ kind: 'checkout' as const, by: me, since: '2026-11-03T10:00:00Z', device: null, heldOn: null, ...over })
+  // The hold's own section, above the tabs (DetailsPanel.test.tsx has its rows)
+  const info = async (name = 'Check-Out Info') => within(await details()).findByRole('group', { name })
+  const value = (section: HTMLElement, label: string) => within(section).getByText(label).nextElementSibling?.textContent
 
   it('checks a free document out, and shows it held by you', async () => {
     let doc = letter
@@ -76,38 +79,38 @@ describe('Check Out, Check In and Release in the details', () => {
     )
     await userEvent.click(await button('Check Out'))
 
-    expect(await within(await details()).findByText(/Checked out by you since/)).toBeTruthy()
+    expect(value(await info(), 'User')).toBe('Priya Nair (You)')
     expect(api.callsTo('POST /v1/documents/10388/checkout')).toHaveLength(1)
     expect(within(await details()).queryByRole('button', { name: 'Check Out' })).toBeNull()
     expect(within(await details()).getByRole('button', { name: 'Check In' })).toBeTruthy()
     expect(within(await details()).getByRole('button', { name: 'Release' })).toBeTruthy()
   })
 
-  it("shows who has someone else's check-out and since when, and offers no Check Out or take-over", async () => {
+  it("shows who has someone else's check-out, and offers no Check Out or take-over", async () => {
     const theirs = document({ ...letter, canEdit: false, hold: held({ by: { id: 9, name: 'Alex Marsh' } }) })
     await renderApp('/folders/7?sel=10388', routes(theirs))
 
+    expect(value(await info(), 'User')).toBe('Alex Marsh')
     const panel = await details()
-    expect(await within(panel).findByText(/Checked out by Alex Marsh since/)).toBeTruthy()
-    expect(within(panel).getByText(/Classic Interface \(Unlock\)/)).toBeTruthy()
     expect(within(panel).queryByRole('button', { name: /Check Out|Check In|Release/ })).toBeNull()
   })
 
-  it('says a check-out you hold on a computer is released there, and offers no way to take it over', async () => {
-    const mine = document({ ...letter, canEdit: false, hold: held({ device: { id: 'd1', name: 'Healdan Helper on MacBook', app: 'Word' } }) })
+  // Where it's released isn't said any more (the owner's dogfooding punch list, 2026-11-14): the section says where it's held
+  it('shows your check-out on a computer, and offers no way to take it over or words on where to release it', async () => {
+    const onMac = { name: 'Healdan Helper on MacBook', app: 'Word' }
+    const mine = document({ ...letter, canEdit: false, hold: held({ device: { id: 'd1', ...onMac }, heldOn: onMac }) })
     await renderApp('/folders/7?sel=10388', routes(mine))
 
+    expect(value(await info(), 'Computer')).toBe('Healdan Helper on MacBook')
     const panel = await details()
-    expect(await within(panel).findByText(/Checked out by you on Healdan Helper on MacBook since/)).toBeTruthy()
-    expect(within(panel).getByText(/Release it on that computer, or in the Classic Interface \(Unlock\)/)).toBeTruthy()
+    expect(within(panel).queryByText(/Release it|released on|Classic Interface \(Unlock\)/)).toBeNull()
     expect(within(panel).queryByRole('button', { name: /Check Out|Check In|Release/ })).toBeNull()
   })
 
   it('says a lock you took yourself is yours, as the check-out does', async () => {
     const mine = document({ ...letter, canEdit: false, hold: held({ kind: 'lock' }) })
     await renderApp('/folders/7?sel=10388', routes(mine))
-    expect(await within(await details()).findByText(/^Locked by you since/)).toBeTruthy()
-    expect(within(await details()).queryByText(/Locked by Priya Nair/)).toBeNull()
+    expect(value(await info('Lock Info'), 'User')).toBe('Priya Nair (You)')
   })
 
   it('offers only files of the document\'s kind to check in, and says so when the server refuses another', async () => {
@@ -123,11 +126,12 @@ describe('Check Out, Check In and Release in the details', () => {
     expect(screen.queryByText('Some details need fixing.')).toBeNull()
   })
 
-  it('says a lock is undone in the Classic Interface', async () => {
+  it("shows who has a lock, and offers no Check Out, without words on where it's undone", async () => {
     const locked = document({ ...letter, canEdit: false, hold: held({ kind: 'lock', by: { id: 9, name: 'Alex Marsh' } }) })
     await renderApp('/folders/7?sel=10388', routes(locked))
-    expect(await within(await details()).findByText(/Locked by Alex Marsh since/)).toBeTruthy()
-    expect(within(await details()).getByText(/Unlock it in the Classic Interface/)).toBeTruthy()
+    expect(value(await info('Lock Info'), 'User')).toBe('Alex Marsh')
+    expect(within(await details()).queryByText(/Unlock it in the Classic Interface/)).toBeNull()
+    expect(within(await details()).queryByRole('button', { name: /Check Out|Check In|Release/ })).toBeNull()
   })
 
   it('releases your own web check-out', async () => {
@@ -141,7 +145,7 @@ describe('Check Out, Check In and Release in the details', () => {
     )
     await userEvent.click(await button('Release'))
 
-    await waitFor(async () => expect(within(await details()).queryByText(/Checked out by you/)).toBeNull())
+    await waitFor(async () => expect(within(await details()).queryByRole('group', { name: 'Check-Out Info' })).toBeNull())
     expect(api.callsTo('DELETE /v1/documents/10388/checkout')).toHaveLength(1)
     expect(await button('Check Out')).toBeTruthy()
   })
@@ -178,6 +182,7 @@ describe('Check Out, Check In and Release in the details', () => {
   it('keeps Preview on each version for a person who may not download, and disables only its Download', async () => {
     await renderApp('/folders/7?sel=10388', routes(document({ ...letter, canOpen: false })))
     const panel = await details()
+    await userEvent.click(await within(panel).findByRole('tab', { name: /^Versions/ }))
     expect(((await within(panel).findByRole('button', { name: 'Preview Version 2.1' })) as HTMLButtonElement).disabled).toBe(false)
     expect((within(panel).getByRole('button', { name: 'Download Version 2.1' }) as HTMLButtonElement).disabled).toBe(true)
   })
@@ -190,7 +195,7 @@ describe('Check Out, Check In and Release in the details', () => {
   it('passes axe with a hold shown', async () => {
     const theirs = document({ ...letter, canEdit: false, hold: held({ by: { id: 9, name: 'Alex Marsh' } }) })
     await renderApp('/folders/7?sel=10388', routes(theirs))
-    await within(await details()).findByText(/Checked out by Alex Marsh/)
+    await info()
     await expectNoAxeViolations(await details())
   })
 })

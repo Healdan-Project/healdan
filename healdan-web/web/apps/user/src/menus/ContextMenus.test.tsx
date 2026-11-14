@@ -107,7 +107,7 @@ describe("a document row's menu", () => {
   })
 
   it('offers Check In and Release for the person’s own web check-out, in place of Check Out', async () => {
-    const mine = doc({ ...plan, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null } })
+    const mine = doc({ ...plan, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null, heldOn: null } })
     const { all } = routes({ 'GET /v1/folders/7/children': children([letter, lease, mine]) })
     const { api } = await renderApp('/folders/7', { ...all, 'DELETE /v1/documents/10433/checkout': () => doc({ ...plan, hold: null }) })
     fireEvent.contextMenu(await row(/Plan/))
@@ -117,7 +117,7 @@ describe("a document row's menu", () => {
   })
 
   it('checks in a file it asks for, of the document’s kind', async () => {
-    const mine = doc({ ...plan, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null } })
+    const mine = doc({ ...plan, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null, heldOn: null } })
     const { all } = routes({ 'GET /v1/folders/7/children': children([letter, lease, mine]) })
     const { api } = await renderApp('/folders/7', { ...all, 'POST /v1/documents/10433/versions': () => doc({ ...plan, hold: null }) })
     fireEvent.contextMenu(await row(/Plan/))
@@ -142,7 +142,7 @@ describe("a document row's menu", () => {
     await waitFor(async () => expect(within(await toolbar()).getByRole('button', { name: 'Check Out' }).hasAttribute('disabled')).toBe(true))
     fireEvent.contextMenu(await row(/Lease/))
     expect((await item('Check Out')).getAttribute('aria-disabled')).toBe('true')
-    finish(doc({ ...lease, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null } }))
+    finish(doc({ ...lease, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null, heldOn: null } }))
   })
 
   it('adds the document to Favorites', async () => {

@@ -34,18 +34,23 @@ describe('DocResult', () => {
     expect(await within(panel).findByRole('heading', { level: 2, name: 'Letter from Dunmere Pryce.pdf' })).toBeTruthy()
     // The # goes to the server as typed, encoded as a query value
     expect(api.callsTo('GET /v1/lookup')[0]!.query).toEqual({ q: '#10388' })
-    // No version was named, so none is marked in Versions
+    // No version was named, so the details start on Properties, and none is marked in Versions
+    expect(within(panel).getByRole('tab', { name: 'Properties' }).getAttribute('aria-selected')).toBe('true')
+    await userEvent.click(await within(panel).findByRole('tab', { name: /^Versions/ }))
     await within(panel).findAllByRole('listitem')
-    const versions = within(panel).getByRole('group', { name: 'Versions' })
+    const versions = within(panel).getByRole('tabpanel', { name: /^Versions/ })
     expect(within(versions).getAllByRole('listitem').every((item) => item.getAttribute('aria-current') === null)).toBe(true)
   })
 
-  it('selects the version in the address in Versions', async () => {
+  // Spec 6.3: "#10388.2 selects version 2 in the details", which are in the Versions tab since the owner's dogfooding punch
+  // list (2026-11-14): a # that names a version opens it
+  it('opens the Versions tab with the version in the address marked', async () => {
     const { api } = await renderApp('/doc/10388.2', routes())
 
     const panel = await screen.findByRole('region', { name: 'Details' })
     await within(panel).findAllByRole('listitem')
-    const versions = within(panel).getByRole('group', { name: 'Versions' })
+    expect(within(panel).getByRole('tab', { name: /^Versions/ }).getAttribute('aria-selected')).toBe('true')
+    const versions = within(panel).getByRole('tabpanel', { name: /^Versions/ })
     const marked = within(versions).getAllByRole('listitem').filter((item) => item.getAttribute('aria-current') === 'true')
     expect(marked).toHaveLength(1)
     // The server answers a bare major with its latest snapshot, 2.1 here, not the whole version 2.0
@@ -125,8 +130,10 @@ describe('DocResult', () => {
       const { api } = await renderApp('/doc/10388', long('250.0'))
       const panel = await screen.findByRole('region', { name: 'Details' })
 
+      // The tab counts them all, not the page
+      await userEvent.click(await within(panel).findByRole('tab', { name: 'Versions (250)' }))
       await within(panel).findAllByRole('listitem')
-      const versions = within(panel).getByRole('group', { name: 'Versions' })
+      const versions = within(panel).getByRole('tabpanel', { name: 'Versions (250)' })
       expect(within(versions).getAllByRole('listitem')).toHaveLength(200)
       expect(api.callsTo('GET /v1/documents/10388/versions')[0]!.query).toMatchObject({ limit: 200 })
 
@@ -151,7 +158,6 @@ describe('DocResult', () => {
     await renderApp('/doc/10388.2', routes())
     const panel = await screen.findByRole('region', { name: 'Details' })
     await within(panel).findAllByRole('listitem')
-    await within(panel).findAllByRole('term')
     await waitFor(() => expect(within(main()).getAllByRole('row')).toHaveLength(2))
     await expectNoAxeViolations(document.body)
   })

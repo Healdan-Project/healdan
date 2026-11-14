@@ -1,0 +1,61 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The helper's segmented control: equal segments on a Pill track, the selected one raised on the secondary button's face
+   with its edge. Pill and that face hold --hd-text only (tokens.test.ts), which every label is. The selected label is
+   bolder as well, so the state doesn't rest on the faces' small difference in lightness. */
+.tabs {
+  display: flex;
+  flex-direction: column;
+}
+
+.list {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: var(--hd-space-1);
+  padding: var(--hd-space-1);
+  border-radius: var(--hd-radius);
+  background: var(--hd-pill);
+}
+
+.tab {
+  min-height: 22px;
+  padding: 0 var(--hd-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--hd-radius-small);
+  color: var(--hd-text);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 20px;
+  cursor: default;
+}
+
+.tab[data-selected] {
+  border-color: var(--hd-button-secondary-line);
+  background: var(--hd-button-secondary);
+  box-shadow: 0 1px 2px var(--hd-scrim);
+  font-weight: var(--hd-weight-bold);
+}
+
+.tab[data-hovered]:not([data-selected]) {
+  background: var(--hd-selection-inactive);
+}
+
+.tab[data-focus-visible] {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
+.panel {
+  padding-top: var(--hd-space-4);
+}
+
+/* A panel with nothing focusable in it takes the focus itself, as React Aria makes it */
+.panel[data-focus-visible] {
+  border-radius: var(--hd-radius-small);
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}

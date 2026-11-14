@@ -150,8 +150,33 @@ public class DeviceHolds {
 	 *         record is older than the check-out
 	 */
 	public Optional<HoldDevice> current(Document doc) {
+		return held(doc).map(Held::row);
+	}
+
+	/**
+	 * A device's record of a check-out, and what the device is called
+	 *
+	 * @param row the record
+	 * @param name the name of the token it was last written through, revoked
+	 *        or not; null if the token has none
+	 */
+	public record Held(HoldDevice row, String name) {
+	}
+
+	/**
+	 * As {@link #current(Document)}, with the device's name, read from the
+	 * same token row the check reads, so a list of documents reads it once
+	 * per document
+	 *
+	 * @param doc a document, as it is now
+	 * @return the record and the device's name; empty as {@link #current}
+	 */
+	public Optional<Held> held(Document doc) {
 		HoldDevice row = find(doc);
-		return row != null && row.getDevice() != null && upToDate(doc, row) ? Optional.of(row) : Optional.empty();
+		if (row == null || row.getDevice() == null)
+			return Optional.empty();
+		RecordedToken token = holder(doc, row);
+		return token != null ? Optional.of(new Held(row, token.name())) : Optional.empty();
 	}
 
 	/**
@@ -294,14 +319,22 @@ public class DeviceHolds {
 	 *         token, and no check-out came after the record was written
 	 */
 	private boolean upToDate(Document doc, HoldDevice row) {
+		return holder(doc, row) != null;
+	}
+
+	/**
+	 * @return the record's token if the record is up to date
+	 *         ({@link #upToDate}); otherwise null
+	 */
+	private RecordedToken holder(Document doc, HoldDevice row) {
 		if (doc.getStatus() != DocumentStatus.CHECKEDOUT || doc.getLockUserId() == null || row.getTokenId() == null)
-			return false;
+			return null;
 		// The check-out changed hands, whatever the history kept
 		RecordedToken token = token(row.getTokenId());
 		if (token == null || token.userId() != doc.getLockUserId())
-			return false;
+			return null;
 		Date latest = latestCheckout(doc.getId());
-		return latest == null || latest.getTime() <= row.getLastModified().getTime();
+		return latest == null || latest.getTime() <= row.getLastModified().getTime() ? token : null;
 	}
 
 	/**

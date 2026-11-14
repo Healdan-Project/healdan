@@ -25,10 +25,10 @@ Your administrator can add more properties.
 
 ## Editing in the App
 
-Choose **Edit** in a document's details. The properties become a form, made from the profile, so your firm's own
-properties are in it.
+Choose **Edit Properties**, at the top of the **Properties** tab in a document's details. The properties become a
+form, made from the profile, so your firm's own properties are in it.
 
-![The details of Service Charge Budget 2026–27.xlsx, # 30, with its properties as a form: Client and Matter as text; Author with "Pri" typed and its list open, offering Jamie Clarke, the person it has now, first, then Priya Nair; Class (required) Finance, Subclass Statement, Comments and Legacy doc # as fields; and the Save and Cancel buttons](edit-properties.png)
+![The details of Service Charge Budget 2026–27.xlsx, # 30, on the Properties tab after Edit Properties, which is greyed out while its properties are a form: Client and Matter as text; Author with "Pri" typed and its list open, offering Jamie Clarke, the person it has now, first, then Priya Nair; Class (required) Finance, Subclass Statement, Comments and Legacy doc # as fields; and the Save and Cancel buttons](edit-properties.png)
 
 - **A required property has a \* after its name.** Class is required.
 - **A property picked from a list offers only its options.** A Subclass offers only the ones that belong to the Class
@@ -47,7 +47,8 @@ properties are in it.
 - **A property Healdan refuses is marked** under its field, such as "That is too long." or "That isn't one of the
   choices.", and nothing is saved until all of them are right.
 
-**Edit** is greyed out when you can't change the document's properties: you don't have the Write permission, someone
+**Edit Properties** is greyed out while the form is open, and when you can't change the document's properties: you
+don't have the Write permission, someone
 else has it checked out or locked, it's checked out to you on another computer, or it's protected by a password.
 
 ## Comments

@@ -2778,7 +2778,7 @@ components:
       type: object
       description: Who has a document checked out or locked
       additionalProperties: false
-      required: [kind, by, since, device]
+      required: [kind, by, since, device, heldOn]
       properties:
         kind:
           type: string
@@ -2805,7 +2805,37 @@ components:
             The computer that holds the check-out, shown only to the user who
             holds it. Null for anyone else, for a lock, and when no device
             holds it: a check-out from the web page, or from a token with no
-            device.
+            device. A client takes a check-out whose `device` is its own for
+            its own, so only the holder gets it: `heldOn` is for showing.
+        heldOn:
+          oneOf:
+            - $ref: '#/components/schemas/HeldOnView'
+            - type: 'null'
+          description: |
+            The computer and app the check-out is held on, for showing, given
+            to the user who holds it and to administrators, so an
+            administrator can say which computer to check it in on. Null for
+            anyone else, for a lock, and when no device holds it, as
+            `device` is. Problems that carry the `hold` give it on the same
+            terms.
+    HeldOnView:
+      type: object
+      description: |
+        The computer and app a check-out is held on, for showing. It has no
+        device id: it isn't for telling a client's own check-outs apart.
+      additionalProperties: false
+      required: [name, app]
+      properties:
+        name:
+          type: [string, 'null']
+          description: |
+            What the computer is called: the name of the token it last wrote
+            through, such as `Healdan Helper on MacBook`. Null when the
+            server's data doesn't say.
+        app:
+          type: [string, 'null']
+          description: The app its check-out named, or null
+          examples: [LibreOffice]
     DeviceView:
       type: object
       description: The computer that holds a check-out

@@ -216,7 +216,8 @@ Errors are RFC 9457 problems, sent as `application/problem+json`:
   "status": 409,
   "detail": "Document #1234 is checked out to Jamie Clarke.",
   "code": "checked-out",
-  "hold": { "kind": "checkout", "by": { "id": 8, "name": "Jamie Clarke" }, "since": "2026-10-23T15:00:00Z" }
+  "hold": { "kind": "checkout", "by": { "id": 8, "name": "Jamie Clarke" }, "since": "2026-10-23T15:00:00Z",
+            "device": null, "heldOn": null }
 }
 ```
 
@@ -505,7 +506,13 @@ this, because the same person may have the document open on two computers.
 
 - **The hold names its device.** `hold.device` (`id`, `name`, `app`) is shown only to the user who holds the
   check-out. It is `null` for anyone else, for a lock, and when no device holds it: a check-out from the web page,
-  from Healdan's own pages on the web session, or from a token that signed in with no device.
+  from Healdan's own pages on the web session, or from a token that signed in with no device. A client treats a
+  check-out whose `device` is its own as its own, so nobody else gets it.
+- **The hold says where it's held, for showing.** `hold.heldOn` (`name`, `app`) is the computer's name and the app,
+  with no device id. It's given to the user who holds the check-out and to administrators, so an administrator can
+  say which computer to check it in on, and it's `null` for anyone else, for a lock, and when no device holds it.
+  Problems that carry the `hold`, such as `409 checked-out` and `held-elsewhere`, give it on the same terms. Show
+  it; never decide anything by it.
 - **`POST /documents/{docNumber}/checkout`** takes an optional body: `{"app": "LibreOffice"}` records the app the
   document is opened in, and `{"move": true}` moves your own check-out from another of your devices to this one.
   The move is recorded in the history as a check-out. Edits the other device hasn't saved are not in Healdan.

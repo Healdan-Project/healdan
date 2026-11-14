@@ -9,11 +9,14 @@ import { renderWithRouter } from '../test/renderWithRouter'
 import css from './details.module.css?raw'
 import { Properties } from './Properties'
 
+// The Properties tab names the list (DetailsPanel), so it's found by its first label
+const listed = async () => (await screen.findAllByRole('term'))[0]!.closest('dl') as HTMLElement
+
 describe('Properties', () => {
   it('starts with Location in search results, linking to the folder', async () => {
     await renderWithRouter(<Properties document={letter} fields={propertiesOf()} context="search" />)
 
-    const list = await screen.findByRole('group', { name: 'Properties' })
+    const list = await listed()
     expect(within(list).getAllByRole('term')[0]!.textContent).toBe('Location')
     const link = within(list).getByRole('link', { name: 'Correspondence' })
     expect(link.getAttribute('href')).toBe('/app/folders/111')
@@ -22,7 +25,7 @@ describe('Properties', () => {
   it('has no Location in a folder, where the folder is the view', async () => {
     await renderWithRouter(<Properties document={letter} fields={propertiesOf()} context="folder" />)
 
-    const list = await screen.findByRole('group', { name: 'Properties' })
+    const list = await listed()
     expect(within(list).queryByText('Location')).toBeNull()
     expect(within(list).queryByRole('link')).toBeNull()
   })
@@ -33,7 +36,7 @@ describe('Properties', () => {
       <Properties document={bare} fields={propertiesOf({ docsubclass: null, author: null }).filter((f) => f.name !== 'typist')} context="folder" />,
     )
 
-    const list = await screen.findByRole('group', { name: 'Properties' })
+    const list = await listed()
     const value = (label: string) => within(list).getByText(label).nextElementSibling?.textContent
     expect(value('Subclass')).toBe('None')
     expect(value('Author')).toBe('None')
@@ -44,7 +47,7 @@ describe('Properties', () => {
     const bare = document({ docNumber: 1, author: { username: 'jclarke', displayName: 'jclarke' } })
     await renderWithRouter(<Properties document={bare} fields={propertiesOf({ author: { id: 3, name: null }, typist: { id: 5, name: null } })} context="folder" />)
 
-    const list = await screen.findByRole('group', { name: 'Properties' })
+    const list = await listed()
     const value = (label: string) => within(list).getByText(label).nextElementSibling?.textContent
     // The Author is the document's, which the server names by its username when it has no name
     expect(value('Author')).toBe('jclarke')
@@ -59,7 +62,7 @@ describe('Properties', () => {
   it('shows no email field for a document that has none of them', async () => {
     await renderWithRouter(<Properties document={letter} fields={propertiesOf()} context="folder" />)
 
-    const list = await screen.findByRole('group', { name: 'Properties' })
+    const list = await listed()
     for (const label of ['From', 'To', 'Sent', 'Received']) expect(within(list).queryByText(label)).toBeNull()
   })
 })
