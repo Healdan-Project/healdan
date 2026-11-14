@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import type { components } from '@healdan/api'
 import { Icon, t, type ComboBoxSection } from '@healdan/ui'
-import { fileIcon } from '../fileIcon'
+import { fileIcon, matterIcon } from '../kindIcons'
 import { matterParts } from '../matterDisplay'
 import { keys } from '../queries'
 import { useApi } from '../services'
@@ -74,7 +74,7 @@ export function suggestionSections(answer: S['SuggestView'] | undefined, scope: 
       options: answer.matters.map((matter) => ({
         id: `m${matter.id}`,
         textValue: matterLabel(matter),
-        icon: <Icon name="briefcase" />,
+        icon: <Icon {...matterIcon} />,
         label: matterLabel(matter),
         meta: matter.client.name,
       })),
@@ -87,7 +87,7 @@ export function suggestionSections(answer: S['SuggestView'] | undefined, scope: 
       options: answer.documents.map((doc) => ({
         id: `d${doc.docNumber}`,
         textValue: doc.name,
-        icon: <Icon name={fileIcon(doc.name)} />,
+        icon: <Icon {...fileIcon(doc.name)} />,
         label: doc.name,
         meta: t('search.documentMeta', { n: doc.docNumber, matter: matterParts(doc.matter.display).number }),
       })),
