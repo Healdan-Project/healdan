@@ -96,7 +96,7 @@ Double-clicking the divider puts the pane back to its usual width too.
 - **The details and Filters** share one width, from 260 pixels to half the window. They start at 300.
 - **The preview,** once docked, keeps a width of its own, as a page needs more room than the details do. Until you
   change it, it takes a share of the window.
-- **The list keeps at least 464 pixels,** so on a smaller window the panes can't be made as wide.
+- **The list keeps at least 481 pixels,** so on a smaller window the panes can't be made as wide.
 
 Healdan remembers each width in this browser, so the panes are as you left them next time, but not in another browser
 or on another computer. A width that doesn't fit a smaller window is drawn as wide as fits, and comes back when the

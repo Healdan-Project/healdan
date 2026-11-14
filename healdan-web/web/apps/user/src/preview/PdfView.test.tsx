@@ -3,7 +3,6 @@
 
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { PaneFrame, PaneSplitter } from '../frame/PaneWidths'
 import { expectNoAxeViolations } from '../test/axe'
 import { document, problem } from '../test/fakeApi'
 import { pdf, resetPdf } from '../test/fakePdf'
@@ -16,7 +15,11 @@ const letter = document()
 const path = 'GET /v1/documents/10388/preview'
 
 beforeEach(resetPdf)
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 describe('PdfView', () => {
   it('draws page 1 and says which page it is of how many', async () => {
@@ -49,9 +52,9 @@ describe('PdfView', () => {
     vi.unstubAllGlobals()
   })
 
-  it('keeps the page as it was drawn while a divider is dragged, and draws it at the width the drag ends at', async () => {
+  it('keeps the page as it was drawn while its width changes, and draws it at the width it settles at', async () => {
     let room = 632
-    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => room)
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => room)
     const observers: (() => void)[] = []
     vi.stubGlobal(
       'ResizeObserver',
@@ -65,27 +68,19 @@ describe('PdfView', () => {
         disconnect() {}
       },
     )
-    renderPreview(
-      <PaneFrame className="">
-        <PaneSplitter name="preview" aria-label="Resize Preview" />
-        <PdfView document={letter} />
-      </PaneFrame>,
-      { [path]: () => pdfResponse() },
-    )
+    renderPreview(<PdfView document={letter} />, { [path]: () => pdfResponse() })
     await screen.findByText('Page 1 of 3')
     // Pages are 600 wide, and 32 is left round them
     await waitFor(() => expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(1))
-    const divider = screen.getByRole('separator', { name: 'Resize Preview' })
-    fireEvent.pointerDown(divider, { pointerId: 1, button: 0, clientX: 600, pointerType: 'mouse' })
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 560, pointerType: 'mouse' })
-    room = 932
-    act(() => observers.forEach((callback) => callback()))
-    await new Promise((done) => setTimeout(done, 50))
-    expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(1)
-    fireEvent.pointerUp(window, { pointerId: 1, clientX: 560, pointerType: 'mouse' })
+    // A divider dragged or the window's edge: widths come one after another, and the page waits for the last
+    for (const next of [700, 800, 932]) {
+      room = next
+      act(() => observers.forEach((callback) => callback()))
+      await new Promise((done) => setTimeout(done, 50))
+      expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(1)
+    }
     await waitFor(() => expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(1.5))
-    width.mockRestore()
-    vi.unstubAllGlobals()
+    expect(pdf.drawn.map((drawn) => drawn.scale).filter((scale) => scale > 1.01 && scale < 1.49)).toEqual([])
   })
 
   it('moves between pages, and stops at the first and the last', async () => {

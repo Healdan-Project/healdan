@@ -14,6 +14,13 @@ describe('the panes\' widths', () => {
     expect(initialWidth('preview', 1600)).toBe(previewInitial(1600))
   })
 
+  it('keep the list room for the columns it keeps beside the reading pane, its padding and its own scrollbar', () => {
+    // A search's hits: 220, 80 and 116 for the columns, 24 each side, and 17 for Windows' scrollbar
+    expect(MAIN_MIN).toBe(220 + 80 + 116 + 2 * 24 + 17)
+    // So on the narrowest wide window the details are a little narrower than their usual 300
+    expect(layoutFor(1024, {}).right).toBe(1024 - MAIN_MIN - LEFT.initial)
+  })
+
   it('let the left pane go from 180 to 420 pixels on a wide window', () => {
     expect(leftLimits(1600)).toEqual({ min: 180, max: 420 })
     expect(layoutFor(1600, { left: 100 }).left).toBe(180)
@@ -31,7 +38,7 @@ describe('the panes\' widths', () => {
     // 1,024 pixels is the narrowest wide window: room for the region at its narrowest is kept beside the list
     expect(leftLimits(1024)).toEqual({ min: 180, max: 1024 - MAIN_MIN - RIGHT.min })
     const layout = layoutFor(1024, { left: 420, right: 600, preview: 600 })
-    expect(layout.left).toBe(300)
+    expect(layout.left).toBe(1024 - MAIN_MIN - RIGHT.min)
     expect(layout.right).toBe(260)
     expect(1024 - layout.left - layout.right).toBe(MAIN_MIN)
     // The list never has less than its least, whatever was chosen
@@ -46,8 +53,8 @@ describe('the panes\' widths', () => {
 
   it('give the right region what the left pane leaves, and the left pane first', () => {
     // A wide left pane narrows what the region may take, and a narrower one gives it back
-    expect(layoutFor(1100, { left: 376, right: 500 }).right).toBe(1100 - MAIN_MIN - 376)
-    expect(layoutFor(1100, { left: 180, right: 500 }).right).toBe(456)
+    expect(layoutFor(1100, { left: 340, right: 500 }).right).toBe(1100 - MAIN_MIN - 340)
+    expect(layoutFor(1100, { left: 180, right: 500 }).right).toBe(1100 - MAIN_MIN - 180)
   })
 
   it('never let a limit fall below the least, even on a window too small for both panes', () => {

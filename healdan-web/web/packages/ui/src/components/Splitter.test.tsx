@@ -90,14 +90,32 @@ describe('Splitter', () => {
     expect(valueOf()).toBe(284)
   })
 
-  it('follows the reading direction in a right-to-left page', async () => {
+  it('follows the direction of a page drawn right to left', async () => {
+    render(
+      <div dir="rtl">
+        <Pane pane="start" minValue={180} maxValue={420} />
+      </div>,
+    )
+    await press('{ArrowLeft}')
+    expect(valueOf()).toBe(264)
+    fireEvent.pointerDown(separator(), { pointerId: 1, button: 0, clientX: 600, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 580, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 580, clientY: 300, pointerType: 'mouse' })
+    expect(valueOf()).toBe(284)
+  })
+
+  it('follows the page, not the browser\'s language, which a page drawn left to right may not share', async () => {
     render(
       <I18nProvider locale="ar-EG">
         <Pane pane="start" minValue={180} maxValue={420} />
       </I18nProvider>,
     )
-    await press('{ArrowLeft}')
+    await press('{ArrowRight}')
     expect(valueOf()).toBe(264)
+    fireEvent.pointerDown(separator(), { pointerId: 1, button: 0, clientX: 600, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 620, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 620, clientY: 300, pointerType: 'mouse' })
+    expect(valueOf()).toBe(284)
   })
 
   it('stops at the limits, goes to them with Home and End, and keeps nothing when it is already there', async () => {
@@ -156,6 +174,43 @@ describe('Splitter', () => {
     expect(valueOf()).toBe(410)
   })
 
+  it('reports and keeps nothing for a press that only jitters, moves up and down, or comes back where it began', () => {
+    const moved = vi.fn()
+    const kept = vi.fn()
+    // A width drawn at the limit, as a kept one is on a smaller window, which a press mustn't keep in its place
+    render(<Splitter aria-label="Resize Navigation" pane="start" value={500} minValue={180} maxValue={420} onResize={moved} onResizeEnd={kept} onReset={() => {}} />)
+    const element = separator()
+    fireEvent.pointerDown(element, { pointerId: 1, button: 0, clientX: 420, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 420, clientY: 320, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 421, clientY: 320, pointerType: 'mouse' })
+    expect(element.hasAttribute('data-dragging')).toBe(false)
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 421, clientY: 320, pointerType: 'mouse' })
+    expect(moved).not.toHaveBeenCalled()
+    expect(kept).not.toHaveBeenCalled()
+
+    fireEvent.pointerDown(element, { pointerId: 2, button: 0, clientX: 420, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 380, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 420, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 420, clientY: 300, pointerType: 'mouse' })
+    // The caller was told the drag came back, so it draws the pane as it was
+    expect(moved.mock.calls.map(([width]) => width)).toEqual([380, 420])
+    expect(kept).not.toHaveBeenCalled()
+    expect(document.documentElement.hasAttribute(RESIZING_ATTRIBUTE)).toBe(false)
+  })
+
+  it('reports the width a drag has reached again when its limits change while it lasts', () => {
+    const moved = vi.fn()
+    const { rerender } = render(<Splitter aria-label="Resize Navigation" pane="start" value={248} minValue={180} maxValue={420} onResize={moved} onResizeEnd={() => {}} onReset={() => {}} />)
+    fireEvent.pointerDown(separator(), { pointerId: 1, button: 0, clientX: 248, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 400, clientY: 300, pointerType: 'mouse' })
+    expect(moved).toHaveBeenLastCalledWith(400)
+    // The window narrowed: the caller drew what it kept, and is told the drag's width again, within the new limit
+    rerender(<Splitter aria-label="Resize Navigation" pane="start" value={248} minValue={180} maxValue={360} onResize={moved} onResizeEnd={() => {}} onReset={() => {}} />)
+    expect(moved).toHaveBeenLastCalledWith(360)
+    expect(valueOf()).toBe(360)
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 400, clientY: 300, pointerType: 'mouse' })
+  })
+
   it('narrows a pane after it as a touch drags it to the right', () => {
     render(<Pane pane="end" start={300} minValue={260} maxValue={640} />)
     const element = separator()
@@ -170,9 +225,12 @@ describe('Splitter', () => {
     const { unmount } = render(<Pane pane="start" minValue={180} maxValue={420} onResizeEnd={kept} />)
     fireEvent.pointerDown(separator(), { pointerId: 1, button: 0, clientX: 248, clientY: 300, pointerType: 'mouse' })
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 280, clientY: 300, pointerType: 'mouse' })
+    // As useMove's start does on iOS, which only its end, never reached here, undoes
+    document.documentElement.style.webkitUserSelect = 'none'
     unmount()
     expect(kept).toHaveBeenCalledWith(280)
     expect(document.documentElement.hasAttribute(RESIZING_ATTRIBUTE)).toBe(false)
+    expect(document.documentElement.style.webkitUserSelect).toBe('')
   })
 
   it('passes axe', async () => {

@@ -5,6 +5,8 @@
 // (or the defaults), and how far each divider may go. The list takes the rest, and is never squeezed for them: on a small
 // window the panes' limits shrink instead. In a narrow window the panes fold away, and none of this applies.
 
+import { clampWidth } from '@healdan/ui'
+
 /** The left pane, Navigation */
 export const LEFT = { min: 180, max: 420, initial: 248 }
 
@@ -12,10 +14,17 @@ export const LEFT = { min: 180, max: 420, initial: 248 }
 export const RIGHT = { min: 260, initial: 300 }
 
 /**
- * The least the list between them keeps: room for the three columns a list keeps beside the reading pane (spec section
- * 6.4), which for a search's hits are at least 416 pixels, and the view's padding of 24 on each side
+ * The widest scrollbar that takes room, Windows' (macOS shows one too when set to, and Linux's are a little narrower): the
+ * list scrolls itself, so its own scrollbar takes from its columns
  */
-export const MAIN_MIN = 464
+const SCROLLBAR = 17
+
+/**
+ * The least the list between them keeps: room for the three columns a list keeps beside the reading pane (spec section
+ * 6.4), which for a search's hits are at least 416 pixels, the view's padding of 24 on each side, and the list's scrollbar.
+ * The right region's border is inside its width (RightRegion.module.css).
+ */
+export const MAIN_MIN = 416 + 2 * 24 + SCROLLBAR
 
 /** Each pane whose width is remembered: the left pane, the right region with the details or Filters, and the reading pane */
 export type PaneName = 'left' | 'right' | 'preview'
@@ -46,9 +55,9 @@ export function initialWidth(name: PaneName, window: number): number {
   return name === 'left' ? LEFT.initial : name === 'right' ? RIGHT.initial : previewInitial(window)
 }
 
-/** The width within the limits, in whole pixels */
+/** The width within the limits, in whole pixels, as the divider holds it */
 export function within(width: number, { min, max }: Limits): number {
-  return Math.round(Math.min(max, Math.max(min, width)))
+  return clampWidth(width, min, max)
 }
 
 /**

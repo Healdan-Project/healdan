@@ -8,7 +8,7 @@ import { useNarrow } from './narrow'
 import { layoutFor, type Chosen, type PaneLayout, type PaneName } from './paneLayout'
 
 /** What the frame's dividers work with: the panes' widths now, and how a divider changes one */
-export interface PaneWidths {
+interface PaneWidths {
   /** A wide window: the panes beside the list have dividers. In a narrow one they fold away, and their widths are their own. */
   resizable: boolean
   layout: PaneLayout
@@ -41,9 +41,12 @@ function subscribe(onChange: () => void): () => void {
   return () => window.removeEventListener('resize', onChange)
 }
 
-/** The window's width, as it changes */
+/**
+ * The width the page is laid out in, as it changes: the layout viewport's, which the frame's grid has. Not innerWidth, which
+ * mobile Safari gives as the visual viewport's, smaller while the page is pinch-zoomed.
+ */
 function useWindowWidth(): number {
-  return useSyncExternalStore(subscribe, () => window.innerWidth, () => 1280)
+  return useSyncExternalStore(subscribe, () => document.documentElement.clientWidth, () => 1280)
 }
 
 const NOT_RESIZABLE: PaneWidths = {
@@ -55,16 +58,9 @@ const NOT_RESIZABLE: PaneWidths = {
 }
 
 const Context = createContext<PaneWidths>(NOT_RESIZABLE)
-// Apart, so what reads only this (a preview) isn't drawn again at each change of the window's width
-const ResizingContext = createContext(false)
 
-export function usePaneWidths(): PaneWidths {
+function usePaneWidths(): PaneWidths {
   return useContext(Context)
-}
-
-/** Whether a divider is being dragged: what is costly to draw at each width, such as a page of a PDF, can wait for the drag to end */
-export function usePanesResizing(): boolean {
-  return useContext(ResizingContext)
 }
 
 function properties(layout: PaneLayout): CSSProperties {
@@ -74,14 +70,14 @@ function properties(layout: PaneLayout): CSSProperties {
 /**
  * The frame's element, which holds the panes' widths as custom properties (`--left-width`, `--right-width` and
  * `--preview-width`) for the CSS of the left pane, the top bar and the right region. A drag sets them on the element as it
- * goes, so the list follows without the views being rendered again; only the drag's end changes state. In a narrow window
- * it sets none, so the folded panes keep their own widths, and what was chosen is used again when the window widens.
+ * goes, so the list follows without the views being rendered again; only the drag's end changes state. A render while a drag
+ * lasts (the window resized) draws what was kept, and the Splitter then reports the drag's width again. In a narrow window it
+ * sets none, so the folded panes keep their own widths, and what was chosen is used again when the window widens.
  */
 export function PaneFrame({ className, children }: { className: string; children: ReactNode }) {
   const narrow = useNarrow()
   const windowWidth = useWindowWidth()
   const [chosen, setChosen] = useState<Chosen>(remembered)
-  const [resizing, setResizing] = useState(false)
   const element = useRef<HTMLDivElement>(null)
   const layout = useMemo(() => layoutFor(windowWidth, chosen), [windowWidth, chosen])
 
@@ -93,12 +89,10 @@ export function PaneFrame({ className, children }: { className: string; children
         // The other panes too: a wider left pane can narrow the right region, down to its least, for the list to keep its room
         const drawn = layoutFor(windowWidth, { ...chosen, [name]: width })
         for (const pane of NAMES) element.current?.style.setProperty(PROPERTIES[pane], `${drawn[pane]}px`)
-        setResizing(true)
       },
       keep(name, width) {
         setChosen((before) => ({ ...before, [name]: width }))
         keepNumber(KEYS[name], width)
-        setResizing(false)
       },
       reset(name) {
         setChosen((before) => {
@@ -107,7 +101,6 @@ export function PaneFrame({ className, children }: { className: string; children
           return after
         })
         forget(KEYS[name])
-        setResizing(false)
       },
     }),
     [narrow, windowWidth, chosen, layout],
@@ -115,11 +108,9 @@ export function PaneFrame({ className, children }: { className: string; children
 
   return (
     <Context.Provider value={value}>
-      <ResizingContext.Provider value={resizing}>
-        <div ref={element} className={className} style={narrow ? undefined : properties(layout)}>
-          {children}
-        </div>
-      </ResizingContext.Provider>
+      <div ref={element} className={className} style={narrow ? undefined : properties(layout)}>
+        {children}
+      </div>
     </Context.Provider>
   )
 }

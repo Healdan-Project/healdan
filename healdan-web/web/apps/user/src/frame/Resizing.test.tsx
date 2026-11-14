@@ -3,7 +3,7 @@
 
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import { detailsRoutes } from '../test/details'
 import { children, document, folder, type Routes } from '../test/fakeApi'
@@ -15,6 +15,8 @@ import { resize, setViewport } from '../test/viewport'
 vi.mock('../preview/pdfEngine', () => import('../test/fakePdf'))
 
 beforeEach(resetPdf)
+// A test that refuses storage stops refusing it, whether or not it passed
+afterEach(() => vi.restoreAllMocks())
 
 // The dividers between the left pane, the list and the right region (spec section 6.1): dragged or moved by keys in a wide
 // window, remembered in this browser, and gone in a narrow one, where the panes fold away.
@@ -96,13 +98,47 @@ describe('the panes\' dividers', () => {
     setViewport(1100)
     await renderApp('/folders/7', routes())
     const separator = await navigation()
-    // 1,100 less the list's 464 and the right region's least, 260
-    expect(valueOf(separator)).toBe(376)
-    expect(separator.getAttribute('aria-valuemax')).toBe('376')
+    // 1,100 less the list's 481 and the right region's least, 260
+    expect(valueOf(separator)).toBe(359)
+    expect(separator.getAttribute('aria-valuemax')).toBe('359')
     expect(kept('left')).toBe('420')
     resize(1400)
     await waitFor(() => expect(valueOf(separator)).toBe(420))
     expect(drawn('--left-width')).toBe('420px')
+  })
+
+  it('keep nothing for a press that only jitters, so a kept width drawn at the limit comes back on a wider window', async () => {
+    window.localStorage.setItem('healdan.pane.left', '420')
+    setViewport(1100)
+    await renderApp('/folders/7', routes())
+    const separator = await navigation()
+    expect(valueOf(separator)).toBe(359)
+    fireEvent.pointerDown(separator, { pointerId: 1, button: 0, clientX: 359, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 359, clientY: 310, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 360, clientY: 310, pointerType: 'mouse' })
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 360, clientY: 310, pointerType: 'mouse' })
+    expect(kept('left')).toBe('420')
+    resize(1400)
+    await waitFor(() => expect(valueOf(separator)).toBe(420))
+  })
+
+  it('draw a drag the window resizes under from the width it has reached', async () => {
+    setViewport(1280)
+    await renderApp('/folders/7?sel=10388', routes())
+    await press(await screen.findByRole('separator', { name: 'Resize Details' }), '{End}')
+    expect(drawn('--right-width')).toBe('551px')
+    const separator = await navigation()
+    fireEvent.pointerDown(separator, { pointerId: 1, button: 0, clientX: 248, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 288, pointerType: 'mouse' })
+    // A wider left pane leaves the region less
+    expect(drawn('--right-width')).toBe('511px')
+    resize(1240)
+    expect(drawn('--left-width')).toBe('288px')
+    // 1,240 less the list's 481 and the dragged left pane's 288, not what the 248 kept would leave
+    expect(drawn('--right-width')).toBe('471px')
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 288, pointerType: 'mouse' })
+    await waitFor(() => expect(kept('left')).toBe('288'))
+    expect(drawn('--right-width')).toBe('471px')
   })
 
   it('aren\'t there in a narrow window, where the panes keep their own widths, and come back when it widens', async () => {
@@ -141,7 +177,6 @@ describe('the panes\' dividers', () => {
     expect(drawn('--left-width')).toBe('264px')
     await press(separator, '{Enter}')
     expect(valueOf(separator)).toBe(248)
-    vi.restoreAllMocks()
   })
 
   it('resize the details from their edge, widening them to the left, up to what the list leaves', async () => {
@@ -150,18 +185,18 @@ describe('the panes\' dividers', () => {
     const region = await screen.findByRole('region', { name: 'Details' })
     const separator = await screen.findByRole('separator', { name: 'Resize Details' })
     expect(separator.getAttribute('aria-controls')).toBe(region.id)
-    // Half the window is 640, but the list keeps 464 beside the left pane's 248
-    expect([valueOf(separator), separator.getAttribute('aria-valuemin'), separator.getAttribute('aria-valuemax')]).toEqual([300, '260', '568'])
+    // Half the window is 640, but the list keeps 481 beside the left pane's 248
+    expect([valueOf(separator), separator.getAttribute('aria-valuemin'), separator.getAttribute('aria-valuemax')]).toEqual([300, '260', '551'])
     await press(separator, '{ArrowLeft}')
     expect(valueOf(separator)).toBe(316)
     expect(drawn('--right-width')).toBe('316px')
     expect(kept('right')).toBe('316')
     await press(separator, '{End}')
-    expect(valueOf(separator)).toBe(568)
+    expect(valueOf(separator)).toBe(551)
     // A wider left pane leaves the region less
     await press(await navigation(), '{ArrowRight}')
-    expect(valueOf(screen.getByRole('separator', { name: 'Resize Details' }))).toBe(552)
-    expect(kept('right')).toBe('568')
+    expect(valueOf(screen.getByRole('separator', { name: 'Resize Details' }))).toBe(535)
+    expect(kept('right')).toBe('551')
   })
 
   it('give the reading pane a width of its own, which follows the window until it is chosen', async () => {

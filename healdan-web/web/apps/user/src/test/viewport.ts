@@ -4,15 +4,16 @@
 import { act } from '@testing-library/react'
 
 // jsdom has no matchMedia. This one answers the `(max-width: Npx)` queries the app asks, for the width a test sets, and tells
-// the listeners when `resize` changes it. The window's innerWidth, which the panes' dividers read, follows it, and `resize`
-// sends the window's resize event too.
+// the listeners when `resize` changes it. The page's layout width (the root element's clientWidth, which the panes' dividers
+// read) and the window's innerWidth follow it, and `resize` sends the window's resize event too.
 let width = 1280
 const listeners = new Set<() => void>()
-/** jsdom's own innerWidth */
+/** jsdom's own innerWidth, which its layout width (0, as it lays nothing out) is given too */
 const JSDOM_WIDTH = 1024
 
 function setInnerWidth(pixels: number) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: pixels })
+  Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: pixels })
 }
 
 function install() {

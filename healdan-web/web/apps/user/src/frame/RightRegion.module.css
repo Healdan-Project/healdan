@@ -2,9 +2,11 @@
    SPDX-License-Identifier: LGPL-3.0-only */
 
 /* --right-width and --preview-width are the widths the region's divider sets (PaneWidths.tsx), which the frame holds in a
-   wide window only; these fallbacks are the defaults. */
+   wide window only; these fallbacks are the defaults. Its border is inside its width, so the list has the rest to the pixel
+   (paneLayout.ts). */
 .region {
   flex: none;
+  box-sizing: border-box;
   width: var(--right-width, 300px);
   overflow: auto;
   border-inline-start: 1px solid var(--hd-line);

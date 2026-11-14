@@ -6,7 +6,6 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, type Api } from '@healdan/api'
 import { Button, Icon, t } from '@healdan/ui'
 import { ErrorPanel } from '../frame/ErrorPanel'
-import { usePanesResizing } from '../frame/PaneWidths'
 import { useApi } from '../services'
 import { NoPreview } from './NoPreview'
 import type { PdfFile } from './pdfEngine'
@@ -20,6 +19,8 @@ export const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3]
 const FIT = ZOOMS.indexOf(1)
 /** Room round a page, in CSS pixels */
 const MARGIN = 32
+/** How long a new width has to stay put before the page is drawn again at it */
+const SETTLE_MS = 150
 
 async function fetchPreview(api: Api, from: PreviewSource, signal: AbortSignal): Promise<Preview> {
   const response = await api.getResponse(from.path, from.query, { signal })
@@ -34,24 +35,36 @@ async function fetchPreview(api: Api, from: PreviewSource, signal: AbortSignal):
 }
 
 /**
- * The width of an element, as it changes: give the callback to its `ref`, which may come after the first render. While a
- * pane's divider is dragged it stays the width the page was last drawn at, and the width the drag ends at comes once it's
- * over: a page drawn again at each step of a drag would be blank for most of it.
+ * The width of an element, as it changes: give the callback to its `ref`, which may come after the first render. The first
+ * width comes at once, and a new one once it has stayed put for a moment: a page drawn again at each step of a resize (a
+ * pane's divider dragged, the window's edge, the window snapped to half the screen) would be blank for most of it.
  */
 function useWidth(): [(element: HTMLElement | null) => void, number] {
   const [element, setElement] = useState<HTMLElement | null>(null)
   const [width, setWidth] = useState(0)
-  const resizing = usePanesResizing()
-  const [shown, setShown] = useState(0)
-  if (!resizing && shown !== width) setShown(width)
   useLayoutEffect(() => {
     // An observer says the width when it starts watching, so the first width comes with it
     if (!element || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver(() => setWidth(element.clientWidth))
+    let shown = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const show = (next: number) => {
+      shown = next
+      setWidth(next)
+    }
+    const observer = new ResizeObserver(() => {
+      const next = element.clientWidth
+      clearTimeout(timer)
+      if (next === shown) return
+      if (shown === 0) show(next)
+      else timer = setTimeout(() => show(next), SETTLE_MS)
+    })
     observer.observe(element)
-    return () => observer.disconnect()
+    return () => {
+      observer.disconnect()
+      clearTimeout(timer)
+    }
   }, [element])
-  return [setElement, shown]
+  return [setElement, width]
 }
 
 /**

@@ -36,7 +36,7 @@ test.afterAll(async () => {
 
 const main = (page: Page) => page.getByRole('main')
 const width = async (locator: Locator) => (await locator.boundingBox())?.width ?? 0
-/** How far a pane's drawn width is from the width its divider says: the right region's edge adds a pixel */
+/** How far a pane's drawn width is from the width its divider says, which a fractional layout can round by a pixel */
 const off = async (locator: Locator, expected: number) => Math.abs((await width(locator)) - expected)
 const valueOf = async (separator: Locator) => Number(await separator.getAttribute('aria-valuenow'))
 

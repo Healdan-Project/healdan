@@ -1,9 +1,12 @@
 /* SPDX-FileCopyrightText: 2026 The Healdan Project
    SPDX-License-Identifier: LGPL-3.0-only */
 
-/* A target 24 pixels wide (WCAG 2.5.8) laid over the pane's edge: 4 pixels over the pane, inside its padding, and 20 over
-   the gutter beside it, so it takes no click from the tree's rows or the list's. It sits in a box whose inline end (a pane
-   before it) or inline start (a pane after it) is the pane's edge, and takes no room of its own. */
+/* A target 24 pixels wide (WCAG 2.5.8) laid over the pane's edge, so it takes no click from the tree's rows, the pane's
+   scrollbar or the list's. A pane before it (the left pane) scrolls with its scrollbar at that edge, inside its 1-pixel
+   border, so the divider covers only the border and lies 23 pixels over the gutter beside it. A pane after it (the right
+   region) has its scrollbar at its far edge, so the divider lies 4 pixels over the pane, inside its padding, and 20 over the
+   gutter. It sits in a box whose inline end (a pane before it) or inline start (a pane after it) is the pane's edge, and
+   takes no room of its own. */
 .splitter {
   position: absolute;
   inset-block: 0;
@@ -17,7 +20,7 @@
 }
 
 .splitter[data-pane='start'] {
-  inset-inline-end: -20px;
+  inset-inline-end: -23px;
 }
 
 .splitter[data-pane='end'] {
@@ -34,7 +37,7 @@
 }
 
 .splitter[data-pane='start']::before {
-  inset-inline-start: 2px;
+  inset-inline-start: 0;
 }
 
 .splitter[data-pane='end']::before {
