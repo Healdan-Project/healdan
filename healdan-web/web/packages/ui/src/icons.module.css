@@ -1,0 +1,47 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* Every icon keeps its size in a row whose text is cut short: a flex item would shrink before the text's ellipsis. */
+.icon {
+  flex: none;
+}
+
+/* An icon that stands for a kind of item draws in that kind's colour (tokens.css), but on a surface that sets
+   --hd-icon-on-fill in that colour instead. Every accent fill with text on it sets currentColor, the text's, as only it
+   passes there: a selected row in a list that has the focus, a focused menu item or option, the accent button
+   (components/*.module.css; icons.test.tsx checks each one does). */
+.wordProcessing {
+  color: var(--hd-icon-on-fill, var(--hd-kind-word-processing));
+}
+
+.spreadsheet {
+  color: var(--hd-icon-on-fill, var(--hd-kind-spreadsheet));
+}
+
+.presentation {
+  color: var(--hd-icon-on-fill, var(--hd-kind-presentation));
+}
+
+.pdf {
+  color: var(--hd-icon-on-fill, var(--hd-kind-pdf));
+}
+
+.email {
+  color: var(--hd-icon-on-fill, var(--hd-kind-email));
+}
+
+.picture {
+  color: var(--hd-icon-on-fill, var(--hd-kind-picture));
+}
+
+.folder {
+  color: var(--hd-icon-on-fill, var(--hd-kind-folder));
+}
+
+.matter {
+  color: var(--hd-icon-on-fill, var(--hd-kind-matter));
+}
+
+.client {
+  color: var(--hd-icon-on-fill, var(--hd-kind-client));
+}

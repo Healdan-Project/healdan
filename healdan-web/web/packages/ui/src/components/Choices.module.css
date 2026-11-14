@@ -62,6 +62,7 @@
   border-color: var(--hd-accent-fill);
   background: var(--hd-accent-fill);
   color: var(--hd-accent-on-fill);
+  --hd-icon-on-fill: currentColor;
 }
 
 .choice[data-selected] .dot {

@@ -233,6 +233,8 @@ describe('the scope and the words', () => {
     await renderApp('/', routes)
     const menu = await openScopes()
     expect(within(menu).getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Documents', 'Emails', 'Docs & Emails', 'Folders', 'Matters', 'Clients'])
+    // Each with its scope's icon, as the button shows it, in its kind's colour where it has one
+    expect(within(menu).getAllByRole('menuitem').map((i) => i.querySelector('svg')!.getAttribute('data-kind'))).toEqual([null, 'email', null, 'folder', 'matter', 'client'])
   })
 
   it('are Documents on the start page', async () => {

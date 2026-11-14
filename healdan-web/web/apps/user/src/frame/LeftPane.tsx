@@ -5,7 +5,7 @@ import { useQueries } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useId, useState, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
-import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, t, type IconName, type ItemMenu, type TreeNode } from '@healdan/ui'
+import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, t, type ItemMenu, type TreeNode } from '@healdan/ui'
 import { useMyMattersChange } from '../actions/myMatters'
 import { carriesRows, placeOf, takesDrag, type Place } from '../filing/dropTargets'
 import { useFiling } from '../filing/FilingProvider'
@@ -13,19 +13,13 @@ import { FavoriteMenuItems, folderMenu, MatterMenuItems } from '../menus/Context
 import { useOrganising } from '../organising/OrganisingProvider'
 import { fetchSubfolders, idFrom, keys, useFavorites, useFolder, useMyMatters, useRecentMatters } from '../queries'
 import { useApi } from '../services'
-import { recentKinds } from '../search/scopes'
+import { fileIcon, folderIcon, matterIcon } from '../kindIcons'
+import { recentKinds, scopeIcons } from '../search/scopes'
 import { ErrorPanel } from './ErrorPanel'
 import { messageFor } from './errors'
 import styles from './LeftPane.module.css'
 
 type S = components['schemas']
-
-const recentIcons: Record<(typeof recentKinds)[number], IconName> = {
-  documents: 'document',
-  emails: 'email',
-  folders: 'folder',
-  clients: 'building',
-}
 
 /**
  * A section of the pane. With a `menu`, its links have a right-click menu, by the key each carries as `data-menu-key`
@@ -90,7 +84,8 @@ function RecentSection() {
           return (
             <li key={kind}>
               <Link to="/recent/$kind" params={{ kind }} className={styles.entry} aria-current={here ? 'page' : undefined}>
-                <Icon name={recentIcons[kind]} />
+                {/* Each entry is also a scope, so it has the scope's icon */}
+                <Icon {...scopeIcons[kind]} />
                 {t(`recent.${kind}`)}
               </Link>
             </li>
@@ -127,7 +122,7 @@ function RecentMattersSection() {
                 className={styles.entry}
                 aria-current={currentFolder(pathname) === String(matter.folderId) ? 'page' : undefined}
               >
-                <Icon name="briefcase" />
+                <Icon {...matterIcon} />
                 <span className={styles.text}>
                   <MatterLabel matter={matter} />
                 </span>
@@ -141,10 +136,9 @@ function RecentMattersSection() {
 }
 
 function folderLabel(folder: S['FolderView']): ReactNode {
-  const icon: IconName = folder.kind === 'searchFolder' ? 'folderSearch' : 'folder'
   return (
     <>
-      <Icon name={icon} />
+      <Icon {...folderIcon(folder.kind)} />
       <span className={styles.text}>{folder.name}</span>
     </>
   )
@@ -222,7 +216,7 @@ function MyMattersSection() {
       textValue: `${matter.display} ${matter.client.name}`,
       label: (
         <>
-          <Icon name="briefcase" />
+          <Icon {...matterIcon} />
           <span className={styles.text}>
             <MatterLabel matter={matter} />
           </span>
@@ -304,12 +298,12 @@ function FavoritesSection() {
             <li key={favorite.id}>
               {favorite.item.type === 'document' ? (
                 <Link to="/doc/$ref" params={{ ref: String(favorite.item.docNumber) }} data-menu-key={String(favorite.id)} className={styles.entry}>
-                  <Icon name="star" />
+                  <Icon {...fileIcon(favorite.item.name)} />
                   <span className={styles.text}>{favorite.item.name}</span>
                 </Link>
               ) : (
                 <Link to="/folders/$id" params={{ id: String(favorite.item.id) }} data-menu-key={String(favorite.id)} className={styles.entry}>
-                  <Icon name="star" />
+                  <Icon {...folderIcon(favorite.item.kind)} />
                   <span className={styles.text}>{favorite.item.name}</span>
                 </Link>
               )}

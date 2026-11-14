@@ -5,6 +5,8 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
+import '../tokens.css'
+import { Icon } from '../icons'
 import { Menu, MenuItem } from './Menu'
 import { Tree, type TreeNode, type TreeProps } from './Tree'
 
@@ -58,6 +60,26 @@ describe('Tree', () => {
     const first = screen.getAllByRole('button', { name: /expand/i })[0] as HTMLElement
     fireEvent.click(first)
     expect(screen.getByRole('row', { name: /Correspondence/ })).toBeTruthy()
+  })
+
+  it('draws a label\'s icon whole and in its kind\'s colour, on the open row too', () => {
+    const matter = (id: string, name: string): TreeNode => ({
+      id,
+      textValue: name,
+      label: (
+        <>
+          <Icon name="briefcase" kind="matter" />
+          {name}
+        </>
+      ),
+    })
+    render(<Tree aria-label="My Matters" nodes={[matter('m1', '1001.1 – Charter Dispute – MV Northern Star'), matter('m2', '1002.1')]} expanded={new Set()} onExpandedChange={vi.fn()} onAction={vi.fn()} current="m1" />)
+    for (const name of [/1001\.1/, /1002\.1/]) {
+      const icon = screen.getByRole('row', { name }).querySelector('svg')!
+      // A long label is cut short, never its icon
+      expect(getComputedStyle(icon).flexShrink).toBe('0')
+      expect(getComputedStyle(icon).color).toBe('rgb(138, 90, 0)')
+    }
   })
 
   it('reports an expansion once, and an action on a row', () => {

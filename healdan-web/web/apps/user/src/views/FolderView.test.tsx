@@ -79,9 +79,10 @@ describe('FolderView', () => {
     const rows = dataRows()
     expect(rows).toHaveLength(8)
     expect(within(rows[0]!).getByRole('rowheader').textContent).toBe('Drafts')
-    expect(rows[0]!.querySelector('.tabler-icon-folder')).toBeTruthy()
+    expect(rows[0]!.querySelector('.tabler-icon-folder')!.getAttribute('data-kind')).toBe('folder')
     const cells = within(rows[2]!).getAllByRole('gridcell').map((c) => c.textContent)
     expect(within(rows[2]!).getByRole('rowheader').textContent).toBe('Letter to Dunmere Pryce.docx')
+    expect(rows[2]!.querySelector('.tabler-icon-file-type-docx')!.getAttribute('data-kind')).toBe('wordProcessing')
     // Doc #, the file's version in Healdan's numbering, the Author's name and the edit date
     expect(cells).toEqual(['10431', '3', 'Priya Nair', 'Oct 3, 2026'])
 

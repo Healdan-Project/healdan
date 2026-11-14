@@ -7,6 +7,7 @@ import { apiPath, type components } from '@healdan/api'
 import { Button, Dialog, Icon, plural, t, TextField, toast } from '@healdan/ui'
 import type { Movable } from '../actions/batch'
 import { messageFor } from '../frame/errors'
+import { folderIcon, matterIcon } from '../kindIcons'
 import { fetchSubfolders, keys, useFolder, useMyMatters, useRecentMatters } from '../queries'
 import { matterLabel, suggestable, useSuggestions } from '../search/Suggestions'
 import { useApi } from '../services'
@@ -66,7 +67,7 @@ function MatterChoices({ matters, onChoose }: { matters: S['MatterView'][]; onCh
     <ul className={styles.list}>
       {matters.map((matter) => (
         <Choice key={matter.id} onPress={() => onChoose(matter.folderId)}>
-          <Icon name="briefcase" />
+          <Icon {...matterIcon} />
           <span className={styles.matter}>
             {matter.display} <span className={styles.client} data-client>{matter.client.name}</span>
           </span>
@@ -108,7 +109,7 @@ function Matters({ onChoose }: { onChoose: (folderId: number) => void }) {
           <ul className={styles.list} aria-label={t('matters.title')}>
             {found?.matters.map((matter) => (
               <Choice key={matter.id} onPress={() => void open(matter.id)}>
-                <Icon name="briefcase" />
+                <Icon {...matterIcon} />
                 <span className={styles.matter}>
                   {matterLabel(matter)} <span className={styles.client} data-client>{matter.client.name}</span>
                 </span>
@@ -162,7 +163,7 @@ function Folders({ trail, onOpen, onBack, onChoose }: { trail: number[]; onOpen:
         <ul className={styles.list} aria-label={view ? t('move.folders', { name: view.name }) : undefined}>
           {folders.map((one) => (
             <Choice key={one.id} onPress={() => onOpen(one.id)}>
-              <Icon name="folder" /> {one.name}
+              <Icon {...folderIcon()} /> {one.name}
             </Choice>
           ))}
         </ul>

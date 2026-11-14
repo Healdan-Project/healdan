@@ -16,6 +16,13 @@ describe('NoPreview', () => {
     expect(screen.getByRole('button', { name: 'Download' })).toBeTruthy()
   })
 
+  it('shows the icon of the file\'s kind, in its colour', () => {
+    const { container } = renderPreview(<NoPreview document={document({ name: 'Board Deck.pptx' })} />)
+    const icon = container.querySelector('svg')!
+    expect(icon.getAttribute('class')).toContain('tabler-icon-file-type-ppt')
+    expect(icon.getAttribute('data-kind')).toBe('presentation')
+  })
+
   it('can say something else, as when a preview could not be drawn', () => {
     renderPreview(<NoPreview document={document()} message="The preview couldn't be drawn." />)
     expect(screen.getByText("The preview couldn't be drawn.")).toBeTruthy()

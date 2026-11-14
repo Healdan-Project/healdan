@@ -118,6 +118,10 @@ describe('EmailView', () => {
     expect(chips).toHaveLength(3)
     expect(within(chips[0]!).getByText('Contract.pdf')).toBeTruthy()
     expect(within(chips[0]!).getByText('117 KB')).toBeTruthy()
+    // Each with its kind's icon, which keeps its size however long the name
+    const icons = chips.map((chip) => chip.querySelector('svg')!)
+    expect(icons.map((icon) => icon.getAttribute('data-kind'))).toEqual(['pdf', 'picture', 'spreadsheet'])
+    expect(icons.map((icon) => getComputedStyle(icon).flexShrink)).toEqual(['0', '0', '0'])
   })
 
   it('previews a PDF chip in place of the body, and Back to Message brings the body back', async () => {

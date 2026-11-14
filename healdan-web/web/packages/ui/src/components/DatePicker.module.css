@@ -43,6 +43,7 @@
   background: var(--hd-accent-fill);
   color: var(--hd-accent-on-fill);
   outline: none;
+  --hd-icon-on-fill: currentColor;
 }
 
 .open,
@@ -119,6 +120,7 @@
 .cell[data-selected] {
   background: var(--hd-accent-fill);
   color: var(--hd-accent-on-fill);
+  --hd-icon-on-fill: currentColor;
 }
 
 .cell[data-disabled],
