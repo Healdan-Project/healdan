@@ -172,6 +172,7 @@ export const enUS = {
   'doc.notFound': 'No document # {n} that you can see.',
   'matters.title': '{matters}',
   'common.loading': 'Loading…',
+  'common.working': 'Working…',
   'common.tryAgain': 'Try Again',
   'common.none': 'None yet.',
   'app.name': 'Healdan',

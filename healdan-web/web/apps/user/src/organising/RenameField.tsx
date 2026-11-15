@@ -38,11 +38,13 @@ function DocumentRenameField({ document }: { document: Movable }) {
       name={document.name}
       selected={extension ? document.name.length - extension.length - 1 : document.name.length}
       save={async (name) => {
+        let renamed = false
         try {
           await renameDocument(api, document.docNumber, name)
+          renamed = true
         } finally {
-          // Whether it worked or not, what shows the document is asked again
-          void invalidateDocumentLists(queryClient)
+          // Whether it worked or not, what shows the document is asked again; an email showing it as a copy only if it did
+          void invalidateDocumentLists(queryClient, renamed ? [document.docNumber] : [])
         }
       }}
       refusal={(error) => renameRefusal(error, document.name, me.data?.id)}

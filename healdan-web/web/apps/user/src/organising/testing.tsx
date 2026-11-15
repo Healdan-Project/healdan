@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import type { QueryClient } from '@tanstack/react-query'
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { components } from '@healdan/api'
 import { correspondence, filledForm, inFolder, letter, store, workspace } from '../filing/testing'
-import { children, document, folder, type Routes } from '../test/fakeApi'
+import { keys } from '../queries'
+import { children, document, folder, messageView, type Routes } from '../test/fakeApi'
 
 type S = components['schemas']
 
@@ -15,6 +17,17 @@ export const lease = document({ docNumber: 10432, name: 'Lease.docx', folder: in
 export const plan = document({ docNumber: 10433, name: 'Plan.pdf', folder: inFolder })
 export const drafts = folder({ id: 8, name: 'Drafts', path: [store, workspace, { id: 7, name: 'Correspondence', kind: 'folder' }, { id: 8, name: 'Drafts', kind: 'folder' }] })
 export const matterTop = folder({ id: 110, name: '1001.1 – Charter Dispute', kind: 'matter', path: [store, workspace], canFile: false, canRename: false })
+
+/**
+ * Puts a filed email's message in the cache, as Quick Look read it, with its first attachment shown as Saved as # `copy`,
+ * and gives back its key.
+ */
+export function cacheMessage(queryClient: QueryClient, email: number, copy: number) {
+  const key = keys.message(email, '1.0')
+  const message = messageView()
+  queryClient.setQueryData(key, { ...message, attachments: message.attachments.map((one, i) => (i === 0 ? { ...one, docNumber: copy } : one)) })
+  return key
+}
 
 export interface Written {
   renamed: { docNumber: number; name: string }[]

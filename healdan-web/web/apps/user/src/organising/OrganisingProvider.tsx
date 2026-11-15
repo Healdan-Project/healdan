@@ -113,6 +113,7 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     // Where the focus goes once the rows are gone, as after a delete: the picker that had it is gone, and the page would have it
     const next = rowAfter(todo.map((one) => one.docNumber))
     const outcome = await moveDocuments(api, todo, folder.id)
+    // No doc #s: a moved copy of an email's attachment is still its copy, wherever it went (invalidateDocumentLists)
     await invalidateDocumentLists(queryClient)
     report(outcome, plural('moved', outcome.done.length, { folder: folder.name || t('move.thisFolder') }), t('move.refusedTitle'))
     if (outcome.done.length > 0 && !dragged) focusLater(next)
@@ -123,7 +124,7 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     const outcome = await removeDocuments(api, documents)
     // What was deleted can't stay selected: its details would answer 404
     if (selected !== undefined && outcome.done.some((one) => one.docNumber === selected)) select(undefined)
-    await invalidateDocumentLists(queryClient)
+    await invalidateDocumentLists(queryClient, outcome.done.map((one) => one.docNumber))
     report(outcome, plural('deleted', outcome.done.length), t('delete.refusedTitle'))
     // Where the focus goes once the rows are gone: the next row, or the one before, or the list. With none gone, it stays
     // where it was, as the dialog that says why gives it back there

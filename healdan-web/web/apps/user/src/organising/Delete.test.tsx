@@ -10,7 +10,7 @@ import { renderApp } from '../test/renderApp'
 import { heldByJamie } from '../filing/testing'
 import { children, document as doc } from '../test/fakeApi'
 import { inFolder } from '../filing/testing'
-import { routes, row, select, toolbar } from './testing'
+import { cacheMessage, routes, row, select, toolbar } from './testing'
 
 const only = doc({ docNumber: 10450, name: 'Only.docx', folder: inFolder })
 
@@ -45,6 +45,20 @@ describe('Deleting', () => {
     const grid = await within(screen.getByRole('main')).findByRole('grid')
     await waitFor(() => expect(within(grid).queryByRole('row', { name: /Lease/ })).toBeNull())
     expect(api.callsTo('DELETE /v1/documents/*')).toHaveLength(2)
+  })
+
+  it("has a filed email's message read again when it shows a deleted document as an attachment's copy", async () => {
+    const { all, written } = routes()
+    const { queryClient } = await renderApp('/folders/7', all)
+    const showsLease = cacheMessage(queryClient, 10500, 10432)
+    const showsOther = cacheMessage(queryClient, 10501, 10999)
+    await select(/Lease/)
+    await userEvent.keyboard('{Delete}')
+    await userEvent.click(await screen.findByRole('button', { name: 'Move to Trash' }))
+
+    await waitFor(() => expect(written.deleted).toEqual([10432]))
+    await waitFor(() => expect(queryClient.getQueryState(showsLease)?.isInvalidated).toBe(true))
+    expect(queryClient.getQueryState(showsOther)?.isInvalidated).toBe(false)
   })
 
   it('forgets the selection of documents it deleted, so F2 renames the row the focus is on', async () => {
