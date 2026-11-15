@@ -11,6 +11,9 @@ import { createQueryClient } from './queryClient'
 import { createAppRouter } from './router'
 import { createSignedOut } from './signedOut'
 
+/** How long the first draw waits for the server's word for a matter */
+const SERVER_INFO_WAIT_MS = 5_000
+
 /**
  * Draws the app in `root`, and gives back what takes it away again. At an address that isn't secure (plain http://, not
  * the machine itself) the browser sends no Sec-Fetch-Site, so the web session's route refuses every call: the app says
@@ -28,11 +31,16 @@ export async function start(root: HTMLElement, secure = window.isSecureContext):
   }
   const signedOut = createSignedOut()
   const api = createApi({ onSignedOut: signedOut.mark })
-  // The firm's word for a matter must be set before the first render. If the server can't say, the default words do.
+  // The firm's word for a matter must be set before the first render. If the server can't say, or hasn't within
+  // SERVER_INFO_WAIT_MS, the default words do: a server that hangs leaves the app's own waits and errors, not a blank page.
+  const wait = new AbortController()
+  const timer = setTimeout(() => wait.abort(), SERVER_INFO_WAIT_MS)
   try {
-    setLabels((await api.get<components['schemas']['ServerInfo']>('/v1/server')).labels)
+    setLabels((await api.get<components['schemas']['ServerInfo']>('/v1/server', undefined, { signal: wait.signal })).labels)
   } catch {
     // Matter and Matters stay.
+  } finally {
+    clearTimeout(timer)
   }
   const queryClient = createQueryClient()
   drawn.render(
