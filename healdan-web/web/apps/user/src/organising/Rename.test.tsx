@@ -8,7 +8,7 @@ import { problem } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { ApiError } from '@healdan/api'
 import { heldByJamie } from '../filing/testing'
-import { letter, row, routes, select, toolbar } from './testing'
+import { cacheMessage, letter, row, routes, select, toolbar } from './testing'
 
 const field = (name = 'Letter to Dunmere Pryce.docx') => screen.findByRole('textbox', { name: `New Name of ${name}` })
 
@@ -45,6 +45,21 @@ describe('Renaming in place', () => {
     await waitFor(() => expect(written.renamed).toHaveLength(1))
     await waitFor(() => expect(api.callsTo('GET /v1/me/favorites')).toHaveLength(2))
     expect(api.callsTo('GET /v1/matters/recent')).toHaveLength(2)
+  })
+
+  it("has a filed email's message read again when it shows the renamed document as an attachment's copy", async () => {
+    const { all, written } = routes()
+    const { queryClient } = await renderApp('/folders/7', all)
+    const showsLetter = cacheMessage(queryClient, 10500, 10431)
+    const showsOther = cacheMessage(queryClient, 10501, 10999)
+    await select(/Letter to Dunmere/)
+    await userEvent.keyboard('{F2}')
+    await field()
+    await userEvent.keyboard('Lease Cover{Enter}')
+
+    await waitFor(() => expect(written.renamed).toHaveLength(1))
+    await waitFor(() => expect(queryClient.getQueryState(showsLetter)?.isInvalidated).toBe(true))
+    expect(queryClient.getQueryState(showsOther)?.isInvalidated).toBe(false)
   })
 
   it('Esc cancels without a call, and the row has the focus', async () => {

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import type { Query, QueryClient } from '@tanstack/react-query'
+import type { components } from '@healdan/api'
 
 // Everything that shows a document's state: the document and its properties and versions, a folder's list, search results
 // and Recent; My Favorites, which names documents; and Recent Matters and Recent Clients, which a change to a document of
@@ -10,10 +11,18 @@ const DOCUMENT_LISTS = ['documents', 'folders', 'search', 'favorites', 'matters'
 
 /**
  * Asks again for everything that shows a document's state. Whatever changes a document (a check-out, a save of its
- * properties, a rename, a move, a filing) calls this when it's done, whether it worked or not.
+ * properties, a rename, a move, a filing) calls this when it's done, whether it worked or not. A delete, a move or a
+ * rename names its documents in `changed`, and a filed email's message that shows one as an attachment's copy (Saved as
+ * # n) is asked again too: the server pairs copies by name and size within the email's matter. Only those, as each read
+ * of a message reads the whole email on the server.
  */
-export function invalidateDocumentLists(queryClient: QueryClient): Promise<unknown> {
-  return Promise.all(DOCUMENT_LISTS.map((root) => queryClient.invalidateQueries({ queryKey: [root] })))
+export function invalidateDocumentLists(queryClient: QueryClient, changed: readonly number[] = []): Promise<unknown> {
+  const lists = DOCUMENT_LISTS.map((root) => queryClient.invalidateQueries({ queryKey: [root] }))
+  if (changed.length === 0) return Promise.all(lists)
+  const named = new Set(changed)
+  const showsOne = (query: Query) =>
+    (query.state.data as components['schemas']['MessageView'] | undefined)?.attachments.some((one) => one.docNumber !== null && named.has(one.docNumber)) ?? false
+  return Promise.all([...lists, queryClient.invalidateQueries({ queryKey: ['messages'], predicate: showsOne })])
 }
 
 // Everything that shows a folder's name: the folder, its lists and the tree's subfolders (all under 'folders'), search

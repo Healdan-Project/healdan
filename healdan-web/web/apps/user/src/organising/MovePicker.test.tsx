@@ -8,7 +8,7 @@ import { ApiError } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
 import { document as doc, folder, matter } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
-import { routes, select, toolbar } from './testing'
+import { cacheMessage, routes, select, toolbar } from './testing'
 
 async function openPicker() {
   await userEvent.click(within(await toolbar()).getByRole('button', { name: 'More' }))
@@ -60,6 +60,24 @@ describe('The Move To… picker', () => {
     await userEvent.click(here)
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     await waitFor(() => expect(globalThis.document.activeElement?.closest('[role="grid"]')).toBeTruthy())
+  })
+
+  it("has a filed email's message read again when it shows a moved document as an attachment's copy", async () => {
+    const { all, written } = routes()
+    const { queryClient } = await renderApp('/folders/7', all)
+    const showsPlan = cacheMessage(queryClient, 10500, 10433)
+    const showsOther = cacheMessage(queryClient, 10501, 10999)
+    await select(/Plan/)
+    const dialog = await openPicker()
+    await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
+    await userEvent.click(await within(dialog).findByRole('button', { name: /Correspondence/ }))
+    const here = await within(dialog).findByRole('button', { name: 'Move Here' })
+    await waitFor(() => expect(here.hasAttribute('disabled')).toBe(false))
+    await userEvent.click(here)
+
+    await waitFor(() => expect(written.moved).toEqual([{ docNumber: 10433, folderId: 111 }]))
+    await waitFor(() => expect(queryClient.getQueryState(showsPlan)?.isInvalidated).toBe(true))
+    expect(queryClient.getQueryState(showsOther)?.isInvalidated).toBe(false)
   })
 
   it('moves the selection into a folder of the chosen matter, each document with its own call', async () => {

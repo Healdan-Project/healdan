@@ -42,7 +42,7 @@ function DocumentRenameField({ document }: { document: Movable }) {
           await renameDocument(api, document.docNumber, name)
         } finally {
           // Whether it worked or not, what shows the document is asked again
-          void invalidateDocumentLists(queryClient)
+          void invalidateDocumentLists(queryClient, [document.docNumber])
         }
       }}
       refusal={(error) => renameRefusal(error, document.name, me.data?.id)}
