@@ -56,6 +56,16 @@
   background: var(--hd-line);
 }
 
+/* The progress bar a pending button holds is only for screen readers */
+.pendingBar {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .button[data-focus-visible] {
   outline: var(--hd-focus-outline);
   outline-offset: var(--hd-focus-offset);

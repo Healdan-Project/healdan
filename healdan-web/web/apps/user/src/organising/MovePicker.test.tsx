@@ -62,7 +62,7 @@ describe('The Move To… picker', () => {
     await waitFor(() => expect(globalThis.document.activeElement?.closest('[role="grid"]')).toBeTruthy())
   })
 
-  it("has a filed email's message read again when it shows a moved document as an attachment's copy", async () => {
+  it("leaves a filed email's message alone when it shows a moved document as an attachment's copy, as a moved copy is still its copy", async () => {
     const { all, written } = routes()
     const { queryClient } = await renderApp('/folders/7', all)
     const showsPlan = cacheMessage(queryClient, 10500, 10433)
@@ -76,7 +76,9 @@ describe('The Move To… picker', () => {
     await userEvent.click(here)
 
     await waitFor(() => expect(written.moved).toEqual([{ docNumber: 10433, folderId: 111 }]))
-    await waitFor(() => expect(queryClient.getQueryState(showsPlan)?.isInvalidated).toBe(true))
+    // The toast comes once the lists have been asked again
+    expect(await screen.findByText('Moved 1 document to Correspondence')).toBeTruthy()
+    expect(queryClient.getQueryState(showsPlan)?.isInvalidated).toBe(false)
     expect(queryClient.getQueryState(showsOther)?.isInvalidated).toBe(false)
   })
 

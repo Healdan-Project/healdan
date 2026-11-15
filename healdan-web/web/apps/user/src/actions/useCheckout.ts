@@ -38,24 +38,27 @@ export function useCheckout(document: DocumentView | undefined): Checkout {
   // The work is all in the mutation, which goes on when the control that started it goes, as a menu's item does
   const mutation = useMutation({
     mutationKey: holdKey(document?.docNumber),
-    mutationFn: async ({ docNumber, action }: { docNumber: number; action: () => Promise<DocumentView> }) => {
+    mutationFn: async ({ docNumber, action, newFile }: { docNumber: number; action: () => Promise<DocumentView>; newFile: boolean }) => {
+      let saved = false
       try {
         const updated = await action()
         queryClient.setQueryData(keys.document(docNumber), updated)
+        saved = newFile
       } catch (error) {
         // A refusal that names a field (a file of another kind than the document) says what is wrong with it
         const [first] = fieldErrors(error).values()
         toast(first ?? messageFor(error))
       } finally {
         // The folder's list, search results and Recent show the hold too. They're asked for again without waiting, so the
-        // controls aren't busy while every open list and tree answers: the document's own answer is set above.
-        void invalidateDocumentLists(queryClient)
+        // controls aren't busy while every open list and tree answers: the document's own answer is set above. A check-in's
+        // new file can change the name and size that pair the document with an email's attachment, so it's named.
+        void invalidateDocumentLists(queryClient, saved ? [docNumber] : [])
       }
     },
   })
 
-  const run = async (action: (doc: DocumentView) => Promise<DocumentView>) => {
-    if (document) await mutation.mutateAsync({ docNumber: document.docNumber, action: () => action(document) })
+  const run = async (action: (doc: DocumentView) => Promise<DocumentView>, newFile = false) => {
+    if (document) await mutation.mutateAsync({ docNumber: document.docNumber, action: () => action(document), newFile })
   }
 
   return {
@@ -63,6 +66,6 @@ export function useCheckout(document: DocumentView | undefined): Checkout {
     busy,
     checkOut: () => run((doc) => checkOut(api, doc.docNumber)),
     release: () => run((doc) => release(api, doc.docNumber)),
-    checkIn: (file) => run((doc) => checkIn(api, doc, file)),
+    checkIn: (file) => run((doc) => checkIn(api, doc, file), true),
   }
 }

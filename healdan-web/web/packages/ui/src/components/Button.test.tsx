@@ -3,10 +3,9 @@
 
 import { render, screen } from '@testing-library/react'
 import { fireEvent } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import { Button } from './Button'
-import buttonCss from './Button.module.css?raw'
 
 describe('Button', () => {
   it('is reachable by Tab and works with Enter and Space', () => {
@@ -30,22 +29,46 @@ describe('Button', () => {
     expect(onPress).not.toHaveBeenCalled()
   })
 
-  it('while pending keeps the focus and takes no press, and looks as a disabled one does', () => {
+  it('while pending keeps the focus and takes no press', () => {
     const onPress = vi.fn()
-    render(
-      <>
-        <Button isPending onPress={onPress}>Save</Button>
-      </>,
-    )
+    render(<Button isPending onPress={onPress}>Save</Button>)
     const pending = screen.getByRole('button', { name: 'Save' })
     pending.focus()
     expect(document.activeElement).toBe(pending)
     fireEvent.keyDown(pending, { key: 'Enter' })
     fireEvent.keyUp(pending, { key: 'Enter' })
     expect(onPress).not.toHaveBeenCalled()
-    // jsdom leaves the colour tokens unresolved, so the rules are read: pending takes disabled's muted text and face
-    expect(buttonCss).toMatch(/\.button\[data-disabled\],\s*\.button\[data-pending\]\s*\{[^}]*\bcolor:\s*var\(--hd-text-muted\)/)
-    expect(buttonCss).toMatch(/\.button\.default\[data-disabled\],\s*\.button\.default\[data-pending\]\s*\{/)
+  })
+
+  it('while pending looks as a disabled one does, in each face', () => {
+    // The module's rules are in the page (vite.config.ts), so what jsdom applies to each state is compared, not their text.
+    // Each colour token gets a value of its own, so a state that took another token would look different.
+    const tokens = document.head.appendChild(document.createElement('style'))
+    tokens.textContent = `:root { ${['text', 'text-muted', 'line', 'accent-fill', 'accent-on-fill', 'button-secondary', 'button-secondary-line'].map((name, i) => `--hd-${name}: rgb(${i + 1}, 0, 0);`).join(' ')} }`
+    onTestFinished(() => tokens.remove())
+    const look = (button: HTMLElement) => {
+      const style = getComputedStyle(button)
+      return { color: style.color, background: style.backgroundColor, border: style.borderColor }
+    }
+    for (const variant of ['default', 'secondary', 'quiet'] as const) {
+      const { unmount } = render(
+        <>
+          <Button variant={variant} aria-label="Enabled">Enabled</Button>
+          <Button variant={variant} isDisabled aria-label="Disabled">Disabled</Button>
+          <Button variant={variant} isPending aria-label="Pending">Pending</Button>
+        </>,
+      )
+      const [enabled, disabled, pending] = screen.getAllByRole('button')
+      expect(look(pending!), variant).toEqual(look(disabled!))
+      expect(look(pending!), variant).not.toEqual(look(enabled!))
+      unmount()
+    }
+  })
+
+  it('while pending, with a label of its own, says it is working', async () => {
+    const { container } = render(<Button variant="quiet" isPending aria-label="Add to Favorites">★</Button>)
+    expect(screen.getByRole('button', { name: 'Add to Favorites Working…' })).toBeTruthy()
+    await expectNoAxeViolations(container)
   })
 
   it('has a quiet face for an icon in a row, named by its label', () => {

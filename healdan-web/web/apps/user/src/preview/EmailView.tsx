@@ -103,7 +103,7 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, onPreview }: 
       {attachment.docNumber !== null ? (
         <span className={styles.saved}>{t('email.saved', { n: attachment.docNumber })}</span>
       ) : (
-        <Button variant="quiet" aria-label={t('email.saveAttachment', { name: attachment.name })} isDisabled={saving || !canOpen} onPress={(event) => void saveToMatter(event.target.ownerDocument.activeElement === event.target)}>
+        <Button variant="quiet" aria-label={t('email.saveAttachment', { name: attachment.name })} isDisabled={!canOpen} isPending={saving} onPress={(event) => void saveToMatter(event.target.ownerDocument.activeElement === event.target)}>
           {t('email.saveToMatter')}
         </Button>
       )}

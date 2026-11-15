@@ -11,18 +11,23 @@ const DOCUMENT_LISTS = ['documents', 'folders', 'search', 'favorites', 'matters'
 
 /**
  * Asks again for everything that shows a document's state. Whatever changes a document (a check-out, a save of its
- * properties, a rename, a move, a filing) calls this when it's done, whether it worked or not. A delete, a move or a
- * rename names its documents in `changed`, and a filed email's message that shows one as an attachment's copy (Saved as
- * # n) is asked again too: the server pairs copies by name and size within the email's matter. Only those, as each read
- * of a message reads the whole email on the server.
+ * properties, a rename, a move, a filing) calls this when it's done, whether it worked or not. A delete, a rename or a
+ * new file (a check-in, a new version) that went through names its documents in `changed`, and a filed email's message
+ * that shows one as an attachment's copy (Saved as # n) is asked again too: the server pairs each attachment with the
+ * documents filed from the email by name and size, and leaves out deleted ones. A move changes neither, wherever the
+ * copy goes. Only those, as each read of a message reads the whole email on the server, and without waiting for them,
+ * so what follows the change (its toast, the focus) doesn't wait for an email.
  */
 export function invalidateDocumentLists(queryClient: QueryClient, changed: readonly number[] = []): Promise<unknown> {
   const lists = DOCUMENT_LISTS.map((root) => queryClient.invalidateQueries({ queryKey: [root] }))
-  if (changed.length === 0) return Promise.all(lists)
-  const named = new Set(changed)
-  const showsOne = (query: Query) =>
-    (query.state.data as components['schemas']['MessageView'] | undefined)?.attachments.some((one) => one.docNumber !== null && named.has(one.docNumber)) ?? false
-  return Promise.all([...lists, queryClient.invalidateQueries({ queryKey: ['messages'], predicate: showsOne })])
+  if (changed.length > 0) {
+    const named = new Set(changed)
+    // Partial: only data that has attachments is looked at, whatever else comes to sit under 'messages'
+    const showsOne = (query: Query) =>
+      (query.state.data as Partial<components['schemas']['MessageView']> | undefined)?.attachments?.some((one) => one.docNumber !== null && named.has(one.docNumber)) ?? false
+    void queryClient.invalidateQueries({ queryKey: ['messages'], predicate: showsOne })
+  }
+  return Promise.all(lists)
 }
 
 // Everything that shows a folder's name: the folder, its lists and the tree's subfolders (all under 'folders'), search

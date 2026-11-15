@@ -11,7 +11,8 @@ import styles from './actions.module.css'
 /**
  * The details panel's check-out buttons, under its Check-Out Info (`details/HoldInfo`): Check Out when the document is
  * free; Check In and Release for the person's own check-out from the web page. A check-out on a computer, someone else's
- * check-out and a lock have none, as the web page is no device and never takes a check-out over (R14).
+ * check-out and a lock have none, as the web page is no device and never takes a check-out over (R14). While one runs
+ * they're pending, not disabled, so the focus stays on the one pressed.
  */
 export function CheckoutControls({ document }: { document: components['schemas']['DocumentView'] }) {
   const checkout = useCheckout(document)
@@ -20,16 +21,16 @@ export function CheckoutControls({ document }: { document: components['schemas']
     <>
       <div className={styles.holdActions}>
         {checkout.state.kind === 'free' && (
-          <Button isDisabled={checkout.busy || !document.canEdit} onPress={() => void checkout.checkOut()}>
+          <Button isDisabled={!document.canEdit} isPending={checkout.busy} onPress={() => void checkout.checkOut()}>
             {t('checkout.checkOut')}
           </Button>
         )}
         {checkout.state.kind === 'yours' && (
           <>
-            <Button isDisabled={checkout.busy} onPress={() => picker.current?.click()}>
+            <Button isPending={checkout.busy} onPress={() => picker.current?.click()}>
               {t('checkout.checkIn')}
             </Button>
-            <Button isDisabled={checkout.busy} onPress={() => void checkout.release()}>
+            <Button isPending={checkout.busy} onPress={() => void checkout.release()}>
               {t('checkout.release')}
             </Button>
             <input

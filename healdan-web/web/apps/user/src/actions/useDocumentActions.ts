@@ -102,9 +102,12 @@ export function useDocumentActions({ document, documents, preview = document?.do
   }
 }
 
-/** Add to Favorites, or Remove from Favorites once it's there, as the star (useFavorite) says: every menu's item for it */
+/**
+ * Add to Favorites, or Remove from Favorites once it's there, as the star (useFavorite) says: every menu's item for it,
+ * disabled while a change runs, as a menu item has no pending state
+ */
 export function favoriteAction(favorite: Favorite): DocumentAction {
-  return { id: 'favorite', label: favorite.favorite ? t('favorites.remove') : t('favorites.add'), isDisabled: favorite.isDisabled, perform: () => void favorite.toggle() }
+  return { id: 'favorite', label: favorite.favorite ? t('favorites.remove') : t('favorites.add'), isDisabled: favorite.isUnknown || favorite.isBusy, perform: () => void favorite.toggle() }
 }
 
 /** Open in New Tab: the item's own page (docHref, folderHref), disabled with none, as with several documents selected */

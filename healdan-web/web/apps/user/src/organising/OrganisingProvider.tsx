@@ -113,7 +113,8 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     // Where the focus goes once the rows are gone, as after a delete: the picker that had it is gone, and the page would have it
     const next = rowAfter(todo.map((one) => one.docNumber))
     const outcome = await moveDocuments(api, todo, folder.id)
-    await invalidateDocumentLists(queryClient, outcome.done.map((one) => one.docNumber))
+    // No doc #s: a moved copy of an email's attachment is still its copy, wherever it went (invalidateDocumentLists)
+    await invalidateDocumentLists(queryClient)
     report(outcome, plural('moved', outcome.done.length, { folder: folder.name || t('move.thisFolder') }), t('move.refusedTitle'))
     if (outcome.done.length > 0 && !dragged) focusLater(next)
   }

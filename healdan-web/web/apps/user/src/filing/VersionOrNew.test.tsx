@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@healdan/api'
 import { children, document, folder } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
+import { cacheMessage } from '../organising/testing'
 import * as t from './testing'
 const { letter, heldByJamie, file, data, dropWithOption, routes, grid, tray, posts } = t
 
@@ -71,6 +72,19 @@ describe('Dropping one file on a document\'s row', () => {
     await userEvent.click(within(await prompt()).getByRole('button', { name: 'Save as Version 4' }))
     const region = await tray()
     expect(await within(region).findByText(/It's checked out\. Checked out by Jamie Clarke since/)).toBeTruthy()
+  })
+
+  it("has a filed email's message read again when it shows the document as an attachment's copy", async () => {
+    const { all } = routes({ 'POST /v1/documents/10431/versions': document({ ...letter, version: '4.0', fileVersion: '4.0' }) })
+    const { queryClient } = await renderApp('/folders/7', all)
+    const showsLetter = cacheMessage(queryClient, 10500, 10431)
+    const showsOther = cacheMessage(queryClient, 10501, 10999)
+    fireEvent.drop(await row(), { dataTransfer: data([file('Draft 2.docx')]) })
+    await userEvent.click(within(await prompt()).getByRole('button', { name: 'Save as Version 4' }))
+
+    await within(await tray()).findByText('Saved as Version 4 of # 10431')
+    await waitFor(() => expect(queryClient.getQueryState(showsLetter)?.isInvalidated).toBe(true))
+    expect(queryClient.getQueryState(showsOther)?.isInvalidated).toBe(false)
   })
 
   it('saves into the person\'s own web check-out as its check-in', async () => {

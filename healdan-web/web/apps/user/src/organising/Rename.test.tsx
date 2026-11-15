@@ -62,6 +62,25 @@ describe('Renaming in place', () => {
     expect(queryClient.getQueryState(showsOther)?.isInvalidated).toBe(false)
   })
 
+  it("leaves a filed email's message alone when the rename is refused, as nothing changed", async () => {
+    const { all } = routes({
+      'PATCH /v1/documents/*': () => {
+        throw new ApiError(409, 'name-taken', 'Taken.', { status: 409, code: 'name-taken' })
+      },
+    })
+    const { api, queryClient } = await renderApp('/folders/7', all)
+    const showsLetter = cacheMessage(queryClient, 10500, 10431)
+    await select(/Letter to Dunmere/)
+    await userEvent.keyboard('{F2}')
+    await field()
+    await userEvent.keyboard('Lease Cover{Enter}')
+
+    await screen.findByRole('alert')
+    // The lists are asked again all the same
+    await waitFor(() => expect(api.callsTo('GET /v1/matters/recent')).toHaveLength(2))
+    expect(queryClient.getQueryState(showsLetter)?.isInvalidated).toBe(false)
+  })
+
   it('Esc cancels without a call, and the row has the focus', async () => {
     const { all, written } = routes()
     await renderApp('/folders/7', all)

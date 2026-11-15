@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { launch } from '../actions/launch'
@@ -9,6 +9,7 @@ import { expectNoAxeViolations } from '../test/axe'
 import { detailsRoutes, letter } from '../test/details'
 import { children, document, folder, problem, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
+import { cacheMessage } from '../organising/testing'
 
 const correspondence = folder({ id: 7, name: 'Correspondence' })
 
@@ -150,6 +151,24 @@ describe('Check Out, Check In and Release in the details', () => {
     expect(await button('Check Out')).toBeTruthy()
   })
 
+  it('keeps Release focusable while it works, as Chromium moves the focus off a disabled button, and takes no second press', async () => {
+    let answer: (value: ReturnType<typeof document>) => void = () => {}
+    const { api } = await renderApp(
+      '/folders/7?sel=10388',
+      routes(document({ ...letter, hold: held() }), { 'DELETE /v1/documents/10388/checkout': () => new Promise((resolve) => (answer = resolve)) }),
+    )
+    const release = (await button('Release')) as HTMLButtonElement
+    release.focus()
+    await userEvent.keyboard('{Enter}')
+
+    await waitFor(() => expect(release.getAttribute('aria-disabled')).toBe('true'))
+    expect(release.disabled).toBe(false)
+    expect(globalThis.document.activeElement).toBe(release)
+    await userEvent.keyboard('{Enter}')
+    expect(api.callsTo('DELETE /v1/documents/10388/checkout')).toHaveLength(1)
+    await act(async () => answer(document({ ...letter, hold: null })))
+  })
+
   it('checks in a file as the next snapshot of the version it started from, with the document\'s own name', async () => {
     const mine = document({ ...letter, version: '2.1', hold: held() })
     let sent: FormData | undefined
@@ -168,6 +187,28 @@ describe('Check Out, Check In and Release in the details', () => {
     await waitFor(() => expect(api.callsTo('POST /v1/documents/10388/versions')).toHaveLength(1))
     expect(await (sent!.get('version') as Blob).text().then(JSON.parse)).toEqual({ kind: 'snapshot', name: letter.name, ifHeld: true, ifVersion: '2.1' })
     expect((sent!.get('file') as File).name).toBe('whatever.pdf')
+  })
+
+  it("has a filed email's message read again when it shows the checked-in document as an attachment's copy, and not for a check-out", async () => {
+    let doc = document({ ...letter, hold: null })
+    const { queryClient } = await renderApp(
+      '/folders/7?sel=10388',
+      routes(doc, {
+        'GET /v1/documents/10388': () => doc,
+        'POST /v1/documents/10388/checkout': () => (doc = document({ ...letter, hold: held() })),
+        'POST /v1/documents/10388/versions': () => (doc = document({ ...letter, version: '2.2', hold: null })),
+      }),
+    )
+    const showsLetter = cacheMessage(queryClient, 10500, 10388)
+    const showsOther = cacheMessage(queryClient, 10501, 10999)
+    await userEvent.click(await button('Check Out'))
+    await button('Release')
+    expect(queryClient.getQueryState(showsLetter)?.isInvalidated).toBe(false)
+
+    const input = (await details()).querySelector<HTMLInputElement>('input[type="file"]')!
+    await userEvent.upload(input, new File(['new text'], 'whatever.pdf', { type: 'application/pdf' }))
+    await waitFor(() => expect(queryClient.getQueryState(showsLetter)?.isInvalidated).toBe(true))
+    expect(queryClient.getQueryState(showsOther)?.isInvalidated).toBe(false)
   })
 
   it("shows the server's problem from the catalogue when a check-out is refused, and asks again for the hold", async () => {

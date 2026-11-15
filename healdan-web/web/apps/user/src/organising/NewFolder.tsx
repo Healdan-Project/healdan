@@ -86,7 +86,7 @@ export function NewFolderDialog({ parent, onCancel }: NewFolderDialogProps) {
             }}
           />
           <div className={styles.actions}>
-            <Button type="submit" variant="default" isDisabled={name.trim() === '' || busy}>
+            <Button type="submit" variant="default" isDisabled={name.trim() === ''} isPending={busy}>
               {t('newFolder.create')}
             </Button>
             <Button onPress={close}>{t('common.cancel')}</Button>

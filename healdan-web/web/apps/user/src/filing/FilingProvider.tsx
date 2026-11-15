@@ -76,15 +76,23 @@ const REFRESH_MS = 1000
 export function FilingProvider({ children }: { children: ReactNode }) {
   const api = useApi()
   const queryClient = useQueryClient()
-  const uploads = useMemo(
-    () =>
-      createUploads(api, {
-        // Each item settling would ask for every list, the tree and the details again: a run of them asks once a second
-        onSettled: coalesced(() => void invalidateDocumentLists(queryClient), REFRESH_MS),
-        meId: () => queryClient.getQueryData<S['UserView']>(keys.me)?.id,
-      }),
-    [api, queryClient],
-  )
+  const uploads = useMemo(() => {
+    // Each item settling would ask for every list, the tree and the details again: a run of them asks once a second, with
+    // the documents that got a new version since the last time
+    const versions = new Set<number>()
+    const refresh = coalesced(() => {
+      const changed = [...versions]
+      versions.clear()
+      void invalidateDocumentLists(queryClient, changed)
+    }, REFRESH_MS)
+    return createUploads(api, {
+      onSettled: (newVersionOf) => {
+        if (newVersionOf !== undefined) versions.add(newVersionOf)
+        refresh()
+      },
+      meId: () => queryClient.getQueryData<S['UserView']>(keys.me)?.id,
+    })
+  }, [api, queryClient])
   const items = useSyncExternalStore(uploads.subscribe, uploads.items)
   // Forms wait in turn: a drop that needs the form while another's is open keeps its files, and opens when that one closes
   const [forms, setForms] = useState<PendingForm[]>([])

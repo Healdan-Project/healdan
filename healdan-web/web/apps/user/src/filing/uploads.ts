@@ -65,8 +65,11 @@ export function isBusy(items: readonly UploadItem[]): boolean {
 }
 
 export interface UploadsOptions {
-  /** Called after each item is done, however it went: the lists that show documents are asked for again */
-  onSettled: () => void
+  /**
+   * Called after each item is done, however it went: the lists that show documents are asked for again. With the
+   * document's doc # when a new version of it was saved, whose file can change what pairs it with an email's attachment
+   */
+  onSettled: (newVersionOf?: number) => void
   /** How many run at once; 3 by default */
   limit?: number
   /** How long a new document is fresh, in ms */
@@ -148,8 +151,10 @@ export function createUploads(api: Api, options: UploadsOptions): Uploads {
   async function run(item: UploadItem) {
     const job = jobs.get(item.id)!
     patch(item.id, { status: 'uploading' })
+    let newVersionOf: number | undefined
     try {
       const done = await send(item, job)
+      if (job.kind === 'version') newVersionOf = job.document.docNumber
       patch(item.id, { status: 'filed', docNumber: done.docNumber, version: job.kind === 'version' ? done.version : undefined, fresh: true })
       setTimeout(() => patch(item.id, { fresh: false }), options.freshFor ?? FRESH_MS)
     } catch (error) {
@@ -160,7 +165,7 @@ export function createUploads(api: Api, options: UploadsOptions): Uploads {
       if (job.kind === 'version' && !job.ifHeld && mayLeaveCheckOut(error)) await releaseLeftover(job.document.docNumber).catch(() => undefined)
     } finally {
       jobs.delete(item.id)
-      options.onSettled()
+      options.onSettled(newVersionOf)
       pump()
     }
   }

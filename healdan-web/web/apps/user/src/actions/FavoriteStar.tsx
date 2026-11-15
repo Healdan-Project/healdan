@@ -22,8 +22,8 @@ function isIt(favorite: S['FavoriteView'], what: Starred): boolean {
 export interface Favorite {
   /** The bookmark, while the folder or document is in My Favorites */
   favorite: S['FavoriteView'] | undefined
-  /** My Favorites isn't known yet, or a change to this one is under way (from the star or a menu alike) */
-  isDisabled: boolean
+  /** My Favorites isn't known yet, or there's nothing to star */
+  isUnknown: boolean
   /** A change to this one is under way (from the star or a menu alike) */
   isBusy: boolean
   /** Adds it to My Favorites, or takes it out */
@@ -57,7 +57,7 @@ export function useFavorite(what: Starred | undefined): Favorite {
   })
   return {
     favorite,
-    isDisabled: what === undefined || busy || favorites.isPending,
+    isUnknown: what === undefined || favorites.isPending,
     isBusy: busy,
     toggle: async () => {
       if (what) await mutation.mutateAsync({ bookmark: favorite, star: what })
@@ -71,9 +71,9 @@ export function useFavorite(what: Starred | undefined): Favorite {
  * moves off a disabled button.
  */
 export function FavoriteStar({ what, add, remove }: { what: Starred; add: string; remove: string }) {
-  const { favorite, isDisabled, isBusy, toggle } = useFavorite(what)
+  const { favorite, isUnknown, isBusy, toggle } = useFavorite(what)
   return (
-    <Button variant="quiet" aria-label={favorite ? remove : add} isDisabled={isDisabled && !isBusy} isPending={isBusy} onPress={() => void toggle()}>
+    <Button variant="quiet" aria-label={favorite ? remove : add} isDisabled={isUnknown} isPending={isBusy} onPress={() => void toggle()}>
       <span className={favorite ? styles.starred : styles.star}>
         <Icon name={favorite ? 'starFilled' : 'star'} size={18} />
       </span>
