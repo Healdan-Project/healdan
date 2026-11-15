@@ -10,6 +10,8 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { noticesFor, writeNotices } from './notices.mjs'
 
+// A workspace whose lockfile has `packages` (null leaves one out), with client-only shipped as the real one is, since the
+// declared-only list names it
 function project(packages, files = {}) {
   const root = mkdtempSync(join(tmpdir(), 'notices-'))
   const entries = {
@@ -17,7 +19,9 @@ function project(packages, files = {}) {
     'apps/user': { name: '@healdan/user', license: 'LGPL-3.0-only' },
     'node_modules/@healdan/user': { resolved: 'apps/user', link: true },
   }
-  for (const [name, entry] of Object.entries(packages)) entries[`node_modules/${name}`] = entry
+  for (const [name, entry] of Object.entries({ 'client-only': { version: '0.0.1', license: 'MIT' }, ...packages })) {
+    if (entry !== null) entries[`node_modules/${name}`] = entry
+  }
   writeFileSync(join(root, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: entries }))
   for (const [path, text] of Object.entries(files)) {
     const full = join(root, path)
@@ -87,4 +91,14 @@ test('the command writes notices.txt when run through a symlinked path', () => {
   symlinkSync(root, link)
   execFileSync(process.execPath, [join(link, 'scripts', 'notices.mjs')])
   assert.match(readFileSync(join(root, 'apps/user/dist/notices.txt'), 'utf8'), /Licence of a/)
+})
+
+test("fails on a declared-only package the app no longer ships, or ships only for development, naming it", () => {
+  assert.throws(() => noticesFor(project({ 'client-only': null })), /DECLARED_ONLY names client-only/)
+  assert.throws(() => noticesFor(project({ 'client-only': { version: '0.0.1', license: 'MIT', dev: true } })), /DECLARED_ONLY names client-only/)
+})
+
+test('fails on a declared-only package that now ships a licence file, as its entry is no longer needed', () => {
+  const root = project({}, { 'node_modules/client-only/LICENSE': 'Licence of client-only' })
+  assert.throws(() => noticesFor(root), /DECLARED_ONLY names client-only/)
 })
