@@ -546,9 +546,13 @@ ESLint enforces these, so `npm run lint` fails on a break:
 
 And the build checks these:
 
-- **Versions are exact,** and `npm ci --ignore-scripts` installs them with no install script run.
+- **Versions are exact,** and `npm ci --ignore-scripts` installs them with no install script run. The workspace's
+  `.npmrc` sets `ignore-scripts` and `save-exact` for a plain `npm install` too, and `scripts/workspace.test.mjs`
+  checks both, and that `.nvmrc` names the Node that `healdan-web/pom.xml` downloads.
 - **Licences are checked** by `.github/scripts/check-web-licences.py`, and the build writes the notices for what the
-  app ships into `apps/user/dist/notices.txt`.
+  app ships into `apps/user/dist/notices.txt`. It fails on a shipped package with no licence file, and on an entry
+  in `scripts/notices.mjs`' `DECLARED_ONLY` (a reviewed package that declares its licence without a file) that the
+  app no longer ships without one.
 - **The page's Content-Security-Policy** allows no inline style, so a library that injects one is a problem:
   `scripts/check-dist.mjs` checks the one React Aria would inject, for pressed states, is a linked file.
 - **The libraries are chunks of their own** (`vite.config.ts`): React Aria in one, PDF.js in another (loaded only

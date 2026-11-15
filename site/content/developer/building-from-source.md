@@ -63,15 +63,20 @@ Healdan's modules need.
 
 The User app is the web page at `/app/`. Its source is an npm workspace in `healdan-web/web`, and the `healdan-web`
 module builds it with Maven, so a full build needs no Node of your own: `frontend-maven-plugin` downloads the Node
-version that `healdan-web/web/.nvmrc` names (the same one `healdan-web/pom.xml` names) into `healdan-web/target/`,
-runs `npm ci --ignore-scripts` and `npm run build`, and copies `apps/user/dist/` into the module's jar.
+version that `healdan-web/web/.nvmrc` names (the same one `healdan-web/pom.xml` names, which
+`scripts/workspace.test.mjs` checks) into `healdan-web/target/`, runs `npm ci --ignore-scripts` and `npm run
+build`, and copies `apps/user/dist/` into the module's jar.
 
 - **`-Dhealdan.web.skip=true`** skips all of that. The jar then holds no app, and `/app/` answers `503`. Use it
   when you aren't working on the app, as CI's `build` check does.
 - **`npm ci --ignore-scripts`** installs the packages exactly as the lockfile records them, and runs none of their
-  install scripts. The build tools' binaries come from platform packages, so nothing needs a script.
+  install scripts. The build tools' binaries come from platform packages, so nothing needs a script. The
+  workspace's `.npmrc` sets `ignore-scripts` and `save-exact`, so your own `npm install` runs none either and pins
+  the exact version of a package it adds.
 - **The packages' licences** are checked by `.github/scripts/check-web-licences.py`, and the build writes the
-  notices for the ones the app ships into `apps/user/dist/notices.txt`.
+  notices for the ones the app ships into `apps/user/dist/notices.txt`. It fails on a shipped package with no
+  licence file, and on an entry in `scripts/notices.mjs`' `DECLARED_ONLY`, the few reviewed packages that declare
+  their licence without a file, that no longer needs to be there.
 
 To work on the app itself, use Node from `.nvmrc` and run, in `healdan-web/web`:
 
