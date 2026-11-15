@@ -546,7 +546,9 @@ ESLint enforces these, so `npm run lint` fails on a break:
 
 And the build checks these:
 
-- **Versions are exact,** and `npm ci --ignore-scripts` installs them with no install script run.
+- **Versions are exact,** and `npm ci --ignore-scripts` installs them with no install script run. The workspace's
+  `.npmrc` sets `ignore-scripts` and `save-exact` for a plain `npm install` too, and `scripts/workspace.test.mjs`
+  checks both, and that `.nvmrc` names the Node that `healdan-web/pom.xml` downloads.
 - **Licences are checked** by `.github/scripts/check-web-licences.py`, and the build writes the notices for what the
   app ships into `apps/user/dist/notices.txt`.
 - **The page's Content-Security-Policy** allows no inline style, so a library that injects one is a problem:
