@@ -35,9 +35,9 @@ If you sign in with a button such as **Sign In with Microsoft** (see
 password. Your password is your account's at the provider, and you change it there. So, under
 **Account → Security**:
 
-- **Change password** isn't for you: whatever you type, it says the password is wrong.
+- **Change password** is greyed out, as there's no Healdan password to change.
 - **Allowed Impersonators** stays empty: Healdan won't add anyone, as nobody may sign in with their own password
-  and act in your name.
+  and act in your name. Adding someone fails, with an error that doesn't say why.
 - **API Keys** you make never sign in.
 - **Last Logins** still lists your sign-ins. If you see one that wasn't you, change your password at the provider
   and tell your administrator.
