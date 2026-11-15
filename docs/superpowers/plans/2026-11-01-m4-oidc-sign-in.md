@@ -1685,7 +1685,7 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 - The Entra page's labels against the portal's own words ("Single tenant only", "Assignment Required"). No pointer for a provider behind a private certificate authority, which the app's Java must trust. Advise trying `admin`'s password before going live. (Task 13b)
 - **Done** on 2026-11-15: Other Providers tells a missing list from an empty one, which Check reports as listing nothing. Other Providers said "lists no methods" where an empty list is what Check reports. (Task 9b; the Entra page's Check sentence names the token endpoint since [#169](https://github.com/Healdan-Project/healdan/pull/169).)
-- **Done** on 2026-11-15: Known Limitations says both. Known Limitations could say that a provider account's Allowed Impersonators answers a generic 500, and that an admin's Change Password for one says "Wrong password", both upstream's messages. (Task 13c)
+- **Done** on 2026-11-15: Known Limitations, and the User Guide's Your Profile and Password, say that adding an impersonator fails with an error that doesn't say why, and that Change password is greyed out for a provider account (`UsersPanel` offers it only for source `DEFAULT`, and the account menu only for source 0), so "Wrong password" shows only on a users list loaded before the link. Known Limitations could say that a provider account's Allowed Impersonators answers a generic 500, and that an admin's Change Password for one says "Wrong password", both upstream's messages. (Task 13c)
 
 **Upstream, seen in the build**
 

@@ -21,9 +21,9 @@ The examples use `healdan.example` for your Healdan server and `idp.firm.example
   the client secret at its token endpoint as `client_secret_post` (in the request's body) or `client_secret_basic`
   (in an HTTP Basic header), whichever its discovery document lists in `token_endpoint_auth_methods_supported`.
   Healdan uses `client_secret_post` when the document lists it, and `client_secret_basic` when it lists that and not
-  `client_secret_post`, or has no such list at all. A provider whose list holds neither, as one that lists only
-  `private_key_jwt` or an empty list does, can't be used, and **Check** says so, naming what it lists (an empty list
-  as nothing).
+  `client_secret_post`, or has no such list at all. A provider whose list holds neither, such as one that lists
+  only `private_key_jwt`, or an empty list, fails **Check**, which names what it lists (an empty list as nothing).
+  Healdan still sends it the secret as `client_secret_basic`, which works only if the provider takes that anyway.
   **Check** tests the secret with a code the provider never issued, so it relies on the token endpoint checking the
   client before the code: a wrong secret answered with `invalid_client`, or HTTP 401 with `unauthorized_client` or no
   error code, and a right one with `invalid_grant`, as Keycloak and Authentik answer. Any other answer, and Check says
