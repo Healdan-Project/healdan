@@ -3,7 +3,8 @@
 
 // Writes apps/user/dist/notices.txt: for each package the app ships (the lockfile's packages not marked dev, apart from
 // the workspace's own), its name, version, licence and the text of its licence and notice files. About shows it.
-// Fails when a shipped package has no such file, so nothing goes out without its notice.
+// Fails when a shipped package has no such file, so nothing goes out without its notice, and when DECLARED_ONLY names a
+// package the app no longer ships without one.
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -12,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 // Packages that declare their licence in package.json and ship no file for it. Reviewed one by one; the text says so.
 // client-only is the React team's marker package (react-aria-components depends on it). An entry the app no longer
 // ships without a licence file fails the build, so the list holds only what it covers.
-const DECLARED_ONLY = new Set(['client-only'])
+export const DECLARED_ONLY = new Set(['client-only'])
 
 // Licences of data a package ships in folders, beyond its own: pdfjs-dist's standard fonts (Foxit's and Liberation's),
 // predefined CMaps and JPEG 2000 and JBIG2 decoders, which the app serves from /app/pdfjs/ (apps/user/pdfjs-data.mjs).
@@ -38,20 +39,23 @@ function licenceFiles(dir) {
     .sort()
 }
 
-export function noticesFor(root) {
+export function noticesFor(root, declaredOnly = DECLARED_ONLY) {
   const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'))
   const sections = []
   const missing = []
-  const declared = new Set()
+  // The declared-only names the app ships without a licence file, whether or not the lockfile gives a licence
+  const withoutFile = new Set()
   for (const [key, entry] of Object.entries(lock.packages ?? {})) {
     if (!key.includes('node_modules/') || entry.link || entry.dev) continue
     const name = key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length)
     const dir = join(root, key)
     const files = licenceFiles(dir)
-    if (files.length === 0 && DECLARED_ONLY.has(name) && entry.license) {
-      declared.add(name)
-      sections.push(`${name} ${entry.version}\nLicence: ${entry.license}\n\nThis package ships no licence file. Its package.json declares the ${entry.license} licence.\n`)
-      continue
+    if (files.length === 0 && declaredOnly.has(name)) {
+      withoutFile.add(name)
+      if (entry.license) {
+        sections.push(`${name} ${entry.version}\nLicence: ${entry.license}\n\nThis package ships no licence file. Its package.json declares the ${entry.license} licence.\n`)
+        continue
+      }
     }
     if (files.length === 0) {
       missing.push(`${name}@${entry.version}`)
@@ -64,7 +68,7 @@ export function noticesFor(root) {
     }
     sections.push(`${name} ${entry.version}\nLicence: ${entry.license ?? 'unknown'}\n\n${texts.join('\n\n')}\n`)
   }
-  const stale = [...DECLARED_ONLY].filter((name) => !declared.has(name))
+  const stale = [...declaredOnly].filter((name) => !withoutFile.has(name))
   const problems = []
   if (missing.length > 0) problems.push(`No LICENSE, LICENCE or NOTICE file for: ${missing.join(', ')}`)
   if (stale.length > 0) {

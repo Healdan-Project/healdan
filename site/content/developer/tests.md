@@ -238,7 +238,9 @@ code is laid out.
   component, each view against a small fake API typed from `openapi.yaml`, and the string catalogue's mapping of
   the API's problem codes. Every component and view also gets an axe check for accessibility, which can't check
   colour contrast under jsdom, so `tokens.test.ts` checks it from the colours. Node's own test
-  runner tests the build's scripts. CI runs them in the `Web` check.
+  runner tests the build's scripts, and `scripts/workspace.test.mjs` checks the workspace's settings: that `.npmrc`
+  sets `ignore-scripts` and `save-exact`, and that `.nvmrc` names the Node that `healdan-web/pom.xml` downloads. CI
+  runs them in the `Web` check.
 - **Browser tests,** Playwright's specs in `healdan-web/web/e2e/`, in Chromium and WebKit. `docker/tests/test-web.sh`
   runs them in Playwright's Docker image, `mcr.microsoft.com/playwright:v<version>-noble`, where `<version>` is the
   `@playwright/test` version in `package-lock.json`, so the image's browsers are the ones that version expects.

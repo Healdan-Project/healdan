@@ -12,13 +12,21 @@ import { test } from 'node:test'
 
 const web = join(fileURLToPath(import.meta.url), '..', '..')
 
+// Reads .npmrc as npm's ini reader does: a key with no = is true, a quoted value loses its quotes, and an unquoted one
+// ends at a ; or #
 function npmrc() {
   const settings = {}
   for (const line of readFileSync(join(web, '.npmrc'), 'utf8').split('\n')) {
     const text = line.trim()
     if (text === '' || text.startsWith('#') || text.startsWith(';')) continue
     const at = text.indexOf('=')
-    settings[text.slice(0, at).trim()] = text.slice(at + 1).trim()
+    if (at === -1) {
+      settings[text] = 'true'
+      continue
+    }
+    const value = text.slice(at + 1).trim()
+    const quoted = /^(["'])(.*)\1$/.exec(value)
+    settings[text.slice(0, at).trim()] = quoted ? quoted[2] : value.split(/[;#]/)[0].trim()
   }
   return settings
 }

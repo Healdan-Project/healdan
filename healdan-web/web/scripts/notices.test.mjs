@@ -8,18 +8,19 @@ import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
-import { noticesFor, writeNotices } from './notices.mjs'
+import { DECLARED_ONLY, noticesFor, writeNotices } from './notices.mjs'
 
-// A workspace whose lockfile has `packages` (null leaves one out), with client-only shipped as the real one is, since the
-// declared-only list names it
-function project(packages, files = {}) {
+// A workspace whose lockfile has `packages` (null leaves one out). Each package `declaredOnly` names ships first as one
+// that declares MIT and has no licence file, as the real lockfile ships DECLARED_ONLY's.
+function project(packages, files = {}, declaredOnly = DECLARED_ONLY) {
   const root = mkdtempSync(join(tmpdir(), 'notices-'))
   const entries = {
     '': { name: 'web' },
     'apps/user': { name: '@healdan/user', license: 'LGPL-3.0-only' },
     'node_modules/@healdan/user': { resolved: 'apps/user', link: true },
   }
-  for (const [name, entry] of Object.entries({ 'client-only': { version: '0.0.1', license: 'MIT' }, ...packages })) {
+  const shipped = Object.fromEntries([...declaredOnly].map((name) => [name, { version: '0.0.1', license: 'MIT' }]))
+  for (const [name, entry] of Object.entries({ ...shipped, ...packages })) {
     if (entry !== null) entries[`node_modules/${name}`] = entry
   }
   writeFileSync(join(root, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: entries }))
@@ -76,10 +77,12 @@ test('writes apps/user/dist/notices.txt', () => {
   assert.match(readFileSync(join(root, 'apps/user/dist/notices.txt'), 'utf8'), /Licence of a/)
 })
 
+// The declared-only tests' own list, so they don't depend on what DECLARED_ONLY holds
+const MARKER = new Set(['marker'])
+
 test('lists a package that declares MIT but ships no licence file, as the declared-only list allows', () => {
-  const root = project({ 'client-only': { version: '0.0.1', license: 'MIT' } })
-  const text = noticesFor(root)
-  assert.match(text, /client-only 0\.0\.1\nLicence: MIT\n/)
+  const text = noticesFor(project({}, {}, MARKER), MARKER)
+  assert.match(text, /marker 0\.0\.1\nLicence: MIT\n/)
   assert.match(text, /ships no licence file/)
 })
 
@@ -94,11 +97,21 @@ test('the command writes notices.txt when run through a symlinked path', () => {
 })
 
 test("fails on a declared-only package the app no longer ships, or ships only for development, naming it", () => {
-  assert.throws(() => noticesFor(project({ 'client-only': null })), /DECLARED_ONLY names client-only/)
-  assert.throws(() => noticesFor(project({ 'client-only': { version: '0.0.1', license: 'MIT', dev: true } })), /DECLARED_ONLY names client-only/)
+  assert.throws(() => noticesFor(project({ marker: null }, {}, MARKER), MARKER), /DECLARED_ONLY names marker/)
+  const dev = project({ marker: { version: '0.0.1', license: 'MIT', dev: true } }, {}, MARKER)
+  assert.throws(() => noticesFor(dev, MARKER), /DECLARED_ONLY names marker/)
 })
 
 test('fails on a declared-only package that now ships a licence file, as its entry is no longer needed', () => {
-  const root = project({}, { 'node_modules/client-only/LICENSE': 'Licence of client-only' })
-  assert.throws(() => noticesFor(root), /DECLARED_ONLY names client-only/)
+  const root = project({}, { 'node_modules/marker/LICENSE': 'Licence of marker' }, MARKER)
+  assert.throws(() => noticesFor(root, MARKER), /DECLARED_ONLY names marker/)
+})
+
+test('names a declared-only package whose lockfile entry gives no licence as missing, not as stale', () => {
+  const root = project({ marker: { version: '0.0.2' } }, {}, MARKER)
+  assert.throws(() => noticesFor(root, MARKER), (error) => {
+    assert.match(error.message, /No LICENSE, LICENCE or NOTICE file for: marker@0\.0\.2/)
+    assert.doesNotMatch(error.message, /DECLARED_ONLY/)
+    return true
+  })
 })
