@@ -49,6 +49,13 @@ account has none.
 - **A plan for the groups.** Decide which provider groups may sign in, and which Healdan group each maps to. Any
   Healdan group can be mapped, `admin` included, but an admin skips every permission check: see
   [Day-to-Day Accounts Shouldn't Be Admins](../../admin/users-and-groups/#day-to-day-accounts-shouldnt-be-admins).
+- **Menus for the Classic Interface.** The User app, where a sign-in lands unless **Start In** in
+  [Healdan Settings](../../admin/healdan-settings/) says otherwise, needs nothing more. The Classic Interface shows
+  each person only the menus their groups have, and a group you make has none, so someone whose groups have none
+  finds an empty page there. Give each mapped group its menus under **Administration → Access Control → Security**,
+  on the **Menus** tab. Mapping a provider group to LogicalDOC's `author` group as well gives its menus too, but
+  `author` is then the provider's to decide (see
+  [The Group Map and Its Gate](../../admin/healdan-settings/#the-group-map-and-its-gate)).
 - **A plan for existing accounts.** If people already have Healdan accounts, the easiest way to keep their history,
   check-outs and grants is Link by Email, which needs their emails at the provider to match their Healdan accounts'
   emails. Turn it on only where people can't change their own emails.

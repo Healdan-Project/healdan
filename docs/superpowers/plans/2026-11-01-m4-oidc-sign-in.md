@@ -1670,7 +1670,7 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 - `test-signin.sh`'s checks say little when they fail, and check 5 doesn't assert the problem's code. (Task 11)
 - The `smoke-signin` seed would run with an `https` issuer too: its guard against production is that production never sets its variables, nor `HEALDAN_SMOKE_FIXTURE`. (Task 11)
-- The smoke seed's group `Smoke SSO` grants no menus, so `sso-user` lands on an empty page. The Install manual should say to map a provider group to a Healdan group that has menus, or new accounts see nothing. (Task 13c)
+- **Done** on 2026-11-15: the Install manual's Sign-In Providers page says to give a mapped group menus, as the User app needs none and the Classic Interface shows an empty page without them. The smoke seed's group `Smoke SSO` grants no menus, so `sso-user` lands on an empty page. The Install manual should say to map a provider group to a Healdan group that has menus, or new accounts see nothing. (Task 13c)
 - **Fixed** on 2026-11-03. Untested in `ProviderClient`: the HTTPS check on a cached discovery document, redirects not followed, the key fetch's timeout, a token with no `kid`, an encrypted token, `jku`, `x5u` and embedded `jwk` headers, ES384 and ES512, the redaction of a provider's error description, and that the secret never goes in a query string. Each has a test (`ProviderClientTest.testKeptDiscoveryIsCheckedForHttpsAtEachUse`, `testTokenRequestsAreNotRedirected`, `testAWholeAnswerWithinTheTimeout`, `testIdTokenWithoutKeyId`, `testEncryptedIdTokenRefused`, `testKeysInTheTokensHeaderAreIgnored`, `testEllipticCurveSignatures`, `testProvidersErrorDescriptionsAreRedacted`, `testSecretNeverInAQueryString`). A token with no `kid` can't name a key the kept ones lack, so a rotated key is found only when the keys are fetched again, at 5 minutes old or on `forget`; every provider Healdan names sends a `kid`. (Tasks 4 and 9b)
 - Two of the tab's tests rely on DNS failing for `login.firm.example`; `FakeProvider` would be steadier. (Task 13a)
 
@@ -1684,8 +1684,8 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 **Docs**
 
 - The Entra page's labels against the portal's own words ("Single tenant only", "Assignment Required"). No pointer for a provider behind a private certificate authority, which the app's Java must trust. Advise trying `admin`'s password before going live. (Task 13b)
-- Other Providers says "lists no methods" where an empty list is what Check reports. (Task 9b; the Entra page's Check sentence names the token endpoint since [#169](https://github.com/Healdan-Project/healdan/pull/169).)
-- Known Limitations could say that a provider account's Allowed Impersonators answers a generic 500, and that an admin's Change Password for one says "Wrong password", both upstream's messages. (Task 13c)
+- **Done** on 2026-11-15: Other Providers tells a missing list from an empty one, which Check reports as listing nothing. Other Providers said "lists no methods" where an empty list is what Check reports. (Task 9b; the Entra page's Check sentence names the token endpoint since [#169](https://github.com/Healdan-Project/healdan/pull/169).)
+- **Done** on 2026-11-15: Known Limitations says both. Known Limitations could say that a provider account's Allowed Impersonators answers a generic 500, and that an admin's Change Password for one says "Wrong password", both upstream's messages. (Task 13c)
 
 **Upstream, seen in the build**
 

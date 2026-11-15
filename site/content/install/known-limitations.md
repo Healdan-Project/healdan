@@ -25,6 +25,10 @@ weight: 12
 - **Provider accounts have no password.** An account that signs in through a provider, such as Microsoft Entra ID,
   has no Healdan password, so it can't sign in where Healdan asks for one: WebDAV, CMIS, and LogicalDOC's REST web
   services. Unlinking the account from its provider gives it a password again.
+- **Two of LogicalDOC's screens refuse a provider account in their own words.** A provider account has no password
+  and allows no one to impersonate it. In the Classic Interface, an administrator's **Change Password** for one says
+  "Wrong password", and the person's own **Allowed Impersonators**, in their account menu, fails with an error that
+  doesn't say why. Both messages are LogicalDOC's.
 - **Provider accounts can't use LogicalDOC's API keys.** An account that signs in through a provider never signs in
   with an API key, on any route, as the key would skip the provider. Linking an account to a provider deletes the
   API keys it had and closes the sessions they opened, and so does unlinking it. The web page still lets a provider
