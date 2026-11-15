@@ -237,7 +237,7 @@ public class CheckoutResourceTest extends ApiTestCase {
 		history.setEvent(DocumentEvent.CHANGED);
 		DocumentDAO.get().setPassword(d.getId(), "S3cret-pw!", history);
 		String token = signIn(clerk);
-		String detail = "Document #%d is protected by a password. Open it in Healdan's web page.".formatted(number(d));
+		String detail = "Document #%d is protected by a password. Open it in the Classic Interface.".formatted(number(d));
 		assertFalse(get("/api/v1/documents/" + number(d)).token(token).send().json().path("canEdit").booleanValue());
 		DbSnapshot before = fx.snapshot();
 
