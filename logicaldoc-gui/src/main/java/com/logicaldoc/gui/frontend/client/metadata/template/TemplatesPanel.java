@@ -125,7 +125,7 @@ public class TemplatesPanel extends VLayout {
 
         toolStrip.addButton(refresh);
         toolStrip.addButton(add);
-        toolStrip.addButton(importButton);
+        // Healdan: no Import, which the server refuses (spec 2026-11-15-template-imports-refused-design.md)
         toolStrip.addFill();
 
         list.addCellContextClickHandler(event -> {

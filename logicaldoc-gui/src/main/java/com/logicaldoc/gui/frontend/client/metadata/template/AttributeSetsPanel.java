@@ -121,7 +121,7 @@ public class AttributeSetsPanel extends VLayout {
 
         ToolStripButton importButton = new ToolStripButton(I18N.message("iimport"));
         importButton.addClickHandler(event -> new AttributeSetUploader(AttributeSetsPanel.this).show());
-        toolStrip.addButton(importButton);
+        // Healdan: no Import, which the server refuses (spec 2026-11-15-template-imports-refused-design.md)
 
         toolStrip.addFill();
 

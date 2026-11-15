@@ -623,6 +623,8 @@ public class TemplateServiceImpl extends AbstractRemoteService implements Templa
     @Override
     public void importTemplate() throws ServerException {
         Session session = validateSession();
+        // Healdan: no import of CE's file (spec 2026-11-15-template-imports-refused-design.md)
+        HealdanImports.refuse();
 
         /*
          * It's important then only those users with access to the metadata

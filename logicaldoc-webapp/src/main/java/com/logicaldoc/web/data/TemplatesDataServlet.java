@@ -16,7 +16,6 @@ import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.metadata.Template;
 import com.logicaldoc.core.metadata.TemplateDAO;
 import com.logicaldoc.core.security.Session;
-import com.logicaldoc.core.security.authorization.PermissionException;
 import com.logicaldoc.core.security.menu.Menu;
 import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.util.io.IOUtil;
@@ -54,7 +53,9 @@ public class TemplatesDataServlet extends AbstractDataServlet {
         if (export != null) {
             // An export request
             if (!MenuDAO.get().isReadAllowed(Menu.ADMINISTRATION_METADATA, session.getUserId()))
-                new PermissionException("Cannot export attribute set");
+                // Healdan: refuse, as the check means to (spec 2026-11-15-template-imports-refused-design.md)
+                throw new IOException("User %s cannot access the menu %d".formatted(session.getUsername(),
+                        Menu.ADMINISTRATION_METADATA));
             export(response, export);
         } else {
             // A listing request

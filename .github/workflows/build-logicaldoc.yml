@@ -125,6 +125,8 @@ jobs:
             SystemServiceImplAuthorizationTest
             SearchEngineServiceImplAuthorizationTest
             AttributeSetServiceImplAuthorizationTest
+            MetadataImportsTest
+            MetadataExportsTest
             SecurityServiceImplAuthorizationTest
             MessageServiceImplAuthorizationTest
             TicketsDataServletTest
