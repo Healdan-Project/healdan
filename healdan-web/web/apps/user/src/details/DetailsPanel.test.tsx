@@ -97,6 +97,29 @@ describe('DetailsPanel', () => {
     expect(api.callsTo('DELETE /v1/me/favorites/960')).toHaveLength(1)
   })
 
+  it('keeps the star focusable while it works, as Chromium moves the focus off a disabled button, and takes no second press', async () => {
+    let answer: (value: S['FavoriteView']) => void = () => {}
+    const { api } = await renderApp(
+      '/folders/7?sel=10388',
+      routes({
+        'GET /v1/me/favorites': page([]),
+        'POST /v1/me/favorites': () => new Promise<S['FavoriteView']>((resolve) => (answer = resolve)),
+      }),
+    )
+    const panel = await details()
+    const add = (await within(panel).findByRole('button', { name: 'Add Document to Favorites' })) as HTMLButtonElement
+    await waitFor(() => expect(add.disabled).toBe(false))
+    add.focus()
+    await userEvent.keyboard('{Enter}')
+
+    await waitFor(() => expect(add.getAttribute('aria-disabled')).toBe('true'))
+    expect(add.disabled).toBe(false)
+    expect(globalThis.document.activeElement).toBe(add)
+    await userEvent.keyboard('{Enter}')
+    expect(api.callsTo('POST /v1/me/favorites')).toHaveLength(1)
+    await act(async () => answer(favorite(letter, 960)))
+  })
+
   it('lists the properties in order, without Location outside search results and without the email fields of a document', async () => {
     await renderApp('/folders/7?sel=10388', routes())
     const panel = await details()

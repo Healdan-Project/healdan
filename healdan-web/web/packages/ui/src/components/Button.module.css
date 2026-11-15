@@ -44,11 +44,14 @@
   filter: brightness(0.92);
 }
 
-.button[data-disabled] {
+/* Pending (a change under way) takes no press but keeps the focus, and looks disabled */
+.button[data-disabled],
+.button[data-pending] {
   color: var(--hd-text-muted);
 }
 
-.button.default[data-disabled] {
+.button.default[data-disabled],
+.button.default[data-pending] {
   border-color: var(--hd-line);
   background: var(--hd-line);
 }

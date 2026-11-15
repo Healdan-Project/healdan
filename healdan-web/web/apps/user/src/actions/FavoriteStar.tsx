@@ -24,6 +24,8 @@ export interface Favorite {
   favorite: S['FavoriteView'] | undefined
   /** My Favorites isn't known yet, or a change to this one is under way (from the star or a menu alike) */
   isDisabled: boolean
+  /** A change to this one is under way (from the star or a menu alike) */
+  isBusy: boolean
   /** Adds it to My Favorites, or takes it out */
   toggle: () => Promise<void>
 }
@@ -56,6 +58,7 @@ export function useFavorite(what: Starred | undefined): Favorite {
   return {
     favorite,
     isDisabled: what === undefined || busy || favorites.isPending,
+    isBusy: busy,
     toggle: async () => {
       if (what) await mutation.mutateAsync({ bookmark: favorite, star: what })
     },
@@ -64,12 +67,13 @@ export function useFavorite(what: Starred | undefined): Favorite {
 
 /**
  * The star of a folder (beside its name) or of a document (beside its name in the details): in My Favorites or not
- * (spec 4, 6.1).
+ * (spec 4, 6.1). While its change runs it's pending, not disabled: it takes no press, and keeps the focus, which Chromium
+ * moves off a disabled button.
  */
 export function FavoriteStar({ what, add, remove }: { what: Starred; add: string; remove: string }) {
-  const { favorite, isDisabled, toggle } = useFavorite(what)
+  const { favorite, isDisabled, isBusy, toggle } = useFavorite(what)
   return (
-    <Button variant="quiet" aria-label={favorite ? remove : add} isDisabled={isDisabled} onPress={() => void toggle()}>
+    <Button variant="quiet" aria-label={favorite ? remove : add} isDisabled={isDisabled && !isBusy} isPending={isBusy} onPress={() => void toggle()}>
       <span className={favorite ? styles.starred : styles.star}>
         <Icon name={favorite ? 'starFilled' : 'star'} size={18} />
       </span>
