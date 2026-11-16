@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Ui;
 
 namespace Healdan.Helper.Platform;
 
 /// <summary>
-/// How the helper speaks up (spec §5.1): a native notification on macOS once the user has allowed them. When it can't
-/// (a build run by hand, or notifications refused), the notice goes to the log and becomes the menu's status line.
+/// How the helper speaks up (spec §5.1): a native notification on macOS once the user has allowed them, and on Linux
+/// through <c>notify-send</c>. When it can't (a build run by hand, notifications refused, or no <c>notify-send</c>),
+/// the notice goes to the log and becomes the menu's status line.
 /// Every notice is logged.
 /// </summary>
 internal sealed class Notifier(HelperLog log) : INotifier
@@ -32,7 +34,9 @@ internal sealed class Notifier(HelperLog log) : INotifier
         bool shown;
         try
         {
-            shown = MacNotifications.TryPost(title, message);
+            shown = OperatingSystem.IsLinux()
+                ? NotifySend.TryPost(title, message)
+                : MacNotifications.TryPost(title, message);
         }
         catch (Exception e)
         {
