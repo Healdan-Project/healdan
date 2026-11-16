@@ -17,6 +17,7 @@ public sealed class FakeApp : IOfficeApp
     private readonly List<string> _opened = [];
     private readonly ConcurrentDictionary<string, bool> _lockSeen = new(StringComparer.Ordinal);
     private volatile bool _running;
+    private volatile bool _runningSeen;
 
     public string Name => "LibreOffice";
 
@@ -46,13 +47,20 @@ public sealed class FakeApp : IOfficeApp
         lock (_lock)
             _opened.Add(path);
         _lockSeen.TryRemove(path, out _);
+        _runningSeen = false;
         _running = true;
         // LibreOffice locks a file it opens for editing; a read-only copy gets no lock file.
         if (OperatingSystem.IsWindows() || (File.GetUnixFileMode(path) & UnixFileMode.UserWrite) != 0)
             File.WriteAllText(LockPath(path), "fake lock");
     }
 
-    public bool IsRunning() => _running;
+    public bool IsRunning()
+    {
+        if (!_running)
+            return false;
+        _runningSeen = true;
+        return true;
+    }
 
     public bool LockExists(string path)
     {
@@ -68,6 +76,14 @@ public sealed class FakeApp : IOfficeApp
     /// window by removing the lock file waits for this first rather than for a fixed time.
     /// </summary>
     public bool LockSeen(string path) => _lockSeen.ContainsKey(path);
+
+    /// <summary>
+    /// True once something has asked whether the app runs and found it running, since it last opened a copy. After an
+    /// open only the close watcher's crash check asks, and it counts the app going away as a crash only once it has seen
+    /// it running, so a test that crashes the app waits for this first rather than for a fixed time, which a slow runner
+    /// can outlast (#247).
+    /// </summary>
+    public bool RunningSeen => _runningSeen;
 
     public static string LockPath(string path) =>
         Path.Combine(Path.GetDirectoryName(path)!, $".~lock.{Path.GetFileName(path)}#");
