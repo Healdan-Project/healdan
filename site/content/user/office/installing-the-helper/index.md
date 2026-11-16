@@ -62,11 +62,13 @@ The helper for Ubuntu isn't ready yet. Until it is, Healdan works in LibreOffice
 
 ## The Sign In Window
 
-![The Sign In to Healdan window: Healdan's mark above the title and a line saying the helper keeps a sign-in in the keychain, never your password; then Server Address https://healdan.example, empty Username and Password fields, and the Cancel and Sign In buttons](sign-in.png)
+![The Sign In to Healdan window's first step: Healdan's mark above the title and a line saying the helper keeps a sign-in in the keychain, never your password; then Server Address with healdan.example typed in it, and the Cancel and Continue buttons](sign-in.png)
 
-Type the server's address. If your firm signs people in through a provider, such as Microsoft, the window then
-shows its button: see [Signing In Through the Browser](#signing-in-through-the-browser). Otherwise it looks as in
-the picture: type your username and password, and choose **Sign In**.
+Type the server's address and choose **Continue**. The window then shows your server's own way of signing in, with
+the server's name at the top and **Change** beside it to go back to the address. If your firm signs people in
+through a provider, such as Microsoft, that's a button for it: see
+[Signing In Through the Browser](#signing-in-through-the-browser). Otherwise type your username and password, and
+choose **Sign In**.
 
 - **The address** is your server's, such as `docs.example.org`. The helper adds `https://` if you leave it out, and
   refuses `http://`: your password and documents only travel encrypted. (`http://localhost` works, for a server on
@@ -75,8 +77,13 @@ the picture: type your username and password, and choose **Sign In**.
   name, and keeps that in your Mac's keychain.
 - **Wrong passwords count,** as they do in the web page: five in a row block your username for 15 minutes, wherever
   you sign in. See [Signing In](../../getting-started/signing-in/#if-you-cant-sign-in).
-- **"That address isn't a Healdan server"** means the address reached a server, but not Healdan. Check it with your
-  administrator.
+- **"That address isn't a Healdan server"** under the address, when you choose **Continue**, means the address
+  reached a server, but not Healdan. Check it with your administrator. If the window says the server couldn't be
+  reached, check the address, and that your Mac is online.
+
+Once the helper knows your server, as after you sign out or when your sign-in ends, the window opens straight on
+your server's way of signing in. If it can't reach the server yet, say just after your Mac starts, it says so and
+tries again every few seconds.
 
 The helper stays signed in until you sign out or change your password, or it goes unused for 30 days, and for a
 year at most: your administrator can change both. It then asks you to sign in again, and anything you save
@@ -91,9 +98,9 @@ an account that signs in through a provider doesn't have: install the latest.
 {{< /callout >}}
 
 When your administrator has set up a sign-in provider, the window shows a button for each, such as **Sign In with
-Microsoft**, once it has found your server. They're the web page's buttons, with the same words.
+Microsoft**, once you've chosen **Continue**. They're the web page's buttons, with the same words.
 
-![The Sign In to Healdan window for a server with a sign-in provider: Healdan's mark above the title and a line saying the helper keeps a sign-in in the keychain, never your password; then Server Address https://healdan.example, the Sign In with Microsoft button, the Sign In with a Password link under it, and the Cancel button](sign-in-provider.png)
+![The Sign In to Healdan window's second step for a server with a sign-in provider: Healdan's mark above the title and a line saying the helper keeps a sign-in in the keychain, never your password; then healdan.example with a Change link beside it, the Sign In with Microsoft button, the Sign In with a Password link under it, and the Cancel button](sign-in-provider.png)
 
 1. Choose the button. The helper opens a tab in your usual browser at the provider, and the window says "Finish
    signing in in your browser…".

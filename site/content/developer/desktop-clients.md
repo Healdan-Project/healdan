@@ -348,18 +348,21 @@ is all there is. `SignIn.SignInWithProviderAsync` then takes these steps, all in
    browser was given it. The answer is the same as a password's, and the token is kept as `SignInAsync` keeps it.
    A `401 sign-in-failed` means the code was used, came too late or didn't match, and the sign-in starts again.
 
-The Sign In window offers it (`Windows/SignInWindow.axaml`, through `SignInPrompt`). `HelperSession.ProvidersAsync`
-reads `GET /server` when the window opens, and again each time the address is changed and left. An answer that
-didn't come (the server couldn't be reached, or isn't Healdan) is asked for again, because a fixed address, as after a
-refused token, is read-only and nobody leaves it: whenever the window is shown again (Avalonia raises `Opened` on every
-`Show`), when the address field is left, and when **Sign In** is pressed. An ask under way is never repeated for the
-same address, and none runs on the UI thread. **Sign In** asks first, with the fields off and its label "Signing In…",
-and sends the password only if the providers still don't come. If they do, the window shows the buttons and sends
-nothing, since an account that signs in through a provider has no password for a wrong one to count against; what was
-typed stays in the form, and a second **Sign In** sends it. A server with
-providers gets a button for each, in its order, and the password form folds behind a link labelled with its
-`passwordLabel`, unless something is typed in the form already. A server with none, an older one, or one the helper
-can't reach or doesn't speak to gets the password form as before, whose Sign In then says why. Showing the window
+The Sign In window offers it (`Windows/SignInWindow.axaml`, through `SignInPrompt`), in two steps (the address-first
+spec, `docs/superpowers/specs/2026-11-16-helper-sign-in-address-first-design.md`). The first is the address, and
+**Continue**, the default button, so Return connects rather than trying a password. `HelperSession.ProvidersAsync`
+makes a sign-in's checks of the address (`BeforeSignIn`), reads `GET /server`, and gives a `ServerAnswer`: the
+server's name (its host and port), and its choices or why there are none, with the messages a password sign-in
+gives. Only a server that couldn't be reached or didn't answer in 30 seconds is marked `Retry`. A problem stays on
+the first step, under the address. Choices take the window to the second step, which names the server, with
+**Change** back to the address (none for a fixed address, as after a refused token, since the helper is running
+against it). A server with providers gets a button for each, in its order, with the first focused, and the password
+form folds behind a link labelled with its `passwordLabel`; a server with none, or an older one, gets the password
+form at once. A kept address opens on the second step, saying it's connecting, and asks when the window opens. A
+`Retry` answer is asked again every 5 seconds (the window's `RetryEvery`) while the window is shown, and any answer
+without choices again whenever it's shown again (Avalonia raises `Opened` on every `Show`). An ask under way is
+never repeated, none runs on the UI thread, and an answer that comes after **Change** is dropped. A password goes
+only to a server whose choices the window shows, so **Sign In** sends it with no ask first. Showing the window
 again clears the error line, which is a stale one by then. A button runs
 `HelperSession.TrySignInWithProviderAsync`, which makes the password sign-in's checks before and after (the address,
 another server's copies, the settings) and turns what went wrong into the window's error line:
@@ -831,10 +834,11 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   challenge and the address, and works once. A fake `IBrowser` plays the person: it asks `SessionServer` to sign in,
   then follows its redirect to the helper's real listener, and records where the listener sent it on. `PkceTests`
   hold the challenge to RFC 7636's appendix B.
-- **`SignInWindowTests`** drive the Sign In window headless, with a fake prompt: the buttons and the folded form,
-  the wait and its Cancel, a refusal and the browser's time running out on the error line and the focus it leaves,
-  the providers asked for again when the address changes, when the window is shown again and when Sign In is
-  pressed, and the notice of a sign-in that ended. `HelperSessionTests` run `TrySignInWithProviderAsync` with the
+- **`SignInWindowTests`** drive the Sign In window headless, with a fake prompt: the two steps, Return on the
+  address connecting with no password sent, Continue's problems and its busy state, Change and its absence for a
+  fixed address, a kept address opening on the choices and its retry (stopping at Close and at Change, and dropping
+  a late answer), the buttons and the folded form, the wait and its Cancel, a refusal and the browser's time running
+  out on the error line and the focus it leaves, and the notice of a sign-in that ended. `HelperSessionTests` run `TrySignInWithProviderAsync` with the
   fake browsers above.
 - **`Category=Stack`** tests run against a real stack, and skip without `HEALDAN_STACK_URL`: `StackCycleTests` the
   cycle, and `StackProviderSignInTests`, which also needs `HEALDAN_STACK_SIGNIN_PROVIDER`, a sign-in through the

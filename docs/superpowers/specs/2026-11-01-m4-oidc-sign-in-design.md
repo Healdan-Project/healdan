@@ -186,7 +186,7 @@ A refusal comes back to the sign-in page, or to the helper (§6.2), with a code.
 
 ### 6.1 The window (call)
 
-- **The sign-in window** asks for the server's address as today, then reads `GET /server`: a button for each provider, and the password link, labelled as on the web page.
+- **The sign-in window** asks for the server's address as today, then reads `GET /server`: a button for each provider, and the password link, labelled as on the web page. (changed later: the address first, then the server's choices; `docs/superpowers/specs/2026-11-16-helper-sign-in-address-first-design.md`.)
 - **A server with no provider** gets today's window. The password route stays for local accounts (owner, §7.3).
 
 ### 6.2 The flow (call; RFC 8252's loopback redirect)
