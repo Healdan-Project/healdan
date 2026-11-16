@@ -111,6 +111,7 @@ Healdan hides Dropbox (80): its GUI shows only with menu `-2070`, which the `hid
 ### 2.3 Attribute and metadata search
 
 - **The model** (`CORE/metadata/`): `Template` (`ld_template`, `ld_template_ext`, `ld_template_acl`) and `AttributeSet` (`ld_attributeset`, `ld_attributeset_ext`). Attribute options are in `ld_extoption`.
+- **Import and export** (upstream, in the sync of 2026-11-15). The Templates and Attribute sets tabs export a template or set as CE's own objects written by `IOUtil.serialize` (`TemplatesDataServlet`, `AttributeSetsDataServlet`), which needs Document metadata. Healdan refuses the import (`HealdanImports`, spec `docs/superpowers/specs/2026-11-15-template-imports-refused-design.md`); its own is Healdan-Project/healdan#245.
 - **Where values are stored.** `ld_document_ext`, `ld_folder_ext`, `ld_version_ext` and `ld_generic_ext`, with typed value columns.
   - Indexes exist only on `ld_document_ext(ld_name, ld_type)`.
   - There are none on the value columns, and none at all on `ld_folder_ext`.
