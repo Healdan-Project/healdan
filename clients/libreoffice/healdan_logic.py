@@ -11,6 +11,7 @@ standard library: the commands and what each does, where the helper keeps its fi
 The extension holds no token and calls no server: the helper does the work, and draws the windows.
 """
 
+import errno
 import http.client
 import json
 import logging
@@ -335,8 +336,12 @@ def _alive(pid):
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
+    except PermissionError as e:
+        if e.errno == errno.EPERM:
+            return False  # it exists but isn't ours: the helper runs as the same user as LibreOffice, so it's not the helper
+        return True  # EACCES: a security policy (AppArmor, SELinux) refused the signal, which says nothing of whose it is
     except OSError:
-        return True  # it exists, though it isn't ours to signal
+        return True  # unusual; as before, believe the helper is there
     return True
 
 

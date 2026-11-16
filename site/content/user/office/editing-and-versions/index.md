@@ -108,7 +108,8 @@ Healdan, and **Don't Save** leaves Healdan at your last save.
 
 ## The Local Copies
 
-The helper keeps the copies in `~/Library/Application Support/Healdan Helper/Copies/`, named after the title, such as
+The helper keeps the copies in `~/Library/Application Support/Healdan Helper/Copies/` (on Ubuntu,
+`~/.local/share/healdan-helper/Copies/`), named after the title, such as
 `Lease agreement #1234 v2.1.docx`. A copy open in LibreOffice or PowerPoint keeps the name it was opened with while
 it's open, even as the title moves on; one open in Word or Excel takes each saved version's name. Leave the folder to
 the helper: opening, moving or renaming a copy yourself would cut it off from Healdan.

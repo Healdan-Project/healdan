@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Ui;
 
 namespace Healdan.Helper.Platform;
 
 /// <summary>
-/// How the helper speaks up (spec §5.1): a native notification on macOS once the user has allowed them. When it can't
-/// (a build run by hand, or notifications refused), the notice goes to the log and becomes the menu's status line.
+/// How the helper speaks up (spec §5.1): a native notification on macOS once the user has allowed them, and on Linux
+/// through <c>notify-send</c>. When it can't (a build run by hand, notifications refused, or no <c>notify-send</c>),
+/// the notice goes to the log and becomes the menu's status line.
 /// Every notice is logged.
 /// </summary>
 internal sealed class Notifier(HelperLog log) : INotifier
@@ -16,6 +18,11 @@ internal sealed class Notifier(HelperLog log) : INotifier
     private const string Helper = "Healdan Helper";
 
     private volatile string? _status;
+
+    private readonly object _order = new();
+
+    /// <summary>The last Linux notice queued; the next runs after it.</summary>
+    private Task _last = Task.CompletedTask;
 
     /// <summary>The last notice that couldn't be shown as a notification, for the menu; null when there's none.</summary>
     public string? Status => _status;
@@ -29,10 +36,24 @@ internal sealed class Notifier(HelperLog log) : INotifier
     public void Notify(string title, string message)
     {
         log.Info($"Notice: {title}: {message}");
+        // notify-send can take seconds when the notification daemon is stuck, and callers include the UI thread. One
+        // after another, so notices show, and fall back to the status line, in the order they were given.
+        if (OperatingSystem.IsLinux())
+        {
+            lock (_order)
+                _last = _last.ContinueWith(_ => Show(title, message, (t, m) => NotifySend.TryPost(t, m)),
+                    CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            return;
+        }
+        Show(title, message, MacNotifications.TryPost);
+    }
+
+    private void Show(string title, string message, Func<string, string, bool> post)
+    {
         bool shown;
         try
         {
-            shown = MacNotifications.TryPost(title, message);
+            shown = post(title, message);
         }
         catch (Exception e)
         {

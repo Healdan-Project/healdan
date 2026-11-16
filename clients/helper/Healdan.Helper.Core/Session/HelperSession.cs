@@ -1222,6 +1222,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             _log.Warn("The temporary folder couldn't be made: " + e.Message);
         }
 
+        // Links are accepted before the channel (and channel.json) is up, so a second helper's link can't arrive while
+        // they aren't; the link held from the start opens once the channel listens.
+        var held = Links.Accept(api.Server, cycle);
         var channel = new ChannelServer(_paths, new ChannelHandler(cycle, Links, _windows, _notifier, _log, _paths));
         try
         {
@@ -1235,6 +1238,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             }
             if (quit)
             {
+                Links.NotReady();
                 channel.Stop(); // quit while starting: Dispose has run, so this start is undone here
                 cycle.Dispose();
                 return;
@@ -1255,7 +1259,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             if (_started)
                 _addinDocuments = documents;
         }
-        _ = Links.Ready(api.Server, cycle);
+        if (held is not null)
+            _ = Links.Handle(held);
         RaiseChanged();
     }
 

@@ -14,6 +14,7 @@ using Avalonia.Threading;
 using Healdan.Helper.Core;
 using Healdan.Helper.Core.Addin;
 using Healdan.Helper.Core.Cycle;
+using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Security;
 using Healdan.Helper.Core.Session;
@@ -101,6 +102,13 @@ public partial class App : Application
         // it until it has started.
         if (this.TryGetFeature<IActivatableLifetime>() is { } activatable)
             activatable.Activated += OnActivated;
+        // Linux starts the helper with the link as its argument; the session holds it until it has signed in. A healdan:
+        // link that isn't an open link goes too, so it's logged and the user told it was ignored, as on macOS.
+        if (OperatingSystem.IsLinux() && desktop.Args is { } args)
+        {
+            foreach (var arg in args.Where(HealdanLink.HasScheme))
+                session.Links.Handle(arg).ContinueWith(t => _log.Error("A link failed", t.Exception), TaskContinuationOptions.OnlyOnFaulted);
+        }
 
         _tray = new TrayMenu(this, session, notifier, windows, extension.Check, () => desktop.Shutdown());
         NativeMenu.SetMenu(this, AppMenu.Build(windows.ShowAbout, windows.ShowSettings, MacPlatform.GiveBackFocus, () => desktop.Shutdown()));

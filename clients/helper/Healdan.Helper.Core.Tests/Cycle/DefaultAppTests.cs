@@ -12,7 +12,10 @@ public sealed class DefaultAppTests
     [
         ".app", ".command", ".tool", ".terminal", ".pkg", ".mpkg", ".dmg", ".workflow", ".action", ".jar", ".fileloc",
         ".inetloc", ".webloc", ".scpt", ".scptd", ".applescript", ".sh", ".py", ".rb", ".pl", ".prefPane", ".kext",
-        ".mobileconfig", ".shortcut"
+        ".mobileconfig", ".shortcut",
+        ".desktop", ".appimage", ".deb", ".rpm", ".snap", ".flatpak", ".flatpakref", ".flatpakrepo", ".run", ".bin", ".exe",
+        ".msi", ".bat", ".cmd", ".com", ".ps1", ".vbs", ".lnk", ".jnlp",
+        ".url", ".msp", ".scr", ".pif", ".cpl", ".reg", ".js", ".jse", ".vbe", ".wsf", ".wsh", ".hta"
     ];
 
     public static TheoryData<string> RefusedExtensions() => [.. Refused];
@@ -29,10 +32,20 @@ public sealed class DefaultAppTests
     }
 
     [Theory]
+    [InlineData("Editor.DeskTop")]
+    [InlineData("/Copies/Tool.AppImage")]
+    [InlineData("setup.EXE")]
+    [InlineData("Update.Deb")]
+    [InlineData("/Copies/run me.Ps1")]
+    public void RefusesLinuxAndWineKindsInAnyCase(string name) => Assert.True(DefaultApp.Refuses(name));
+
+    [Theory]
     [InlineData("Signed NDA.pdf")]
     [InlineData("Photo.JPG")]
     [InlineData("Notes.txt")]
     [InlineData("No extension")]
     [InlineData("Invoice.command.pdf")]
+    [InlineData("Contract.DOCX")]
+    [InlineData("Setup.exe.pdf")]
     public void HandsOverOtherFiles(string name) => Assert.False(DefaultApp.Refuses(name));
 }

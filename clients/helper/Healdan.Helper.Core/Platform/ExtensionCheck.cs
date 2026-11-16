@@ -17,10 +17,11 @@ namespace Healdan.Helper.Core.Platform;
 /// none is, it opens the <c>.oxt</c> in LibreOffice for the user to accept, once per helper version. After that it
 /// doesn't start LibreOffice again: each start tells the user, and the menu offers Install the LibreOffice Extension
 /// (<see cref="Missing"/>, <see cref="InstallFromMenu"/>) until it's installed.</para>
-/// <para><b>Linux</b> (<see cref="ExtensionRoute.Unopkg"/>, phase 2): <c>unopkg list</c>, then <c>unopkg add</c>
-/// once per helper version, else the <c>.oxt</c> opened in LibreOffice. unopkg never runs beside a running
-/// LibreOffice, which then gets the <c>.oxt</c> unless it was asked already. It runs once per helper version, unless
-/// the installed extension is still older.</para>
+/// <para><b>Linux</b> (<see cref="ExtensionRoute.Unopkg"/>, phase 2): a start for a helper version already checked, with
+/// the installed extension current, reads nothing. Otherwise, while LibreOffice is running, the registry is read (it runs
+/// nothing), and the <c>.oxt</c> is opened in LibreOffice unless it was asked already; unopkg never runs beside a running
+/// LibreOffice. With LibreOffice closed it's <c>unopkg list</c>, then <c>unopkg add</c> once per helper version, else the
+/// <c>.oxt</c> opened in LibreOffice. As on macOS, the registry is then read again while the extension is missing.</para>
 /// </summary>
 /// <param name="helperVersion">This helper's version: a new one checks again, and may open LibreOffice again.</param>
 /// <param name="bundledOxt">The <c>.oxt</c> inside the app; null, or missing, in a build that carries none.</param>
@@ -93,13 +94,12 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
     }
 
     /// <summary>
-    /// macOS: reads the registry again, as the menu opens and every few seconds while it's missing, so the menu's item and
-    /// the dot go once the user has accepted the extension.
-    /// Elsewhere, what the last check found.
+    /// Reads LibreOffice's registry again, as the menu opens and every few seconds while it's missing, on macOS and Linux,
+    /// so the menu's item and the dot go once the user has accepted the extension, whether or not LibreOffice is running.
     /// </summary>
     public bool Refresh()
     {
-        if (route != ExtensionRoute.OpenInLibreOffice || Volatile.Read(ref _bundled) is not { } bundled)
+        if (Volatile.Read(ref _bundled) is not { } bundled)
             return Missing;
         var (wasMissing, wasOlder) = (Missing, Older);
         if (!tools.LibreOfficeInstalled)
@@ -180,6 +180,12 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
                 Save(record with { CheckedFor = helperVersion });
                 SetMissing(false);
                 log.Info($"LibreOffice extension {record.Version} was installed when last checked; LibreOffice is running, so it isn't listed now");
+                return ExtensionOutcome.Current;
+            }
+            // The user may have accepted the extension in this running LibreOffice: its registry says, and runs nothing.
+            if (RecordIfCurrent(ReadInstalled(), bundled, record))
+            {
+                log.Info($"LibreOffice extension {bundled} is in LibreOffice's registry, though LibreOffice is running");
                 return ExtensionOutcome.Current;
             }
             SetMissing(true);
@@ -264,7 +270,7 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
         return ExtensionOutcome.OpenedInLibreOffice;
     }
 
-    /// <summary>LibreOffice's registry (macOS), kept so <see cref="Older"/> can tell an older extension from none.</summary>
+    /// <summary>LibreOffice's registry (macOS, and Linux beside a running LibreOffice), kept so <see cref="Older"/> can tell an older extension from none.</summary>
     private InstalledExtension? ReadInstalled()
     {
         var installed = tools.ReadInstalled();

@@ -85,4 +85,25 @@ public sealed class LinkHandOverTests : IDisposable
         Assert.Contains("Dropped a link that isn't Healdan's open link", text);
         Assert.DoesNotContain("forged", text);
     }
+
+    [Fact]
+    public void ANoticeForALinkNotTakenNamesTheDocOnly()
+    {
+        var text = LinkHandOver.NotTakenNotice("healdan://open/1234?server=healdan.test&ro=1");
+
+        Assert.Equal("Healdan Helper didn't open #1234. Sign in from its menu, then click the link again.", text);
+        Assert.DoesNotContain("healdan.test", text);
+    }
+
+    [Fact]
+    public void NoNoticeForAnythingThatIsntHealdansLink()
+    {
+        Assert.Null(LinkHandOver.NotTakenNotice("https://example.com/"));
+    }
+
+    [Fact]
+    public void TheAlreadyRunningNoticeSaysWhereTheMenuIs()
+    {
+        Assert.Equal("Healdan Helper is already running. Its menu is in the top bar.", LinkHandOver.AlreadyRunningNotice);
+    }
 }

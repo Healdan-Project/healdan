@@ -190,12 +190,16 @@ from the Open from Healdan window. A read-only copy isn't checked out.
   documents, spreadsheets, presentations, drawings and PDFs". Open it from the Open from Healdan window, or download
   it from the web page.
 - **Your Mac checks it.** The helper marks a copy it opens in your Mac's usual app as downloaded from the internet, so
-  macOS checks it as it would any download.
-- **Never the kinds on its list.** The helper keeps a list of the common kinds of file that can run a program or
-  change your Mac when opened, such as `.app`, `.command`, `.pkg`, `.dmg`, `.sh` or `.mobileconfig`. A file of one
-  of those kinds isn't downloaded or opened: the helper says it never opens that kind of file. If you need it,
-  download it from the web page. A kind that isn't on the list, such as a `.zsh` script, can still open, and then
-  your Mac's check is what protects you.
+  macOS checks it as it would any download. Ubuntu has no such mark, so on Ubuntu the list below is the only check.
+- **Never the kinds on its list.** The helper keeps one list, the same on a Mac and on Ubuntu, of the common kinds of
+  file that can run a program or change your computer when opened, such as `.app`, `.command`, `.pkg`, `.dmg`, `.sh`
+  or `.mobileconfig`. A file of one of those kinds isn't downloaded or opened: the helper says it never opens that kind
+  of file. If you need it, download it from the web page. A kind that isn't on the list, such as a `.zsh` script, can
+  still open, and then your Mac's check is what protects you.
+- **The list also has** the kinds that run on Linux, or under Wine: `.desktop`, `.appimage`, `.deb`, `.rpm`, `.snap`,
+  `.flatpak`, `.flatpakref`, `.flatpakrepo`, `.run`, `.bin`, `.exe`, `.msi`, `.bat`, `.cmd`, `.com`, `.ps1`, `.vbs`,
+  `.lnk`, `.jnlp`, `.url`, `.msp`, `.scr`, `.pif`, `.cpl`, `.reg`, `.js`, `.jse`, `.vbe`, `.wsf`, `.wsh`, and `.hta`, on a Mac too, where they do no harm but can't be opened from the helper either. Ubuntu opens a
+  file that isn't on the list with `xdg-open`, in the app Ubuntu has for it.
 
 ## What Can't Be Opened
 

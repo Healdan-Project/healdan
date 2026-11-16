@@ -3,13 +3,14 @@ title: Working in Office Apps
 weight: 5
 ---
 
-With the Healdan Helper on your Mac, you save to and open from Healdan inside LibreOffice Writer, Calc, Impress and
-Draw, and inside Microsoft Word, Excel and PowerPoint, without going through the web page. The title bar always shows
+With the Healdan Helper on your Mac, or on Ubuntu with LibreOffice, you save to and open from Healdan inside
+LibreOffice Writer, Calc, Impress and Draw, and on a Mac inside Microsoft Word, Excel and PowerPoint, without going
+through the web page. The title bar always shows
 the document's doc # and version: `Lease agreement #1234 v2.1`.
 
 ## How It Fits Together
 
-- **The Healdan Helper** is a small app in your Mac's menu bar. It keeps your sign-in, keeps a local copy of each
+- **The Healdan Helper** is a small app in your Mac's menu bar, or in the top bar of Ubuntu's desktop. It keeps your sign-in, keeps a local copy of each
   document you have open, sends your saves to Healdan in the background, and shows the Save to Healdan, Open from
   Healdan and Properties windows.
 - **Healdan's LibreOffice extension** adds a **Healdan** menu and toolbar to LibreOffice. It also takes over
@@ -30,15 +31,17 @@ open is checked out to you, as it would be there.
 
 ## What You Need
 
-- A Mac with Apple silicon, running macOS 26 or later.
+- A Mac with Apple silicon, running macOS 26 or later, or a computer running Ubuntu 26.04.
 - LibreOffice 26.2 or later, or Microsoft Word, Excel or PowerPoint from Microsoft 365, or both. To file email, the
   new Outlook for Mac from Microsoft 365: see [Filing Email from Outlook](filing-email/).
 - For the Healdan tab in Word, Excel and PowerPoint, an administrator who has deployed the add-in: see
   [Deploying the Add-in](../../install/office-integration/#deploying-the-add-in).
 - Your Healdan server's `https://` address: the one you use for the web page.
 
-The helper for Ubuntu comes later, and Microsoft Office on Windows later still. See
-[Known Limitations](../../install/known-limitations/).
+On Ubuntu, the helper works with LibreOffice only: Microsoft Office isn't on Ubuntu, and PDFs open read-only in the
+default app. These pages say "Mac" and **⌘** where they were written for the Mac: on Ubuntu, read them as your
+computer and **Ctrl**, and see [Installing on Ubuntu](installing-the-helper/#installing-on-ubuntu) for what differs.
+Microsoft Office on Windows comes later. See [Known Limitations](../../install/known-limitations/).
 
 ## A Document's Day
 

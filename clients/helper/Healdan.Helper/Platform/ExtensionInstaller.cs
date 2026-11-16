@@ -37,23 +37,42 @@ internal sealed class ExtensionInstaller : IExtensionTools
         _log = log;
         Check = new ExtensionCheck(this, paths, notifier, log, helperVersion,
             OperatingSystem.IsMacOS() ? ExtensionRoute.OpenInLibreOffice : ExtensionRoute.Unopkg,
-            OperatingSystem.IsMacOS() ? BundledOxt : null, windowWaiting);
+            BundledOxt, windowWaiting);
     }
 
     /// <summary>The check, which the menu (its Install the LibreOffice Extension item) and Settings read too.</summary>
     public ExtensionCheck Check { get; }
 
-    /// <summary>The <c>.oxt</c> in the app bundle's <c>Contents/Resources</c> (<c>package.sh</c> puts it there); null outside the app bundle.</summary>
-    public static string? BundledOxt => MacPlatform.InAppBundle
-        ? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Resources", "healdan.oxt"))
-        : null;
+    /// <summary>
+    /// The <c>.oxt</c> that comes with the helper: on macOS, in the app bundle's <c>Contents/Resources</c>; on Linux,
+    /// <c>healdan.oxt</c> beside the executable, where the package puts it. Null when there is none (a build run by
+    /// hand), and on other systems. <c>package.sh</c> puts it there.
+    /// </summary>
+    public static string? BundledOxt => OperatingSystem.IsMacOS()
+        ? MacPlatform.InAppBundle
+            ? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Resources", "healdan.oxt"))
+            : null
+        : OperatingSystem.IsLinux() && Path.Combine(AppContext.BaseDirectory, "healdan.oxt") is var beside && File.Exists(beside)
+            ? beside
+            : null;
 
     /// <summary>Installs or updates the extension if it needs it; at start, once signed in, never while a window waits.</summary>
     public Task<ExtensionOutcome> EnsureCurrentAsync(CancellationToken cancel) => Check.RunAsync(cancel);
 
     public bool LibreOfficeInstalled => OperatingSystem.IsMacOS() ? _libreOffice is not null : File.Exists(Unopkg);
 
-    public bool LibreOfficeRunning() => _app.IsRunning();
+    /// <summary>When Linux's process list can't be read it counts as running, so unopkg isn't run against a profile LibreOffice may have open.</summary>
+    public bool LibreOfficeRunning()
+    {
+        try
+        {
+            return _app.IsRunning();
+        }
+        catch (IOException)
+        {
+            return true;
+        }
+    }
 
     /// <summary>LibreOffice's user profile's registry, read without running anything.</summary>
     public InstalledExtension? ReadInstalled() => ExtensionVersion.FromRegistry(LibreOfficeProfile());
@@ -121,7 +140,7 @@ internal sealed class ExtensionInstaller : IExtensionTools
 
     private const int Timeout = -1;
 
-    /// <summary>Linux's unopkg; Task 22 settles where its package puts it.</summary>
+    /// <summary>Linux's unopkg, where Ubuntu's <c>libreoffice-script-provider-python</c> package puts it.</summary>
     private static string Unopkg => "/usr/lib/libreoffice/program/unopkg";
 
     /// <summary>

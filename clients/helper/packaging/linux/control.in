@@ -1,0 +1,12 @@
+Package: healdan-helper
+Version: @VERSION@
+Architecture: @ARCH@
+Section: utils
+Priority: optional
+Maintainer: The Healdan Project
+Homepage: https://docs.healdan.com
+Installed-Size: @SIZE@
+Depends: libsecret-tools, libnotify-bin, xdg-utils, libreoffice-core, libreoffice-script-provider-python, libharfbuzz0b, libice6, libsm6, libfontconfig1, libx11-6, libxi6, libxrandr2, libxcursor1, libxext6, libxfixes3, libicu78, libssl3t64, zlib1g, libstdc++6
+Recommends: libreoffice-writer, libreoffice-calc, libreoffice-impress, libreoffice-draw
+Description: Opens and saves Healdan documents in LibreOffice
+ The Healdan Helper opens and saves Healdan documents in LibreOffice, and takes the links from the web page.

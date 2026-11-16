@@ -40,7 +40,7 @@ internal sealed class TrayMenu : IDisposable
     private readonly WindowIcon _plain;
     private readonly WindowIcon _attention;
     /// <summary>
-    /// macOS: LibreOffice's registry read again while the extension is missing, so the dot and the menu item go once the
+    /// macOS and Linux: LibreOffice's registry read again while the extension is missing, so the dot and the menu item go once the
     /// user has accepted it there, without waiting for the menu to open.
     /// </summary>
     private readonly DispatcherTimer _registry = new() { Interval = TimeSpan.FromSeconds(5) };
@@ -91,7 +91,7 @@ internal sealed class TrayMenu : IDisposable
         var reason = Attention.Reason(_session.SignedIn, _session.StartFailed, _windows.Waiting, copies.Any(_session.HasCrashed), _session.KeptCopies().Count,
             missing, _extension.Older is not null);
         ShowDot(reason);
-        _registry.IsEnabled = missing && OperatingSystem.IsMacOS();
+        _registry.IsEnabled = missing; // macOS and Linux both read LibreOffice's registry, which sees an extension accepted while it runs
 
         var items = _menu.Items;
         items.Clear();

@@ -2,13 +2,14 @@ name: Clients
 
 # Builds and tests the desktop clients in clients/: the helper (.NET) on Ubuntu and macOS, the LibreOffice extension's
 # Python tests on Ubuntu, and the Office add-in's Node tests on Ubuntu. A helper-v* tag, or a run by hand, also packages
-# the macOS helper (spec §5.12).
+# the macOS helper and the Ubuntu helper's .debs (spec §5.12).
 #
 # No paths filter: the Clients check should be required, so every pull request runs the workflow and the test jobs skip
 # themselves when code-changed.sh says the clients didn't change: nothing under clients/, this workflow or the API
 # contract (healdan-api's openapi.yaml, which the helper's contract tests read). The Clients job, the check, then passes
 # at once.
-# Pull requests never package: that needs the signing secrets, and Clients doesn't wait for it.
+# Pull requests never package, the Mac's helper (it needs the signing secrets) or Ubuntu's, and Clients doesn't wait for
+# either.
 
 on:
   push:
@@ -157,6 +158,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v5
@@ -293,6 +296,93 @@ jobs:
           if [ -f "$keychain" ]; then security delete-keychain "$keychain" || true; fi
           rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/notary-key.p8"
 
+  # The Ubuntu package (spec §5.12): a .deb each for amd64 and arm64, built in an ubuntu:26.04 container so that the
+  # install check runs on the release the package is for. No secrets are needed, so there is no environment. The
+  # packages are uploaded as an artifact; release-linux attaches them to the tag's release only from a tag push.
+  package-linux:
+    name: Package (Linux)
+    needs: [ helper, extension ]
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/helper-v')
+    runs-on: ubuntu-24.04
+    container: ubuntu:26.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      # What the bare image lacks for the checkout, .NET (its ICU, OpenSSL and the like) and package.sh.
+      - name: Install the tools
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates curl git desktop-file-utils python3 \
+            libicu78 libssl3t64 zlib1g libstdc++6
+
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: clients/helper/global.json
+
+      - name: Work out the version
+        id: version
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            version=${REQUESTED:-0.0.0-dev.$GITHUB_RUN_NUMBER}
+          else
+            version=${REF_NAME#helper-v}
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::'$version' isn't a version like 1.2.3 or 1.2.3-rc1 (tags are helper-v1.2.3)"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Packaging Healdan Helper $version"
+
+      - name: Build the packages
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          clients/helper/packaging/linux/package.sh "$VERSION" amd64
+          clients/helper/packaging/linux/package.sh "$VERSION" arm64
+
+      # The amd64 package installs with its dependencies (the container is the Ubuntu it is for), and nothing it
+      # installed is missing a library.
+      - name: Check the amd64 package installs
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          apt-get install -y --no-install-recommends ./clients/helper/packaging/linux/out/Healdan-Helper-$VERSION-amd64.deb
+          files=$(find /opt/healdan-helper -type f \( -name HealdanHelper -o -name '*.so' -o -name '*.so.*' \) -print)
+          if [ -z "$files" ]; then
+            echo "::error::The package installed no program or library to check"
+            exit 1
+          fi
+          missing=$(printf '%s\n' "$files" | xargs -r -n1 ldd 2>&1 | grep 'not found' || true)
+          if [ -n "$missing" ]; then
+            echo "$missing"
+            echo "::error::The package leaves libraries missing"
+            exit 1
+          fi
+
+      - name: Upload the packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: Healdan-Helper-${{ steps.version.outputs.version }}-linux
+          path: clients/helper/packaging/linux/out/*.deb
+          if-no-files-found: error
+          retention-days: 30
+
   # Attaches the notarised disk image to the tag's GitHub release, making the release if there's none yet: only for a
   # push of a helper-v* tag, so a run by hand (even on such a tag) attaches nothing. Kept apart from package-mac so
   # only this short job, which builds nothing and sees no signing secret, can write to the repository.
@@ -330,7 +420,7 @@ jobs:
             prerelease=()
             if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "Healdan Helper $VERSION" \
-              --notes "Healdan Helper $VERSION for macOS on Apple silicon: open the disk image and drag Healdan Helper to Applications." \
+              --notes "Healdan Helper $VERSION. macOS on Apple silicon: open the disk image and drag Healdan Helper to Applications. Ubuntu 26.04: install Ubuntu's own LibreOffice first (sudo apt install libreoffice; the App Center's snap and Flathub's LibreOffice can't work with the helper), then the .deb for the computer (amd64 or arm64) with sudo apt install ./Healdan-Helper-$VERSION-<arch>.deb. To upgrade on either system, quit Healdan Helper before installing the new version, and open it again after." \
               "${prerelease[@]}"
           fi
           gh release upload "$TAG" "$dmg" --repo "$GITHUB_REPOSITORY" --clobber
@@ -348,3 +438,32 @@ jobs:
               echo "Deleted the release $tag; the tag stays"
             fi
           done
+
+  # Attaches the .debs to the release release-mac made for the tag, only from a push of a helper-v* tag. It waits for
+  # release-mac, so a Mac build that isn't notarised leaves the tag without a release for Linux too.
+  release-linux:
+    name: Release (Linux)
+    needs: [ package-linux, release-mac ]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/helper-v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download the packages
+        uses: actions/download-artifact@v8
+        with:
+          name: Healdan-Helper-${{ needs.package-linux.outputs.version }}-linux
+          path: ${{ runner.temp }}/package
+
+      - name: Attach them to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.package-linux.outputs.version }}
+        run: |
+          gh release upload "$TAG" \
+            "$RUNNER_TEMP/package/Healdan-Helper-$VERSION-amd64.deb" \
+            "$RUNNER_TEMP/package/Healdan-Helper-$VERSION-arm64.deb" \
+            --repo "$GITHUB_REPOSITORY" --clobber

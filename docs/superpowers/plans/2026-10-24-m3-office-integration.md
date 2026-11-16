@@ -155,7 +155,7 @@ All target `master`; stack each on the one before, as the stacked-PR convention 
 - **PR E, Task 20** ([#74](https://github.com/Healdan-Project/healdan/pull/74)): docs, CLAUDE.md, the capability map, the inventory, the spec's corrections and the roadmap.
 - **Task 21:** the owner's acceptance of phase 1.
 - **Phase 2, after the owner's semi-production server:**
-  - **PR F, Task 22:** the Linux package and the Linux specifics;
+  - **PR F, Task 22:** the Linux package and the Linux specifics (built on 2026-11-16 on `claude/m3-phase-2-linux`; its by-hand rows passed the same day);
   - **Task 23:** the owner's acceptance of phase 2.
 
 ---
@@ -1136,34 +1136,48 @@ Passed on 2026-10-29, with no punch-list items; the decision log's last row has 
 
 ### Task 22: Linux (phase 2: after the owner's semi-production server)
 
+**Built on 2026-11-16 on `claude/m3-phase-2-linux`; all five steps are done.** Where the build departed from the text below:
+- **Files.** `tray-light.png` wasn't needed: the polish spec draws the mark, white on GNOME's top bar. There is no `UseSystemHarfBuzz()`: the start-up crash didn't recur in 20 starts of the published build and 6 of a Debug build. One helper per user is a lock file, `helper.lock` (`Links/SingleInstance.cs`), not the pid in `channel.json`, and the hand-over is `Links/LinkHandOver.cs`, with the first start taking its link from its arguments. Added: `postrm`, `Platform/NotifySend.cs` and `Platform/OwnProcesses.cs`, and `Depends` also lists `libicu78`, `libssl3t64`, `zlib1g` and `libstdc++6`.
+- **Fixes the walkthrough found.** Crash detection counts only the user's own LibreOffice, so a container's headless one doesn't hide a crash (T4). The helper reads LibreOffice's user registry on Ubuntu too, so it sees an extension the user accepted while LibreOffice was open (T12). The extension is 0.3.1.
+- **Also built:** `package.sh` drops .NET's LTTng trace provider, which 26.04 can't load; the `Package (Linux)` and `Release (Linux)` jobs; the default app's Linux kinds, and `secret-tool`'s time limit and errors (from Follow-ups).
+
 **Files:**
 - Create: `clients/helper/packaging/linux/package.sh`, `clients/helper/packaging/linux/control.in` (`Depends: libsecret-tools, libnotify-bin, libreoffice-script-provider-python, libharfbuzz0b, libice6, libsm6, libfontconfig1, libx11-6`), `clients/helper/packaging/linux/healdan-helper.desktop` (`MimeType=x-scheme-handler/healdan;`, `Exec=/opt/healdan-helper/HealdanHelper %u`), `clients/helper/packaging/linux/autostart.desktop`, `clients/helper/packaging/linux/postinst`
 - Modify: `clients/helper/Healdan.Helper/Program.cs` (`UseSystemHarfBuzz()` on Linux, the trial's crash fix), `Tray/TrayMenu.cs` (`tray-light.png` on Linux), `Links/LinkHandler.cs` (one helper: a second process forwards with `ChannelInfo.TryForward`, and waits up to 30 s while the first one is still starting, by the pid in `channel.json`), `Platform/Notifier.cs` (`notify-send`), `.github/workflows/clients.yml` (`package-linux`: amd64 and arm64 `.deb`s built in `ubuntu:26.04`)
 - Test: `clients/helper/Healdan.Helper.Core.Tests/Links/SingleInstanceTests.cs`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `SingleInstanceTests.SecondStartWhileFirstStartingForwards`: a `channel.json` whose pid is alive but whose port isn't listening yet makes `TryForward` retry until the port answers.
 
-- [ ] **Step 2: Implement it and the packaging, and build both `.deb`s**
+- [x] **Step 2: Implement it and the packaging, and build both `.deb`s**
 
 Expected: `dpkg-deb -I` and `-c` are right, and `desktop-file-validate` passes.
 
-- [ ] **Step 3: On the owner's Ubuntu 26.04 machine, run spec §12.2's rows T1–T12 for U, against the semi-production server**
+- [x] **Step 3: On the owner's Ubuntu 26.04 machine, run spec §12.2's rows T1–T12 for U, against the semi-production server**
 
 These are the rows the trial deferred.
 
 **Watch for:** GNOME on Wayland not raising the windows (T9). If it doesn't, the helper shows a notification whose click brings the window up, as spec §12.4 says; record it.
 
-- [ ] **Step 4: Update spec §12.5's U column, the Install page's Ubuntu part and Known Limitations**
+- [x] **Step 4: Update spec §12.5's U column, the Install page's Ubuntu part and Known Limitations**
 
-- [ ] **Step 5: Commit** — "Package the helper for Ubuntu"
+- [x] **Step 5: Commit** — "Package the helper for Ubuntu"
 
 ---
 
 ### Task 23: The owner's acceptance, phase 2
 
 - [ ] **Step 1: The owner runs spec §14.2 on Ubuntu 26.04, against the semi-production server, with the released `.deb`**
+
+- [ ] **Step 1b: The by-hand rows added by the final review, on the owner's Ubuntu desktop with the released `.deb`**
+  - A start with LibreOffice closed and no extension installed (the `unopkg add` path): the extension is there the next time LibreOffice opens.
+  - An upgrade from an older `.deb`, quitting the helper first: the install prints "Quit Healdan Helper and open it again to use the new version.", and the helper that opens afterwards is the new one.
+  - A link clicked while the helper is signed out: the notice says "Healdan Helper didn't open #<n>. Sign in from its menu, then click the link again."; after signing in, the same link opens. Starting the helper from the app grid while it runs says it's already running.
+  - Settings' Start at Sign-In row: On with the package's entry; Off, with the hint, after turning it off in GNOME Tweaks' Startup Applications (and On again after deleting `~/.config/autostart/healdan-helper.desktop`).
+  - Autostart at a fresh sign-in to Ubuntu: the helper's mark appears in the top bar without opening it.
+
+- [ ] **Step 1c: The next macOS release's notes say that LibreOffice opens extension 0.3.1 once for each Mac user, who accepts it**
 
 - [ ] **Step 2: Mark M3 done in the roadmap, with the date, and move what's left to Follow-ups**
 
@@ -1229,6 +1243,18 @@ Every call made while building, in order. "Where" is the task or review that rai
 | 2026-10-29 | Before the release (#75) | the hardened runtime keeps only `allow-jit`; `allow-unsigned-executable-memory` and `disable-library-validation` go | spec §10: no more permissions than needed. A build signed with the Developer ID and only `allow-jit` started under the hardened runtime and loaded its own Avalonia and Skia libraries, with no refusal in the system log | a release candidate that fails to open a document, and the two entitlements back in the next. |
 | 2026-10-29 | Before the release (#75) | the six signing secrets live in a `helper-release` environment that only `helper-v*` tags may use; `package-mac` takes it only for a tag's run, so a run by hand on a branch builds unsigned instead of failing (owner) | repository secrets let any run of the workflow, on any branch, sign with the Developer ID | a run by hand on a tag still signs, as a tag's push does. |
 | 2026-10-29 | Task 21 (#75) | phase 1 is accepted (owner), and `helper-v0.3.0` is tagged on master on 2026-10-30 without running spec §14.2 again on the release | the walkthrough passed with no punch-list items before #105 merged. The signed, notarised `0.3.0-rc1`, built after #105 with only `allow-jit`, then passed its own checks on the Mac (it opened, saved and closed a document, posted notifications and registered its login item), and nothing under `clients/` changed between its commit and the tag's | a 0.3.1, if the release's entitlements break a step the walkthrough would have caught. |
+| 2026-11-16 | Task 22 (PR F) | one helper per user is a lock file, `helper.lock`, in the helper's folder, held while it runs; a helper that can't open it still starts, and logs that a second can't be ruled out | spec §5.3 requires that a link clicked while the helper is still signing in must not start a second helper, and `channel.json` exists only once it has signed in | rework of the hand-over. |
+| 2026-11-16 | Task 22 (PR F) | Linux notices go through `notify-send`, run off the caller's thread; when one can't be shown, it's the menu's status line, as on macOS | a stuck notification daemon must not freeze the helper's windows (a post can take up to 5 s) | none; macOS is untouched. |
+| 2026-11-16 | Task 22 (PR F) | `release-linux` runs after `release-mac`, and uploads both `.deb`s to the release `release-mac` made; a Mac build that isn't notarised blocks Linux's release of that tag too | one release per version for both systems | a Mac build that isn't notarised blocks Linux's release of that tag too. |
+| 2026-11-16 | Task 22 (PR F) | no workaround for the trial's HarfBuzz start-up crash: no `UseSystemHarfBuzz()`; `libharfbuzz0b` stays in `Depends` | 0 of 20 starts of the published build crashed (and 0 of 6 Debug starts), so the trial's crash wasn't reproduced | a start-up crash found later; `libharfbuzz0b` stays in Depends. |
+| 2026-11-16 | Task 22 (PR F) | `package.sh` drops .NET's `libcoreclrtraceptprovider.so` | it needs `liblttng-ust.so.0`, which Ubuntu 26.04 lacks, and loads only with LTTng tracing on | no LTTng tracing in the packaged helper. |
+| 2026-11-16 | Task 22 (PR F) | the package's `Depends` adds `libicu78`, `libssl3t64`, `zlib1g` and `libstdc++6` (checked in an `ubuntu:26.04` container), so it installs only on Ubuntu 26.04 | the self-contained .NET runtime needs them and a minimal 26.04 lacks them; §5.12 targets 26.04 | `libicu78` ties the `.deb` to 26.04, so a later Ubuntu needs a rebuild. |
+| 2026-11-16 | Task 22 (PR F) | `Maintainer: The Healdan Project`, with no email | the repository has no project address, and none may be invented | one control line once the owner names an address. |
+| 2026-11-16 | Task 22 (PR F) | on Ubuntu the helper reads LibreOffice's user registry, as on macOS, at a start only while LibreOffice is open (with it closed a start runs `unopkg list`, and a helper version already checked reads nothing), as the menu opens and every few seconds while the extension is missing | the walkthrough's T12 found an extension accepted in a running LibreOffice was never seen; `unopkg` stays the installer while LibreOffice is closed, and the registry is the reader | small. |
+| 2026-11-16 | Task 22 (PR F) | crash detection on Ubuntu counts only the user's own LibreOffice: `soffice.bin` processes of the user's uid, not zombies | a crash must be seen on machines with other LibreOffices (the walkthrough's T4 found a container's headless LibreOffice hid it) | small. |
+| 2026-11-16 | Final review | the lock applies on macOS too: a second copy macOS starts for a link while the first is signing in hands the link over, once, and quits, instead of becoming a second full helper | one rule on both systems; the final review found the lock's check was already shared | none known; macOS CI checks the conflict. |
+| 2026-11-16 | Final review | one refused-kinds list on both systems, so a Mac also refuses Linux's and Wine's runnable kinds | harmless on macOS, and one list is one thing to keep right | a Mac user can't open a `.exe` or `.jnlp` in the default app. |
+| 2026-11-16 | Final review | the package `Depends` on `libreoffice-core` and `Recommends` `libreoffice-writer`, `-calc`, `-impress` and `-draw`; snap and Flatpak LibreOffice aren't supported | apt would otherwise satisfy `libreoffice-script-provider-python` with `libreoffice-core-nogui`, which has no windows; the sandboxes can't reach the helper's copies | an admin who wants no Recommends installs with `--no-install-recommends`; snap and Flatpak users must switch. |
 
 ### What the final review found in this plan
 
@@ -1255,7 +1281,7 @@ Filled in as the build found them, under the same headings as M2's, with one mor
 - Stamping happens only through the API, and date properties show a day early west of UTC in the old web page (Known Limitations).
 
 **For phase 2 and M3.5**
-- Linux: the default app's refused kinds are macOS's (final review C2), and `xdg-open` has its own runnable ones, such as `.desktop`; `SecretToolKeychain` has no time limit and throws a raw `Win32Exception` when `secret-tool` is missing, and a locked or missing keyring reads as "no sign-in"; `unopkg`'s path is hard-coded; Quit doesn't wait for a killed `unopkg`; the extension's `_alive` treats `EPERM` as alive (Tasks 14, 18, 19).
+- Linux: fixed in phase 2: the default app's refused kinds now include `xdg-open`'s runnable ones, such as `.desktop`; `SecretToolKeychain` has a 2-minute limit, and a missing `secret-tool` says to install `libsecret-tools`; the extension's `_alive` treats a process owned by another user as not the helper. Still open: Quit doesn't wait for a killed `unopkg`. macOS has the same exposure as Linux had in crash detection (another user's LibreOffice under fast user switching hides a crash): left as a follow-up. `unopkg`'s path is Ubuntu's own, so it's fine as it is (Tasks 14, 18, 19, 22).
 - Windows, later: `DefaultApp` uses `UseShellExecute` on the file, and `CopyNames` doesn't replace Windows-only characters (Tasks 12, 17).
 - Word (M3.5): its rename after each save (R19), and a check of the stamper's rewritten parts, whose lexical form changes (attribute order, empty elements, non-BMP characters) though their content doesn't; LibreOffice reads them (Task 7).
 - `.uno:SaveAll` isn't intercepted, so it may ask "Keep current format"; Save as New Version with the helper down goes up as a snapshot without saying so (Task 18).

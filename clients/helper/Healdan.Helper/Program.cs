@@ -5,7 +5,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Healdan.Helper.Core;
 using Healdan.Helper.Core.Channel;
+using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Platform;
 
 namespace Healdan.Helper;
@@ -21,17 +23,24 @@ internal static class Program
 
     public static HelperLog Log { get; private set; } = null!;
 
+    private static SingleInstance? _instance;
+
     [STAThread]
     public static int Main(string[] args)
     {
         Paths = HelperPaths.For(DevRoot());
         Log = new HelperLog(Paths.Log);
-        if (AnotherHelperAnswers(Paths))
+        // Held for the life of the process (a static field, so the GC can't release it). A helper that holds none, one from
+        // before the lock or one that couldn't open its file, counts too when its channel answers, on both systems.
+        _instance = SingleInstance.TryAcquire(Paths, Log);
+        if (_instance is null || AnotherHelperAnswers(Paths))
         {
             // Two helpers would both send the same copies' saves. macOS starts a second copy of the app for a link
             // when it hands links to another copy than the one running, and sends the link as an Apple event once
             // the app runs, so this one starts just far enough to take it.
             Log.Info("Another Healdan Helper is running for this user, so this one hands it any link it was started for, and quits");
+            if (OperatingSystem.IsLinux())
+                return HandOverLinks(args);
             if (!OperatingSystem.IsMacOS())
                 return 0;
             WaitForDisplay();
@@ -39,6 +48,30 @@ internal static class Program
         }
         WaitForDisplay();
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
+    }
+
+    /// <summary>
+    /// Linux starts a new process for each click of a link, with the link as its argument, so this hands each one to the
+    /// running helper and quits, with no window. The helper may still be signing in, so it waits up to 30 s for it.
+    /// </summary>
+    private static int HandOverLinks(string[] args)
+    {
+        var handOver = new LinkHandOver(Paths, Log);
+        var links = 0;
+        foreach (var arg in args)
+        {
+            if (!HealdanLink.HasScheme(arg))
+                continue;
+            links++;
+            // The wait gave up: no channel (signed out, or Sign In dismissed or still up) or the helper refused it. A
+            // healdan: link that isn't an open link isn't handed over (Send logs it), and the user is told it was ignored.
+            if (!handOver.Send(arg, TimeSpan.FromSeconds(30)))
+                NotifySend.TryPost("Healdan Helper", LinkHandOver.NotTakenNotice(arg) ?? LinkHandler.IgnoredNotice);
+        }
+        // Started from the app grid while the helper runs: say so, as nothing else shows.
+        if (links == 0)
+            NotifySend.TryPost("Healdan Helper", LinkHandOver.AlreadyRunningNotice);
+        return 0;
     }
 
     /// <summary>
@@ -75,11 +108,14 @@ internal static class Program
 #endif
     }
 
-    /// <summary>A helper whose channel answers its ping is running; a <c>channel.json</c> left by one that stopped isn't.</summary>
+    /// <summary>
+    /// A helper whose channel answers its ping, and whose process is alive (on Linux, the user's own), is running; a
+    /// <c>channel.json</c> left by one that stopped isn't, whatever now answers on its port.
+    /// </summary>
     private static bool AnotherHelperAnswers(HelperPaths paths)
     {
         var info = ChannelInfo.Read(paths);
-        if (info is null || info.Pid == Environment.ProcessId)
+        if (info is null || info.Pid == Environment.ProcessId || !ChannelInfo.IsAlive(info.Pid))
             return false;
         try
         {

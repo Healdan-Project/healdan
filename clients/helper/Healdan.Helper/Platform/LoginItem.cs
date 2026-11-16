@@ -4,6 +4,7 @@
 using System.Runtime.InteropServices;
 using Healdan.Helper.Core;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Settings;
 
 namespace Healdan.Helper.Platform;
@@ -45,6 +46,11 @@ internal static unsafe class LoginItem
     /// </summary>
     public static void EnsureRegistered(HelperPaths paths, HelperLog log)
     {
+        if (OperatingSystem.IsLinux())
+        {
+            log.Info("The package's autostart entry (/etc/xdg/autostart/healdan-helper.desktop) starts the helper at sign-in");
+            return;
+        }
         if (!Available)
         {
             log.Info("Not the app bundle's Release build, so it isn't registered to start at sign-in");
@@ -89,6 +95,17 @@ internal static unsafe class LoginItem
     /// </summary>
     public static LoginItemSummary Summary()
     {
+        if (OperatingSystem.IsLinux())
+        {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var path = AutostartEntry.UserPath(Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"), home);
+            // An entry that can't be read doesn't turn anything off.
+            var user = File.Exists(path) ? ReadEntry(path) : null;
+            var system = File.Exists(AutostartEntry.SystemPath) ? ReadEntry(AutostartEntry.SystemPath) : null;
+            var shown = home.Length > 0 && path.StartsWith(home + "/", StringComparison.Ordinal) ? "~" + path[home.Length..] : path;
+            var row = AutostartEntry.Summarize(File.Exists(AutostartEntry.SystemPath), user, system, shown);
+            return new(row.Value, row.On, row.Note);
+        }
         if (!Available)
             return new("Not in This Build", false, "The installed app starts when you sign in to this computer.");
         if (Passing() is { } where)
@@ -106,6 +123,19 @@ internal static unsafe class LoginItem
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
         {
             return new("Unknown", false, "macOS didn't say.");
+        }
+    }
+
+    /// <summary>An autostart entry's text, or null when it can't be read.</summary>
+    private static string? ReadEntry(string path)
+    {
+        try
+        {
+            return File.ReadAllText(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
         }
     }
 

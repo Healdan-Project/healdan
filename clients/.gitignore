@@ -4,3 +4,4 @@ obj/
 __pycache__/
 TestResults/
 helper/packaging/mac/out/
+helper/packaging/linux/out/

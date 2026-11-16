@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Healdan Helper
+Icon=healdan-helper
+TryExec=/opt/healdan-helper/HealdanHelper
+Exec=/opt/healdan-helper/HealdanHelper
+Terminal=false
+X-GNOME-Autostart-enabled=true

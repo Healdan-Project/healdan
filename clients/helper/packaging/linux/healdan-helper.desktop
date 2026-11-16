@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Healdan Helper
+Comment=Opens and saves Healdan documents in LibreOffice
+Exec=/opt/healdan-helper/HealdanHelper %u
+Icon=healdan-helper
+Terminal=false
+Categories=Office;
+MimeType=x-scheme-handler/healdan;
+StartupNotify=false
+StartupWMClass=HealdanHelper
