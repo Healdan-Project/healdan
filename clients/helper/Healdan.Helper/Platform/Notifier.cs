@@ -31,12 +31,21 @@ internal sealed class Notifier(HelperLog log) : INotifier
     public void Notify(string title, string message)
     {
         log.Info($"Notice: {title}: {message}");
+        // notify-send can take seconds when the notification daemon is stuck, and callers include the UI thread.
+        if (OperatingSystem.IsLinux())
+        {
+            _ = Task.Run(() => Show(title, message, (t, m) => NotifySend.TryPost(t, m)));
+            return;
+        }
+        Show(title, message, MacNotifications.TryPost);
+    }
+
+    private void Show(string title, string message, Func<string, string, bool> post)
+    {
         bool shown;
         try
         {
-            shown = OperatingSystem.IsLinux()
-                ? NotifySend.TryPost(title, message)
-                : MacNotifications.TryPost(title, message);
+            shown = post(title, message);
         }
         catch (Exception e)
         {

@@ -13,8 +13,8 @@ namespace Healdan.Helper.Core.Platform;
 /// </summary>
 public static class NotifySend
 {
-    /// <summary>How long the tool is given: it only hands the notice to the desktop, so more means it is stuck.</summary>
-    private static readonly TimeSpan Limit = TimeSpan.FromSeconds(5);
+    /// <summary>How long the tool is given by default: it only hands the notice to the desktop, so more means it is stuck.</summary>
+    public static readonly TimeSpan DefaultLimit = TimeSpan.FromSeconds(5);
 
     /// <summary>The command that shows the notice. The icon and desktop entry are what the package installs.</summary>
     public static ProcessStartInfo Command(string title, string message, string tool = "notify-send")
@@ -30,16 +30,16 @@ public static class NotifySend
     }
 
     /// <summary>
-    /// Shows the notice. True only when the tool exited 0 within five seconds; false when it's missing, fails or is
+    /// Shows the notice. True only when the tool exited 0 within <paramref name="limit"/> (five seconds by default); false when it's missing, fails or is
     /// stuck (it's then killed), so the caller can fall back to the menu's status line.
     /// </summary>
-    public static bool TryPost(string title, string message, string tool = "notify-send")
+    public static bool TryPost(string title, string message, string tool = "notify-send", TimeSpan? limit = null)
     {
         try
         {
             using var process = Process.Start(Command(title, message, tool));
             if (process is null) return false;
-            if (!process.WaitForExit(Limit))
+            if (!process.WaitForExit(limit ?? DefaultLimit))
             {
                 try
                 {

@@ -59,16 +59,19 @@ public sealed class NotifySendTests : IDisposable
     }
 
     [Fact]
-    public void AToolThatHangsIsKilledAfterAboutFiveSeconds()
+    public void AToolThatHangsIsKilledAfterTheLimit()
     {
         if (OperatingSystem.IsWindows()) return;
 
         var clock = Stopwatch.StartNew();
-        var shown = NotifySend.TryPost("Title", "Message", Script("exec sleep 60"));
+        var shown = NotifySend.TryPost("Title", "Message", Script("exec sleep 60"), TimeSpan.FromSeconds(1));
 
         Assert.False(shown);
-        Assert.InRange(clock.Elapsed, TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(15));
+        Assert.InRange(clock.Elapsed, TimeSpan.FromSeconds(0.8), TimeSpan.FromSeconds(10));
     }
+
+    [Fact]
+    public void TheDefaultLimitIsFiveSeconds() => Assert.Equal(TimeSpan.FromSeconds(5), NotifySend.DefaultLimit);
 
     private string Script(string body)
     {
