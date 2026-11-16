@@ -42,6 +42,14 @@ public sealed class SignInWindowTests
 
         public ConcurrentQueue<(string Server, string User, string Password)> PasswordSignIns { get; } = new();
 
+        /// <summary>Holds the providers' answer, for any address, until the test gives it, before it awaits the window.</summary>
+        public TaskCompletionSource<ProviderChoice?> HoldProviders()
+        {
+            var answer = new TaskCompletionSource<ProviderChoice?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            OnProviders = _ => answer.Task;
+            return answer;
+        }
+
         public SignInPrompt Make(string? server = "healdan.example", bool serverFixed = false, string? notice = null) => new(server, serverFixed,
             (s, u, p) =>
             {
@@ -436,6 +444,7 @@ public sealed class SignInWindowTests
             Assert.Equal(["healdan.example", "firm.example"], prompt.ProvidersAsked);
             Assert.Equal(2, ProviderButtons(window).Count);
             Assert.False(Shown(user)); // folded: nothing was typed in it
+            Assert.Same(ProviderButtons(window)[0], window.FocusManager?.GetFocusedElement()); // not left in the folded field
 
             server.Focus();
             server.Text = "healdan.example"; // back to a server with none
@@ -454,10 +463,9 @@ public sealed class SignInWindowTests
     public Task WhatWasTypedKeepsThePasswordFormOpen()
     {
         // Providers that arrive after the person started typing a username don't fold the form under them. The answer
-        // waits for the username: one already there when the window awaits it would be shown inside the focus change,
-        // before anything is typed, and folding is then right.
-        var answer = new TaskCompletionSource<ProviderChoice?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var prompt = new FakePrompt { OnProviders = _ => answer.Task };
+        // waits for the username, so it comes after it however soon the window would show it.
+        var prompt = new FakePrompt();
+        var answer = prompt.HoldProviders();
         return Run(prompt.Make(server: null), async window =>
         {
             var server = Find<TextBox>(window, "Server");
@@ -468,7 +476,7 @@ public sealed class SignInWindowTests
             user.Text = "robert";
 
             answer.SetResult(Two);
-            await window.Loading;
+            await window.Loading.WaitAsync(TimeSpan.FromSeconds(15)); // a failure, not a hung run, if it never comes
 
             Assert.Equal(["firm.example"], prompt.ProvidersAsked);
             Assert.Equal(2, ProviderButtons(window).Count);
@@ -498,6 +506,7 @@ public sealed class SignInWindowTests
 
             Assert.Equal(["https://healdan.example", "https://healdan.example"], prompt.ProvidersAsked);
             Assert.Equal(2, ProviderButtons(window).Count);
+            Assert.Same(ProviderButtons(window)[0], window.FocusManager?.GetFocusedElement()); // not left in the folded field
 
             // Answered, it isn't asked again
             server.Focus();
@@ -536,8 +545,8 @@ public sealed class SignInWindowTests
     [MacFact]
     public Task ShowingTheWindowAgainWhileAskingAsksOnce()
     {
-        var answer = new TaskCompletionSource<ProviderChoice?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var prompt = new FakePrompt { OnProviders = _ => answer.Task };
+        var prompt = new FakePrompt();
+        var answer = prompt.HoldProviders();
         return Run(prompt.Make(server: "https://healdan.example", serverFixed: true), async window =>
         {
             window.Hide();

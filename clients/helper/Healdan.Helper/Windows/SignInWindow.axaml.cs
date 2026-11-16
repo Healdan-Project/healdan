@@ -124,7 +124,10 @@ public partial class SignInWindow : Window
         ProviderChoice? choice;
         try
         {
-            choice = await Task.Run(() => prompt.ProvidersAsync(address));
+            // Shown from the dispatcher even when the answer is already there: never inside the focus change that
+            // asked, where Fold would read the focus half moved and leave it on a field it hides.
+            choice = await Task.Run(() => prompt.ProvidersAsync(address))
+                .ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.ForceYielding);
         }
         catch (Exception)
         {
