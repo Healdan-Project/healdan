@@ -118,6 +118,13 @@ internal sealed class CloseWatcher : IDisposable
             return _entries.TryGetValue(path, out var entry) && entry.LockSeen;
     }
 
+    /// <summary>Whether the copy is watched and its app has been seen running, so that its going is a crash or a close.</summary>
+    public bool AppSeen(string path)
+    {
+        lock (_lock)
+            return _entries.TryGetValue(path, out var entry) && entry.AppSeen;
+    }
+
     public void Unwatch(string path)
     {
         lock (_lock)
