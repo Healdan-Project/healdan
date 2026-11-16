@@ -334,7 +334,7 @@ public class HealdanSettingsServiceImplTest extends AbstractHealdanTestCase {
 		settings.setApiTokenMaxDays(7);
 		as(boss).save(settings);
 
-		// Read through Hibernate: the test database keeps timestamps in Europe/Rome's time
+		// Read the row again: the save capped it in the database, not the token in hand
 		Date expires = ApiTokenDAO.get().findById(token.getId()).getExpires();
 		assertEquals(token.getCreation().getTime() + TimeUnit.DAYS.toMillis(7), expires.getTime(), 1000);
 	}

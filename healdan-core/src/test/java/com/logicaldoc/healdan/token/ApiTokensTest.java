@@ -170,7 +170,7 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		assertEquals(1, tokens().capLifetime(7));
 		assertEquals(0, tokens().capLifetime(7));
 
-		// Read through Hibernate: the test database keeps timestamps in Europe/Rome's time
+		// Read the row again: capLifetime changed it in the database, not the token in hand
 		Date expires = ApiTokenDAO.get().findById(token.getId()).getExpires();
 		assertEquals(token.getCreation().getTime() + 7 * DAY, expires.getTime(), 1000);
 	}

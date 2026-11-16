@@ -211,7 +211,7 @@ LOGICALDOC_IMAGE=healdan-demo:local LOGICALDOC_PORT=8091 docker compose -p heald
 - that the checked-out document is checked out, by Jamie Clarke;
 - that the guard refuses a repository with any document in it, and one with a user besides `admin`, whether that user was there before or a firm that failed partway left it. (changed in the build)
 
-The test context sets `hibernate.jdbc.time_zone`, so in the tests Hibernate reads dates in another zone than the seed's JDBC writes them in. The tests read backdated dates through JDBC. (changed in the build) `testTheRealManifest` runs the real manifest in about two and a half minutes. (changed in the build)
+The tests read backdated dates through JDBC. Until 2026-11-16 the test context set `hibernate.jdbc.time_zone`, so in the tests Hibernate read dates in another zone than the seed's JDBC wrote them in; it sets none now, as production doesn't, so the two agree. (changed in the build) `testTheRealManifest` runs the real manifest in about two and a half minutes. (changed in the build)
 
 CI's `build` runs it like any `healdan-core` test, so a code change that breaks the demo fails the check. A change under `docker/` counts as code, so it runs then too.
 

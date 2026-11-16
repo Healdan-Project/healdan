@@ -6,13 +6,16 @@ package com.logicaldoc.healdan.listing;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.zone.ZoneOffsetTransition;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.EnumSet;
@@ -430,21 +433,30 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 
 	/**
 	 * A document published since a minute ago is listed for someone who doesn't
-	 * see unpublished documents. Hibernate writes the start of publishing, and
-	 * the listing compares it with now through JDBC, so the two must store dates
-	 * in the same zone, as they do in production. When the test context had
-	 * Hibernate in Rome's zone and the JVM in UTC, a document whose start
-	 * LogicalDOC had set to midnight, as it does for every new one, was unlisted
-	 * until one in the morning (CI on 15 November 2026).
+	 * see unpublished documents, and one published from a minute from now
+	 * isn't. Hibernate writes the start of publishing, and the listing compares
+	 * it with now through JDBC, so the two must store dates in the same zone, as
+	 * they do in production: the first document goes missing when Hibernate's
+	 * zone is ahead of the JVM's, and the second shows when it's behind. When
+	 * the test context had Hibernate in Rome's zone and the JVM in UTC, a
+	 * document whose start LogicalDOC had set to midnight, as it does for every
+	 * new one, was unlisted until one in the morning (CI on 15 November 2026).
 	 */
 	@Test
-	public void testListsADocumentPublishedAMinuteAgo() throws Exception {
+	public void testListsADocumentPublishedAMinuteAgoAndNotOneInAMinute() throws Exception {
 		Folder fresh = fx.folder(documents, "Fresh");
 		long doc = fx.upload(fresh, "fresh.pdf", "fresh", admin).getId();
+		long due = fx.upload(fresh, "due.pdf", "due", admin).getId();
 		awaitAsyncWork();
+		long now = System.currentTimeMillis();
+		// The dates are stored as wall-clock times, which repeat when the clocks go back
+		ZoneOffsetTransition change = ZONE.getRules().nextTransition(Instant.ofEpochMilli(now - 120_000L));
+		assumeTrue("The clocks change within two minutes",
+				change == null || change.getInstant().toEpochMilli() > now + 120_000L);
 		// Through Hibernate, as a store writes it, but past the store's truncation to the day
-		DocumentDAO.get().bulkUpdate("set startPublishing = :start where id = :id",
-				Map.of("start", new Date(System.currentTimeMillis() - 60_000L), "id", doc));
+		String start = "set startPublishing = :start where id = :id";
+		assertEquals(1, DocumentDAO.get().bulkUpdate(start, Map.of("start", new Date(now - 60_000L), "id", doc)));
+		assertEquals(1, DocumentDAO.get().bulkUpdate(start, Map.of("start", new Date(now + 60_000L), "id", due)));
 		evict();
 
 		assertEquals(list(doc), FolderListing.get().page(fresh, alice, all()).docIds());
