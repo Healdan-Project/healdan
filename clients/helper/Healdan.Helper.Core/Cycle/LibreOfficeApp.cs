@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using Healdan.Helper.Core.Copies;
+using Healdan.Helper.Core.Platform;
 
 namespace Healdan.Helper.Core.Cycle;
 
@@ -40,9 +41,18 @@ public sealed class LibreOfficeApp : IOfficeApp
         }
     }
 
+    /// <summary>
+    /// Whether LibreOffice is running. On Linux only the user's own live <c>soffice.bin</c> processes count: another
+    /// user's LibreOffice (a second desktop session, or a conversion service in a Docker container) is no sign the
+    /// user's own is open, and counting it would hide a crash of theirs from the close watcher for good. A zombie
+    /// doesn't count either.
+    /// </summary>
     public bool IsRunning()
     {
-        var processes = Process.GetProcessesByName(OperatingSystem.IsMacOS() ? "soffice" : "soffice.bin");
+        if (!OperatingSystem.IsMacOS())
+            return OwnProcesses.AnyNamed("soffice.bin");
+
+        var processes = Process.GetProcessesByName("soffice");
         foreach (var process in processes)
             process.Dispose();
         return processes.Length > 0;
