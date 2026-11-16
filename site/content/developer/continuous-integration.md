@@ -5,6 +5,17 @@ weight: 4
 
 `master` takes changes only through pull requests, and merges a pull request once its required checks pass.
 
+- **`master`'s ruleset** (Settings → Rules → Rulesets → `master: require CI`) requires a pull request, with no
+  approvals, and every check below but `Docs site`. It doesn't require a branch to be up to date with `master`, as
+  that would run every open pull request's checks again after each merge. It blocks force pushes and deleting the
+  branch, and nothing bypasses it, an admin included.
+- **Merge commits only.** The repository allows no squash or rebase merges, as an upstream sync must be merged so
+  that the history it shares with LogicalDOC stays intact.
+- **Release tags are fixed.** The `Release tags` ruleset blocks moving, force-pushing and deleting `helper-v*` and
+  `v*` tags, with no bypass (see [Releasing the macOS Helper](#releasing-the-macos-helper)).
+
+[Issue #9](https://github.com/Healdan-Project/healdan/issues/9) has the reasons for each.
+
 ## The Checks
 
 | Check | Workflow | What it does |
@@ -286,7 +297,9 @@ The helper has versions of its own, such as `1.2.3` or `1.2.3-rc1`. Pushing the 
 1. **`Package (macos-15)`** runs `clients/helper/packaging/mac/package.sh 1.2.3`, which publishes the helper as a
    single self-contained file for Apple silicon, builds `Healdan Helper.app` with the LibreOffice extension's
    `healdan.oxt` and the app's icon inside, signs it with the Developer ID, has Apple notarise it, and wraps it in
-   `Healdan-Helper-1.2.3.dmg`, signed and notarised too. It uploads the disk image as the run's artifact.
+   `Healdan-Helper-1.2.3.dmg`, signed and notarised too. It uploads the disk image as the run's artifact. On a tag
+   it first waits for an approval: the run shows **Waiting** until the `helper-release` environment's reviewer
+   chooses **Review deployments → Approve and deploy**, and only then does the job get the signing secrets.
 2. **`Release (macOS)`** attaches the disk image to the tag's GitHub release, and makes the release first if
    there isn't one (a pre-release for a version like `1.2.3-rc1`). It runs only for a pushed tag, and only once
    `xcrun stapler validate` has found the disk image's notarisation ticket. It's the only job with write access to
@@ -296,6 +309,10 @@ Only official releases stay on GitHub. Once `1.2.3`'s disk image is attached, `R
 releases of `1.2.3-rc1` and the version's other pre-releases, with their disk images. Their tags stay, as the record
 of what was tested. It also refuses to publish a pre-release of a version that's already released, so re-running an
 old `helper-v1.2.3-rc1` run attaches nothing.
+
+A tag can't be moved or deleted once it's pushed: the `Release tags` ruleset blocks it, with no bypass. A tag pushed
+on the wrong commit stays, and the next release candidate (`helper-v1.2.3-rc2`) replaces it. Pushing a new tag isn't
+restricted, which is why the signing waits for an approval.
 
 `package.sh` tries `hdiutil` three times, as it's sometimes busy on CI's runners. Stapling a ticket and checking it
 both fetch the ticket from Apple, whose ticket server dropped the connection on 0.4.0-rc3, 0.6.0 and 0.7.0, on the
@@ -312,7 +329,8 @@ unsigned.
 
 Signing needs six secrets in the repository's `helper-release` environment (Settings → Environments →
 `helper-release` → Environment secrets). Only `helper-v*` tags may use it, so a run on a branch can't sign with the
-Developer ID. Each is set with `gh secret set <name> --env helper-release --repo Healdan-Project/healdan`:
+Developer ID. The environment also has a required reviewer, the repository's owner, whom admins can't bypass, so a
+pushed tag gets the secrets only once they approve its run. Each is set with `gh secret set <name> --env helper-release --repo Healdan-Project/healdan`:
 
 | Secret | What it holds |
 |---|---|
