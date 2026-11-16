@@ -115,9 +115,12 @@ public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity de
         keychain.Save(Account, new KeptToken(device.Id, token).ToSecret());
     }
 
-    private async Task RequireHealdanAsync(CancellationToken ct)
+    private async Task RequireHealdanAsync(CancellationToken ct) => RequireHealdan(await api.ServerAsync(ct));
+
+    /// <summary>The server's <c>GET /server</c> answer is Healdan's, in the API this helper speaks.</summary>
+    /// <exception cref="InvalidOperationException">The server isn't Healdan, or its API isn't one this helper speaks.</exception>
+    internal static void RequireHealdan(ServerInfo server)
     {
-        var server = await api.ServerAsync(ct);
         if (server.Product != "Healdan")
             throw new InvalidOperationException("That address isn't a Healdan server.");
         if (server.ApiVersion != SupportedApiVersion)

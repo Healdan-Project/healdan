@@ -639,6 +639,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         bool ended;
         lock (_gate)
             ended = _ended;
+        // Each window checks its addresses afresh, and logs its own problems.
+        Volatile.Write(ref _choicesClient, null);
+        Interlocked.Exchange(ref _choicesProblem, null);
         try
         {
             var prompt = new SignInPrompt(server, serverFixed, TrySignInAsync, ProvidersAsync, TrySignInWithProviderAsync,
@@ -660,7 +663,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private async Task<string?> TrySignInAsync(string address, string user, string password)
     {
         if (string.IsNullOrWhiteSpace(address))
-            return "Enter your Healdan server's address.";
+            return NoAddress;
         if (string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(password))
             return "Enter your username and password.";
         if (BeforeSignIn(address, out var server, out var api) is { } refused)
@@ -685,52 +688,132 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
         catch (OperationCanceledException)
         {
-            return $"{server.Authority} didn't answer within {SignInTimeout.TotalSeconds:0} seconds.";
+            return Unanswered(server);
         }
         catch (HttpRequestException e)
         {
-            return $"{server.Authority} couldn't be reached: {e.Message}";
+            return Unreachable(server, e);
         }
         return await AfterSignInAsync(server, api, $"as {user.Trim()}");
     }
 
+    /// <summary>The problem <see cref="ProvidersAsync"/> logged last in this Sign In window, with its server; null after an answer with choices.</summary>
+    private string? _choicesProblem;
+
     /// <summary>
-    /// The Sign In window's provider buttons (M4 spec §6.1): the sign-in choices of the server at
-    /// <paramref name="address"/>, or null when it isn't a Healdan server this helper can reach and speak to, for
-    /// which the window shows the password form, whose Sign In then says why. The labels are kept for the refusals'
-    /// messages.
+    /// The address this Sign In window's asks last passed a sign-in's checks for, with the client, without the device
+    /// token, that reads its <c>GET /server</c>; null before any, and when a window opens.
     /// </summary>
-    private async Task<ProviderChoice?> ProvidersAsync(string address)
+    private ChoicesClient? _choicesClient;
+
+    private sealed record ChoicesClient(string Address, Uri Server, HealdanApi Api);
+
+    /// <summary>
+    /// The Sign In window's second step (M4 spec §6.1; address-first spec §3): the sign-in choices of the server at
+    /// <paramref name="address"/>, or why there are none, as the window shows it, with the reasons a password sign-in
+    /// gives. The address gets a sign-in's checks first (<see cref="BeforeSignIn"/>), once per window and address, so a
+    /// refusal shows before any choice; the sign-in checks again. Only a server that couldn't be reached, didn't answer
+    /// in time, or answered with a server error is worth asking again. Never throws.
+    /// </summary>
+    private async Task<ServerAnswer> ProvidersAsync(string address)
     {
         if (string.IsNullOrWhiteSpace(address))
-            return null;
-        Uri server;
+            return new ServerAnswer(null, null, NoAddress);
+        // The window asks again every few seconds while the server can't be reached: the same address isn't checked again.
+        if (Volatile.Read(ref _choicesClient) is not { } client || client.Address != address)
+        {
+            if (BeforeSignIn(address, out var checkedServer, out _) is { } refused)
+            {
+                string? name = null;
+                try
+                {
+                    name = ParseAddress(address).Authority;
+                }
+                catch (UriFormatException)
+                {
+                }
+                return new ServerAnswer(name, null, refused);
+            }
+            // A client of its own, without the device token: GET /server is public, and after a 401 the running client's is refused.
+            client = new ChoicesClient(address, checkedServer, NewApi(checkedServer));
+            Volatile.Write(ref _choicesClient, client);
+        }
+        var server = client.Server;
+        ServerAnswer answer;
         try
         {
-            server = ParseAddress(address);
+            answer = await AskProvidersAsync(server, client.Api);
         }
-        catch (UriFormatException)
+        catch (Exception e)
         {
-            return null;
+            // None of the reasons a sign-in gives: logged with its type, and not asked again by itself.
+            _log.Error($"The Sign In window couldn't read {server.Authority}'s sign-in choices", e);
+            return new ServerAnswer(server.Authority, null, $"Healdan Helper couldn't read {server.Authority}'s answer.");
         }
+        // The window asks again every few seconds while the server can't be reached: each problem is logged once.
+        var problem = answer.Problem is null ? null : $"{server.Authority}'s sign-in choices: {answer.Problem}";
+        if (Interlocked.Exchange(ref _choicesProblem, problem) != problem && problem is not null)
+            _log.Info($"The Sign In window couldn't read {problem}");
+        return answer;
+    }
+
+    private static async Task<ServerAnswer> AskProvidersAsync(Uri server, HealdanApi api)
+    {
+        var name = server.Authority;
         using var timeout = new CancellationTokenSource(SignInTimeout);
         try
         {
-            var info = await NewApi(server).ServerAsync(timeout.Token);
-            if (info.Product != "Healdan" || info.ApiVersion != SignIn.SupportedApiVersion)
-                return null;
+            var info = await api.ServerAsync(timeout.Token);
+            try
+            {
+                SignIn.RequireHealdan(info);
+            }
+            catch (InvalidOperationException e)
+            {
+                return new ServerAnswer(name, null, e.Message); // not Healdan, or an API this helper doesn't speak
+            }
             var providers = (info.Providers ?? [])
                 .Where(p => !string.IsNullOrWhiteSpace(p.Id))
                 .Select(p => string.IsNullOrWhiteSpace(p.Label) ? p with { Label = DefaultProviderLabel } : p)
                 .ToList();
-            return new ProviderChoice(providers, string.IsNullOrWhiteSpace(info.PasswordLabel) ? DefaultPasswordLabel : info.PasswordLabel);
+            var label = string.IsNullOrWhiteSpace(info.PasswordLabel) ? DefaultPasswordLabel : info.PasswordLabel;
+            return new ServerAnswer(name, new ProviderChoice(providers, label), null);
         }
-        catch (Exception e)
+        catch (ApiException e) when (e.Status >= 500)
         {
-            _log.Info($"The Sign In window couldn't read {server.Authority}'s sign-in providers ({e.GetType().Name})");
-            return null;
+            // A server error: Healdan starting, or a reverse proxy's page (502 to 504, Cloudflare's 52x) while it restarts.
+            return new ServerAnswer(name, null, Refused(e, NotHealdan), Retry: true);
+        }
+        catch (ApiException e)
+        {
+            return new ServerAnswer(name, null, Refused(e, NotHealdan));
+        }
+        catch (JsonException)
+        {
+            return new ServerAnswer(name, null, NotHealdan);
+        }
+        catch (OperationCanceledException)
+        {
+            return new ServerAnswer(name, null, Unanswered(server), Retry: true);
+        }
+        catch (HttpRequestException e) when (e.HttpRequestError == HttpRequestError.SecureConnectionError)
+        {
+            // The server's certificate, or the secure connection, was refused: asking again won't change that.
+            return new ServerAnswer(name, null, Unreachable(server, e));
+        }
+        catch (Exception e) when (e is HttpRequestException or IOException)
+        {
+            // IOException: the connection dropped while the answer was read.
+            return new ServerAnswer(name, null, Unreachable(server, e), Retry: true);
         }
     }
+
+    private static string Unanswered(Uri server) => $"{server.Authority} didn't answer within {SignInTimeout.TotalSeconds:0} seconds.";
+
+    private static string Unreachable(Uri server, Exception e) => Sentence($"{server.Authority} couldn't be reached: {e.Message}");
+
+    /// <summary>The text with a full stop at its end, as the window's lines have: .NET's messages and HTTP's reason phrases have none.</summary>
+    private static string Sentence(string text) => text.Length == 0 || text[^1] is '.' or '!' or '?' or '…' ? text : text + ".";
 
     /// <summary>
     /// A provider's button in the Sign In window (M4 spec §6.2): signs in through the provider in the system browser,
@@ -743,7 +826,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private async Task<string?> TrySignInWithProviderAsync(string address, string providerId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(address))
-            return "Enter your Healdan server's address.";
+            return NoAddress;
         if (string.IsNullOrWhiteSpace(providerId))
             return "Choose how to sign in.";
         if (BeforeSignIn(address, out var server, out var api) is { } refused)
@@ -789,7 +872,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
         catch (HttpRequestException e)
         {
-            return $"{server.Authority} couldn't be reached: {e.Message}";
+            return Unreachable(server, e);
         }
         catch (IOException e)
         {
@@ -811,6 +894,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
 
     private const string NotHealdan = "That address isn't a Healdan server.";
 
+    private const string NoAddress = "Enter your Healdan server's address.";
+
     /// <summary>The web page's word for a provider with no label of its own, as its sign-in page shows it.</summary>
     private const string DefaultProviderLabel = "Sign In";
 
@@ -821,7 +906,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private static string Refused(ApiException e, string otherwise) => e.Code switch
     {
         "http-404" => NotHealdan,
-        _ when e.Code.StartsWith("http-", StringComparison.Ordinal) => $"The server answered {e.Status}: {e.Detail}",
+        _ when e.Code.StartsWith("http-", StringComparison.Ordinal) => Sentence($"The server answered {e.Status}: {e.Detail}"),
         _ => e.Detail.Length > 0 ? e.Detail : otherwise
     };
 
