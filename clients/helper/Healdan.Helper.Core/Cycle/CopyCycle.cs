@@ -645,6 +645,12 @@ public sealed class CopyCycle : IDisposable
         return s?.Queue.Queued?.Hash;
     }
 
+    /// <summary>
+    /// Whether the close watcher counts the copy's app as seen running, so that the app going is a crash or a close. For
+    /// the tests, which wait on it before they stop the app, rather than guess how long the crash check takes (#247).
+    /// </summary>
+    internal bool AppSeen(string path) => _closes.AppSeen(path);
+
     /// <summary>The copy's <see cref="CopyState.Pending"/>: a save answered counts as gone even while its job finishes.</summary>
     private bool PendingOf(Session s) => HasUnsent(s, sendsCount: false);
 

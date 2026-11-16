@@ -585,7 +585,7 @@ public sealed class CopyCycleTests : IDisposable
         var (cycle, path) = await OpenAsync();
         FakeApp.Write(path, "saved before the crash");
         await Wait.Until(() => _events.LastTitle(path) is not null, "the save");
-        await Task.Delay(Fast.CrashPoll * 2); // the crash check has seen the app running
+        await Wait.Until(() => cycle.AppSeen(path), "the crash check sees LibreOffice running");
         _app.Crash();
 
         await Wait.Until(() => _events.Crashes.Contains(path), "Crashed");
@@ -628,7 +628,7 @@ public sealed class CopyCycleTests : IDisposable
     {
         // #136: the web page's Unlock ended the check-out while LibreOffice was away, and before the helper restarted.
         var (cycle, path) = await OpenAsync();
-        await Task.Delay(Fast.CrashPoll * 2); // the crash check has seen the app running
+        await Wait.Until(() => cycle.AppSeen(path), "the crash check sees LibreOffice running");
         _app.Crash();
         await Wait.Until(() => _events.Crashes.Contains(path), "Crashed");
         _server.Change(5, d => d.Hold = null);
@@ -1904,7 +1904,10 @@ public sealed class CopyCycleTests : IDisposable
         var cycle = Cycle(appFor: MicrosoftOfficeForItsFormats);
         await cycle.OpenAsync(5, false);
         var path = CopyPath("Lease agreement #5 v1.0.docx");
-        await Task.Delay(Fast.CrashPoll * 3); // the crash check has seen Word running
+        await Wait.Until(() => cycle.AppSeen(path), "the crash check sees Word running");
+        // A lock look every LockPoll and a crash check every CrashPoll: these looks span about three more crash checks.
+        var looks = _office.Asked(path);
+        await Wait.Until(() => _office.Asked(path) >= looks + 3 * (int)(Fast.CrashPoll / Fast.LockPoll), "more crash checks");
         Assert.Empty(_events.Crashes);
         Assert.True(_scripting.IsRunning("Microsoft Word"));
 
@@ -1937,7 +1940,7 @@ public sealed class CopyCycleTests : IDisposable
         await cycle.OpenAsync(5, false);
         var path = CopyPath("Lease agreement #5 v1.0 (read-only).docx");
         Assert.False(File.Exists(FakeScripting.OwnerPath(OfficeProgram.Word, path)));
-        await Task.Delay(Fast.CrashPoll * 3);
+        await Wait.Until(() => cycle.AppSeen(path), "the crash check sees Word running");
 
         _scripting.SetRunning(OfficeProgram.Word, false);
 

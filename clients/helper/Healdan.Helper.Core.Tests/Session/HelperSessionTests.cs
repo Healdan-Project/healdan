@@ -1709,7 +1709,7 @@ public sealed class HelperSessionTests : IDisposable
         await session.StartAsync();
         var path = await OpenAsync(session);
         FakeApp.Write(path, "saved just before the crash");
-        await Task.Delay(Fast.CrashPoll * 2); // the crash check has seen the app running
+        await Wait.Until(() => session.Cycle?.AppSeen(path) == true, "the crash check sees the app running");
         _app.Crash();
         await Wait.Until(() => !_windows.Crashes.IsEmpty, "the crash window");
         var copy = Assert.Single(_windows.Crashes);
