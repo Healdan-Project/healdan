@@ -12,7 +12,9 @@ The tests use JUnit 4. [Building from Source](../building-from-source/) has the 
   `logicaldoc-core` that's `sql/logicaldoc-core.sql` plus the test `data.sql`.
 - **Each module has its own base class,** such as `AbstractCoreTestCase`, `AbstractWebappTestCase` or
   `AbstractWebserviceTestCase`. Extend the closest one. `healdan-core`'s `AbstractHealdanTestCase` also runs
-  Healdan's migrations and setup steps on the test database.
+  Healdan's migrations and setup steps on the test database, and first empties the store (`store.1.dir`): ids
+  restart with each test's database, while the store under `target/` stays, so a file an earlier test left would be
+  taken for one of this test's documents.
 - **Plugin manifests.** Some tests load them from fixture jars in `src/test/resources` through
   `getPluginArchives()`. Those jars are kept by hand; they aren't built from source.
 - Tests write their stores, indexes and temporary files under `target/`.

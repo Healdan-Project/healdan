@@ -30,7 +30,6 @@ import com.logicaldoc.core.conversion.FormatConverter;
 import com.logicaldoc.core.document.AbstractDocument;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.IndexingStatus;
-import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.HealdanOperation.Kind;
@@ -220,9 +219,6 @@ public class DemoTimelineTest extends AbstractHealdanTestCase {
 					null));
 		} finally {
 			converters.remove("jpg-pdf");
-			// The store is on disk and the next run files the same id: a PDF left here would hide the conversion
-			jdbc.queryForList("select ld_id from ld_document where ld_filename = 'Receipt.jpg'", Long.class)
-					.forEach(Store.get()::delete);
 		}
 
 		assertEquals(Integer.valueOf(IndexingStatus.INDEXED.ordinal()), jdbc

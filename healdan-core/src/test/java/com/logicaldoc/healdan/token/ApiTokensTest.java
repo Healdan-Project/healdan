@@ -63,9 +63,7 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		for (Object value : row.values())
 			assertFalse(String.valueOf(value).contains(issued.token()));
 
-		// Read the dates back through Hibernate, as the application does: the raw JDBC read above uses the JVM's
-		// zone, while Hibernate writes in hibernate.jdbc.time_zone (Europe/Rome in the tests), so two dates on
-		// either side of a DST change would differ by an hour
+		// Read the dates back through Hibernate, as the application does, rather than from the raw row above
 		ApiToken stored = ApiTokenDAO.get().findById(issued.row().getId());
 		Date expires = stored.getExpires();
 		// The expiry is 365 days after the moment the token was issued, which falls between the two clock reads
@@ -172,7 +170,7 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		assertEquals(1, tokens().capLifetime(7));
 		assertEquals(0, tokens().capLifetime(7));
 
-		// Read through Hibernate: the test database keeps timestamps in Europe/Rome's time
+		// Read the row again: capLifetime changed it in the database, not the token in hand
 		Date expires = ApiTokenDAO.get().findById(token.getId()).getExpires();
 		assertEquals(token.getCreation().getTime() + 7 * DAY, expires.getTime(), 1000);
 	}

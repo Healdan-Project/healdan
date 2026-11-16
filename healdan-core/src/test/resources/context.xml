@@ -50,8 +50,9 @@
         <property name="mappingLocations" value="classpath*:mappings/*.hbm.xml" />
         <property name="hibernateProperties">
             <props>
-                <prop key="hibernate.jdbc.time_zone">Europe/Rome</prop>
-            
+                <!-- No hibernate.jdbc.time_zone, unlike LogicalDOC's test context (Europe/Rome): Hibernate then stores
+                     dates in the JVM's zone, as Healdan's JDBC does and as in production. With the two apart, a date
+                     Hibernate wrote and one JDBC wrote differ by the zones' offset -->
 				<prop key="hibernate.dialect">${hibernate.dialect}</prop>
                 <prop key="hibernate.id.optimizer.pooled.preferred">${hibernate.id.optimizer}</prop>
                 <prop key="hibernate.generate_statistics">true</prop>
