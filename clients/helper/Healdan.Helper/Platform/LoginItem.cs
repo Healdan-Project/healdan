@@ -45,6 +45,11 @@ internal static unsafe class LoginItem
     /// </summary>
     public static void EnsureRegistered(HelperPaths paths, HelperLog log)
     {
+        if (OperatingSystem.IsLinux())
+        {
+            log.Info("The package's autostart entry (/etc/xdg/autostart/healdan-helper.desktop) starts the helper at sign-in");
+            return;
+        }
         if (!Available)
         {
             log.Info("Not the app bundle's Release build, so it isn't registered to start at sign-in");
