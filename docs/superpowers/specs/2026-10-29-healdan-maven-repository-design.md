@@ -5,7 +5,8 @@
 - **Status:** approved by the owner on 2026-10-29, and amended that day for licences (§3.1). Built from
   [`docs/superpowers/plans/2026-10-29-healdan-maven-repository.md`](../plans/2026-10-29-healdan-maven-repository.md).
   `https://maven.healdan.com/` serves the 15 hosted artifacts from `Healdan-Project/maven`. Extended on 2026-11-16
-  for upstream's retired repositories (§12).
+  for upstream's retired repositories (§12), in
+  [Healdan-Project/healdan#258](https://github.com/Healdan-Project/healdan/pull/258).
 - **Inputs:**
   - a design conversation with the owner on 2026-10-29;
   - the failed `master` runs of `build-logicaldoc.yml` that day (40877494760, 40891327931, 40894089832), and the
