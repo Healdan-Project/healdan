@@ -453,11 +453,11 @@ public sealed class SignInWindowTests
     [MacFact]
     public Task WhatWasTypedKeepsThePasswordFormOpen()
     {
-        // Providers that arrive after the person started typing a username don't fold the form under them.
-        var prompt = new FakePrompt
-        {
-            OnProviders = s => Task.FromResult<ProviderChoice?>(s == "firm.example" ? Two : None)
-        };
+        // Providers that arrive after the person started typing a username don't fold the form under them. The answer
+        // waits for the username: one already there when the window awaits it would be shown inside the focus change,
+        // before anything is typed, and folding is then right.
+        var answer = new TaskCompletionSource<ProviderChoice?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var prompt = new FakePrompt { OnProviders = _ => answer.Task };
         return Run(prompt.Make(server: null), async window =>
         {
             var server = Find<TextBox>(window, "Server");
@@ -466,8 +466,11 @@ public sealed class SignInWindowTests
             server.Text = "firm.example";
             user.Focus();
             user.Text = "robert";
+
+            answer.SetResult(Two);
             await window.Loading;
 
+            Assert.Equal(["firm.example"], prompt.ProvidersAsked);
             Assert.Equal(2, ProviderButtons(window).Count);
             Assert.True(Shown(user));
             Assert.True(Shown(Find<Button>(window, "SignInButton")));
