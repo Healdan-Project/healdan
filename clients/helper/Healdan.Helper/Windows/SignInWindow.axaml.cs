@@ -231,12 +231,17 @@ public partial class SignInWindow : Window
         _retry = null;
     }
 
-    /// <summary>The prompt's answer, off the UI thread; it never throws, and the window doesn't either.</summary>
+    /// <summary>
+    /// The prompt's answer, off the UI thread; it never throws, and the window doesn't either. It comes back through the
+    /// dispatcher even when it's already there, never inside the click or key press that asked (#251), where the focus
+    /// it moves could be half moved.
+    /// </summary>
     private static async Task<ServerAnswer> AskAsync(SignInPrompt prompt, string address)
     {
         try
         {
-            return await Task.Run(() => prompt.ProvidersAsync(address));
+            return await Task.Run(() => prompt.ProvidersAsync(address))
+                .ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.ForceYielding);
         }
         catch (Exception ex)
         {

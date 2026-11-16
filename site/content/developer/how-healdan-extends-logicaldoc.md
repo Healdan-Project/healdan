@@ -44,6 +44,11 @@ learn from.
 - Entities are JPA-annotated `@Entity` classes. DAOs follow one pattern: an interface `XxxDAO` and an
   implementation `HibernateXxxDAO`.
 - **Both Spring and Hibernate scan only `com.logicaldoc`,** so code in any other package isn't found.
+- **A bean definition Spring can't make is abstract.** Beans are fetched with `Context.get(Type.class)`, and to learn
+  what a `FactoryBean` makes, Spring makes every one not yet made, lazy ones too. One that fails is made again at
+  the next lookup, and Spring 6.2 records each failure without a lock, so two lookups at once could throw and
+  answer a request with a 500. LogicalDOC's template for transactional proxies in the webapp's `context.xml`,
+  `applicationBaseTransactionProxy`, has no target, so Healdan makes it abstract, an upstream edit.
 
 ## Healdan's Code
 

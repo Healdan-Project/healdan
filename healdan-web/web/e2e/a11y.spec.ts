@@ -3,7 +3,7 @@
 
 import { expect, test, type APIRequestContext, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import { expectNoViolations } from './axe'
-import { PASSWORD, USERNAME, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
+import { PASSWORD, USERNAME, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
 
 // Signed-in Devices fits its dialog: nothing scrolls sideways, every Revoke is inside the dialog, and at 1280 a device's name
 // takes no more than two lines (the dialog is as wide as its table needs; at 768 a name may wrap between words further)
@@ -70,7 +70,7 @@ let heldNumber = 0
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   const where = await matterFolders(api, token)
   matterFolder = where.matter

@@ -212,7 +212,7 @@ public sealed class SignInWindowTests
             Assert.False(Find<TextBox>(window, "Server").IsEnabled);
 
             answer.SetResult(Answer(None));
-            await window.Loading;
+            await window.Loading.WaitAsync(TimeSpan.FromSeconds(15)); // a failure, not a hung run, if it never comes
 
             var user = Find<TextBox>(window, "User");
             Assert.True(Shown(user));
@@ -244,7 +244,7 @@ public sealed class SignInWindowTests
             Assert.False(Shown(Find<StackPanel>(window, "PasswordForm")));
 
             answer.SetResult(Answer(Two));
-            await window.Loading;
+            await window.Loading.WaitAsync(TimeSpan.FromSeconds(15));
 
             Assert.Equal(2, ProviderButtons(window).Count);
             Assert.False(Shown(status));
@@ -488,7 +488,7 @@ public sealed class SignInWindowTests
             Assert.True(Shown(Find<TextBox>(window, "User")));
 
             first.SetResult(Answer(Two)); // the kept server answers at last
-            await stale; // and the window has done whatever it does with that answer
+            await stale.WaitAsync(TimeSpan.FromSeconds(15)); // and the window has done whatever it does with that answer
 
             Assert.Empty(ProviderButtons(window));
             Assert.Equal("firm.example", Find<TextBlock>(window, "ServerName").Text);
@@ -539,7 +539,7 @@ public sealed class SignInWindowTests
             Assert.Equal(["https://healdan.example"], prompt.ProvidersAsked); // the one answer is still to come
 
             answer.SetResult(NotHealdan()); // not one to retry
-            await window.Loading;
+            await window.Loading.WaitAsync(TimeSpan.FromSeconds(15));
             Assert.Equal(["https://healdan.example"], prompt.ProvidersAsked);
         });
     }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, escape, matterFolders, signIn, specsFolder, tabTo } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, escape, matterFolders, signIn, specsFolder, tabTo } from './helpers'
 
 // Renaming folders in the User app (folder rename spec): by F2 in the list, from the My Matters tree's ⋯ and from the
 // open folder's heading, once by keyboard alone, with a taken name refused beside the field; and, for webuser, who isn't
@@ -20,7 +20,7 @@ const ids: Record<keyof typeof NAMES, number> = { home: 0, byF2: 0, byTree: 0, b
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   const where = await matterFolders(api, token)
   matterFolder = where.matter

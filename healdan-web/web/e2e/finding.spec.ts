@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { PASSWORD, authorized, deviceToken, fileDocument, matterFolders, signIn } from './helpers'
+import { PASSWORD, apiContext, authorized, deviceToken, fileDocument, matterFolders, signIn } from './helpers'
 
 // Finding in the User app (M6 spec section 6.3): the search box and its scopes, a matter opened by its number, My Matters
 // and its tree, a document found by its words and by its #, Filters, and Copy Link. The documents are made here, through
@@ -23,7 +23,7 @@ const file = (folderId: number, name: string, mimeType: string, buffer: Buffer) 
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   const folders = await matterFolders(api, token)
   matterFolder = folders.matter

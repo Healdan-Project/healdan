@@ -3,7 +3,7 @@
 
 import { readFile } from 'node:fs/promises'
 import { expect, test, type APIRequestContext, type Page, type Request } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, escape, escaped, fileDocument, matterFolders, minimalPdf, signIn } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, escape, escaped, fileDocument, matterFolders, minimalPdf, signIn } from './helpers'
 
 // Working in the User app (M6 spec sections 6.4 to 6.6): Quick Look, reading an email, opening, downloading and checking out;
 // filing, organising and the keys have specs of their own. The documents are made here, through the API with a device token, in matter 1.1's
@@ -69,7 +69,7 @@ let returning = 0
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   documentsFolder = (await matterFolders(api, token)).documents
   await fileDocument(api, token, documentsFolder, PDF_NAME, 'application/pdf', minimalPdf(`Quick Look ${RUN}`))

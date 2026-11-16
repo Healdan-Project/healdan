@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, escape, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
 
 // The right-click menus (changed after M6: the owner's dogfooding punch list, 2026-11-14): Rename from a document's menu
 // opened by a right-click, Move To… from one opened by Shift+F10 on the focused row, and Remove from Favorites from a
@@ -27,7 +27,7 @@ const favoriteIds = async () => (await get<{ items: { id: number; item: { docNum
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   const where = await matterFolders(api, token)
   matterFolder = where.matter

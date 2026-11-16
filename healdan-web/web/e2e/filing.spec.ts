@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, fileDocument, matterFolders, signIn } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, fileDocument, matterFolders, signIn } from './helpers'
 
 // Filing by drag and drop (M6 spec section 6.5): three files dropped on a folder's list, one of them an email that is already
 // in the matter, and one file dropped on a document's row as its next version. Playwright can't drag real files, so each
@@ -39,7 +39,7 @@ let versionedNumber = 0
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   const folders = await matterFolders(api, token)
   documentsFolder = folders.documents
