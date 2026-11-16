@@ -13,10 +13,10 @@ person's computer, and **Healdan's LibreOffice extension**. They build apart fro
 
 | From | To | How |
 |---|---|---|
-| The web page's Open in App | The helper | A `healdan://open/<doc #>?server=<host>` link, which macOS hands the app bundle as an Apple event, started or not |
+| The web page's Open in App | The helper | A `healdan://open/<doc #>?server=<host>` link, which macOS hands the app bundle as an Apple event, started or not, and Ubuntu's desktop entry hands a new process as its argument |
 | The LibreOffice extension | The helper | The channel: HTTP on `127.0.0.1`, with a secret (below) |
 | The Office add-in in Word, Excel and PowerPoint | The helper | [The add-in's port](#the-add-ins-port): HTTPS on `127.0.0.1`, from the server's own pages, with a paired key |
-| A second helper | The running helper | The channel's `/v1/link`, for a link macOS gave another copy of the app (below) |
+| A second helper | The running helper | The channel's `/v1/link`, for a link macOS gave another copy of the app, or Ubuntu gave a new process (below) |
 | The helper | Healdan | The [API](../api/) under `/api/v1`, with a device token |
 | The helper | The system browser, and back | A provider's sign-in at Healdan's `/api/signin/<id>`, which ends at a port the helper listens on, on `127.0.0.1` (below) |
 
@@ -42,7 +42,8 @@ for every app.
   - `Browse/`, `Forms/` and `Ui/`: what the windows show and decide, and their words;
   - `Platform/` and `Settings/`: the extension's install check, which app opens each kind of file, and the settings.
 - **`Healdan.Helper`** is the Avalonia 12 app: the menu-bar icon (`Tray/`), the windows (`Windows/`), and macOS's
-  notifications, login item, extension install and text layout (`Platform/`). It starts out of the Dock
+  notifications, login item, extension install and text layout (`Platform/`), and on Ubuntu its notices through
+  `notify-send` (`Notifier`). It starts out of the Dock
   (`LSUIElement`), and is in the Dock and ⌘Tab only while one of its windows is open (`MacPlatform.ShowInDock`), with
   its own app menu (`AppMenu`; Avalonia's default items are off). It hands the focus back once the last window
   closes. Each window waiting for an answer has a line in the menu bar icon's menu (`OpenWindows.WaitingWindows`).
@@ -141,7 +142,10 @@ size the helper uses, the widths then match CoreText's.
   (`DefaultApp`), with no check-out, and only from the Open window: a link to one is refused (`OpenLinkAsync`), unless
   it's a PDF, which a link opens as the Open window does, in CoffeePDF while it's available and else read-only in the
   default app. On macOS the copy gets `com.apple.quarantine` (`Platform/Quarantine.cs`), so Gatekeeper checks it, and
-  `DefaultApp.RefusedExtensions` (apps, installers, scripts and the like) are never downloaded or handed over.
+  `DefaultApp.RefusedExtensions` (apps, installers, scripts and the like) are never downloaded or handed over. On
+  Ubuntu the default app is `xdg-open`, there's no quarantine, and the list also holds what runs on Linux or under
+  Wine: `.desktop`, `.appimage`, `.deb`, `.rpm`, `.snap`, `.flatpak`, `.flatpakref`, `.flatpakrepo`, `.run`, `.bin`,
+  `.exe`, `.msi`, `.bat`, `.cmd`, `.com`, `.ps1`, `.vbs`, `.lnk` and `.jnlp`.
 - **Saving:** the helper watches the folder, so it works whether or not the extension took the save over. A save
   counts once the file's size has stopped changing for 1.2 seconds, checked every 300 ms, and its content differs
   from the last sent. It goes up as a snapshot with `keepCheckedOut: true`, the document's own `name`, `ifVersion`,
@@ -288,6 +292,7 @@ Every copy is directly in one folder, `Copies/`, mode 700.
 | Settings | `<support>/settings.json` | the same |
 | Device id | `<support>/device.json`: a random UUID made once, not a secret | the same |
 | The channel | `<support>/channel.json`, mode 600: `{"port", "secret", "pid"}` | the same |
+| The one-helper lock | `<support>/helper.lock`, held while the helper runs (`SingleInstance`) | the same |
 | The add-in's certificate | `<support>/addin-cert.pem` and `addin-key.pem` (mode 600): the helper's own self-signed certificate for `localhost` and `127.0.0.1`, RSA 2048, valid 800 days (`AddinCertificate`). Set Up Microsoft Office makes it, makes it again once fewer than 30 days are left, and has the user trust it, in their login keychain (`OfficeSetUp`; `MacCertificateTrust` runs `security add-trusted-cert -r trustRoot -p ssl`). The add-in's port only serves it, and never makes one | none: Microsoft Office is a Mac app here, so nothing makes one |
 | The add-in's keys | `<support>/addin-keys.json` (mode 600): `{"keys": [{"hash", "app", "paired"}]}`, each paired key's SHA-256 in hex, never the key (`AddinKeys`) | none, as above |
 | Logs | `~/Library/Logs/Healdan Helper/helper.log` and `extension.log` | `<support>/helper.log` and `extension.log` |
@@ -430,6 +435,15 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   its channel runs `HandOverApp` instead of the helper: Avalonia with no window or icon, which takes each link's event
   and posts it to `/v1/link` (`LinkHandOver`), then quits a second after the last, or after 5 seconds when none came.
   A link it can't hand over is logged as dropped, with why. An old copy can't do any of this, so its links are lost.
+- **One helper per user on Ubuntu, and its links:** `Program.Main` takes the lock `<support>/helper.lock` first
+  (`SingleInstance`: an exclusive file lock the system frees when the helper ends, however it ends, so a stale file
+  never blocks a start; `channel.json`'s pid can't say this, as the channel starts only after sign-in). A process that
+  can't take it, or finds a helper answering its channel, is a second one: it hands each `healdan://` link in its
+  arguments to the running helper with `POST /v1/link` and the channel's secret (`LinkHandOver`), then quits with no
+  window. It waits up to 30 seconds for a helper that's still starting, and a link still waiting by then is logged as
+  dropped. The desktop entry is `Exec=/opt/healdan-helper/HealdanHelper %u`, so the first start takes its link from
+  its arguments and holds it until the helper has signed in. A helper that can't open the lock file starts anyway, and
+  logs that a second one can't be ruled out.
 
 - **The window routes** answer when the user closes the window, which can take minutes, so their callers mustn't time
   out. A second request while one of a window is open is answered `cancel`, and brings the open one up.
@@ -771,7 +785,11 @@ LibreOffice. So the packaged helper never runs it on macOS: it opens its own `.o
 helper version that brings a newer extension, and reads LibreOffice's registry under
 `~/Library/Application Support/LibreOffice/4/user/` to see what's installed: at each start, as the menu opens, and
 every 5 seconds while the extension is missing or older, so the menu, the menu bar icon's dot and Settings follow
-what the user accepts. On Ubuntu, `unopkg` works.
+what the user accepts. On Ubuntu the helper reads the registry the same way, under `~/.config/libreoffice/4/user`,
+at the same times (`ExtensionCheck`), so it also sees an extension that LibreOffice asked the user to install. At a
+start with LibreOffice closed, it installs or updates the extension with `unopkg` (`ExtensionInstaller`), which
+works there, from `healdan.oxt` beside the executable. With LibreOffice open, LibreOffice asks the user to install it,
+as on macOS.
 
 ## Running the Helper from Source
 
@@ -795,7 +813,8 @@ only. A Debug build run this way:
 Release builds have none of the variables. For links, notifications and the extension's install, build the app with
 `clients/helper/packaging/mac/package.sh` (unsigned, without `SIGN_IDENTITY`, it runs on your own Mac) and open
 `clients/helper/packaging/mac/out/Healdan Helper.app`. Only one helper runs per user: a second start finds the first
-through `channel.json`, hands it any link it was started for, and quits (see [The Channel](#the-channel)).
+(through `channel.json` and, on Ubuntu, the lock), hands it any link it was started for, and quits (see
+[The Channel](#the-channel)).
 
 ## Tests
 
@@ -915,5 +934,47 @@ the steps and the secrets.
 
 ## Linux
 
-The helper's core, and its tests, run on Linux too: CI runs them on Ubuntu. The Ubuntu package, its tray icon and its
-link hand-over come in M3's second phase.
+The helper works on Ubuntu 26.04 with LibreOffice. Microsoft Office, CoffeePDF and Outlook
+aren't on Linux, so those parts of the helper stay macOS's. The core, and its tests, run on Ubuntu in CI too.
+
+- **One helper per user, and links in arguments:** see [The Channel](#the-channel).
+- **Notices** go through `notify-send` (`NotifySend`, from `libnotify-bin`), run off the caller's thread, as the
+  cycle and the channel post them from their own threads and `notify-send` can wait on the desktop. When one can't be
+  shown, it's the menu's status line, as on macOS.
+- **The keychain** is the Secret Service through `secret-tool` (`SecretToolKeychain`, from `libsecret-tools`; GNOME
+  Keyring), with a 2-minute limit, as a locked keyring asks for its password. A missing `secret-tool` says to install
+  `libsecret-tools`.
+- **The registry read** is the same on both systems: see [Installing It by Hand](#installing-it-by-hand).
+- **Crash detection** counts only the user's own LibreOffice (`OwnProcesses`: `soffice.bin` processes of the user's
+  uid, read from `/proc`, not zombies), so another user's, or a container's, LibreOffice can't hide a crash.
+- **The tray icon** is drawn at run time as on macOS (`Tray/TrayIcons.cs`), white for GNOME's dark top bar. It needs the AppIndicator extension, which
+  Ubuntu has on by default. GNOME's Wayland raised the windows and gave the focus back, so no notification fallback
+  was needed.
+- **The start-up crash** the trial saw with .NET's own HarfBuzz library didn't recur, so there's no
+  `UseSystemHarfBuzz()`.
+
+### The Package
+
+`clients/helper/packaging/linux/package.sh <version> <amd64|arm64>` builds
+`clients/helper/packaging/linux/out/Healdan-Helper-<version>-<arch>.deb`. It publishes the helper self-contained, not as
+a single file (only macOS's signing needs that), and drops .NET's `libcoreclrtraceptprovider.so`, which needs
+`liblttng-ust.so.0`, a library Ubuntu 26.04 lacks, and loads only with LTTng tracing on. The Debian version is
+`X.Y.Z~pre` for `X.Y.Z-pre`, so a release candidate sorts before its release; the maintainer is `The Healdan Project`,
+with no address.
+
+| Path | What it is |
+|---|---|
+| `/opt/healdan-helper/` | The helper (`HealdanHelper`) and its libraries, with `healdan.oxt` beside it |
+| `/usr/share/applications/healdan-helper.desktop` | The desktop entry: `x-scheme-handler/healdan`, `Exec=/opt/healdan-helper/HealdanHelper %u` |
+| `/etc/xdg/autostart/healdan-helper.desktop` | Starts the helper at sign-in |
+| `/usr/share/icons/hicolor/scalable/apps/healdan-helper.svg` | The docs site's `site/static/favicon.svg` |
+| `/usr/share/doc/healdan-helper/copyright` | The licence notice |
+
+- **`Depends`:** `libsecret-tools`, `libnotify-bin`, `libreoffice-script-provider-python`, `libharfbuzz0b`, `libice6`,
+  `libsm6`, `libfontconfig1`, `libx11-6`, `libicu78`, `libssl3t64`, `zlib1g` and `libstdc++6`. `libicu78` ties the
+  package to Ubuntu 26.04.
+- **Installing:** `sudo apt install ./Healdan-Helper-<version>-<arch>.deb`. Installing a newer one over an older works.
+- **CI** builds both `.deb`s and attaches them to a release: see
+  [Releasing the Ubuntu Helper](../continuous-integration/#releasing-the-ubuntu-helper).
+- **The autostart entry** is all the helper does about starting at sign-in on Ubuntu: it logs that the entry starts it,
+  where on macOS it registers a login item.

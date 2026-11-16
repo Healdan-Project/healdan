@@ -4,8 +4,10 @@ linkTitle: Installing the Helper
 weight: 1
 ---
 
-The Healdan Helper runs in your Mac's menu bar. It adds Healdan's menu and toolbar to LibreOffice, and does the work
-for the Healdan tab in Word, Excel and PowerPoint. Install it on each Mac you work on.
+The Healdan Helper runs in your Mac's menu bar, or in the top bar of Ubuntu's desktop. It adds Healdan's menu and
+toolbar to LibreOffice, and on a Mac does the work for the Healdan tab in Word, Excel and PowerPoint. Install it on
+each computer you work on. This page is written for the Mac, with [Installing on Ubuntu](#installing-on-ubuntu)
+below it, and notes where Ubuntu differs.
 
 ## Before You Start
 
@@ -17,7 +19,8 @@ for the Healdan tab in Word, Excel and PowerPoint. Install it on each Mac you wo
 - **How you sign in to Healdan:** your username and password, the ones you use in the web page, or, if your firm
   signs you in through a provider such as Microsoft, your account there. Signing in through a provider needs
   Healdan Helper 0.6.0 or later.
-- **A Mac with Apple silicon,** running macOS 26 or later.
+- **A Mac with Apple silicon,** running macOS 26 or later, or **a computer running Ubuntu 26.04** (the helper needs
+  that release's libraries), with LibreOffice 26.2 or later. Word, Excel and PowerPoint aren't on Ubuntu.
 
 ## Installing on macOS
 
@@ -56,9 +59,59 @@ LibreOffice asks to add Healdan's extension: see [Adding Healdan to LibreOffice]
 
 {{% /steps %}}
 
-{{< callout type="info" >}}
-The helper for Ubuntu isn't ready yet. Until it is, Healdan works in LibreOffice on macOS only.
-{{< /callout >}}
+## Installing on Ubuntu
+
+Install LibreOffice first: if it isn't there, the helper can't open anything. Then:
+
+{{% steps %}}
+
+### Get the Package
+
+Your administrator tells you where to get `Healdan-Helper-<version>-amd64.deb`, or `-arm64.deb` for an Arm computer.
+Healdan's own releases are on [GitHub](https://github.com/Healdan-Project/healdan/releases).
+
+### Install It
+
+In a terminal, in the folder you downloaded it to:
+
+```bash
+sudo apt install ./Healdan-Helper-<version>-amd64.deb
+```
+
+`apt` adds the libraries the helper needs. Installing a newer package the same way upgrades it.
+
+### Open It
+
+The helper starts by itself each time you sign in to Ubuntu. To start it now, press **Super** and type "Healdan". The
+helper is added to the end of the app grid, not to the Dock: the Dock shows your favourites and the apps that are
+running.
+
+Healdan's mark appears in the top bar. The helper shows a window only when it needs you. A dot on the mark means it
+needs you, as on the Mac: click the mark to see why.
+
+### Sign In
+
+The Sign In to Healdan window opens: see [The Sign In Window](#the-sign-in-window).
+
+### Add the Extension
+
+The helper adds Healdan's extension to LibreOffice for you. If LibreOffice is closed when the helper starts, the
+helper installs it, and it's there the next time you open LibreOffice. If LibreOffice is open, it asks whether to
+install the extension **Healdan**: choose **OK**, then quit LibreOffice and open it again. See
+[Adding Healdan to LibreOffice](#adding-healdan-to-libreoffice).
+
+{{% /steps %}}
+
+- **Ubuntu 26.04 only.** The package depends on that release's libraries, so `apt` refuses it on an earlier Ubuntu.
+- **Notices** come through Ubuntu's own notifications. If one can't be shown, the helper's latest notice is a line in
+  its menu, as on the Mac.
+- **Your sign-in** is kept in GNOME Keyring, so it doesn't ask for your password each time. If the keyring is locked
+  when the helper starts, Ubuntu asks for its password: the helper waits two minutes. If `secret-tool` is missing, the
+  helper says to install `libsecret-tools`, which the package normally does.
+- **One helper runs per user.** A Healdan link clicked while the helper is running is handed to it. One that starts
+  the helper waits for you to sign in, and opens then.
+- **The top bar's mark** needs Ubuntu's AppIndicator extension, which is on by default. Without it, the helper runs
+  with no mark.
 
 ## The Sign In Window
 
@@ -228,7 +281,7 @@ pairs with the helper, so that only your own add-in can use it.
 
 ## The Prompts to Expect
 
-Each of these comes once.
+Each of these comes once. They're the Mac's; on Ubuntu, only the LibreOffice one and the browser's are asked.
 
 | When | What asks | Choose |
 |---|---|---|
@@ -368,6 +421,18 @@ this Mac only. That's for a server that's gone for good, or one you're moving aw
   you sign in to the same server again.
 
 ## Removing the Helper
+
+On Ubuntu:
+
+1. Check the helper's menu: no documents open, no saves waiting, nothing Not Yet in Healdan.
+2. Remove the extension from LibreOffice: **Tools › Extensions**, select **Healdan**, then **Remove**.
+3. Choose **Sign Out**, which removes the sign-in from GNOME Keyring, then **Quit Healdan Helper**, and run
+   `sudo apt remove healdan-helper`.
+
+The helper's files stay in `~/.local/share/healdan-helper/`. Its `Copies` folder holds the local copies of the
+documents you had open, including any changes that never reached Healdan: look there before deleting it.
+
+On a Mac:
 
 1. Check the helper's menu: no documents open, no saves waiting, nothing Not Yet in Healdan, and no copies waiting
    for another server.

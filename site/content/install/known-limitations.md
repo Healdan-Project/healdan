@@ -56,12 +56,21 @@ weight: 12
   `CATALINA_OPTS` replaces its default, `-Xmx2g`, so keep `-Xmx2g` beside the proxy's flags. It must be an HTTP
   proxy, and only the first one Java's settings give is tried: a SOCKS proxy (`-DsocksProxyHost`) makes every call
   to a provider fail, and `-Dhttps.protocols` isn't read (`-Djdk.tls.client.protocols` is).
-- **LibreOffice and Microsoft Office on macOS only.** The [Healdan Helper](../office-integration/), which brings
-  Healdan into LibreOffice and, with its add-in, into Word, Excel and PowerPoint, runs on Macs with Apple silicon. The
-  helper for Ubuntu comes next. Windows comes later.
+- **LibreOffice on macOS and Ubuntu, Microsoft Office on macOS only.** The [Healdan Helper](../office-integration/),
+  which brings Healdan into LibreOffice and, on a Mac, with its add-in, into Word, Excel and PowerPoint, runs on Macs
+  with Apple silicon and on Ubuntu 26.04. Microsoft Office isn't on Ubuntu, and Windows comes later.
+- **The helper for Ubuntu is for Ubuntu 26.04 only.** Its package needs the `libicu78` library, which is Ubuntu
+  26.04's, so it won't install on an earlier Ubuntu. The arm64 package is built, but hasn't been run on an arm64
+  machine.
+- **A link clicked while the helper is still signing in waits up to 30 seconds on Ubuntu.** If the sign-in takes
+  longer, the link is dropped, with a line in the helper's log: click Open in App again once the helper is signed in.
+- **The helper's tray icon on Ubuntu needs the AppIndicator extension,** which Ubuntu's GNOME has on by default. With
+  it turned off, the helper runs with no icon, and so no menu.
+- **The helper installs LibreOffice's extension itself only while LibreOffice is closed,** on Ubuntu. With LibreOffice
+  open at the helper's start, LibreOffice asks the person to install it instead: **OK**, then restart LibreOffice.
 - **PDFs are edited in CoffeePDF, on macOS only.** [CoffeePDF](https://github.com/coffeemuse/CoffeePDF) is the one app
   that edits a PDF from Healdan, and only on a Mac where it's installed with its Healdan support on. On any other
-  computer, or a Mac without it, a PDF opens read-only in the computer's default app.
+  computer, Ubuntu's included, or a Mac without it, a PDF opens read-only in the computer's default app.
 - **Office's own Save, Save As and Open aren't taken over.** LibreOffice's are, but Word, Excel and PowerPoint keep
   theirs, and Healdan's buttons are on the Healdan tab. **⌘S** on a document that isn't in Healdan yet saves it on the
   Mac, as before; use Save to Healdan to file it.

@@ -4,7 +4,7 @@ weight: 5
 ---
 
 People can save to and open from Healdan inside LibreOffice, Word, Excel and PowerPoint, through the **Healdan
-Helper**: a small app on each person's Mac, with an extension it adds to LibreOffice and, for the Microsoft apps, an
+Helper**: a small app on each person's Mac or Ubuntu computer, with an extension it adds to LibreOffice and, for the Microsoft apps, an
 add-in you deploy once from Microsoft 365 (see [Microsoft Office](#microsoft-office)). This page is for whoever runs the
 server. The User Guide's [Working in Office Apps](../../user/office/) is for the people using it.
 
@@ -25,9 +25,13 @@ server. The User Guide's [Working in Office Apps](../../user/office/) is for the
 
 - A Mac with Apple silicon and macOS 26 or later, with LibreOffice 26.2 or later, Word, Excel or PowerPoint, or
   several of them, installed first.
-- The helper's disk image, `Healdan-Helper-<version>.dmg`. Healdan's releases are on
+- The helper's disk image, `Healdan-Helper-<version>.dmg`, for a Mac. Healdan's releases are on
   [GitHub](https://github.com/Healdan-Project/healdan/releases), each under a `helper-v<version>` tag, signed and
   notarised. Tell people where to get it, and which version.
+- For Ubuntu, a computer running Ubuntu 26.04 with LibreOffice 26.2 or later installed first, and the helper's
+  package from the same release: `Healdan-Helper-<version>-amd64.deb` for most computers, or `-arm64.deb` for an Arm
+  one. `sudo apt install ./Healdan-Helper-<version>-amd64.deb` installs it with the libraries it
+  needs. Microsoft Office isn't on Ubuntu, so only LibreOffice works there.
 - For PDFs, Healdan Helper 0.5.0 or later. It opens them in [CoffeePDF](https://github.com/coffeemuse/CoffeePDF) on a
   Mac where CoffeePDF is installed with its Healdan support on, and read-only in the Mac's default app elsewhere. An
   earlier helper refuses Open in App on a PDF.
@@ -35,14 +39,15 @@ server. The User Guide's [Working in Office Apps](../../user/office/) is for the
   file into it. The helper enforces nothing of its own, and can't do anything the web page wouldn't allow.
 
 [Installing the Healdan Helper](../../user/office/installing-the-helper/) takes them through the rest. The helper
-doesn't update itself: to move people to a new version, have them install the new disk image over the old one.
+doesn't update itself: to move people to a new version, have them install the new disk image over the old one, or,
+on Ubuntu, the new `.deb` with `sudo apt install` over the old.
 
-The helper for Ubuntu comes later. See [Known Limitations](../known-limitations/).
+What the helper can't do yet, such as on other versions of Ubuntu, is in [Known Limitations](../known-limitations/).
 
 ## Device Sign-Ins
 
 Each helper signs in once with the person's username and password, and keeps a device sign-in, named
-`Healdan Helper on <computer>`, in the Mac's keychain. It never stores the password.
+`Healdan Helper on <computer>`, in the Mac's keychain, or on Ubuntu in the desktop's keyring (GNOME Keyring). It never stores the password.
 
 - **The usual limits apply.** A sign-in unused for 30 days stops working, and none lasts more than 365 days. Change
   both in [Healdan Settings](../../admin/healdan-settings/#device-sign-ins).
@@ -76,15 +81,18 @@ by the words in it.
   images, common scripts, Automator and Shortcuts files, internet location files, kernel extensions and
   configuration profiles. People download those from the web page. A kind it doesn't list still opens, and the
   quarantine is then the check: disk images other than `.dmg`, such as `.iso` or `.sparseimage`, and kinds such as
-  `.zsh`, `.pyc` or `.jnlp`.
+  `.zsh`, `.pyc` or `.jnlp`. On Ubuntu there's no quarantine, so the fixed list also covers what runs on Linux or
+  under Wine: `.desktop`, `.appimage`, `.deb`, `.rpm`, `.snap`, `.flatpak`, `.flatpakref`, `.flatpakrepo`, `.run`,
+  `.bin`, `.exe`, `.msi`, `.bat`, `.cmd`, `.com`, `.ps1`, `.vbs`, `.lnk` and `.jnlp`, and the default app is
+  `xdg-open`'s.
 - **The risk that's left.** Opening a document someone can edit checks it out to them, with no extra question.
   Browsers ask before a site hands a link to an app, and remember the answer per site. So a page the person has
   allowed could open, and check out, documents they can edit, though it can't change them. Their next close checks
   each one back in.
-- **The token** is in the macOS keychain and in the helper's memory, never in a file or a log, and works only
+- **The token** is in the macOS keychain (on Ubuntu, GNOME Keyring through the Secret Service) and in the helper's memory, never in a file or a log, and works only
   under `/api`.
-- **Local copies** are in `~/Library/Application Support/Healdan Helper/Copies/`, readable only by the person signed
-  in to the Mac. Read-only copies, and copies once checked in, are deleted. A copy with changes that haven't
+- **Local copies** are in `~/Library/Application Support/Healdan Helper/Copies/` (on Ubuntu, `~/.local/share/healdan-helper/Copies/`),
+  readable only by the person signed in to the computer. Read-only copies, and copies once checked in, are deleted. A copy with changes that haven't
   reached Healdan stays until they have, or until the person files it as a new document; the helper's menu lists
   those it can't send. Turn on FileVault on laptops.
 - **LibreOffice talks to the helper** over `127.0.0.1` only, with a secret in a file only the person can read, so

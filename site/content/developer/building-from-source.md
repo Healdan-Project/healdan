@@ -117,6 +117,7 @@ python3 -m unittest discover -s clients/libreoffice/tests -v                   #
 node --test 'clients/office/test/*.test.js'                                  # the add-in's tests
 clients/libreoffice/build.sh                                                   # the extension's healdan.oxt
 clients/helper/packaging/mac/package.sh 1.2.3                                  # the macOS app and disk image, on a Mac
+clients/helper/packaging/linux/package.sh 1.2.3 amd64                          # the Ubuntu .deb (or arm64), on Ubuntu 26.04
 ```
 
 `package.sh` signs only with `SIGN_IDENTITY` set (see
@@ -124,6 +125,10 @@ clients/helper/packaging/mac/package.sh 1.2.3                                  #
 an ad-hoc signature, without the hardened runtime, which runs on the Mac that built it and which Gatekeeper refuses
 on any other. The hardened runtime would refuse the app's own libraries, as an ad-hoc signature has no team for its
 library validation to match. A `SIGN_IDENTITY` that isn't in the keychains stops it.
+
+The Linux `package.sh` needs no signing. It writes `clients/helper/packaging/linux/out/Healdan-Helper-1.2.3-amd64.deb`,
+which installs on Ubuntu 26.04 with `sudo apt install ./` and the file's name (see
+[Desktop Clients](../desktop-clients/#the-package)).
 
 Tests marked `Stack` run against a live Healdan and skip without `HEALDAN_STACK_URL`, the stack's base URL, such as
 `http://localhost:8080`. Start a throwaway stack with the smoke fixture overlay first (see

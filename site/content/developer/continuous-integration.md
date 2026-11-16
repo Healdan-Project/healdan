@@ -157,8 +157,9 @@ are:
 
 `Clients` is one of `master`'s required checks.
 
-Two more jobs package the macOS helper. They run only for a `helper-v*` tag or a run by hand, never for a pull
-request, and `Clients` doesn't wait for them (see [Releasing the macOS Helper](#releasing-the-macos-helper)).
+Four more jobs package the helper, two for the Mac and two for Ubuntu. They run only for a `helper-v*` tag or a run
+by hand, never for a pull request, and `Clients` doesn't wait for them (see
+[Releasing the macOS Helper](#releasing-the-macos-helper) and [Releasing the Ubuntu Helper](#releasing-the-ubuntu-helper)).
 
 The helper's tests marked `[Trait("Category", "Stack")]` need a running Healdan stack and skip here, because
 `HEALDAN_STACK_URL` isn't set. The ones marked `MacKeychain` touch the real macOS keychain, so they run by hand on a Mac. The ones marked
@@ -355,3 +356,21 @@ SIGN_IDENTITY="Developer ID Application: <name> (<team ID>)" clients/helper/pack
 ```
 
 `NOTARY_KEY` (the `.p8` file's path), `NOTARY_KEY_ID` and `NOTARY_ISSUER` notarise it as well.
+## Releasing the Ubuntu Helper
+
+The same `helper-v1.2.3` tag runs two more jobs, for Ubuntu, beside the Mac's. They need no signing secrets, so there's
+no approval to wait for.
+
+1. **`Package (Linux)`** (`package-linux`) runs for a tag or by hand, after the helper's and the extension's tests. It
+   runs on an `ubuntu-24.04` runner, in an `ubuntu:26.04` container, so its install check runs on the release the
+   package is for. It runs `clients/helper/packaging/linux/package.sh` for `amd64` and for `arm64`, installs the amd64
+   `.deb` with `apt-get` and checks with `ldd` that nothing the package installed is missing a library, and uploads
+   both `.deb`s as the artifact `Healdan-Helper-<version>-linux`.
+2. **`Release (Linux)`** (`release-linux`) runs only for a pushed `helper-v*` tag, after both `package-linux` and
+   `release-mac`, and attaches the two `.deb`s to the release `release-mac` made. So a Mac build that isn't
+   notarised leaves that tag without a release for Ubuntu too: run the tag's jobs again once the Mac's passes. The
+   release's notes, which `release-mac` writes, cover both systems.
+
+A run by hand packages any branch under a version you give, or `0.0.0-dev.<run>`, and attaches nothing. `Clients`
+doesn't wait for either job. What the package holds is in [Desktop Clients](../desktop-clients/#the-package).
+
