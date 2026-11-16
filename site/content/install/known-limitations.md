@@ -62,8 +62,13 @@ weight: 12
 - **The helper for Ubuntu is for Ubuntu 26.04 only.** Its package needs the `libicu78` library, which is Ubuntu
   26.04's, so it won't install on an earlier Ubuntu. The arm64 package is built, but hasn't been run on an arm64
   machine.
-- **A link clicked while the helper is still signing in waits up to 30 seconds on Ubuntu.** If the sign-in takes
-  longer, the link is dropped, with a line in the helper's log: click Open in App again once the helper is signed in.
+- **A link clicked while the helper is signed out isn't opened, on Ubuntu.** One clicked while it's still signing in
+  waits up to 30 seconds. If the helper has no sign-in by then (it's signed out, its Sign In window was dismissed or is
+  still up, or a first sign-in took longer), the link is dropped, with a line in the helper's log, and a notice says
+  "Healdan Helper didn't open #1234. Sign in from its menu, then click the link again." Sign in, then click Open in App
+  again.
+- **LibreOffice from Ubuntu's App Center (snap) or Flathub (Flatpak) isn't supported.** Their sandboxes can't reach the
+  helper's copies or its extension. Install Ubuntu's own LibreOffice with `sudo apt install libreoffice`.
 - **The helper's tray icon on Ubuntu needs the AppIndicator extension,** which Ubuntu's GNOME has on by default. With
   it turned off, the helper runs with no icon, and so no menu.
 - **The helper installs LibreOffice's extension itself only while LibreOffice is closed,** on Ubuntu. With LibreOffice

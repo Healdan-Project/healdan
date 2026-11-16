@@ -28,10 +28,15 @@ server. The User Guide's [Working in Office Apps](../../user/office/) is for the
 - The helper's disk image, `Healdan-Helper-<version>.dmg`, for a Mac. Healdan's releases are on
   [GitHub](https://github.com/Healdan-Project/healdan/releases), each under a `helper-v<version>` tag, signed and
   notarised. Tell people where to get it, and which version.
-- For Ubuntu, a computer running Ubuntu 26.04 with LibreOffice installed first (tested with 26.2), and the helper's
-  package from the same release: `Healdan-Helper-<version>-amd64.deb` for most computers, or `-arm64.deb` for an Arm
-  one. `sudo apt install ./Healdan-Helper-<version>-amd64.deb` installs it with the libraries it
-  needs. Microsoft Office isn't on Ubuntu, so only LibreOffice works there.
+- For Ubuntu, a computer running Ubuntu 26.04 with Ubuntu's own LibreOffice installed first (tested with 26.2):
+  `sudo apt install libreoffice`. The App Center's LibreOffice (a snap) and Flathub's can't work with the helper, as
+  their sandboxes can't reach the helper's copies. The helper's package, from the same release as the Mac's:
+  `Healdan-Helper-<version>-amd64.deb` for most computers, or `-arm64.deb` for an Arm one. `sudo apt install
+  ./Healdan-Helper-<version>-amd64.deb` installs it with the libraries it needs, and brings LibreOffice and its windows
+  (Writer, Calc, Impress and Draw) if they're missing. It also starts the helper at sign-in for everyone who uses the
+  computer; a person turns that off for their own account in GNOME Tweaks' **Startup Applications**, or with a
+  `~/.config/autostart/healdan-helper.desktop` that says `Hidden=true`. Microsoft Office isn't on Ubuntu, so only
+  LibreOffice works there.
 - For PDFs, Healdan Helper 0.5.0 or later. It opens them in [CoffeePDF](https://github.com/coffeemuse/CoffeePDF) on a
   Mac where CoffeePDF is installed with its Healdan support on, and read-only in the Mac's default app elsewhere. An
   earlier helper refuses Open in App on a PDF.
@@ -39,8 +44,10 @@ server. The User Guide's [Working in Office Apps](../../user/office/) is for the
   file into it. The helper enforces nothing of its own, and can't do anything the web page wouldn't allow.
 
 [Installing the Healdan Helper](../../user/office/installing-the-helper/) takes them through the rest. The helper
-doesn't update itself: to move people to a new version, have them install the new disk image over the old one, or,
-on Ubuntu, the new `.deb` with `sudo apt install` over the old.
+doesn't update itself: to move people to a new version, have them quit Healdan Helper, install the new disk image over
+the old one, or, on Ubuntu, the new `.deb` with `sudo apt install` over the old, and open the helper again. The old
+one keeps running until it's quit. The next macOS release also opens its newer LibreOffice extension in LibreOffice once
+for each Mac user, who accepts it.
 
 What the helper can't do yet, such as on other versions of Ubuntu, is in [Known Limitations](../known-limitations/).
 
@@ -76,15 +83,15 @@ by the words in it.
   checked out like any document the person can edit, on a Mac where CoffeePDF is installed with Healdan support on;
   where it isn't, a PDF opens read-only in the default app, from Open from Healdan or from a link. Each copy the
   default app opens is marked as downloaded from the internet (macOS's quarantine), so Gatekeeper checks
-  it as it does a browser's downloads. The helper never downloads or opens a kind of file on its fixed list of 24
-  extensions, which run a program or change the Mac when opened: apps, `.pkg` and `.mpkg` installers, `.dmg` disk
-  images, common scripts, Automator and Shortcuts files, internet location files, kernel extensions and
-  configuration profiles. People download those from the web page. A kind it doesn't list still opens, and the
-  quarantine is then the check: disk images other than `.dmg`, such as `.iso` or `.sparseimage`, and kinds such as
-  `.zsh`, `.pyc` or `.jnlp`. On Ubuntu there's no quarantine, so the fixed list also covers what runs on Linux or
-  under Wine: `.desktop`, `.appimage`, `.deb`, `.rpm`, `.snap`, `.flatpak`, `.flatpakref`, `.flatpakrepo`, `.run`,
-  `.bin`, `.exe`, `.msi`, `.bat`, `.cmd`, `.com`, `.ps1`, `.vbs`, `.lnk` and `.jnlp`, and the default app is
-  `xdg-open`'s.
+  it as it does a browser's downloads. The helper never downloads or opens a kind of file on its fixed list of 42
+  extensions, the same on a Mac and on Ubuntu, which run a program or change the computer when opened: apps, `.pkg` and
+  `.mpkg` installers, `.dmg` disk images, common scripts, Automator and Shortcuts files, internet location files,
+  kernel extensions and configuration profiles, and what runs on Linux or under Wine: `.desktop`, `.appimage`, `.deb`,
+  `.rpm`, `.snap`, `.flatpak`, `.flatpakref`, `.flatpakrepo`, `.run`, `.bin`, `.exe`, `.msi`, `.bat`, `.cmd`, `.com`,
+  `.ps1`, `.vbs`, `.lnk` and `.jnlp`. People download those from the web page; a Mac user can't open a `.exe` or a
+  `.jnlp` in the default app either. A kind it doesn't list still opens, and on a Mac the quarantine is then the
+  check: disk images other than `.dmg`, such as `.iso` or `.sparseimage`, and kinds such as `.zsh` or `.pyc`. On Ubuntu
+  there's no quarantine, so the list is the only check, and the default app is `xdg-open`'s.
 - **The risk that's left.** Opening a document someone can edit checks it out to them, with no extra question.
   Browsers ask before a site hands a link to an app, and remember the answer per site. So a page the person has
   allowed could open, and check out, documents they can edit, though it can't change them. Their next close checks

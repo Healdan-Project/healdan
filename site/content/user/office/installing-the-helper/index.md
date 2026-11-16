@@ -33,7 +33,9 @@ Your administrator tells you where to get `Healdan-Helper-<version>.dmg`. Healda
 
 ### Copy the Helper to Applications
 
-Open the disk image, and drag **Healdan Helper** onto **Applications**.
+Open the disk image, and drag **Healdan Helper** onto **Applications**. To upgrade, quit Healdan Helper first (choose
+**Quit Healdan Helper** in its menu), drag the new one over the old, and open it again: the old one keeps running
+until you quit it.
 
 ### Open It from Applications
 
@@ -61,7 +63,10 @@ LibreOffice asks to add Healdan's extension: see [Adding Healdan to LibreOffice]
 
 ## Installing on Ubuntu
 
-Install LibreOffice first: if it isn't there, the helper can't open anything. Then:
+Install Ubuntu's own LibreOffice first: `sudo apt install libreoffice`. The App Center's LibreOffice (a snap) and
+Flathub's can't work with the helper, as their sandboxes can't reach the copies it makes, so remove one of those first if
+you have it. If Ubuntu's LibreOffice is missing, the package brings it, with its windows (Writer, Calc, Impress and
+Draw), but install it yourself first to choose what comes with it. Then:
 
 {{% steps %}}
 
@@ -78,11 +83,15 @@ In a terminal, in the folder you downloaded it to:
 sudo apt install ./Healdan-Helper-<version>-amd64.deb
 ```
 
-`apt` adds the libraries the helper needs. Installing a newer package the same way upgrades it.
+`apt` adds the libraries the helper needs. To upgrade, quit Healdan Helper (choose **Quit Healdan Helper** in its
+menu), install the newer package the same way, then open the helper again. The old one keeps running until you quit it.
 
 ### Open It
 
-The helper starts by itself each time you sign in to Ubuntu. To start it now, press **Super** and type "Healdan". The
+The package starts the helper at sign-in for everyone who uses the computer. To turn that off for your account only, open
+GNOME Tweaks' **Startup Applications** and turn Healdan Helper off, or make a file
+`~/.config/autostart/healdan-helper.desktop` that says `Hidden=true` (deleting it turns autostart on again). To start
+the helper now, press **Super** and type "Healdan". The
 helper is added to the end of the app grid, not to the Dock: the Dock shows your favourites and the apps that are
 running.
 
@@ -109,7 +118,10 @@ install the extension **Healdan**: choose **OK**, then quit LibreOffice and open
   when the helper starts, Ubuntu asks for its password: the helper waits two minutes. If `secret-tool` is missing, the
   helper says to install `libsecret-tools`, which the package normally does.
 - **One helper runs per user.** A Healdan link clicked while the helper is running is handed to it. One that starts
-  the helper waits for you to sign in, and opens then.
+  the helper waits for you to sign in, and opens then. A link clicked while the running helper is signed out, or is
+  still signing in after 30 seconds, isn't opened: a notice says "Healdan Helper didn't open #1234. Sign in from its
+  menu, then click the link again." Open the helper from the top bar to sign in, then click the link again. Opening
+  the helper from the app grid while it runs only says that it's already running.
 - **The top bar's mark** needs Ubuntu's AppIndicator extension, which is on by default. Without it, the helper runs
   with no mark.
 
@@ -369,7 +381,10 @@ Settings has four groups (three while your Mac has no Word, Excel, PowerPoint or
 - **This Computer:**
   - **Start at Sign-In:** On or Off. After your first sign-in, the helper starts whenever you sign in to your Mac.
     To stop it, turn it off in **System Settings › General › Login Items & Extensions**. While it isn't on, a line
-    under it says why, or how to turn it on.
+    under it says why, or how to turn it on. On Ubuntu it's On while the package's entry is installed and your account
+    hasn't turned it off; Off says so, and that GNOME Tweaks' **Startup Applications**, or deleting your
+    `~/.config/autostart/healdan-helper.desktop`, turns it on again; **Not in This Build** is a helper run by hand,
+    which no package started.
   - **LibreOffice Extension:** the version installed, and when it was installed, or **Not Installed**. While the
     extension isn't installed, **Install…** asks LibreOffice to add it, as the menu's **Install the LibreOffice
     Extension…** does. While an older version is installed, the row shows that version, with **Update…**, which asks
@@ -424,7 +439,8 @@ this Mac only. That's for a server that's gone for good, or one you're moving aw
 
 On Ubuntu:
 
-1. Check the helper's menu: no documents open, no saves waiting, nothing Not Yet in Healdan.
+1. Check the helper's menu: no documents open, no saves waiting, nothing Not Yet in Healdan, and no copies waiting
+   for another server.
 2. Remove the extension from LibreOffice: **Tools › Extensions**, select **Healdan**, then **Remove**.
 3. Choose **Sign Out**, which removes the sign-in from GNOME Keyring, then **Quit Healdan Helper**, and run
    `sudo apt remove healdan-helper`.
@@ -433,7 +449,8 @@ Removing the package doesn't remove the extension from LibreOffice, which keeps 
 in LibreOffice's Extension Manager (**Tools › Extensions**).
 
 The helper's files stay in `~/.local/share/healdan-helper/`. Its `Copies` folder holds the local copies of the
-documents you had open, including any changes that never reached Healdan: look there before deleting it.
+documents you had open, including any changes that never reached Healdan, and any `Copies from` folders hold those left
+from other servers: look there before deleting it.
 
 On a Mac:
 

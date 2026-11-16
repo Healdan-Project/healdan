@@ -1170,6 +1170,15 @@ These are the rows the trial deferred.
 
 - [ ] **Step 1: The owner runs spec §14.2 on Ubuntu 26.04, against the semi-production server, with the released `.deb`**
 
+- [ ] **Step 1b: The by-hand rows added by the final review, on the owner's Ubuntu desktop with the released `.deb`**
+  - A start with LibreOffice closed and no extension installed (the `unopkg add` path): the extension is there the next time LibreOffice opens.
+  - An upgrade from an older `.deb`, quitting the helper first: the install prints "Quit Healdan Helper and open it again to use the new version.", and the helper that opens afterwards is the new one.
+  - A link clicked while the helper is signed out: the notice says "Healdan Helper didn't open #<n>. Sign in from its menu, then click the link again."; after signing in, the same link opens. Starting the helper from the app grid while it runs says it's already running.
+  - Settings' Start at Sign-In row: On with the package's entry; Off, with the hint, after turning it off in GNOME Tweaks' Startup Applications (and On again after deleting `~/.config/autostart/healdan-helper.desktop`).
+  - Autostart at a fresh sign-in to Ubuntu: the helper's mark appears in the top bar without opening it.
+
+- [ ] **Step 1c: The next macOS release's notes say that LibreOffice opens extension 0.3.1 once for each Mac user, who accepts it**
+
 - [ ] **Step 2: Mark M3 done in the roadmap, with the date, and move what's left to Follow-ups**
 
 ---
@@ -1241,8 +1250,12 @@ Every call made while building, in order. "Where" is the task or review that rai
 | 2026-11-16 | Task 22 (PR F) | `package.sh` drops .NET's `libcoreclrtraceptprovider.so` | it needs `liblttng-ust.so.0`, which Ubuntu 26.04 lacks, and loads only with LTTng tracing on | no LTTng tracing in the packaged helper. |
 | 2026-11-16 | Task 22 (PR F) | the package's `Depends` adds `libicu78`, `libssl3t64`, `zlib1g` and `libstdc++6` (checked in an `ubuntu:26.04` container), so it installs only on Ubuntu 26.04 | the self-contained .NET runtime needs them and a minimal 26.04 lacks them; §5.12 targets 26.04 | `libicu78` ties the `.deb` to 26.04, so a later Ubuntu needs a rebuild. |
 | 2026-11-16 | Task 22 (PR F) | `Maintainer: The Healdan Project`, with no email | the repository has no project address, and none may be invented | one control line once the owner names an address. |
-| 2026-11-16 | Task 22 (PR F) | on Ubuntu the helper reads LibreOffice's user registry, as on macOS, at a start, as the menu opens and every few seconds while the extension is missing | the walkthrough's T12 found an extension accepted in a running LibreOffice was never seen; `unopkg` stays the installer while LibreOffice is closed, and the registry is the reader | small. |
+| 2026-11-16 | Task 22 (PR F) | on Ubuntu the helper reads LibreOffice's user registry, as on macOS, at a start only while LibreOffice is open (with it closed a start runs `unopkg list`, and a helper version already checked reads nothing), as the menu opens and every few seconds while the extension is missing | the walkthrough's T12 found an extension accepted in a running LibreOffice was never seen; `unopkg` stays the installer while LibreOffice is closed, and the registry is the reader | small. |
 | 2026-11-16 | Task 22 (PR F) | crash detection on Ubuntu counts only the user's own LibreOffice: `soffice.bin` processes of the user's uid, not zombies | a crash must be seen on machines with other LibreOffices (the walkthrough's T4 found a container's headless LibreOffice hid it) | small. |
+
+| 2026-11-16 | Final review | the lock applies on macOS too: a second copy macOS starts for a link while the first is signing in hands the link over, once, and quits, instead of becoming a second full helper | one rule on both systems; the final review found the lock's check was already shared | none known; macOS CI checks the conflict. |
+| 2026-11-16 | Final review | one refused-kinds list on both systems, so a Mac also refuses Linux's and Wine's runnable kinds | harmless on macOS, and one list is one thing to keep right | a Mac user can't open a `.exe` or `.jnlp` in the default app. |
+| 2026-11-16 | Final review | the package `Depends` on `libreoffice-core` and `Recommends` `libreoffice-writer`, `-calc`, `-impress` and `-draw`; snap and Flatpak LibreOffice aren't supported | apt would otherwise satisfy `libreoffice-script-provider-python` with `libreoffice-core-nogui`, which has no windows; the sandboxes can't reach the helper's copies | an admin who wants no Recommends installs with `--no-install-recommends`; snap and Flatpak users must switch. |
 
 ### What the final review found in this plan
 

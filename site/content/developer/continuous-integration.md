@@ -307,7 +307,8 @@ The helper has versions of its own, such as `1.2.3` or `1.2.3-rc1`. Pushing the 
    the repository, and it sees no signing secret.
 
 Only official releases stay on GitHub. Once `1.2.3`'s disk image is attached, `Release (macOS)` deletes the
-releases of `1.2.3-rc1` and the version's other pre-releases, with their disk images. Their tags stay, as the record
+releases of `1.2.3-rc1` and the version's other pre-releases, whole, so with their disk images and the Ubuntu `.deb`s
+attached to them. Their tags stay, as the record
 of what was tested. It also refuses to publish a pre-release of a version that's already released, so re-running an
 old `helper-v1.2.3-rc1` run attaches nothing.
 
@@ -364,12 +365,14 @@ no approval to wait for.
 1. **`Package (Linux)`** (`package-linux`) runs for a tag or by hand, after the helper's and the extension's tests. It
    runs on an `ubuntu-24.04` runner, in an `ubuntu:26.04` container, so its install check runs on the release the
    package is for. It runs `clients/helper/packaging/linux/package.sh` for `amd64` and for `arm64`, installs the amd64
-   `.deb` with `apt-get` and checks with `ldd` that nothing the package installed is missing a library, and uploads
+   `.deb` with `apt-get` (without its Recommends, which only add LibreOffice's windows) and checks with `ldd` that nothing
+   the package installed is missing a library (and fails when it finds no file to check), and uploads
    both `.deb`s as the artifact `Healdan-Helper-<version>-linux`.
 2. **`Release (Linux)`** (`release-linux`) runs only for a pushed `helper-v*` tag, after both `package-linux` and
    `release-mac`, and attaches the two `.deb`s to the release `release-mac` made. So a Mac build that isn't
    notarised leaves that tag without a release for Ubuntu too: run the tag's jobs again once the Mac's passes. The
-   release's notes, which `release-mac` writes, cover both systems.
+   release's notes, which `release-mac` writes, cover both systems: on Ubuntu to install Ubuntu's own LibreOffice first,
+   and on both to quit Healdan Helper before installing a new version and open it again after.
 
 A run by hand packages any branch under a version you give, or `0.0.0-dev.<run>`, and attaches nothing. `Clients`
 doesn't wait for either job. What the package holds is in [Desktop Clients](../desktop-clients/#the-package).
