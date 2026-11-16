@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -425,6 +426,28 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 		assertEquals(set(a, b), new HashSet<>(pdfs.docIds()));
 		assertEquals(set(closedGranted),
 				new HashSet<>(FolderListing.get().page(closed, alice, all().withKinds(Set.of("pdf"))).docIds()));
+	}
+
+	/**
+	 * A document published since a minute ago is listed for someone who doesn't
+	 * see unpublished documents. Hibernate writes the start of publishing, and
+	 * the listing compares it with now through JDBC, so the two must store dates
+	 * in the same zone, as they do in production. When the test context had
+	 * Hibernate in Rome's zone and the JVM in UTC, a document whose start
+	 * LogicalDOC had set to midnight, as it does for every new one, was unlisted
+	 * until one in the morning (CI on 15 November 2026).
+	 */
+	@Test
+	public void testListsADocumentPublishedAMinuteAgo() throws Exception {
+		Folder fresh = fx.folder(documents, "Fresh");
+		long doc = fx.upload(fresh, "fresh.pdf", "fresh", admin).getId();
+		awaitAsyncWork();
+		// Through Hibernate, as a store writes it, but past the store's truncation to the day
+		DocumentDAO.get().bulkUpdate("set startPublishing = :start where id = :id",
+				Map.of("start", new Date(System.currentTimeMillis() - 60_000L), "id", doc));
+		evict();
+
+		assertEquals(list(doc), FolderListing.get().page(fresh, alice, all()).docIds());
 	}
 
 	@Test

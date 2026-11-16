@@ -90,8 +90,7 @@ public class BackdaterTest extends AbstractHealdanTestCase {
 		assertEquals(LONG_AGO.getTime(), folderCreated(folder).getTime());
 		Date cached = FolderDAO.get().findById(folder.getId()).getCreation();
 		assertNotEquals("The cache still holds the real date", real.getTime(), cached.getTime());
-		// Hibernate reads timestamps in hibernate.jdbc.time_zone (Europe/Rome in the tests), while JDBC writes in
-		// the JVM's zone (see ApiTokensTest), so compare the cached read with a read past the cache, not LONG_AGO
+		// The cached copy must hold what a read past the cache finds
 		Context.get(SessionFactory.class).getCache().evictAllRegions();
 		assertEquals(FolderDAO.get().findById(folder.getId()).getCreation().getTime(), cached.getTime());
 	}
