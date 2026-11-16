@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, signIn, specsFolder, tabTo } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, signIn, specsFolder, tabTo } from './helpers'
 
 // The User app by keyboard alone (M6 spec section 15.2, rows 3 to 9; section 10.5): after the sign-in page, every step is a
 // key (`page.keyboard`), and where a control is reached it is by Tab (`tabTo`). `focus()` only starts a step at a place the
@@ -72,7 +72,7 @@ const trackers: string[] = []
 
 test.beforeAll(async ({ playwright, browser }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   const folders = await matterFolders(api, token)
   matterFolder = folders.matter

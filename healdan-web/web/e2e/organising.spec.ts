@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, escape, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
 
 // Organising in the User app (M6 spec section 6.7): a folder made with New Folder, a document renamed in place, one moved
 // by the picker, two moved by dragging them onto a folder of the tree, and two deleted after the question. Playwright can't
@@ -30,7 +30,7 @@ const folders: Record<'picked' | 'dragged', number> = { picked: 0, dragged: 0 }
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   const where = await matterFolders(api, token)
   documentsFolder = where.documents
@@ -176,8 +176,12 @@ test('moves two rows by dragging them onto a folder of the tree, and deletes two
   expect((await question.getByRole('listitem').allTextContents()).sort()).toEqual([NAMES.deleteOne, NAMES.deleteTwo].sort())
   await expect(question.getByText('The Trash is in the Classic Interface, where they can be restored.')).toBeVisible()
   await question.getByRole('button', { name: 'Cancel' }).click()
+  await expect(question).toHaveCount(0)
   expect((await document(numbers.deleteOne)).name).toBe(NAMES.deleteOne)
 
+  // Delete is a key of the list's rows, and the question gives the focus back to the row it was asked from only a frame after
+  // it has gone, which a slow WebKit did after the next key (2026-11-14): Delete waits for it, as a person waits for the ring
+  await expect.poll(() => row(list, NAMES.deleteOne).evaluate((element) => element.contains(globalThis.document.activeElement))).toBe(true)
   await page.keyboard.press('Delete')
   await page.getByRole('dialog', { name: 'Move 2 documents to the Trash?' }).getByRole('button', { name: 'Move to Trash' }).click()
   await expect(page.getByText('Moved 2 documents to the Trash')).toBeVisible()

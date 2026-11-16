@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
-import { PASSWORD, authorized, deviceToken, fileDocument, matterFolders, signIn } from './helpers'
+import { PASSWORD, apiContext, authorized, deviceToken, fileDocument, matterFolders, signIn } from './helpers'
 
 // Signing in to the User app (M6 spec sections 2.1 and 8): links into the app come back after the sign-in, the sign-in page
 // lands in the app, the way to the Classic Interface and back, and Sign Out. The document a doc # link names is this
@@ -20,7 +20,7 @@ async function personMenu(page: Page) {
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   linked = await fileDocument(api, token, (await matterFolders(api, token)).documents, NAME, 'text/plain', Buffer.from(`linked ${RUN}`))
 })

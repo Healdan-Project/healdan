@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, escape, escaped, matterFolders, signIn, specsFolder } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, escape, escaped, matterFolders, signIn, specsFolder } from './helpers'
 
 // A favorite's own name (changed after M6: the owner's dogfooding punch list, 2026-11-14): a folder added to My Favorites
 // with its star, renamed from its menu in My Favorites, and given its own name back with Use Original Name. The folder is
@@ -27,7 +27,7 @@ const ours = async () => (await favorites()).find((favorite) => favorite.item.id
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   const home = await specsFolder(api, token, (await matterFolders(api, token)).documents)
   folderId = (await call<{ id: number }>(api.post('/api/v1/folders', { ...authorized(token), data: { parentId: home, name: FOLDER } }), `making ${FOLDER}`)).id
