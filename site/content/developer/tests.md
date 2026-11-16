@@ -330,6 +330,11 @@ code is laid out.
     800 pixels wide has no divider and that the width comes back at 1280; and puts it back with Enter. It does the same
     for the details' divider, with End, Home and Enter. Each test has a browser context of its own, so its storage
     starts empty.
+  - Each spec's own calls to the API (filing, checking, cleaning up) go through `apiContext` in `helpers.ts`, which
+    sends every request on a connection of its own (`Connection: close`). Playwright's request context otherwise keeps
+    connections for later requests, for as long as they stay open, and Tomcat closes one that has waited 20 seconds: a
+    request sent on one at that moment fails with `socket hang up`, as `keyboard.spec.ts`'s sign-out after its tests
+    did. A new spec makes its context with `apiContext` too.
   - It runs in `docker/smoke-test.sh` as step 9, on amd64 and arm64. On a Mac, Docker Desktop doesn't reach the
     host's ports from the default `--network host`: set `WEB_NETWORK=bridge`. The browser then still opens
     `http://127.0.0.1:<port>`, which a small proxy in its container forwards to `host.docker.internal`, because the web

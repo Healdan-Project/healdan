@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, escape, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
 
 // Organising in the User app (M6 spec section 6.7): a folder made with New Folder, a document renamed in place, one moved
 // by the picker, two moved by dragging them onto a folder of the tree, and two deleted after the question. Playwright can't
@@ -30,7 +30,7 @@ const folders: Record<'picked' | 'dragged', number> = { picked: 0, dragged: 0 }
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   const where = await matterFolders(api, token)
   documentsFolder = where.documents

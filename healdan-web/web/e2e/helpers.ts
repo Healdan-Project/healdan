@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test'
+import { expect, type APIRequest, type APIRequestContext, type Locator, type Page } from '@playwright/test'
 
 // webuser is made by healdan-core's SmokeWebUserSeed on the smoke stack; docker/tests/test-web.sh passes its password.
 export const USERNAME = 'webuser'
@@ -29,6 +29,17 @@ export async function signIn(page: Page) {
 // What the specs that file their own documents share. They file through the API with a device token, into matter 1.1's
 // Documents folder (which the smoke fixture makes), with names that are the run's own, so nothing depends on what an
 // earlier step left.
+
+/**
+ * The request context a spec files, checks and cleans up through, at the stack's address. Each request has a connection
+ * of its own (`Connection: close`). Playwright's context otherwise keeps connections for later requests, for as long as
+ * they stay open, and Tomcat closes one that has waited 20 seconds (`connectionTimeout`): a request sent on one at that
+ * moment fails with `socket hang up` (ECONNRESET). keyboard.spec's sign-out after its tests, 20 to 21 seconds after its
+ * last call, failed so twice on 2026-11-14.
+ */
+export function apiContext(request: APIRequest, baseURL: string | undefined): Promise<APIRequestContext> {
+  return request.newContext({ baseURL, extraHTTPHeaders: { Connection: 'close' } })
+}
 
 export async function call<T>(response: Promise<{ ok(): boolean; status(): number; json(): Promise<unknown> }>, what: string): Promise<T> {
   const answer = await response

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, authorized, call, deviceToken, escape, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
 
 // Resizing the panes (M6 spec section 6.1, changed after M6): the left pane's divider and the details' divider dragged by
 // the mouse and moved by keys, the width kept across a reload, the list's columns following, and no dividers in a narrow
@@ -20,7 +20,7 @@ let docNumber = 0
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
-  api = await playwright.request.newContext({ baseURL: testInfo.project.use.baseURL })
+  api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   const where = await matterFolders(api, token)
   const home = await specsFolder(api, token, where.documents)
