@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 The Healdan Project
 # SPDX-License-Identifier: LGPL-3.0-only
 
-# Refreshes the desktop database (so healdan: links find the helper) and the icon cache; neither can fail the install.
+# Refreshes the desktop database (so healdan: links find the helper) and the icon cache; neither can fail the install. An
+# upgrade also says to restart the helper: the old one keeps running until it's quit.
 set -e
 
 if command -v update-desktop-database >/dev/null 2>&1; then
@@ -10,6 +11,10 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
   gtk-update-icon-cache -q -t /usr/share/icons/hicolor || true
+fi
+
+if [ "$1" = configure ] && [ -n "${2:-}" ]; then
+  echo "Quit Healdan Helper and open it again to use the new version."
 fi
 
 exit 0

@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 The Healdan Project
 # SPDX-License-Identifier: LGPL-3.0-only
 
-# Refreshes the desktop database (so healdan: links find the helper) and the icon cache; neither can fail the install.
+# After a removal, refreshes the desktop database (so healdan: links stop finding the helper) and the icon cache; neither
+# can fail the removal.
 set -e
 
 if command -v update-desktop-database >/dev/null 2>&1; then

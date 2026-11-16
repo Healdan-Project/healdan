@@ -2,13 +2,14 @@ name: Clients
 
 # Builds and tests the desktop clients in clients/: the helper (.NET) on Ubuntu and macOS, the LibreOffice extension's
 # Python tests on Ubuntu, and the Office add-in's Node tests on Ubuntu. A helper-v* tag, or a run by hand, also packages
-# the macOS helper (spec §5.12).
+# the macOS helper and the Ubuntu helper's .debs (spec §5.12).
 #
 # No paths filter: the Clients check should be required, so every pull request runs the workflow and the test jobs skip
 # themselves when code-changed.sh says the clients didn't change: nothing under clients/, this workflow or the API
 # contract (healdan-api's openapi.yaml, which the helper's contract tests read). The Clients job, the check, then passes
 # at once.
-# Pull requests never package: that needs the signing secrets, and Clients doesn't wait for it.
+# Pull requests never package, the Mac's helper (it needs the signing secrets) or Ubuntu's, and Clients doesn't wait for
+# either.
 
 on:
   push:
@@ -157,6 +158,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v5
@@ -357,8 +360,13 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          apt-get install -y ./clients/helper/packaging/linux/out/Healdan-Helper-$VERSION-amd64.deb
-          missing=$(find /opt/healdan-helper -type f \( -name HealdanHelper -o -name '*.so' -o -name '*.so.*' \) -print0 | xargs -0 -n1 ldd 2>&1 | grep 'not found' || true)
+          apt-get install -y --no-install-recommends ./clients/helper/packaging/linux/out/Healdan-Helper-$VERSION-amd64.deb
+          files=$(find /opt/healdan-helper -type f \( -name HealdanHelper -o -name '*.so' -o -name '*.so.*' \) -print)
+          if [ -z "$files" ]; then
+            echo "::error::The package installed no program or library to check"
+            exit 1
+          fi
+          missing=$(printf '%s\n' "$files" | xargs -r -n1 ldd 2>&1 | grep 'not found' || true)
           if [ -n "$missing" ]; then
             echo "$missing"
             echo "::error::The package leaves libraries missing"
@@ -410,7 +418,7 @@ jobs:
             prerelease=()
             if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "Healdan Helper $VERSION" \
-              --notes "Healdan Helper $VERSION. macOS on Apple silicon: open the disk image and drag Healdan Helper to Applications. Ubuntu 26.04: after installing LibreOffice, install the .deb for the computer (amd64 or arm64) with sudo apt install ./Healdan-Helper-$VERSION-<arch>.deb." \
+              --notes "Healdan Helper $VERSION. macOS on Apple silicon: open the disk image and drag Healdan Helper to Applications. Ubuntu 26.04: install Ubuntu's own LibreOffice first (sudo apt install libreoffice; the App Center's snap and Flathub's LibreOffice can't work with the helper), then the .deb for the computer (amd64 or arm64) with sudo apt install ./Healdan-Helper-$VERSION-<arch>.deb. To upgrade on either system, quit Healdan Helper before installing the new version, and open it again after." \
               "${prerelease[@]}"
           fi
           gh release upload "$TAG" "$dmg" --repo "$GITHUB_REPOSITORY" --clobber

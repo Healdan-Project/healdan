@@ -74,6 +74,8 @@ install -m 644 "$repo/site/static/favicon.svg" "$root/usr/share/icons/hicolor/sc
   printf 'Third-party notices\n===================\n\n'
   cat "$helper/Healdan.Helper/THIRD-PARTY-NOTICES.txt"
 } > "$root/usr/share/doc/healdan-helper/copyright"
+# An admin's edit of the autostart entry survives an upgrade.
+printf '/etc/xdg/autostart/healdan-helper.desktop\n' > "$root/DEBIAN/conffiles"
 install -m 755 "$here/postinst" "$root/DEBIAN/postinst"
 install -m 755 "$here/postrm" "$root/DEBIAN/postrm"
 
@@ -86,7 +88,7 @@ chmod 755 "$root/opt/healdan-helper/HealdanHelper"
 size=$(du -sk --exclude=DEBIAN "$root" | cut -f1)
 sed -e "s/@VERSION@/$debian/g" -e "s/@ARCH@/$arch/g" -e "s/@SIZE@/$size/g" "$here/control.in" > "$root/DEBIAN/control"
 ! grep -q '@[A-Z_]*@' "$root/DEBIAN/control" || die "control.in has a placeholder package.sh doesn't fill"
-chmod 644 "$root/DEBIAN/control"
+chmod 644 "$root/DEBIAN/control" "$root/DEBIAN/conffiles"
 
 # --- The package, and its checks --------------------------------------------------------------------------------------
 
