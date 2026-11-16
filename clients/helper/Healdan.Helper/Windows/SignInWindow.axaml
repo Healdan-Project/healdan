@@ -35,7 +35,8 @@
       <StackPanel x:Name="ChoicesStep" Spacing="9" IsVisible="False">
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock x:Name="ServerName" Classes="heading" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-          <Button x:Name="ChangeLink" Grid.Column="1" Classes="link" Content="Change" VerticalAlignment="Center" Margin="12,0,0,0" />
+          <Button x:Name="ChangeLink" Grid.Column="1" Classes="link" Content="Change" VerticalAlignment="Center"
+                  VerticalContentAlignment="Center" Margin="12,0,0,0" />
         </Grid>
         <!-- Connecting, or why the server gave no choices; hidden once it has. -->
         <TextBlock x:Name="Status" Classes="muted" FontSize="12" TextWrapping="Wrap" IsVisible="False" />

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 using System.Collections.Concurrent;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
@@ -349,6 +350,26 @@ public sealed class SignInWindowTests
             Assert.Equal("firm.example", Find<TextBlock>(window, "ServerName").Text);
             Assert.True(Shown(Find<Button>(window, "PasswordLink"))); // folded again
             Assert.False(Shown(Find<TextBox>(window, "User")));
+        });
+    }
+
+    [MacFact]
+    public Task ChangeLinesUpWithTheServersName()
+    {
+        // A link is a button, whose text sat at the top of its box, above the name it's beside.
+        var prompt = new FakePrompt { OnProviders = _ => Task.FromResult(Answer(Two)) };
+        return Run(prompt.Make(), async window =>
+        {
+            await window.Loading;
+            window.UpdateLayout();
+
+            var name = Find<TextBlock>(window, "ServerName");
+            var change = Find<Button>(window, "ChangeLink").GetVisualDescendants().OfType<TextBlock>().Single();
+            var nameAt = name.TranslatePoint(new Point(0, 0), window)!.Value;
+            var changeAt = change.TranslatePoint(new Point(0, 0), window)!.Value;
+            // A text block draws its text from its top, so the two tops line the text up when the sizes match.
+            Assert.Equal(name.FontSize, change.FontSize);
+            Assert.Equal(nameAt.Y, changeAt.Y, 0.5);
         });
     }
 
