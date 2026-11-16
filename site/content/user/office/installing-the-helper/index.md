@@ -83,7 +83,7 @@ choose **Sign In**.
 
 Once the helper knows your server, as after you sign out or when your sign-in ends, the window opens straight on
 your server's way of signing in. If it can't reach the server yet, say just after your Mac starts, it says so and
-tries again every few seconds.
+tries again every few seconds. If the server gave another problem, choose **Try Again** once it's put right.
 
 The helper stays signed in until you sign out or change your password, or it goes unused for 30 days, and for a
 year at most: your administrator can change both. It then asks you to sign in again, and anything you save

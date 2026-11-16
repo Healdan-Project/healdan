@@ -45,7 +45,8 @@ again.") stay above both. (call)
 - The Server Address box, **Cancel**, and **Continue**, the default button, so Return in the box continues.
 - **Continue** checks the address as a sign-in does today (`BeforeSignIn`: `https://` added when it's left out,
   `http://` refused but for `localhost`, another server refused while the helper is signed in to one) and reads
-  `GET /server`. Meanwhile the box and **Continue** are off and **Continue** says "Connecting…". (call)
+  `GET /server`. Meanwhile **Continue** is off and says "Connecting…"; the box stays open, and changing it drops that
+  answer. (call; the box was off too until review)
 - **A problem** shows on the error line under the box, with its reason: the address isn't usable, the server
   couldn't be reached or didn't answer within 30 seconds, it isn't Healdan, or it speaks an API this helper doesn't.
   These are the reasons `TrySignInAsync` gives today. `SignInPrompt.ProvidersAsync` returns null for all of them;
@@ -67,6 +68,8 @@ again.") stay above both. (call)
 - **A password goes only to a server whose choices step 2 shows,** so today's "Sign In asks for the providers again
   first" goes. (call)
 - **The window never opens the browser by itself,** even for a server with one provider and nothing else. (call)
+  Return never presses a provider's button, and Space presses the focused one only when it went down there, and not
+  just after the button took the focus by itself. (call, in review)
 
 ### 3.3 Which step the window opens on
 
@@ -75,8 +78,9 @@ again.") stay above both. (call)
   (owner) Until the server answers, a "Connecting to healdan.rjl.zone…" line stands where the choices go. (call)
   - **If it can't be reached,** that line says so and the window asks again every 5 seconds, showing the choices
     once it answers. The helper starts at the Mac's login, sometimes before the network is up. (call)
-  - **Any other problem** (not Healdan, an API this helper doesn't speak) shows its reason there, with no retry.
-    (call)
+  - **Any other problem** (not Healdan, an API this helper doesn't speak) shows its reason there, with no retry,
+    and a **Try Again** link, the only way to ask again for a fixed server. (call; Try Again added in review.) A
+    server error (5xx) counts as can't be reached; a secure connection that failed doesn't. (call, in review)
   - **Change** leads to step 1 throughout, except when the server is fixed (§3.2).
 
 ## 4. What it touches

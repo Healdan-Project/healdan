@@ -170,6 +170,77 @@ public sealed class SignInWindowTests
     }
 
     [MacFact]
+    public Task ASecondReturnDoesntOpenTheBrowser()
+    {
+        // Return pressed twice, or held: the second lands on the first provider's button, which has the focus by then.
+        var prompt = new FakePrompt { OnProviders = _ => Task.FromResult(Answer(Two)) };
+        return Run(prompt.Make(server: null), async window =>
+        {
+            var server = Find<TextBox>(window, "Server");
+            server.Text = "healdan.example";
+            server.Focus();
+            window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+            await Until(() => ProviderButtons(window).Count == 2);
+            Assert.True(ProviderButtons(window)[0].IsFocused);
+
+            window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+            // And Space just after the buttons came, as when the window comes up over an app the person is typing in
+            window.KeyPressQwerty(PhysicalKey.Space, RawInputModifiers.None);
+            window.KeyReleaseQwerty(PhysicalKey.Space, RawInputModifiers.None);
+            await Task.Delay(100);
+
+            Assert.Empty(prompt.ProviderSignIns);
+            Assert.False(Shown(Find<TextBlock>(window, "Waiting")));
+        });
+    }
+
+    [MacFact]
+    public Task ASpaceThatWentDownElsewhereDoesntPressAProvidersButton()
+    {
+        var answer = new TaskCompletionSource<ServerAnswer>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var prompt = new FakePrompt { OnProviders = _ => answer.Task };
+        return Run(prompt.Make(server: null), async window =>
+        {
+            window.KeysSettle = TimeSpan.Zero; // only where the key went down counts here
+            Continue(window, "healdan.example");
+            var server = Find<TextBox>(window, "Server");
+            server.Focus();
+            window.KeyPressQwerty(PhysicalKey.Space, RawInputModifiers.None); // down in the address box
+
+            answer.SetResult(Answer(Two));
+            await window.Loading.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.True(ProviderButtons(window)[0].IsFocused);
+            window.KeyReleaseQwerty(PhysicalKey.Space, RawInputModifiers.None); // up on the button
+            await Task.Delay(100);
+
+            Assert.Empty(prompt.ProviderSignIns);
+        });
+    }
+
+    [MacFact]
+    public Task SpacePressesTheFocusedProvidersButton()
+    {
+        var prompt = new FakePrompt
+        {
+            OnProviders = _ => Task.FromResult(Answer(Two)),
+            OnProvider = (_, _, ct) => Task.Delay(Timeout.Infinite, ct).ContinueWith<string?>(_ => "")
+        };
+        return Run(prompt.Make(server: null), async window =>
+        {
+            window.KeysSettle = TimeSpan.Zero;
+            Continue(window, "healdan.example");
+            await window.Loading;
+            Assert.True(ProviderButtons(window)[0].IsFocused);
+
+            window.KeyPressQwerty(PhysicalKey.Space, RawInputModifiers.None);
+            window.KeyReleaseQwerty(PhysicalKey.Space, RawInputModifiers.None);
+            await Until(() => !prompt.ProviderSignIns.IsEmpty);
+
+            Assert.Equal([("healdan.example", "entra")], prompt.ProviderSignIns);
+        });
+    }
+
+    [MacFact]
     public Task ContinueShowsWhyOnTheAddress()
     {
         var prompt = new FakePrompt { OnProviders = _ => Task.FromResult(Unreachable()) };
@@ -209,7 +280,7 @@ public sealed class SignInWindowTests
             var next = Find<Button>(window, "ContinueButton");
             Assert.Equal("Connecting…", next.Content);
             Assert.False(next.IsEnabled);
-            Assert.False(Find<TextBox>(window, "Server").IsEnabled);
+            Assert.True(Find<TextBox>(window, "Server").IsEnabled); // a mistake can be put right at once
 
             answer.SetResult(Answer(None));
             await window.Loading.WaitAsync(TimeSpan.FromSeconds(15)); // a failure, not a hung run, if it never comes
@@ -219,6 +290,35 @@ public sealed class SignInWindowTests
             Assert.True(user.IsFocused);
             Assert.True(Shown(Find<Button>(window, "SignInButton")));
             Assert.Single(prompt.ProvidersAsked);
+        });
+    }
+
+    [MacFact]
+    public Task ChangingTheAddressWhileItConnectsDropsThatAnswer()
+    {
+        // A mistyped host a firewall drops would otherwise hold the window for the 30 seconds a sign-in waits.
+        var first = new TaskCompletionSource<ServerAnswer>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var prompt = new FakePrompt { OnProviders = s => s == "healdan.exmaple" ? first.Task : Task.FromResult(Answer(None)) };
+        return Run(prompt.Make(server: null), async window =>
+        {
+            Continue(window, "healdan.exmaple");
+            await Until(() => prompt.ProvidersAsked.Count == 1);
+            var stale = window.Loading;
+
+            Find<TextBox>(window, "Server").Text = "healdan.example";
+
+            var next = Find<Button>(window, "ContinueButton");
+            Assert.Equal("Continue", next.Content);
+            Assert.True(next.IsEnabled);
+            first.SetResult(Answer(Two, "healdan.exmaple")); // the mistyped address answers at last
+            await stale.WaitAsync(TimeSpan.FromSeconds(15));
+            Assert.True(Shown(Find<StackPanel>(window, "AddressStep"))); // dropped
+            Assert.True(next.IsEnabled);
+
+            Click(next);
+            await window.Loading;
+            Assert.Equal("healdan.example", Find<TextBlock>(window, "ServerName").Text);
+            Assert.True(Shown(Find<TextBox>(window, "User")));
         });
     }
 
@@ -406,6 +506,7 @@ public sealed class SignInWindowTests
             Assert.Equal("healdan.example couldn't be reached: Connection refused. Trying again…", status.Text); // kept while it asks
             Assert.Contains("problem", status.Classes);
             Assert.Empty(ProviderButtons(window));
+            Assert.False(Shown(Find<Button>(window, "TryAgainLink"))); // it asks again by itself
 
             release.SetResult(Answer(Two));
             await Until(() => ProviderButtons(window).Count == 2);
@@ -432,6 +533,46 @@ public sealed class SignInWindowTests
             var change = Find<Button>(window, "ChangeLink");
             Assert.True(Shown(change));
             Assert.True(change.IsEnabled);
+            Assert.True(Shown(Find<Button>(window, "TryAgainLink")));
+        });
+    }
+
+    [MacFact]
+    public Task TryAgainAsksAFixedServerAgain()
+    {
+        // After 'Your sign-in ended' there's no Change: Try Again is how a server that answered wrongly is asked again.
+        var answers = new ConcurrentQueue<ServerAnswer>([NotHealdan(), Answer(Two)]);
+        var prompt = new FakePrompt { OnProviders = _ => Task.FromResult(answers.TryDequeue(out var a) ? a : Answer(Two)) };
+        return Run(prompt.Make(server: "https://healdan.example", serverFixed: true, notice: SignInPrompt.Ended), async window =>
+        {
+            await window.Loading;
+            var tryAgain = Find<Button>(window, "TryAgainLink");
+            Assert.True(Shown(tryAgain));
+            Assert.True(tryAgain.IsFocused); // the one thing to do here, but Cancel
+
+            Click(tryAgain);
+            Assert.False(Shown(tryAgain));
+            Assert.Equal("Connecting to healdan.example…", Find<TextBlock>(window, "Status").Text);
+            await window.Loading;
+
+            Assert.Equal(2, prompt.ProvidersAsked.Count);
+            Assert.Equal(2, ProviderButtons(window).Count);
+            Assert.False(Shown(tryAgain));
+        });
+    }
+
+    [MacFact]
+    public Task AnAnswerWithNoReasonSaysSo()
+    {
+        var prompt = new FakePrompt { OnProviders = _ => Task.FromResult(new ServerAnswer("healdan.example", null, null)) };
+        return Run(prompt.Make(server: "https://healdan.example"), async window =>
+        {
+            await window.Loading;
+
+            var status = Find<TextBlock>(window, "Status");
+            Assert.True(Shown(status));
+            Assert.Equal("Signing in failed.", status.Text);
+            Assert.True(Shown(Find<Button>(window, "TryAgainLink")));
         });
     }
 
@@ -499,7 +640,7 @@ public sealed class SignInWindowTests
     [MacFact]
     public Task ShowingTheWindowAgainAsksAgainWithoutChoices()
     {
-        // A fixed address has no Change, so showing the window is how a server that answered wrongly is asked again.
+        // The helper makes a new window for each Sign In, so this is Avalonia's Show after a Hide, which asks as Opened does.
         var answers = new ConcurrentQueue<ServerAnswer>([NotHealdan(), Answer(Two)]);
         var prompt = new FakePrompt { OnProviders = _ => Task.FromResult(answers.TryDequeue(out var a) ? a : Answer(Two)) };
         return Run(prompt.Make(server: "https://healdan.example", serverFixed: true), async window =>

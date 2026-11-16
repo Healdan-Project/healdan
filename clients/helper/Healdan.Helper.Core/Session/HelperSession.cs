@@ -639,6 +639,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         bool ended;
         lock (_gate)
             ended = _ended;
+        // Each window checks its addresses afresh, and logs its own problems.
+        Volatile.Write(ref _choicesClient, null);
+        Interlocked.Exchange(ref _choicesProblem, null);
         try
         {
             var prompt = new SignInPrompt(server, serverFixed, TrySignInAsync, ProvidersAsync, TrySignInWithProviderAsync,
@@ -694,32 +697,59 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         return await AfterSignInAsync(server, api, $"as {user.Trim()}");
     }
 
-    /// <summary>The problem <see cref="ProvidersAsync"/> logged last, with its server; null after an answer with choices.</summary>
+    /// <summary>The problem <see cref="ProvidersAsync"/> logged last in this Sign In window, with its server; null after an answer with choices.</summary>
     private string? _choicesProblem;
+
+    /// <summary>
+    /// The address this Sign In window's asks last passed a sign-in's checks for, with the client, without the device
+    /// token, that reads its <c>GET /server</c>; null before any, and when a window opens.
+    /// </summary>
+    private ChoicesClient? _choicesClient;
+
+    private sealed record ChoicesClient(string Address, Uri Server, HealdanApi Api);
 
     /// <summary>
     /// The Sign In window's second step (M4 spec §6.1; address-first spec §3): the sign-in choices of the server at
     /// <paramref name="address"/>, or why there are none, as the window shows it, with the reasons a password sign-in
-    /// gives. The address gets a sign-in's checks first (<see cref="BeforeSignIn"/>), so a refusal shows before any
-    /// choice. Only a server that couldn't be reached, or didn't answer in time, is worth asking again.
+    /// gives. The address gets a sign-in's checks first (<see cref="BeforeSignIn"/>), once per window and address, so a
+    /// refusal shows before any choice; the sign-in checks again. Only a server that couldn't be reached, didn't answer
+    /// in time, or answered with a server error is worth asking again. Never throws.
     /// </summary>
     private async Task<ServerAnswer> ProvidersAsync(string address)
     {
         if (string.IsNullOrWhiteSpace(address))
             return new ServerAnswer(null, null, NoAddress);
-        if (BeforeSignIn(address, out var server, out var api) is { } refused)
+        // The window asks again every few seconds while the server can't be reached: the same address isn't checked again.
+        if (Volatile.Read(ref _choicesClient) is not { } client || client.Address != address)
         {
-            string? name = null;
-            try
+            if (BeforeSignIn(address, out var checkedServer, out _) is { } refused)
             {
-                name = ParseAddress(address).Authority;
+                string? name = null;
+                try
+                {
+                    name = ParseAddress(address).Authority;
+                }
+                catch (UriFormatException)
+                {
+                }
+                return new ServerAnswer(name, null, refused);
             }
-            catch (UriFormatException)
-            {
-            }
-            return new ServerAnswer(name, null, refused);
+            // A client of its own, without the device token: GET /server is public, and after a 401 the running client's is refused.
+            client = new ChoicesClient(address, checkedServer, NewApi(checkedServer));
+            Volatile.Write(ref _choicesClient, client);
         }
-        var answer = await AskProvidersAsync(server, api);
+        var server = client.Server;
+        ServerAnswer answer;
+        try
+        {
+            answer = await AskProvidersAsync(server, client.Api);
+        }
+        catch (Exception e)
+        {
+            // None of the reasons a sign-in gives: logged with its type, and not asked again by itself.
+            _log.Error($"The Sign In window couldn't read {server.Authority}'s sign-in choices", e);
+            return new ServerAnswer(server.Authority, null, $"Healdan Helper couldn't read {server.Authority}'s answer.");
+        }
         // The window asks again every few seconds while the server can't be reached: each problem is logged once.
         var problem = answer.Problem is null ? null : $"{server.Authority}'s sign-in choices: {answer.Problem}";
         if (Interlocked.Exchange(ref _choicesProblem, problem) != problem && problem is not null)
@@ -734,7 +764,14 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         try
         {
             var info = await api.ServerAsync(timeout.Token);
-            SignIn.RequireHealdan(info);
+            try
+            {
+                SignIn.RequireHealdan(info);
+            }
+            catch (InvalidOperationException e)
+            {
+                return new ServerAnswer(name, null, e.Message); // not Healdan, or an API this helper doesn't speak
+            }
             var providers = (info.Providers ?? [])
                 .Where(p => !string.IsNullOrWhiteSpace(p.Id))
                 .Select(p => string.IsNullOrWhiteSpace(p.Label) ? p with { Label = DefaultProviderLabel } : p)
@@ -742,13 +779,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             var label = string.IsNullOrWhiteSpace(info.PasswordLabel) ? DefaultPasswordLabel : info.PasswordLabel;
             return new ServerAnswer(name, new ProviderChoice(providers, label), null);
         }
-        catch (InvalidOperationException e)
+        catch (ApiException e) when (e.Status >= 500)
         {
-            return new ServerAnswer(name, null, e.Message); // not Healdan, or an API this helper doesn't speak
-        }
-        catch (ApiException e) when (e.Status is 502 or 503 or 504)
-        {
-            // A reverse proxy's page while Healdan restarts behind it: the server is coming back.
+            // A server error: Healdan starting, or a reverse proxy's page (502 to 504, Cloudflare's 52x) while it restarts.
             return new ServerAnswer(name, null, Refused(e, NotHealdan), Retry: true);
         }
         catch (ApiException e)
@@ -762,6 +795,11 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         catch (OperationCanceledException)
         {
             return new ServerAnswer(name, null, Unanswered(server), Retry: true);
+        }
+        catch (HttpRequestException e) when (e.HttpRequestError == HttpRequestError.SecureConnectionError)
+        {
+            // The server's certificate, or the secure connection, was refused: asking again won't change that.
+            return new ServerAnswer(name, null, Unreachable(server, e));
         }
         catch (Exception e) when (e is HttpRequestException or IOException)
         {

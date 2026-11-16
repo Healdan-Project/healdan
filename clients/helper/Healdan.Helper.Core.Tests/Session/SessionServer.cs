@@ -41,6 +41,24 @@ public sealed class SessionServer(FakeApi documents) : DelegatingHandler(documen
     /// <summary>When set, <c>GET /server</c>'s connection drops before its answer is read.</summary>
     public bool ServerCut { get; set; }
 
+    /// <summary>When set, <c>GET /server</c>'s secure connection fails, as with a certificate that expired or names another host.</summary>
+    public bool ServerCertificateRefused { get; set; }
+
+    /// <summary>When set, <c>GET /server</c> answers <c>200</c> with this body.</summary>
+    public string? ServerJson { get; set; }
+
+    /// <summary>The <c>Authorization</c> header of each <c>GET /server</c> that reached the server, or null for one without.</summary>
+    public IReadOnlyList<string?> ServerAuthorizations
+    {
+        get
+        {
+            lock (_lock)
+                return [.. _serverAuthorizations];
+        }
+    }
+
+    private readonly List<string?> _serverAuthorizations = [];
+
     /// <summary>When set, a provider sign-in is refused with this code, as <c>no-group</c>: the browser is sent back with <c>error</c>.</summary>
     public string? RefuseProviderWith { get; set; }
 
@@ -100,7 +118,11 @@ public sealed class SessionServer(FakeApi documents) : DelegatingHandler(documen
         var path = request.RequestUri!.AbsolutePath;
         var call = $"{request.Method} {request.RequestUri.Host}{path}";
         lock (_lock)
+        {
             _calls.Add(call);
+            if (path == "/api/v1/server")
+                _serverAuthorizations.Add(request.Headers.Authorization?.ToString());
+        }
         if (documents.Down)
             throw new HttpRequestException("Connection refused (fake).");
 
@@ -108,6 +130,10 @@ public sealed class SessionServer(FakeApi documents) : DelegatingHandler(documen
         {
             case ("GET", "/api/v1/server") when ServerCut:
                 throw new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely (fake).");
+            case ("GET", "/api/v1/server") when ServerCertificateRefused:
+                throw new HttpRequestException(HttpRequestError.SecureConnectionError, "The SSL connection could not be established (fake).");
+            case ("GET", "/api/v1/server") when ServerJson is { } json:
+                return Json(HttpStatusCode.OK, json);
             case ("GET", "/api/v1/server") when ServerStatus is { } status:
                 return new HttpResponseMessage(status) { Content = new StringContent("<html><body>Bad Gateway (fake proxy)</body></html>", Encoding.UTF8, "text/html") };
             case ("GET", "/api/v1/server"):

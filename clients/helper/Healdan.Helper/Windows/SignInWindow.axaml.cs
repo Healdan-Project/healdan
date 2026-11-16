@@ -3,6 +3,7 @@
 
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -21,18 +22,23 @@ namespace Healdan.Helper.Windows;
 /// are. The password box is emptied as soon as the password is sent, so the window never holds the password beyond the
 /// one call. The prompt's notice, such as Healdan having ended the sign-in, stays above both steps while the window is up.
 /// <para>A first sign-in opens on the address, and asks nothing until Continue, which shows a problem on the error line
-/// and stays there. An address already kept opens on the choices, which come when the server answers. One that couldn't
-/// be reached is asked again every <see cref="RetryEvery"/> while the window is shown, and when it's shown again; any
-/// other problem only when it's shown again. Change goes back to the address, except for a server the helper is running
+/// and stays there. The address stays open while Continue connects, and changing it drops that answer. An address
+/// already kept opens on the choices, which come when the server answers. One that couldn't be reached is asked again
+/// every <see cref="RetryEvery"/> while the window is shown, and when it's shown again; any other problem when the person
+/// chooses Try Again, or it's shown again. Change goes back to the address, except for a server the helper is running
 /// against, and drops any answer still to come. A password goes only to a server whose choices the window shows, and
-/// the window never opens the browser by itself. A provider's button sends the person to the browser, and the window
-/// says to finish there; Cancel, or closing the window, stops the helper waiting for it. A refusal leaves the focus on
-/// the button that was used.</para>
+/// the window never opens the browser by itself: Return never presses a provider's button, as on the Mac it's the
+/// default button's, and nor does a key just after the buttons took the focus. A provider's button sends the person to
+/// the browser, and the window says to finish there; Cancel, or closing the window, stops the helper waiting for it. A
+/// refusal leaves the focus on the button that was used.</para>
 /// </summary>
 public partial class SignInWindow : Window
 {
     private const string SignInLabel = "Sign In";
     private const string ContinueLabel = "Continue";
+
+    /// <summary>The problem shown for an answer that has no choices and gives no reason.</summary>
+    private const string FailedLabel = "Signing in failed.";
 
     private readonly SignInPrompt? _prompt;
     private bool _closed;
@@ -58,6 +64,12 @@ public partial class SignInWindow : Window
     /// <summary>Continue or a sign-in is under way: the fields and buttons are off, new ones included.</summary>
     private bool _busy;
 
+    /// <summary>The Continue under way, by its ask and address: the address step's controls are its until it ends; null when none is.</summary>
+    private (int Ask, string Address)? _connecting;
+
+    /// <summary>Until when a key doesn't press the provider's button that took the focus by itself.</summary>
+    private DateTime _keysFrom;
+
     /// <summary>For the XAML loader; the helper always opens it with a prompt.</summary>
     public SignInWindow() => InitializeComponent();
 
@@ -72,8 +84,14 @@ public partial class SignInWindow : Window
         else
             ShowChoicesStep(prompt.Server, ServerAddress.Name(prompt.Server));
         ContinueButton.Click += (_, _) => OnContinue();
+        Server.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == TextBox.TextProperty)
+                OnAddressEdited();
+        };
         SignInButton.Click += OnSignIn;
         ChangeLink.Click += (_, _) => OnChange();
+        TryAgainLink.Click += (_, _) => OnTryAgain();
         PasswordLink.Click += (_, _) => Unfold();
         CancelButton.Click += (_, _) =>
         {
@@ -109,6 +127,12 @@ public partial class SignInWindow : Window
     /// <summary>How long the window waits before asking again a server that couldn't be reached.</summary>
     public TimeSpan RetryEvery { get; set; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// How long after the first provider's button takes the focus by itself a key doesn't press it: a key pressed then was
+    /// meant for the address box, or for another app the window came up over.
+    /// </summary>
+    public TimeSpan KeysSettle { get; set; } = TimeSpan.FromMilliseconds(500);
+
     private string Address => (Server.Text ?? "").Trim();
 
     // --- The address --------------------------------------------------------------------------------------------------
@@ -132,11 +156,14 @@ public partial class SignInWindow : Window
     private async Task ContinueAsync(SignInPrompt prompt, string address, int ask)
     {
         Problem.IsVisible = false;
-        SetConnecting(true);
+        SetConnecting((ask, address));
         var answer = await AskAsync(prompt, address);
-        if (_closed || ask != _ask)
+        if (_closed)
             return;
-        SetConnecting(false);
+        if (_connecting?.Ask == ask)
+            SetConnecting(null); // the controls are this Continue's until it ends, whatever became of its answer
+        if (ask != _ask)
+            return;
         if (answer.Choice is { } choice)
         {
             ShowChoicesStep(address, answer.Name ?? ServerAddress.Name(address));
@@ -144,15 +171,26 @@ public partial class SignInWindow : Window
             FocusChoices();
             return;
         }
-        ShowProblem(answer.Problem ?? "Signing in failed.");
+        ShowProblem(answer.Problem ?? FailedLabel);
         Server.Focus();
     }
 
-    private void SetConnecting(bool connecting)
+    /// <summary>Continue is off while it connects; the address stays open, so a mistake can be put right at once.</summary>
+    private void SetConnecting((int Ask, string Address)? connecting)
     {
-        _busy = connecting;
-        Server.IsEnabled = ContinueButton.IsEnabled = !connecting;
-        ContinueButton.Content = connecting ? "Connecting…" : ContinueLabel;
+        _connecting = connecting;
+        _busy = connecting is not null;
+        ContinueButton.IsEnabled = connecting is null;
+        ContinueButton.Content = connecting is null ? ContinueLabel : "Connecting…";
+    }
+
+    /// <summary>The address changed while Continue connects: its answer is for an address no longer typed, and Continue is back.</summary>
+    private void OnAddressEdited()
+    {
+        if (_connecting is not { } connecting || Address == connecting.Address)
+            return;
+        ++_ask;
+        SetConnecting(null);
     }
 
     private void OnChange()
@@ -180,7 +218,7 @@ public partial class SignInWindow : Window
         (ContinueButton.IsVisible, ContinueButton.IsDefault) = (false, false);
         ServerName.Text = name;
         ProviderList.Children.Clear();
-        ProviderList.IsVisible = PasswordLink.IsVisible = PasswordForm.IsVisible = false;
+        ProviderList.IsVisible = PasswordLink.IsVisible = PasswordForm.IsVisible = TryAgainLink.IsVisible = false;
         (SignInButton.IsVisible, SignInButton.IsDefault) = (false, false);
         SetStatus($"Connecting to {name}…", problem: false);
     }
@@ -194,7 +232,17 @@ public partial class SignInWindow : Window
         if (_prompt is null || _closed || _choicesFor is not { } address || _choice is not null || _asking == address)
             return;
         StopRetry();
+        TryAgainLink.IsVisible = false;
         Loading = AskChoicesAsync(_prompt, address, ++_ask);
+    }
+
+    /// <summary>Try Again, after a problem nothing asks again about by itself, such as a server that answered wrongly.</summary>
+    private void OnTryAgain()
+    {
+        if (_choicesFor is null || _choice is not null)
+            return;
+        SetStatus($"Connecting to {ServerName.Text}…", problem: false);
+        AskChoices();
     }
 
     private async Task AskChoicesAsync(SignInPrompt prompt, string address, int ask)
@@ -215,14 +263,21 @@ public partial class SignInWindow : Window
             return;
         }
         // The status keeps this text while it asks again, rather than going back to connecting.
-        SetStatus(answer.Retry ? $"{answer.Problem} Trying again…" : answer.Problem, problem: true);
-        if (answer.Retry)
-            _retry = DispatcherTimer.RunOnce(() =>
-            {
-                _retry = null;
-                if (IsVisible) // hidden, it asks when it's shown again
-                    AskChoices();
-            }, RetryEvery);
+        var problem = answer.Problem ?? FailedLabel;
+        SetStatus(answer.Retry ? $"{problem} Trying again…" : problem, problem: true);
+        if (!answer.Retry)
+        {
+            // Nothing asks again by itself, and with a fixed server nothing else is left but Cancel.
+            TryAgainLink.IsVisible = true;
+            TryAgainLink.Focus();
+            return;
+        }
+        _retry = DispatcherTimer.RunOnce(() =>
+        {
+            _retry = null;
+            if (IsVisible) // hidden, it asks when it's shown again
+                AskChoices();
+        }, RetryEvery);
     }
 
     private void StopRetry()
@@ -287,6 +342,23 @@ public partial class SignInWindow : Window
         button.Classes.Add("accent");
         button.Tag = provider.Id; // to find it again for the focus
         AutomationProperties.SetName(button, provider.Label);
+        // Return is the default button's, as on the Mac, never a provider's: a second Return for Continue would open the
+        // browser. Space presses the focused one, when it went down there, and not just after it took the focus by itself.
+        var spaceDown = false;
+        button.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key == Key.Enter || (e.Key == Key.Space && DateTime.UtcNow < _keysFrom))
+                e.Handled = true;
+            else if (e.Key == Key.Space)
+                spaceDown = true;
+        }, RoutingStrategies.Tunnel);
+        button.AddHandler(KeyUpEvent, (_, e) =>
+        {
+            if (e.Key != Key.Space)
+                return;
+            e.Handled = !spaceDown; // Avalonia's button presses on Space's release, wherever it went down
+            spaceDown = false;
+        }, RoutingStrategies.Tunnel);
         button.Click += (_, _) => OnProvider(provider.Id);
         return button;
     }
@@ -314,7 +386,10 @@ public partial class SignInWindow : Window
     private void FocusChoices()
     {
         if (ProviderList.Children.FirstOrDefault() is Button first)
+        {
+            _keysFrom = DateTime.UtcNow + KeysSettle; // a key on its way now was meant for the address box, or another app
             first.Focus();
+        }
         else if (PasswordForm.IsVisible)
             (string.IsNullOrEmpty(User.Text) ? User : Password).Focus();
     }

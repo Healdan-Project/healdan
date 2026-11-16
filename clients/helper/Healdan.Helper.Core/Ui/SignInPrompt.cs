@@ -50,5 +50,5 @@ public sealed record ProviderChoice(IReadOnlyList<ProviderInfo> Providers, strin
 /// <param name="Name">The server as the window names it: its host and any port, such as healdan.example; null when the address isn't one.</param>
 /// <param name="Choice">The server's providers and password label; null when there's a problem.</param>
 /// <param name="Problem">Why there are no choices, as the window shows it; null when there are.</param>
-/// <param name="Retry">The server couldn't be reached or didn't answer in time, so asking again later may work.</param>
+/// <param name="Retry">The server couldn't be reached, didn't answer in time, or answered with a server error (5xx), so asking again later may work.</param>
 public sealed record ServerAnswer(string? Name, ProviderChoice? Choice, string? Problem, bool Retry = false);

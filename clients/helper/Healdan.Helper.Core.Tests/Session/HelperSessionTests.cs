@@ -328,11 +328,14 @@ public sealed class HelperSessionTests : IDisposable
         Assert.Equal("healdan.test", answer.Name);
     }
 
-    [Fact]
-    public async Task AProxysGatewayErrorCanBeRetried()
+    [Theory]
+    [InlineData(502)]
+    [InlineData(522)] // Cloudflare's: the origin didn't answer
+    [InlineData(500)]
+    public async Task AServerErrorCanBeRetried(int status)
     {
-        // Healdan restarting behind a reverse proxy: the server is coming back, so the window asks again.
-        _http.ServerStatus = HttpStatusCode.BadGateway;
+        // Healdan starting, or restarting behind a reverse proxy: the server is coming back, so the window asks again.
+        _http.ServerStatus = (HttpStatusCode)status;
         ServerAnswer? answer = null;
         _windows.OnSignIn = async prompt =>
         {
@@ -343,8 +346,72 @@ public sealed class HelperSessionTests : IDisposable
         await Make().StartAsync();
 
         Assert.Null(answer!.Choice);
-        Assert.Contains("502", answer.Problem);
+        Assert.Contains(status.ToString(), answer.Problem);
         Assert.True(answer.Retry);
+    }
+
+    [Fact]
+    public async Task ARefusedCertificateIsntRetried()
+    {
+        // An expired certificate, or one for another host, won't put itself right in 5 seconds.
+        _http.ServerCertificateRefused = true;
+        ServerAnswer? answer = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            answer = await prompt.ProvidersAsync(Account);
+            return false;
+        };
+
+        await Make().StartAsync();
+
+        Assert.Null(answer!.Choice);
+        Assert.Contains("The SSL connection could not be established (fake).", answer.Problem);
+        Assert.False(answer.Retry);
+    }
+
+    [Fact]
+    public async Task AnAnswerTheHelperCantReadIsLoggedAndShown()
+    {
+        _http.ServerJson = """{"product":"Healdan","version":"9.3.1","apiVersion":"v1","labels":{"matter":"Matter","matters":"Matters"},"signIn":["password","provider"],"providers":[null],"passwordLabel":"Sign In with a Password"}""";
+        ServerAnswer? answer = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            answer = await prompt.ProvidersAsync(Account);
+            return false;
+        };
+
+        await Make().StartAsync();
+
+        Assert.Null(answer!.Choice);
+        Assert.Equal("Healdan Helper couldn't read healdan.test's answer.", answer.Problem);
+        Assert.Equal("healdan.test", answer.Name);
+        Assert.False(answer.Retry);
+        Assert.Contains(LogLines(), l => l.Contains("couldn't read healdan.test's sign-in choices") && l.Contains(nameof(NullReferenceException)));
+    }
+
+    [Fact]
+    public async Task TheChoicesAreReadWithoutTheRefusedToken()
+    {
+        // GET /server is public: after a 401 the running client's token is refused, and needn't go out again.
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        var asked = new TaskCompletionSource<ServerAnswer>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var before = 0;
+        _windows.OnSignIn = async prompt =>
+        {
+            before = _http.ServerAuthorizations.Count;
+            asked.TrySetResult(await prompt.ProvidersAsync(prompt.Server!));
+            return await StaysUp();
+        };
+
+        _server.Unauthorized = true;
+        await session.Links.Handle("healdan://open/5?server=healdan.test");
+
+        Assert.NotNull((await asked.Task.WaitAsync(TimeSpan.FromSeconds(10))).Choice);
+        var asks = _http.ServerAuthorizations.Skip(before).ToList();
+        Assert.NotEmpty(asks);
+        Assert.All(asks, Assert.Null);
     }
 
     [Fact]
@@ -386,6 +453,26 @@ public sealed class HelperSessionTests : IDisposable
         var lines = File.ReadAllLines(Paths.Log).Where(l => l.Contains("couldn't read healdan.test's sign-in choices")).ToList();
         Assert.Equal(2, lines.Count);
         Assert.All(lines, l => Assert.Contains("Connection refused (fake).", l));
+    }
+
+    [Fact]
+    public async Task EachSignInWindowLogsItsOwnProblem()
+    {
+        // Two windows hours apart meeting the same outage are two attempts, and the log shows both.
+        _server.Down = true;
+        _windows.OnSignIn = async prompt =>
+        {
+            await prompt.ProvidersAsync(Account);
+            await prompt.ProvidersAsync(Account); // the window's retry: logged once
+            return false;
+        };
+        var session = Make();
+
+        await session.StartAsync();
+        await session.SignInAgainAsync(); // the menu's Sign In…
+
+        Assert.Equal(2, _windows.SignIns.Count);
+        Assert.Equal(2, LogLines().Count(l => l.Contains("couldn't read healdan.test's sign-in choices")));
     }
 
     [Fact]

@@ -40,6 +40,8 @@
         </Grid>
         <!-- Connecting, or why the server gave no choices; hidden once it has. -->
         <TextBlock x:Name="Status" Classes="muted" FontSize="12" TextWrapping="Wrap" IsVisible="False" />
+        <!-- A problem nothing asks again about by itself: the person asks again once it's put right. -->
+        <Button x:Name="TryAgainLink" Classes="link" Content="Try Again" HorizontalAlignment="Left" IsVisible="False" />
         <!-- The server's providers, in its order; the window adds a button for each. -->
         <StackPanel x:Name="ProviderList" Spacing="8" Margin="0,4,0,0" IsVisible="False" />
         <Button x:Name="PasswordLink" Classes="link" HorizontalAlignment="Center" IsVisible="False" />
