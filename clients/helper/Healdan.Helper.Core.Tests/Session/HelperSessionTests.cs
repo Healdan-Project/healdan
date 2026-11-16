@@ -347,6 +347,7 @@ public sealed class HelperSessionTests : IDisposable
 
         Assert.Null(answer!.Choice);
         Assert.Contains(status.ToString(), answer.Problem);
+        Assert.EndsWith(".", answer.Problem); // a reason phrase, such as Bad Gateway, has no full stop of its own
         Assert.True(answer.Retry);
     }
 
@@ -429,6 +430,7 @@ public sealed class HelperSessionTests : IDisposable
 
         Assert.Null(answer!.Choice);
         Assert.StartsWith("healdan.test couldn't be reached: The response ended prematurely (fake).", answer.Problem); // .NET adds the error's name
+        Assert.EndsWith(").", answer.Problem); // after which the window adds "Trying again…"
         Assert.True(answer.Retry);
     }
 

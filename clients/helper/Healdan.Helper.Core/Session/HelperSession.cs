@@ -810,7 +810,10 @@ public sealed class HelperSession : ICycleEvents, IDisposable
 
     private static string Unanswered(Uri server) => $"{server.Authority} didn't answer within {SignInTimeout.TotalSeconds:0} seconds.";
 
-    private static string Unreachable(Uri server, Exception e) => $"{server.Authority} couldn't be reached: {e.Message}";
+    private static string Unreachable(Uri server, Exception e) => Sentence($"{server.Authority} couldn't be reached: {e.Message}");
+
+    /// <summary>The text with a full stop at its end, as the window's lines have: .NET's messages and HTTP's reason phrases have none.</summary>
+    private static string Sentence(string text) => text.Length == 0 || text[^1] is '.' or '!' or '?' or '…' ? text : text + ".";
 
     /// <summary>
     /// A provider's button in the Sign In window (M4 spec §6.2): signs in through the provider in the system browser,
@@ -903,7 +906,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private static string Refused(ApiException e, string otherwise) => e.Code switch
     {
         "http-404" => NotHealdan,
-        _ when e.Code.StartsWith("http-", StringComparison.Ordinal) => $"The server answered {e.Status}: {e.Detail}",
+        _ when e.Code.StartsWith("http-", StringComparison.Ordinal) => Sentence($"The server answered {e.Status}: {e.Detail}"),
         _ => e.Detail.Length > 0 ? e.Detail : otherwise
     };
 
