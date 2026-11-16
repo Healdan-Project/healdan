@@ -335,8 +335,10 @@ def _alive(pid):
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
+    except PermissionError:
+        return False  # it exists but isn't ours: the helper runs as the same user as LibreOffice, so it's not the helper
     except OSError:
-        return True  # it exists, though it isn't ours to signal
+        return True  # unusual; as before, believe the helper is there
     return True
 
 
