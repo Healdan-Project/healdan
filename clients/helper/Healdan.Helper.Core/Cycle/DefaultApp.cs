@@ -18,12 +18,15 @@ public sealed class DefaultApp : IOfficeApp
     /// <summary>What a copy's record names as its app; <see cref="Settings.AppChooser"/> says it too.</summary>
     public const string AppName = "Default";
 
-    /// <summary>The kinds of file the default app is never handed, by extension: apps, installers, scripts and the like.</summary>
+    /// <summary>The kinds of file the default app is never handed, by extension: apps, installers, scripts and the like, on macOS and Linux.</summary>
     public static readonly IReadOnlyList<string> RefusedExtensions =
     [
         ".app", ".command", ".tool", ".terminal", ".pkg", ".mpkg", ".dmg", ".workflow", ".action", ".jar", ".fileloc",
         ".inetloc", ".webloc", ".scpt", ".scptd", ".applescript", ".sh", ".py", ".rb", ".pl", ".prefPane", ".kext",
-        ".mobileconfig", ".shortcut"
+        ".mobileconfig", ".shortcut",
+        // Linux's (xdg-open runs or installs them) and Wine's runnable kinds.
+        ".desktop", ".appimage", ".deb", ".rpm", ".snap", ".flatpak", ".flatpakref", ".flatpakrepo", ".run", ".bin", ".exe",
+        ".msi", ".bat", ".cmd", ".com", ".ps1", ".vbs", ".lnk", ".jnlp"
     ];
 
     /// <summary>Whether the file's extension, in any case, is one the default app is never handed.</summary>
