@@ -83,7 +83,7 @@ by the words in it.
   checked out like any document the person can edit, on a Mac where CoffeePDF is installed with Healdan support on;
   where it isn't, a PDF opens read-only in the default app, from Open from Healdan or from a link. Each copy the
   default app opens is marked as downloaded from the internet (macOS's quarantine), so Gatekeeper checks
-  it as it does a browser's downloads. The helper never downloads or opens a kind of file on its fixed list of 54
+  it as it does a browser's downloads. The helper never downloads or opens a kind of file on its fixed list of 55
   extensions, the same on a Mac and on Ubuntu, which run a program or change the computer when opened: apps, `.pkg` and
   `.mpkg` installers, `.dmg` disk images, common scripts, Automator and Shortcuts files, internet location files,
   kernel extensions and configuration profiles, and what runs on Linux or under Wine: `.desktop`, `.appimage`, `.deb`,
