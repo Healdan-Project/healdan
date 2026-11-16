@@ -251,6 +251,16 @@ public sealed class ExtensionVersionTests : IDisposable
     }
 
     [Fact]
+    public void FromRegistryReadsLinuxsLayout()
+    {
+        // LibreOffice 26.2 on Ubuntu: ~/.config/libreoffice/4/user, the extension opened from a file manager or Open With.
+        var registry = RegistryInstalled.Replace("lu38484eovjwz.tmp_/healdan-0.1.0.oxt", "lu14105633vzu.tmp_/healdan.oxt", StringComparison.Ordinal);
+        var user = Profile(registry, ("lu14105633vzu.tmp_/healdan.oxt", Description("org.healdan.libreoffice", "0.3.1")));
+
+        Assert.Equal(new InstalledExtension("0.3.1", true), ExtensionVersion.FromRegistry(user));
+    }
+
+    [Fact]
     public void ATurnedOffExtensionIsRevoked()
     {
         // Tools › Extensions › Disable marked the entry so, on the owner's Mac.

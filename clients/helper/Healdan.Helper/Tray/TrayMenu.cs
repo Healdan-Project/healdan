@@ -91,7 +91,7 @@ internal sealed class TrayMenu : IDisposable
         var reason = Attention.Reason(_session.SignedIn, _session.StartFailed, _windows.Waiting, copies.Any(_session.HasCrashed), _session.KeptCopies().Count,
             missing, _extension.Older is not null);
         ShowDot(reason);
-        _registry.IsEnabled = missing && OperatingSystem.IsMacOS();
+        _registry.IsEnabled = missing; // macOS and Linux both read LibreOffice's registry, which sees an extension accepted while it runs
 
         var items = _menu.Items;
         items.Clear();

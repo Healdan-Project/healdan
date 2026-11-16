@@ -166,6 +166,74 @@ public sealed class ExtensionCheckTests : IDisposable
     }
 
     [Fact]
+    public async Task AStartWithLibreOfficeRunningReadsTheRegistry()
+    {
+        // The user accepted the .oxt in LibreOffice, which is still running at this start: its registry says so.
+        Save(new ExtensionRecord { Version = "0.1.0", OpenedFor = "0.2.0", OpenedBy = "0.1.9" });
+        _tools.Running = true;
+        _tools.Registry = new InstalledExtension("0.2.0", true);
+        var check = Linux(Oxt("0.2.0"));
+
+        Assert.Equal(ExtensionOutcome.Current, await check.RunAsync());
+
+        Assert.False(check.Missing);
+        Assert.Equal(0, _tools.Opened);
+        Assert.Equal(0, _tools.Listed);
+        var record = Record();
+        Assert.Equal("0.2.0", record.Version);
+        Assert.Equal(Helper, record.CheckedFor);
+        Assert.Null(record.OpenedFor);
+        Assert.Equal(ExtensionOutcome.Current, await Linux(Oxt("0.2.0")).RunAsync()); // the next start answers at once
+        Assert.Equal(1, _tools.RegistryReads);
+    }
+
+    [Fact]
+    public async Task AStartWithLibreOfficeRunningAndNothingInTheRegistryStillWaits()
+    {
+        Save(new ExtensionRecord { Version = "0.1.0", OpenedFor = "0.2.0" });
+        _tools.Running = true;
+        var check = Linux(Oxt("0.2.0"));
+
+        Assert.Equal(ExtensionOutcome.AwaitingLibreOffice, await check.RunAsync());
+
+        Assert.True(check.Missing);
+        Assert.Equal(0, _tools.Opened);
+        Assert.Equal(1, _tools.RegistryReads);
+    }
+
+    [Fact]
+    public async Task AStartWithLibreOfficeRunningOpensTheOxtWhenTheRegistryHasNone()
+    {
+        _tools.Running = true;
+
+        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await Linux(Oxt("0.2.0")).RunAsync());
+
+        Assert.Equal(1, _tools.Opened);
+        Assert.Equal("0.2.0", Record().OpenedFor);
+        Assert.Equal(0, _tools.Listed);
+    }
+
+    [Fact]
+    public async Task RefreshOnTheUnopkgRouteSeesAnAcceptedExtension()
+    {
+        Save(new ExtensionRecord { OpenedFor = "0.2.0", OpenedBy = Helper });
+        _tools.Running = true;
+        var check = Linux(Oxt("0.2.0"));
+        var changed = 0;
+        check.Changed += () => changed++;
+        Assert.Equal(ExtensionOutcome.AwaitingLibreOffice, await check.RunAsync());
+        Assert.True(check.Missing);
+        changed = 0;
+
+        _tools.Registry = new InstalledExtension("0.2.0", true); // the user accepted it, and restarted LibreOffice
+
+        Assert.False(check.Refresh());
+        Assert.False(check.Missing);
+        Assert.Equal(1, changed);
+        Assert.Null(Record().OpenedFor);
+    }
+
+    [Fact]
     public async Task ARunningLibreOfficeIsAskedOnlyOnce()
     {
         Save(new ExtensionRecord { Version = "0.1.0", OpenedFor = "0.2.0" });

@@ -93,13 +93,12 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
     }
 
     /// <summary>
-    /// macOS: reads the registry again, as the menu opens and every few seconds while it's missing, so the menu's item and
-    /// the dot go once the user has accepted the extension.
-    /// Elsewhere, what the last check found.
+    /// Reads LibreOffice's registry again, as the menu opens and every few seconds while it's missing, on macOS and Linux,
+    /// so the menu's item and the dot go once the user has accepted the extension, whether or not LibreOffice is running.
     /// </summary>
     public bool Refresh()
     {
-        if (route != ExtensionRoute.OpenInLibreOffice || Volatile.Read(ref _bundled) is not { } bundled)
+        if (Volatile.Read(ref _bundled) is not { } bundled)
             return Missing;
         var (wasMissing, wasOlder) = (Missing, Older);
         if (!tools.LibreOfficeInstalled)
@@ -180,6 +179,12 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
                 Save(record with { CheckedFor = helperVersion });
                 SetMissing(false);
                 log.Info($"LibreOffice extension {record.Version} was installed when last checked; LibreOffice is running, so it isn't listed now");
+                return ExtensionOutcome.Current;
+            }
+            // The user may have accepted the extension in this running LibreOffice: its registry says, and runs nothing.
+            if (RecordIfCurrent(ReadInstalled(), bundled, record))
+            {
+                log.Info($"LibreOffice extension {bundled} is in LibreOffice's registry, though LibreOffice is running");
                 return ExtensionOutcome.Current;
             }
             SetMissing(true);
@@ -264,7 +269,7 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
         return ExtensionOutcome.OpenedInLibreOffice;
     }
 
-    /// <summary>LibreOffice's registry (macOS), kept so <see cref="Older"/> can tell an older extension from none.</summary>
+    /// <summary>LibreOffice's registry (macOS, and Linux beside a running LibreOffice), kept so <see cref="Older"/> can tell an older extension from none.</summary>
     private InstalledExtension? ReadInstalled()
     {
         var installed = tools.ReadInstalled();
