@@ -16,9 +16,10 @@ namespace Healdan.Helper.Core.Ui;
 /// on the window's error line. The password is used for this one call and never kept.
 /// </param>
 /// <param name="ProvidersAsync">
-/// The sign-in providers of the server at the address, with its password link's label, for the window's buttons; an
-/// empty list for a server with none, and null when the address isn't a Healdan server the helper can reach. Never
-/// throws.
+/// What the server at the address says about signing in, for the window's second step: its providers, with its
+/// password link's label (an empty list for a server with none), or why there are none, as the window shows it: the
+/// address isn't usable, the server isn't Healdan, or it couldn't be reached. Makes a password sign-in's checks of the
+/// address first. Never throws.
 /// </param>
 /// <param name="SignInWithProviderAsync">
 /// Signs in through the provider with the id, at the address, in the system browser (M4 spec §6.2). Null when it
@@ -31,7 +32,7 @@ namespace Healdan.Helper.Core.Ui;
 /// </param>
 public sealed record SignInPrompt(string? Server, bool ServerFixed,
     Func<string, string, string, Task<string?>> SignInAsync,
-    Func<string, Task<ProviderChoice?>> ProvidersAsync,
+    Func<string, Task<ServerAnswer>> ProvidersAsync,
     Func<string, string, CancellationToken, Task<string?>> SignInWithProviderAsync,
     string? Notice = null)
 {
@@ -44,3 +45,10 @@ public sealed record SignInPrompt(string? Server, bool ServerFixed,
 
 /// <summary>A server's sign-in choices (<c>GET /server</c>): its providers, in the order of their buttons, and the password link's label.</summary>
 public sealed record ProviderChoice(IReadOnlyList<ProviderInfo> Providers, string PasswordLabel);
+
+/// <summary>What the server at an address said to the Sign In window: its sign-in choices, or why there are none.</summary>
+/// <param name="Name">The server as the window names it: its host and any port, such as healdan.example; null when the address isn't one.</param>
+/// <param name="Choice">The server's providers and password label; null when there's a problem.</param>
+/// <param name="Problem">Why there are no choices, as the window shows it; null when there are.</param>
+/// <param name="Retry">The server couldn't be reached or didn't answer in time, so asking again later may work.</param>
+public sealed record ServerAnswer(string? Name, ProviderChoice? Choice, string? Problem, bool Retry = false);

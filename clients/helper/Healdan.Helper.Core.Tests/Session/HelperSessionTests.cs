@@ -260,61 +260,72 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
-    public async Task TheSignInWindowIsGivenTheServersProviders()
+    public async Task TheSignInWindowIsGivenTheServersChoicesOrWhyNot()
     {
         _http.Providers.Add(("entra", "Sign In with Microsoft"));
         _http.Providers.Add(("authentik", ""));
-        var choices = new List<ProviderChoice?>();
+        var answers = new List<ServerAnswer>();
         _windows.OnSignIn = async prompt =>
         {
-            choices.Add(await prompt.ProvidersAsync("healdan.test"));
-            choices.Add(await prompt.ProvidersAsync("https://other.test")); // not Healdan
-            choices.Add(await prompt.ProvidersAsync("https://newer.test")); // an API this helper doesn't speak
-            choices.Add(await prompt.ProvidersAsync("http://healdan.example")); // not an address the helper signs in to
-            choices.Add(await prompt.ProvidersAsync(" "));
+            answers.Add(await prompt.ProvidersAsync("healdan.test"));
+            answers.Add(await prompt.ProvidersAsync("https://other.test")); // not Healdan
+            answers.Add(await prompt.ProvidersAsync("https://newer.test")); // an API this helper doesn't speak
+            answers.Add(await prompt.ProvidersAsync("http://healdan.example")); // not an address the helper signs in to
+            answers.Add(await prompt.ProvidersAsync(" "));
             return false;
         };
         var session = Make();
 
         await session.StartAsync();
 
-        var choice = choices[0]!;
-        Assert.Equal([new ProviderInfo("entra", "Sign In with Microsoft"), new ProviderInfo("authentik", "Sign In")], choice.Providers);
-        Assert.Equal("Sign In with a Password", choice.PasswordLabel);
-        Assert.Equal([null, null, null, null], choices.Skip(1));
+        var answer = answers[0];
+        Assert.Equal("healdan.test", answer.Name);
+        Assert.Equal([new ProviderInfo("entra", "Sign In with Microsoft"), new ProviderInfo("authentik", "Sign In")], answer.Choice!.Providers);
+        Assert.Equal("Sign In with a Password", answer.Choice.PasswordLabel);
+        Assert.Null(answer.Problem);
+        Assert.All(answers.Skip(1), a => Assert.Null(a.Choice));
+        Assert.All(answers, a => Assert.False(a.Retry));
+        Assert.Contains("isn't a Healdan server", answers[1].Problem);
+        Assert.Contains("v2", answers[2].Problem);
+        Assert.Contains("https", answers[3].Problem);
+        Assert.DoesNotContain("Parameter", answers[3].Problem);
+        Assert.Equal("Enter your Healdan server's address.", answers[4].Problem);
         Assert.Empty(_keychain.Items);
     }
 
     [Fact]
     public async Task AServerWithNoProvidersGivesAnEmptyList()
     {
-        ProviderChoice? choice = null;
+        ServerAnswer? answer = null;
         _windows.OnSignIn = async prompt =>
         {
-            choice = await prompt.ProvidersAsync(Account);
+            answer = await prompt.ProvidersAsync(Account);
             return false;
         };
 
         await Make().StartAsync();
 
-        Assert.Empty(choice!.Providers);
-        Assert.Equal("Sign In with a Password", choice.PasswordLabel);
+        Assert.Empty(answer!.Choice!.Providers);
+        Assert.Equal("Sign In with a Password", answer.Choice.PasswordLabel);
     }
 
     [Fact]
-    public async Task AServerThatCantBeReachedGivesNoProviders()
+    public async Task AServerThatCantBeReachedSaysSoAndCanBeRetried()
     {
         _server.Down = true;
-        ProviderChoice? choice = new([], "x");
+        ServerAnswer? answer = null;
         _windows.OnSignIn = async prompt =>
         {
-            choice = await prompt.ProvidersAsync(Account);
+            answer = await prompt.ProvidersAsync(Account);
             return false;
         };
 
         await Make().StartAsync();
 
-        Assert.Null(choice);
+        Assert.Null(answer!.Choice);
+        Assert.Equal("healdan.test couldn't be reached: Connection refused (fake).", answer.Problem);
+        Assert.True(answer.Retry);
+        Assert.Equal("healdan.test", answer.Name);
     }
 
     [Fact]

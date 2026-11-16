@@ -124,7 +124,7 @@ public partial class SignInWindow : Window
         ProviderChoice? choice;
         try
         {
-            choice = await Task.Run(() => prompt.ProvidersAsync(address));
+            choice = (await Task.Run(() => prompt.ProvidersAsync(address))).Choice;
         }
         catch (Exception)
         {

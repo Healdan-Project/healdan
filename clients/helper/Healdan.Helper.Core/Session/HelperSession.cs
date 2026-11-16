@@ -660,7 +660,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private async Task<string?> TrySignInAsync(string address, string user, string password)
     {
         if (string.IsNullOrWhiteSpace(address))
-            return "Enter your Healdan server's address.";
+            return NoAddress;
         if (string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(password))
             return "Enter your username and password.";
         if (BeforeSignIn(address, out var server, out var api) is { } refused)
@@ -685,52 +685,83 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
         catch (OperationCanceledException)
         {
-            return $"{server.Authority} didn't answer within {SignInTimeout.TotalSeconds:0} seconds.";
+            return Unanswered(server);
         }
         catch (HttpRequestException e)
         {
-            return $"{server.Authority} couldn't be reached: {e.Message}";
+            return Unreachable(server, e);
         }
         return await AfterSignInAsync(server, api, $"as {user.Trim()}");
     }
 
     /// <summary>
-    /// The Sign In window's provider buttons (M4 spec §6.1): the sign-in choices of the server at
-    /// <paramref name="address"/>, or null when it isn't a Healdan server this helper can reach and speak to, for
-    /// which the window shows the password form, whose Sign In then says why. The labels are kept for the refusals'
-    /// messages.
+    /// The Sign In window's second step (M4 spec §6.1; address-first spec §3): the sign-in choices of the server at
+    /// <paramref name="address"/>, or why there are none, as the window shows it, with the reasons a password sign-in
+    /// gives. The address gets a sign-in's checks first (<see cref="BeforeSignIn"/>), so a refusal shows before any
+    /// choice. Only a server that couldn't be reached, or didn't answer in time, is worth asking again.
     /// </summary>
-    private async Task<ProviderChoice?> ProvidersAsync(string address)
+    private async Task<ServerAnswer> ProvidersAsync(string address)
     {
         if (string.IsNullOrWhiteSpace(address))
-            return null;
-        Uri server;
-        try
+            return new ServerAnswer(null, null, NoAddress);
+        if (BeforeSignIn(address, out var server, out var api) is { } refused)
         {
-            server = ParseAddress(address);
+            string? name = null;
+            try
+            {
+                name = ParseAddress(address).Authority;
+            }
+            catch (UriFormatException)
+            {
+            }
+            return new ServerAnswer(name, null, refused);
         }
-        catch (UriFormatException)
-        {
-            return null;
-        }
+        var answer = await AskProvidersAsync(server, api);
+        if (answer.Problem is not null)
+            _log.Info($"The Sign In window couldn't read {server.Authority}'s sign-in choices{(answer.Retry ? " (unreachable)" : "")}");
+        return answer;
+    }
+
+    private static async Task<ServerAnswer> AskProvidersAsync(Uri server, HealdanApi api)
+    {
+        var name = server.Authority;
         using var timeout = new CancellationTokenSource(SignInTimeout);
         try
         {
-            var info = await NewApi(server).ServerAsync(timeout.Token);
-            if (info.Product != "Healdan" || info.ApiVersion != SignIn.SupportedApiVersion)
-                return null;
+            var info = await api.ServerAsync(timeout.Token);
+            SignIn.RequireHealdan(info);
             var providers = (info.Providers ?? [])
                 .Where(p => !string.IsNullOrWhiteSpace(p.Id))
                 .Select(p => string.IsNullOrWhiteSpace(p.Label) ? p with { Label = DefaultProviderLabel } : p)
                 .ToList();
-            return new ProviderChoice(providers, string.IsNullOrWhiteSpace(info.PasswordLabel) ? DefaultPasswordLabel : info.PasswordLabel);
+            var label = string.IsNullOrWhiteSpace(info.PasswordLabel) ? DefaultPasswordLabel : info.PasswordLabel;
+            return new ServerAnswer(name, new ProviderChoice(providers, label), null);
         }
-        catch (Exception e)
+        catch (InvalidOperationException e)
         {
-            _log.Info($"The Sign In window couldn't read {server.Authority}'s sign-in providers ({e.GetType().Name})");
-            return null;
+            return new ServerAnswer(name, null, e.Message); // not Healdan, or an API this helper doesn't speak
+        }
+        catch (ApiException e)
+        {
+            return new ServerAnswer(name, null, Refused(e, NotHealdan));
+        }
+        catch (JsonException)
+        {
+            return new ServerAnswer(name, null, NotHealdan);
+        }
+        catch (OperationCanceledException)
+        {
+            return new ServerAnswer(name, null, Unanswered(server), Retry: true);
+        }
+        catch (HttpRequestException e)
+        {
+            return new ServerAnswer(name, null, Unreachable(server, e), Retry: true);
         }
     }
+
+    private static string Unanswered(Uri server) => $"{server.Authority} didn't answer within {SignInTimeout.TotalSeconds:0} seconds.";
+
+    private static string Unreachable(Uri server, HttpRequestException e) => $"{server.Authority} couldn't be reached: {e.Message}";
 
     /// <summary>
     /// A provider's button in the Sign In window (M4 spec §6.2): signs in through the provider in the system browser,
@@ -743,7 +774,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private async Task<string?> TrySignInWithProviderAsync(string address, string providerId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(address))
-            return "Enter your Healdan server's address.";
+            return NoAddress;
         if (string.IsNullOrWhiteSpace(providerId))
             return "Choose how to sign in.";
         if (BeforeSignIn(address, out var server, out var api) is { } refused)
@@ -789,7 +820,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
         catch (HttpRequestException e)
         {
-            return $"{server.Authority} couldn't be reached: {e.Message}";
+            return Unreachable(server, e);
         }
         catch (IOException e)
         {
@@ -810,6 +841,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     };
 
     private const string NotHealdan = "That address isn't a Healdan server.";
+
+    private const string NoAddress = "Enter your Healdan server's address.";
 
     /// <summary>The web page's word for a provider with no label of its own, as its sign-in page shows it.</summary>
     private const string DefaultProviderLabel = "Sign In";

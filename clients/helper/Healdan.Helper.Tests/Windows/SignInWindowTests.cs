@@ -48,10 +48,11 @@ public sealed class SignInWindowTests
                 PasswordSignIns.Enqueue((s, u, p));
                 return OnPassword(s, u, p);
             },
-            s =>
+            async s =>
             {
                 ProvidersAsked.Enqueue(s);
-                return OnProviders(s);
+                var c = await OnProviders(s);
+                return new ServerAnswer(s, c, c is null ? "unreachable" : null, c is null);
             },
             (s, id, ct) =>
             {
