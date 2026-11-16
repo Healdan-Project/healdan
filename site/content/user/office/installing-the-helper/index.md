@@ -20,7 +20,7 @@ below it, and notes where Ubuntu differs.
   signs you in through a provider such as Microsoft, your account there. Signing in through a provider needs
   Healdan Helper 0.6.0 or later.
 - **A Mac with Apple silicon,** running macOS 26 or later, or **a computer running Ubuntu 26.04** (the helper needs
-  that release's libraries), with LibreOffice 26.2 or later. Word, Excel and PowerPoint aren't on Ubuntu.
+  that release's libraries), tested with LibreOffice 26.2. Word, Excel and PowerPoint aren't on Ubuntu.
 
 ## Installing on macOS
 
@@ -281,7 +281,7 @@ pairs with the helper, so that only your own add-in can use it.
 
 ## The Prompts to Expect
 
-Each of these comes once. They're the Mac's; on Ubuntu, only the LibreOffice one and the browser's are asked.
+Each of these comes once. They're the Mac's. On Ubuntu you're asked three: LibreOffice's, to install the extension; the browser's, the first time a link opens the helper; and the keyring's password, if it's locked.
 
 | When | What asks | Choose |
 |---|---|---|
@@ -428,6 +428,9 @@ On Ubuntu:
 2. Remove the extension from LibreOffice: **Tools › Extensions**, select **Healdan**, then **Remove**.
 3. Choose **Sign Out**, which removes the sign-in from GNOME Keyring, then **Quit Healdan Helper**, and run
    `sudo apt remove healdan-helper`.
+
+Removing the package doesn't remove the extension from LibreOffice, which keeps it in your own profile: step 2 does that,
+in LibreOffice's Extension Manager (**Tools › Extensions**).
 
 The helper's files stay in `~/.local/share/healdan-helper/`. Its `Copies` folder holds the local copies of the
 documents you had open, including any changes that never reached Healdan: look there before deleting it.

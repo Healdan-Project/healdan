@@ -28,7 +28,7 @@ server. The User Guide's [Working in Office Apps](../../user/office/) is for the
 - The helper's disk image, `Healdan-Helper-<version>.dmg`, for a Mac. Healdan's releases are on
   [GitHub](https://github.com/Healdan-Project/healdan/releases), each under a `helper-v<version>` tag, signed and
   notarised. Tell people where to get it, and which version.
-- For Ubuntu, a computer running Ubuntu 26.04 with LibreOffice 26.2 or later installed first, and the helper's
+- For Ubuntu, a computer running Ubuntu 26.04 with LibreOffice installed first (tested with 26.2), and the helper's
   package from the same release: `Healdan-Helper-<version>-amd64.deb` for most computers, or `-arm64.deb` for an Arm
   one. `sudo apt install ./Healdan-Helper-<version>-amd64.deb` installs it with the libraries it
   needs. Microsoft Office isn't on Ubuntu, so only LibreOffice works there.
