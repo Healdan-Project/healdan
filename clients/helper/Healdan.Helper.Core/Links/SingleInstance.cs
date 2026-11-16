@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+using Healdan.Helper.Core.Logging;
+
 namespace Healdan.Helper.Core.Links;
 
 /// <summary>
@@ -11,15 +13,18 @@ namespace Healdan.Helper.Core.Links;
 /// </summary>
 public sealed class SingleInstance : IDisposable
 {
-    private readonly FileStream _file;
+    private readonly FileStream? _file;
 
-    private SingleInstance(FileStream file) => _file = file;
+    private SingleInstance(FileStream? file) => _file = file;
 
-    /// <summary>The lock, or null when another process holds it, so a helper is already running.</summary>
-    public static SingleInstance? TryAcquire(HelperPaths paths)
+    /// <summary>
+    /// The lock, or null when another process holds it, so a helper is already running. When the lock file can't be
+    /// opened at all (the folder isn't writable, or the file is another user's), this logs it to <paramref name="log"/>
+    /// and returns an instance that holds nothing, so the helper starts as it did before the lock; a second helper
+    /// then can't be ruled out.
+    /// </summary>
+    public static SingleInstance? TryAcquire(HelperPaths paths, HelperLog? log = null)
     {
-        // The helper may not have made its folder yet on a first start.
-        Directory.CreateDirectory(paths.Support);
         var options = new FileStreamOptions
         {
             Mode = FileMode.OpenOrCreate,
@@ -30,14 +35,21 @@ public sealed class SingleInstance : IDisposable
             options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
         try
         {
+            // The helper may not have made its folder yet on a first start.
+            Directory.CreateDirectory(paths.Support);
             return new SingleInstance(new FileStream(Path.Combine(paths.Support, "helper.lock"), options));
         }
         catch (IOException)
         {
             return null;
         }
+        catch (UnauthorizedAccessException e)
+        {
+            log?.Warn($"Couldn't take the one-helper lock ({e.Message}), so a second Healdan Helper can't be ruled out");
+            return new SingleInstance(null);
+        }
     }
 
     /// <summary>Releases the lock; the file stays.</summary>
-    public void Dispose() => _file.Dispose();
+    public void Dispose() => _file?.Dispose();
 }

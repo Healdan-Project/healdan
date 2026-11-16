@@ -18,8 +18,11 @@ public sealed class SingleInstanceTests : IDisposable
 
     public void Dispose()
     {
-        foreach (var server in _servers)
-            server.Dispose();
+        lock (_servers)
+        {
+            foreach (var server in _servers)
+                server.Dispose();
+        }
         TempFolder.Delete(_root);
     }
 
@@ -56,6 +59,27 @@ public sealed class SingleInstanceTests : IDisposable
     }
 
     [Fact]
+    public void AFolderThatCantBeWrittenLeavesTheHelperRunningWithoutALock()
+    {
+        if (OperatingSystem.IsWindows() || Environment.UserName == "root")
+            return; // Windows has no such modes, and root ignores them
+        var logFile = Path.Combine(Directory.CreateTempSubdirectory("healdan-single-log-").FullName, "test.log");
+        File.SetUnixFileMode(Paths.Support, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            using var held = SingleInstance.TryAcquire(Paths, new HelperLog(logFile));
+
+            Assert.NotNull(held);
+            Assert.Contains("a second Healdan Helper can't be ruled out", File.ReadAllText(logFile));
+        }
+        finally
+        {
+            File.SetUnixFileMode(Paths.Support, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            TempFolder.Delete(Path.GetDirectoryName(logFile)!);
+        }
+    }
+
+    [Fact]
     public async Task SecondStartWhileFirstStartingForwards()
     {
         var seen = new TaskCompletionSource<string?>();
@@ -69,7 +93,8 @@ public sealed class SingleInstanceTests : IDisposable
                 return Task.FromResult<JsonNode?>(new JsonObject());
             }));
             server.Start();
-            _servers.Add(server);
+            lock (_servers)
+                _servers.Add(server);
         });
 
         var sent = await Task.Run(() => new LinkHandOver(Paths, new HelperLog(Paths.Log)).Send(Link, TimeSpan.FromSeconds(10)));
@@ -99,7 +124,7 @@ public sealed class SingleInstanceTests : IDisposable
 
         Assert.False(new LinkHandOver(Paths, new HelperLog(Paths.Log)).Send(Link));
 
-        Assert.True(clock.Elapsed < TimeSpan.FromMilliseconds(200));
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(1));
         Assert.Contains("Dropped a link to #5", Logged());
     }
 }

@@ -31,7 +31,7 @@ internal static class Program
         Log = new HelperLog(Paths.Log);
         // Held for the life of the process (a static field, so the GC can't release it); a helper from before the lock
         // holds none, so one that answers counts too.
-        _instance = SingleInstance.TryAcquire(Paths);
+        _instance = SingleInstance.TryAcquire(Paths, Log);
         if (_instance is null || AnotherHelperAnswers(Paths))
         {
             // Two helpers would both send the same copies' saves. macOS starts a second copy of the app for a link
