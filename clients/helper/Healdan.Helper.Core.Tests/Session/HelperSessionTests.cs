@@ -1489,9 +1489,9 @@ public sealed class HelperSessionTests : IDisposable
         _http.HoldSignIns.SetResult();
 
         Assert.Null(await late!.WaitAsync(TimeSpan.FromSeconds(10)));
-        // The start's last write, which comes after Started is set.
-        await Wait.Until(() => Logged("Accepting links"), "the start after the late sign-in", TimeSpan.FromSeconds(5));
-        Assert.True(session.Started);
+        // Started is set at the start's end, after the channel and the links.
+        await Wait.Until(() => session.Started, "the start after the late sign-in", TimeSpan.FromSeconds(5));
+        Assert.True(Logged("Accepting links"));
         Assert.True(session.SignedIn);
         Assert.True(File.Exists(Paths.Channel));
     }

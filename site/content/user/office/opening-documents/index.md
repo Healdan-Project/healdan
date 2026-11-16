@@ -198,7 +198,7 @@ from the Open from Healdan window. A read-only copy isn't checked out.
   still open, and then your Mac's check is what protects you.
 - **The list also has** the kinds that run on Linux, or under Wine: `.desktop`, `.appimage`, `.deb`, `.rpm`, `.snap`,
   `.flatpak`, `.flatpakref`, `.flatpakrepo`, `.run`, `.bin`, `.exe`, `.msi`, `.bat`, `.cmd`, `.com`, `.ps1`, `.vbs`,
-  `.lnk` and `.jnlp`, on a Mac too, where they do no harm but can't be opened from the helper either. Ubuntu opens a
+  `.lnk`, `.jnlp`, `.url`, `.msp`, `.scr`, `.pif`, `.cpl`, `.reg`, `.js`, `.jse`, `.vbe`, `.wsf`, `.wsh`, and `.hta`, on a Mac too, where they do no harm but can't be opened from the helper either. Ubuntu opens a
   file that isn't on the list with `xdg-open`, in the app Ubuntu has for it.
 
 ## What Can't Be Opened

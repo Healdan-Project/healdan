@@ -14,7 +14,8 @@ public sealed class DefaultAppTests
         ".inetloc", ".webloc", ".scpt", ".scptd", ".applescript", ".sh", ".py", ".rb", ".pl", ".prefPane", ".kext",
         ".mobileconfig", ".shortcut",
         ".desktop", ".appimage", ".deb", ".rpm", ".snap", ".flatpak", ".flatpakref", ".flatpakrepo", ".run", ".bin", ".exe",
-        ".msi", ".bat", ".cmd", ".com", ".ps1", ".vbs", ".lnk", ".jnlp"
+        ".msi", ".bat", ".cmd", ".com", ".ps1", ".vbs", ".lnk", ".jnlp",
+        ".url", ".msp", ".scr", ".pif", ".cpl", ".reg", ".js", ".jse", ".vbe", ".wsf", ".wsh", ".hta"
     ];
 
     public static TheoryData<string> RefusedExtensions() => [.. Refused];

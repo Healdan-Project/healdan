@@ -102,10 +102,11 @@ public partial class App : Application
         // it until it has started.
         if (this.TryGetFeature<IActivatableLifetime>() is { } activatable)
             activatable.Activated += OnActivated;
-        // Linux starts the helper with the link as its argument; the session holds it until it has signed in.
+        // Linux starts the helper with the link as its argument; the session holds it until it has signed in. A healdan:
+        // link that isn't an open link goes too, so it's logged and the user told it was ignored, as on macOS.
         if (OperatingSystem.IsLinux() && desktop.Args is { } args)
         {
-            foreach (var arg in args.Where(a => HealdanLink.TryParse(a, out _, out _, out _)))
+            foreach (var arg in args.Where(HealdanLink.HasScheme))
                 session.Links.Handle(arg).ContinueWith(t => _log.Error("A link failed", t.Exception), TaskContinuationOptions.OnlyOnFaulted);
         }
 

@@ -83,13 +83,13 @@ by the words in it.
   checked out like any document the person can edit, on a Mac where CoffeePDF is installed with Healdan support on;
   where it isn't, a PDF opens read-only in the default app, from Open from Healdan or from a link. Each copy the
   default app opens is marked as downloaded from the internet (macOS's quarantine), so Gatekeeper checks
-  it as it does a browser's downloads. The helper never downloads or opens a kind of file on its fixed list of 42
+  it as it does a browser's downloads. The helper never downloads or opens a kind of file on its fixed list of 54
   extensions, the same on a Mac and on Ubuntu, which run a program or change the computer when opened: apps, `.pkg` and
   `.mpkg` installers, `.dmg` disk images, common scripts, Automator and Shortcuts files, internet location files,
   kernel extensions and configuration profiles, and what runs on Linux or under Wine: `.desktop`, `.appimage`, `.deb`,
   `.rpm`, `.snap`, `.flatpak`, `.flatpakref`, `.flatpakrepo`, `.run`, `.bin`, `.exe`, `.msi`, `.bat`, `.cmd`, `.com`,
-  `.ps1`, `.vbs`, `.lnk` and `.jnlp`. People download those from the web page; a Mac user can't open a `.exe` or a
-  `.jnlp` in the default app either. A kind it doesn't list still opens, and on a Mac the quarantine is then the
+  `.ps1`, `.vbs`, `.lnk`, `.jnlp`, `.url`, `.msp`, `.scr`, `.pif`, `.cpl`, `.reg`, `.js`, `.jse`, `.vbe`, `.wsf`, `.wsh`, and `.hta`. People download those from the
+  web page; a Mac user can't open a `.exe`, a `.jnlp` or a `.js` in the default app either. A kind it doesn't list still opens, and on a Mac the quarantine is then the
   check: disk images other than `.dmg`, such as `.iso` or `.sparseimage`, and kinds such as `.zsh` or `.pyc`. On Ubuntu
   there's no quarantine, so the list is the only check, and the default app is `xdg-open`'s.
 - **The risk that's left.** Opening a document someone can edit checks it out to them, with no extra question.

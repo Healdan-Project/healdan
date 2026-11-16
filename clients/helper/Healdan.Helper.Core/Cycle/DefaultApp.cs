@@ -26,7 +26,10 @@ public sealed class DefaultApp : IOfficeApp
         ".mobileconfig", ".shortcut",
         // Linux's (xdg-open runs or installs them) and Wine's runnable kinds.
         ".desktop", ".appimage", ".deb", ".rpm", ".snap", ".flatpak", ".flatpakref", ".flatpakrepo", ".run", ".bin", ".exe",
-        ".msi", ".bat", ".cmd", ".com", ".ps1", ".vbs", ".lnk", ".jnlp"
+        ".msi", ".bat", ".cmd", ".com", ".ps1", ".vbs", ".lnk", ".jnlp",
+        // What else Wine runs: its loader's internet shortcuts, patches and programs, and the scripts and pages its
+        // wscript and mshta run.
+        ".url", ".msp", ".scr", ".pif", ".cpl", ".reg", ".js", ".jse", ".vbe", ".wsf", ".wsh", ".hta"
     ];
 
     /// <summary>Whether the file's extension, in any case, is one the default app is never handed.</summary>

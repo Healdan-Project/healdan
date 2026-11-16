@@ -19,6 +19,11 @@ internal sealed class Notifier(HelperLog log) : INotifier
 
     private volatile string? _status;
 
+    private readonly object _order = new();
+
+    /// <summary>The last Linux notice queued; the next runs after it.</summary>
+    private Task _last = Task.CompletedTask;
+
     /// <summary>The last notice that couldn't be shown as a notification, for the menu; null when there's none.</summary>
     public string? Status => _status;
 
@@ -31,10 +36,13 @@ internal sealed class Notifier(HelperLog log) : INotifier
     public void Notify(string title, string message)
     {
         log.Info($"Notice: {title}: {message}");
-        // notify-send can take seconds when the notification daemon is stuck, and callers include the UI thread.
+        // notify-send can take seconds when the notification daemon is stuck, and callers include the UI thread. One
+        // after another, so notices show, and fall back to the status line, in the order they were given.
         if (OperatingSystem.IsLinux())
         {
-            _ = Task.Run(() => Show(title, message, (t, m) => NotifySend.TryPost(t, m)));
+            lock (_order)
+                _last = _last.ContinueWith(_ => Show(title, message, (t, m) => NotifySend.TryPost(t, m)),
+                    CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
             return;
         }
         Show(title, message, MacNotifications.TryPost);

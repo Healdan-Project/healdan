@@ -11,8 +11,10 @@ public static class OwnProcesses
 {
     /// <summary>
     /// Whether a process named <paramref name="name"/> (its <c>comm</c>, the kernel's name for it, as
-    /// <c>GetProcessesByName</c> matches) is running as the user and isn't a zombie or dead. A process whose
-    /// <c>status</c> can't be read (it exited meanwhile, or it isn't readable) doesn't count and is skipped. Throws
+    /// <c>GetProcessesByName</c> matches) is running as the user and isn't a zombie or dead. A process in another pid
+    /// namespace than the helper's doesn't count either: a rootless container's root is the user's uid on the host, so
+    /// the uid alone can't tell its LibreOffice from the user's (a namespace that can't be read doesn't rule one out).
+    /// A process whose <c>status</c> can't be read (it exited meanwhile, or it isn't readable) doesn't count and is skipped. Throws
     /// <see cref="IOException"/> when the user's own uid can't be read or the process list can't be listed at all, so a
     /// caller can't take "can't tell" for "not running"; each caller counts an app as running then.
     /// </summary>
@@ -34,6 +36,7 @@ public static class OwnProcesses
             throw new IOException($"The process list in {procRoot} can't be read: {e.Message}", e);
         }
 
+        var ownNamespace = PidNamespace(Path.Combine(procRoot, "self"));
         foreach (var folder in folders)
         {
             if (!long.TryParse(Path.GetFileName(folder), out _))
@@ -49,10 +52,24 @@ public static class OwnProcesses
             }
 
             var status = ReadStatus(Path.Combine(folder, "status"));
-            if (status is { Uid: var uid, State: var state } && uid == ownUid && state is not ('Z' or 'X'))
+            if (status is { Uid: var uid, State: var state } && uid == ownUid && state is not ('Z' or 'X')
+                && (ownNamespace is null || PidNamespace(folder) is not { } theirs || theirs == ownNamespace))
                 return true;
         }
         return false;
+    }
+
+    /// <summary>A process's pid namespace, as its <c>ns/pid</c> link names it (<c>pid:[4026531836]</c>), or null when it can't be read.</summary>
+    private static string? PidNamespace(string folder)
+    {
+        try
+        {
+            return new FileInfo(Path.Combine(folder, "ns", "pid")).LinkTarget;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

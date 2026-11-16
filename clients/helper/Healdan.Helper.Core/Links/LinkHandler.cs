@@ -22,6 +22,9 @@ public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog 
 {
     private const string Helper = "Healdan Helper";
 
+    /// <summary>What the notice says for a <c>healdan:</c> link that isn't one to open a document.</summary>
+    public const string IgnoredNotice = "Healdan Helper only opens documents, so it ignored that link.";
+
     private readonly object _gate = new();
     private Uri? _server;
     private CopyCycle? _cycle;
@@ -33,7 +36,14 @@ public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog 
     /// Links open from now on, against <paramref name="server"/> through <paramref name="cycle"/>. A link held while
     /// the helper was starting opens now; the task is that open.
     /// </summary>
-    public Task Ready(Uri server, CopyCycle cycle)
+    public Task Ready(Uri server, CopyCycle cycle) => Accept(server, cycle) is { } held ? Handle(held) : Task.CompletedTask;
+
+    /// <summary>
+    /// <see cref="Ready"/> without opening the link held from the start, which it returns (null when none is) for the
+    /// caller to <see cref="Handle"/> once it's ready for it: the session accepts links before its channel is up, so a
+    /// second helper's link can't arrive while they aren't, and opens the held one after.
+    /// </summary>
+    public string? Accept(Uri server, CopyCycle cycle)
     {
         string? held;
         lock (_gate)
@@ -42,7 +52,7 @@ public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog 
             (held, _held, _holding) = (_held, null, false);
         }
         log.Info("Accepting links");
-        return held is null ? Task.CompletedTask : Handle(held);
+        return held;
     }
 
     /// <summary>
@@ -70,7 +80,7 @@ public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog 
         if (!HealdanLink.TryParse(url, out var n, out var readOnly, out var server))
         {
             log.Warn("Ignored a link that isn't Healdan's open link");
-            notifier.Notify(Helper, "Healdan Helper only opens documents, so it ignored that link.");
+            notifier.Notify(Helper, IgnoredNotice);
             return;
         }
         Uri? signedIn;

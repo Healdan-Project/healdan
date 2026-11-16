@@ -4,6 +4,7 @@
 """Tests for healdan_logic: the extension's commands, paths, channel client and flows, with no LibreOffice."""
 
 import contextlib
+import errno
 import http.server
 import json
 import logging
@@ -328,8 +329,10 @@ class ChannelTest(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "signals are POSIX")
     def test_a_pid_owned_by_someone_else_is_not_the_helper(self):
         # EPERM: the process exists but isn't ours. The helper runs as the same user as LibreOffice, so it's not it.
-        with mock.patch.object(logic.os, "kill", side_effect=PermissionError):
+        with mock.patch.object(logic.os, "kill", side_effect=PermissionError(errno.EPERM, "not permitted")):
             self.assertFalse(logic._alive(4242))
+        with mock.patch.object(logic.os, "kill", side_effect=PermissionError(errno.EACCES, "denied by policy")):
+            self.assertTrue(logic._alive(4242))  # a security policy's refusal isn't another user's process
         with mock.patch.object(logic.os, "kill", side_effect=OSError(5, "other")):
             self.assertTrue(logic._alive(4242))  # any other failure is read as before
         with mock.patch.object(logic.os, "kill", side_effect=ProcessLookupError):

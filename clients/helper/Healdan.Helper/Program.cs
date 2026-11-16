@@ -30,13 +30,10 @@ internal static class Program
     {
         Paths = HelperPaths.For(DevRoot());
         Log = new HelperLog(Paths.Log);
-        // Held for the life of the process (a static field, so the GC can't release it); a helper from before the lock
-        // holds none, so one that answers counts too.
+        // Held for the life of the process (a static field, so the GC can't release it). A helper that holds none, one from
+        // before the lock or one that couldn't open its file, counts too when its channel answers, on both systems.
         _instance = SingleInstance.TryAcquire(Paths, Log);
-        // On Linux a helper that holds the lock is the first, whatever a stale channel.json's port answers; only a lockless
-        // instance (the lock file couldn't be opened) still asks.
-        var checkChannel = OperatingSystem.IsMacOS() || _instance is not { HoldsLock: true };
-        if (_instance is null || (checkChannel && AnotherHelperAnswers(Paths)))
+        if (_instance is null || AnotherHelperAnswers(Paths))
         {
             // Two helpers would both send the same copies' saves. macOS starts a second copy of the app for a link
             // when it hands links to another copy than the one running, and sends the link as an Apple event once
@@ -63,12 +60,13 @@ internal static class Program
         var links = 0;
         foreach (var arg in args)
         {
-            if (!HealdanLink.TryParse(arg, out _, out _, out _))
+            if (!HealdanLink.HasScheme(arg))
                 continue;
             links++;
-            // The wait gave up: no channel (signed out, or Sign In dismissed or still up) or the helper refused it.
-            if (!handOver.Send(arg, TimeSpan.FromSeconds(30)) && LinkHandOver.NotTakenNotice(arg) is { } notice)
-                NotifySend.TryPost("Healdan Helper", notice);
+            // The wait gave up: no channel (signed out, or Sign In dismissed or still up) or the helper refused it. A
+            // healdan: link that isn't an open link isn't handed over (Send logs it), and the user is told it was ignored.
+            if (!handOver.Send(arg, TimeSpan.FromSeconds(30)))
+                NotifySend.TryPost("Healdan Helper", LinkHandOver.NotTakenNotice(arg) ?? LinkHandler.IgnoredNotice);
         }
         // Started from the app grid while the helper runs: say so, as nothing else shows.
         if (links == 0)
@@ -110,11 +108,14 @@ internal static class Program
 #endif
     }
 
-    /// <summary>A helper whose channel answers its ping is running; a <c>channel.json</c> left by one that stopped isn't.</summary>
+    /// <summary>
+    /// A helper whose channel answers its ping, and whose process is alive (on Linux, the user's own), is running; a
+    /// <c>channel.json</c> left by one that stopped isn't, whatever now answers on its port.
+    /// </summary>
     private static bool AnotherHelperAnswers(HelperPaths paths)
     {
         var info = ChannelInfo.Read(paths);
-        if (info is null || info.Pid == Environment.ProcessId)
+        if (info is null || info.Pid == Environment.ProcessId || !ChannelInfo.IsAlive(info.Pid))
             return false;
         try
         {

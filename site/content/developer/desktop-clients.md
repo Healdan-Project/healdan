@@ -145,7 +145,8 @@ size the helper uses, the widths then match CoreText's.
   `DefaultApp.RefusedExtensions` (apps, installers, scripts and the like) are never downloaded or handed over. On
   Ubuntu the default app is `xdg-open`, there's no quarantine, and the list also holds what runs on Linux or under
   Wine: `.desktop`, `.appimage`, `.deb`, `.rpm`, `.snap`, `.flatpak`, `.flatpakref`, `.flatpakrepo`, `.run`, `.bin`,
-  `.exe`, `.msi`, `.bat`, `.cmd`, `.com`, `.ps1`, `.vbs`, `.lnk` and `.jnlp`.
+  `.exe`, `.msi`, `.bat`, `.cmd`, `.com`, `.ps1`, `.vbs`, `.lnk`, `.jnlp`, `.url`, `.msp`, `.scr`, `.pif`, `.cpl`, `.reg`,
+  `.js`, `.jse`, `.vbe`, `.wsf`, `.wsh` and `.hta`.
 - **Saving:** the helper watches the folder, so it works whether or not the extension took the save over. A save
   counts once the file's size has stopped changing for 1.2 seconds, checked every 300 ms, and its content differs
   from the last sent. It goes up as a snapshot with `keepCheckedOut: true`, the document's own `name`, `ifVersion`,
@@ -440,14 +441,14 @@ server, a Save as New Version still to go, or a write that hasn't settled.
 - **One helper per user on Ubuntu, and its links:** `Program.Main` takes the lock `<support>/helper.lock` first
   (`SingleInstance`: an exclusive file lock the system frees when the helper ends, however it ends, so a stale file
   never blocks a start; `channel.json`'s pid can't say this, as the channel starts only after sign-in). A process that
-  can't take it is a second one (a helper that holds the real lock is the first, and doesn't ask the channel, whose stale `channel.json` another server's port could answer; one that couldn't open the lock file still asks): it hands each `healdan://` link in its
+  can't take it is a second one, and so is one whose `channel.json` names a live process of the user's own whose channel answers (a helper from before the lock, or one that couldn't open the lock file; a stale `channel.json`'s port, whatever answers on it, doesn't count): it hands each `healdan://` link in its
   arguments to the running helper with `POST /v1/link` and the channel's secret (`LinkHandOver`), then quits with no
   window. It waits up to 30 seconds for a helper that's still starting, and a link still waiting by then, as a helper
   signed out or with its Sign In window up has no channel, is logged as dropped and posted as a notice with the doc # only
-  (`LinkHandOver.NotTakenNotice`). A second start with no link says the helper is already running, in a notice
+  (`LinkHandOver.NotTakenNotice`). It tries again only while the link can't have reached the helper: one sent that got no answer within 3 seconds isn't sent again, as the helper may have it. A `healdan:` link that isn't an open link gets the notice that it was ignored (`LinkHandler.IgnoredNotice`), as the first start's does. A second start with no link says the helper is already running, in a notice
   (`LinkHandOver.AlreadyRunningNotice`). `ChannelInfo.IsAlive` counts only the user's own process on Linux
   (`OwnProcesses.IsOwn`), so another user's process reusing a stale pid isn't the helper. The desktop entry is `Exec=/opt/healdan-helper/HealdanHelper %u`, so the first start takes its link from
-  its arguments and holds it until the helper has signed in. A helper that can't open the lock file starts anyway, and
+  its arguments and holds it until the helper has signed in. The session accepts links before its channel and `channel.json` are up, so a link handed over as the channel starts isn't dropped, and the held link opens once the channel listens. A helper that can't open the lock file starts anyway, and
   logs that a second one can't be ruled out.
 
 - **The window routes** answer when the user closes the window, which can take minutes, so their callers mustn't time
@@ -945,7 +946,7 @@ The helper works on Ubuntu 26.04 with LibreOffice. Microsoft Office, CoffeePDF a
 aren't on Linux, so those parts of the helper stay macOS's. The core, and its tests, run on Ubuntu in CI too.
 
 - **One helper per user, and links in arguments:** see [The Channel](#the-channel).
-- **Notices** go through `notify-send` (`NotifySend`, from `libnotify-bin`), run off the caller's thread, as the
+- **Notices** go through `notify-send` (`NotifySend`, from `libnotify-bin`), run off the caller's thread, one after another so they keep their order, as the
   cycle and the channel post them from their own threads and `notify-send` can wait on the desktop. When one can't be
   shown, it's the menu's status line, as on macOS.
 - **The keychain** is the Secret Service through `secret-tool` (`SecretToolKeychain`, from `libsecret-tools`; GNOME
@@ -953,7 +954,7 @@ aren't on Linux, so those parts of the helper stay macOS's. The core, and its te
   `libsecret-tools`.
 - **The registry read** is on both systems, at different times: see [Installing It by Hand](#installing-it-by-hand).
 - **Crash detection** counts only the user's own LibreOffice (`OwnProcesses`: `soffice.bin` processes of the user's
-  uid, read from `/proc`, not zombies), so another user's, or a container's, LibreOffice can't hide a crash.
+  uid, read from `/proc`, not zombies, and in the helper's pid namespace, as a rootless container's root is the user's uid), so another user's, or a container's, LibreOffice can't hide a crash.
 - **The tray icon** is drawn at run time as on macOS (`Tray/TrayIcons.cs`), white for GNOME's dark top bar. It needs the AppIndicator extension, which
   Ubuntu has on by default. GNOME's Wayland raised the windows and gave the focus back, so no notification fallback
   was needed.
@@ -977,7 +978,7 @@ with no address.
 | `/usr/share/icons/hicolor/scalable/apps/healdan-helper.svg` | The docs site's `site/static/favicon.svg` |
 | `/usr/share/doc/healdan-helper/copyright` | The licence notice |
 
-- **`Depends`:** `libsecret-tools`, `libnotify-bin`, `libreoffice-core` (named so that apt never satisfies
+- **`Depends`:** `libsecret-tools`, `libnotify-bin`, `xdg-utils` (the default app's `xdg-open`), `libreoffice-core` (named so that apt never satisfies
   `libreoffice-script-provider-python` with `libreoffice-core-nogui`, which has no windows),
   `libreoffice-script-provider-python`, `libharfbuzz0b`, `libice6`, `libsm6`, `libfontconfig1`, `libx11-6`, `libxi6`,
   `libxrandr2`, `libxcursor1`, `libxext6`, `libxfixes3` (the X libraries Avalonia loads at run time), `libicu78`,
@@ -992,4 +993,6 @@ with no address.
   where on macOS it registers a login item. A person turns it off with an entry of their own in
   `~/.config/autostart` (or `$XDG_CONFIG_HOME/autostart`) that says `Hidden=true` or `X-GNOME-Autostart-enabled=false`,
   which GNOME Tweaks' Startup Applications writes; Settings' Start at Sign-In row reads both files
-  (`AutostartEntry`).
+  (`AutostartEntry`). The user's entry stands in for the system's whole, as the desktop reads them; without one, the
+  system entry's own `Hidden=true` or `X-GNOME-Autostart-enabled=false` (an administrator's edit) is Off. The entry has
+  `TryExec`, so after a removal that keeps it (it's a conffile) nothing tries to start a helper that's gone.

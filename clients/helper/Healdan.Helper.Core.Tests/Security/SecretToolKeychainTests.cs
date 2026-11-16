@@ -89,6 +89,17 @@ public sealed class SecretToolKeychainTests : IDisposable
     }
 
     [Fact]
+    public void DeleteSaysWhenTheKeyringRefuses()
+    {
+        if (OperatingSystem.IsWindows()) return;
+
+        var e = Assert.Throws<InvalidOperationException>(
+            () => Keychain("echo 'Cannot delete a locked object' >&2; exit 1").Delete("me"));
+
+        Assert.Equal("secret-tool could not clear the sign-in (exit 1): Cannot delete a locked object", e.Message);
+    }
+
+    [Fact]
     public void AMissingToolSaysToInstallLibsecretTools()
     {
         var keychain = new SecretToolKeychain(tool: Path.Combine(_folder, "no-such-secret-tool"));

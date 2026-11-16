@@ -41,8 +41,9 @@ public sealed class SecretToolKeychain(string service = "Healdan Helper", string
 
     public void Delete(string account)
     {
-        // clear exits non-zero when nothing matched; either way the item is gone afterwards.
-        Run(["clear", "service", service, "account", account], null);
+        // clear exits non-zero with nothing said when nothing matched, so the item is gone; a locked or missing keyring says why.
+        var (code, _, error) = Run(["clear", "service", service, "account", account], null);
+        if (code != 0 && error.Length > 0) throw Failed("clear", code, error);
     }
 
     /// <summary>The tool's last line of error text, when it had any: never the secret, which only goes in on stdin.</summary>

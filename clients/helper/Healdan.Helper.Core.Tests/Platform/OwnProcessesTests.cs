@@ -42,6 +42,29 @@ public sealed class OwnProcessesTests : IDisposable
         Assert.True(OwnProcesses.AnyNamed("soffice.bin", _proc, Own));
     }
 
+    [Fact]
+    public void AProcessInAnotherPidNamespaceDoesntCount()
+    {
+        // A rootless container's LibreOffice: the user's uid on the host, in the container's own pid namespace.
+        Add("self", "HealdanHelper", Own);
+        Namespace("self", "pid:[4026531836]");
+        Add("4321", "soffice.bin", Own);
+        Namespace("4321", "pid:[4026532901]");
+
+        Assert.False(OwnProcesses.AnyNamed("soffice.bin", _proc, Own));
+
+        Add("5555", "soffice.bin", Own);
+        Namespace("5555", "pid:[4026531836]");
+        Assert.True(OwnProcesses.AnyNamed("soffice.bin", _proc, Own));
+    }
+
+    /// <summary>The process's <c>ns/pid</c> link, as the kernel names its pid namespace.</summary>
+    private void Namespace(string pid, string target)
+    {
+        var ns = Directory.CreateDirectory(Path.Combine(_proc, pid, "ns")).FullName;
+        File.CreateSymbolicLink(Path.Combine(ns, "pid"), target);
+    }
+
     [Theory]
     [InlineData("Z (zombie)")]
     [InlineData("X (dead)")]

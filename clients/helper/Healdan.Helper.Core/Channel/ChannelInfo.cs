@@ -55,11 +55,22 @@ public sealed record ChannelInfo(int Port, string Secret, int Pid)
     /// Sends <c>POST /v1/&lt;route&gt;</c> to the helper that is running. False when there is no info file, its process
     /// is gone, nothing answers within <paramref name="timeout"/>, or it answers with an error.
     /// </summary>
-    public static bool TryForward(HelperPaths p, string route, JsonObject body, TimeSpan timeout)
+    public static bool TryForward(HelperPaths p, string route, JsonObject body, TimeSpan timeout) =>
+        Forward(p, route, body, timeout) == ForwardOutcome.Taken;
+
+    /// <summary>
+    /// How a <see cref="Forward"/> went: taken; not taken, so sending it again can't act on it twice (no info file, its
+    /// process gone, nothing listening, or an error answered); or unknown, as the request went out but no answer came in
+    /// time, so the running helper may have it.
+    /// </summary>
+    public enum ForwardOutcome { Taken, NotTaken, Unknown }
+
+    /// <summary><see cref="TryForward"/>, telling a request that never reached the helper from one that may have.</summary>
+    public static ForwardOutcome Forward(HelperPaths p, string route, JsonObject body, TimeSpan timeout)
     {
         var info = Read(p);
         if (info is null || !IsAlive(info.Pid))
-            return false;
+            return ForwardOutcome.NotTaken;
         try
         {
             using var http = new HttpClient { Timeout = timeout };
@@ -69,11 +80,15 @@ public sealed record ChannelInfo(int Port, string Secret, int Pid)
             };
             request.Headers.Add(SecretHeader, info.Secret);
             using var response = http.Send(request);
-            return response.IsSuccessStatusCode;
+            return response.IsSuccessStatusCode ? ForwardOutcome.Taken : ForwardOutcome.NotTaken;
+        }
+        catch (HttpRequestException e) when (e.HttpRequestError is HttpRequestError.ConnectionError or HttpRequestError.NameResolutionError)
+        {
+            return ForwardOutcome.NotTaken; // nothing listens on the port, so nothing was sent
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or OperationCanceledException or IOException)
         {
-            return false;
+            return ForwardOutcome.Unknown;
         }
     }
 
@@ -81,7 +96,7 @@ public sealed record ChannelInfo(int Port, string Secret, int Pid)
     /// Whether <paramref name="pid"/> is a live process, and on Linux the user's own: another user's process that reuses a
     /// stale pid isn't the helper. When the own uid can't be read, the pid alone decides.
     /// </summary>
-    private static bool IsAlive(int pid)
+    public static bool IsAlive(int pid)
     {
         try
         {

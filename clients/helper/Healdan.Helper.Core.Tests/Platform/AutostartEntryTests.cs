@@ -44,6 +44,31 @@ public sealed class AutostartEntryTests
         Assert.Contains("GNOME Tweaks", summary.Note);
     }
 
+    [Fact]
+    public void ASystemEntryAnAdministratorSwitchedOffIsOff()
+    {
+        var summary = AutostartEntry.Summarize(true, null, Entry + "X-GNOME-Autostart-enabled=false\n");
+
+        Assert.Equal("Off", summary.Value);
+        Assert.False(summary.On);
+        Assert.Contains("administrator", summary.Note);
+        Assert.Contains(AutostartEntry.SystemPath, summary.Note);
+    }
+
+    [Fact]
+    public void TheUsersEntryStandsInForTheSystemsWhole()
+    {
+        Assert.True(AutostartEntry.Summarize(true, Entry, Entry + "Hidden=true\n").On);
+    }
+
+    [Fact]
+    public void TheOffNoteNamesTheUsersEntryWhereItIs()
+    {
+        var summary = AutostartEntry.Summarize(true, Entry + "Hidden=true\n", Entry, "~/.cfg/autostart/healdan-helper.desktop");
+
+        Assert.Contains("delete ~/.cfg/autostart/healdan-helper.desktop.", summary.Note);
+    }
+
     [Theory]
     [InlineData("#Hidden=true")]
     [InlineData("Hidden=false")]

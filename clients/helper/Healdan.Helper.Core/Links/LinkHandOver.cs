@@ -57,16 +57,28 @@ public sealed class LinkHandOver(HelperPaths paths, HelperLog log, TimeSpan? tim
         return true;
     }
 
+    /// <summary>
+    /// Tries again only while the link can't have reached the running helper: one sent that got no answer in time may
+    /// have been taken, and sending it again would open it twice.
+    /// </summary>
     private bool Forward(string url, TimeSpan? wait)
     {
         var until = Stopwatch.StartNew();
         while (true)
         {
-            if (ChannelInfo.TryForward(paths, "link", new JsonObject { ["url"] = url }, timeout ?? TimeSpan.FromSeconds(3)))
-                return true;
-            if (wait is not { } limit || until.Elapsed >= limit)
+            switch (ChannelInfo.Forward(paths, "link", new JsonObject { ["url"] = url }, timeout ?? TimeSpan.FromSeconds(3)))
+            {
+                case ChannelInfo.ForwardOutcome.Taken:
+                    return true;
+                case ChannelInfo.ForwardOutcome.Unknown:
+                    log.Warn($"{Helper} didn't answer in time, so the link isn't sent again: it may have it");
+                    return false;
+            }
+            if (wait is not { } limit)
                 return false;
-            var left = limit - until.Elapsed;
+            var left = limit - until.Elapsed; // read once, so it can't go below zero between a check and the sleep
+            if (left <= TimeSpan.Zero)
+                return false;
             Thread.Sleep(left < Retry ? left : Retry);
         }
     }

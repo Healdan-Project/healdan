@@ -20,6 +20,9 @@ public static partial class HealdanLink
     /// <summary>A doc # has at most 18 digits, so it always fits a <c>long</c>.</summary>
     private const int MaxDigits = 18;
 
+    /// <summary>Whether <paramref name="url"/> is a <c>healdan:</c> link of any kind, open link or not (the scheme in any case).</summary>
+    public static bool HasScheme(string url) => url.StartsWith(Scheme + ":", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// Reads an open link. False for any other link: another scheme or verb, credentials or a port where the verb is,
     /// more path than the doc #, a doc # that isn't a positive whole number, or <c>server</c> given twice. A link
