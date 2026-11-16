@@ -18,6 +18,7 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.junit.Before;
@@ -30,6 +31,7 @@ import com.logicaldoc.core.conversion.FormatConverter;
 import com.logicaldoc.core.document.AbstractDocument;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.IndexingStatus;
+import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanOperation;
@@ -47,6 +49,10 @@ public class DemoTimelineTest extends AbstractHealdanTestCase {
 
 	@Before
 	public void buildTheFirm() throws Exception {
+		// Ids restart with each test's database, so a PDF conversion an earlier class left under an id a document here
+		// gets would be taken for its own, and CE would skip converting it
+		FileUtils.deleteDirectory(((FSStore) Store.get()).getRoot());
+
 		DemoManifest manifest = DemoManifest.read(DIR.resolve("manifest.json"));
 		DemoFirm[] built = new DemoFirm[1];
 		HealdanOperation.run(Kind.SEED, () -> built[0] = new DemoFirm(manifest, "Demo-Firm-2026").build());
