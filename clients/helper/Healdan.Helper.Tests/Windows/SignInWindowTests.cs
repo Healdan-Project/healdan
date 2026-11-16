@@ -444,7 +444,7 @@ public sealed class SignInWindowTests
             await Until(() => prompt.ProvidersAsked.Count >= 2);
 
             window.Close();
-            await Task.Delay(100); // an ask begun before the close is recorded on the thread pool
+            await window.Loading; // the last ask begun before the close, recorded on the thread pool, has its answer
             var asked = prompt.ProvidersAsked.Count;
             await Task.Delay(300);
 
@@ -461,7 +461,7 @@ public sealed class SignInWindowTests
             await Until(() => prompt.ProvidersAsked.Count >= 2);
 
             Click(Find<Button>(window, "ChangeLink"));
-            await Task.Delay(100);
+            await window.Loading; // as above: nothing can begin an ask after Change but Continue
             var asked = prompt.ProvidersAsked.Count;
             await Task.Delay(300);
 
@@ -481,13 +481,14 @@ public sealed class SignInWindowTests
         return Run(prompt.Make(server: "https://healdan.example"), async window =>
         {
             await Until(() => !prompt.ProvidersAsked.IsEmpty);
+            var stale = window.Loading; // the kept server's ask, still waiting for its answer
             Click(Find<Button>(window, "ChangeLink"));
             Continue(window, "firm.example");
             await window.Loading;
             Assert.True(Shown(Find<TextBox>(window, "User")));
 
             first.SetResult(Answer(Two)); // the kept server answers at last
-            await Task.Delay(100);
+            await stale; // and the window has done whatever it does with that answer
 
             Assert.Empty(ProviderButtons(window));
             Assert.Equal("firm.example", Find<TextBlock>(window, "ServerName").Text);

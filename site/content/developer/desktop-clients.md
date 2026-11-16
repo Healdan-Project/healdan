@@ -353,8 +353,9 @@ spec, `docs/superpowers/specs/2026-11-16-helper-sign-in-address-first-design.md`
 **Continue**, the default button, so Return connects rather than trying a password. `HelperSession.ProvidersAsync`
 makes a sign-in's checks of the address (`BeforeSignIn`), reads `GET /server`, and gives a `ServerAnswer`: the
 server's name (its host and port), and its choices or why there are none, with the messages a password sign-in
-gives. Only a server that couldn't be reached or didn't answer in 30 seconds is marked `Retry`. A problem stays on
-the first step, under the address. Choices take the window to the second step, which names the server, with
+gives. Only a server that couldn't be reached, didn't answer in 30 seconds, dropped the connection, or answered 502,
+503 or 504 (a reverse proxy's page while Healdan restarts) is marked `Retry`, and each problem is logged once until
+it changes. A problem stays on the first step, under the address. Choices take the window to the second step, which names the server, with
 **Change** back to the address (none for a fixed address, as after a refused token, since the helper is running
 against it). A server with providers gets a button for each, in its order, with the first focused, and the password
 form folds behind a link labelled with its `passwordLabel`; a server with none, or an older one, gets the password
