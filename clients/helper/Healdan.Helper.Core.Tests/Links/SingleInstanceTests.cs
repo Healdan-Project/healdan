@@ -15,11 +15,13 @@ public sealed class SingleInstanceTests : IDisposable
 
     private readonly string _root = Directory.CreateTempSubdirectory("healdan-single-").FullName;
     private readonly List<ChannelServer> _servers = [];
+    private bool _disposed;
 
     public void Dispose()
     {
         lock (_servers)
         {
+            _disposed = true;
             foreach (var server in _servers)
                 server.Dispose();
         }
@@ -59,6 +61,21 @@ public sealed class SingleInstanceTests : IDisposable
     }
 
     [Fact]
+    public void AnErrorThatIsntALockConflictLeavesTheHelperRunningWithoutALock()
+    {
+        // The support folder's path is a file, so the folder can't be made; no other helper holds anything.
+        var parent = Path.Combine(_root, "file");
+        File.WriteAllText(parent, "");
+        var paths = HelperPaths.For(Path.Combine(parent, "support"));
+        var logFile = Path.Combine(_root, "test.log");
+
+        using var held = SingleInstance.TryAcquire(paths, new HelperLog(logFile));
+
+        Assert.NotNull(held);
+        Assert.Contains("a second Healdan Helper can't be ruled out", File.ReadAllText(logFile));
+    }
+
+    [Fact]
     public void AFolderThatCantBeWrittenLeavesTheHelperRunningWithoutALock()
     {
         if (OperatingSystem.IsWindows() || Environment.UserName == "root")
@@ -92,9 +109,13 @@ public sealed class SingleInstanceTests : IDisposable
                 seen.TrySetResult((string?)body["url"]);
                 return Task.FromResult<JsonNode?>(new JsonObject());
             }));
-            server.Start();
             lock (_servers)
+            {
+                if (_disposed)
+                    return;
+                server.Start();
                 _servers.Add(server);
+            }
         });
 
         var sent = await Task.Run(() => new LinkHandOver(Paths, new HelperLog(Paths.Log)).Send(Link, TimeSpan.FromSeconds(10)));

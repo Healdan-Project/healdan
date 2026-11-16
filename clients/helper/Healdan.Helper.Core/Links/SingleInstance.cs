@@ -13,6 +13,14 @@ namespace Healdan.Helper.Core.Links;
 /// </summary>
 public sealed class SingleInstance : IDisposable
 {
+    /// <summary>
+    /// What an open that another process's lock refuses fails with: Windows' sharing violation, or, on Unix, .NET's
+    /// <c>flock</c> refusal, whose HResult is the errno EWOULDBLOCK (11 on Linux, 35 on macOS). Any other failure
+    /// isn't another helper holding the lock.
+    /// </summary>
+    private static readonly int SharingViolation =
+        OperatingSystem.IsWindows() ? unchecked((int)0x80070020) : OperatingSystem.IsMacOS() ? 35 : 11;
+
     private readonly FileStream? _file;
 
     private SingleInstance(FileStream? file) => _file = file;
@@ -39,11 +47,11 @@ public sealed class SingleInstance : IDisposable
             Directory.CreateDirectory(paths.Support);
             return new SingleInstance(new FileStream(Path.Combine(paths.Support, "helper.lock"), options));
         }
-        catch (IOException)
+        catch (IOException e) when (e.HResult == SharingViolation)
         {
             return null;
         }
-        catch (UnauthorizedAccessException e)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             log?.Warn($"Couldn't take the one-helper lock ({e.Message}), so a second Healdan Helper can't be ruled out");
             return new SingleInstance(null);
