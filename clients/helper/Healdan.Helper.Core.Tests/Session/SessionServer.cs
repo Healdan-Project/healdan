@@ -35,6 +35,12 @@ public sealed class SessionServer(FakeApi documents) : DelegatingHandler(documen
     /// <summary>The providers <c>/server</c> lists, in the order of their buttons.</summary>
     public List<(string Id, string Label)> Providers { get; } = [];
 
+    /// <summary>When set, <c>GET /server</c> answers this status with a proxy's page, as a reverse proxy does while Healdan restarts.</summary>
+    public HttpStatusCode? ServerStatus { get; set; }
+
+    /// <summary>When set, <c>GET /server</c>'s connection drops before its answer is read.</summary>
+    public bool ServerCut { get; set; }
+
     /// <summary>When set, a provider sign-in is refused with this code, as <c>no-group</c>: the browser is sent back with <c>error</c>.</summary>
     public string? RefuseProviderWith { get; set; }
 
@@ -100,6 +106,10 @@ public sealed class SessionServer(FakeApi documents) : DelegatingHandler(documen
 
         switch (request.Method.Method, path)
         {
+            case ("GET", "/api/v1/server") when ServerCut:
+                throw new HttpIOException(HttpRequestError.ResponseEnded, "The response ended prematurely (fake).");
+            case ("GET", "/api/v1/server") when ServerStatus is { } status:
+                return new HttpResponseMessage(status) { Content = new StringContent("<html><body>Bad Gateway (fake proxy)</body></html>", Encoding.UTF8, "text/html") };
             case ("GET", "/api/v1/server"):
                 var host = request.RequestUri.Host;
                 var product = host == "other.test" ? "Elsewhere" : "Healdan";

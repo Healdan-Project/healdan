@@ -329,6 +329,66 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task AProxysGatewayErrorCanBeRetried()
+    {
+        // Healdan restarting behind a reverse proxy: the server is coming back, so the window asks again.
+        _http.ServerStatus = HttpStatusCode.BadGateway;
+        ServerAnswer? answer = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            answer = await prompt.ProvidersAsync(Account);
+            return false;
+        };
+
+        await Make().StartAsync();
+
+        Assert.Null(answer!.Choice);
+        Assert.Contains("502", answer.Problem);
+        Assert.True(answer.Retry);
+    }
+
+    [Fact]
+    public async Task AConnectionThatDropsCanBeRetried()
+    {
+        _http.ServerCut = true;
+        ServerAnswer? answer = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            answer = await prompt.ProvidersAsync(Account);
+            return false;
+        };
+
+        await Make().StartAsync();
+
+        Assert.Null(answer!.Choice);
+        Assert.StartsWith("healdan.test couldn't be reached: The response ended prematurely (fake).", answer.Problem); // .NET adds the error's name
+        Assert.True(answer.Retry);
+    }
+
+    [Fact]
+    public async Task AProblemTheWindowAsksAgainAboutIsLoggedOnce()
+    {
+        // The window asks every 5 seconds while the server can't be reached: a day of that mustn't fill the log.
+        _server.Down = true;
+        _windows.OnSignIn = async prompt =>
+        {
+            for (var i = 0; i < 3; i++)
+                await prompt.ProvidersAsync(Account);
+            _server.Down = false;
+            await prompt.ProvidersAsync(Account); // answered
+            _server.Down = true;
+            await prompt.ProvidersAsync(Account); // a new outage is news
+            return false;
+        };
+
+        await Make().StartAsync();
+
+        var lines = File.ReadAllLines(Paths.Log).Where(l => l.Contains("couldn't read healdan.test's sign-in choices")).ToList();
+        Assert.Equal(2, lines.Count);
+        Assert.All(lines, l => Assert.Contains("Connection refused (fake).", l));
+    }
+
+    [Fact]
     public async Task SignsInThroughAProviderFromTheWindowThenStarts()
     {
         _http.Providers.Add(("entra", "Sign In with Microsoft"));

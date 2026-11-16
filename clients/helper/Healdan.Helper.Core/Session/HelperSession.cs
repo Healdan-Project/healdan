@@ -694,6 +694,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         return await AfterSignInAsync(server, api, $"as {user.Trim()}");
     }
 
+    /// <summary>The problem <see cref="ProvidersAsync"/> logged last, with its server; null after an answer with choices.</summary>
+    private string? _choicesProblem;
+
     /// <summary>
     /// The Sign In window's second step (M4 spec §6.1; address-first spec §3): the sign-in choices of the server at
     /// <paramref name="address"/>, or why there are none, as the window shows it, with the reasons a password sign-in
@@ -717,8 +720,10 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             return new ServerAnswer(name, null, refused);
         }
         var answer = await AskProvidersAsync(server, api);
-        if (answer.Problem is not null)
-            _log.Info($"The Sign In window couldn't read {server.Authority}'s sign-in choices{(answer.Retry ? " (unreachable)" : "")}");
+        // The window asks again every few seconds while the server can't be reached: each problem is logged once.
+        var problem = answer.Problem is null ? null : $"{server.Authority}'s sign-in choices: {answer.Problem}";
+        if (Interlocked.Exchange(ref _choicesProblem, problem) != problem && problem is not null)
+            _log.Info($"The Sign In window couldn't read {problem}");
         return answer;
     }
 
@@ -741,6 +746,11 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         {
             return new ServerAnswer(name, null, e.Message); // not Healdan, or an API this helper doesn't speak
         }
+        catch (ApiException e) when (e.Status is 502 or 503 or 504)
+        {
+            // A reverse proxy's page while Healdan restarts behind it: the server is coming back.
+            return new ServerAnswer(name, null, Refused(e, NotHealdan), Retry: true);
+        }
         catch (ApiException e)
         {
             return new ServerAnswer(name, null, Refused(e, NotHealdan));
@@ -753,15 +763,16 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         {
             return new ServerAnswer(name, null, Unanswered(server), Retry: true);
         }
-        catch (HttpRequestException e)
+        catch (Exception e) when (e is HttpRequestException or IOException)
         {
+            // IOException: the connection dropped while the answer was read.
             return new ServerAnswer(name, null, Unreachable(server, e), Retry: true);
         }
     }
 
     private static string Unanswered(Uri server) => $"{server.Authority} didn't answer within {SignInTimeout.TotalSeconds:0} seconds.";
 
-    private static string Unreachable(Uri server, HttpRequestException e) => $"{server.Authority} couldn't be reached: {e.Message}";
+    private static string Unreachable(Uri server, Exception e) => $"{server.Authority} couldn't be reached: {e.Message}";
 
     /// <summary>
     /// A provider's button in the Sign In window (M4 spec §6.2): signs in through the provider in the system browser,
