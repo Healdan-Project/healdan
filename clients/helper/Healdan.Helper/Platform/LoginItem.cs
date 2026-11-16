@@ -4,6 +4,7 @@
 using System.Runtime.InteropServices;
 using Healdan.Helper.Core;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Settings;
 
 namespace Healdan.Helper.Platform;
@@ -94,6 +95,23 @@ internal static unsafe class LoginItem
     /// </summary>
     public static LoginItemSummary Summary()
     {
+        if (OperatingSystem.IsLinux())
+        {
+            string? user = null;
+            try
+            {
+                var path = AutostartEntry.UserPath(
+                    Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+                if (File.Exists(path))
+                    user = File.ReadAllText(path);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // an entry that can't be read doesn't turn anything off
+            }
+            var row = AutostartEntry.Summarize(File.Exists(AutostartEntry.SystemPath), user);
+            return new(row.Value, row.On, row.Note);
+        }
         if (!Available)
             return new("Not in This Build", false, "The installed app starts when you sign in to this computer.");
         if (Passing() is { } where)

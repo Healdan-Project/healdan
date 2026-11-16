@@ -7,6 +7,7 @@ using Healdan.Helper.Core;
 using Healdan.Helper.Core.Channel;
 using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Platform;
 
 namespace Healdan.Helper;
@@ -32,7 +33,10 @@ internal static class Program
         // Held for the life of the process (a static field, so the GC can't release it); a helper from before the lock
         // holds none, so one that answers counts too.
         _instance = SingleInstance.TryAcquire(Paths, Log);
-        if (_instance is null || AnotherHelperAnswers(Paths))
+        // On Linux a helper that holds the lock is the first, whatever a stale channel.json's port answers; only a lockless
+        // instance (the lock file couldn't be opened) still asks.
+        var checkChannel = OperatingSystem.IsMacOS() || _instance is not { HoldsLock: true };
+        if (_instance is null || (checkChannel && AnotherHelperAnswers(Paths)))
         {
             // Two helpers would both send the same copies' saves. macOS starts a second copy of the app for a link
             // when it hands links to another copy than the one running, and sends the link as an Apple event once
@@ -56,11 +60,19 @@ internal static class Program
     private static int HandOverLinks(string[] args)
     {
         var handOver = new LinkHandOver(Paths, Log);
+        var links = 0;
         foreach (var arg in args)
         {
-            if (HealdanLink.TryParse(arg, out _, out _, out _))
-                handOver.Send(arg, TimeSpan.FromSeconds(30));
+            if (!HealdanLink.TryParse(arg, out _, out _, out _))
+                continue;
+            links++;
+            // The wait gave up: no channel (signed out, or Sign In dismissed or still up) or the helper refused it.
+            if (!handOver.Send(arg, TimeSpan.FromSeconds(30)) && LinkHandOver.NotTakenNotice(arg) is { } notice)
+                NotifySend.TryPost("Healdan Helper", notice);
         }
+        // Started from the app grid while the helper runs: say so, as nothing else shows.
+        if (links == 0)
+            NotifySend.TryPost("Healdan Helper", LinkHandOver.AlreadyRunningNotice);
         return 0;
     }
 

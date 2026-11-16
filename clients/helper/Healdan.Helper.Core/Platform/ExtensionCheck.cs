@@ -17,10 +17,11 @@ namespace Healdan.Helper.Core.Platform;
 /// none is, it opens the <c>.oxt</c> in LibreOffice for the user to accept, once per helper version. After that it
 /// doesn't start LibreOffice again: each start tells the user, and the menu offers Install the LibreOffice Extension
 /// (<see cref="Missing"/>, <see cref="InstallFromMenu"/>) until it's installed.</para>
-/// <para><b>Linux</b> (<see cref="ExtensionRoute.Unopkg"/>, phase 2): <c>unopkg list</c>, then <c>unopkg add</c>
-/// once per helper version, else the <c>.oxt</c> opened in LibreOffice. unopkg never runs beside a running
-/// LibreOffice, which then gets the <c>.oxt</c> unless it was asked already. It runs once per helper version, unless
-/// the installed extension is still older.</para>
+/// <para><b>Linux</b> (<see cref="ExtensionRoute.Unopkg"/>, phase 2): a start for a helper version already checked, with
+/// the installed extension current, reads nothing. Otherwise, while LibreOffice is running, the registry is read (it runs
+/// nothing), and the <c>.oxt</c> is opened in LibreOffice unless it was asked already; unopkg never runs beside a running
+/// LibreOffice. With LibreOffice closed it's <c>unopkg list</c>, then <c>unopkg add</c> once per helper version, else the
+/// <c>.oxt</c> opened in LibreOffice. As on macOS, the registry is then read again while the extension is missing.</para>
 /// </summary>
 /// <param name="helperVersion">This helper's version: a new one checks again, and may open LibreOffice again.</param>
 /// <param name="bundledOxt">The <c>.oxt</c> inside the app; null, or missing, in a build that carries none.</param>

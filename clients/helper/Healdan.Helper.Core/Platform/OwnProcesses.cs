@@ -12,25 +12,26 @@ public static class OwnProcesses
     /// <summary>
     /// Whether a process named <paramref name="name"/> (its <c>comm</c>, the kernel's name for it, as
     /// <c>GetProcessesByName</c> matches) is running as the user and isn't a zombie or dead. A process whose
-    /// <c>status</c> can't be read (it exited meanwhile, or it isn't readable) doesn't count.
+    /// <c>status</c> can't be read (it exited meanwhile, or it isn't readable) doesn't count and is skipped. Throws
+    /// <see cref="IOException"/> when the user's own uid can't be read or the process list can't be listed at all, so a
+    /// caller can't take "can't tell" for "not running"; each caller counts an app as running then.
     /// </summary>
     /// <param name="name">The process name.</param>
     /// <param name="procRoot">The proc folder; <c>/proc</c> but in tests.</param>
     /// <param name="ownUid">The user's real uid; read from <c>self/status</c> in <paramref name="procRoot"/> when null.</param>
     public static bool AnyNamed(string name, string procRoot = "/proc", string? ownUid = null)
     {
-        ownUid ??= ReadStatus(Path.Combine(procRoot, "self", "status"))?.Uid;
-        if (ownUid is null)
-            return false;
+        ownUid ??= ReadStatus(Path.Combine(procRoot, "self", "status"))?.Uid
+            ?? throw new IOException("The user's own uid can't be read from " + Path.Combine(procRoot, "self", "status"));
 
-        IEnumerable<string> folders;
+        string[] folders;
         try
         {
             folders = Directory.GetDirectories(procRoot);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
-            return false;
+            throw new IOException($"The process list in {procRoot} can't be read: {e.Message}", e);
         }
 
         foreach (var folder in folders)
@@ -52,6 +53,19 @@ public static class OwnProcesses
                 return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Whether process <paramref name="pid"/> is the user's own: its <c>status</c>'s real uid is the user's. A process that
+    /// isn't there or can't be read isn't. Throws <see cref="IOException"/> when the user's own uid can't be read.
+    /// </summary>
+    /// <param name="procRoot">The proc folder; <c>/proc</c> but in tests.</param>
+    /// <param name="ownUid">The user's real uid; read from <c>self/status</c> in <paramref name="procRoot"/> when null.</param>
+    public static bool IsOwn(int pid, string procRoot = "/proc", string? ownUid = null)
+    {
+        ownUid ??= ReadStatus(Path.Combine(procRoot, "self", "status"))?.Uid
+            ?? throw new IOException("The user's own uid can't be read from " + Path.Combine(procRoot, "self", "status"));
+        return ReadStatus(Path.Combine(procRoot, pid.ToString(), "status"))?.Uid == ownUid;
     }
 
     /// <summary>A <c>status</c> file's real uid (the first of its <c>Uid:</c> fields) and state letter, or null when it can't be read.</summary>

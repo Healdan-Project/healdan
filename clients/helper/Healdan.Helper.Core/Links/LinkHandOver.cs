@@ -9,11 +9,13 @@ using Healdan.Helper.Core.Logging;
 namespace Healdan.Helper.Core.Links;
 
 /// <summary>
-/// A second helper's links. Only one helper runs for each user, but macOS starts another copy of the app when the copy
-/// it hands <c>healdan:</c> links to isn't the one running, such as an old one in <c>/Applications</c> beside a newer
-/// one. That copy quits, so it first hands each link it's given to the running helper over the channel, as
-/// <c>POST /v1/link</c> with the secret from <c>channel.json</c>. A link it can't hand over is logged as dropped, with
-/// why; only Healdan's open links are handed over, and a link is named in the log only by its doc #.
+/// A second helper's links. Only one helper runs for each user, but a second process starts for a link: on Linux for
+/// every click (the desktop starts the helper with the link as its argument), on macOS when the copy it hands
+/// <c>healdan:</c> links to isn't the one running, such as an old one in <c>/Applications</c> beside a newer one. That
+/// process quits, so it first hands each link it's given to the running helper over the channel, as <c>POST /v1/link</c>
+/// with the secret from <c>channel.json</c>. A link it can't hand over is logged as dropped, with why (Linux's second
+/// process also says so in a notice, <see cref="NotTakenNotice"/>); only Healdan's open links are handed over, and a
+/// link is named in the log and the notice only by its doc #.
 /// </summary>
 /// <param name="timeout">How long the running helper has to take the link; 3 s by default, as it answers at once.</param>
 public sealed class LinkHandOver(HelperPaths paths, HelperLog log, TimeSpan? timeout = null)
@@ -21,6 +23,18 @@ public sealed class LinkHandOver(HelperPaths paths, HelperLog log, TimeSpan? tim
     private const string Helper = "the running Healdan Helper";
 
     private static readonly TimeSpan Retry = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>What the notice says when a second helper is started with no link while one runs (Linux).</summary>
+    public const string AlreadyRunningNotice = "Healdan Helper is already running. Its menu is in the top bar.";
+
+    /// <summary>
+    /// What the notice says when the running helper didn't take a link (it has no channel while signed out or signing in),
+    /// naming the doc # and never the whole link; null when <paramref name="url"/> isn't Healdan's open link.
+    /// </summary>
+    public static string? NotTakenNotice(string url) =>
+        HealdanLink.TryParse(url, out var n, out _, out _)
+            ? $"Healdan Helper didn't open #{n}. Sign in from its menu, then click the link again."
+            : null;
 
     /// <summary>
     /// True once the running helper has taken <paramref name="url"/>; it opens it as its own links. With a

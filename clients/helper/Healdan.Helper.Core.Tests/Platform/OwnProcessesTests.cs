@@ -90,11 +90,95 @@ public sealed class OwnProcessesTests : IDisposable
         Assert.False(OwnProcesses.AnyNamed("other", _proc));
     }
 
+    [Fact]
+    public void AMissingSelfStatusThrows()
+    {
+        Add("4321", "soffice.bin", Own);
+
+        Assert.Throws<IOException>(() => OwnProcesses.AnyNamed("soffice.bin", _proc));
+    }
+
+    [Fact]
+    public void AnAbsentProcFolderThrows()
+    {
+        var absent = Path.Combine(_proc, "nowhere");
+
+        Assert.Throws<IOException>(() => OwnProcesses.AnyNamed("soffice.bin", absent, Own));
+    }
+
+    [Fact]
+    public void AnUnreadableProcFolderThrows()
+    {
+        if (!OperatingSystem.IsLinux() || Environment.UserName == "root")
+            return; // permissions don't stop root
+        Add("4321", "soffice.bin", Own);
+        File.SetUnixFileMode(_proc, UnixFileMode.None);
+        try
+        {
+            Assert.Throws<IOException>(() => OwnProcesses.AnyNamed("soffice.bin", _proc, Own));
+        }
+        finally
+        {
+            File.SetUnixFileMode(_proc, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
+    public void OneUnreadableProcessIsStillSkipped()
+    {
+        Directory.CreateDirectory(Path.Combine(_proc, "100")); // no comm
+        Add("4321", "soffice.bin", Own);
+
+        Assert.True(OwnProcesses.AnyNamed("soffice.bin", _proc, Own));
+    }
+
+    [Fact]
+    public void AProcessOfTheUsersOwnIsOwn()
+    {
+        Add("4321", "healdan-helper", Own);
+
+        Assert.True(OwnProcesses.IsOwn(4321, _proc, Own));
+    }
+
+    [Fact]
+    public void AnotherUsersProcessIsNotOwn()
+    {
+        Add("4321", "healdan-helper", "33017");
+
+        Assert.False(OwnProcesses.IsOwn(4321, _proc, Own));
+    }
+
+    [Fact]
+    public void AProcessThatIsntThereIsNotOwn()
+    {
+        Assert.False(OwnProcesses.IsOwn(4321, _proc, Own));
+    }
+
+    [Fact]
+    public void TheOwnUidForIsOwnIsReadFromSelf()
+    {
+        Add("self", "healdan-helper", Own);
+        Add("4321", "healdan-helper", Own);
+        Add("4322", "healdan-helper", "33017");
+
+        Assert.True(OwnProcesses.IsOwn(4321, _proc));
+        Assert.False(OwnProcesses.IsOwn(4322, _proc));
+    }
+
+    [Fact]
+    public void IsOwnThrowsWithoutAnOwnUid()
+    {
+        Add("4321", "healdan-helper", Own);
+
+        Assert.Throws<IOException>(() => OwnProcesses.IsOwn(4321, _proc));
+    }
+
     [LinuxFact]
     public void FindsTheTestsOwnProcessInTheRealProc()
     {
         var comm = File.ReadAllText("/proc/self/comm").Trim();
 
+        Assert.True(OwnProcesses.IsOwn(Environment.ProcessId));
         Assert.True(OwnProcesses.AnyNamed(comm));
         Assert.False(OwnProcesses.AnyNamed("no-such-process-" + Guid.NewGuid().ToString("N")[..4]));
     }

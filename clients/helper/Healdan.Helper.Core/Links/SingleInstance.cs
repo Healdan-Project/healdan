@@ -26,6 +26,12 @@ public sealed class SingleInstance : IDisposable
     private SingleInstance(FileStream? file) => _file = file;
 
     /// <summary>
+    /// True when this process holds the real lock, so it is the one helper; false for the lockless instance that
+    /// <see cref="TryAcquire"/> returns when the lock file can't be opened, which can't rule out a second helper.
+    /// </summary>
+    public bool HoldsLock => _file is not null;
+
+    /// <summary>
     /// The lock, or null when another process holds it, so a helper is already running. When the lock file can't be
     /// opened at all (the folder isn't writable, or the file is another user's), this logs it to <paramref name="log"/>
     /// and returns an instance that holds nothing, so the helper starts as it did before the lock; a second helper

@@ -6,6 +6,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Healdan.Helper.Core.Platform;
 
 namespace Healdan.Helper.Core.Channel;
 
@@ -76,16 +77,31 @@ public sealed record ChannelInfo(int Port, string Secret, int Pid)
         }
     }
 
+    /// <summary>
+    /// Whether <paramref name="pid"/> is a live process, and on Linux the user's own: another user's process that reuses a
+    /// stale pid isn't the helper. When the own uid can't be read, the pid alone decides.
+    /// </summary>
     private static bool IsAlive(int pid)
     {
         try
         {
             using var process = Process.GetProcessById(pid);
-            return !process.HasExited;
+            if (process.HasExited)
+                return false;
         }
         catch (ArgumentException)
         {
             return false;
+        }
+        if (!OperatingSystem.IsLinux())
+            return true;
+        try
+        {
+            return OwnProcesses.IsOwn(pid);
+        }
+        catch (IOException)
+        {
+            return true;
         }
     }
 }

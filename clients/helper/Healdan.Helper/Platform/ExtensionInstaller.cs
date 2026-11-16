@@ -61,7 +61,18 @@ internal sealed class ExtensionInstaller : IExtensionTools
 
     public bool LibreOfficeInstalled => OperatingSystem.IsMacOS() ? _libreOffice is not null : File.Exists(Unopkg);
 
-    public bool LibreOfficeRunning() => _app.IsRunning();
+    /// <summary>When Linux's process list can't be read it counts as running, so unopkg isn't run against a profile LibreOffice may have open.</summary>
+    public bool LibreOfficeRunning()
+    {
+        try
+        {
+            return _app.IsRunning();
+        }
+        catch (IOException)
+        {
+            return true;
+        }
+    }
 
     /// <summary>LibreOffice's user profile's registry, read without running anything.</summary>
     public InstalledExtension? ReadInstalled() => ExtensionVersion.FromRegistry(LibreOfficeProfile());
@@ -129,7 +140,7 @@ internal sealed class ExtensionInstaller : IExtensionTools
 
     private const int Timeout = -1;
 
-    /// <summary>Linux's unopkg; Task 22 settles where its package puts it.</summary>
+    /// <summary>Linux's unopkg, where Ubuntu's <c>libreoffice-script-provider-python</c> package puts it.</summary>
     private static string Unopkg => "/usr/lib/libreoffice/program/unopkg";
 
     /// <summary>

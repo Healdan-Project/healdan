@@ -42,6 +42,7 @@ public sealed class SingleInstanceTests : IDisposable
     {
         var first = SingleInstance.TryAcquire(Paths);
         Assert.NotNull(first);
+        Assert.True(first.HoldsLock);
 
         Assert.Null(SingleInstance.TryAcquire(Paths));
 
@@ -72,6 +73,7 @@ public sealed class SingleInstanceTests : IDisposable
         using var held = SingleInstance.TryAcquire(paths, new HelperLog(logFile));
 
         Assert.NotNull(held);
+        Assert.False(held.HoldsLock);
         Assert.Contains("a second Healdan Helper can't be ruled out", File.ReadAllText(logFile));
     }
 
