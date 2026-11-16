@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+using System.Diagnostics;
 using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Channel;
 using Healdan.Helper.Core.Logging;
@@ -19,20 +20,40 @@ public sealed class LinkHandOver(HelperPaths paths, HelperLog log, TimeSpan? tim
 {
     private const string Helper = "the running Healdan Helper";
 
-    /// <summary>True once the running helper has taken <paramref name="url"/>; it opens it as its own links.</summary>
-    public bool Send(string url)
+    private static readonly TimeSpan Retry = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>
+    /// True once the running helper has taken <paramref name="url"/>; it opens it as its own links. With a
+    /// <paramref name="wait"/> it tries again about every 250 ms until the helper takes it or the wait ends, as a helper
+    /// still signing in has no channel yet; without one it tries once.
+    /// </summary>
+    public bool Send(string url, TimeSpan? wait = null)
     {
         if (!HealdanLink.TryParse(url, out var n, out _, out _))
         {
             log.Warn("Dropped a link that isn't Healdan's open link");
             return false;
         }
-        if (!ChannelInfo.TryForward(paths, "link", new JsonObject { ["url"] = url }, timeout ?? TimeSpan.FromSeconds(3)))
+        if (!Forward(url, wait))
         {
             log.Warn($"Dropped a link to #{n}: {Helper} didn't take it, or nothing answers its channel");
             return false;
         }
         log.Info($"Handed a link to #{n} to {Helper}");
         return true;
+    }
+
+    private bool Forward(string url, TimeSpan? wait)
+    {
+        var until = Stopwatch.StartNew();
+        while (true)
+        {
+            if (ChannelInfo.TryForward(paths, "link", new JsonObject { ["url"] = url }, timeout ?? TimeSpan.FromSeconds(3)))
+                return true;
+            if (wait is not { } limit || until.Elapsed >= limit)
+                return false;
+            var left = limit - until.Elapsed;
+            Thread.Sleep(left < Retry ? left : Retry);
+        }
     }
 }

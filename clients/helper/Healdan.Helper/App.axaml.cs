@@ -11,6 +11,7 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
+using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core;
 using Healdan.Helper.Core.Addin;
 using Healdan.Helper.Core.Cycle;
@@ -101,6 +102,12 @@ public partial class App : Application
         // it until it has started.
         if (this.TryGetFeature<IActivatableLifetime>() is { } activatable)
             activatable.Activated += OnActivated;
+        // Linux starts the helper with the link as its argument; the session holds it until it has signed in.
+        if (OperatingSystem.IsLinux() && desktop.Args is { } args)
+        {
+            foreach (var arg in args.Where(a => HealdanLink.TryParse(a, out _, out _, out _)))
+                session.Links.Handle(arg).ContinueWith(t => _log.Error("A link failed", t.Exception), TaskContinuationOptions.OnlyOnFaulted);
+        }
 
         _tray = new TrayMenu(this, session, notifier, windows, extension.Check, () => desktop.Shutdown());
         NativeMenu.SetMenu(this, AppMenu.Build(windows.ShowAbout, windows.ShowSettings, MacPlatform.GiveBackFocus, () => desktop.Shutdown()));

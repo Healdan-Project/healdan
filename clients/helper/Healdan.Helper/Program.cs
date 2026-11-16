@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Healdan.Helper.Core;
 using Healdan.Helper.Core.Channel;
+using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Platform;
 
@@ -21,17 +22,24 @@ internal static class Program
 
     public static HelperLog Log { get; private set; } = null!;
 
+    private static SingleInstance? _instance;
+
     [STAThread]
     public static int Main(string[] args)
     {
         Paths = HelperPaths.For(DevRoot());
         Log = new HelperLog(Paths.Log);
-        if (AnotherHelperAnswers(Paths))
+        // Held for the life of the process (a static field, so the GC can't release it); a helper from before the lock
+        // holds none, so one that answers counts too.
+        _instance = SingleInstance.TryAcquire(Paths);
+        if (_instance is null || AnotherHelperAnswers(Paths))
         {
             // Two helpers would both send the same copies' saves. macOS starts a second copy of the app for a link
             // when it hands links to another copy than the one running, and sends the link as an Apple event once
             // the app runs, so this one starts just far enough to take it.
             Log.Info("Another Healdan Helper is running for this user, so this one hands it any link it was started for, and quits");
+            if (OperatingSystem.IsLinux())
+                return HandOverLinks(args);
             if (!OperatingSystem.IsMacOS())
                 return 0;
             WaitForDisplay();
@@ -39,6 +47,21 @@ internal static class Program
         }
         WaitForDisplay();
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
+    }
+
+    /// <summary>
+    /// Linux starts a new process for each click of a link, with the link as its argument, so this hands each one to the
+    /// running helper and quits, with no window. The helper may still be signing in, so it waits up to 30 s for it.
+    /// </summary>
+    private static int HandOverLinks(string[] args)
+    {
+        var handOver = new LinkHandOver(Paths, Log);
+        foreach (var arg in args)
+        {
+            if (HealdanLink.TryParse(arg, out _, out _, out _))
+                handOver.Send(arg, TimeSpan.FromSeconds(30));
+        }
+        return 0;
     }
 
     /// <summary>
