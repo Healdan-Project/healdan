@@ -57,7 +57,8 @@ Tell the people who need the document its password some other way than Healdan, 
 ### What a Password Stops
 
 - **The Healdan Helper and Healdan's API** can't open, download, check out or save a password-protected document,
-  though its properties can still be read. Open it in the web page instead. See
+  though its properties can still be read. Open it in the [Classic Interface](../../the-classic-interface/)
+  instead. See
   [Opening Documents](../../office/opening-documents/#what-cant-be-opened).
 - **Downloading several documents together** doesn't work with a password-protected one among them. See
   [Downloading Documents](../downloading-documents/#a-password-protected-document).

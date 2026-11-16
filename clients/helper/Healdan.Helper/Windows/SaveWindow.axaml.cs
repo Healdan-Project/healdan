@@ -17,8 +17,8 @@ namespace Healdan.Helper.Windows;
 /// once the folder can take documents and every required field has a value. The answer goes back on
 /// <c>/v1/save-new</c>: the extension then writes the document to the answer's temporary file and files it.
 /// <para>Its email mode, File to Healdan (M5 spec §7.3), files a message from Outlook: the folder and its properties as
-/// for a document, with the message's subject, sender and when it was sent shown read-only in place of the name (M1 names
-/// an email after its subject), and "Also file attachments as separate documents", unticked, with a tick for each
+/// for a document, with the message's subject, From, To, CC, Sent and Received shown read-only in place of the name (M1
+/// names an email after its subject; a field the message doesn't have isn't shown), and "Also file attachments as separate documents", unticked, with a tick for each
 /// attachment, in place of the format. The box ticks and unticks them all; each can be unticked while it's ticked.
 /// Its Save files through the window, with Save, Cancel and closing off meanwhile: once filed (or the matter holds the
 /// message already) it closes; a refusal shows in it, a property's under the field and an attachment's under its tick,

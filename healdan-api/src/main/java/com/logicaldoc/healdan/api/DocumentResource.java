@@ -558,7 +558,7 @@ public class DocumentResource {
 	static void refuseProtected(Document document, Session session, long docNumber) {
 		if (!ApiViews.opens(document, session))
 			throw ApiProblem.forbidden(
-					"Document #%d is protected by a password. Open it in Healdan's web page.".formatted(docNumber));
+					"Document #%d is protected by a password. Open it in the Classic Interface.".formatted(docNumber));
 	}
 
 	/**

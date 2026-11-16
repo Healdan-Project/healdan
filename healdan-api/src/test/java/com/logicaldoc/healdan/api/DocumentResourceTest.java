@@ -473,7 +473,7 @@ public class DocumentResourceTest extends ApiTestCase {
 
 		assertEquals(refused.toString(), 403, refused.status());
 		assertEquals("forbidden", refused.code());
-		assertEquals("Document #%d is protected by a password. Open it in Healdan's web page.".formatted(number(d)),
+		assertEquals("Document #%d is protected by a password. Open it in the Classic Interface.".formatted(number(d)),
 				refused.json().path("detail").textValue());
 		assertEquals(0, jdbc().queryForObject(
 				"select count(*) from ld_history where ld_event = 'event.downloaded' and ld_docid = ?", Integer.class,

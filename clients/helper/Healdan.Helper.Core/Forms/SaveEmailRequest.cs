@@ -12,7 +12,7 @@ namespace Healdan.Helper.Core.Forms;
 
 /// <summary>
 /// What filing a message asks of the Save window's email mode (M5 spec §7.3): the message as <c>inspect</c> found it
-/// (its subject, sender and when it was sent, read-only), the attachments to offer, and the folder to open at: a File
+/// (its subject, From, To, CC, Sent and Received, read-only), the attachments to offer, and the folder to open at: a File
 /// Here's whose form needs something typed or that Healdan refused, or the pane's first suggestion. There's no name: M1
 /// names every email after its subject (plan correction 10).
 /// </summary>

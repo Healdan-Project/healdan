@@ -405,7 +405,7 @@ public class PropertiesResourceTest extends ApiTestCase {
 
 		assertEquals(refused.toString(), 403, refused.status());
 		assertEquals("forbidden", refused.code());
-		assertEquals("Document #%s is protected by a password. Open it in Healdan's web page."
+		assertEquals("Document #%s is protected by a password. Open it in the Classic Interface."
 				.formatted(d.getCustomId()), refused.json().path("detail").textValue());
 		before.assertUnchanged();
 		// Its properties may still be read, and none is shown editable
