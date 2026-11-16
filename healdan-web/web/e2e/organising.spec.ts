@@ -176,8 +176,12 @@ test('moves two rows by dragging them onto a folder of the tree, and deletes two
   expect((await question.getByRole('listitem').allTextContents()).sort()).toEqual([NAMES.deleteOne, NAMES.deleteTwo].sort())
   await expect(question.getByText('The Trash is in the Classic Interface, where they can be restored.')).toBeVisible()
   await question.getByRole('button', { name: 'Cancel' }).click()
+  await expect(question).toHaveCount(0)
   expect((await document(numbers.deleteOne)).name).toBe(NAMES.deleteOne)
 
+  // Delete is a key of the list's rows, and the question gives the focus back to the row it was asked from only a frame after
+  // it has gone, which a slow WebKit did after the next key (2026-11-14): Delete waits for it, as a person waits for the ring
+  await expect.poll(() => row(list, NAMES.deleteOne).evaluate((element) => element.contains(globalThis.document.activeElement))).toBe(true)
   await page.keyboard.press('Delete')
   await page.getByRole('dialog', { name: 'Move 2 documents to the Trash?' }).getByRole('button', { name: 'Move to Trash' }).click()
   await expect(page.getByText('Moved 2 documents to the Trash')).toBeVisible()
