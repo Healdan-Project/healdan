@@ -56,6 +56,42 @@ describe('Toast', () => {
     expect(onAction).toHaveBeenCalledTimes(1)
   })
 
+  it('returns focus to the page control it came from after the action is pressed', async () => {
+    render(
+      <>
+        <button>Page</button>
+        <ToastRegion />
+      </>,
+    )
+    act(() => toastWithAction('Moved to the Trash', { label: 'Undo', onAction: vi.fn() }))
+    await screen.findByRole('status')
+    const page = screen.getByRole('button', { name: 'Page' })
+    page.focus()
+    await userEvent.keyboard('{F6}')
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    for (let i = 0; i < 4 && document.activeElement !== undo; i++) await userEvent.tab()
+    await userEvent.keyboard('{Enter}')
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(document.activeElement).toBe(page)
+  })
+
+  it('shows a second toast after the first has closed, and F6 still reaches it', async () => {
+    render(
+      <>
+        <button>Page</button>
+        <ToastRegion />
+      </>,
+    )
+    act(() => toastWithAction('First', { label: 'Undo', onAction: vi.fn() }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }))
+    expect(screen.queryByRole('status')).toBeNull()
+    act(() => toastWithAction('Second', { label: 'Undo', onAction: vi.fn() }))
+    await screen.findByRole('status')
+    screen.getByRole('button', { name: 'Page' }).focus()
+    await userEvent.keyboard('{F6}')
+    expect(screen.getByRole('region').contains(document.activeElement)).toBe(true)
+  })
+
   describe('timing', () => {
     beforeEach(() => vi.useFakeTimers())
     afterEach(() => vi.useRealTimers())
