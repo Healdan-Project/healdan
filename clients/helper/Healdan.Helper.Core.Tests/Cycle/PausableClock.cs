@@ -13,6 +13,7 @@ public sealed class PausableClock : TimeProvider
     private readonly object _lock = new();
     private long _behind; // how far behind the real clock this one is, in timestamp ticks
     private long? _stoppedAt; // the real clock's timestamp when this one stopped
+    private DateTimeOffset _stoppedUtc; // the real time of day when this one stopped
 
     public override long GetTimestamp()
     {
@@ -20,17 +21,26 @@ public sealed class PausableClock : TimeProvider
             return (_stoppedAt ?? TimeProvider.System.GetTimestamp()) - _behind;
     }
 
-    /// <summary>The real time of day, moved as this clock has been: stopped, or moved on by hand.</summary>
+    /// <summary>
+    /// The real time of day, moved as this clock has been: stopped, or moved on by hand. While it's stopped, it's the time
+    /// of day read when it stopped, never the real clock, so every reading gives the same moment to the tick, however long
+    /// the runner pauses between them.
+    /// </summary>
     public override DateTimeOffset GetUtcNow()
     {
-        var real = TimeProvider.System.GetTimestamp();
-        return TimeProvider.System.GetUtcNow() + GetElapsedTime(real, GetTimestamp());
+        lock (_lock)
+            return (_stoppedAt is null ? TimeProvider.System.GetUtcNow() : _stoppedUtc) - GetElapsedTime(0, _behind);
     }
 
     public void Pause()
     {
         lock (_lock)
-            _stoppedAt ??= TimeProvider.System.GetTimestamp();
+        {
+            if (_stoppedAt is not null)
+                return;
+            _stoppedAt = TimeProvider.System.GetTimestamp();
+            _stoppedUtc = TimeProvider.System.GetUtcNow();
+        }
     }
 
     /// <summary>Starts it again from where it stopped.</summary>

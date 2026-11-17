@@ -31,13 +31,6 @@ public sealed class PairingTests : IDisposable
 
     private string Shown => _windows.ShownCode ?? throw new InvalidOperationException("No pairing code is shown.");
 
-    /// <summary>
-    /// The two times are the same moment. The stopped clock gives the time of day from two readings, so the same moment can
-    /// come back a tick or two apart.
-    /// </summary>
-    private static void Same(DateTimeOffset expected, DateTimeOffset actual) =>
-        Assert.InRange((actual - expected).Duration(), TimeSpan.Zero, TimeSpan.FromMilliseconds(5));
-
     /// <summary>A code that isn't <paramref name="code"/>.</summary>
     private static string Not(string code) => code == "000000" ? "111111" : "000000";
 
@@ -52,7 +45,7 @@ public sealed class PairingTests : IDisposable
         var (app, code, expires) = Assert.Single(_windows.PairingCodes);
         Assert.Equal("Word", app);
         Assert.Matches("^[0-9]{6}$", code);
-        Same(_clock.GetUtcNow() + TimeSpan.FromMinutes(2), expires);
+        Assert.Equal(_clock.GetUtcNow() + TimeSpan.FromMinutes(2), expires);
         Assert.Equal(code, _windows.ShownCode);
 
         // Each pairing has a code of its own, drawn at random.
@@ -155,7 +148,7 @@ public sealed class PairingTests : IDisposable
         Assert.Equal(["hash", "app", "paired"], entry.Select(p => p.Key));
         Assert.Equal(hash, (string?)entry["hash"]);
         Assert.Equal("PowerPoint", (string?)entry["app"]);
-        Same(_clock.GetUtcNow(), DateTimeOffset.Parse((string)entry["paired"]!, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(_clock.GetUtcNow(), DateTimeOffset.Parse((string)entry["paired"]!, System.Globalization.CultureInfo.InvariantCulture));
         if (!OperatingSystem.IsWindows())
             Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, File.GetUnixFileMode(file));
         Assert.Empty(Directory.GetFiles(_root, "*.tmp")); // written whole, then renamed into place
@@ -289,7 +282,7 @@ public sealed class PairingTests : IDisposable
 
         var paired = pairing.Paired();
         Assert.Equal(["Word", "Excel"], paired.Select(p => p.App)); // each app once, as Settings lists them
-        Assert.All(paired, p => Same(_clock.GetUtcNow(), p.Paired)); // Word's latest pairing, not its first
+        Assert.All(paired, p => Assert.Equal(_clock.GetUtcNow(), p.Paired)); // Word's latest pairing, not its first
 
         pairing.Forget("Word");
 
@@ -310,7 +303,7 @@ public sealed class PairingTests : IDisposable
         Assert.Equal("Word", restarted.AppFor(key));
         var app = Assert.Single(restarted.Paired());
         Assert.Equal("Word", app.App);
-        Same(paired, app.Paired);
+        Assert.Equal(paired, app.Paired);
     }
 
     [Fact]
