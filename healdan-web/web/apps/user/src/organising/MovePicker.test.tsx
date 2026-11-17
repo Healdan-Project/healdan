@@ -236,8 +236,8 @@ describe('The Move To… picker, for a folder', () => {
     expect(await screen.findByText('Moved "Drafts" to 1001.1 – Charter Dispute')).toBeTruthy()
   })
 
-  it("with documents in the selection, greys a matter's top level out for them, as it does now", async () => {
-    const { all } = pickerRoutes(admin)
+  it("with documents in the selection, greys a matter's top level out when nothing selected can go there", async () => {
+    const { all } = pickerRoutes()
     await renderApp('/folders/7', all)
     await select(/Lease/)
     await addRow(/Drafts/)
@@ -245,6 +245,23 @@ describe('The Move To… picker, for a folder', () => {
     await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
     expect(await within(dialog).findByText('Open a folder inside the matter to move the documents into it.')).toBeTruthy()
     expect((await here(dialog)).hasAttribute('disabled')).toBe(true)
+  })
+
+  it("moves an administrator's folders to a matter's top level with documents selected too, and says the documents stayed, as a drop does", async () => {
+    const { all, written } = pickerRoutes(admin)
+    const { api } = await renderApp('/folders/7', all)
+    await select(/Lease/)
+    await addRow(/Drafts/)
+    const dialog = await pickFor(/Lease/, 'Move 2 Items')
+    await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
+    const button = await here(dialog)
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
+    await userEvent.click(button)
+
+    await waitFor(() => expect(written.movedFolders).toEqual([{ id: 8, folderId: 110 }]))
+    expect(api.callsTo('POST /v1/documents/*/move')).toHaveLength(0)
+    const refusals = await screen.findByRole('dialog', { name: "Some Items Weren't Moved" })
+    expect(within(refusals).getAllByRole('listitem').map((one) => one.textContent)).toEqual([expect.stringMatching(/^Lease\.docx: /)])
   })
 
   it("moves each item with its own call, the documents first, and says where they went", async () => {

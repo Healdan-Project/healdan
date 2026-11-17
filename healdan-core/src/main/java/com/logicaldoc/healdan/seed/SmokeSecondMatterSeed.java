@@ -38,7 +38,8 @@ import com.logicaldoc.util.spring.Context;
  * once {@code smoke-organising} has given them to the template.
  * <p>
  * Without the Store, the template or client 1, as on a stack whose fixture
- * step was skipped, it does nothing and counts as done. Without the variable
+ * step was skipped, or without the user {@code admin}, who makes it, it does
+ * nothing and counts as done. Without the variable
  * the step does nothing and writes no marker, so it can run on a later start.
  */
 @Component
@@ -108,6 +109,10 @@ public class SmokeSecondMatterSeed implements SeedStep {
 			return;
 
 		User admin = UserDAO.get().findByUsername("admin", true);
+		if (admin == null) {
+			log.warn("No user admin to make matter {}.{} as", CLIENT, NUMBER);
+			return;
+		}
 		MatterService.get().create(new NewMatter(client.getId(), NUMBER, NAME, null, stores.get(0).getId(),
 				admin.getId(), templates.get(0).getId()), admin);
 	}

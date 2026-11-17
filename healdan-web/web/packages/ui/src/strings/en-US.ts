@@ -367,6 +367,8 @@ export const enUS = {
   // toast, and why a folder can't be moved or wasn't, never naming what the person can't read (spec 4.2)
   'move.oneTitle': 'Move "{name}"',
   'move.itself': 'The folder itself',
+  // The same, said as a sentence: a toast, or a line of Refusals, after a drop or a choice that would put a folder in its tree
+  'move.intoItself': "A folder can't be moved into itself or a folder inside it.",
   'move.already': 'Already there',
   'move.adminsOnly': 'Administrators only',
   'move.notAllowed': "It holds items you don't have permission to move.",
@@ -420,7 +422,8 @@ export const enUS = {
   'trash.folder': 'Folder',
   'trash.emptyTitle': 'Nothing in the Trash.',
   'trash.emptyLine': 'What you delete comes here, and you can restore it from here.',
-  'trash.removedLede': "What people removed from their Trash. Restore puts an item back where it was deleted from; after {days} days it's destroyed.",
+  // {days} is the plural trash.days, such as "30 days"
+  'trash.removedLede': "What people removed from their Trash. Restore puts an item back where it was deleted from; after {days} it's destroyed.",
   // A Removed By the upgrade didn't record
   'trash.notRecorded': 'Not recorded',
   'trash.restored': 'Restored "{name}" to {place}',
@@ -430,7 +433,6 @@ export const enUS = {
   'trash.cantRestore': '"{name}" can\'t be restored from here.',
   'remove.oneTitle': 'Remove "{name}" from the Trash?',
   'remove.emptyTitle': 'Empty the Trash?',
-  'remove.adminCan': "You won't be able to restore it. An administrator can, for {days} days.",
   'remove.confirm': 'Remove',
   'remove.emptyConfirm': 'Empty Trash',
   // What a deleted folder holds: in the questions, and in the details
@@ -528,6 +530,13 @@ export const enUSPlurals = {
   'trash.items': { one: '{n} item', other: '{n} items' },
   'remove.manyTitle': { one: 'Remove {n} item from the Trash?', other: 'Remove {n} items from the Trash?' },
   'remove.emptyLine': { one: 'This removes the {n} item you deleted.', other: 'This removes all {n} items you deleted.' },
+  // The last line of Remove's and Empty Trash's questions, by how many items they remove; {days} is trash.days
+  'remove.adminCan': {
+    one: "You won't be able to restore it. An administrator can, for {days}.",
+    other: "You won't be able to restore them. An administrator can, for {days}.",
+  },
+  // How long an administrator can still restore what's removed, as the administrators set it
+  'trash.days': { one: '{n} day', other: '{n} days' },
   'holds.folders': { one: '{n} folder', other: '{n} folders' },
   'holds.documents': { one: '{n} document', other: '{n} documents' },
 } as const

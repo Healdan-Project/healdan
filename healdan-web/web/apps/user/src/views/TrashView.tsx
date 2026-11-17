@@ -13,6 +13,7 @@ import { messageFor } from '../frame/errors'
 import { RightRegionView } from '../frame/RightRegion'
 import { ConfirmRemove, type RemoveQuestion } from '../organising/ConfirmRemove'
 import { MovePicker } from '../organising/MovePicker'
+import { focusIfLost, rowAfterKeys } from '../organising/rows'
 import { useMe, useTrash } from '../queries'
 import { useApi } from '../services'
 import { Toolbar } from './Toolbar'
@@ -127,9 +128,13 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
     }
   }
 
-  /** What changed is asked again: the Trash's views and what shows documents, with the restored documents named */
+  /**
+   * What changed is asked again: the Trash's views and what shows documents, with the restored documents named, and for a
+   * folder, whose documents aren't named here, every message that shows a copy (invalidateDocumentLists)
+   */
   function refresh(restored: readonly Item[] = []) {
-    return invalidateDocumentLists(queryClient, restored.flatMap((item) => (item.docNumber === null ? [] : [item.docNumber])))
+    const named = restored.some((item) => item.type === 'folder') ? 'any' : restored.flatMap((item) => (item.docNumber === null ? [] : [item.docNumber]))
+    return invalidateDocumentLists(queryClient, named)
   }
 
   function toastRestored(done: S['RestoredItem']) {
@@ -155,7 +160,7 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
       for (const done of outcome.done) toastRestored(done)
       for (const { item, error } of outcome.refused) refused(item, error)
       if (outcome.placeGone.length > 0) setPicking(outcome.placeGone)
-      if (outcome.done.length > 0) refocus(next)
+      if (outcome.done.length > 0) focusIfLost(next)
     })
   }
 
@@ -173,7 +178,7 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
         const done = await restoreTrashItem(api, item.id, folderId)
         await refresh([item])
         toastRestored(done)
-        refocus(next)
+        focusIfLost(next)
       } catch (error) {
         await refresh()
         refused(item, error)
@@ -200,7 +205,7 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
         }
       }
       await refresh()
-      refocus(next)
+      focusIfLost(next)
     })
   }
 
@@ -270,7 +275,7 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
           {/* Administrators only (/v1/me's admin); others never see it */}
           {admin && <ToggleButtons label={t('trash.show')} choices={trashViews.map((one) => ({ value: one, label: t(`trash.view.${one}`) }))} value={view} onChange={showView} />}
         </div>
-        {view === 'removed' && removedDays !== undefined && <p className={styles.lede}>{t('trash.removedLede', { days: removedDays })}</p>}
+        {view === 'removed' && removedDays !== undefined && <p className={styles.lede}>{t('trash.removedLede', { days: plural('trash.days', removedDays) })}</p>}
         {paged.isError ? (
           <ErrorPanel error={paged.error} onRetry={paged.refetch} />
         ) : (
@@ -343,30 +348,7 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
 
 /** The key of the row that follows the items' rows in the list drawn now, else the one before them, else none */
 function rowAfter(items: readonly Item[]): string | undefined {
-  const gone = new Set(items.map(keyOf))
-  const keys = Array.from(globalThis.document.querySelectorAll('[role="grid"] [data-row-key]'), (row) => row.getAttribute('data-row-key') ?? '')
-  const last = keys.findLastIndex((key) => gone.has(key))
-  if (last < 0) return undefined
-  return keys.slice(last + 1).find((key) => !gone.has(key)) ?? keys.slice(0, last).findLast((key) => !gone.has(key))
-}
-
-/**
- * Once the list is drawn again, a focus the change left nowhere (on the page, on a row that's gone, or on a button that no
- * longer applies) goes to that row, or to the list: a keyboard user keeps their place. A focus somewhere else, such as the
- * picker that asks where, stays.
- */
-function refocus(key: string | undefined) {
-  let tries = 0
-  const attempt = () => {
-    // A test's page can go with the timer still set, as focusLater's can (rows.ts)
-    if (!globalThis.document) return
-    const active = globalThis.document.activeElement
-    const lost = !active || active === globalThis.document.body || !active.isConnected || (active instanceof HTMLButtonElement && active.disabled)
-    const target = lost ? ((key ? globalThis.document.querySelector<HTMLElement>(`[role="grid"] [data-row-key="${key}"]`) : null) ?? globalThis.document.querySelector<HTMLElement>('[role="grid"]')) : null
-    if (target) target.focus()
-    else if (++tries < 10) setTimeout(attempt, 50)
-  }
-  setTimeout(attempt, 0)
+  return rowAfterKeys(items.map(keyOf))?.key
 }
 
 /** The items, each once: offset pages shift when items come or go between them, so a page can repeat the last one's end */

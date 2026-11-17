@@ -125,10 +125,12 @@ describe('Dragging a folder', () => {
     const { api } = await renderApp('/folders/7', all)
     await expand(/^Correspondence/)
     await dragOnto(await row(/Drafts/), /^Drafts/)
-    expect(await screen.findByText('The folder itself')).toBeTruthy()
+    // A sentence, not the picker's label
+    const intoItself = "A folder can't be moved into itself or a folder inside it."
+    expect(await screen.findByText(intoItself)).toBeTruthy()
     await expand(/^Drafts/)
     await dragOnto(await row(/Drafts/), /Old Versions/)
-    await waitFor(() => expect(screen.getAllByText('The folder itself')).toHaveLength(2))
+    await waitFor(() => expect(screen.getAllByText(intoItself)).toHaveLength(2))
     expect(written.movedFolders).toEqual([])
     expect(api.callsTo('POST /v1/folders/*/move')).toHaveLength(0)
   })

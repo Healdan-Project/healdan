@@ -16,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import com.logicaldoc.healdan.rules.HealdanHooksImpl;
 import com.logicaldoc.healdan.seed.demo.Backdater;
 import com.logicaldoc.healdan.seed.demo.DemoClock;
 import com.logicaldoc.healdan.seed.demo.DemoFirm;
@@ -90,9 +89,6 @@ public class DemoFixtureSeed implements SeedStep {
 		DemoManifest manifest = DemoManifest.read(manifestFile);
 		DemoClock clock = new DemoClock(today.get(), ZoneId.systemDefault());
 
-		// Healdan's hooks register when their bean is made, which Spring may do after the seeds run. Without them a
-		// folder's delete here records no Trash item, as a person's does
-		Context.get(HealdanHooksImpl.class);
 		Backdater backdater = new Backdater(jdbc);
 		DemoFirm firm = new DemoFirm(manifest, password).build();
 		// The firm is set up the day before its first action

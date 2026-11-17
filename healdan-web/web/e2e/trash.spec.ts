@@ -168,7 +168,7 @@ test('deletes two documents and Empty Trash leaves the Trash empty', async ({ pa
   await main(page).getByRole('toolbar', { name: 'Trash Actions' }).getByRole('button', { name: 'Empty Trash…' }).click()
   const question = page.getByRole('dialog', { name: 'Empty the Trash?' })
   await expect(question.getByText(/^This removes all \d+ items you deleted\.$/)).toBeVisible()
-  await expect(question.getByText(/You won't be able to restore it\. An administrator can, for \d+ days\./)).toBeVisible()
+  await expect(question.getByText(/You won't be able to restore them\. An administrator can, for \d+ days?\./)).toBeVisible()
   // Cancel, which has the focus, removes nothing
   await expect(question.getByRole('button', { name: 'Cancel' })).toBeFocused()
   await question.getByRole('button', { name: 'Cancel' }).click()

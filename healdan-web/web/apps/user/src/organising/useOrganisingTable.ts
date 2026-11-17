@@ -43,7 +43,7 @@ export function useOrganisingTable(rows: readonly Hit[], selection: ReadonlySet<
   const itemsOf = (keys: Iterable<string>): OrganisingItems => ({ documents: documentsOf(keys), folders: foldersOf(keys).map(movingFolder) })
   const selected = documentsOf(selection)
   const selectedFolders: MovingFolder[] = foldersOf(selection).map(movingFolder)
-  const contextMenu = useListMenu({ rows, selection, onSelect, selected })
+  const contextMenu = useListMenu({ rows, selection, onSelect, selected, folders: selectedFolders })
   return {
     selected,
     folders: selectedFolders,

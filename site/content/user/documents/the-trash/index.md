@@ -77,8 +77,9 @@ holds. Choose **Remove**, in red, or **Cancel**, which has the focus.
 
 > You won't be able to restore it. An administrator can, for 30 days.
 
-The days are the number your administrator has set. **Empty Trash…**, at the right of the toolbar, asks "Empty the
-Trash?", says "This removes all 4 items you deleted." and ends the same way. Choose **Empty Trash**.
+The days are the number your administrator has set. For several items it says "them". **Empty Trash…**, at the right
+of the toolbar, asks "Empty the Trash?", says "This removes all 4 items you deleted." and ends the same way. Choose
+**Empty Trash**.
 
 Nothing in the app destroys anything. After the days an administrator sets, a nightly job destroys what was removed.
 

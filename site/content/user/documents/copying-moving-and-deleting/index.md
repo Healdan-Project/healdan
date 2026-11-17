@@ -110,6 +110,10 @@ In the window, a choice Healdan won't allow is greyed out with its reason:
 
 A search folder is never listed. Healdan won't move a folder into a Store, a search folder or its own tree.
 
+With folders and documents selected together, **Move Here** is greyed out only where none of them can go. At the top of
+a matter, an administrator's folders move there, and "Some Items Weren't Moved" says the documents stayed, as a drag
+does.
+
 - **You need the Move permission** on the folder and on everything inside it, including what you can't see, and the
   Add permission on the folder you move it to. Without it Healdan says "It holds items you don't have permission to
   move." or "You don't have permission to move this folder."

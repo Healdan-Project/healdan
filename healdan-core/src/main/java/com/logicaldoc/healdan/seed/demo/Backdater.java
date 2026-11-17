@@ -114,14 +114,18 @@ public final class Backdater {
 	/**
 	 * Dates the Trash item a delete recorded, whose time is the real one. A
 	 * delete records no member with a time of its own while the rows are
-	 * deleted, so the item's is the only one.
+	 * deleted, so the item's is the only one. Only the newest item of the
+	 * object is dated, the one the delete just made: an earlier delete of it,
+	 * since restored, keeps its own date.
 	 *
 	 * @param kind {@code document} or {@code folder}
 	 * @param objectId the id of the document or folder the delete was of
 	 */
 	public void touchTrash(String kind, long objectId, Date when) {
-		jdbc.update("update hd_trash set hd_deletedat = ? where hd_kind = ? and hd_objectid = ?",
-				new Timestamp(when.getTime()), kind, objectId);
+		Long item = jdbc.queryForObject("select max(hd_id) from hd_trash where hd_kind = ? and hd_objectid = ?",
+				Long.class, kind, objectId);
+		if (item != null)
+			jdbc.update("update hd_trash set hd_deletedat = ? where hd_id = ?", new Timestamp(when.getTime()), item);
 	}
 
 	/**

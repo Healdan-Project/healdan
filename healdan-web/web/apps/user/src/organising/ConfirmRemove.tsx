@@ -49,7 +49,8 @@ export function ConfirmRemove({ question, removedDays, onConfirm, onCancel }: Co
               ))}
             </ul>
           )}
-          <p>{t('remove.adminCan', { days: removedDays })}</p>
+          {/* "it" for one item, "them" for several or all the person deleted, and the days counted as days are */}
+          <p>{plural('remove.adminCan', empty ? question.empty : items.length, { days: plural('trash.days', removedDays) })}</p>
           <div className={styles.actions}>
             <Button autoFocus onPress={close}>
               {t('common.cancel')}

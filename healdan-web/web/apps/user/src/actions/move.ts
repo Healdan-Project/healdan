@@ -4,18 +4,13 @@
 import { apiPath, type Api, type components } from '@healdan/api'
 import type { StringKey } from '@healdan/ui'
 import { refusalOf, type Place } from '../filing/dropTargets'
-import { eachDocument, type Movable, type OneItem, type OrganisingItems, type Outcome } from './batch'
+import type { Movable, OneItem, OrganisingItems } from './batch'
 import { whyNotMove, type MovingFolder } from './folders'
 
 type S = components['schemas']
 
 export function moveDocument(api: Api, docNumber: number, folderId: number): Promise<S['DocumentView']> {
   return api.send('POST', apiPath`/v1/documents/${docNumber}/move`, { folderId })
-}
-
-/** Moves each document into the folder with a call of its own; a refused one doesn't stop the others. */
-export function moveDocuments(api: Api, documents: readonly Movable[], folderId: number): Promise<Outcome> {
-  return eachDocument(documents, (document) => moveDocument(api, document.docNumber, folderId))
 }
 
 /** What a move into a place will do: the documents and folders it moves, and those it refuses before any call, with why */
@@ -35,9 +30,9 @@ export function planMove(items: OrganisingItems, place: Place, admin: boolean | 
   const plan: MovePlan = { documents: [], folders: [], refused: [] }
   for (const folder of items.folders) {
     if (folder.parentId === place.id) continue
-    // The place's path holds the place itself
+    // The place's path holds the place itself. Said as a sentence: the picker's "The folder itself" is a label
     const inside = folder.id === place.id || place.path?.includes(folder.id) === true
-    const reason = inside ? 'move.itself' : (whyNotMove(folder, admin) ?? folderRule(place, admin))
+    const reason = inside ? 'move.intoItself' : (whyNotMove(folder, admin) ?? folderRule(place, admin))
     if (reason) plan.refused.push({ folder, reason })
     else plan.folders.push(folder)
   }

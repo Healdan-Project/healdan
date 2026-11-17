@@ -575,7 +575,8 @@ address (`?view=`). It is a group of toggle buttons named **Show** (changed in t
 - **Move To…:** the documents' picker. It greys out, with the reason, the folder itself and everything in it ("The
   folder itself"), where it already is ("Already there"), a matter's top level for anyone but an admin ("Administrators
   only"), search folders, and, for documents in the selection, a matter's top level as now. Move Here then calls each
-  item's move. Changed in the build: search folders stay out of the picker, as they are today, since a row nobody can
+  item's move. Changed in the review: Move Here is greyed out only where nothing selected can go, so at a matter's top
+  level an admin's folders move and Refusals says the documents, as a drop does (`planMove`). Changed in the build: search folders stay out of the picker, as they are today, since a row nobody can
   choose adds nothing (correction 12); and "Already there" also greys Move Here out when every selected document is
   already there (Ruling 37).
 - **Leaving its matter (owner: A):** before a folder moves into another matter, by drag or by Move To…, the app asks
@@ -663,10 +664,10 @@ the new hooks, `deleteTree`'s early return and the two folder moves. CMIS's `del
 - **`healdan-core`:** the V11 migration; `trash/` (the record's DAO, the recording listener and hooks, removal, restore
   scope, `TrashDestroyer`, the setting); `FilingRules`, `PermissionRules`, `HealdanHooksImpl`; `HealdanSettings` and
   `HealdanSettingsServiceImpl`; tests. As built: the seeds `trash-record-existing` (§4.7), `trash-system-destroy`
-  (correction 9) and `smoke-second-matter` (correction 15). The demo firm's `DemoFixtureSeed` asks Spring for
-  `HealdanHooksImpl` before its timeline: seeds run from `HealdanStartup`'s start, which Spring can call before that
-  bean registers Healdan's hooks, so the demo's folder delete recorded no Trash item. Its `Backdater` dates each delete's
-  item to the step's time, so the User Guide's Trash picture comes from the demo firm (changed in the build: Ruling 39).
+  (correction 9) and `smoke-second-matter` (correction 15). Seeds run from `HealdanStartup`'s start, which Spring could
+  call before `HealdanHooksImpl` registers Healdan's hooks, so the demo's folder delete recorded no Trash item; the build
+  had the demo firm's `DemoFixtureSeed` ask Spring for that bean first, and the review made `HealdanStartup` depend on it
+  (`@DependsOn`), for every seed. The demo's `Backdater` dates each delete's newest item to the step's time, so the User Guide's Trash picture comes from the demo firm (changed in the build: Ruling 39).
 - **`healdan-api`:** `FolderResource` (delete, move), `TrashResource`, `ApiViews` (`canMove`, `canDelete`,
   `TrashItem`), `DocumentChanges.delete`'s answer, models, `openapi.yaml`, tests. As built, `FolderResource`'s delete,
   move and contents (§6.6) hand their work to `FolderChanges`, and `TrashViews` reads the Trash's lists.

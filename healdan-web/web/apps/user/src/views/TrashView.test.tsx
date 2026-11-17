@@ -297,13 +297,21 @@ describe('The Trash', () => {
     await waitFor(() => expect(api.callsTo('DELETE /v1/trash/*').map((call) => call.path)).toEqual(['/v1/trash/701']))
   })
 
+  it('says a single day as a day', async () => {
+    await renderApp('/trash', routes({ 'GET /v1/trash': trashPage(mine, 1) }))
+    await selectRows(/Old Drafts/)
+    fireEvent.click(within(await toolbar()).getByRole('button', { name: 'Remove…' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Remove "Old Drafts" from the Trash?' })
+    expect(within(dialog).getByText("You won't be able to restore it. An administrator can, for 1 day.")).toBeTruthy()
+  })
+
   it('asks before removing several, listing them', async () => {
     const { api } = await renderApp('/trash', routes())
     await selectRows(/Old Drafts/, 1)
     fireEvent.click(within(await toolbar()).getByRole('button', { name: 'Remove…' }))
     const dialog = await screen.findByRole('dialog', { name: 'Remove 2 items from the Trash?' })
     expect(within(dialog).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Old Drafts', 'Letter to Harbour Master v2.docx'])
-    expect(within(dialog).getByText("You won't be able to restore it. An administrator can, for 30 days.")).toBeTruthy()
+    expect(within(dialog).getByText("You won't be able to restore them. An administrator can, for 30 days.")).toBeTruthy()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(api.callsTo('DELETE /v1/trash/*').map((call) => call.path)).toEqual(['/v1/trash/701', '/v1/trash/702']))
   })
@@ -314,7 +322,7 @@ describe('The Trash', () => {
     fireEvent.click(within(await toolbar()).getByRole('button', { name: 'Empty Trash…' }))
     const dialog = await screen.findByRole('dialog', { name: 'Empty the Trash?' })
     expect(within(dialog).getByText('This removes all 3 items you deleted.')).toBeTruthy()
-    expect(within(dialog).getByText("You won't be able to restore it. An administrator can, for 45 days.")).toBeTruthy()
+    expect(within(dialog).getByText("You won't be able to restore them. An administrator can, for 45 days.")).toBeTruthy()
     const confirm = within(dialog).getByRole('button', { name: 'Empty Trash' })
     expect(confirm.className).toContain('danger')
     await expectNoAxeViolations(dialog)
