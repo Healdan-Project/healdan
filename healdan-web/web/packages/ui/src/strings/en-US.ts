@@ -367,6 +367,7 @@ export const enUS = {
   'problems.admins-only': 'Only administrators can do that.',
   'problems.items-not-allowed': "It holds items you don't have permission to change.",
   'problems.name-taken': "There's already one with that name here.",
+  'problems.place-gone': "The folder it was deleted from is gone, or you can't restore into it. Choose another.",
   'problems.immutable': "It holds an immutable document, which can't be deleted.",
   'problems.refused': 'That was refused.',
   'problems.too-large': 'That file is too large.',

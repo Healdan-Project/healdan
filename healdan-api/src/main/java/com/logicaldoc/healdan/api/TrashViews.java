@@ -97,7 +97,7 @@ final class TrashViews {
 	 * @throws PersistenceException error at data layer
 	 */
 	static TrashItem item(TrashItemRow row, User caller) throws PersistenceException {
-		boolean folder = FOLDER.equals(row.kind());
+		boolean folder = isFolder(row);
 		TrashStore store = TrashStore.get();
 		TrashState state = store.state(row.id());
 
@@ -124,6 +124,14 @@ final class TrashViews {
 				deletedFrom(row, caller), ApiViews.matterRef(matter),
 				ApiViews.userRef(row.deletedById(), row.deletedByName()), Date.from(row.deletedAt()), removedBy,
 				removedAt, destroyAfter);
+	}
+
+	/**
+	 * @param row an item of the Trash's record
+	 * @return true for a folder's delete, false for a document's
+	 */
+	static boolean isFolder(TrashItemRow row) {
+		return FOLDER.equals(row.kind());
 	}
 
 	/**

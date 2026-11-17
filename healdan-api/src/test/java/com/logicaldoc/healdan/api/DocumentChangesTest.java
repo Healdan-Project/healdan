@@ -10,6 +10,7 @@ import static org.junit.Assert.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -40,6 +41,9 @@ import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.trash.TrashMember;
+import com.logicaldoc.healdan.trash.TrashState;
+import com.logicaldoc.healdan.trash.TrashStore;
 
 /**
  * {@code PATCH}, {@code POST .../move} and {@code DELETE} on
@@ -347,7 +351,20 @@ public class DocumentChangesTest extends ApiTestCase {
 
 		ApiResponse deleted = delete(path(d)).token(token).send();
 
-		assertEquals(deleted.toString(), 204, deleted.status());
+		// The answer is the Trash item the delete made, whose id a restore takes
+		assertEquals(deleted.toString(), 200, deleted.status());
+		JsonNode item = deleted.json();
+		assertEquals(TrashStore.get().itemHolding(new TrashMember('D', d.getId()), TrashState.DELETED).orElseThrow()
+				.longValue(), item.path("id").asLong());
+		assertEquals("document", item.path("type").textValue());
+		assertEquals("a.docx", item.path("name").textValue());
+		assertEquals(number(d), item.path("docNumber").asLong());
+		assertEquals("word", item.path("kind").textValue());
+		assertEquals(3, d.getFileSize());
+		assertEquals(d.getFileSize(), item.path("size").asLong());
+		assertTrue(item.path("contents").isNull());
+		assertEquals(documents.getId(), item.path("deletedFrom").path("folder").path("id").asLong());
+		assertEquals(clerk.getId(), item.path("deletedBy").path("id").asLong());
 		assertNotEquals(0, jdbc().queryForObject("select ld_deleted from ld_document where ld_id = ?", Integer.class,
 				d.getId()).intValue());
 		assertEquals(404, get(path(d)).token(token).send().status());
@@ -364,7 +381,7 @@ public class DocumentChangesTest extends ApiTestCase {
 		assertEquals(403, delete(path(d)).token(readerToken).send().status());
 		assertEquals(404, delete(path(d)).token(outsiderToken).send().status());
 		before.assertUnchanged();
-		assertEquals(204, delete(path(d)).token(signIn(viewer)).send().status());
+		assertEquals(200, delete(path(d)).token(signIn(viewer)).send().status());
 	}
 
 	@Test
@@ -456,10 +473,17 @@ public class DocumentChangesTest extends ApiTestCase {
 		Document d = file("a.docx");
 		Document shortcut = fx.legacyShortcut(d, drafts);
 
-		assertEquals(204, delete(path(d)).token(token).send().status());
+		ApiResponse deleted = delete(path(d)).token(token).send();
 
+		assertEquals(deleted.toString(), 200, deleted.status());
 		assertNotEquals(0, deleted(d));
 		assertNotEquals(0, deleted(shortcut));
+		// The shortcut went with the document, in its Trash item
+		long item = deleted.json().path("id").asLong();
+		assertEquals(Set.of(new TrashMember('D', d.getId()), new TrashMember('D', shortcut.getId())),
+				Set.copyOf(TrashStore.get().members(item, TrashState.DELETED)));
+		assertEquals(d.getFileSize(), deleted.json().path("size").asLong());
+		assertTrue(deleted.json().path("contents").isNull());
 	}
 
 	@Test

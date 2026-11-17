@@ -2,14 +2,15 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { describe, expect, it } from 'vitest'
-import { fakeApi, problem } from '../test/fakeApi'
+import { fakeApi, problem, trashItem } from '../test/fakeApi'
 import { removeDocument, removeDocuments } from './remove'
 
 describe('removeDocument', () => {
-  it('deletes the document, which moves it to the trash', async () => {
-    const api = fakeApi({ 'DELETE /v1/documents/10431': undefined })
-    await removeDocument(api, 10431)
+  it('deletes the document, which moves it to the Trash, and answers the Trash item', async () => {
+    const api = fakeApi({ 'DELETE /v1/documents/10431': trashItem({ id: 7, docNumber: 10431 }) })
+    const item = await removeDocument(api, 10431)
     expect(api.callsTo('DELETE /v1/documents/10431')).toHaveLength(1)
+    expect(item.id).toBe(7)
   })
 })
 
