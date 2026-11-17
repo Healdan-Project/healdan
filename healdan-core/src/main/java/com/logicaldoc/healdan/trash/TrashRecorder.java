@@ -126,7 +126,7 @@ public class TrashRecorder {
 		Folder parent = folders.findById(top.parentId());
 		long id = store.insert(new TrashItemRow(0L, folder.getTenantId(), FOLDER, folderId, folder.getName(), null,
 				top.parentId(), path(parent), matterOf(folderId, parent), tree.size() - 1, documents.size(),
-				actor.getId(), actor.getFullName(), now(folder.getTenantId())), members);
+				actor.getId(), actor.getFullName(), Instant.now()), members);
 		log.debug("Recorded the delete of folder {} as Trash item {}", folderId, id);
 		return id;
 	}
@@ -150,7 +150,7 @@ public class TrashRecorder {
 		long id = store.insert(new TrashItemRow(0L, folder.getTenantId(), FOLDER, folder.getId(), folder.getName(),
 				null, folder.getParentId(), path(parent), matterOf(folder.getId(), parent), 0, 0,
 				user != null ? Long.valueOf(user.getId()) : folder.getDeleteUserId(),
-				user != null ? user.getFullName() : folder.getDeleteUser(), now(folder.getTenantId())), List.of(self));
+				user != null ? user.getFullName() : folder.getDeleteUser(), Instant.now()), List.of(self));
 		log.debug("Recorded the delete of folder {} as Trash item {}", folder.getId(), id);
 	}
 
@@ -197,7 +197,7 @@ public class TrashRecorder {
 				document.getFileName(), target == null ? docNumber(document) : null,
 				folder != null ? folder.getId() : null, path(folder), matter != null ? matter.getId() : null, 0, 0,
 				user != null ? Long.valueOf(user.getId()) : document.getDeleteUserId(),
-				user != null ? user.getFullName() : document.getDeleteUser(), now(document.getTenantId())), members);
+				user != null ? user.getFullName() : document.getDeleteUser(), Instant.now()), members);
 		log.debug("Recorded the delete of document {} as Trash item {}", document.getId(), id);
 	}
 
@@ -282,15 +282,6 @@ public class TrashRecorder {
 		boolean numbered = customId != null && !customId.isEmpty() && customId.length() <= 18
 				&& customId.chars().allMatch(c -> c >= '0' && c <= '9');
 		return numbered ? customId : null;
-	}
-
-	/**
-	 * @return the database's time, read once per item, as CE's own updates
-	 *         stamp its rows
-	 */
-	private Instant now(long tenantId) {
-		return jdbc.queryForObject("select current_timestamp from ld_tenant where ld_id = ?",
-				(rs, n) -> rs.getTimestamp(1).toInstant(), tenantId);
 	}
 
 	private static TrashMember folderMember(long id) {
