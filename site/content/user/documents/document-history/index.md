@@ -53,7 +53,7 @@ Each event reads as it does on the tab:
 | Document metadata have been changed | its properties changed, its tags among them |
 | Document renamed, Document moved | its name or folder changed |
 | Added new note | someone added a [note](../notes/) |
-| The document has been locked, The document has been unlocked | a [lock](../locking-a-document/) |
+| The document has been locked, The document has been unlocked | a [lock](../locking-a-document/). Releasing a [check-out](../checking-out-and-checking-in/#giving-up-a-check-out) in the app records "The document has been unlocked" too, and when one of your computers held it, the comment names that computer and its app, such as "Released while checked out on Healdan Helper on MacBook (Word)" |
 | The document has been protected by a password | a password was set |
 | The document has been downloaded | someone downloaded it |
 | Document has been viewed | someone opened its preview: at most once every 30 seconds in each session |

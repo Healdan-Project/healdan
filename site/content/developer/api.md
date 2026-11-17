@@ -544,7 +544,9 @@ this, because the same person may have the document open on two computers.
   with the device's name and app, and that device's next save with `ifHeld: true` is `409 not-held`. Without the
   flag, or with `elsewhere=false`, the release is `409 held-elsewhere`. The flag changes nothing else: someone else
   still gets `409 checked-out` or `locked`, an administrator releases as before, and a check-out held on the
-  caller's own device, or on none, is released as it would be without it.
+  caller's own device, or on none, is released as it would be without it. An administrator's release is recorded in
+  the same way: whenever a check-out a device holds is released from anywhere but that device, the history's comment
+  names the device and its app, such as "Released while checked out on Healdan Helper on MacBook (Word)".
 - **Healdan's own pages are no device.** On the web session, a document you have checked out on one of your devices
   is `409 held-elsewhere`, as for a token with no device, and `move` can't bring the check-out to the page. A release
   with `elsewhere=true` can end it.

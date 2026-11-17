@@ -225,7 +225,8 @@ view.
 - **Release** (`actions/ReleaseProvider.tsx`, in the frame) is every release, from the toolbar, a row's menu and
   Check-Out Info: `useReleasing().askRelease(documents)` decides once, by `holdState`'s `yourDevice`, which of them
   another of the person's computers holds. When any is, it shows `ConfirmRelease` first, an alert dialog that lists
-  them by computer, with the red button first and Cancel focused; then it releases each in turn (`eachDocument`),
+  them by computer (by `hold.device.id`, not the name, so two computers of one name are two lists), with the red
+  button first and Cancel focused; then it releases each in turn (`eachDocument`),
   sending `elsewhere=true` only for those, and names the refusals in `Refusals`. Its mutation's variables are the
   documents, which `useHoldsBusy` reads to make every control that offers a change to one of them pending.
 - **Editing properties** is `details/PropertiesForm.tsx`, made from `GET /v1/documents/{n}/properties` and saved with

@@ -306,24 +306,35 @@ code is laid out.
     and checks the new name in **My Favorites** and through the API, the tooltip unchanged and the focus back on the
     favourite, then gives it the folder's name back with **Use Original Name**. Afterwards it removes the bookmark,
     if a failed run left it; the folder stays.
+  - `checked-out.spec.ts` checks **Checked Out to Me** and releasing another computer's check-out. It files a `.docx`
+    with a device token, in a folder of its own inside `E2E`, and checks it out for Word with that token, as the
+    helper does when Word opens it. Through the page it opens **Checked Out to Me** from its entry, and checks the
+    row's **Computer** (the token's name, and Word) and that the entry's badge equals the list's row count (the
+    list's `aria-rowcount`, as other runs may have documents checked out to `webuser`). It then opens the warning with
+    **Release…**, checks that **Cancel** has the focus and cancels, the document still checked out on the token's
+    computer, then releases it with **Release Document** and checks that the row leaves the list, that the badge
+    drops by one, and that the token's save with `ifHeld: true` is then `409 not-held`, as the computer's next save
+    would be. Afterwards it releases the document, if a failed run left it held, and signs the token out.
   - `a11y.spec.ts` runs axe on each main view in the light theme and again in the dark one (a browser context with
-    Playwright's `colorScheme`, signed in once per theme): Recent's four lists, a matter, a folder with details (its
-    toolbar buttons all one height, and a document the spec checked out through the API, and releases at the end, whose
-    row shows its marker and is 34 pixels high, as a free row is), the properties form, that document's details with
-    its **Check-Out Info** and the **Versions** tab, Filters (with one in use, and while the counts are held open
-    with `page.route`, since busy states keep AA contrast and the last answer's counts must stay, never zeros), the list
-    while it is asked for again, the filing tray and the File Documents form, the rename field, the delete question, the
-    Help menu, search results for a word with their Filters (Title keeps 200 pixels, and text that doesn't fit ends in an
-    ellipsis), a document's page, Quick Look on a PDF and on an email, the reading pane, New Folder, More and Move To… (a
-    matter's client starts clear of it, drawn smaller), the person menu, Signed-in Devices (whole in its dialog, with no
-    sideways scroll, every Revoke inside it and a name of at most two lines at 1280, and again at 768) with the Revoke
-    question and its refusal (and a real revoke, whose focus must stay in the dialog), at 768 × 1024 the folded top bar
-    with the left pane, the empty region and the details opened over the list, and last the signed-out screen (the session
-    is ended with `DELETE /api/v1/session` from the page). Colour contrast is checked here, as jsdom can't. axe-core is
-    the workspace's own development dependency: `e2e/axe.ts` reads its file from `node_modules` and runs it with
-    `page.evaluate`, which the browser's debugging protocol does and the page's Content-Security-Policy doesn't govern, so
-    the policy stays as the app ships it. No spec turns it off: `addScriptTag` with the source in it would be blocked by
-    `script-src 'self'`, and `bypassCSP` would test a page the app never serves.
+    Playwright's `colorScheme`, signed in once per theme): Recent's four lists, **Checked Out to Me** with a document
+    the spec checked out on its token, and the warning before releasing it (closed with Esc, so nothing is released), a
+    matter, a folder with details (its toolbar buttons all one height, and a document the spec checked out through the
+    API, and releases at the end, whose row shows its marker and is 34 pixels high, as a free row is), the properties
+    form, that document's details with its **Check-Out Info** and the **Versions** tab, Filters (with one in use, and
+    while the counts are held open with `page.route`, since busy states keep AA contrast and the last answer's counts
+    must stay, never zeros), the list while it is asked for again, the filing tray and the File Documents form, the
+    rename field, the delete question, the Help menu, search results for a word with their Filters (Title keeps 200
+    pixels, and text that doesn't fit ends in an ellipsis), a document's page, Quick Look on a PDF and on an email, the
+    reading pane, New Folder, More and Move To… (a matter's client starts clear of it, drawn smaller), the person menu,
+    Signed-in Devices (whole in its dialog, with no sideways scroll, every Revoke inside it and a name of at most two
+    lines at 1280, and again at 768) with the Revoke question and its refusal (and a real revoke, whose focus must stay
+    in the dialog), at 768 × 1024 the folded top bar with the left pane, the empty region and the details opened over
+    the list, and last the signed-out screen (the session is ended with `DELETE /api/v1/session` from the page). Colour
+    contrast is checked here, as jsdom can't. axe-core is the workspace's own development dependency: `e2e/axe.ts` reads
+    its file from `node_modules` and runs it with `page.evaluate`, which the browser's debugging protocol does and the
+    page's Content-Security-Policy doesn't govern, so the policy stays as the app ships it. No spec turns it off:
+    `addScriptTag` with the source in it would be blocked by `script-src 'self'`, and `bypassCSP` would test a page the
+    app never serves.
   - `resizing.spec.ts` files a document into a folder of its own inside `E2E`, and through the page drags the left
     pane's divider with the mouse and checks the pane's width, its value and that the list's Title column narrowed (the
     virtualiser measured the narrower list); reloads and finds the width kept; moves it by keys; checks that a window

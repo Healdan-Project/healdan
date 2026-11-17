@@ -1540,7 +1540,8 @@ paths:
         the caller's other devices are then `409 held-elsewhere`, and so is
         a check-out from them, unless it asks with `move: true` to move the
         check-out to its own device; the move is recorded in the history as
-        a check-out. A
+        a check-out. A release from them isn't, when it sends
+        `elsewhere=true` (see `releaseDocument`). A
         token that signed in with no device holds no device's check-out, and
         nor does the web page: such a check-out works from any of the
         caller's devices until a check-out or a save through the API records
@@ -1593,8 +1594,10 @@ paths:
         and returns the document. The user who holds it can, from the device
         that holds the check-out (`409 held-elsewhere` from another, unless
         `elsewhere=true`), and so can an administrator; the release is
-        recorded in the history. Such a release is recorded with the device
-        and app that held it. An administrator's release also makes an
+        recorded in the history. When a device holds the check-out and the
+        release comes from anywhere else, whoever sends it (the holder with
+        `elsewhere=true`, or an administrator), the history's comment names
+        that device and its app. An administrator's release also makes an
         immutable document mutable again, as the web page's does. Anyone
         else gets `409 checked-out` or `409 locked`, with the `hold`. A free
         document is returned as it is, and one the caller can't read is

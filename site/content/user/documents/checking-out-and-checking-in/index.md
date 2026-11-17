@@ -56,14 +56,14 @@ wherever you checked it out: in the app, in the Classic Interface, or on any of 
 [Healdan Helper](../../office/). It's the place to look for work still in progress, or for a document you forgot to
 check in. Beside it, a count says how many there are, once there's at least one.
 
-![Checked Out to Me open in the main area, its entry highlighted at the top of the left pane above Recent, with 4 beside it. No document is selected, so the toolbar's buttons are greyed out. Its list has the columns Title, Doc #, Version, Matter, Computer, Checked Out and Edit Date: Lease – Engrossment.docx, Due Diligence Tracker.xlsx and Licence Review – Advice to Kestrel.odt, each on MacBook, with Word, Excel and LibreOffice under it, checked out at 15:19, 15:18 and 15:17, then Disclosure Letter – Draft.docx on Web Page, checked out at 15:16](checked-out-to-me.png)
+![Checked Out to Me open in the main area, its entry highlighted at the top of the left pane with 4 beside it. Its list shows three documents on MacBook, each with its app beside the computer's name, LibreOffice cut short with an ellipsis, then one on Web Page, the latest check-out first](checked-out-to-me.png)
 
 | Column | What it shows |
 |---|---|
 | **Title** | The document's name, with the pencil at its end |
 | **Doc #**, **Version** | Its doc # and version |
 | **Matter** | Its matter's number, with the client's name beside it in paler type |
-| **Computer** | The computer it's checked out on, such as "MacBook", with the app under it, such as Word. **Web Page** for one checked out in the app or the Classic Interface, which belongs to no computer |
+| **Computer** | The computer it's checked out on, such as "MacBook", with the app beside it in paler type, such as Word. **Web Page** for one checked out in the app or the Classic Interface, which belongs to no computer |
 | **Checked Out** | When you checked it out, or last saved to it from the computer that holds it, as **Check-Out Time** in its [Check-Out Info](#check-out-info) |
 | **Edit Date** | When it was last saved to Healdan |
 
@@ -142,7 +142,7 @@ right-click menu.
 Releasing it throws away whatever was done on that computer since its last save to Healdan, so Healdan asks first,
 naming the computer:
 
-![The warning Release 3 Documents from MacBook?, over Checked Out to Me with its three MacBook documents selected and Release… in the toolbar. It says they're checked out to you on MacBook, and lists each with its doc #, app and last save to Healdan: Lease – Engrossment.docx, # 48, Word, saved 4 Nov 2026, 11:00; Due Diligence Tracker.xlsx, # 18, Excel, saved 14 Nov 2026, 16:00; and Licence Review – Advice to Kestrel.odt, # 44, LibreOffice, saved 1 Nov 2026, 15:00. A red box says that changes on MacBook that haven't reached Healdan will be lost, that MacBook can't save to these documents again, and that uploading its copies as new versions rescues those changes. A note says to revoke MacBook's sign-in in Signed-in Devices, a link, if it was lost or stolen. Then the red Release 3 Documents button, and Cancel](release-warning.png)
+![The warning Release 3 Documents from MacBook?, over Checked Out to Me with MacBook's three documents selected. It lists Lease – Engrossment.docx, Due Diligence Tracker.xlsx and Licence Review – Advice to Kestrel.odt, each with its doc #, app and last save to Healdan, then a red box saying that changes on MacBook that haven't reached Healdan will be lost, a note linking to Signed-in Devices, the red Release 3 Documents button, and Cancel](release-warning.png)
 
 - **The list** has the documents checked out on that computer, each with its doc #, its app and when it was last
   saved to Healdan. Work done on the computer since then isn't in Healdan.
@@ -154,11 +154,13 @@ naming the computer:
   Releasing doesn't revoke it, and revoking doesn't release its check-outs: for a lost computer, do both.
 
 You can release several documents at once, from one computer or several, as long as each is checked out to you: the
-warning then lists each computer's documents under its name. Check-outs made in the app among them are released too,
-without being listed. If Healdan refuses any, it names them, and the rest are released.
+warning then lists each computer's documents under its name, and two computers with the same name, such as a new Mac
+restored from a lost one's backup, get a list each. Check-outs made in the app among them are released too, without
+being listed. If Healdan refuses any, it names them, and the rest are released.
 
 The document's history records the release, naming the computer and the app, such as "Released while checked out on
-Healdan Helper on MacBook (Word)": see [Document History](../document-history/).
+Healdan Helper on MacBook (Word)". The history is the **History** tab in the Classic Interface, which administrators
+see, and anyone their administrator has given the History menu: see [Document History](../document-history/).
 
 #### Rescuing That Computer's Work
 
@@ -167,6 +169,9 @@ Work on the computer that hadn't reached Healdan isn't in the document, but it m
 - **If the computer comes back,** its Healdan Helper refuses the next save there and keeps its copy: choose
   **Save as New Document** to file the changes as a document of their own. See
   [Your Check-Out Ended](../../office/when-things-go-wrong/#your-check-out-ended).
+- **If its app had crashed,** and you reopen the kept copy on that computer while nobody has the document and nothing
+  newer has been stored in Healdan, the Healdan Helper checks it out to you again, and the copy saves as before. See
+  [Reopening After a Crash](../../office/when-things-go-wrong/#reopening-after-a-crash).
 - **If you have a copy of the file,** drop it on the document's row in the app and choose to save it as the
   document's next version. See [Dropping a File on a Document](../../working-with-matters/filing-a-document/#dropping-a-file-on-a-document).
 
