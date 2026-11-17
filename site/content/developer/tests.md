@@ -343,8 +343,8 @@ code is laid out.
       Enter in the question, and where the focus lands asserted: on the remaining row of the open folder's list, by name. Row 10 ends by asserting that the Trash leaves the focus on a row of its list, or the list itself.
 
     It leaves out **Copy Link**, as headless browsers' clipboards differ between engines (`finding.spec.ts` covers it), and
-    row 9's move into another matter: the smoke fixture's only matter outside Smoke Cloud is 1.1, and a move into Smoke
-    Cloud would write through Garage after step 8 has checked its read cache. A step that can't be done by keys is a bug in the
+    row 9's move into another matter, which `folders.spec.ts` covers into matter 1.4 (a move into Smoke Cloud would
+    write through Garage after step 8 has checked its read cache). A step that can't be done by keys is a bug in the
     app.
   - `context-menu.spec.ts` checks the right-click menus. It files three documents and makes two folders through the API,
     in a folder of its own inside `E2E`, adds one of the documents to Favorites and the matter to My Matters (the move
