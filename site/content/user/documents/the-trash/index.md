@@ -38,7 +38,7 @@ Choose **Trash**, at the foot of the left pane, below **My Favorites**. In a nar
 left pane too, which the **☰** (Navigation) button opens. It lists what **you** deleted, newest first. Others'
 deletions are in their own Trash.
 
-![The Trash listing two deleted documents and a deleted folder, Superseded Drafts, with "2 items" beside its name. The folder is selected and its details are at the right: Folder, 2 items, Deleted From 1003.1 › Drafts, Deleted, Holds 1 folder, 1 document, with Restore and Remove… buttons](trash.png)
+![The Trash listing a deleted folder, Old Drafts, and a deleted document, Subscription Agreement – First Draft.docx, each with where it was deleted from and the day. The folder is selected and its details are at the right: Folder, Deleted From 1003.1 › Drafts, Deleted, Holds, with Restore and Remove… buttons](trash.png)
 
 - **A deleted folder is one row,** with how many items it holds, such as "14 items", beside its name. What's inside it
   isn't a row of its own.
