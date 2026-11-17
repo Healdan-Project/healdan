@@ -474,7 +474,9 @@ client reads the body). Its refusals are unchanged.
   as `DocumentView.kind` is, or `folder`; the counts are `contents`, as `holds` is the check-out problem's list; a
   document's `size` is there, for the details (§7.2); and `deletedFrom` is `{ folder, path }`, the folder (a `FolderRef`)
   when it is live and readable, with its present path, else `null` and the path recorded at the delete. Counts take only
-  what the caller can read.
+  what the caller can read. Changed in the build (final review): while `deletedFrom.folder` is given, `matter` is the
+  matter that folder is in now, so it goes with the path (a folder moved into another matter since the delete gives the
+  other matter); else the one recorded at the delete.
 - **`POST /v1/trash/{id}/restore`**, body `{ "folderId": n }` optional. Answers `200` with where it went (a `FolderRef`)
   and the item. Refuses `404` (not the caller's, unless admin; already restored, removed for a non-admin, or destroyed);
   `409 place-gone` when no `folderId` is given and the place isn't live or now refuses it, which the app answers with the
@@ -517,7 +519,9 @@ A **Trash** entry at the foot of the left pane, below My Favorites, apart from t
   folder holds ("3 folders, 11 documents"), with Restore and Remove….
 - **Keyboard and menus:** rows select as in any list; a right-click menu has Restore and Remove…; the Delete key is
   Remove…; Enter opens nothing (call: a deleted item has no page).
-- **Empty:** "Nothing in the Trash." with a line on where deleted items go.
+- **Empty:** "Nothing in the Trash." with a line on where deleted items go. Changed in the build (final review): that's
+  Mine's; Everyone's says "Nothing in the Trash." alone, and Removed "Nothing removed.", as neither holds what the
+  person deleted.
 - **Restore** sends each selected item back where it was, then a toast "Restored "Old Drafts" to 1001.1 › Drafts" with
   Open. One that answers `409 place-gone` opens the picker, titled "Restore "Old Drafts" to…". Changed in the build:
   - several items restored give a toast each, at most three showing at once, as the region allows (Ruling 34);
@@ -530,7 +534,8 @@ A switch beside the heading, **Mine · Everyone's · Removed**, for admins only 
 it. Everyone's adds a Deleted By column, with Restore and Remove…. Removed has Deleted By, Removed By, Removed and
 Destroyed ("in 23 days", in the caution colour under a week), and Restore only, with the lede "What people removed from
 their Trash. Restore puts an item back where it was deleted from; after 30 days it's destroyed." The switch is kept in the
-address (`?view=`). It is a group of toggle buttons named **Show** (changed in the build: Ruling 33).
+address (`?view=`). It is a group of toggle buttons named **Show** (changed in the build: Ruling 33). The lede counts the
+days, "after 1 day" for one (changed in the build (final review)).
 
 ### 7.4 Confirmations and toasts (owner)
 
@@ -542,11 +547,20 @@ address (`?view=`). It is a group of toggle buttons named **Show** (changed in t
   administrator can, for 30 days."; several: "Remove 3 items from the Trash?" listing them. **Empty Trash:** "Empty the
   Trash?", "This removes all 4 items you deleted.", and the same last line. The destructive button is red: `@healdan/ui`'s
   `danger` Button variant, which Checked Out to Me's Release uses too (changed in the build: Ruling 33 made a
-  `destructive` variant, which the merge with master's Checked Out to Me replaced with its `danger` one).
+  `destructive` variant, which the merge with master's Checked Out to Me replaced with its `danger` one). Changed in the
+  build (final review):
+  - the last line says "them" for several items and for Empty Trash, "You won't be able to restore them. An
+    administrator can, for 30 days.", and counts the days, "for 1 day" for one;
+  - Remove's and Empty Trash's question is an alert dialog with a warning sign beside its title, as the release's warning
+    is, since removing is the one step a person can't undo themselves; Delete's question and the one before a folder
+    leaves its matter stay plain dialogs, as both can be undone.
 - **The toast after a Delete:** "Moved "Old Drafts" to the Trash" with **Undo**. It stays 10 s, longer while the pointer
   or the keyboard's focus is on it (call). Undo restores the items that Delete made, then says "Restored …". One
   document is named as a folder is, "Moved "Lease.pdf" to the Trash", and several are counted, "Moved 4 items to the
-  Trash" (changed in the build: correction 14).
+  Trash" (changed in the build: correction 14). What Undo can't restore is said in Refusals, "Some Items Weren't
+  Restored", while the rest is restored: one already restored or no longer in the Trash (`404`) with "It's already been
+  restored, or it's no longer in the Trash.", and one whose place is gone with "The folder it was deleted from is gone.
+  Restore it from the Trash to choose another place.", as the dialog only closes (changed in the build (final review)).
 - `packages/ui`'s `Toast` gains an action: a button with its label and callback, reachable by keyboard (F6 to the region,
   as React Aria's toast region allows), announced, and still the region's at most three.
 
@@ -585,7 +599,16 @@ address (`?view=`). It is a group of toggle buttons named **Show** (changed in t
 - **Refusals:** the Refusals dialog, as for documents, with each code's words: "It holds items you don't have permission
   to delete." (or "move"), "Documents in it are checked out:" with the readable ones listed and "They can be deleted once
   they're checked in or released.", and the existing words for the rest. A move's dialog is titled "Some Items Weren't
-  Moved" once a folder is refused, as the documents' title no longer fits (changed in the build: Ruling 37).
+  Moved" once a folder is refused, as the documents' title no longer fits (changed in the build: Ruling 37). Changed in
+  the build (final review), so that each says the cause the API tells apart:
+  - a move's check-outs end "It can be moved once they're checked in or released.";
+  - `admins-only` says "Only administrators can move a matter's top-level folders." for a folder at a matter's top level,
+    and "Only administrators can move folders into a matter's top level." for any other, as a drop of one on a matter in
+    the tree says before any call;
+  - `forbidden` says "You don't have permission to move this folder." when the folder's `canMove` is false, and "You
+    don't have permission to add folders there." when it's true, as the Add on the destination is then what's missing;
+  - a folder dropped into itself or its own tree says "A folder can't be moved into itself or a folder inside it.", a
+    sentence, where the picker's label is "The folder itself".
 
 ### 7.6 Strings
 
