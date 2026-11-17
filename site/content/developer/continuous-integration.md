@@ -20,7 +20,7 @@ weight: 4
 
 | Check | Workflow | What it does |
 |---|---|---|
-| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`) for Oracle's and SQL Server's drivers (`check-database-drivers.py`) and for the licences of the User app's npm packages (`check-web-licences.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
+| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts and on upstream's retired ones (`check-maven-repositories.py`), for Oracle's and SQL Server's drivers (`check-database-drivers.py`) and for the licences of the User app's npm packages (`check-web-licences.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, `WarParsersTest` and `WarStorageTest`, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`), the helper's open-save-close cycle (its stack test), provider sign-in through a stand-in Keycloak (`test-signin.sh`) and storage backends against a stand-in Garage (`test-storage.sh`) included |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
 | `Web` | `web.yml` | Builds and tests the User app in `healdan-web/web`: generates the API's types, typechecks, lints, runs the tests and builds (see below) |
@@ -56,7 +56,7 @@ others, so one run shows every failing test.
 Each shard restores a copy of Maven's local repository before it builds: the copy for the POMs as they are, or else
 the newest copy `master` saved. Only `master`'s runs save one, from a single shard, so a pull request that edits a
 POM downloads only what its edit adds. Some dependencies come only from Healdan's copies at
-`https://maven.healdan.com/`, through the mirror in `docker/maven-settings.xml`.
+`https://maven.healdan.com/`, through a mirror in `docker/maven-settings.xml`.
 
 Maven notes where each file came from in a `_remote.repositories` file beside it, and uses a cached file only when
 that note names one of the build's repositories. Maven 3.9 notes the repository's id, and Maven 3.10 its id and a
@@ -254,6 +254,13 @@ The arm64 runner hasn't run short, so its job doesn't.
   `python3 import-artifact.py --verify https://maven.healdan.com/` passes. One whose licence doesn't allow hosting
   it is dropped from the build instead, as JAI was. A missing `com.logicaldoc:*` artifact is never imported: it
   means a module or version was left behind, so bump it.
+- **Upstream's retired Maven repositories.** Upstream's parent POM also declares `java.net` (`maven.java.net`,
+  whose certificate chain no longer validates) and `sourceforge` (`oss.sonatype.org`, Sonatype's retired OSSRH,
+  which answers 404). Nothing comes from either, but Maven asks every repository for each version range's metadata,
+  so every shard failed a TLS handshake with `java.net` and warned of it dozens of times. A second mirror in
+  `docker/maven-settings.xml`, `retired-repositories`, sends both to Maven Central. The same check fails `build`
+  when a POM or the settings file has a repository on either host under an id that no mirror to Central, or to
+  Healdan's copies, covers. When a sync brings one in, add its id to that mirror's `mirrorOf` in the sync PR.
 - **Oracle and SQL Server.** Healdan supports only open-source databases, so the WAR ships neither driver and the
   setup wizard doesn't offer them. `.github/scripts/check-database-drivers.py` runs after the Maven repository
   check and fails `build` on a POM dependency on Oracle's or SQL Server's JDBC driver, or on a tracked file naming

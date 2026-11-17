@@ -4,7 +4,9 @@
 - **Date:** 2026-10-29
 - **Status:** approved by the owner on 2026-10-29, and amended that day for licences (§3.1). Built from
   [`docs/superpowers/plans/2026-10-29-healdan-maven-repository.md`](../plans/2026-10-29-healdan-maven-repository.md).
-  `https://maven.healdan.com/` serves the 15 hosted artifacts from `Healdan-Project/maven`.
+  `https://maven.healdan.com/` serves the 15 hosted artifacts from `Healdan-Project/maven`. Extended on 2026-11-16
+  for upstream's retired repositories (§12), in
+  [Healdan-Project/healdan#258](https://github.com/Healdan-Project/healdan/pull/258).
 - **Inputs:**
   - a design conversation with the owner on 2026-10-29;
   - the failed `master` runs of `build-logicaldoc.yml` that day (40877494760, 40891327931, 40894089832), and the
@@ -56,7 +58,8 @@ SourceForge from the build, so a refusal there can't fail Healdan's build howeve
   target exist for upstream's deploys to SourceForge. The extension resolves from Central, and Healdan never
   deploys, so neither makes a build depend on LogicalDOC.
 - **Other repositories.** Terracotta's stays. The parent POM's other dead repositories (`java.net`, whose
-  certificate fails in CI's logs, and `oss.sonatype.org`) aren't LogicalDOC's.
+  certificate fails in CI's logs, and `oss.sonatype.org`) aren't LogicalDOC's. Since 2026-11-16 a second mirror
+  sends both to Maven Central, and the guard covers their hosts (§12).
 
 ## 3. The artifacts
 
@@ -314,3 +317,51 @@ stay. They download nothing, and leaving them keeps the edits small.
 
 Every other change is in Healdan's own files: `docker/maven-settings.xml`, `.github/`, `CLAUDE.md`, `site/` and
 this spec.
+
+## 12. Upstream's retired repositories (2026-11-16)
+
+- **The problem.** §2 left the parent POM's two dead repositories alone: `java.net`
+  (`https://maven.java.net/content/repositories/releases`), whose certificate chain no longer validates (`PKIX path
+  building failed` on CI's JDK), and `sourceforge` (`https://oss.sonatype.org/content/groups/sourceforge/`), Sonatype's
+  retired OSSRH, which answers 404 for every path. Nothing comes from either, but Maven asks every repository for
+  each version range's metadata, so every build still contacted both. The build has one range,
+  `org.bouncycastle:bcutil-jdk18on:[1.81,1.82)` (from `bcpkix-jdk18on` 1.81). On Healdan-Project/healdan#256's run
+  43970046626 (2026-11-16) each test shard's two Maven runs looked it up afresh, each failed the TLS handshake with
+  `java.net`, and the shard's log repeated the cached failure 39 to 45 times.
+  - That run's `Tests (5 of 8)` failed on `logicaldoc-util` with `No versions available for
+    org.bouncycastle:bcutil-jdk18on:jar:[1.81,1.82) within specified range`, just after `java.net`'s warning for
+    that range. The warning alone doesn't fail a build: the other seven shards logged it for the same lookup, on the
+    same cache, and passed, and the same lookup with the parent POM's repositories and these settings, on CI's Maven
+    image (Maven 3.9.16, JDK 25), logs it and resolves, on an empty local repository and on a stale one. For the
+    range to come out empty, that shard's lookup at Central must have found nothing too, which Maven doesn't log (a
+    404 isn't a warning). Its rerun passed. So this change takes the dead repositories out of every build, but it
+    isn't shown to prevent that failure.
+- **The fix.** A second mirror in `docker/maven-settings.xml`, `retired-repositories`, with
+  `<mirrorOf>java.net,sourceforge</mirrorOf>`, sends both to `https://repo1.maven.org/maven2`. A mirror matches by
+  id, so every request for either goes to Central, whatever URL a POM gives. No upstream POM changes.
+  - **What only they had.** Nothing: a full build (GWT compile and WAR included) on an empty local repository, with
+    the mirror, finds everything (Tests, below), so Healdan hosts nothing new. Something only one of them had would
+    be imported (§7) and its id mirrored to `healdan` instead, which the guard accepts.
+  - **Its own id.** The mirror isn't called `central`, so an error names it. A range's lookup asks Central twice,
+    once as `central` and once as the mirror, which costs a request where it used to cost a failed handshake. (call)
+  - **Not covered.** `logicaldoc-webservicesamples`, which no build builds (§6), also declares
+    `maven2-repository.dev.java.net` (`download.java.net/maven/2/`, which answers 404) and Google Code's
+    repositories, which are gone too. They're left alone, as its other repositories are.
+- **The guard.** `check-maven-repositories.py` (§6) also fails `build` when a `<repository>` or `<pluginRepository>`
+  in a tracked POM or the settings file has a URL on `maven.java.net` or `oss.sonatype.org` (its `RETIRED`), under
+  an id that no mirror to Central or to Healdan's copies covers, naming the file and line. It goes by host, as the
+  LogicalDOC rule does, so a sync that adds another id on either host fails too, and the fix is to add that id to
+  the mirror's `mirrorOf` in the sync PR.
+- **Tests.**
+  - The guard's unit tests: both ids mirrored to Central pass, with `https://` and `http://` URLs; unmirrored ones
+    fail with file and line; another id on either host fails, as a plugin repository too; a mirror to another URL
+    doesn't count; a mirror to Healdan's copies does; and the settings file's own repositories are checked.
+  - A clean build: `mvn -B -ntp -DskipTests install` (GWT compile and WAR included) in CI's Maven image, with the
+    new settings and an empty local repository, passed in 4 minutes (2026-11-16, at `5704bdd34` with this change).
+    Its log never names `maven.java.net` or `oss.sonatype.org`. The `_remote.repositories` records name `central`
+    (3,281), `healdan` (the 15 hosted artifacts of §3), `Alfresco Maven Repository` (14) and `terracotta` (3), and
+    none names `retired-repositories`, `java.net`, `sourceforge` or `logicaldoc`. The one range was looked up at
+    `central`, `retired-repositories` and `logicaldoc-webdav`'s `mulesoft-public`.
+  - The pull request's CI: the test shards and both Docker image builds build through the mirror.
+- **Upstream edits.** None. The change is `docker/maven-settings.xml`, the guard and its tests, `CLAUDE.md`, the
+  Developer Guide and this spec.

@@ -13,8 +13,10 @@ builds it for you. This page is for working on the code.
 - **Maven 3.9 or newer.**
 - **Two extra Maven repositories.** Some dependencies aren't on Maven Central. They come from Healdan's copies at
   `https://maven.healdan.com/`, of the artifacts only LogicalDOC's repository has, and from
-  `https://repo.terracotta.org/maven2`. `docker/maven-settings.xml` lists them. CI and the Docker build copy it to
-  `~/.m2/settings.xml`; copy it there for local builds.
+  `https://repo.terracotta.org/maven2`. `docker/maven-settings.xml` lists them. It also sends two repositories
+  upstream's POMs declare but that have gone, `java.net` and `sourceforge` (Sonatype's retired OSSRH), to Maven
+  Central, so a build never contacts them. CI and the Docker build copy it to `~/.m2/settings.xml`; copy it there for
+  local builds.
 - **`~/logicaldoc-dev.properties`.** Spring-based tests fail in `setUp` without it. An empty file works.
 - **On x86-64, a processor with AVX2** (the x86-64-v3 level). `healdan-web`'s build runs Vite, whose bundler,
   Rolldown, ships a native program that stops with `Illegal instruction` (exit code 132) without it.

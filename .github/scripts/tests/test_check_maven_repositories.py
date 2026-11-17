@@ -32,7 +32,22 @@ MIRROR = """  <mirrors>
     </mirror>
   </mirrors>"""
 
+RETIRED_MIRROR = """  <mirrors>
+    <mirror>
+      <id>healdan</id>
+      <mirrorOf>logicaldoc</mirrorOf>
+      <url>https://maven.healdan.com/</url>
+    </mirror>
+    <mirror>
+      <id>retired-repositories</id>
+      <mirrorOf>{mirror_of}</mirrorOf>
+      <url>{url}</url>
+    </mirror>
+  </mirrors>"""
+
 SOURCEFORGE = "https://logicaldoc.sourceforge.net/maven/"
+JAVA_NET = "https://maven.java.net/content/repositories/releases"
+OSSRH = "https://oss.sonatype.org/content/groups/sourceforge/"
 
 
 def repositories(*entries, tag="repository"):
@@ -44,6 +59,11 @@ def repositories(*entries, tag="repository"):
 
 def problem(name, line, id_, host="logicaldoc.sourceforge.net"):
     return f"{name}:{line}: repository {id_} " + checker.FIX.format(host=host, id=id_)
+
+
+def retired(name, line, id_, host):
+    return (f"{name}:{line}: repository {id_} "
+            + checker.RETIRED_FIX.format(host=host, why=checker.RETIRED[host], id=id_))
 
 
 class CheckMavenRepositoriesTest(unittest.TestCase):
@@ -99,10 +119,48 @@ class CheckMavenRepositoriesTest(unittest.TestCase):
 
     def test_other_hosts_ignored(self):
         self.write("pom.xml", POM.format(body=repositories(
-            ("sourceforge", "https://oss.sonatype.org/content/groups/sourceforge/"),
+            ("eclipse-releases", "https://repo.eclipse.org/content/groups/releases/"),
             ("terracotta", "https://repo.terracotta.org/maven2"),
             ("props", "${repository.url}"))))
         self.assertEqual([], self.problems())
+
+    def test_retired_repositories_mirrored_to_central_pass(self):
+        self.settings(RETIRED_MIRROR.format(mirror_of="java.net,sourceforge", url="https://repo1.maven.org/maven2/"))
+        self.write("pom.xml", POM.format(body=repositories(("sourceforge", OSSRH), ("java.net", JAVA_NET))))
+        self.write("samples/pom.xml", POM.format(body=repositories(
+            ("sourceforge", "http://oss.sonatype.org/content/groups/sourceforge/"), ("java.net", JAVA_NET))))
+        self.assertEqual([], self.problems())
+
+    def test_unmirrored_retired_repositories_reported_with_file_and_line(self):
+        self.write("pom.xml", POM.format(body=repositories(("central", "https://repo1.maven.org/maven2"),
+                                                           ("sourceforge", OSSRH), ("java.net", JAVA_NET))))
+        self.assertEqual([retired("pom.xml", 9, "sourceforge", "oss.sonatype.org"),
+                          retired("pom.xml", 13, "java.net", "maven.java.net")], self.problems())
+
+    def test_retired_hosts_reported_under_any_id_and_scheme(self):
+        self.settings(RETIRED_MIRROR.format(mirror_of="java.net, sourceforge", url="https://repo1.maven.org/maven2"))
+        self.write("pom.xml", POM.format(body=repositories(
+            ("ossrh-snapshots", "http://OSS.sonatype.org/content/repositories/snapshots"),
+            ("java-net-plugins", JAVA_NET), tag="pluginRepository")))
+        self.assertEqual([retired("pom.xml", 5, "ossrh-snapshots", "oss.sonatype.org"),
+                          retired("pom.xml", 9, "java-net-plugins", "maven.java.net")], self.problems())
+
+    def test_retired_repository_mirrored_elsewhere_reported(self):
+        for url in ("https://download.java.net/maven/2/", "https://repo1.maven.org/maven2/releases"):
+            with self.subTest(url):
+                self.settings(RETIRED_MIRROR.format(mirror_of="java.net", url=url))
+                self.write("pom.xml", POM.format(body=repositories(("java.net", JAVA_NET))))
+                self.assertEqual([retired("pom.xml", 5, "java.net", "maven.java.net")], self.problems())
+
+    def test_retired_repository_may_be_mirrored_to_healdan(self):
+        self.settings(MIRROR.format(mirror_of="logicaldoc,java.net", url="https://maven.healdan.com/"))
+        self.write("pom.xml", POM.format(body=repositories(("java.net", JAVA_NET))))
+        self.assertEqual([], self.problems())
+
+    def test_retired_repository_and_logicaldoc_host_both_checked(self):
+        self.settings(RETIRED_MIRROR.format(mirror_of="sourceforge", url="https://repo1.maven.org/maven2"))
+        self.write("pom.xml", POM.format(body=repositories(("ld", SOURCEFORGE), ("sourceforge", OSSRH))))
+        self.assertEqual([problem("pom.xml", 5, "ld")], self.problems())
 
     def test_settings_without_healdan_mirror_reported(self):
         for body in ("", MIRROR.format(mirror_of="logicaldoc", url=SOURCEFORGE),
@@ -122,8 +180,9 @@ class CheckMavenRepositoriesTest(unittest.TestCase):
 
     def test_settings_repositories_checked(self):
         self.settings(MIRROR.format(mirror_of="logicaldoc", url="https://maven.healdan.com/") + "\n"
-                      + repositories(("ld", SOURCEFORGE)))
-        self.assertEqual([problem("docker/maven-settings.xml", 10, "ld")], self.problems())
+                      + repositories(("ld", SOURCEFORGE), ("ossrh", OSSRH)))
+        self.assertEqual([problem("docker/maven-settings.xml", 10, "ld"),
+                          retired("docker/maven-settings.xml", 14, "ossrh", "oss.sonatype.org")], self.problems())
 
     def test_untracked_pom_ignored(self):
         self.write("x/pom.xml", POM.format(body=repositories(("ld", SOURCEFORGE))), track=False)

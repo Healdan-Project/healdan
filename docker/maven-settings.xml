@@ -3,7 +3,8 @@
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
   <!-- CI, the Docker build and local builds copy this file to ~/.m2/settings.xml. Some dependencies aren't on Maven
        Central: Healdan hosts the ones only LogicalDOC's repository has, and Terracotta's repository has the rest.
-       The design is docs/superpowers/specs/2026-10-29-healdan-maven-repository-design.md. -->
+       Upstream's two retired repositories go to Central. The design is
+       docs/superpowers/specs/2026-10-29-healdan-maven-repository-design.md. -->
   <mirrors>
     <!-- Upstream's POMs declare LogicalDOC's repository (id logicaldoc, on logicaldoc.sourceforge.net). A mirror
          matches by id, so every request for it, whatever URL a POM gives, goes to Healdan's copies instead.
@@ -13,6 +14,19 @@
       <name>Healdan's copies of artifacts only LogicalDOC's repository has</name>
       <mirrorOf>logicaldoc</mirrorOf>
       <url>https://maven.healdan.com/</url>
+    </mirror>
+    <!-- Upstream's parent POM also declares two repositories that have gone: java.net (maven.java.net, whose
+         certificate chain no longer validates) and sourceforge (oss.sonatype.org, Sonatype's retired OSSRH, which
+         answers 404). Neither serves anything, and a build on an empty local repository finds everything without
+         them, but Maven still asks every repository for each version range's metadata, so each CI test shard failed
+         a TLS handshake with java.net and warned of it dozens of times. This sends both to Central instead.
+         .github/scripts/check-maven-repositories.py fails the build when a POM declares a repository on either host
+         that no mirror to Central covers. -->
+    <mirror>
+      <id>retired-repositories</id>
+      <name>Maven Central in place of upstream's retired java.net and Sonatype repositories</name>
+      <mirrorOf>java.net,sourceforge</mirrorOf>
+      <url>https://repo1.maven.org/maven2</url>
     </mirror>
   </mirrors>
   <profiles>
