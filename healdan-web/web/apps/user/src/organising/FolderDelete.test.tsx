@@ -9,7 +9,7 @@ import { heldByJamie } from '../filing/testing'
 import { expectNoAxeViolations } from '../test/axe'
 import { children, folder, page, problem } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
-import { drafts, matterTop, routes, row, select, store, workspace } from './testing'
+import { drafts, lease, matterTop, routes, row, select, store, workspace } from './testing'
 
 // Deleting folders (folders and Trash spec 4.2, 6.1, 7.4, 7.5): the ways in, the question and what it holds, and what was
 // refused, per item. A click on a folder row opens it, so these focus rows rather than click them.
@@ -153,9 +153,11 @@ describe('The ways in to deleting a folder', () => {
 })
 
 describe("The toolbar's More", () => {
-  it('moves and deletes the selected folders with the documents, and greys both out for a folder that says no', async () => {
-    const toolbar = () => screen.findByRole('toolbar', { name: 'Folder Actions' })
-    const { all } = routes({ 'GET /v1/folders/7/children': () => children([{ ...drafts, canDelete: false }, folder({ id: 9, name: 'Pleadings', path: drafts.path })]) })
+  const toolbar = () => screen.findByRole('toolbar', { name: 'Folder Actions' })
+  const locked = { ...drafts, canDelete: false }
+
+  it('deletes the selected folders with the documents, and keeps Delete while one of several can be deleted', async () => {
+    const { all } = routes({ 'GET /v1/folders/7/children': () => children([locked, folder({ id: 9, name: 'Pleadings', path: drafts.path })]) })
     await renderApp('/folders/7', all)
     await focusRow(/Pleadings/)
     await userEvent.keyboard(' ')
@@ -167,9 +169,31 @@ describe("The toolbar's More", () => {
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
 
+    // Drafts can't be deleted, Pleadings can: the selection's Delete is there for what can
     await addRow(/Drafts/)
     await userEvent.click(within(await toolbar()).getByRole('button', { name: 'More' }))
+    expect((await item('Delete')).getAttribute('aria-disabled')).toBeNull()
+  })
+
+  it('greys Delete out when nothing selected can be deleted, and the Delete key says why', async () => {
+    const other = folder({ id: 9, name: 'Pleadings', path: drafts.path, canDelete: false })
+    await renderApp('/folders/7', routes({ 'GET /v1/folders/7/children': () => children([locked, other]) }).all)
+    await focusRow(/Drafts/)
+    await userEvent.keyboard(' ')
+    await addRow(/Pleadings/)
+    await userEvent.click(within(await toolbar()).getByRole('button', { name: 'More' }))
     expect((await item('Delete')).getAttribute('aria-disabled')).toBe('true')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    fireEvent.contextMenu(await row(/Pleadings/))
+    expect(await screen.findByRole('menu', { name: 'Actions for 2 items' })).toBeTruthy()
+    expect((await item('Delete')).getAttribute('aria-disabled')).toBe('true')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    await focusRow(/Pleadings/)
+    await userEvent.keyboard('{Delete}')
+    expect(await screen.findByText("Drafts: You don't have permission to delete this folder.")).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 })
 
@@ -191,6 +215,40 @@ describe('Deleting folders and documents together', () => {
     expect(written.deletedFolders).toEqual([8])
     expect(api.calls.filter((call) => call.method === 'DELETE').map((call) => call.path)).toEqual(['/v1/folders/8', '/v1/documents/10431', '/v1/documents/10432', '/v1/documents/10433'])
     const toast = (await screen.findByText('Moved 4 items to the Trash')).closest('[role="alertdialog"]') as HTMLElement
+    expect(within(toast).getByRole('button', { name: 'Undo' })).toBeTruthy()
+  })
+
+  it("deletes what can be deleted in a mixed selection, and says why the folder that can't wasn't, with no call for it", async () => {
+    const pleadings = folder({ id: 9, name: 'Pleadings', path: drafts.path })
+    const { all, written } = routes({ 'GET /v1/folders/7/children': () => children([{ ...drafts, canDelete: false }, pleadings, lease]) })
+    const { api } = await renderApp('/folders/7', all)
+    await select(/Lease/)
+    await addRow(/Drafts/)
+    await addRow(/Pleadings/)
+
+    // Every way in has Delete for the selection: its right-click menu, More and the key
+    fireEvent.contextMenu(await row(/Lease/))
+    expect(await screen.findByRole('menu', { name: 'Actions for 3 items' })).toBeTruthy()
+    expect((await item('Delete')).getAttribute('aria-disabled')).toBeNull()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    await userEvent.click(within(await screen.findByRole('toolbar', { name: 'Folder Actions' })).getByRole('button', { name: 'More' }))
+    expect((await item('Delete')).getAttribute('aria-disabled')).toBeNull()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+
+    await focusRow(/Lease/)
+    await userEvent.keyboard('{Delete}')
+    const dialog = await question('Move 3 items to the Trash?')
+    expect(within(dialog).getAllByRole('listitem').map((one) => one.textContent)).toEqual(['Drafts', 'Pleadings', 'Lease.docx'])
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }))
+
+    const refusals = await screen.findByRole('dialog', { name: "Some Items Weren't Moved to the Trash" })
+    expect(within(refusals).getAllByRole('listitem').map((one) => one.textContent)).toEqual(["Drafts: You don't have permission to delete this folder."])
+    expect(api.calls.filter((call) => call.method === 'DELETE').map((call) => call.path)).toEqual(['/v1/folders/9', '/v1/documents/10432'])
+    expect(written.deletedFolders).toEqual([9])
+    expect(written.deleted).toEqual([10432])
+    const toast = (await screen.findByText('Moved 2 items to the Trash')).closest('[role="alertdialog"]') as HTMLElement
     expect(within(toast).getByRole('button', { name: 'Undo' })).toBeTruthy()
   })
 

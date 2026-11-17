@@ -4,7 +4,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { drafts, routes, row, select } from '../organising/testing'
+import { drafts, matterTop, routes, row, select } from '../organising/testing'
 import { comeBack } from '../test/comeBack'
 import { children, document as doc, folder, matter, page } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
@@ -29,6 +29,8 @@ describe('The rows of a list', () => {
     expect(rowOf(doc()).selectable).toBe(true)
     expect(rowOf(drafts)).toMatchObject({ selectable: true, opensOnClick: true })
     expect(rowOf(matter()).selectable).toBe(false)
+    // A matter's own folder, where a list shows it as a folder, is a matter's row
+    expect(rowOf(matterTop)).toMatchObject({ selectable: false, opensOnClick: false })
   })
 })
 
@@ -94,6 +96,25 @@ describe('Selecting folder rows', () => {
     comeBack()
     await waitFor(() => expect(screen.queryByRole('row', { name: /Drafts/ })).toBeNull())
     expect(selectedRows()).toEqual([])
+  })
+
+  it("never selects or drags a matter's own folder in Recent › Folders, and a click opens it", async () => {
+    const { router } = await renderApp('/recent/folders', { ...routes().all, 'GET /v1/folders/recent': page([matterTop, drafts]) })
+    const grid = await within(screen.getByRole('main')).findByRole('grid')
+    const top = await within(grid).findByRole('row', { name: /Charter Dispute/ })
+    expect(top.draggable).toBe(false)
+    expect((await within(grid).findByRole('row', { name: /Drafts/ })).draggable).toBe(true)
+
+    act(() => top.focus())
+    await userEvent.keyboard(' ')
+    fireEvent.contextMenu(top)
+    await screen.findByRole('menu')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    expect(selectedRows()).toEqual([])
+
+    await userEvent.click(within(top).getByRole('rowheader'))
+    await waitFor(() => expect(router.history.location.pathname).toBe('/app/folders/110'))
   })
 
   it('selects folders in Recent › Folders, where Delete then asks about them', async () => {

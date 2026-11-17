@@ -9,7 +9,7 @@ import { ActionItem } from '../actions/ActionControls'
 import type { OrganisingItems } from '../actions/batch'
 import { favoriteNameRefusal, hasOwnName, renameFavorite } from '../actions/favoriteName'
 import { useFavorite, type Starred } from '../actions/FavoriteStar'
-import { movingFolder } from '../actions/folders'
+import { anyDeletable, movingFolder } from '../actions/folders'
 import { useMyMattersChange } from '../actions/myMatters'
 import { favoriteAction, newTabAction, useDocumentActions } from '../actions/useDocumentActions'
 import { docHref, folderHref } from '../addresses'
@@ -118,7 +118,8 @@ export function FolderChangeItems({ folder }: { folder: S['FolderView'] }) {
 
 /**
  * A selection of several with a folder in it: Move To… and Delete, which take folders and documents together, each its own
- * call (folders and Trash spec 7.5). Each is greyed out while a folder in it says it can't be moved or deleted.
+ * call (folders and Trash spec 7.5). Move To… is greyed out while a folder in it says it can't be moved. Delete is there
+ * while anything in it can be deleted: a folder that can't is said in Refusals while the rest is deleted.
  */
 export function SelectionMenuItems({ items }: { items: OrganisingItems }) {
   const organising = useOrganising()
@@ -127,7 +128,7 @@ export function SelectionMenuItems({ items }: { items: OrganisingItems }) {
       <MenuItem id="move" isDisabled={items.folders.some((folder) => !folder.canMove)} onAction={() => organising.askMove(items)}>
         {t('move.menu')}
       </MenuItem>
-      <MenuItem id="delete" isDisabled={items.folders.some((folder) => !folder.canDelete)} onAction={() => organising.askDelete(items)}>
+      <MenuItem id="delete" isDisabled={!anyDeletable(items)} onAction={() => organising.askDelete(items)}>
         {t('delete.menu')}
       </MenuItem>
     </>

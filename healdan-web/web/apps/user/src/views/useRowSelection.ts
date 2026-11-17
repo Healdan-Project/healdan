@@ -4,6 +4,7 @@
 import { useMemo, useState } from 'react'
 import { useRightRegion } from '../frame/RightRegion'
 import { useSelection } from '../selection'
+import { selectable } from './useListing'
 
 export interface RowSelection {
   /** The one selected document's number, from the address */
@@ -23,20 +24,22 @@ export interface RowSelection {
  *
  * @param rows what the list holds, as far as it's loaded
  */
-export function useRowSelection(rows?: readonly { type: string; docNumber?: number; id?: number }[]): RowSelection {
+export function useRowSelection(rows?: readonly { type: string; docNumber?: number; id?: number; kind?: string }[]): RowSelection {
   const region = useRightRegion()
   const { selected, select } = useSelection()
   // What the address can't hold: several rows, or any with a folder
   const [inView, setInView] = useState<Set<string> | null>(null)
   const listed = useMemo(
-    () => (rows ? new Set(rows.flatMap((row) => (row.type === 'document' ? [`d${row.docNumber}`] : row.type === 'folder' ? [`f${row.id}`] : []))) : undefined),
+    () => (rows ? new Set(rows.flatMap((row) => (!selectable(row) ? [] : row.type === 'document' ? [`d${row.docNumber}`] : [`f${row.id}`]))) : undefined),
     [rows],
   )
   const kept = useMemo(() => (inView && listed ? new Set([...inView].filter((key) => listed.has(key))) : inView), [inView, listed])
   const selection = kept && selected === undefined ? kept : new Set(selected === undefined ? [] : [`d${selected}`])
 
   function change(next: Set<string>, { showDetails = true }: { showDetails?: boolean } = {}) {
-    const keys = [...next].filter((key) => key.startsWith('d') || key.startsWith('f'))
+    // Only rows that select: Space on a matter's own folder selects nothing, and leaves the selection as it was
+    const keys = [...next].filter((key) => (key.startsWith('d') || key.startsWith('f')) && (!listed || listed.has(key)))
+    if (keys.length === 0 && next.size > 0) return
     const [only] = keys
     const document = keys.length === 1 && only?.startsWith('d') ? Number(only.slice(1)) : undefined
     setInView(document === undefined && keys.length > 0 ? new Set(keys) : null)

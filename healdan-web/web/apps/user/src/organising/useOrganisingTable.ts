@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import type { components } from '@healdan/api'
 import { toast, t } from '@healdan/ui'
 import type { OrganisingItems } from '../actions/batch'
-import { movingFolder, whyNotDelete, type MovingFolder } from '../actions/folders'
+import { anyDeletable, movingFolder, whyNotDelete, type MovingFolder } from '../actions/folders'
 import { whyNotRename } from '../actions/rename'
 import { ROWS_TYPE } from '../filing/dropTargets'
 import { useListMenu, type ListMenuOf } from '../menus/useListMenu'
@@ -20,7 +20,7 @@ type Folder = components['schemas']['FolderView']
 /**
  * What a list does for organising (spec 6.7, 10.5; folder rename spec 5.1; folders and Trash spec 7.5): F2 renames the
  * row, a document or a folder, and on a matter's row says why it isn't renamed here; Delete asks to move the selected
- * folders and documents to the Trash, and on a matter's row, or a folder that can't be deleted, says why not; and dragging
+ * folders and documents to the Trash, and on a matter's row, or folders none of which can be deleted, says why not; and dragging
  * rows carries them to a folder of the tree. `selected` are the selected documents and `folders` the selected folders, for
  * More, and `contextMenu` the rows' right-click menu, which acts on them too (useListMenu). `onSelect` selects the row a
  * right-click lands on; none where the address alone selects.
@@ -71,12 +71,16 @@ export function useOrganisingTable(rows: readonly Hit[], selection: ReadonlySet<
       onDelete: (keys: Set<string>) => {
         // A matter's own folder is deleted in the Classic Interface, as Delete on a matter in the tree says
         if ([...keys].some((key) => matters.has(key))) return toast(t('delete.matterFolder'))
-        // A folder that can't be deleted says why, as F2 does, and nothing is asked; with several, naming it
-        const blocked = foldersOf(keys).find((folder) => !folder.canDelete)
-        const why = blocked && whyNotDelete(blocked, me.data?.admin)
-        if (blocked && why) return toast(keys.size > 1 ? t('organising.refused', { name: blocked.name, reason: t(why) }) : t(why))
         const items = itemsOf(keys)
-        if (items.documents.length + items.folders.length > 0) organising.askDelete(items)
+        // With nothing that can be deleted, the first folder says why, as F2 does, and nothing is asked; with several,
+        // naming it. Several with something deletable are asked about, and those that can't be say why in Refusals
+        if (!anyDeletable(items)) {
+          const blocked = foldersOf(keys).find((folder) => !folder.canDelete)
+          const why = blocked && whyNotDelete(blocked, me.data?.admin)
+          if (blocked && why) toast(keys.size > 1 ? t('organising.refused', { name: blocked.name, reason: t(why) }) : t(why))
+          return
+        }
+        organising.askDelete(items)
       },
       drag: {
         type: ROWS_TYPE,

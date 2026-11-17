@@ -287,8 +287,10 @@ and `drag` props and the selected documents and folders for the toolbar's More m
   (`filing/refusal.ts`: a hold says who holds it, an `already-filed` names the copy).
 - **Deleting folders.** The Delete key on a folder's row or on a folder in the tree, the folder's right-click menu, the
   tree's ⋯ and the open folder's ⋯ all ask (**Move To…** and **Delete** follow **Rename** in each, and a matter's own
-  folder has neither). `canDelete` greys **Delete** out, and `whyNotDelete` says why the key does nothing, as
-  `whyNotRename` does for F2. The question names one item, "Move "Old Drafts" to the Trash?", with what a folder holds
+  folder has neither). For one folder, `canDelete` greys **Delete** out, and `whyNotDelete` says why the key does
+  nothing, as `whyNotRename` does for F2. In a selection of several, **Delete** stays while anything in it can be
+  deleted: a folder that can't makes no call and is a line of `Refusals` with `whyNotDelete`'s reason, while the rest is
+  deleted. The question names one item, "Move "Old Drafts" to the Trash?", with what a folder holds
   from `GET /folders/{id}/contents`, which counts only what the person can read, and lists several. A refusal is a line
   of `Refusals` (`folderDeleteRefusal`): `items-not-allowed` names nothing, and `checked-out` lists only the problem's
   `holds`, the documents the person can read. An open folder that's deleted gives way to its parent.
@@ -319,7 +321,9 @@ and `drag` props and the selected documents and folders for the toolbar's More m
 - **Every list of documents** has it: a folder, search results, Recent Documents and Emails, and the `#` result, each with
   `useOrganisingTable` and a `Toolbar` holding `SelectionActions`, and Recent › Folders and a Folders search have F2 and
   Delete. `useRowSelection(rows)` puts one document selected alone in `?sel=`, and keeps several, or any with a folder,
-  in the view, as a folder is never in the address and has no details. It keeps only the selected rows still listed, so
+  in the view, as a folder is never in the address and has no details. A matter's own folder, where a list shows one
+  (Recent › Folders), isn't selected or dragged, as a matter's row isn't (`selectable` in `useListing.ts`), and a click
+  opens it. It keeps only the selected rows still listed, so
   once they're deleted or moved F2 and Delete take the focused row.
 
 Test it with `organising/*.test.tsx`; `testing.tsx` has routes for a folder that rename, move, delete and restore as the

@@ -5,7 +5,7 @@ import { useMemo } from 'react'
 import type { components } from '@healdan/api'
 import { plural, t, type ItemMenu } from '@healdan/ui'
 import { movingFolder } from '../actions/folders'
-import { childKey, type Hit } from '../views/useListing'
+import { childKey, selectable, type Hit } from '../views/useListing'
 import { DocumentMenuItems, folderMenu, MatterMenuItems, SelectionMenuItems } from './ContextMenus'
 
 export interface ListMenuOf {
@@ -27,8 +27,8 @@ function nameOf(hit: Hit): string {
  * A list's right-click menu, by row (changed after M6: the owner's dogfooding punch list, 2026-11-14). A right-click on a
  * document or a folder that isn't selected selects it first, in place of the selection, as Finder does; one inside the
  * selection keeps it, and the menu then acts on all of it: several documents have a document's menu with only what takes
- * several, and a selection with a folder in it has Move To… and Delete (folders and Trash spec 7.5). A matter's row isn't
- * selected, and leaves the selection alone. The right-click doesn't show the row's details in place of Filters, as a click
+ * several, and a selection with a folder in it has Move To… and Delete (folders and Trash spec 7.5). A matter's row, or a
+ * matter's own folder's, isn't selected, and leaves the selection alone. The right-click doesn't show the row's details in place of Filters, as a click
  * does: it only asked for a menu.
  */
 export function useListMenu({ rows, selection, onSelect, selected }: ListMenuOf): ItemMenu {
@@ -55,8 +55,8 @@ export function useListMenu({ rows, selection, onSelect, selected }: ListMenuOf)
       return folderMenu(hit, 'row')
     },
     onOpen: (key) => {
-      const type = byKey.get(key)?.type
-      if ((type === 'document' || type === 'folder') && !selection.has(key)) onSelect?.(new Set([key]), { showDetails: false })
+      const hit = byKey.get(key)
+      if (hit && selectable(hit) && !selection.has(key)) onSelect?.(new Set([key]), { showDetails: false })
     },
   }
 }

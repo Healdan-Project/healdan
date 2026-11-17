@@ -7,7 +7,7 @@ import { createContext, useContext, useState, type DragEvent, type ReactNode } f
 import type { components } from '@healdan/api'
 import { plural, t, toast, toastWithAction } from '@healdan/ui'
 import { eachItem, nameOf, refusalLines, type Movable, type OneItem, type OrganisingItems, type Outcome, type RefusalLine } from '../actions/batch'
-import { deleteFolder, folderContents, folderDeleteRefusal } from '../actions/folders'
+import { deleteFolder, folderContents, folderDeleteRefusal, FolderNotDeletable, whyNotDelete } from '../actions/folders'
 import { moveDocuments } from '../actions/move'
 import { invalidateDocumentLists } from '../actions/refresh'
 import { removeDocument } from '../actions/remove'
@@ -194,7 +194,9 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     const next = rowAfter(rowKeys(items))
     const outcome = await eachItem<S['TrashItem']>(items, {
       document: (document) => removeDocument(api, document.docNumber),
-      folder: (folder) => deleteFolder(api, folder.id),
+      // One of several that says it can't be deleted makes no call: Refusals says why, and the rest is deleted
+      folder: (folder) =>
+        folder.canDelete ? deleteFolder(api, folder.id) : Promise.reject(new FolderNotDeletable(whyNotDelete(folder, me.data?.admin) ?? 'delete.noPermission')),
     })
     const done = outcome.done.flatMap((one) => ('document' in one ? [one.document.docNumber] : []))
     // What was deleted can't stay selected: its details would answer 404
