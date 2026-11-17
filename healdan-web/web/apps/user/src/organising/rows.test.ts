@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { describe, expect, it, vi } from 'vitest'
-import { pageToken, readRows, rowsPayload } from './rows'
+import { focusLater, pageToken, readRows, rowsPayload } from './rows'
 
 describe('The rows a drag carries', () => {
   it('are the documents\' numbers, names and folders, and read back as they were written', () => {
@@ -25,6 +25,29 @@ describe('The rows a drag carries', () => {
     expect(readRows(JSON.stringify({ token: pageToken, documents: 'x' }))).toEqual([])
     expect(readRows('not json')).toEqual([])
     expect(readRows('')).toEqual([])
+  })
+})
+
+describe('Focusing a row later', () => {
+  it('stops trying, with no fault, once the page has gone', () => {
+    // A released row that stays drawn, as in a folder, keeps it trying for a second; a test's page can go in that second
+    const grid = globalThis.document.createElement('div')
+    grid.setAttribute('role', 'grid')
+    grid.innerHTML = '<div data-row-key="d10432" tabindex="-1"></div><div data-row-key="d10433" tabindex="-1"></div>'
+    globalThis.document.body.append(grid)
+    vi.useFakeTimers()
+    try {
+      focusLater('d10432', ['d10433'])
+      vi.advanceTimersByTime(100)
+      expect(vi.getTimerCount()).toBe(1)
+      vi.stubGlobal('document', undefined)
+      expect(() => vi.runAllTimers()).not.toThrow()
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.unstubAllGlobals()
+      vi.useRealTimers()
+      grid.remove()
+    }
   })
 })
 

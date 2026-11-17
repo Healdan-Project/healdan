@@ -52,6 +52,9 @@ export function rowAfter(docNumbers: readonly number[]): string | undefined {
 export function focusLater(key: string | undefined, gone: readonly string[] = []) {
   let tries = 0
   const attempt = () => {
+    // A browser runs no timer of a page that has gone, but a test's page (jsdom's) goes with the timer still set, and
+    // where the rows stay drawn the tries last a second
+    if (!globalThis.document) return
     const target = gone.some(rowDrawn)
       ? null
       : ((key ? globalThis.document.querySelector<HTMLElement>(`[data-row-key="${key}"]`) : null) ?? (key ? null : globalThis.document.querySelector<HTMLElement>('[role="grid"]')))
