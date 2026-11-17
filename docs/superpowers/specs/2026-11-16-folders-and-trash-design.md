@@ -237,7 +237,8 @@ deleted. Each delete is recorded as one Trash item (§5.1), which lists what it 
   confirmation ending "You won't be able to restore it. An administrator can, for 30 days." (the set days).
 - **What it takes:** the item's members that are still deleted go to 2. A folder removed takes its contents with it
   (CE's `FSI.deleteFromTrash` left them at 1, in the Trash). A member removed on its own in the Classic Interface goes
-  alone (§5.1).
+  alone (§5.1), as an item of its own in Removed, so an administrator sees it there before it's destroyed (changed in the
+  build).
 - **Who:** the deleter, for their own; an admin, for anyone's, from Everyone's.
 - **On every route:** the Classic Interface's three removal RPCs go through Healdan (§9.1), so their removals are
   recorded the same way and take a folder's contents too.
@@ -475,10 +476,18 @@ What changes there, each through Healdan's code (§9.1):
 
 ### 9.1 Upstream files (each a small hook into Healdan's code, listed in this spec)
 
-- **`HibernateFolderDAO.deleteTree`:** the document update takes only rows at 0 (`and ld_deleted = 0`), so a folder
-  delete doesn't take items already deleted or removed (§4.2).
+- **`HibernateFolderDAO.deleteTree`:** the document update and the alias update take only rows at 0
+  (`and ld_deleted = 0`), so a folder delete doesn't take items already deleted or removed, and an alias already removed
+  stays removed (§4.2). Where it stops at an immutable document after Healdan's hook, it calls a new `HealdanHooks`
+  method, `afterFolderDeleteTree`, so the Trash's item keeps only what it took (changed in the build).
 - **`HibernateFolderDAO.restore`:** the two updates that set the tree's folders and documents live take only the ids a
-  new `HealdanHooks` method names, whose default keeps CE's behaviour (§4.4).
+  new `HealdanHooks` method names, whose default keeps CE's behaviour (§4.4), in lists of at most 1,000.
+- **`LDRepository.deleteTree`** (CMIS): calls `afterFolderDeleteTree` once its item-by-item delete ends, however it ends.
+  CMIS records the item before it deletes, and commits each row on its own, so a delete that stops short leaves the item
+  holding live rows; the hook drops them, and when the folder itself stayed, each top-most row it did delete becomes an
+  item of its own (changed in the build).
+- **`DocumentServiceImpl.deleteDocument`:** deletes the document before its shortcuts, as the API does, so a refused
+  delete leaves the shortcuts live instead of in the trash with no item and no deleter (changed in the build).
 - **`DocumentServiceImpl.deleteFromTrash`, `emptyTrash`, and `FolderServiceImpl.deleteFromTrash`:** call a new
   `HealdanHooks` method each, whose default keeps CE's SQL (§4.5).
 - **`FolderServiceImpl.move` and `SoapFolderService.move`** (which REST's calls): call
@@ -494,8 +503,12 @@ What changes there, each through Healdan's code (§9.1):
   `where` clause, so each destroy writes another document's file name into another folder's history, which that
   folder's readers can see, across matters. It gains `where ld_id = ?` (call, from the builder check: a fix to a leak in
   upstream code, which the ground rules fix in Healdan; it fixes the Classic Interface's Destroy Documents too). CE's own
-  info lines naming each file stay, as they are for Destroy Documents; the job's own lines name none.
-- **`HealdanHooks`** (fork-owned in core) gains those methods; **`HealdanTreeChecks`** (fork-owned) gains `movedTrees`.
+  info lines naming each file stay, as they are for Destroy Documents; the job's own lines name none. It also no longer
+  deletes from `ld_readingrequest`, which no CE schema has: the failure, which CE swallowed, made the caller's
+  transaction rollback-only, so a destroy inside one never committed (changed in the build). A sync that brings the
+  table puts the delete back, without the `try`.
+- **`HealdanHooks`** (fork-owned in core) gains those methods and `afterFolderDeleteTree`; **`HealdanTreeChecks`**
+  (fork-owned) gains `movedTrees`.
 
 Each upstream edit adds its test class to CI's `UPSTREAM_TESTS` (`HibernateFolderDAOTest` methods for the delete and
 restore, the RPC services' tests where they exist, and `ResourceServiceImplTest#testMoveFolder` for WebDAV's).

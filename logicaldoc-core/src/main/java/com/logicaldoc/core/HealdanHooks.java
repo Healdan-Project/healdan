@@ -106,6 +106,19 @@ public interface HealdanHooks {
     }
 
     /**
+     * Called once a tree's delete is over on a route that can stop short after
+     * {@link #beforeFolderDeleteTree}: when CMIS's {@code deleteTree} ends,
+     * however it ends, and where {@code HibernateFolderDAO.deleteTree} stops at
+     * an immutable document. Not a check: it never throws.
+     *
+     * @param folderId the root of the tree
+     * @param transaction the history entry, possibly {@code null}
+     */
+    default void afterFolderDeleteTree(long folderId, FolderHistory transaction) {
+        // Nothing by default
+    }
+
+    /**
      * Called first in {@code HibernateFolderDAO.merge}, and again for each
      * clashing subfolder it merges, before any document is moved: each move
      * removes the document's hit from the index and saves a version in the

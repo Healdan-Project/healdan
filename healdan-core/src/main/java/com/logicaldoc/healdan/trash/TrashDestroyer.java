@@ -204,9 +204,12 @@ public class TrashDestroyer {
 	 * a transaction of its own, then, unless one failed, the folders in one
 	 */
 	private Outcome destroy(long item, Instant cutoff, Instant now, User system) {
+		// What was destroyed outside the Trash, as the Classic Interface's Destroy Documents does, is so recorded, and
+		// no later night reads it again
+		int gone = store.destroyedIfGone(item, TrashState.REMOVED, now);
 		List<TrashMember> members = store.membersRemovedBefore(item, cutoff);
 		Outcome documents = destroyDocuments(item, members, system, now);
-		int count = documents.destroyed();
+		int count = gone + documents.destroyed();
 		boolean failed = documents.failed();
 		if (!failed)
 			try {

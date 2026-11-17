@@ -8,8 +8,12 @@ import java.util.List;
 import java.util.Map;
 
 import org.hibernate.Hibernate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.PersistenceException;
@@ -64,6 +68,8 @@ import jakarta.annotation.PreDestroy;
  */
 @Component
 public class HealdanHooksImpl implements HealdanHooks {
+
+	private static final Logger log = LoggerFactory.getLogger(HealdanHooksImpl.class);
 
 	static final String EVERYONE_DELETE = "The Everyone group can't be deleted.";
 
@@ -193,12 +199,34 @@ public class HealdanHooksImpl implements HealdanHooks {
 			// Whoever asks, admins too: a check-out inside, or an immutable document, at which CE's own delete stopped
 			// silently, after writing the folder's history. After the permissions, so someone who may not delete
 			// everything inside learns nothing of what's there (spec 4.2, 6.1)
-			TrashRules.get().checkDeletable(folderId);
+			List<Long> tree = rows.tree(folderId);
+			TrashRules.get().checkDeletable(tree);
 			// Not a rule: once the rules let it through, the tree CE is about to delete is one Trash item, recorded in
 			// the delete's transaction
-			TrashRecorder.get().treeDeleting(folderId, actor);
+			TrashRecorder.get().treeDeleting(folderId, tree, actor);
 		});
 		evictTreeAfterCompletion(folderId);
+	}
+
+	/**
+	 * Not a rule: the Trash item the delete recorded keeps only what it took
+	 * ({@link TrashRecorder#settle}). A failure is logged, never thrown, so the
+	 * delete's own outcome stands.
+	 */
+	@Override
+	public void afterFolderDeleteTree(long folderId, FolderHistory transaction) {
+		try {
+			new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+				try {
+					TrashRecorder.get().settle(folderId);
+				} catch (PersistenceException e) {
+					throw new IllegalStateException(e);
+				}
+			});
+		} catch (RuntimeException e) {
+			log.warn("The Trash item of a folder delete couldn't be settled ({})", e.getClass().getSimpleName());
+			log.debug("Couldn't settle the Trash item of folder {}", folderId, e);
+		}
 	}
 
 	/**

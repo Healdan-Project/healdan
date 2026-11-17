@@ -85,14 +85,29 @@ public class TrashRules {
 	 *         with {@link #CHECKED_OUT} or {@link #IMMUTABLE}
 	 */
 	public void checkDeletable(long folderId) throws PersistenceException {
-		List<Long> tree = rows.tree(folderId);
+		checkDeletable(rows.tree(folderId));
+	}
+
+	/**
+	 * {@link #checkDeletable(long)} with the folder's live tree already read
+	 *
+	 * @param tree the folder and the live folders below it, as
+	 *        {@link StoredRows#tree} gives them
+	 * @throws PersistenceException the refusal
+	 */
+	public void checkDeletable(List<Long> tree) throws PersistenceException {
 		if (!checkedOutIn(tree).isEmpty())
 			throw new HealdanRuleException(CHECKED_OUT);
 		if (holdsImmutable(tree))
 			throw new HealdanRuleException(IMMUTABLE);
 	}
 
-	private List<Long> checkedOutIn(List<Long> tree) {
+	/**
+	 * @param tree the folder and the live folders below it, as
+	 *        {@link StoredRows#tree} gives them
+	 * @return every live document in them that is checked out, by anyone
+	 */
+	public List<Long> checkedOutIn(List<Long> tree) {
 		List<Long> ids = new ArrayList<>();
 		for (List<Long> folders : chunks(tree))
 			ids.addAll(named.queryForList("""
@@ -104,7 +119,12 @@ public class TrashRules {
 		return ids;
 	}
 
-	private boolean holdsImmutable(List<Long> tree) {
+	/**
+	 * @param tree the folder and the live folders below it, as
+	 *        {@link StoredRows#tree} gives them
+	 * @return true if a live document in them is immutable
+	 */
+	public boolean holdsImmutable(List<Long> tree) {
 		for (List<Long> folders : chunks(tree)) {
 			Long count = named.queryForObject("""
 					select count(*) from ld_document

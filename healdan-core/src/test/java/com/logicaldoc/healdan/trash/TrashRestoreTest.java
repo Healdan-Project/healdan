@@ -369,6 +369,56 @@ public class TrashRestoreTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testAShortcutLeftBehindGoesWithItsFolder() throws Exception {
+		Document c = upload(correspondence, "c.txt", alice);
+		Folder elsewhere = fx.folder(documents, "Elsewhere");
+		awaitAsyncWork();
+		Document shortcut = fx.legacyShortcut(c, elsewhere);
+		documentDao.delete(c.getId(), documentHistory(alice));
+		documentDao.delete(shortcut.getId());
+		long cItem = holding(document(c));
+		// The shortcut's folder goes to the Trash after it, without it
+		folderDao.deleteTree(elsewhere.getId(), folderHistory(alice));
+		long elsewhereItem = holding(folder(elsewhere));
+
+		restore.restore(cItem, null, alice, aliceSession);
+
+		// Its folder isn't live: it stays, and moves to the item that holds its folder
+		assertEquals(0, rowDeleted(document(c)));
+		assertEquals(1, rowDeleted(document(shortcut)));
+		assertTrue(trash.member(cItem, document(shortcut)).isEmpty());
+		assertEquals(Optional.of(elsewhereItem), trash.itemHolding(document(shortcut), TrashState.DELETED));
+
+		// So it goes with that folder, here to Removed, and isn't left in the trash under it
+		TrashRemoval.get().removeItem(elsewhereItem, alice);
+		assertEquals(2, rowDeleted(document(shortcut)));
+		assertEquals(TrashState.REMOVED, trash.member(elsewhereItem, document(shortcut)).orElseThrow().state());
+	}
+
+	@Test
+	public void testAnAliasFromOutsideComesBackOnlyIntoALiveFolder() throws Exception {
+		Folder tree = fx.folder(correspondence, "Aliased Tree");
+		Folder holder = fx.folder(loose, "Holder");
+		Folder alias = fx.legacyAlias(holder, "Tree's Alias", tree);
+		awaitAsyncWork();
+		folderDao.deleteTree(tree.getId(), folderHistory(alice));
+		long id = holding(folder(tree));
+		// The alias's own folder goes to the Trash after it, without it
+		folderDao.deleteTree(holder.getId(), folderHistory(admin));
+		long holderItem = holding(folder(holder));
+
+		folderDao.restore(tree.getId(), correspondence.getId(), folderHistory(alice));
+
+		assertEquals(0, rowDeleted(folder(tree)));
+		assertEquals(1, rowDeleted(folder(alias)));
+		assertTrue(trash.member(id, folder(alias)).isEmpty());
+		assertEquals(Optional.of(holderItem), trash.itemHolding(folder(alias), TrashState.DELETED));
+
+		folderDao.restore(holder.getId(), loose.getId(), folderHistory(admin));
+		assertEquals(0, rowDeleted(folder(alias)));
+	}
+
+	@Test
 	public void testPlaceOfIsEmptyWhenTheFolderIsGone() throws Exception {
 		Folder letters = fx.folder(correspondence, "Letters");
 		Document a = upload(letters, "a.txt", alice);

@@ -2470,6 +2470,9 @@ paths:
         1. `404 not-found` for an item that doesn't exist, isn't in the Trash
            (restored, removed already, or destroyed), or that someone else
            deleted, unless the caller is an administrator.
+        2. `409 refused` when nothing its delete took is in the Trash any
+           more, though the item still says so. What was destroyed outside
+           the Trash is then recorded as destroyed, and the item leaves it.
       tags: [Trash]
       parameters:
         - $ref: '#/components/parameters/TrashId'

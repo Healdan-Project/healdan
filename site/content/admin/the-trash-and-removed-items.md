@@ -70,7 +70,8 @@ The Classic Interface keeps its Trash, and its **Deleted documents** and **Delet
 What it restores follows the same rules as the rest: a restore of a folder brings back only what that delete took, and
 a folder that has been removed from the Trash comes back only for an administrator. The reports list what is in the
 Trash and what was removed, one row at a time, everyone's for administrators, and restore them. Restoring or removing
-one row changes that row alone.
+one row changes that row alone. A row removed on its own, such as one subfolder of a deleted folder, leaves that folder's
+item for an item of its own in Removed, where you can restore it before the nightly job destroys it.
 
 **Removing** takes a folder's contents with it, whichever of the Classic Interface's three removal actions you use:
 deleting a folder from the Trash, deleting a document from the Trash, and Empty trash. Each records who removed what

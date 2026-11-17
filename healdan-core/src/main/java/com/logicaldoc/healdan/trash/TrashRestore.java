@@ -74,8 +74,10 @@ public class TrashRestore {
 
 	/** Members of an item, with where their rows stand */
 	private static final String MEMBER_FOLDERS = """
-			select m.hd_objectid, m.hd_state, f.ld_deleted, f.ld_foldref from hd_trash_member m
+			select m.hd_objectid, m.hd_state, f.ld_deleted, f.ld_foldref, f.ld_parentid, p.ld_deleted
+			  from hd_trash_member m
 			  join ld_folder f on f.ld_id = m.hd_objectid
+			  left join ld_folder p on p.ld_id = f.ld_parentid
 			 where m.hd_trashid = :item and m.hd_objecttype = 'F' and m.hd_state in (:states)
 			 order by m.hd_objectid
 			""";
@@ -89,7 +91,8 @@ public class TrashRestore {
 			""";
 
 	/** Nothing comes back with a live folder, whose restore is a move */
-	private static final Plan NOTHING = new Plan(0L, Map.of(), new HealdanHooks.RestoreScope(List.of(), List.of()));
+	private static final Plan NOTHING = new Plan(0L, Map.of(), new HealdanHooks.RestoreScope(List.of(), List.of()),
+			List.of());
 
 	private final TrashStore store;
 
@@ -133,6 +136,8 @@ public class TrashRestore {
 		if (plan == null)
 			return null;
 		mark(plan.item(), plan.taken(), actor);
+		for (Left left : plan.left())
+			rehome(plan.item(), left);
 		HealdanHooks.RestoreScope scope = plan.scope();
 		queueForIndexing(scope.documentIds());
 		CacheEvictor evictor = CacheEvictor.get();
@@ -294,12 +299,24 @@ public class TrashRestore {
 		Map<TrashState, List<TrashMember>> taken = new EnumMap<>(TrashState.class);
 		List<Long> folders = new ArrayList<>();
 		List<Long> documents = new ArrayList<>();
+		List<Left> left = new ArrayList<>();
 		named.query(MEMBER_FOLDERS, args, rs -> {
 			long id = rs.getLong(1);
 			long foldRef = rs.getLong(4);
 			boolean aliasIntoTree = !rs.wasNull() && tree.contains(foldRef);
-			if ((tree.contains(id) || aliasIntoTree)
-					&& take(item.get(), new TrashMember('F', id), TrashState.of(rs.getString(2)), rs.getInt(3), taken))
+			if (!tree.contains(id) && !aliasIntoTree)
+				return;
+			TrashMember member = new TrashMember('F', id);
+			TrashState memberState = TrashState.of(rs.getString(2));
+			int parentRow = rs.getInt(6);
+			if (rs.wasNull())
+				parentRow = -1;
+			// An alias from outside the tree comes back only into a live folder, as a shortcut does
+			if (!tree.contains(id) && parentRow != 0) {
+				log.debug("Left alias {} of Trash item {}: its folder isn't live", id, item.get());
+				if (rs.getInt(3) == code(memberState))
+					left.add(new Left(member, memberState, rs.getLong(5), parentRow));
+			} else if (take(item.get(), member, memberState, rs.getInt(3), taken))
 				folders.add(id);
 		});
 		named.query(MEMBER_DOCUMENTS, args, rs -> {
@@ -308,7 +325,7 @@ public class TrashRestore {
 					&& take(item.get(), new TrashMember('D', id), TrashState.of(rs.getString(2)), rs.getInt(3), taken))
 				documents.add(id);
 		});
-		return new Plan(item.get(), taken, new HealdanHooks.RestoreScope(folders, documents));
+		return new Plan(item.get(), taken, new HealdanHooks.RestoreScope(folders, documents), left);
 	}
 
 	/**
@@ -333,22 +350,29 @@ public class TrashRestore {
 	 * own folder while that is live, with JDBC as a folder's restore brings
 	 * them back: CE's document restore refuses a shortcut anywhere in a Store
 	 */
-	private void restoreShortcuts(long trashId, TrashMember top, TrashState state, User actor) {
+	private void restoreShortcuts(long trashId, TrashMember top, TrashState state, User actor)
+			throws PersistenceException {
 		List<String> states = state == TrashState.REMOVED
 				? List.of(TrashState.DELETED.code(), TrashState.REMOVED.code())
 				: List.of(TrashState.DELETED.code());
 		Map<TrashState, List<TrashMember>> taken = new EnumMap<>(TrashState.class);
 		List<Long> shortcuts = new ArrayList<>();
+		List<Left> left = new ArrayList<>();
 		named.query(MEMBER_DOCUMENTS, new MapSqlParameterSource("item", trashId).addValue("states", states), rs -> {
 			long id = rs.getLong(1);
 			if (id == top.objectId())
 				return;
 			TrashMember member = new TrashMember('D', id);
-			if (rs.getInt(5) != 0)
+			TrashState memberState = TrashState.of(rs.getString(2));
+			if (rs.getInt(5) != 0) {
 				log.debug("Left shortcut {} of Trash item {}: its folder isn't live", id, trashId);
-			else if (take(trashId, member, TrashState.of(rs.getString(2)), rs.getInt(3), taken))
+				if (rs.getInt(3) == code(memberState))
+					left.add(new Left(member, memberState, rs.getLong(4), rs.getInt(5)));
+			} else if (take(trashId, member, memberState, rs.getInt(3), taken))
 				shortcuts.add(id);
 		});
+		for (Left one : left)
+			rehome(trashId, one);
 		if (shortcuts.isEmpty())
 			return;
 		for (List<Long> chunk : CollectionUtil.partition(shortcuts, CHUNK)) {
@@ -364,6 +388,35 @@ public class TrashRestore {
 		evictor.evictDocuments(shortcuts);
 		evictor.evictDocumentsAfterCompletion(shortcuts);
 		log.debug("Restored {} shortcuts of Trash item {}", shortcuts.size(), trashId);
+	}
+
+	/**
+	 * A member a restore leaves behind, because the folder it is in isn't live
+	 *
+	 * @param member the shortcut or alias
+	 * @param state its state in the item
+	 * @param folderId the folder it is in
+	 * @param folderRow that folder's deletion code
+	 */
+	private record Left(TrashMember member, TrashState state, long folderId, int folderRow) {
+	}
+
+	/**
+	 * Gives a member a restore leaves behind a place in the Trash, so that it
+	 * isn't left in an item restored without it: the item that holds its
+	 * folder in the member's own state, so that it comes back with that
+	 * folder; or else an item of its own
+	 */
+	private void rehome(long trashId, Left left) throws PersistenceException {
+		Optional<Long> holder = left.folderRow() == code(left.state())
+				? store.itemHolding(new TrashMember('F', left.folderId()), left.state())
+				: Optional.empty();
+		if (holder.isPresent() && holder.get() != trashId && store.member(holder.get(), left.member()).isEmpty()) {
+			store.moveMembers(trashId, List.of(left.member()), holder.get());
+			log.debug("Moved {} {} of Trash item {} to Trash item {}, which holds its folder", left.member().type(),
+					left.member().objectId(), trashId, holder.get());
+		} else
+			TrashRecorder.get().splitOff(trashId, left.member(), List.of(left.member()));
 	}
 
 	private void mark(long item, Map<TrashState, List<TrashMember>> taken, User actor) {
@@ -409,7 +462,10 @@ public class TrashRestore {
 	 * @param item the folder's item, 0 for none
 	 * @param taken the members taken, by the state they are in
 	 * @param scope what the restore sets live
+	 * @param left the aliases from outside it leaves behind, their folders
+	 *        not live
 	 */
-	private record Plan(long item, Map<TrashState, List<TrashMember>> taken, HealdanHooks.RestoreScope scope) {
+	private record Plan(long item, Map<TrashState, List<TrashMember>> taken, HealdanHooks.RestoreScope scope,
+			List<Left> left) {
 	}
 }

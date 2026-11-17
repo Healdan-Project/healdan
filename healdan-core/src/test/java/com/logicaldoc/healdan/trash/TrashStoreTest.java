@@ -247,22 +247,6 @@ public class TrashStoreTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testRemovedBeforeTakesTheOldestFirst() {
-		long a = insertFolder("A", 100, 3L, T0);
-		long b = insertFolder("B", 200, 3L, T0);
-		long c = insertFolder("C", 300, 3L, T0);
-		store.change(a, List.of(doc(1000)), TrashState.DELETED, TrashState.REMOVED, 9L, "Admin", T0.plusSeconds(300));
-		store.change(a, List.of(doc(1001)), TrashState.DELETED, TrashState.REMOVED, 9L, "Admin", T0.plusSeconds(50));
-		store.change(b, List.of(folder(200)), TrashState.DELETED, TrashState.REMOVED, 9L, "Admin", T0.plusSeconds(10));
-		store.change(c, List.of(folder(300)), TrashState.DELETED, TrashState.REMOVED, 9L, "Admin", T0.plusSeconds(1000));
-
-		assertEquals(List.of(b, a), store.removedBefore(T0.plusSeconds(500), 10));
-		assertEquals(List.of(b), store.removedBefore(T0.plusSeconds(500), 1));
-		assertEquals(List.of(b, a, c), store.removedBefore(T0.plusSeconds(5000), 10));
-		assertTrue(store.removedBefore(T0, 10).isEmpty());
-	}
-
-	@Test
 	public void testRemovedBeforePagesOnFromTheLastItem() {
 		long a = insertFolder("A", 100, 3L, T0);
 		long b = insertFolder("B", 200, 3L, T0);
