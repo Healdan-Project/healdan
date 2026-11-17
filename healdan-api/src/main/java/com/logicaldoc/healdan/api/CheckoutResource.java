@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.api;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.apache.commons.lang.StringUtils;
 import org.hibernate.StaleStateException;
@@ -37,10 +38,12 @@ import com.logicaldoc.healdan.util.BasicPlane;
 
 import jakarta.persistence.OptimisticLockException;
 import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 
@@ -66,6 +69,9 @@ public class CheckoutResource {
 
 	/** The code of a refusal because another of the caller's devices holds the check-out */
 	static final String HELD_ELSEWHERE = "held-elsewhere";
+
+	/** The history comment of a release of a check-out another device held: the device, then the app */
+	static final String RELEASED_ELSEWHERE = "Released while checked out on %s";
 
 	/** The longest app name stored ({@code hd_hold_device.hd_app}) */
 	private static final int MAX_APP_LENGTH = 100;
@@ -150,10 +156,13 @@ public class CheckoutResource {
 	 * answered as it is.
 	 *
 	 * @param docNumber the doc #
+	 * @param elsewhere true to release a check-out another of the caller's
+	 *        devices holds, which is then recorded with that device
 	 * @return the document, free
 	 */
 	@DELETE
-	public DocumentView release(@PathParam("docNumber") long docNumber) {
+	public DocumentView release(@PathParam("docNumber") long docNumber,
+			@QueryParam("elsewhere") @DefaultValue("false") boolean elsewhere) {
 		Caller caller = Caller.current();
 		User user = caller.user();
 		String failure = "Can't release document #" + docNumber;
@@ -167,9 +176,10 @@ public class CheckoutResource {
 				boolean holder = document.getLockUserId() != null && document.getLockUserId() == user.getId();
 				if (!holder && !user.isMemberOf(Group.GROUP_ADMIN))
 					throw conflict(document, hold, docNumber, user);
-				refuseElsewhere(document, caller, docNumber);
+				if (!elsewhere)
+					refuseElsewhere(document, caller, docNumber);
 
-				unlock(document, caller.session());
+				unlock(document, caller.session(), releasedElsewhere(document, caller));
 				Document released = DocumentDAO.get().findById(document.getId());
 				DeviceHolds.get().clear(released);
 				return ApiViews.document(released, user);
@@ -367,11 +377,11 @@ public class CheckoutResource {
 	 * @throws PersistenceException CE's refusal, or its last failure; also
 	 *         when the hold is still there after the last try
 	 */
-	static void unlock(Document held, Session session) throws PersistenceException {
+	static void unlock(Document held, Session session, String comment) throws PersistenceException {
 		HoldView hold = ApiViews.hold(held);
 		for (int tries = 1;; tries++) {
 			try {
-				DocumentManager.get().unlock(held.getId(), history(session, DocumentEvent.UNLOCKED));
+				DocumentManager.get().unlock(held.getId(), history(session, DocumentEvent.UNLOCKED, comment));
 			} catch (PersistenceException | RuntimeException e) {
 				if (tries >= TRIES || !overtaken(e) || !heldAsBefore(held.getId(), hold))
 					throw e;
@@ -412,9 +422,33 @@ public class CheckoutResource {
 	 *         each with its event
 	 */
 	static DocumentHistory history(Session session, DocumentEvent event) {
+		return history(session, event, null);
+	}
+
+	/**
+	 * @return a history entry as {@link #history(Session, DocumentEvent)}
+	 *         makes it, with the comment, when there is one
+	 */
+	static DocumentHistory history(Session session, DocumentEvent event, String comment) {
 		DocumentHistory history = new DocumentHistory();
 		history.setSession(session);
 		history.setEvent(event);
+		if (comment != null)
+			history.setComment(comment);
 		return history;
+	}
+
+	/**
+	 * @return the history comment for a release of a check-out another
+	 *         device holds, naming the device and the app, or null when the
+	 *         caller's own device (or none) held it
+	 */
+	private static String releasedElsewhere(Document document, Caller caller) throws PersistenceException {
+		Optional<DeviceHolds.Held> held = DeviceHolds.get().held(document);
+		if (held.isEmpty() || DeviceHolds.get().heldHere(document, caller.token()))
+			return null;
+		String comment = RELEASED_ELSEWHERE.formatted(held.get().name() != null ? held.get().name() : "another device");
+		String app = held.get().row().getApp();
+		return app != null ? comment + " (%s)".formatted(app) : comment;
 	}
 }

@@ -1591,8 +1591,10 @@ paths:
       description: |
         Releases the document's check-out or lock without saving anything,
         and returns the document. The user who holds it can, from the device
-        that holds the check-out (`409 held-elsewhere` from another), and so
-        can an administrator; the release is recorded in the history. An
+        that holds the check-out (`409 held-elsewhere` from another, unless
+        `elsewhere=true`), and so can an administrator; the release is
+        recorded in the history. Such a release is recorded with the device
+        and app that held it. An
         administrator's release also makes an immutable document mutable
         again, as the web page's does. Anyone else gets `409 checked-out` or
         `409 locked`, with the `hold`. A free document is returned as it is,
@@ -1600,6 +1602,17 @@ paths:
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
+        - name: elsewhere
+          in: query
+          required: false
+          description: |
+            `true` to release the caller's own check-out while another of
+            their devices holds it, after the person has been warned that
+            what that device hasn't saved to Healdan is lost. `false` by
+            default, which is `409 held-elsewhere` for such a check-out.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: The document, free
