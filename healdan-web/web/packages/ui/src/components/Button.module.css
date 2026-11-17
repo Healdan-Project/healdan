@@ -22,6 +22,14 @@
   --hd-icon-on-fill: currentColor;
 }
 
+/* Red, for a confirmation that takes something away for good; a kind's icon on it takes its text's colour, as on the accent */
+.button.destructive {
+  border-color: var(--hd-destructive-fill);
+  background: var(--hd-destructive-fill);
+  color: var(--hd-destructive-on-fill);
+  --hd-icon-on-fill: currentColor;
+}
+
 /* No face: it takes the surface it sits on, which holds any text colour, and the text keeps its own. */
 .button.quiet {
   display: inline-flex;
@@ -51,7 +59,9 @@
 }
 
 .button.default[data-disabled],
-.button.default[data-pending] {
+.button.default[data-pending],
+.button.destructive[data-disabled],
+.button.destructive[data-pending] {
   border-color: var(--hd-line);
   background: var(--hd-line);
 }

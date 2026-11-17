@@ -56,7 +56,7 @@ describe('markDocumentListsStale', () => {
   // A tree with many folders open would ask for each on the return after Open in App
   it("marks what shows a document's state stale, but not My Matters' folders", () => {
     const client = new QueryClient()
-    const marked = [keys.document(10431), keys.versions(10431), keys.children(7, {}), keys.recentDocuments, keys.recentMatters, keys.search({ q: 'charter' })]
+    const marked = [keys.document(10431), keys.versions(10431), keys.children(7, {}), keys.recentDocuments, keys.recentMatters, keys.search({ q: 'charter' }), keys.trash('mine')]
     for (const key of [...marked, keys.subfolders(7)]) client.setQueryData(key, {})
 
     markDocumentListsStale(client)

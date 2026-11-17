@@ -22,6 +22,7 @@ describe('focus style', () => {
       './Table.module.css',
       './Tabs.module.css',
       './Toast.module.css',
+      './ToggleButtons.module.css',
       './Tray.module.css',
       './Tree.module.css',
     ])

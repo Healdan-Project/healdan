@@ -306,6 +306,31 @@ for the toolbar's More menu (`actions/MoreMenu.tsx`).
 Test it with `organising/*.test.tsx`; `testing.tsx` has routes for a folder that rename, move and delete as the server
 would, and a `DataTransfer` that keeps what a drag writes. `e2e/organising.spec.ts` does it in a real browser, and `e2e/folders.spec.ts` for renaming folders.
 
+## The Trash
+
+`views/TrashView.tsx` is `/app/trash`, from the **Trash** entry at the foot of the left pane, apart from its sections. Its
+rows are `GET /trash`'s items, paged as a folder's list is (`useTrash` in `queries.ts`, keyed `['trash', view, sort, order]`),
+each keyed `t<id>` and selectable; the selection isn't a document, so it isn't in `?sel=`, and `RightRegionView`'s
+`selected` shows `TrashDetails` for one item as a selected document's details are shown. `?view=` is `everyone` or
+`removed` only for an administrator (`useMe`): anyone else is asked for, and shown, Mine whatever the address says, and
+the switch, `@healdan/ui`'s `ToggleButtons` (React Aria's toggle button group, labelled **Show**), is drawn for
+administrators alone. Name, Deleted and Removed sort; `?sort=` and `?order=` are in the address.
+
+- **Restore** (`actions/trash.ts`'s `restoreItems`) is a call for each item, one after another. Each one restored toasts
+  where it went, with **Open** (`toastWithAction`); one answered `409 place-gone` opens `MovePicker` with the title
+  "Restore "…" to…", one at a time, and its **Move Here** restores with `folderId`; one answered `409 refused` (a Store's
+  item, or a shortcut deleted on its own) says it can't be restored from here. The server's own text is never shown.
+- **Remove…** and **Empty Trash…** ask first (`organising/ConfirmRemove.tsx`, with `Button`'s `destructive` variant),
+  saying how long an administrator can still restore it from the page's `removedDays`, never a constant. A folder's
+  counts come only from its `contents`, which take in only what the person can read.
+- **One at a time.** Restore, Remove and Empty Trash are disabled while one of them runs, so a second press sends nothing:
+  the server doesn't serialise two restores of one item. Once the rows have gone, a focus left on the page, a gone row or
+  a disabled button goes to the row that followed them.
+- **Refreshing.** `'trash'` is among the roots `invalidateDocumentLists` asks again, so a delete anywhere, and a restore or
+  a removal here, refresh the Trash with the lists of documents.
+
+Test it with `views/TrashView.test.tsx`, whose routes answer each view's items and restore each to its place.
+
 ## The Search Box and Search Results
 
 `search/SearchBox.tsx` is the top bar's scope picker (`scopes.ts`: the API's six `scope` values, and the four Recent

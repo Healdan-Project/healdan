@@ -97,6 +97,15 @@ describe('RightRegionView', () => {
     expect(container.innerHTML).toBe('')
   })
 
+  it('shows the details of what a view has selected that the address does not hold, as a Trash item', () => {
+    render(
+      <RightRegionProvider>
+        <RightRegionView details={<p>the item</p>} selected />
+      </RightRegionProvider>,
+    )
+    expect(screen.getByRole('region', { name: 'Details' }).textContent).toBe('the item')
+  })
+
   it("is a region named for what it shows", () => {
     selected = 10388
     render(<RightRegionProvider>{view}</RightRegionProvider>)

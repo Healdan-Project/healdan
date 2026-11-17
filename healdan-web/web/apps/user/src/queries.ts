@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo } from 'react'
 import { apiPath, type Api, type components } from '@healdan/api'
+import { listTrash, type TrashSort, type TrashViewName } from './actions/trash'
 import type { PageOf } from './pages'
 import { ASK_ON_RETURN } from './queryClient'
 import { useApi } from './services'
@@ -40,6 +41,8 @@ export const keys = {
   search: (options: Record<string, unknown>) => ['search', options] as const,
   searchFacets: (options: Record<string, unknown>) => ['search', 'facets', options] as const,
   devices: ['auth', 'tokens'] as const,
+  // A view of the Trash, in an order: everything under ['trash'] is asked again after a restore, a remove or a delete
+  trash: (view: TrashViewName, sort?: TrashSort, order?: 'asc' | 'desc') => ['trash', view, sort, order] as const,
   suggest: (q: string) => ['suggest', q] as const,
   users: (q: string) => ['users', q] as const,
 }
@@ -182,4 +185,26 @@ export async function fetchSubfolders(api: Api, id: string): Promise<S['FolderVi
     offset += page.items.length
     if (page.items.length < CHILDREN_PAGE || (page.total != null && offset >= page.total)) return all
   }
+}
+
+/**
+ * A view of the Trash, paged as a folder's list is (useListing): the next 100 as the end of the rows comes into view, the
+ * last order's rows kept while a new one loads, and asked again on each return to the window. `enabled` false asks nothing,
+ * while it isn't known yet which view the person may see.
+ */
+export function useTrash(view: TrashViewName, sort?: TrashSort, order?: 'asc' | 'desc', enabled = true) {
+  const api = useApi()
+  return useInfiniteQuery({
+    queryKey: keys.trash(view, sort, order),
+    queryFn: ({ pageParam }) => listTrash(api, { view, sort, order, offset: pageParam }),
+    initialPageParam: 0,
+    getNextPageParam: (last) => {
+      const next = last.offset + (last.items?.length ?? 0)
+      // An empty page ends it too, should items have gone since the count
+      return (last.items?.length ?? 0) > 0 && next < (last.total ?? 0) ? next : undefined
+    },
+    enabled,
+    placeholderData: keepPreviousData,
+    meta: ASK_ON_RETURN,
+  })
 }

@@ -122,6 +122,11 @@ export interface RightRegionProps {
   details?: ReactNode
   /** The docked reading pane */
   preview?: ReactNode
+  /**
+   * Something is selected that the address doesn't hold, as a Trash item isn't a document: its details show as a selected
+   * document's do
+   */
+  selected?: boolean
 }
 
 /**
@@ -129,7 +134,7 @@ export interface RightRegionProps {
  * window a divider at its edge resizes it: the details and Filters share one width, and the reading pane has its own, as a
  * page wants more room than the details do.
  */
-export function RightRegionView({ filters, details, preview }: RightRegionProps) {
+export function RightRegionView({ filters, details, preview, selected = false }: RightRegionProps) {
   const content = { filters, details, preview }
   const region = useRightRegion()
   const over = useRef<HTMLElement>(null)
@@ -149,7 +154,7 @@ export function RightRegionView({ filters, details, preview }: RightRegionProps)
       clearTimeout(stop)
     }
   }, [opened])
-  const kind = regionKind(region.show, { filters: !!filters, details: !!details, preview: !!preview })
+  const kind = regionKind(region.show ?? (selected ? 'details' : null), { filters: !!filters, details: !!details, preview: !!preview })
   if (region.narrow) {
     // Folded away behind the top bar's button. Opened, it covers the list, and says what it's for when it has nothing.
     if (!region.narrowOpen) return null

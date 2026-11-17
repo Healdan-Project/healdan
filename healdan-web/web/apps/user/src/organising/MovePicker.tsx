@@ -17,17 +17,19 @@ type S = components['schemas']
 
 export interface MovePickerProps {
   documents: readonly Movable[]
+  /** The dialog's title, in place of "Move 2 Documents": the Trash's "Restore "Old Drafts" to…" */
+  title?: string
   /** The folder the person chose to move the documents into */
   onChoose: (folder: { id: number; name: string }) => void
   onCancel: () => void
 }
 
 /** Matters, or one matter's folders: the choice of a folder to move documents into never browses Stores (spec 6.7). */
-export function MovePicker({ documents, onChoose, onCancel }: MovePickerProps) {
+export function MovePicker({ documents, title, onChoose, onCancel }: MovePickerProps) {
   // The folders from the chosen matter's top level down to the one being looked into; none while a matter is to be chosen
   const [trail, setTrail] = useState<number[]>([])
   return (
-    <Dialog title={plural('moveTitle', documents.length)} isOpen onOpenChange={(open) => !open && onCancel()}>
+    <Dialog title={title ?? plural('moveTitle', documents.length)} isOpen onOpenChange={(open) => !open && onCancel()}>
       {(close) => (
         <div className={styles.picker}>
           {trail.length === 0 ? (

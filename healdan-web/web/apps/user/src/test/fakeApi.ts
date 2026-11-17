@@ -208,6 +208,8 @@ export function defaultRoutes(): Routes {
       folder({ id: 112, name: 'My Recent Docs Here', kind: 'searchFolder' }),
     ]),
     'DELETE /v1/session': undefined,
+    // An empty Trash, removed items staying the days a new install keeps them
+    'GET /v1/trash': { items: [], offset: 0, limit: 100, total: 0, removedDays: 30 },
   }
 }
 

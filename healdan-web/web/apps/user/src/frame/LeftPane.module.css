@@ -3,10 +3,25 @@
 
 .pane {
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
   padding: var(--hd-space-3) var(--hd-space-3) var(--hd-space-5);
   border-inline-end: 1px solid var(--hd-line);
   background: var(--hd-sidebar);
+}
+
+/* The sections keep their own size, and scroll with the pane when they're longer than it */
+.sections {
+  flex: none;
+}
+
+/* The Trash: at the foot of the pane when the sections leave room, else after them, with a line between */
+.foot {
+  flex: none;
+  margin-top: auto;
+  padding-top: var(--hd-space-3);
+  border-top: 1px solid var(--hd-line);
 }
 
 .section {

@@ -377,13 +377,33 @@ function FavoritesSection() {
   )
 }
 
+/**
+ * The Trash, at the foot of the pane, apart from the sections above it (folders and Trash spec 7.1): what the person
+ * deleted, and for an administrator everyone's and what was removed.
+ */
+function TrashEntry() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  return (
+    <div className={styles.foot}>
+      <Link to="/trash" className={styles.entry} aria-current={pathname === '/trash' ? 'page' : undefined}>
+        <Icon name="trash" />
+        {t('trash.title')}
+      </Link>
+    </div>
+  )
+}
+
 export function LeftPane() {
   return (
     <nav className={styles.pane} aria-label={t('pane.label')}>
-      <RecentSection />
-      <RecentMattersSection />
-      <MyMattersSection />
-      <FavoritesSection />
+      {/* In a box of their own, so the sections' spacing is as it was, and the Trash sits below them */}
+      <div className={styles.sections}>
+        <RecentSection />
+        <RecentMattersSection />
+        <MyMattersSection />
+        <FavoritesSection />
+      </div>
+      <TrashEntry />
     </nav>
   )
 }

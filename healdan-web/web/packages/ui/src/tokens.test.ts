@@ -44,6 +44,7 @@ const PAIRS: [string, string][] = [
   ...TEXT.flatMap((fg) => PLAIN.map((bg): [string, string] => [`--hd-${fg}`, `--hd-${bg}`])),
   ...TEXT_ONLY.map((bg): [string, string] => ['--hd-text', `--hd-${bg}`]),
   ['--hd-accent-on-fill', '--hd-accent-fill'],
+  ['--hd-destructive-on-fill', '--hd-destructive-fill'],
 ]
 
 // The focus edge shows against every surface the outline can touch (it is set off from the control, so the accent
