@@ -29,7 +29,8 @@ public class SeedRunner {
 			"apikey-counters", "profile-comments", "queue-drawing-previews", "hide-dropbox", "signin-settings",
 			"storage-settings", "storage-record-original", "storage-hide-stores", "profile-message-id",
 			"document-rows-granting-nothing", "trash-record-existing", "trash-system-destroy", "smoke-fixture",
-			"smoke-organising", "smoke-signin", "smoke-storage", "demo-fixture", "smoke-api-user", "smoke-web-user");
+			"smoke-organising", "smoke-signin", "smoke-storage", "demo-fixture", "smoke-api-user", "smoke-web-user",
+			"smoke-second-matter");
 
 	private static final String MARKER_PREFIX = "seed.";
 

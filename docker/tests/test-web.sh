@@ -34,13 +34,17 @@ fi
 # A throwaway password for a throwaway user on a throwaway stack: healdan-core's SmokeWebUserSeed.PASSWORD.
 WEBUSER_PASSWORD='Web-Smoke-Pw-42!x'
 export WEBUSER_PASSWORD
+# The smoke stack's own administrator, whose published password the smoke stack itself uses (docker/smoke-test.sh): for what only
+# an administrator sees, such as trash.spec's check of the Trash's Removed view.
+ADMIN_PASSWORD=admin
+export ADMIN_PASSWORD
 
 lock=healdan-web/web/package-lock.json
 version=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['packages']['node_modules/@playwright/test']['version'])" "$lock")
 
 browsers() {
   # The workspace is copied in, without node_modules, so npm ci's Linux packages never replace a host's own.
-  docker run --rm --network "$WEB_NETWORK" --ipc=host -e BASE="$WEB_BROWSER_BASE" -e WEBUSER_PASSWORD \
+  docker run --rm --network "$WEB_NETWORK" --ipc=host -e BASE="$WEB_BROWSER_BASE" -e WEBUSER_PASSWORD -e ADMIN_PASSWORD \
     -v "$PWD/healdan-web/web:/src:ro" "mcr.microsoft.com/playwright:v${version}-noble" \
     bash -c "$PROXY "'mkdir /work && cd /src && tar cf - --exclude=node_modules --exclude=dist --exclude=e2e-results . | tar xf - -C /work \
       && cd /work && npm ci --ignore-scripts --no-audit --no-fund && { npx playwright test --reporter=line || { status=$?

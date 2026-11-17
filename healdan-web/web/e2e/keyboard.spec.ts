@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Locator, type Page } from '@playwright/test'
-import { PASSWORD, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, signIn, specsFolder, tabTo } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, escape, escaped, fileDocument, matterFolders, minimalPdf, signIn, specsFolder, tabTo } from './helpers'
 
 // The User app by keyboard alone (M6 spec section 15.2, rows 3 to 9; section 10.5): after the sign-in page, every step is a
 // key (`page.keyboard`), and where a control is reached it is by Tab (`tabTo`). `focus()` only starts a step at a place the
@@ -27,6 +27,11 @@ const TRACKER = 'https://tracker.invalid/pixel.gif'
 const WORK = `Keys ${RUN}`
 const TARGET = `Moved here ${RUN}`
 const MADE = `Made ${RUN}`
+// The folders and the Trash: a folder of their own, so the list above holds nothing of it
+const FOLDER_HOME = `Folder keys ${RUN}`
+const KEYED = `Keyed ${RUN}`
+const KEYED_DOCUMENT = `In keyed ${RUN}.txt`
+const FROM_TREE = `From the tree ${RUN}`
 
 function email(): Buffer {
   const pdf = minimalPdf(`Report ${RUN}`).toString('base64').replace(/(.{76})/g, '$1\r\n')
@@ -67,6 +72,10 @@ let context: BrowserContext | undefined
 let page: Page
 let workFolder = 0
 let matterFolder = 0
+let folderHome = 0
+let keyed = 0
+let fromTree = 0
+let keyedDocument = 0
 const numbers: Record<keyof typeof NAMES | 'email', number> = { alpha: 0, bravo: 0, charlie: 0, pdf: 0, rename: 0, move: 0, remove: 0, email: 0 }
 const trackers: string[] = []
 
@@ -86,6 +95,10 @@ test.beforeAll(async ({ playwright, browser }, testInfo) => {
   for (const key of ['alpha', 'bravo', 'charlie', 'rename', 'move', 'remove'] as const) numbers[key] = await file(NAMES[key], 'text/plain', Buffer.from(`${key} ${RUN}`))
   numbers.pdf = await file(NAMES.pdf, 'application/pdf', minimalPdf(`Quick Look ${RUN}`))
   numbers.email = await file(`${SUBJECT}.eml`, 'message/rfc822', email())
+  folderHome = await makeFolder(specs, FOLDER_HOME)
+  keyed = await makeFolder(folderHome, KEYED)
+  fromTree = await makeFolder(folderHome, FROM_TREE)
+  keyedDocument = await fileDocument(api, token, keyed, KEYED_DOCUMENT, 'text/plain', Buffer.from(`keyed ${RUN}`))
 
   context = await newContext(browser, testInfo.project.use)
   await context.route(/\.invalid\//, (route) => {
@@ -456,4 +469,111 @@ test('row 9: New Folder, F2, Move To… and Delete are all keys', async () => {
   await expect(row(NAMES.remove)).toHaveCount(0)
   // The focus goes to the row that took its place, so the next key works on the list
   await expect.poll(() => inRow(list())).toBe(true)
+})
+
+test('row 10: folders and the Trash are all keys: Delete asks, F6 reaches Undo, then Restore from the Trash, and Delete in the tree', async () => {
+  const get = (path: string) => api!.get(`/api/v1${path}`, authorized(token))
+  await page.goto(`/app/folders/${folderHome}?sort=title&order=asc`)
+  await expect(row(KEYED)).toBeVisible()
+
+  // Delete on a folder row, Enter in the question
+  // A row, which Tab and the arrow keys reach (row 4); the arrow keys select as they move (Keyed is the second row, after the folder
+  // for row 11), and Delete acts on the selection
+  await row(KEYED).focus()
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowDown')
+  await expect(row(KEYED)).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('Delete')
+  const question = page.getByRole('dialog', { name: `Move "${KEYED}" to the Trash?` })
+  await expect(question.getByText(/1 document/)).toBeVisible()
+  await page.keyboard.press('Enter')
+  await expect(page.getByText(`Moved "${KEYED}" to the Trash`)).toBeVisible()
+  await expect(row(KEYED)).toHaveCount(0)
+  expect((await get(`/folders/${keyed}`)).status()).toBe(404)
+
+  // F6 goes to the toast, Tab to its Undo, and Enter puts the folder back
+  await page.keyboard.press('F6')
+  const undo = page.getByRole('button', { name: 'Undo' })
+  // F6 lands on the region of notifications, and Tab goes on to its Undo
+  await expect(page.getByRole('region', { name: 'Notifications' })).toBeFocused()
+  await tabTo(page, undo, { limit: 5 })
+  await page.keyboard.press('Enter')
+  await expect(page.getByText(`Restored "${KEYED}"`)).toBeVisible()
+  await expect(row(KEYED)).toBeVisible()
+  expect((await get(`/folders/${keyed}`)).status()).toBe(200)
+  expect((await get(`/documents/${keyedDocument}`)).status()).toBe(200)
+
+  // Delete again, then the Trash entry at the foot of the left pane by Tab, from the search box (which / reaches), as a row
+  // of it by the arrow keys, and Restore, which Tab reaches in the details
+  await row(KEYED).focus()
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowDown')
+  await expect(row(KEYED)).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('Delete')
+  await expect(question).toBeVisible()
+  await page.keyboard.press('Enter')
+  await expect(page.getByText(`Moved "${KEYED}" to the Trash`)).toBeVisible()
+  await expect(row(KEYED)).toHaveCount(0)
+
+  await page.keyboard.press('/')
+  await expect(page.getByRole('combobox', { name: 'Search' })).toBeFocused()
+  const entry = page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: 'Trash', exact: true })
+  await tabTo(page, entry, { from: page.getByRole('combobox', { name: 'Search' }) })
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/\/app\/trash/)
+  const trash = main().getByRole('grid')
+  const item = trash.getByRole('row', { name: escape(KEYED) })
+  await expect(item).toBeVisible()
+  // Tab gets into the list; its rows are walked by the arrow keys, which select as they move
+  await tabTo(page, trash.getByRole('row').nth(1), { from: main().getByRole('toolbar', { name: 'Trash Actions' }).getByRole('button', { name: 'Empty Trash…' }) })
+  for (let i = 0; i < 40 && !(await item.evaluate((element) => element === document.activeElement)); i++) await page.keyboard.press('ArrowDown')
+  await expect(item).toBeFocused()
+  await expect(item).toHaveAttribute('aria-selected', 'true')
+  const details = page.getByRole('region', { name: 'Details' })
+  await tabTo(page, details.getByRole('button', { name: 'Restore', exact: true }), { from: item })
+  await page.keyboard.press('Enter')
+  await expect(page.getByText(new RegExp(`^Restored "${escaped(KEYED)}" to `))).toBeVisible()
+  await expect(item).toHaveCount(0)
+  expect((await get(`/folders/${keyed}`)).status()).toBe(200)
+  // The focus stays on the page, in the list or what is left of it, so the next key works
+  await expect.poll(() => page.evaluate(() => document.activeElement !== document.body)).toBe(true)
+})
+
+test('row 11: Delete on a folder of the left pane tree asks, Enter moves it to the Trash, and the focus stays in the pane', async () => {
+  // The tree is My Matters, which a person adds a matter to with the plus; the spec does it through the API and takes it out after
+  await call(api!.put(`/api/v1/me/matters/${matterFolder}`, authorized(token)), 'adding the matter to My Matters')
+  try {
+    await page.goto(`/app/folders/${folderHome}?sort=title&order=asc`)
+    const tree = page.getByRole('navigation', { name: 'Navigation' }).getByRole('treegrid', { name: 'My Matters' })
+    const home = tree.locator(`[data-tree-key="${folderHome}"]`)
+    await expect(home).toBeVisible()
+    // The tree's stop, which Tab reaches; its rows are walked by the arrow keys, and Right opens a folder
+    await tabTo(page, tree.getByRole('row').first(), { from: page.getByRole('combobox', { name: 'Search' }), limit: 80 })
+    for (let i = 0; i < 30 && !(await home.evaluate((element) => element === document.activeElement)); i++) await page.keyboard.press('ArrowDown')
+    await expect(home).toBeFocused()
+    await page.keyboard.press('ArrowRight')
+    const child = tree.locator(`[data-tree-key="${fromTree}"]`)
+    await expect(child).toBeVisible()
+    await page.keyboard.press('ArrowDown')
+    for (let i = 0; i < 5 && !(await child.evaluate((element) => element === document.activeElement)); i++) await page.keyboard.press('ArrowDown')
+    await expect(child).toBeFocused()
+    await page.keyboard.press('Delete')
+    await expect(page.getByRole('dialog', { name: `Move "${FROM_TREE}" to the Trash?` })).toBeVisible()
+    await page.keyboard.press('Enter')
+    await expect(page.getByText(`Moved "${FROM_TREE}" to the Trash`)).toBeVisible()
+    await expect(child).toHaveCount(0)
+    expect((await api!.get(`/api/v1/folders/${fromTree}`, authorized(token))).status()).toBe(404)
+    // Where the focus lands (a row of the open folder's list, which the app picks): not the page itself, and not a row that has
+    // gone, but the tree or the list, so the next key works
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const active = document.activeElement
+          return active !== null && active !== document.body && active.isConnected && (active.closest('[role="treegrid"], [role="grid"], main, nav') !== null)
+        }),
+      )
+      .toBe(true)
+  } finally {
+    await api!.delete(`/api/v1/me/matters/${matterFolder}`, authorized(token))
+  }
 })
