@@ -27,7 +27,7 @@ export interface Outcome {
  * Makes `call` for each document in turn, one after another, so the server never has two at once, and keeps going when
  * one is refused: a refusal doesn't undo what was done, nor stop the rest.
  */
-export async function eachDocument(documents: readonly Movable[], call: (document: Movable) => Promise<unknown>): Promise<Outcome> {
+export async function eachDocument<T extends Movable>(documents: readonly T[], call: (document: T) => Promise<unknown>): Promise<Outcome> {
   const outcome: Outcome = { done: [], refused: [] }
   for (const document of documents) {
     try {

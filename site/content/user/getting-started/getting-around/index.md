@@ -12,7 +12,7 @@ orange-red, PDFs red, emails blue and pictures purple. Some kinds share a blue, 
 LibreOffice's text documents, spreadsheets and presentations take the colours of their Microsoft Office counterparts,
 and any other kind of file, such as a drawing, has the plain document icon in the colour of the text beside it.
 
-![Healdan's web page in the Due Diligence folder of matter 1002.1 – Commercial Lease: the top bar with the Healdan name, the Documents search box, the ? button and the PN menu; the left pane with Recent, Recent Matters, My Matters opened to the matter's folders, and My Favorites; the folder's two documents, Service Charge Budget 2026–27.xlsx and Site Plan – Unit 4 Weir Lane.odg, with the second selected; and its details at the right, with the thumbnail of the plan, its name with the Favorites star beside it, Open, Download, Copy Link and Check Out, then the Properties and Versions (1) tabs, with Properties showing Edit Properties and the plan's properties](whole-window.png)
+![Healdan's web page in the Due Diligence folder of matter 1002.1 – Commercial Lease: the top bar with the Healdan name, the Documents search box, the ? button and the PN menu; the left pane with Checked Out to Me and its count, 4, at the top, then Recent, Recent Matters, My Matters opened to the matter's folders, and the My Favorites heading at the bottom; the folder's two documents, Service Charge Budget 2026–27.xlsx and Site Plan – Unit 4 Weir Lane.odg, with the second selected; and its details at the right, with the thumbnail of the plan, its name with the Favorites star beside it, Open, Download, Copy Link and Check Out, then the Properties and Versions (1) tabs, with Properties showing Edit Properties and the plan's properties](whole-window.png)
 
 ## The Top Bar
 
@@ -32,6 +32,9 @@ and any other kind of file, such as a drawing, has the plain document icon in th
 
 The left pane scrolls on its own when it's longer than the window. From the top it has:
 
+- **Checked Out to Me:** the documents checked out to you, wherever you checked them out, with how many beside it.
+  It's an entry of its own, above **Recent**, and sets no search scope. See
+  [Checked Out to Me](../../documents/checking-out-and-checking-in/#checked-out-to-me).
 - **Recent:** **Documents**, **Emails**, **Folders** and **Clients**, each a list of what you worked on lately. Each
   also sets the scope the search box searches in. **Documents** is the page you start on.
 - **Recent Matters:** the matters you've worked in lately, each with its client beside it in smaller, paler type.
@@ -79,8 +82,9 @@ Matter](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matte
 
 ## The Details Panel
 
-Select a document in a folder's list, in search results or in a Recent list, and its **Details** open at the right, in the same place as
-[Filters](../../finding-documents/searching/#filters). At the top, whichever tab is showing, they have:
+Select a document in a folder's list, in search results, in a Recent list or in **Checked Out to Me**, and its
+**Details** open at the right, in the same place as [Filters](../../finding-documents/searching/#filters). At the top,
+whichever tab is showing, they have:
 
 - **A thumbnail** of the first page, when the document has one. Without one, the icon for the kind of file shows
   instead.
@@ -91,7 +95,8 @@ Select a document in a folder's list, in search results or in a Recent list, and
   [Downloading Documents](../../documents/downloading-documents/#one-document-in-the-app). **Copy Link**
   puts the document's address on your clipboard: see [Copying a Link](../../finding-documents/finding-by-doc-number/#copying-a-link).
 - **Check-Out Info** or **Lock Info,** in a shaded box, while someone has the document checked out or locked: who has
-  it and since when. Then **Check Out** and, once it's checked out to you, **Check In** and **Release**: see
+  it and since when. Then **Check Out** and, once it's checked out to you, **Check In** and **Release**, or only
+  **Release…** when it's checked out to you on one of your computers: see
   [Checking Out and Checking In](../../documents/checking-out-and-checking-in/#in-the-app).
 
 Under them are two tabs, **Properties** and **Versions**:
@@ -150,9 +155,10 @@ Right-click a document, a folder or a matter, in a list or in the left pane, for
 a Mac, Control-click does the same. Every choice in these menus is also on the toolbar or beside the item, so the menu
 is a shortcut, never the only way.
 
-- **A document,** in a folder, search results, **Recent Documents**, **Recent Emails** or a doc # result: **Open**,
-  **Preview** and **Open in New Tab**; **Download** and **Check Out**, or **Check In** and **Release** when you checked
-  it out on the web page; **Rename**, **Move To…** and **Delete**; **Copy Link** and **Add to Favorites** (or **Remove
+- **A document,** in a folder, search results, **Recent Documents**, **Recent Emails**, **Checked Out to Me** or a
+  doc # result: **Open**, **Preview** and **Open in New Tab**; **Download** and **Check Out**, or **Check In** and
+  **Release** when you checked it out on the web page, or **Release…** when you checked it out on one of your
+  computers; **Rename**, **Move To…** and **Delete**; **Copy Link** and **Add to Favorites** (or **Remove
   from Favorites**). They work as the toolbar's buttons and its **⋯** (More) menu do.
 - **A folder,** in a list or in the **My Matters** tree: **Open**, **Open in New Tab**, **New Folder** where you can
   make one (inside a matter, and never in a search folder), **Rename** (greyed out where you can't rename the folder,
@@ -165,7 +171,8 @@ is a shortcut, never the only way.
 
 Right-clicking a document that isn't selected selects it first, in place of what was selected, as the Finder does.
 Right-clicking one of several selected documents keeps them all selected, and the menu then acts on all of them: only
-**Move To…** and **Delete** take several documents, so the rest are greyed out, as they are on the toolbar.
+**Move To…**, **Delete** and, when they're all checked out to you, **Release** take several documents, so the rest are
+greyed out, as they are on the toolbar.
 
 **Open in New Tab** opens the document's or folder's page in a new browser tab. Anywhere else, such as a text box, the
 search box, an email's message, a preview, or the space in a list below its last row, right-clicking shows your
@@ -203,7 +210,7 @@ Filters) button, open them over the list, and Esc or choosing a link closes them
 widths and can't be resized there; the widths you chose come back when the window is wider again. A phone's screen is
 too small for the app.
 
-![The web page in a window 768 pixels wide: the left pane open over the folder's list, with Recent, Recent Matters, My Matters opened to 1002.1 – Commercial Lease's folders, and My Favorites, below a top bar that has the ☰ (Navigation) and panel-icon (Details and Filters) buttons](narrow-window.png)
+![The web page in a window 768 pixels wide: the left pane open over the folder's list, with Checked Out to Me and its count, 4, at the top, then Recent, Recent Matters, My Matters opened to 1002.1 – Commercial Lease's folders, and My Favorites, below a top bar that has the ☰ (Navigation) and panel-icon (Details and Filters) buttons](narrow-window.png)
 
 ## When Something Goes Wrong
 

@@ -3,6 +3,7 @@
 
 import type { components } from '@healdan/api'
 import { formatDate, formatVersion, Icon, t, type TableColumn, type TableRow } from '@healdan/ui'
+import { computerLabel } from '../actions/checkout'
 import { HoldMarker } from '../actions/HoldMarker'
 import type { SearchScope } from '../search/scopes'
 import { itemIcon } from '../kindIcons'
@@ -96,4 +97,46 @@ export function hitColumns(scope: SearchScope): TableColumn<ListRow>[] {
 /** What a list keeps while the reading pane is open and the list is narrow (spec section 6.4): Title, Doc # and Edit Date. */
 export function narrowed(columns: TableColumn<ListRow>[]): TableColumn<ListRow>[] {
   return columns.filter((column) => column.id === 'title' || column.id === 'docNumber' || column.id === 'edited')
+}
+
+/**
+ * "MacBook · Word": the computer, then the app muted after a dot, on one line, as a Standard row's 34 pixels have room
+ * for one. Each is an element of its own, whose text is just the computer or the app; the dot is drawn only, and the
+ * spaces around it keep the two apart for a screen reader. The whole text is a tooltip too, as the Matter cell's name
+ * is, so an app the ellipsis cuts short can be read by pointing at it.
+ */
+function ComputerCell({ hold }: { hold: S['HoldView'] | null }) {
+  const { computer, app } = computerLabel(hold)
+  return (
+    <span className={styles.computerCell} title={app ? `${computer} · ${app}` : computer}>
+      <span>{computer}</span>
+      {app && (
+        <>
+          {' '}
+          <span className={styles.muted} aria-hidden="true">
+            ·
+          </span>{' '}
+          <span className={styles.muted}>{app}</span>
+        </>
+      )}
+    </span>
+  )
+}
+
+/** Checked Out to Me: the server's order (latest check-out first), so nothing sorts, as its list takes no `onSort`. */
+export function checkedOutColumns(): TableColumn<ListRow>[] {
+  return [
+    { ...title, minWidth: 220 },
+    { ...docNumber, width: 80 },
+    { ...version, width: 70 },
+    { ...matterColumn(), width: 130 },
+    {
+      id: 'computer',
+      name: t('list.computer'),
+      width: 130,
+      cell: ({ item }) => item.type === 'document' && <ComputerCell hold={item.hold} />,
+    },
+    { id: 'checkedOut', name: t('list.checkedOut'), width: 116, cell: ({ item }) => item.type === 'document' && item.hold?.since ? formatDate(item.hold.since) : null },
+    { ...edited, width: 116 },
+  ]
 }

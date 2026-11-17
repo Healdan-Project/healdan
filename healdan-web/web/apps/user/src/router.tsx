@@ -11,6 +11,7 @@ import { idFrom } from './queries'
 import { DocResult } from './views/DocResult'
 import { FolderView } from './views/FolderView'
 import { NotFound } from './views/NotFound'
+import { CheckedOutView } from './views/CheckedOutView'
 import { RecentView } from './views/RecentView'
 import { SearchView } from './views/SearchView'
 import { TrashView } from './views/TrashView'
@@ -58,6 +59,8 @@ const recentRoute = createRoute({
     return <RecentView kind={recentRoute.useParams().kind} />
   },
 })
+
+const checkedOutRoute = createRoute({ getParentRoute: () => rootRoute, path: 'checked-out', component: CheckedOutView })
 
 // A folder keeps its sort in the address, as Back and a pasted link should show it the same way.
 const foldersRoute = createRoute({
@@ -126,7 +129,7 @@ const trashRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, recentRoute, foldersRoute, searchRoute, docRoute, trashRoute])
+const routeTree = rootRoute.addChildren([indexRoute, recentRoute, checkedOutRoute, foldersRoute, searchRoute, docRoute, trashRoute])
 
 /**
  * A view that failed as it drew (spec 10.7): the catalogue's short message and Try Again, which asks the server again

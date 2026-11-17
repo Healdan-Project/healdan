@@ -16,6 +16,7 @@ type S = components['schemas']
 export const keys = {
   me: ['me'] as const,
   recentDocuments: ['documents', 'recent'] as const,
+  checkouts: ['documents', 'checkouts'] as const,
   recentEmails: ['documents', 'recent', 'email'] as const,
   recentFolders: ['folders', 'recent'] as const,
   recentClients: ['clients', 'recent'] as const,
@@ -82,6 +83,16 @@ export function useRecentDocuments(kind?: 'email') {
     queryFn: () => api.get<PageOf<S['DocumentView']>>('/v1/documents/recent', kind ? { kind } : undefined),
     meta: ASK_ON_RETURN,
   })
+}
+
+/**
+ * The documents the person has checked out, the latest first. Checked Out to Me (`live`) asks again at every return to
+ * the window, as the lists that show a hold do (ASK_ON_RETURN); the left pane's count, always on screen, only once its
+ * answer is 30 seconds old, as each document read costs the server several, and after the person's own changes.
+ */
+export function useCheckouts({ live = false }: { live?: boolean } = {}) {
+  const api = useApi()
+  return useQuery({ queryKey: keys.checkouts, queryFn: () => api.get<PageOf<S['DocumentView']>>('/v1/me/checkouts'), refetchOnWindowFocus: live ? 'always' : true })
 }
 
 export function useRecentFolders() {

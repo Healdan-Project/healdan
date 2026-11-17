@@ -11,7 +11,8 @@ import { useDocumentActions } from './useDocumentActions'
 /**
  * The toolbar's buttons for the selected document (spec 6.1): Open, Preview, Download and Check Out, all disabled with
  * none or several selected, then More (⋯), which acts on `selected` (the one document by default) and the folders
- * selected with them. A row's right-click menu offers the same actions, from the same rules (useDocumentActions).
+ * selected with them. Release takes Check Out's place when everything selected is the person's own check-out. A row's
+ * right-click menu offers the same actions, from the same rules (useDocumentActions).
  */
 export function SelectionActions({
   document,
@@ -30,7 +31,7 @@ export function SelectionActions({
       <ActionButton action={actions.open} />
       <ActionButton action={actions.preview} />
       <ActionButton action={actions.download} />
-      <ActionButton action={actions.checkOut} />
+      <ActionButton action={actions.release ?? actions.checkOut} />
       <MoreMenu actions={actions} isDisabled={selected.length + folders.length === 0} />
     </>
   )

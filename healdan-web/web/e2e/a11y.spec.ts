@@ -138,6 +138,27 @@ for (const scheme of ['light', 'dark'] as const) {
       }
     })
 
+    test('Checked Out to Me, with a document held on a computer, and the warning before releasing it', async () => {
+      await page.goto('/app/checked-out')
+      await expect(main().getByRole('heading', { level: 1, name: 'Checked Out to Me' })).toBeVisible()
+      // The held document is on this run's device token, so its Computer cell is the token's name, with the entry's count beside it
+      const row = main().getByRole('row', { name: escape(HELD) })
+      await expect(row).toBeVisible()
+      await expect(page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: /^Checked Out to Me, \d+ documents?$/ })).toBeVisible()
+      await check('Checked Out to Me')
+      // The warning, its red box and its red button, whose text axe checks for contrast in each theme; Cancel, which has the
+      // focus, releases nothing, and the spec's afterAll releases it
+      await row.getByRole('rowheader').click()
+      await main().getByRole('toolbar', { name: 'Checked Out Actions' }).getByRole('button', { name: 'Release…', exact: true }).click()
+      const warning = page.getByRole('alertdialog', { name: `Release ${HELD} from e2e ${RUN}?`, exact: true })
+      await expect(warning).toBeVisible()
+      await expect(warning.getByRole('button', { name: 'Cancel' })).toBeFocused()
+      await check('the warning before a release')
+      await page.keyboard.press('Escape')
+      await expect(warning).toBeHidden()
+      await expect(row).toBeVisible()
+    })
+
     test("a matter's top level, with its folders", async () => {
       await page.goto(`/app/folders/${matterFolder}`)
       await expect(main().getByRole('heading', { level: 1 })).toContainText('Smoke Matter')

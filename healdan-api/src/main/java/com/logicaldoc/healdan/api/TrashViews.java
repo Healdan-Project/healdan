@@ -41,6 +41,7 @@ import com.logicaldoc.healdan.trash.TrashMemberRow;
 import com.logicaldoc.healdan.trash.TrashStartup;
 import com.logicaldoc.healdan.trash.TrashState;
 import com.logicaldoc.healdan.trash.TrashStore;
+import com.logicaldoc.util.CollectionUtil;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -97,22 +98,38 @@ final class TrashViews {
 	 * @throws PersistenceException error at data layer
 	 */
 	static TrashItem item(TrashItemRow row, User caller) throws PersistenceException {
+		TrashMemberRow top = TrashStore.get().member(row.id(), new TrashMember(isFolder(row) ? 'F' : 'D', row.objectId()))
+				.orElseThrow();
+		return item(row, top, HealdanSettings.get().trashRemovedDays(), caller);
+	}
+
+	/**
+	 * {@link #item(TrashItemRow, User)} with the item's top member and the
+	 * days removed items are kept already read, as a page of the Trash reads
+	 * them once for all its items
+	 *
+	 * @param row an item of the Trash's record
+	 * @param top its top member's row, whose state is the item's
+	 * @param removedDays the days removed items are kept
+	 * @param caller the signed-in user, with its groups
+	 * @return the item as the API shows it
+	 * @throws PersistenceException error at data layer
+	 */
+	static TrashItem item(TrashItemRow row, TrashMemberRow top, int removedDays, User caller)
+			throws PersistenceException {
 		boolean folder = isFolder(row);
-		TrashStore store = TrashStore.get();
-		TrashState state = store.state(row.id());
+		TrashState state = top.state();
 
 		UserRef removedBy = null;
 		Date removedAt = null;
 		Date destroyAfter = null;
-		Optional<TrashMemberRow> top = store.member(row.id(), new TrashMember(folder ? 'F' : 'D', row.objectId()));
-		if (state == TrashState.REMOVED && top.isPresent()) {
-			removedBy = ApiViews.userRef(top.get().removedById(), top.get().removedByName());
-			Instant removed = top.get().removedAt();
+		if (state == TrashState.REMOVED) {
+			removedBy = ApiViews.userRef(top.removedById(), top.removedByName());
+			Instant removed = top.removedAt();
 			if (removed != null) {
 				removedAt = Date.from(removed);
-				destroyAfter = Date.from(TrashStartup
-						.destroyAfter(removed, HealdanSettings.get().trashRemovedDays(), ZoneId.systemDefault())
-						.toInstant());
+				destroyAfter = Date.from(
+						TrashStartup.destroyAfter(removed, removedDays, ZoneId.systemDefault()).toInstant());
 			}
 		}
 
@@ -236,12 +253,8 @@ final class TrashViews {
 		return count;
 	}
 
-	private static List<List<Long>> chunks(Collection<Long> ids) {
-		List<Long> all = new ArrayList<>(ids);
-		List<List<Long>> chunks = new ArrayList<>();
-		for (int i = 0; i < all.size(); i += CHUNK)
-			chunks.add(all.subList(i, Math.min(all.size(), i + CHUNK)));
-		return chunks;
+	private static Collection<List<Long>> chunks(Collection<Long> ids) {
+		return CollectionUtil.partition(new ArrayList<>(ids), CHUNK);
 	}
 
 	private static NamedParameterJdbcTemplate jdbc() {

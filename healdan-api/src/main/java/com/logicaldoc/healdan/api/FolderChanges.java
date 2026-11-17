@@ -27,6 +27,7 @@ import com.logicaldoc.healdan.api.model.HeldDocument;
 import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.api.model.TrashContents;
 import com.logicaldoc.healdan.api.model.TrashItem;
+import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.trash.TrashItemRow;
 import com.logicaldoc.healdan.trash.TrashMember;
@@ -108,8 +109,10 @@ final class FolderChanges {
 				log.debug("Folder {} holds items the caller may not delete", id);
 				throw new ApiProblem(403, "items-not-allowed", DELETE_ITEMS);
 			}
-			refuseCheckedOut(id, user, "deleted");
-			if (TrashRules.get().holdsImmutable(id))
+			// The live tree is read once for both, and the hook reads it again inside the delete's transaction
+			List<Long> tree = StoredRows.get().tree(id);
+			refuseCheckedOut(tree, user, "deleted");
+			if (TrashRules.get().holdsImmutable(tree))
 				throw ApiProblem.conflict("immutable", "It holds an immutable document, which can't be deleted.");
 
 			FolderHistory history = new FolderHistory();
@@ -188,7 +191,7 @@ final class FolderChanges {
 					log.debug("Folder {} holds items the caller may not move", id);
 					throw new ApiProblem(403, "items-not-allowed", MOVE_ITEMS);
 				}
-				refuseCheckedOut(id, user, "moved");
+				refuseCheckedOut(StoredRows.get().tree(id), user, "moved");
 				if (FolderRenames.taken(folderId, id, current.getName(), user))
 					throw ApiProblem.conflict("name-taken",
 							"Another folder in folder %d is called %s.".formatted(folderId, current.getName()));
@@ -253,10 +256,11 @@ final class FolderChanges {
 	 * anyone, naming those the caller can read, with who holds each and since
 	 * when
 	 *
+	 * @param tree the folder and the live folders below it
 	 * @param done what would be done to the folder, for the refusal's text
 	 */
-	private static void refuseCheckedOut(long id, User user, String done) throws PersistenceException {
-		List<Long> held = TrashRules.get().checkedOutIn(id);
+	private static void refuseCheckedOut(List<Long> tree, User user, String done) throws PersistenceException {
+		List<Long> held = TrashRules.get().checkedOutIn(tree);
 		if (held.isEmpty())
 			return;
 		List<HeldDocument> holds = new ArrayList<>();

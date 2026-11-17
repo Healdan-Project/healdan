@@ -887,14 +887,15 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
         // Restore all the children
         if (scope != null) {
             // Healdan: only those the scope names, so what others deleted inside stays in their trash
-            if (!scope.folderIds().isEmpty())
+            // in lists of at most 1,000, as the databases take
+            for (List<Long> chunk : CollectionUtil.partition(new ArrayList<>(scope.folderIds()), 1000))
                 jdbcUpdate(
                         "update ld_folder set ld_deleted = 0, ld_lastmodified = CURRENT_TIMESTAMP where ld_deleted <> 0 and ld_id in (%s)"
-                                .formatted(CollectionUtil.join(scope.folderIds())));
-            if (!scope.documentIds().isEmpty())
+                                .formatted(CollectionUtil.join(chunk)));
+            for (List<Long> chunk : CollectionUtil.partition(new ArrayList<>(scope.documentIds()), 1000))
                 jdbcUpdate(
                         "update ld_document set ld_deleted = 0, ld_lastmodified = CURRENT_TIMESTAMP where ld_deleted <> 0 and ld_id in (%s)"
-                                .formatted(CollectionUtil.join(scope.documentIds())));
+                                .formatted(CollectionUtil.join(chunk)));
         } else if (!treeIds.isEmpty()) {
             String idsStr = treeIds.stream().map(id -> Long.toString(id)).collect(Collectors.joining(","));
             jdbcUpdate(
@@ -1764,6 +1765,8 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
             log.warn("Found undeletable documents in tree {} - {}", folder.getName(), folder.getId());
             for (Long id : ids)
                 notDeletableFolders.add(findById(id));
+            // Healdan: it stops here, so the Trash's item keeps only what it takes (folders and Trash spec, 9.1)
+            com.logicaldoc.core.HealdanHooks.get().afterFolderDeleteTree(folder.getId(), transaction);
             return notDeletableFolders;
         }
 

@@ -105,11 +105,10 @@ is made:
 - **An answer stays fresh for 30 seconds** (`staleTime`), so moving between views doesn't ask again, and a return asks
   again for what's on screen and older than that (TanStack Query's `refetchOnWindowFocus: true`).
 - **A return asks again for what shows a document's state, however fresh the answer is.** A query that shows it carries
-  `meta: ASK_ON_RETURN`: the document, its properties and versions and Recent (`queries.ts`), and a folder's list
-  (`views/useListing.ts`). The return marks them stale (`invalidateQueries` with `refetchType: 'none'`) before it tells
-  TanStack Query, which then asks for them as for any stale answer. A document opened in Excel through the helper is
-  checked out a few seconds after the click, and saved to minutes later, so an answer from just before would show it
-  free, or at its old version. A new query keeps to the 30 seconds unless it carries the same `meta`.
+  `meta: ASK_ON_RETURN`: the document, its properties and versions and Recent (`queries.ts`), and a folder's list (`views/useListing.ts`). The return marks them stale (`invalidateQueries` with `refetchType: 'none'`)
+  before it tells TanStack Query, which then asks for them as for any stale answer. A document opened in Excel through
+  the helper is checked out a few seconds after the click, and saved to minutes later, so an answer from just before
+  would show it free, or at its old version. A new query keeps to the 30 seconds unless it carries the same `meta`.
 - **A return is the window getting the focus back, or a hidden tab showing again.** TanStack Query listens only for
   `visibilitychange`, which moving from Excel back to a browser window that stayed on screen doesn't fire.
   `createQueryClient` gives `focusManager.setEventListener` the app's own `listenForReturn`, which listens for the
@@ -136,6 +135,7 @@ What shows a document's state but isn't asked again on every return:
 | A list scrolled past its first page (`askedOnReturn` in `queryClient.ts`) | Not marked stale on a return | A return would ask for every page it has, one after another |
 | Search results and their counts (`search/useSearchResults.ts`) | `refetchOnWindowFocus: false` | Each page and each count runs the whole search on the server; a search is asked again when it's run again |
 | An email's message, a picture and a PDF in Quick Look (`preview/`) | `refetchOnWindowFocus: false`, `staleTime: Infinity` | They're read once for each file version, and a new version has a key of its own |
+| The left pane's Checked Out to Me count (`useCheckouts` in `queries.ts`) | No `ASK_ON_RETURN`; the view itself asks with `refetchOnWindowFocus: 'always'` (`useCheckouts({ live: true })`) | The count is on every page, and the list reads every document checked out to the person, each with its device's hold; it's asked again after the person's own changes, as every list is |
 
 The first two are asked again on a return once their answer is over 30 seconds old, as everything else is. Thumbnails
 aren't queries: each is an `<img>` addressed by its file version. A test comes back to the window with `comeBack()` from
@@ -215,16 +215,27 @@ view.
   answer as a file, and the app sees none of it. `canOpen` disables the button for the usual refusal, a missing
   permission or a password.
 - **Check Out, Check In and Release** (`checkout.ts`, `useCheckout.ts`, `CheckoutControls.tsx`) follow the document's
-  `hold`. The web session is no device, so the app never takes over a check-out a device holds (`409
-  held-elsewhere`), and offers no button for it. `details/HoldInfo.tsx` is the hold's own section above the tabs,
-  **Check-Out Info** or **Lock Info**, a `Section` with `boxed`: User, Check-Out Time (or Lock Time), and, from
-  `hold.heldOn`, Application and Computer, each but User left out when the API gives no value (User is "Someone"
-  then), in `details/PropertyList.tsx`, which `Properties` draws its rows with too. The API gives `heldOn` to the
-  holder and to administrators only, and the app never decides anything by it: `device` still says whether the
-  check-out is the person's own on a computer. `holdSentence` says who has it and since when, as a sentence, for the
-  drop-on-a-row question and the refusals (`filing/refusal.ts`). A check-in from the app is a file picked into
+  `hold`. The web session is no device, so the app never takes over a check-out a device holds (`409 held-elsewhere`);
+  it only releases the person's own, after a warning (below). `details/HoldInfo.tsx` is the hold's own section above the
+  tabs, **Check-Out Info** or **Lock Info**, a `Section` with `boxed`: User, Check-Out Time (or Lock Time), and, from
+  `hold.heldOn`, Application and Computer, each but User left out when the API gives no value (User is "Someone" then),
+  in `details/PropertyList.tsx`, which `Properties` draws its rows with too. The API gives `heldOn` to the holder and to
+  administrators only, and the app never decides anything by it: `device` still says whether the check-out is the
+  person's own on a computer. `holdSentence` says who has it and since when, as a sentence, for the drop-on-a-row
+  question and the refusals (`filing/refusal.ts`). A check-in from the app is a file picked into
   `POST /v1/documents/{n}/versions` as a snapshot, with `ifHeld` and `ifVersion`. Every outcome asks for the document
   and the lists again.
+- **Release** (`actions/ReleaseProvider.tsx`, in the frame) is every release, from the toolbar, a row's menu and
+  Check-Out Info: `useReleasing().askRelease(documents)` decides once, by `holdState`'s `yourDevice`, which of them
+  another of the person's computers holds. When any is, it shows `ConfirmRelease` first, an alert dialog that lists
+  them by computer (by `hold.device.id`, not the name, so two computers of one name are two lists), with the red
+  button first and Cancel focused; then it releases each in turn (`eachDocument`), sending `elsewhere` only for
+  those, with the device id the warning named, so a check-out that has moved since stays where it is, and names the
+  refusals in `Refusals`. The warning's title counts what it lists; its red button, everything it releases. Its
+  mutation's variables are the documents, which `useHoldsBusy` reads to make every control that offers a change to
+  one of them pending. It
+  doesn't wait for the lists to answer, as useCheckout doesn't; the focus moves to the next row once they have, and
+  only when the released rows were drawn.
 - **Editing properties** is `details/PropertiesForm.tsx`, made from `GET /v1/documents/{n}/properties` and saved with
   `PATCH`, sending only the fields that changed. `frame/errors.ts`'s `fieldErrors` gives each field a 422 names its
   message from the catalogue (`fields.<code>`). **Overridden** shows only where the API's `overrides` names the folder a
@@ -332,13 +343,13 @@ and `drag` props and the selected documents and folders for the toolbar's More m
   and a place that holds no documents, or a folder dropped into its own tree, is refused before any call. There's no
   keyboard drag: More › Move To… is the way for a keyboard.
 - **New Folder** is offered inside a matter's folders, and at a matter's top level only to an administrator (`useMe`).
-- **Every list of documents** has it: a folder, search results, Recent Documents and Emails, and the `#` result, each with
-  `useOrganisingTable` and a `Toolbar` holding `SelectionActions`, and Recent › Folders and a Folders search have F2 and
-  Delete. `useRowSelection(rows)` puts one document selected alone in `?sel=`, and keeps several, or any with a folder,
-  in the view, as a folder is never in the address and has no details. A matter's own folder, where a list shows one
-  (Recent › Folders), isn't selected or dragged, as a matter's row isn't (`selectable` in `useListing.ts`), and a click
-  opens it. It keeps only the selected rows still listed, so
-  once they're deleted or moved F2 and Delete take the focused row.
+- **Every list of documents** has it: a folder, search results, Recent Documents and Emails, Checked Out to Me and the
+  `#` result, each with `useOrganisingTable` and a `Toolbar` holding `SelectionActions`, and Recent › Folders and a
+  Folders search have F2 and Delete. `useRowSelection(rows)` puts one document selected alone in `?sel=`, and keeps
+  several, or any with a folder, in the view, as a folder is never in the address and has no details. A matter's own
+  folder, where a list shows one (Recent › Folders), isn't selected or dragged, as a matter's row isn't (`selectable` in
+  `useListing.ts`), and a click opens it. It keeps only the selected rows still listed, so once they're deleted or moved
+  F2 and Delete take the focused row.
 
 Test it with `organising/*.test.tsx`; `testing.tsx` has routes for a folder that rename, move, delete and restore as the
 server would, a second matter for moves out of a matter, a `DataTransfer` that keeps what a drag writes, and `closeMenu`,
@@ -358,7 +369,7 @@ administrators alone. Name, Deleted and Removed sort; `?sort=` and `?order=` are
   where it went, with **Open** (`toastWithAction`); one answered `409 place-gone` opens `MovePicker` with the title
   "Restore "…" to…", one at a time, and its **Move Here** restores with `folderId`; one answered `409 refused` (a Store's
   item, or a shortcut deleted on its own) says it can't be restored from here. The server's own text is never shown.
-- **Remove…** and **Empty Trash…** ask first (`organising/ConfirmRemove.tsx`, with `Button`'s `destructive` variant),
+- **Remove…** and **Empty Trash…** ask first (`organising/ConfirmRemove.tsx`, with `Button`'s `danger` variant),
   saying how long an administrator can still restore it from the page's `removedDays`, never a constant. A folder's
   counts come only from its `contents`, which take in only what the person can read.
 - **One at a time.** Restore, Remove and Empty Trash are disabled while one of them runs, so a second press sends nothing:
@@ -395,7 +406,10 @@ answer's `total` is reached, or, when it's `null`, when it's shorter than the 10
 "More than". `FiltersPanel` shows no made-up `0` for a ticked value no option offers when the counts are `partial`.
 `views/RecentView.tsx` is the start page and `/recent/<kind>`, a Table each, with `useRowSelection` (the selection of
 document and folder rows, shared with search) putting a document in `?sel=` and its details in the region; a recent client opens
-a Clients search.
+a Clients search. `views/CheckedOutView.tsx` is `/checked-out`, the same list page as Recent's documents
+(`views/DocumentListPage.tsx`) over `GET /v1/me/checkouts` (`useCheckouts`), with its own columns (`checkedOutColumns`,
+none sorting, as the server's order is the latest check-out first). The left pane's entry (`CheckedOutEntry` in
+`frame/LeftPane.tsx`) reads the same query's `total` for its count.
 
 ## Previews
 

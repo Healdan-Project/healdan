@@ -55,7 +55,7 @@ export function ConfirmRemove({ question, removedDays, onConfirm, onCancel }: Co
               {t('common.cancel')}
             </Button>
             <Button
-              variant="destructive"
+              variant="danger"
               onPress={() => {
                 close()
                 onConfirm()

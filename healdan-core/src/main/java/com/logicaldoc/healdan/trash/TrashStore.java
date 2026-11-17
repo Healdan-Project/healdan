@@ -11,6 +11,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -20,6 +21,8 @@ import javax.sql.DataSource;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Component;
@@ -106,10 +109,74 @@ public class TrashStore {
 			ps.setTimestamp(i, Timestamp.from(item.deletedAt()));
 			return ps;
 		}, keys);
-		long id = ((Number) keys.getKeyList().get(0).values().iterator().next()).longValue();
-		jdbc.batchUpdate(INSERT_MEMBER, members.stream().map(member -> new Object[] { id,
-				String.valueOf(member.type()), member.objectId(), TrashState.DELETED.code() }).toList());
+		// MariaDB and HSQLDB give the one key; PostgreSQL gives every column, so take hd_id by its name there
+		Map<String, Object> generated = keys.getKeyList().get(0);
+		Object key = generated.size() == 1 ? generated.values().iterator().next() : generated.get("hd_id");
+		long id = ((Number) key).longValue();
+		if (!members.isEmpty())
+			jdbc.batchUpdate(INSERT_MEMBER, members.stream().map(member -> new Object[] { id,
+					String.valueOf(member.type()), member.objectId(), TrashState.DELETED.code() }).toList());
 		return id;
+	}
+
+	/**
+	 * Moves members, in whatever state, from one item to another
+	 *
+	 * @param from the item that holds them
+	 * @param members the members
+	 * @param to the item they go to, which mustn't hold them already
+	 * @return how many moved
+	 */
+	public int moveMembers(long from, Collection<TrashMember> members, long to) {
+		int moved = 0;
+		for (TrashMember member : members)
+			moved += jdbc.update("update hd_trash_member set hd_trashid = ? where hd_trashid = ? and hd_objecttype = ?"
+					+ " and hd_objectid = ?", to, from, String.valueOf(member.type()), member.objectId());
+		return moved;
+	}
+
+	/**
+	 * Drops the item's deleted members whose rows are live: what a delete
+	 * recorded before it ran and then didn't take (spec 5.2), so that a later
+	 * delete of them records an item of its own
+	 *
+	 * @param id the item
+	 * @return how many were dropped
+	 */
+	public int dropLive(long id) {
+		return jdbc.update("delete from hd_trash_member where hd_trashid = ? and hd_state = ? and ((hd_objecttype = 'F'"
+				+ " and hd_objectid in (select f.ld_id from ld_folder f where f.ld_deleted = 0)) or (hd_objecttype = 'D'"
+				+ " and hd_objectid in (select d.ld_id from ld_document d where d.ld_deleted = 0)))", id,
+				TrashState.DELETED.code());
+	}
+
+	/**
+	 * Deletes the item's own row once it has no members
+	 *
+	 * @param id the item
+	 * @return true if it was deleted
+	 */
+	public boolean deleteIfEmpty(long id) {
+		Long left = jdbc.queryForObject("select count(*) from hd_trash_member where hd_trashid = ?", Long.class, id);
+		return left != null && left == 0 && jdbc.update("delete from hd_trash where hd_id = ?", id) > 0;
+	}
+
+	/**
+	 * Marks destroyed the item's members in a state whose rows no longer exist:
+	 * destroyed outside the Trash, as the Classic Interface's Destroy Documents
+	 * does
+	 *
+	 * @param id the item
+	 * @param from the state they must be in
+	 * @param at when it was found
+	 * @return how many changed
+	 */
+	public int destroyedIfGone(long id, TrashState from, Instant at) {
+		return jdbc.update("update hd_trash_member set hd_state = ?, hd_destroyedat = ? where hd_trashid = ?"
+				+ " and hd_state = ? and ((hd_objecttype = 'F' and not exists (select 1 from ld_folder f"
+				+ " where f.ld_id = hd_trash_member.hd_objectid)) or (hd_objecttype = 'D' and not exists"
+				+ " (select 1 from ld_document d where d.ld_id = hd_trash_member.hd_objectid)))",
+				TrashState.DESTROYED.code(), Timestamp.from(at), id, from.code());
 	}
 
 	/**
@@ -255,17 +322,6 @@ public class TrashStore {
 	}
 
 	/**
-	 * @param cutoff the time
-	 * @param limit the most items to answer
-	 * @return the items with members removed before the cut-off, oldest removal first
-	 */
-	public List<Long> removedBefore(Instant cutoff, int limit) {
-		return jdbc.queryForList("select hd_trashid from hd_trash_member where hd_state = ? and hd_removedat < ?"
-				+ " group by hd_trashid order by min(hd_removedat), hd_trashid limit ?", Long.class,
-				TrashState.REMOVED.code(), Timestamp.from(cutoff), limit);
-	}
-
-	/**
 	 * An item with members removed before a cut-off, and when it first had one
 	 * removed: the place a pass over them has got to
 	 *
@@ -326,10 +382,30 @@ public class TrashStore {
 		return jdbc.query("select hd_trashid, hd_objecttype, hd_objectid, hd_state, hd_removedby, hd_removedbyname,"
 				+ " hd_removedat, hd_restoredby, hd_restoredbyname, hd_restoredat, hd_destroyedat"
 				+ " from hd_trash_member where hd_trashid = ? and hd_objecttype = ? and hd_objectid = ?",
-				(rs, n) -> new TrashMemberRow(rs.getLong(1), new TrashMember(rs.getString(2).charAt(0), rs.getLong(3)),
-						TrashState.of(rs.getString(4)), nullableLong(rs, 5), rs.getString(6), instant(rs, 7),
-						nullableLong(rs, 8), rs.getString(9), instant(rs, 10), instant(rs, 11)),
-				id, String.valueOf(member.type()), member.objectId()).stream().findFirst();
+				(rs, n) -> memberRow(rs), id, String.valueOf(member.type()), member.objectId()).stream().findFirst();
+	}
+
+	/**
+	 * @param ids items, such as a page's
+	 * @return each item's top member's row, by item, in one query
+	 */
+	public Map<Long, TrashMemberRow> tops(Collection<Long> ids) {
+		Map<Long, TrashMemberRow> tops = new HashMap<>();
+		if (ids.isEmpty())
+			return tops;
+		new NamedParameterJdbcTemplate(jdbc).query("select m.hd_trashid, m.hd_objecttype, m.hd_objectid, m.hd_state,"
+				+ " m.hd_removedby, m.hd_removedbyname, m.hd_removedat, m.hd_restoredby, m.hd_restoredbyname,"
+				+ " m.hd_restoredat, m.hd_destroyedat" + TOP + " where t.hd_id in (:ids)",
+				new MapSqlParameterSource("ids", new ArrayList<>(ids)), rs -> {
+					tops.put(rs.getLong(1), memberRow(rs));
+				});
+		return tops;
+	}
+
+	private static TrashMemberRow memberRow(ResultSet rs) throws SQLException {
+		return new TrashMemberRow(rs.getLong(1), new TrashMember(rs.getString(2).charAt(0), rs.getLong(3)),
+				TrashState.of(rs.getString(4)), nullableLong(rs, 5), rs.getString(6), instant(rs, 7),
+				nullableLong(rs, 8), rs.getString(9), instant(rs, 10), instant(rs, 11));
 	}
 
 	private static String where(TrashQuery query, List<Object> args) {

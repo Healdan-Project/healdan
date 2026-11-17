@@ -549,6 +549,26 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         assertEquals(1, column("ld_document", "ld_deleted", 6L));
     }
 
+    @Test
+    public void testFolderDeleteTreeStoppedAtAnImmutableDocumentCallsTheAfterHook() throws PersistenceException {
+        // An immutable live document in the tree, which CE's deleteTree stops at after the before-hook
+        documentDao.jdbcUpdate("update ld_document set ld_folderid = 1201, ld_deleted = 0, ld_immutable = 1 where ld_id = 5");
+        folderDao.jdbcUpdate("update ld_folder set ld_deleted = 0 where ld_id in (1200, 1201)");
+
+        HealdanHooks.register(new HealdanHooks() {
+            @Override
+            public void afterFolderDeleteTree(long folderId, FolderHistory transaction) {
+                calls.add("afterFolderDeleteTree:" + folderId);
+            }
+        });
+
+        assertFalse(folderDao.deleteTree(1200L, folderTransaction()).isEmpty());
+
+        // Called once, in the delete's transaction, with the documents in the tree still live
+        assertEquals(List.of("afterFolderDeleteTree:1200"), calls);
+        assertEquals(0, column("ld_document", "ld_deleted", 5L));
+    }
+
     private static void awaitVersionSaves() throws Exception {
         ThreadPoolExecutor pool = ThreadPools.get().getPool("VersionSave");
         long deadline = System.currentTimeMillis() + 20000L;

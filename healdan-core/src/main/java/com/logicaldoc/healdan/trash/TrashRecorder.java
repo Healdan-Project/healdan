@@ -6,8 +6,13 @@ package com.logicaldoc.healdan.trash;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -28,6 +33,8 @@ import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.runtime.Aspect;
+import com.logicaldoc.core.runtime.RunLevel;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.Matter;
@@ -36,6 +43,7 @@ import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
 import com.logicaldoc.healdan.util.CacheEvictor;
+import com.logicaldoc.util.CollectionUtil;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -54,7 +62,8 @@ import com.logicaldoc.util.spring.Context;
  * Something already a deleted member of an item records nothing, so a route
  * that deletes a tree item by item after the hook (CMIS) makes one item.
  * CMIS calls the hook outside any transaction and commits each member's
- * delete on its own, so there the item commits first, whatever follows.
+ * delete on its own, so there the item commits first, whatever follows; once
+ * it has run, {@link #settle} drops what it didn't take.
  */
 @Component
 public class TrashRecorder {
@@ -111,11 +120,26 @@ public class TrashRecorder {
 	 * @throws PersistenceException error at data layer
 	 */
 	public long treeDeleting(long folderId, User actor) throws PersistenceException {
+		return treeDeleting(folderId, rows.tree(folderId), actor);
+	}
+
+	/**
+	 * {@link #treeDeleting(long, User)} with the folder's live tree already read
+	 *
+	 * @param folderId the folder being deleted
+	 * @param tree the folder and the live folders below it, as
+	 *        {@link StoredRows#tree} gives them
+	 * @param actor who deletes it
+	 * @return the item's id, 0 if nothing was recorded
+	 * @throws PersistenceException error at data layer
+	 */
+	public long treeDeleting(long folderId, List<Long> tree, User actor) throws PersistenceException {
 		FolderRow top = rows.folder(folderId);
-		if (actor == null || top == null || top.deleted() != 0 || ceRefuses(top))
+		// CE's deleteTree stops with an exception that commits when its storing aspect is off
+		if (actor == null || top == null || top.deleted() != 0 || ceRefuses(top)
+				|| !RunLevel.current().aspectEnabled(Aspect.STORING))
 			return 0L;
 
-		List<Long> tree = rows.tree(folderId);
 		List<Long> documents = live("ld_document", "ld_folderid", tree);
 		Set<TrashMember> members = new LinkedHashSet<>();
 		tree.forEach(id -> members.add(folderMember(id)));
@@ -130,6 +154,115 @@ public class TrashRecorder {
 				actor.getId(), actor.getFullName(), Instant.now()), members);
 		log.debug("Recorded the delete of folder {} as Trash item {}", folderId, id);
 		return id;
+	}
+
+	/**
+	 * After a tree's delete, on a route that records the item before it deletes
+	 * (CMIS, which commits each row on its own) or that can stop short (CE's
+	 * {@code deleteTree} at an immutable document): the item keeps only what
+	 * the delete took. Its members whose rows are still live are dropped, so a
+	 * later delete of them records an item of its own. When the folder itself
+	 * stayed, each top-most row the delete did take becomes an item of its own,
+	 * and the folder's empty item goes.
+	 *
+	 * @param folderId the folder whose tree was being deleted
+	 * @throws PersistenceException error at data layer
+	 */
+	public void settle(long folderId) throws PersistenceException {
+		Optional<Long> found = store.itemHolding(folderMember(folderId), TrashState.DELETED);
+		if (found.isEmpty())
+			return;
+		long item = found.get();
+		int dropped = store.dropLive(item);
+		if (dropped == 0)
+			return;
+		log.debug("Dropped {} members of Trash item {} that its delete didn't take", dropped, item);
+		TrashItemRow row = store.item(item).orElseThrow();
+		if (store.member(item, new TrashMember(FOLDER.equals(row.kind()) ? 'F' : 'D', row.objectId())).isPresent())
+			return;
+
+		// The folder stayed: group what was taken under its top-most rows
+		List<TrashMember> left = store.members(item, TrashState.DELETED);
+		Map<TrashMember, Long> containers = containers(left);
+		Set<Long> leftFolders = new HashSet<>();
+		left.stream().filter(member -> member.type() == 'F').forEach(member -> leftFolders.add(member.objectId()));
+		Map<TrashMember, List<TrashMember>> groups = new LinkedHashMap<>();
+		for (TrashMember member : left) {
+			TrashMember top = member;
+			Set<Long> walked = new HashSet<>();
+			Long container = containers.get(top);
+			while (container != null && leftFolders.contains(container) && walked.add(container)) {
+				top = folderMember(container);
+				container = containers.get(top);
+			}
+			groups.computeIfAbsent(top, k -> new ArrayList<>()).add(member);
+		}
+		for (Map.Entry<TrashMember, List<TrashMember>> group : groups.entrySet())
+			splitOff(item, group.getKey(), group.getValue());
+		store.deleteIfEmpty(item);
+	}
+
+	/**
+	 * Moves members of an item into an item of their own, whose top is one of
+	 * them, deleted by whoever deleted the item and when: a part of a delete
+	 * that now stands apart from the rest, such as a subfolder removed on its
+	 * own
+	 *
+	 * @param item the item that holds them
+	 * @param top the new item's top, one of the members
+	 * @param members the members to move, the top included
+	 * @return the new item's id
+	 * @throws PersistenceException error at data layer
+	 */
+	long splitOff(long item, TrashMember top, Collection<TrashMember> members) throws PersistenceException {
+		TrashItemRow from = store.item(item).orElseThrow();
+		TrashItemRow part;
+		if (top.type() == 'F') {
+			Map<String, Object> folder = jdbc.queryForMap("select ld_tenantid, ld_name, ld_parentid from ld_folder"
+					+ " where ld_id = ?", top.objectId());
+			long parentId = ((Number) folder.get("ld_parentid")).longValue();
+			Folder parent = FolderDAO.get().findById(parentId);
+			long folders = members.stream().filter(member -> member.type() == 'F').count() - 1;
+			long documents = members.stream().filter(member -> member.type() == 'D').count();
+			part = new TrashItemRow(0L, ((Number) folder.get("ld_tenantid")).longValue(), FOLDER, top.objectId(),
+					Objects.toString(folder.get("ld_name"), ""), null, parentId, path(parent),
+					parent != null ? matterOf(top.objectId(), parent) : null, (int) folders, (int) documents,
+					from.deletedById(), from.deletedByName(), from.deletedAt());
+		} else {
+			Map<String, Object> document = jdbc.queryForMap("select ld_tenantid, ld_filename, ld_folderid, ld_customid,"
+					+ " ld_docref from ld_document where ld_id = ?", top.objectId());
+			long folderId = ((Number) document.get("ld_folderid")).longValue();
+			Folder folder = FolderDAO.get().findById(folderId);
+			Matter matter = folder != null ? MatterLocator.get().locate(folder).matter() : null;
+			part = new TrashItemRow(0L, ((Number) document.get("ld_tenantid")).longValue(), DOCUMENT, top.objectId(),
+					Objects.toString(document.get("ld_filename"), ""),
+					document.get("ld_docref") == null ? docNumber((String) document.get("ld_customid")) : null, folderId,
+					path(folder), matter != null ? matter.getId() : null, 0, 0, from.deletedById(),
+					from.deletedByName(), from.deletedAt());
+		}
+		long id = store.insert(part, List.of());
+		store.moveMembers(item, members, id);
+		log.debug("Split {} {} of Trash item {} into Trash item {}", top.type(), top.objectId(), item, id);
+		return id;
+	}
+
+	/**
+	 * @return the folder each member is in: a folder's parent, a document's
+	 *         folder; none for a row that is gone
+	 */
+	private Map<TrashMember, Long> containers(Collection<TrashMember> members) {
+		Map<TrashMember, Long> containers = new HashMap<>();
+		for (char type : new char[] { 'F', 'D' }) {
+			List<Long> ids = members.stream().filter(member -> member.type() == type).map(TrashMember::objectId)
+					.toList();
+			String sql = type == 'F' ? "select ld_id, ld_parentid from ld_folder where ld_id in (:ids)"
+					: "select ld_id, ld_folderid from ld_document where ld_id in (:ids)";
+			for (List<Long> chunk : CollectionUtil.partition(ids, CHUNK))
+				named.query(sql, new MapSqlParameterSource("ids", chunk), rs -> {
+					containers.put(new TrashMember(type, rs.getLong(1)), rs.getLong(2));
+				});
+		}
+		return containers;
 	}
 
 	/**
@@ -172,11 +305,12 @@ public class TrashRecorder {
 	/**
 	 * From the document listener: records a document a store put in the trash,
 	 * unless it is already a deleted member of an item. A document's item takes
-	 * its shortcuts already in the trash that no item holds, as the Classic
-	 * Interface deletes them first. A shortcut stored with no history was
-	 * deleted beside its document, as only the routes that delete a document's
-	 * shortcuts with it pass none: it joins the document's item, or, when the
-	 * document isn't deleted yet, waits for it. A shortcut deleted with a
+	 * its shortcuts already in the trash that no item holds. A shortcut stored
+	 * with no history was deleted beside its document, as only the routes that
+	 * delete a document's shortcuts with it pass none, each after the document
+	 * (the Classic Interface's since Healdan's edit), so that a refused
+	 * document leaves its shortcuts live: it joins the document's item, or,
+	 * when the document isn't deleted, waits for it. A shortcut deleted with a
 	 * history was deleted on its own, and is an item of its own.
 	 *
 	 * @param document the document, deleted
@@ -255,12 +389,11 @@ public class TrashRecorder {
 	 * @return the live rows of the table whose column holds one of the ids
 	 */
 	private List<Long> live(String table, String column, Collection<Long> ids) {
-		List<Long> all = new ArrayList<>(ids);
 		List<Long> found = new ArrayList<>();
-		for (int i = 0; i < all.size(); i += CHUNK)
+		for (List<Long> chunk : CollectionUtil.partition(new ArrayList<>(ids), CHUNK))
 			found.addAll(named.queryForList(
 					"select ld_id from %s where ld_deleted = 0 and %s in (:ids) order by ld_id".formatted(table, column),
-					new MapSqlParameterSource("ids", all.subList(i, Math.min(all.size(), i + CHUNK))), Long.class));
+					new MapSqlParameterSource("ids", chunk), Long.class));
 		return found;
 	}
 

@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.api;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -33,6 +34,7 @@ import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
 import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.trash.TrashItemRow;
+import com.logicaldoc.healdan.trash.TrashMemberRow;
 import com.logicaldoc.healdan.trash.TrashQuery;
 import com.logicaldoc.healdan.trash.TrashRemoval;
 import com.logicaldoc.healdan.trash.TrashRestore;
@@ -137,11 +139,14 @@ public class TrashResource {
 			TrashQuery query = new TrashQuery(shown, user.getId(), user.getTenantId(), by, descending,
 					paging.offset(), paging.limit());
 			TrashStore store = TrashStore.get();
+			List<TrashItemRow> rows = store.page(query);
+			// The top members and the setting are read once for the whole page
+			Map<Long, TrashMemberRow> tops = store.tops(rows.stream().map(TrashItemRow::id).toList());
+			int removedDays = HealdanSettings.get().trashRemovedDays();
 			List<TrashItem> items = new ArrayList<>();
-			for (TrashItemRow row : store.page(query))
-				items.add(TrashViews.item(row, user));
-			return new TrashPage(items, paging.offset(), paging.limit(), store.count(query),
-					HealdanSettings.get().trashRemovedDays());
+			for (TrashItemRow row : rows)
+				items.add(TrashViews.item(row, tops.get(row.id()), removedDays, user));
+			return new TrashPage(items, paging.offset(), paging.limit(), store.count(query), removedDays);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list the Trash", e);
 		}
@@ -213,7 +218,9 @@ public class TrashResource {
 	 * Moves an item to Removed, where only an administrator can restore it,
 	 * for the days the administrators set. Checks: an item the caller may not
 	 * remove, which is one not in the Trash, or someone else's unless the
-	 * caller is an administrator ({@code 404}).
+	 * caller is an administrator ({@code 404}); an item none of whose members
+	 * is in the Trash any more, though its record says so ({@code 409
+	 * refused}).
 	 *
 	 * @param id the item's id
 	 * @return {@code 204}
@@ -224,7 +231,8 @@ public class TrashResource {
 		User user = Caller.current().user();
 		try {
 			item(id, user, AccessChecks.isAdmin(user), IN_THE_TRASH);
-			TrashRemoval.get().removeItem(id, user);
+			if (TrashRemoval.get().removeItem(id, user) == 0)
+				throw ApiProblem.conflict("refused", "This item is no longer in the Trash.");
 			log.debug("Removed Trash item {}", id);
 			return Response.noContent().build();
 		} catch (PersistenceException e) {

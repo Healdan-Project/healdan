@@ -37,3 +37,118 @@
   flex: none;
   align-items: center;
 }
+
+/* The warning before a release (ConfirmRelease): the warning sign beside its title, on the dialog's surface */
+.warningSign {
+  color: var(--hd-danger-fill);
+}
+
+.releaseText {
+  margin: 0 0 var(--hd-space-3);
+}
+
+/* "On MacBook", over each computer's list when there are two or more */
+.releaseComputer {
+  margin: 0 0 var(--hd-space-2);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+}
+
+/* It takes the focus, by which the keyboard scrolls it when it's long */
+.releaseList {
+  max-height: 30dvh;
+  margin: 0 0 var(--hd-space-4);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  list-style: none;
+}
+
+.releaseList:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
+/* A document: its icon and name, then its doc #, app and last save, which go under the name in a narrow window. A name
+   wraps rather than being cut short: the warning names what is released. */
+.releaseRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-1) var(--hd-space-3);
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border-bottom: 1px solid var(--hd-line);
+}
+
+.releaseRow:last-child {
+  border-bottom: 0;
+}
+
+.releaseName {
+  flex: 1 1 16em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.releaseMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hd-space-4);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* What is lost: a red edge on the danger tint, its first sentence in the danger text (both AA there: tokens.test.ts) */
+.releaseLoss {
+  margin: 0 0 var(--hd-space-4);
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border-left: 4px solid var(--hd-danger-fill);
+  border-radius: var(--hd-radius);
+  background: var(--hd-danger-tint);
+}
+
+.releaseLoss p {
+  margin: 0 0 var(--hd-space-2);
+}
+
+.releaseLoss p:last-child {
+  margin: 0;
+}
+
+.releaseLoss strong {
+  color: var(--hd-danger-text);
+  font-weight: var(--hd-weight-bold);
+}
+
+.releaseNote {
+  margin: 0 0 var(--hd-space-5);
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border-radius: var(--hd-radius);
+  background: var(--hd-sidebar);
+}
+
+/* Signed-in Devices, inside the note's sentence: a button that reads as a link, as it opens a dialog and goes nowhere */
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--hd-accent-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link:focus-visible {
+  border-radius: var(--hd-radius-small);
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}
+
+.releaseActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hd-space-3);
+}

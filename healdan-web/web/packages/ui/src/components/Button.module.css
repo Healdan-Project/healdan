@@ -22,11 +22,11 @@
   --hd-icon-on-fill: currentColor;
 }
 
-/* Red, for a confirmation that takes something away for good; a kind's icon on it takes its text's colour, as on the accent */
-.button.destructive {
-  border-color: var(--hd-destructive-fill);
-  background: var(--hd-destructive-fill);
-  color: var(--hd-destructive-on-fill);
+/* The red button, for what can't be undone or takes from someone else: as the accent one, on the danger tokens */
+.button.danger {
+  border-color: var(--hd-danger-fill);
+  background: var(--hd-danger-fill);
+  color: var(--hd-danger-on-fill);
   --hd-icon-on-fill: currentColor;
 }
 
@@ -42,8 +42,8 @@
   color: inherit;
 }
 
-/* Not the accent button, whose face already says it is a button */
-.button:not(.default)[aria-pressed='true'] {
+/* Not the accent or red button, whose face already says it is a button */
+.button:not(.default):not(.danger)[aria-pressed='true'] {
   border-color: var(--hd-pressed-edge);
   background: var(--hd-pressed);
 }
@@ -60,8 +60,8 @@
 
 .button.default[data-disabled],
 .button.default[data-pending],
-.button.destructive[data-disabled],
-.button.destructive[data-pending] {
+.button.danger[data-disabled],
+.button.danger[data-pending] {
   border-color: var(--hd-line);
   background: var(--hd-line);
 }

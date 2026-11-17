@@ -358,6 +358,8 @@ function rowAfter(items: readonly Item[]): string | undefined {
 function refocus(key: string | undefined) {
   let tries = 0
   const attempt = () => {
+    // A test's page can go with the timer still set, as focusLater's can (rows.ts)
+    if (!globalThis.document) return
     const active = globalThis.document.activeElement
     const lost = !active || active === globalThis.document.body || !active.isConnected || (active instanceof HTMLButtonElement && active.disabled)
     const target = lost ? ((key ? globalThis.document.querySelector<HTMLElement>(`[role="grid"] [data-row-key="${key}"]`) : null) ?? globalThis.document.querySelector<HTMLElement>('[role="grid"]')) : null

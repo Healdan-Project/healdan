@@ -86,20 +86,26 @@ public class TrashRemoval {
 	}
 
 	/**
-	 * The item's deleted members go to Removed
+	 * The item's deleted members go to Removed, and those whose rows were
+	 * destroyed outside the Trash are marked destroyed
 	 *
 	 * @param trashId the item
 	 * @param actor who removes it
+	 * @return how many members changed; 0 when none was in the Trash
 	 * @throws PersistenceException error at data layer
 	 */
-	public void removeItem(long trashId, User actor) throws PersistenceException {
-		inTransaction(() -> removeWholeItem(trashId, actor, Instant.now()));
+	public int removeItem(long trashId, User actor) throws PersistenceException {
+		int[] changed = new int[1];
+		inTransaction(() -> changed[0] = removeWholeItem(trashId, actor, Instant.now()));
+		return changed[0];
 	}
 
 	/**
 	 * The Classic Interface's members, one by one: a folder member takes the
 	 * item's deleted members in its tree, a document member goes alone, and the
-	 * top member takes the whole item. A member no item holds, deleted before
+	 * top member takes the whole item. What a member takes on its own leaves
+	 * its item for an item of its own, so that Removed lists it where an
+	 * administrator can restore it. A member no item holds, deleted before
 	 * Healdan recorded them, has only its row changed.
 	 *
 	 * @param type {@code 'F'} for folders, {@code 'D'} for documents
@@ -125,7 +131,7 @@ public class TrashRemoval {
 				else if (type == 'F')
 					removeTree(item.get(), id, actor, now);
 				else
-					take(item.get(), List.of(member), actor, now);
+					take(splitOff(item.get(), member, List.of(member)), List.of(member), actor, now);
 			}
 			if (!unrecorded.isEmpty())
 				setRows(type, unrecorded);
@@ -174,8 +180,23 @@ public class TrashRemoval {
 				&& row.get().kind().equals(member.type() == 'F' ? TrashRecorder.FOLDER : TrashRecorder.DOCUMENT);
 	}
 
-	private void removeWholeItem(long item, User actor, Instant now) {
-		take(item, store.members(item, TrashState.DELETED), actor, now);
+	private int removeWholeItem(long item, User actor, Instant now) {
+		int gone = store.destroyedIfGone(item, TrashState.DELETED, now);
+		return gone + take(item, store.members(item, TrashState.DELETED), actor, now);
+	}
+
+	/**
+	 * What a member takes on its own goes to an item of its own
+	 * ({@link TrashRecorder#splitOff})
+	 *
+	 * @return the new item
+	 */
+	private static long splitOff(long item, TrashMember top, List<TrashMember> members) {
+		try {
+			return TrashRecorder.get().splitOff(item, top, members);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException(e.getMessage(), e);
+		}
 	}
 
 	/**
@@ -211,14 +232,16 @@ public class TrashRemoval {
 			if (tree.contains(rs.getLong(2)))
 				taken.add(new TrashMember('D', rs.getLong(1)));
 		});
-		take(item, taken, actor, now);
+		take(splitOff(item, new TrashMember('F', folderId), taken), taken, actor, now);
 	}
 
 	/**
 	 * Sets the members' rows from 1 to 2 and marks them removed, only those
 	 * whose row was at 1
+	 *
+	 * @return how many members were removed
 	 */
-	private void take(long item, Collection<TrashMember> members, User actor, Instant now) {
+	private int take(long item, Collection<TrashMember> members, User actor, Instant now) {
 		List<Long> wantedFolders = new ArrayList<>();
 		List<Long> wantedDocuments = new ArrayList<>();
 		for (TrashMember member : members)
@@ -234,15 +257,18 @@ public class TrashRemoval {
 						member.objectId(), item);
 		}
 		if (done.isEmpty())
-			return;
-		store.change(item, done, TrashState.DELETED, TrashState.REMOVED, actor != null ? (Long) actor.getId() : null,
-				actor != null ? actor.getFullName() : null, now);
+			return 0;
+		int changed = store.change(item, done, TrashState.DELETED, TrashState.REMOVED,
+				actor != null ? (Long) actor.getId() : null, actor != null ? actor.getFullName() : null, now);
 		log.debug("Removed {} folders and {} documents of Trash item {}", folders.size(), documents.size(), item);
+		return changed;
 	}
 
 	/**
 	 * Sets the rows at 1 to 2, and evicts them from the second-level cache now
-	 * and when the transaction ends
+	 * and when the transaction ends. The rows that changed are read again after
+	 * the update, as a restore that commits between the read and the update
+	 * makes the update skip its row.
 	 *
 	 * @return the ids of the rows that went from 1 to 2
 	 */
@@ -259,6 +285,10 @@ public class TrashRemoval {
 				continue;
 			named.update("update " + table + " set ld_deleted = :strong where ld_deleted = :weak and ld_id in (:ids)",
 					args.addValue("strong", PersistentObject.DELETED_CODE_STRONG));
+			// Those at 1 before that are at 2 now: the update's own rows
+			inTrash = named.queryForList("select ld_id from " + table + " where ld_deleted = :strong and ld_id in (:ids)",
+					new MapSqlParameterSource("strong", PersistentObject.DELETED_CODE_STRONG).addValue("ids", inTrash),
+					Long.class);
 			changed.addAll(inTrash);
 			if (type == 'F') {
 				evictor.evictFolders(inTrash);

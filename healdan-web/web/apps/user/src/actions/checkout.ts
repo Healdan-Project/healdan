@@ -67,13 +67,44 @@ export function holdSentence(state: HoldState): string | undefined {
   }
 }
 
+const HELPER_PREFIX = 'Healdan Helper on '
+
+/**
+ * Where a check-out is held, for the Checked Out to Me list: the computer (the helper's token name without "Healdan
+ * Helper on ") and the app. A check-out from the web page has no computer.
+ */
+export function computerLabel(hold: S['HoldView'] | null): { computer: string; app: string | null } {
+  if (!hold?.heldOn) return { computer: t('checkedOut.webPage'), app: null }
+  const { name, app } = hold.heldOn
+  const short = (name?.startsWith(HELPER_PREFIX) ? name.slice(HELPER_PREFIX.length) : name)?.trim()
+  return { computer: short ? short : t('checkedOut.unknownComputer'), app }
+}
+
 export function checkOut(api: Api, docNumber: number): Promise<S['DocumentView']> {
   return api.send('POST', apiPath`/v1/documents/${docNumber}/checkout`)
 }
 
-export function release(api: Api, docNumber: number): Promise<S['DocumentView']> {
-  return api.send('DELETE', apiPath`/v1/documents/${docNumber}/checkout`)
+/**
+ * Ends the person's own check-out. One another of their computers holds is refused (`409 held-elsewhere`) unless
+ * `elsewhere` is the id of the computer the person was warned would lose its unsaved work (spec 4.1); if the check-out
+ * has moved since, it stays where it is, and the release is refused.
+ */
+export function release(api: Api, docNumber: number, options: { elsewhere?: string } = {}): Promise<S['DocumentView']> {
+  return api.send('DELETE', apiPath`/v1/documents/${docNumber}/checkout`, undefined, options.elsewhere ? { elsewhere: options.elsewhere } : undefined)
 }
+
+/** What marks a document's own check-out, check-in or release while it runs (useCheckout), so every control that offers one waits for it */
+export const holdKey = (docNumber: number | undefined) => ['hold', docNumber] as const
+
+/** What marks a release of several documents while it runs (ReleaseProvider), whose variables are its ReleaseTargets */
+export const RELEASE_KEY = ['hold', 'release'] as const
+
+/**
+ * A document of a release, with the id of the other computer of the person's that holds it (`hold.device.id`), or
+ * undefined when the web page holds it. ReleaseProvider decides that once, when Release is pressed, and the decision is
+ * the one rule for what the warning lists, which computer it lists it under, and what is sent as `elsewhere`.
+ */
+export type ReleaseTarget = S['DocumentView'] & { elsewhere: string | undefined }
 
 export interface SaveOptions {
   /** `snapshot` for an ordinary save (2.1 becomes 2.2), `version` for the next major number (2.2 becomes 3.0) */

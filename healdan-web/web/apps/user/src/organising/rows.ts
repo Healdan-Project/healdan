@@ -61,3 +61,46 @@ export function readRows(text: string): { documents: Movable[]; folders: MovingF
     return { documents: [], folders: [] }
   }
 }
+
+/** Whether a list draws the row with this key now (`d10388` for a document) */
+export function rowDrawn(key: string): boolean {
+  return globalThis.document.querySelector(`[role="grid"] [data-row-key="${key}"]`) !== null
+}
+
+/**
+ * Where the focus goes once the rows with these keys (`d10388` for a document, `f45` for a folder) are gone: the key of the
+ * row that follows them in the list drawn now, else the one before them, else none. Undefined when none of them is a row
+ * of the list (a folder of the tree, or the open one).
+ */
+export function rowAfterKeys(gone: readonly string[]): { key?: string } | undefined {
+  const leaving = new Set(gone)
+  const keys = Array.from(globalThis.document.querySelectorAll('[role="grid"] [data-row-key]'), (row) => row.getAttribute('data-row-key') ?? '')
+  const last = keys.findLastIndex((key) => leaving.has(key))
+  if (last < 0) return undefined
+  return { key: keys.slice(last + 1).find((key) => !leaving.has(key)) ?? keys.slice(0, last).findLast((key) => !leaving.has(key)) }
+}
+
+/** The key of the row that follows the documents' rows in the list drawn now, else the one before them, else none */
+export function rowAfter(docNumbers: readonly number[]): string | undefined {
+  return rowAfterKeys(docNumbers.map((n) => `d${n}`))?.key
+}
+
+/**
+ * Focuses a row once it has been drawn again, or the list when there is no such row (as the dialog that had the focus
+ * gives it back first). With `gone`, the row keys of documents that may have left the list, only once none of them is
+ * drawn: where they stay, as a released document does in a folder, the focus stays where it is.
+ */
+export function focusLater(key: string | undefined, gone: readonly string[] = []) {
+  let tries = 0
+  const attempt = () => {
+    // A browser runs no timer of a page that has gone, but a test's page (jsdom's) goes with the timer still set, and
+    // where the rows stay drawn the tries last a second
+    if (!globalThis.document) return
+    const target = gone.some(rowDrawn)
+      ? null
+      : ((key ? globalThis.document.querySelector<HTMLElement>(`[data-row-key="${key}"]`) : null) ?? (key ? null : globalThis.document.querySelector<HTMLElement>('[role="grid"]')))
+    if (target) target.focus()
+    else if (++tries < 20) setTimeout(attempt, 50)
+  }
+  setTimeout(attempt, 0)
+}

@@ -438,6 +438,44 @@ public class TrashRecordingTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testACmisDeleteThatStopsShortKeepsWhatItTook() throws Exception {
+		Folder tree = fx.folder(correspondence, "Cmis Short");
+		Folder sub = fx.folder(tree, "Sub");
+		Document kept = upload(tree, "kept.txt", admin);
+		Document inSub = upload(sub, "sub.txt", admin);
+		awaitAsyncWork();
+		emptyTrash();
+
+		// CMIS records the tree first, then a rule refuses one document, so the tree stays, and its subfolder goes
+		DeleteVeto veto = new DeleteVeto(kept.getId(), false);
+		DocumentListenerManager.get().getListeners().add(0, veto);
+		try {
+			harness.cmisFor(tree.getId(), aliceSession).deleteTree(null, "fld." + tree.getId(), true);
+		} finally {
+			DocumentListenerManager.get().getListeners().remove(veto);
+		}
+		assertEquals(0, folderDeleted(tree));
+		assertEquals(0, deleted(kept));
+		assertEquals(1, folderDeleted(sub));
+		assertEquals(1, deleted(inSub));
+
+		// The tree's item is gone, and what CMIS did delete is an item of its own
+		assertTrue(itemHolding(folder(tree)).isEmpty());
+		assertTrue(itemHolding(document(kept)).isEmpty());
+		long subItem = itemHolding(folder(sub)).orElseThrow();
+		TrashItemRow row = trash.item(subItem).orElseThrow();
+		assertEquals(sub.getId(), row.objectId());
+		assertEquals(Long.valueOf(tree.getId()), row.fromFolderId());
+		assertEquals(Long.valueOf(alice.getId()), row.deletedById());
+		assertEquals(Set.of(folder(sub), document(inSub)), members(subItem));
+		assertEquals(1, items());
+
+		// So a later delete of what stayed records an item of its own
+		recordsOnce(document(kept), () -> documentDao.delete(kept.getId(), documentHistory(alice)));
+		assertEquals(kept.getId(), trash.item(itemHolding(document(kept)).orElseThrow()).orElseThrow().objectId());
+	}
+
+	@Test
 	public void testADeleteCeRefusesRecordsNothing() throws Exception {
 		long before = items();
 

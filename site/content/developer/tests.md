@@ -78,7 +78,8 @@ in `UPSTREAM_TESTS` (see [Continuous Integration](../continuous-integration/)). 
 - **`TrashStoreTest`** checks the record's DAO: items, members, their states and the Trash's lists.
 - **`TrashRecordingTest`** deletes a document and a folder by each route, the API's, the Classic Interface's RPC, WebDAV's
   and CMIS's, and checks that each makes one item with the right members, that a folder delete leaves a colleague's
-  deleted document where it was, and that a delete whose item can't be written is refused.
+  deleted document where it was, that a CMIS delete that stops short keeps only what it took, and that a delete whose
+  item can't be written is refused.
 - **`TrashRulesTest`** checks the rules on a whole tree: Delete or Move needed on everything inside, hidden items
   included, with no name in the refusal; a check-out or an immutable document inside; and a non-admin restoring only from
   the Trash.
@@ -92,16 +93,19 @@ in `UPSTREAM_TESTS` (see [Continuous Integration](../continuous-integration/)). 
   timer with its waits shortened. `TrashTestHooks` is in the test-jar so that other modules' tests can fail a destroy.
 - **`FolderChangesTest` and `TrashResourceTest`** in `healdan-api` check the folder delete, move and contents, the Trash's
   three views and who may read them, restore, remove and empty, each answer against `openapi.yaml`.
-- **`HealdanTrashHooksTest`**, in `logicaldoc-webapp`, checks the Classic Interface's removals and moves through the hooks.
+- **`HealdanTrashHooksTest`**, in `logicaldoc-webapp`, checks the Classic Interface's removals through the hooks, and
+  that its delete takes a document before its shortcuts. Its folder moves are `RpcPermissionGapsTest`'s.
   `CeFlowsTest`, in `healdan-storage`, checks that a document the Trash destroys is held, and that a failed destroy
   strands no held file.
 
 The upstream tests this adds to `UPSTREAM_TESTS`, one for each upstream file the Trash edits, are
 `HibernateFolderDAOTest#testDeleteTreeTakesOnlyLiveRows` (the folder DAO's delete) and `#testRestore` (CE's own
-restore path, left unchanged when the hook answers null), `HealdanTrashHooksTest` (the RPC services' removals and `DocumentServiceImpl` and `FolderServiceImpl`),
+restore path, left unchanged when the hook answers null), `HealdanTrashHooksTest` (the RPC services' removals and the
+document delete's order in `DocumentServiceImpl` and `FolderServiceImpl`),
 `DocumentManagerTest#testDestroyDocumentNamesItsOwnFile` and `#testDestroyDocumentInsideATransaction` (`destroyDocument`),
 and `ResourceServiceImplTest#testMoveFolder` (WebDAV's move). `RpcPermissionGapsTest`, `SoapPermissionGapsTest` and
-`HealdanHooksTest` were already there (`HealdanHooksTest#testFolderRestoreTakesTheScope` covers the restore's scope), and now cover `FolderServiceImpl.move`, `SoapFolderService.move` and the new hooks.
+`HealdanHooksTest` were already there (`HealdanHooksTest#testFolderRestoreTakesTheScope` covers the restore's scope, and
+`#testFolderDeleteTreeStoppedAtAnImmutableDocumentCallsTheAfterHook` `deleteTree`'s early return), and now cover `FolderServiceImpl.move`, `SoapFolderService.move` and the new hooks.
 
 ### The Storage Tests
 
@@ -340,24 +344,35 @@ code is laid out.
     and checks the new name in **My Favorites** and through the API, the tooltip unchanged and the focus back on the
     favourite, then gives it the folder's name back with **Use Original Name**. Afterwards it removes the bookmark,
     if a failed run left it; the folder stays.
+  - `checked-out.spec.ts` checks **Checked Out to Me** and releasing another computer's check-out. It files a `.docx`
+    with a device token, in a folder of its own inside `E2E`, and checks it out for Word with that token, as the
+    helper does when Word opens it. Through the page it opens **Checked Out to Me** from its entry, and checks the
+    row's **Computer** (the token's name, and Word) and that the entry's badge equals the list's row count (the
+    list's `aria-rowcount`, as other runs may have documents checked out to `webuser`). It then opens the warning with
+    **Release…**, checks that **Cancel** has the focus and cancels, the document still checked out on the token's
+    computer, then releases it with **Release Document** and checks that the row leaves the list, that the badge
+    drops by one, and that the token's save with `ifHeld: true` is then `409 not-held`, as the computer's next save
+    would be. Afterwards it releases the document, if a failed run left it held, and signs the token out.
   - `a11y.spec.ts` runs axe on each main view in the light theme and again in the dark one (a browser context with
-    Playwright's `colorScheme`, signed in once per theme): Recent's four lists, a matter, a folder with details (its
-    toolbar buttons all one height, and a document the spec checked out through the API, and releases at the end, whose
-    row shows its marker and is 34 pixels high, as a free row is), the properties form, that document's details with
-    its **Check-Out Info** and the **Versions** tab, Filters (with one in use, and while the counts are held open
-    with `page.route`, since busy states keep AA contrast and the last answer's counts must stay, never zeros), the list
-    while it is asked for again, the filing tray and the File Documents form, the rename field, the delete question, the
-    Help menu, search results for a word with their Filters (Title keeps 200 pixels, and text that doesn't fit ends in an
-    ellipsis), a document's page, Quick Look on a PDF and on an email, the reading pane, New Folder, More and Move To… (a
-    matter's client starts clear of it, drawn smaller), the person menu, Signed-in Devices (whole in its dialog, with no
-    sideways scroll, every Revoke inside it and a name of at most two lines at 1280, and again at 768) with the Revoke
-    question and its refusal (and a real revoke, whose focus must stay in the dialog), at 768 × 1024 the folded top bar
-    with the left pane, the empty region and the details opened over the list, and last the signed-out screen (the session
-    is ended with `DELETE /api/v1/session` from the page). Colour contrast is checked here, as jsdom can't. axe-core is
-    the workspace's own development dependency: `e2e/axe.ts` reads its file from `node_modules` and runs it with
-    `page.evaluate`, which the browser's debugging protocol does and the page's Content-Security-Policy doesn't govern, so
-    the policy stays as the app ships it. No spec turns it off: `addScriptTag` with the source in it would be blocked by
-    `script-src 'self'`, and `bypassCSP` would test a page the app never serves.
+    Playwright's `colorScheme`, signed in once per theme): Recent's four lists, **Checked Out to Me** with a document
+    the spec checked out on its token, and the warning before releasing it (closed with Esc, so nothing is released), a
+    matter, a folder with details (its toolbar buttons all one height, and a document the spec checked out through the
+    API, and releases at the end, whose row shows its marker and is 34 pixels high, as a free row is), the properties
+    form, that document's details with its **Check-Out Info** and the **Versions** tab, Filters (with one in use, and
+    while the counts are held open with `page.route`, since busy states keep AA contrast and the last answer's counts
+    must stay, never zeros), the list while it is asked for again, the filing tray and the File Documents form, the
+    rename field, the delete question, the Help menu, search results for a word with their Filters (Title keeps 200
+    pixels, and text that doesn't fit ends in an ellipsis), a document's page, Quick Look on a PDF and on an email, the
+    reading pane, New Folder, More and Move To… (a matter's client starts clear of it, drawn smaller), the person menu,
+    Signed-in Devices (whole in its dialog, with no sideways scroll, every Revoke inside it and a name of at most two
+    lines at 1280, and again at 768) with the Revoke question and its refusal (and a real revoke, whose focus must stay
+    in the dialog), at 768 × 1024 the folded top bar with the left pane, the empty region and the details opened over
+    the list, and last the signed-out screen (the session is ended with `DELETE /api/v1/session` from the page). Colour
+    contrast is checked here, as jsdom can't. axe-core is the workspace's own development dependency: `e2e/axe.ts` reads
+    its file from `node_modules` and runs it with `page.evaluate`, which the browser's debugging protocol does and the
+    page's Content-Security-Policy doesn't govern, so the policy stays as the app ships it. No spec turns it off:
+    `addScriptTag` with the source in it would be blocked by `script-src 'self'`, and `bypassCSP` would test a page the
+    app never serves.
   - `resizing.spec.ts` files a document into a folder of its own inside `E2E`, and through the page drags the left
     pane's divider with the mouse and checks the pane's width, its value and that the list's Title column narrowed (the
     virtualiser measured the narrower list); reloads and finds the width kept; moves it by keys; checks that a window

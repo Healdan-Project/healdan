@@ -32,7 +32,7 @@ import { CrossMatter } from './CrossMatter'
 import { MovePicker } from './MovePicker'
 import { NewFolderDialog } from './NewFolder'
 import { Refusals, type RefusalsProps } from './Refusals'
-import { readRows } from './rows'
+import { focusLater, readRows, rowAfterKeys } from './rows'
 import { undoAction } from './undo'
 
 export type { OrganisingItems } from '../actions/batch'
@@ -91,33 +91,6 @@ function rowKeys(items: OrganisingItems): string[] {
   return [...items.folders.map((folder) => `f${folder.id}`), ...items.documents.map((document) => `d${document.docNumber}`)]
 }
 
-function listedKeys(): string[] {
-  return Array.from(globalThis.document.querySelectorAll('[role="grid"] [data-row-key]'), (row) => row.getAttribute('data-row-key') ?? '')
-}
-
-/**
- * Where the focus goes once the rows are gone: the key of the row that follows them in the list drawn now, else the one
- * before them, else none. Undefined when none of them is a row of the list (a folder of the tree, or the open one).
- */
-function rowAfter(gone: readonly string[]): { key?: string } | undefined {
-  const leaving = new Set(gone)
-  const keys = listedKeys()
-  const last = keys.findLastIndex((key) => leaving.has(key))
-  if (last < 0) return undefined
-  return { key: keys.slice(last + 1).find((key) => !leaving.has(key)) ?? keys.slice(0, last).findLast((key) => !leaving.has(key)) }
-}
-
-/** Focuses a row once it has been drawn again, or the list when there is no such row (as the dialog that had the focus gives it back first) */
-function focusLater(key: string | undefined) {
-  let tries = 0
-  const attempt = () => {
-    const target = (key ? globalThis.document.querySelector<HTMLElement>(`[data-row-key="${key}"]`) : null) ?? (key ? null : globalThis.document.querySelector<HTMLElement>('[role="grid"]'))
-    if (target) target.focus()
-    else if (++tries < 20) setTimeout(attempt, 50)
-  }
-  setTimeout(attempt, 0)
-}
-
 /**
  * Focuses the list once it's drawn, if the focus was lost meanwhile: the open folder's ⋯, which asked, went with the
  * folder, and its parent's list is where the person is now. A focus put elsewhere (the tree, from which a folder above
@@ -126,6 +99,8 @@ function focusLater(key: string | undefined) {
 function focusListIfLost() {
   let tries = 0
   const attempt = () => {
+    // A test's page can go with the timer still set, as focusLater's can (rows.ts)
+    if (!globalThis.document) return
     const now = globalThis.document.activeElement
     if (now && now !== globalThis.document.body) return
     const list = globalThis.document.querySelector<HTMLElement>('[role="grid"]')
@@ -252,7 +227,7 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
       return
     }
     // Where the focus goes once the rows are gone, as after a delete: the picker that had it is gone, and the page would have it
-    const next = rowAfter([...folders.map((folder) => `f${folder.id}`), ...plan.documents.map((one) => `d${one.docNumber}`)])
+    const next = rowAfterKeys([...folders.map((folder) => `f${folder.id}`), ...plan.documents.map((one) => `d${one.docNumber}`)])
     const calls = {
       document: (document: Movable) => moveDocument(api, document.docNumber, place.id),
       folder: (folder: MovingFolder) => moveFolder(api, folder.id, place.id),
@@ -285,7 +260,7 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
   }
 
   async function remove(items: OrganisingItems) {
-    const next = rowAfter(rowKeys(items))
+    const next = rowAfterKeys(rowKeys(items))
     const outcome = await eachItem<S['TrashItem']>(items, {
       document: (document) => removeDocument(api, document.docNumber),
       // One of several that says it can't be deleted makes no call: Refusals says why, and the rest is deleted

@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.trash;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -11,6 +12,7 @@ import static org.junit.Assert.assertTrue;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.After;
 import org.junit.Before;
@@ -18,6 +20,7 @@ import org.junit.Test;
 
 import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.security.Client;
 import com.logicaldoc.core.security.Session;
@@ -82,20 +85,37 @@ public class TrashRemovalTest extends AbstractRulesTestCase {
 		folderDao.deleteTree(letters.getId(), folderHistory(alice));
 		long id = holding(folder(letters));
 
-		// A document member goes alone, and the item stays in the Trash
+		// A document member goes alone, into an item of its own in Removed, and the item stays in the Trash
 		assertTrue(HealdanHooks.get().removeFromTrash("ld_document", List.of(a.getId()), admin));
 		assertEquals(2, rowDeleted(document(a)));
-		assertRemovedBy(id, document(a), admin);
+		long aItem = removedHolding(document(a));
+		assertNotEquals(id, aItem);
+		assertRemovedBy(aItem, document(a), admin);
+		assertTrue(trash.member(id, document(a)).isEmpty());
+		TrashItemRow aRow = trash.item(aItem).orElseThrow();
+		assertEquals("document", aRow.kind());
+		assertEquals(a.getId(), aRow.objectId());
+		assertEquals(Long.valueOf(letters.getId()), aRow.fromFolderId());
+		assertEquals(Long.valueOf(alice.getId()), aRow.deletedById());
+		assertEquals(TrashState.REMOVED, trash.state(aItem));
 		assertEquals(1, rowDeleted(folder(letters)));
 		assertEquals(TrashState.DELETED, trash.state(id));
 		assertEquals(TrashState.DELETED, trash.member(id, document(b)).orElseThrow().state());
 
-		// A subfolder member takes its tree's members, and nothing above it
+		// A subfolder member takes its tree's members, and nothing above it, into an item of its own
 		assertTrue(HealdanHooks.get().removeFromTrash("ld_folder", List.of(inner.getId()), admin));
 		for (TrashMember member : List.of(folder(inner), document(b), document(c)))
 			assertEquals(member.toString(), 2, rowDeleted(member));
-		assertRemovedBy(id, folder(inner), admin);
-		assertRemovedBy(id, document(b), admin);
+		long innerItem = removedHolding(folder(inner));
+		assertEquals(Set.of(folder(inner), document(b), document(c)),
+				Set.copyOf(trash.members(innerItem, TrashState.REMOVED)));
+		assertRemovedBy(innerItem, folder(inner), admin);
+		assertRemovedBy(innerItem, document(b), admin);
+		assertEquals(inner.getId(), trash.item(innerItem).orElseThrow().objectId());
+		// Removed lists both, where an administrator can restore them
+		List<Long> removed = trash.page(new TrashQuery("removed", admin.getId(), letters.getTenantId(), "deleted",
+				true, 0, 50)).stream().map(TrashItemRow::id).toList();
+		assertTrue(removed.toString(), removed.containsAll(List.of(aItem, innerItem)));
 		assertEquals(1, rowDeleted(folder(letters)));
 		assertEquals(TrashState.DELETED, trash.state(id));
 
@@ -116,14 +136,15 @@ public class TrashRemovalTest extends AbstractRulesTestCase {
 		long id = holding(folder(letters));
 
 		assertTrue(HealdanHooks.get().removeFromTrash("ld_folder", List.of(inner.getId()), alice));
+		long innerItem = removedHolding(folder(inner));
 		TrashRestore.get().restore(id, null, alice, aliceSession);
 
 		assertEquals(0, rowDeleted(folder(letters)));
 		assertEquals(0, rowDeleted(document(a)));
 		assertEquals(2, rowDeleted(folder(inner)));
 		assertEquals(2, rowDeleted(document(b)));
-		assertEquals(TrashState.REMOVED, trash.member(id, folder(inner)).orElseThrow().state());
-		assertEquals(TrashState.REMOVED, trash.member(id, document(b)).orElseThrow().state());
+		assertEquals(TrashState.REMOVED, trash.state(innerItem));
+		assertEquals(TrashState.REMOVED, trash.member(innerItem, document(b)).orElseThrow().state());
 		assertEquals(TrashState.RESTORED, trash.member(id, folder(letters)).orElseThrow().state());
 	}
 
@@ -194,6 +215,33 @@ public class TrashRemovalTest extends AbstractRulesTestCase {
 		assertEquals(0, rowDeleted(document(b)));
 		assertEquals(TrashState.DELETED, trash.member(id, document(b)).orElseThrow().state());
 		assertRemovedBy(id, document(a), admin);
+	}
+
+	@Test
+	public void testRemovingWhatIsGoneOrLive() throws Exception {
+		Document gone = upload(correspondence, "gone.txt", alice);
+		Document live = upload(correspondence, "live.txt", alice);
+		awaitAsyncWork();
+		documentDao.delete(gone.getId(), documentHistory(alice));
+		documentDao.delete(live.getId(), documentHistory(alice));
+		long goneItem = holding(document(gone));
+		long liveItem = holding(document(live));
+		// Destroyed outside the Trash, as the Classic Interface's Destroy Documents does
+		DocumentManager.get().destroyDocument(gone.getId(), folderHistory(admin));
+		// And a record that says deleted for a live row
+		jdbc.update("update ld_document set ld_deleted = 0 where ld_id = ?", live.getId());
+
+		// The one destroyed is so recorded, and the item leaves the Trash
+		assertEquals(1, trashRemoval().removeItem(goneItem, alice));
+		assertEquals(TrashState.DESTROYED, trash.state(goneItem));
+		assertNotNull(trash.member(goneItem, document(gone)).orElseThrow().destroyedAt());
+		// Nothing of the other is in the Trash: nothing changes, which the API answers 409
+		assertEquals(0, trashRemoval().removeItem(liveItem, alice));
+		assertEquals(0, rowDeleted(document(live)));
+	}
+
+	private long removedHolding(TrashMember member) {
+		return trash.itemHolding(member, TrashState.REMOVED).orElseThrow();
 	}
 
 	private TrashRemoval trashRemoval() {

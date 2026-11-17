@@ -285,7 +285,7 @@ describe('The Trash', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Remove "Old Drafts" from the Trash?' })
     expect(within(dialog).getByText('It holds 3 folders and 11 documents.')).toBeTruthy()
     expect(within(dialog).getByText("You won't be able to restore it. An administrator can, for 45 days.")).toBeTruthy()
-    expect(within(dialog).getByRole('button', { name: 'Remove' }).className).toContain('destructive')
+    expect(within(dialog).getByRole('button', { name: 'Remove' }).className).toContain('danger')
     await expectNoAxeViolations(dialog)
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
@@ -316,7 +316,7 @@ describe('The Trash', () => {
     expect(within(dialog).getByText('This removes all 3 items you deleted.')).toBeTruthy()
     expect(within(dialog).getByText("You won't be able to restore it. An administrator can, for 45 days.")).toBeTruthy()
     const confirm = within(dialog).getByRole('button', { name: 'Empty Trash' })
-    expect(confirm.className).toContain('destructive')
+    expect(confirm.className).toContain('danger')
     await expectNoAxeViolations(dialog)
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))

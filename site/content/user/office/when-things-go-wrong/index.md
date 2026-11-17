@@ -173,6 +173,8 @@ your work back by itself, before that goes to Healdan:
 While you had the document open, its check-out ended:
 
 - it was checked in or unlocked in the web page, by you or an administrator;
+- you released it from **Checked Out to Me** in the app, as for a lost computer (see
+  [Your Check-Out on Another Computer](../../documents/checking-out-and-checking-in/#your-check-out-on-another-computer));
 - you chose **Edit Here Instead** for it on another of your computers.
 
 Your next save, or closing the window, is then refused, so it can't land on a document that's moved on. A notice says

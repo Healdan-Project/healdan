@@ -754,13 +754,16 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             return;
         }
 
+        // Healdan: the document first, so that a refused delete leaves its shortcuts live, and they join its Trash
+        // item (folders and Trash spec, 9.1)
+        List<Long> shortcutIds = dao.findAliasIds(doc.getId());
+        dao.delete(doc.getId(), transaction);
+
         // Check if there are some shortcuts associated to the
         // deleting document. All the shortcuts must be deleted.
-        for (Long shortcutId : dao.findAliasIds(doc.getId())) {
+        for (Long shortcutId : shortcutIds) {
             dao.delete(shortcutId);
         }
-
-        dao.delete(doc.getId(), transaction);
     }
 
     @Override

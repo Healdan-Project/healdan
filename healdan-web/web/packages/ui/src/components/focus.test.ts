@@ -25,14 +25,16 @@ describe('focus style', () => {
       './ToggleButtons.module.css',
       './Tray.module.css',
       './Tree.module.css',
+      './VisuallyHidden.module.css',
     ])
   })
 
   for (const [file, css] of Object.entries(sheets)) {
     it(`${file} uses the shared focus outline on focus-visible`, () => {
       const rules = [...css.matchAll(/([^{}]*\[data-focus-visible\][^{}]*)\{([^}]*)\}/g)]
-      if (file === './Dialog.module.css' || file === './Overlay.module.css' || file === './Tray.module.css') {
-        expect(rules).toHaveLength(0) // the dialog and the tray hold focusable parts, not focus of their own
+      if (file === './Dialog.module.css' || file === './Overlay.module.css' || file === './Tray.module.css' || file === './VisuallyHidden.module.css') {
+        // The dialog and the tray hold focusable parts, not focus of their own; hidden text is never focused
+        expect(rules).toHaveLength(0)
         return
       }
       expect(rules.length).toBeGreaterThan(0)

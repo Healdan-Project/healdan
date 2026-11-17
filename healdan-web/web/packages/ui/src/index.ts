@@ -19,6 +19,7 @@ export { PickField, type PickFieldOption, type PickFieldProps } from './componen
 export { Tray, type TrayItem, type TrayProps, type TrayState } from './components/Tray'
 export { Tabs, type TabItem, type TabsProps } from './components/Tabs'
 export { ToggleButtons, type ToggleButtonsProps } from './components/ToggleButtons'
+export { VisuallyHidden } from './components/VisuallyHidden'
 export type { ToastAction } from './components/Toast'
 export { Toast, ToastRegion, clearToasts, toast, toastWithAction, toastWithLink } from './components/Toast'
 export { RESIZING_ATTRIBUTE, Splitter, clampWidth, type SplitterProps } from './components/Splitter'

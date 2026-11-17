@@ -130,7 +130,24 @@ export const enUS = {
   'checkout.checkOut': 'Check Out',
   'checkout.checkIn': 'Check In',
   'checkout.release': 'Release',
+  // Release for a check-out another of the person's computers holds, which warns first
+  'checkout.releaseAsk': 'Release…',
   'checkout.file': 'File to Check In',
+  // The warning before releasing a check-out held on a computer: {computer} is its short name ("MacBook"), and {devices}
+  // the Signed-in Devices button, inside the sentence
+  'release.titleOne': 'Release {name} from {computer}?',
+  'release.otherComputers': 'Other Computers',
+  'release.on': 'On {computer}',
+  // The name of a computer's list, which scrolls when it's long and so takes the focus
+  'release.documentsOn': 'Documents on {computer}',
+  'release.saved': 'Saved {when}',
+  'release.lostOne': "Changes on {computer} that haven't reached Healdan will be lost.",
+  'release.lostMany': "Changes on those computers that haven't reached Healdan will be lost.",
+  'release.rescueMany': 'If you get their copies back, upload each one as a new version of its document to rescue those changes.',
+  'release.stolenOne': 'If {computer} was lost or stolen, also revoke its sign-in in {devices}.',
+  'release.stolenMany': 'If one of them was lost or stolen, also revoke its sign-in in {devices}.',
+  'release.devices': 'Signed-in Devices',
+  'release.refusedTitle': "Some Documents Weren't Released",
   'hold.someone': 'someone',
   'hold.checkedOutBy': 'Checked out by {who}',
   'hold.checkedOutByYou': 'Checked out by you',
@@ -190,6 +207,11 @@ export const enUS = {
   'recent.emails': 'Emails',
   'recent.folders': 'Folders',
   'recent.clients': 'Clients',
+  'checkedOut.title': 'Checked Out to Me',
+  'checkedOut.actions': 'Checked Out Actions',
+  'checkedOut.empty': 'Nothing is checked out to you.',
+  'checkedOut.webPage': 'Web Page',
+  'checkedOut.unknownComputer': 'Another Computer',
   'recent.heading.documents': 'Recent Documents',
   'recent.heading.emails': 'Recent Emails',
   'recent.heading.folders': 'Recent Folders',
@@ -225,6 +247,8 @@ export const enUS = {
   'list.version': 'Version',
   'list.author': 'Author',
   'list.edited': 'Edit Date',
+  'list.computer': 'Computer',
+  'list.checkedOut': 'Checked Out',
   'search.scope': 'Search In',
   'search.label': 'Search',
   'search.placeholder': 'Search, or type # and a number',
@@ -477,9 +501,27 @@ export const enUSPlurals = {
   'delete.manyTitle': { one: 'Move {n} item to the Trash?', other: 'Move {n} items to the Trash?' },
   'delete.doneMany': { one: 'Moved {n} item to the Trash', other: 'Moved {n} items to the Trash' },
   'undo.doneMany': { one: 'Restored {n} item', other: 'Restored {n} items' },
+  // The warning before a release: the button counts every document released, the title and the rest those on the computers
+  releaseTitle: { one: 'Release {n} Document from {computer}?', other: 'Release {n} Documents from {computer}?' },
+  releaseHeldOn: { one: "It's checked out to you on {computer}:", other: "They're checked out to you on {computer}:" },
+  releaseNoMore: {
+    one: "Once released, {computer} can't save to this document again, and the work in its copy can't be carried on there.",
+    other: "Once released, {computer} can't save to these documents again, and the work in its copies can't be carried on there.",
+  },
+  releaseNoMoreMany: {
+    one: "Once released, they can't save to this document again, and the work in their copies can't be carried on there.",
+    other: "Once released, they can't save to these documents again, and the work in their copies can't be carried on there.",
+  },
+  releaseRescue: {
+    one: 'If you get its copy back, upload it as a new version of its document to rescue those changes.',
+    other: 'If you get its copies back, upload each one as a new version of its document to rescue those changes.',
+  },
+  releaseConfirm: { one: 'Release Document', other: 'Release {n} Documents' },
+  released: { one: 'Released {n} document', other: 'Released {n} documents' },
   menuForDocuments: { one: 'Actions for {n} document', other: 'Actions for {n} documents' },
   // A selection of folders and documents
   menuForItems: { one: 'Actions for {n} item', other: 'Actions for {n} items' },
+  checkedOutCount: { one: ', {n} document', other: ', {n} documents' },
   matters: { one: '{n} {matter}', other: '{n} {matters}' },
   'trash.destroyIn': { one: 'in {n} day', other: 'in {n} days' },
   // Beside a deleted folder's name, and the Trash's count

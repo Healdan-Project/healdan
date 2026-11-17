@@ -1,0 +1,311 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mockup: Checked Out to Me</title>
+<style>:root{--border:#d1d1d6;--text-secondary:#6e6e73;--bg-secondary:#fff;--bg-tertiary:#e5e5e7}body{margin:24px auto;max-width:1340px;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#1d1d1f;background:#f5f5f7}.subtitle{color:var(--text-secondary)}.options{display:flex;flex-direction:column;gap:.75rem}.option{display:flex;gap:1rem;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem}.option .letter{flex:none;width:28px;height:28px;border-radius:6px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-weight:600}.option h3{margin:0 0 .25rem;font-size:1rem}.option p{margin:0;color:var(--text-secondary);font-size:.9rem}</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+.hd-wrap{position:relative;width:100%;overflow:hidden;border-radius:10px;border:1px solid #d1d1d6;margin-bottom:1.5rem}
+.hd-app{position:relative;width:1440px;height:720px;transform-origin:0 0;display:grid;grid-template-rows:52px 1fr;font:13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;background:#fff;text-align:left;
+--a:#0C69C0;--a-soft:#E6F0FA;--focus:#22A2E0;--side:#F5F5F7;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--hover:#EFEFF2;--red:#C42B1C}
+.hd-app i.ti{font-size:16px;line-height:1}
+.top{display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff}
+.brand{display:flex;align-items:center;gap:8px;width:216px;font-weight:600;font-size:15px}
+.mark{width:20px;height:22px}
+.search{flex:1;max-width:640px;display:flex;height:34px;border:1px solid #C7C7CC;border-radius:8px;overflow:hidden}
+.scope{display:flex;align-items:center;gap:6px;padding:0 10px 0 12px;background:var(--side);border-right:1px solid #C7C7CC;font-weight:500;white-space:nowrap}
+.q{flex:1;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--third)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--second)}
+.avatar{width:28px;height:28px;border-radius:50%;background:#D9E7F7;color:var(--a);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px}
+.body{display:grid;grid-template-columns:248px 1fr 320px;min-height:0}
+.nav{background:var(--side);border-right:1px solid var(--line);padding:10px 8px;overflow:hidden}
+.navsec{font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;margin:14px 8px 4px;display:flex;justify-content:space-between}
+.navsec:first-child{margin-top:4px}
+.ni{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ni i{color:var(--second)}
+.ni.on{background:var(--a-soft);color:var(--a);font-weight:500}.ni.on i{color:var(--a)}
+.ni .sub{color:var(--third);font-size:11px;margin-left:2px}
+.ni.l2{padding-left:24px}
+.ni .cnt{margin-left:auto;min-width:18px;height:18px;border-radius:9px;background:#FFF1DC;color:#8A5300;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+.ni.on .cnt{background:var(--a);color:#fff}
+.ni.lead{margin-bottom:2px}
+.chev{font-size:12px!important;color:var(--third)!important;width:12px}
+.main{display:flex;flex-direction:column;min-width:0}
+.rhead{display:flex;align-items:baseline;gap:10px;padding:14px 20px 10px}
+.rhead h1{font-size:20px;font-weight:600;margin:0}
+.rhead span{color:var(--second)}
+.bar{display:flex;align-items:center;gap:6px;padding:0 20px 10px;border-bottom:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid #D1D1D6;background:#fff;font-size:12.5px;white-space:nowrap}
+.btn.pri{background:var(--a);border-color:var(--a);color:#fff}.btn.pri i{color:#fff}
+.btn.ghost{border-color:transparent;color:var(--second)}
+.btn.danger{background:var(--red);border-color:var(--red);color:#fff;font-weight:500}
+.btn.focus{box-shadow:0 0 0 3px rgba(34,162,224,.45)}
+.count{margin-left:auto;color:var(--third);font-size:12px;white-space:nowrap}
+table{width:100%;border-collapse:collapse;table-layout:fixed}
+th{font-size:11.5px;font-weight:500;color:var(--second);text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th.new{color:#0A4F91}
+td{padding:0 10px;height:34px;border-bottom:1px solid #F2F2F4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.sel td{background:#DCEAF8}
+.fi{display:flex;align-items:center;gap:8px;overflow:hidden}
+.fi .nm{overflow:hidden;text-overflow:ellipsis}
+.fi i{font-size:17px}
+.fi i.hm{font-size:14px;color:var(--second);margin-left:2px}
+.pdf{color:#C8372D}.doc{color:#2B579A}.xls{color:#217346}.odt{color:#0E85CD}.eml{color:#B7792B}
+.mt{color:var(--third);font-size:12px;margin-left:6px}
+.pc{display:flex;flex-direction:column;justify-content:center;line-height:1.2}
+.pc small{color:var(--third);font-size:11.5px}
+.web{color:var(--second)}
+.side{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.phead{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:600;font-size:14px}
+.phead i{color:var(--second)}
+.det{padding:14px 16px;overflow:hidden}
+.thumb{height:118px;border:1px solid var(--line);border-radius:6px;display:flex;flex-direction:column;gap:6px;padding:14px 18px;margin-bottom:12px;position:relative}
+.thumb div{height:5px;background:#E9E9EC;border-radius:2px}
+.thumb .grid{height:auto;background:none;display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.thumb .grid span{height:9px;background:#E3F0E7;border-radius:1px}
+.dname{font-weight:600;font-size:14px;margin-bottom:2px}
+.dmeta{color:var(--second);font-size:12px;margin-bottom:10px}
+.acts{display:flex;gap:6px;margin-bottom:12px}
+.coi{border:1px solid var(--line);border-radius:8px;background:var(--side);padding:10px 12px}
+.coi h4{margin:0 0 8px;font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em}
+.kv{display:grid;grid-template-columns:100px 1fr;row-gap:5px;font-size:12.5px;margin:0}
+.kv dt{color:var(--second)}.kv dd{margin:0}
+.coi .btn{margin-top:10px}
+.tabs{display:flex;gap:4px;margin-top:12px;border-bottom:1px solid var(--line)}
+.tab{padding:6px 10px 8px;color:var(--second);font-weight:500;border-bottom:2px solid transparent}
+.tab.on{color:var(--a);border-color:var(--a)}
+.new-tag{display:inline-block;font-size:10px;font-weight:600;color:#0A4F91;background:#E6F0FA;border-radius:4px;padding:0 4px;margin-left:4px;vertical-align:1px}
+/* the dialog */
+.scrim{position:absolute;inset:0;background:rgba(29,29,31,.32);display:flex;align-items:center;justify-content:center}
+.dlg{width:660px;background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.3);padding:22px 24px 18px}
+.dlg h3{display:flex;align-items:center;gap:10px;margin:0 0 12px;font-size:17px;font-weight:600}
+.dlg h3 i{font-size:24px!important;color:var(--red)}
+.dlg p{margin:0 0 8px;font-size:13px}
+.dl{border:1px solid var(--line);border-radius:8px;margin:0 0 14px}
+.dl .r{display:grid;grid-template-columns:22px 1fr 64px 80px 150px;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid #F2F2F4;font-size:12.5px}
+.dl .r:last-child{border-bottom:0}
+.dl .r i{font-size:16px}
+.dl .r .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dl .r .m{color:var(--second);font-variant-numeric:tabular-nums}
+.warn{border-left:4px solid var(--red);background:#FDF0EE;border-radius:6px;padding:10px 12px;margin-bottom:10px}
+.warn b{display:block;color:#8E1F14;margin-bottom:4px;font-size:13.5px}
+.warn p{margin:0 0 6px}.warn p:last-child{margin:0}
+.info{display:flex;gap:8px;align-items:flex-start;background:var(--side);border-radius:6px;padding:9px 12px;font-size:12.5px;margin-bottom:16px}
+.info i{color:var(--second);margin-top:1px}
+.info a{color:var(--a);text-decoration:none;font-weight:500}
+.dbtns{display:flex;justify-content:flex-end;gap:8px}
+/* the placement crops */
+.crop{width:248px;background:var(--side);border:1px solid var(--line);border-radius:8px;padding:10px 8px;font:13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;text-align:left;--a:#0C69C0;--a-soft:#E6F0FA;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--side:#F5F5F7}
+.crop i.ti{font-size:16px;line-height:1}
+.crop .dim{opacity:.4}
+.menu{background:#fff;border:1px solid #D1D1D6;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.14);padding:6px;width:232px;margin-left:auto}
+.menu .ni{padding:6px 8px}
+.menu .hr{height:1px;background:var(--line);margin:4px 0}
+.av-row{display:flex;justify-content:flex-end;margin-bottom:6px}
+.crops{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:0 0 1rem}
+.crops .option{flex-direction:column}
+.state{font-size:.8rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin:.5rem 0;opacity:.7}
+.notes{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;font-size:.9rem;margin-bottom:1.5rem}
+.notes li{margin-bottom:.35rem}
+.notes h3{margin-top:0}
+</style>
+
+<h2>Checked Out to Me</h2>
+<p class="subtitle">Priya's MacBook was stolen with three documents checked out on it. Priya is on the office iMac now, and opens the new view to see what's still checked out. Blue-tinted column headings and "new" tags mark what's new; the rest is the app as it is today.</p>
+
+<div class="state">1 · The view, with one of MacBook's documents selected</div>
+<div class="hd-wrap"><div class="hd-app">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan</div>
+    <div class="search"><div class="scope"><i class="ti ti-file-text"></i>Documents<i class="ti ti-chevron-down" style="font-size:13px"></i></div><div class="q"><i class="ti ti-search"></i>Search documents, or # for a doc #</div></div>
+    <div class="topright"><i class="ti ti-help-circle" style="font-size:18px"></i><span class="avatar">PN</span></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="ni on lead"><i class="ti ti-pencil"></i>Checked Out to Me<span class="cnt">5</span></div>
+      <div class="navsec">Recent</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail eml"></i>Emails</div>
+      <div class="ni"><i class="ti ti-folder"></i>Folders</div>
+      <div class="ni"><i class="ti ti-building"></i>Clients</div>
+      <div class="navsec">Recent Matters</div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Matters <i class="ti ti-plus" style="font-size:13px"></i></div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1001.1 – Charter Dispute <span class="sub">Saltmarsh</span></div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase"></i>1004.1 – Grant Funding <span class="sub">Marsh Lane</span></div>
+      <div class="navsec">My Favorites</div>
+      <div class="ni"><i class="ti ti-file-spreadsheet xls"></i>Cap Table – Series A.xlsx</div>
+      <div class="ni"><i class="ti ti-folder"></i>1002.1 › Due Diligence</div>
+    </div>
+    <div class="main">
+      <div class="rhead"><h1>Checked Out to Me</h1><span>Latest check-out first</span></div>
+      <div class="bar">
+        <span class="btn ghost" title="Open"><i class="ti ti-external-link"></i></span>
+        <span class="btn ghost" title="Preview"><i class="ti ti-eye"></i></span>
+        <span class="btn ghost" title="Download"><i class="ti ti-download"></i></span>
+        <span class="btn"><i class="ti ti-lock-open"></i>Release…<span class="new-tag">new</span></span>
+        <span class="btn ghost"><i class="ti ti-dots"></i></span>
+        <span class="count">5 documents</span>
+      </div>
+      <table>
+        <thead><tr><th>Title</th><th class="num" style="width:72px">Doc #</th><th class="num" style="width:44px">Ver.</th><th style="width:120px">Matter</th><th class="new" style="width:110px">Computer</th><th class="new" style="width:100px">Checked Out</th><th style="width:100px">Edit Date</th></tr></thead>
+        <tbody>
+          <tr><td><span class="fi"><i class="ti ti-file-type-docx doc"></i><span class="nm">Letter to Dunmere Pryce – Response to Claim.docx</span><i class="ti ti-pencil hm"></i></span></td><td class="num">10431</td><td class="num">3</td><td>1001.1<span class="mt">Saltmarsh</span></td><td><span class="pc">iMac<small>Word</small></span></td><td>Today 09:12</td><td>Today 09:42</td></tr>
+          <tr class="sel"><td><span class="fi"><i class="ti ti-file-spreadsheet xls"></i><span class="nm">Laytime Calculation – MV Northern Star.xlsx</span><i class="ti ti-pencil hm"></i></span></td><td class="num">10405</td><td class="num">2</td><td>1001.1<span class="mt">Saltmarsh</span></td><td><span class="pc">MacBook<small>Excel</small></span></td><td>Yesterday</td><td>Yesterday</td></tr>
+          <tr><td><span class="fi"><i class="ti ti-file-text odt"></i><span class="nm">Report on Lease – Unit 4.odt</span><i class="ti ti-pencil hm"></i></span></td><td class="num">10447</td><td class="num">1.2</td><td>1002.1<span class="mt">Brightwell</span></td><td><span class="pc">MacBook<small>LibreOffice</small></span></td><td>Nov 14, 2026</td><td>Nov 14, 2026</td></tr>
+          <tr><td><span class="fi"><i class="ti ti-file-type-docx doc"></i><span class="nm">Grant Agreement – Draft.docx</span><i class="ti ti-pencil hm"></i></span></td><td class="num">10414</td><td class="num">4</td><td>1004.1<span class="mt">Marsh Lane</span></td><td><span class="pc">MacBook<small>Word</small></span></td><td>Nov 12, 2026</td><td>Nov 12, 2026</td></tr>
+          <tr><td><span class="fi"><i class="ti ti-file-spreadsheet xls"></i><span class="nm">Cap Table – Series A.xlsx</span><i class="ti ti-pencil hm"></i></span></td><td class="num">10420</td><td class="num">6</td><td>1003.1<span class="mt">Kestrel</span></td><td class="web">Web Page</td><td>Nov 10, 2026</td><td>Nov 9, 2026</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="side">
+      <div class="phead">Details <i class="ti ti-x"></i></div>
+      <div class="det">
+        <div class="thumb"><div style="width:45%"></div><div class="grid"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
+        <div class="dname">Laytime Calculation – MV Northern Star.xlsx <i class="ti ti-star" style="color:var(--third);font-size:14px"></i></div>
+        <div class="dmeta"># 10405 · Version 2 · 48 KB</div>
+        <div class="acts"><span class="btn pri"><i class="ti ti-external-link"></i>Open</span><span class="btn"><i class="ti ti-download"></i>Download</span><span class="btn ghost"><i class="ti ti-dots"></i></span></div>
+        <div class="coi">
+          <h4>Check-Out Info</h4>
+          <dl class="kv">
+            <dt>User</dt><dd>Priya Nair (You)</dd>
+            <dt>Check-Out Time</dt><dd>Yesterday, 16:20</dd>
+            <dt>Application</dt><dd>Excel</dd>
+            <dt>Computer</dt><dd>MacBook</dd>
+          </dl>
+          <span class="btn"><i class="ti ti-lock-open"></i>Release…<span class="new-tag">new</span></span>
+        </div>
+        <div class="tabs"><span class="tab on">Properties</span><span class="tab">Versions</span></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<div class="state">2 · Release… with MacBook's three documents selected</div>
+<div class="hd-wrap"><div class="hd-app">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan</div>
+    <div class="search"><div class="scope"><i class="ti ti-file-text"></i>Documents<i class="ti ti-chevron-down" style="font-size:13px"></i></div><div class="q"><i class="ti ti-search"></i>Search documents, or # for a doc #</div></div>
+    <div class="topright"><i class="ti ti-help-circle" style="font-size:18px"></i><span class="avatar">PN</span></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="ni on lead"><i class="ti ti-pencil"></i>Checked Out to Me<span class="cnt">5</span></div>
+      <div class="navsec">Recent</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail eml"></i>Emails</div>
+      <div class="ni"><i class="ti ti-folder"></i>Folders</div>
+      <div class="ni"><i class="ti ti-building"></i>Clients</div>
+      <div class="navsec">Recent Matters</div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-briefcase"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+    </div>
+    <div class="main">
+      <div class="rhead"><h1>Checked Out to Me</h1><span>Latest check-out first</span></div>
+      <div class="bar"><span class="btn ghost"><i class="ti ti-external-link"></i></span><span class="btn ghost"><i class="ti ti-eye"></i></span><span class="btn ghost"><i class="ti ti-download"></i></span><span class="btn"><i class="ti ti-lock-open"></i>Release…</span><span class="count">3 of 5 selected</span></div>
+      <table>
+        <thead><tr><th>Title</th><th class="num" style="width:72px">Doc #</th><th class="num" style="width:44px">Ver.</th><th style="width:120px">Matter</th><th style="width:110px">Computer</th><th style="width:100px">Checked Out</th><th style="width:100px">Edit Date</th></tr></thead>
+        <tbody>
+          <tr><td><span class="fi"><i class="ti ti-file-type-docx doc"></i><span class="nm">Letter to Dunmere Pryce – Response to Claim.docx</span></span></td><td class="num">10431</td><td class="num">3</td><td>1001.1</td><td>iMac</td><td>Today 09:12</td><td>Today 09:42</td></tr>
+          <tr class="sel"><td><span class="fi"><i class="ti ti-file-spreadsheet xls"></i><span class="nm">Laytime Calculation – MV Northern Star.xlsx</span></span></td><td class="num">10405</td><td class="num">2</td><td>1001.1</td><td>MacBook</td><td>Yesterday</td><td>Yesterday</td></tr>
+          <tr class="sel"><td><span class="fi"><i class="ti ti-file-text odt"></i><span class="nm">Report on Lease – Unit 4.odt</span></span></td><td class="num">10447</td><td class="num">1.2</td><td>1002.1</td><td>MacBook</td><td>Nov 14, 2026</td><td>Nov 14, 2026</td></tr>
+          <tr class="sel"><td><span class="fi"><i class="ti ti-file-type-docx doc"></i><span class="nm">Grant Agreement – Draft.docx</span></span></td><td class="num">10414</td><td class="num">4</td><td>1004.1</td><td>MacBook</td><td>Nov 12, 2026</td><td>Nov 12, 2026</td></tr>
+          <tr><td><span class="fi"><i class="ti ti-file-spreadsheet xls"></i><span class="nm">Cap Table – Series A.xlsx</span></span></td><td class="num">10420</td><td class="num">6</td><td>1003.1</td><td class="web">Web Page</td><td>Nov 10, 2026</td><td>Nov 9, 2026</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="side"></div>
+    <div class="scrim">
+      <div class="dlg" role="alertdialog">
+        <h3><i class="ti ti-alert-triangle"></i>Release 3 Documents from MacBook?</h3>
+        <p>They're checked out to you on MacBook:</p>
+        <div class="dl">
+          <div class="r"><i class="ti ti-file-spreadsheet xls"></i><span class="n">Laytime Calculation – MV Northern Star.xlsx</span><span class="m"># 10405</span><span class="m">Excel</span><span class="m">Saved yesterday, 17:05</span></div>
+          <div class="r"><i class="ti ti-file-text odt"></i><span class="n">Report on Lease – Unit 4.odt</span><span class="m"># 10447</span><span class="m">LibreOffice</span><span class="m">Saved Nov 14, 11:30</span></div>
+          <div class="r"><i class="ti ti-file-type-docx doc"></i><span class="n">Grant Agreement – Draft.docx</span><span class="m"># 10414</span><span class="m">Word</span><span class="m">Saved Nov 12, 15:48</span></div>
+        </div>
+        <div class="warn">
+          <b>Changes on MacBook that haven't reached Healdan will be lost.</b>
+          <p>Once released, MacBook can't save to these documents again, and the work in its copies can't be carried on there.</p>
+          <p>If you get its copies back, upload each one as a new version of its document to rescue those changes.</p>
+        </div>
+        <div class="info"><i class="ti ti-info-circle"></i><span>If MacBook was lost or stolen, also revoke its sign-in in <a>Signed-in Devices</a>.</span></div>
+        <div class="dbtns"><span class="btn focus">Cancel</span><span class="btn danger">Release 3 Documents</span></div>
+      </div>
+    </div>
+  </div>
+</div></div>
+<script>
+(function(){function fit(){document.querySelectorAll('.hd-wrap').forEach(function(w){var a=w.querySelector('.hd-app');var s=Math.min(1,w.clientWidth/1440);a.style.transform='scale('+s+')';w.style.height=(720*s)+'px';});}window.addEventListener('resize',fit);fit();setTimeout(fit,50);setTimeout(fit,400);})();
+</script>
+
+<div class="notes">
+<div>
+<h3>The view</h3>
+<ul>
+<li><b>Columns:</b> Title, Doc #, Version, Matter, <b>Computer</b> (the computer, with the app under it; <i>Web Page</i> for one checked out in a browser), <b>Checked Out</b>, and Edit Date, which is when it was last saved to Healdan. Author makes room for the two new ones.</li>
+<li>Latest check-out first, as the server gives them, with no sorting by header, as Recent's lists.</li>
+<li>The count beside the entry is how many you have checked out. It refreshes when you come back to the window, as the lists do.</li>
+<li>Check-outs only. Documents locked with the Classic Interface's Lock don't appear.</li>
+</ul>
+</div>
+<div>
+<h3>Release…</h3>
+<ul>
+<li>It's the same action everywhere a document shows: the toolbar, a row's right-click menu, and Check-Out Info in the details. So a document checked out on MacBook can be released from a search too, not only from this view.</li>
+<li>A check-out made in a browser releases at once, as today. One held on another computer asks first, with the warning in state 2.</li>
+<li>A selection held on two computers gets one warning, with a list for each computer. Cancel has the focus, so Enter does nothing harmful.</li>
+</ul>
+</div>
+</div>
+
+<h3>Where should Checked Out to Me sit?</h3>
+<div class="crops">
+  <div class="option" data-choice="top">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>At the top of the left pane</h3>
+      <p>An entry of its own above Recent, with its count. Always there, so the pane doesn't jump. My pick: it's a glance away all day.</p>
+      <div class="crop" style="margin-top:10px">
+        <div class="ni lead"><i class="ti ti-pencil"></i>Checked Out to Me<span class="cnt">5</span></div>
+        <div class="navsec">Recent</div>
+        <div class="ni dim"><i class="ti ti-file-text"></i>Documents</div>
+        <div class="ni dim"><i class="ti ti-mail"></i>Emails</div>
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="recent">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>A fifth entry under Recent</h3>
+      <p>After Clients. But each Recent entry is also a search scope, which opening it sets, and this one isn't.</p>
+      <div class="crop" style="margin-top:10px">
+        <div class="navsec">Recent</div>
+        <div class="ni dim"><i class="ti ti-file-text"></i>Documents</div>
+        <div class="ni dim"><i class="ti ti-mail"></i>Emails</div>
+        <div class="ni dim"><i class="ti ti-folder"></i>Folders</div>
+        <div class="ni dim"><i class="ti ti-building"></i>Clients</div>
+        <div class="ni"><i class="ti ti-pencil"></i>Checked Out to Me<span class="cnt">5</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="account">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>In the account menu</h3>
+      <p>Beside Signed-in Devices, out of the way. Tidier, but you'd have to remember to look.</p>
+      <div class="crop" style="margin-top:10px;background:#fff">
+        <div class="av-row"><span class="avatar" style="width:24px;height:24px;border-radius:50%;background:#D9E7F7;color:#0C69C0;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:11px">PN</span></div>
+        <div class="menu">
+          <div class="ni"><i class="ti ti-pencil"></i>Checked Out to Me<span class="cnt">5</span></div>
+          <div class="ni dim"><i class="ti ti-devices"></i>Signed-in Devices</div>
+          <div class="ni dim"><i class="ti ti-layout"></i>Classic Interface</div>
+          <div class="hr"></div>
+          <div class="ni dim"><i class="ti ti-logout"></i>Sign Out</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

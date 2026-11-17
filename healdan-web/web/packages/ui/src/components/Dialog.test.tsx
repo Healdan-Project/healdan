@@ -35,6 +35,36 @@ function open() {
 }
 
 describe('Dialog', () => {
+  it('an alert dialog says so', () => {
+    render(<Dialog title="Release Check-Out" isOpen role="alertdialog" onOpenChange={() => {}}>{() => <Button>OK</Button>}</Dialog>)
+    expect(screen.getByRole('alertdialog', { name: 'Release Check-Out' })).toBeTruthy()
+  })
+
+  it('draws an icon before the title, which is no part of its name', () => {
+    render(
+      <Dialog title="Release Check-Out" isOpen role="alertdialog" icon={<svg aria-hidden="true" data-testid="sign" />} onOpenChange={() => {}}>
+        {() => <Button>OK</Button>}
+      </Dialog>,
+    )
+    const heading = screen.getByRole('heading', { name: 'Release Check-Out' })
+    expect(heading.firstElementChild).toBe(screen.getByTestId('sign'))
+    expect(screen.getByRole('alertdialog', { name: 'Release Check-Out' })).toBeTruthy()
+  })
+
+  it('is described by what it names, as an alert says what it warns of', () => {
+    render(
+      <Dialog title="Release Check-Out" isOpen role="alertdialog" aria-describedby="what" onOpenChange={() => {}}>
+        {() => (
+          <>
+            <p id="what">Unsaved changes are lost.</p>
+            <Button>OK</Button>
+          </>
+        )}
+      </Dialog>,
+    )
+    expect(screen.getByRole('alertdialog', { name: 'Release Check-Out', description: 'Unsaved changes are lost.' })).toBeTruthy()
+  })
+
   it('opens with the keyboard, names itself and moves focus inside', async () => {
     render(<Example />)
     open()

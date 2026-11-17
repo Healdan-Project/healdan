@@ -10,14 +10,20 @@ import static org.junit.Assert.assertTrue;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import com.logicaldoc.core.HealdanHooks;
+import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentHistory;
+import com.logicaldoc.core.document.DocumentListener;
+import com.logicaldoc.core.document.DocumentListenerManager;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
@@ -28,7 +34,8 @@ import com.logicaldoc.web.AbstractWPTestCase;
  * hooks first (Trash spec 2.3): a hook that answers true is called with the
  * RPC's table and ids and CE's own update doesn't run, one that answers false,
  * the default, leaves CE's update as it is, and the RPC's own check of what a
- * non-admin may purge comes before the hook.
+ * non-admin may purge comes before the hook. The Classic Interface's delete
+ * takes a document before its shortcuts (Trash spec 9.1).
  */
 public class HealdanTrashHooksTest extends AbstractWPTestCase {
 
@@ -105,6 +112,76 @@ public class HealdanTrashHooksTest extends AbstractWPTestCase {
 		assertTrue(hooks.calls.isEmpty());
 		assertEquals(1, docDao.queryForInt("select ld_deleted from ld_document where ld_id = " + TRASHED_DOCUMENT));
 		assertEquals(1, folderDao.queryForInt("select ld_deleted from ld_folder where ld_id = " + TRASHED_FOLDER));
+	}
+
+	@Test
+	public void testADeleteTakesTheDocumentBeforeItsShortcuts() throws Exception {
+		// Document 1 has shortcut 2. A refused document leaves its shortcut live
+		Deletes refusing = new Deletes(1L);
+		DocumentListenerManager.get().getListeners().add(refusing);
+		try {
+			assertThrows(Exception.class, () -> new DocumentServiceImpl().delete(List.of(1L)));
+		} finally {
+			DocumentListenerManager.get().getListeners().remove(refusing);
+		}
+		assertEquals(0, docDao.queryForInt("select ld_deleted from ld_document where ld_id = 2"));
+
+		// Otherwise the document goes first, then its shortcut
+		Deletes deletes = new Deletes(0L);
+		DocumentListenerManager.get().getListeners().add(deletes);
+		try {
+			new DocumentServiceImpl().delete(List.of(1L));
+		} finally {
+			DocumentListenerManager.get().getListeners().remove(deletes);
+		}
+		assertEquals(List.of(1L, 2L), deletes.order);
+	}
+
+	/**
+	 * Records the documents stored deleted, in order, and refuses one
+	 */
+	private static class Deletes implements DocumentListener {
+
+		private final long refused;
+
+		private final List<Long> order = new ArrayList<>();
+
+		Deletes(long refused) {
+			this.refused = refused;
+		}
+
+		@Override
+		public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary)
+				throws PersistenceException {
+			if (document.getDeleted() != 0 && document.getId() == refused)
+				throw new HealdanVetoException("Not this one.");
+		}
+
+		@Override
+		public void afterStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			if (document.getDeleted() != 0)
+				order.add(document.getId());
+		}
+
+		@Override
+		public void afterFileStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			// Nothing to record
+		}
+
+		@Override
+		public void beforeCheckin(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			// Nothing to record
+		}
+
+		@Override
+		public void afterCheckin(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			// Nothing to record
+		}
+
+		@Override
+		public void afterSaveHistory(Document document, DocumentHistory event, Map<String, Object> dictionary) {
+			// Nothing to record
+		}
 	}
 
 	/**
