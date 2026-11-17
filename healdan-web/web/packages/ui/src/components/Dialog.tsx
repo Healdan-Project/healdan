@@ -10,17 +10,19 @@ export interface DialogProps {
   isOpen: boolean
   /** `wide` is for a dialog that holds a table; it still fits the window less its margins */
   size?: 'default' | 'wide'
+  /** `alertdialog` is for one that warns of something the person might not want, so a screen reader says so */
+  role?: 'dialog' | 'alertdialog'
   onOpenChange: (isOpen: boolean) => void
   /** The dialog's buttons, given a function that closes it. */
   children: ReactNode | ((close: () => void) => ReactNode)
 }
 
 // A modal dialog: focus stays inside it, Esc closes it, and focus goes back to where it came from.
-export function Dialog({ title, isOpen, onOpenChange, size = 'default', children }: DialogProps) {
+export function Dialog({ title, isOpen, onOpenChange, size = 'default', role = 'dialog', children }: DialogProps) {
   return (
     <ModalOverlay className={styles.overlay} isOpen={isOpen} onOpenChange={onOpenChange} isDismissable>
       <Modal className={size === 'wide' ? `${styles.modal} ${styles.wide}` : styles.modal}>
-        <AriaDialog className={styles.dialog}>
+        <AriaDialog role={role} className={styles.dialog}>
           {({ close }) => (
             <>
               <Heading slot="title" className={styles.title}>

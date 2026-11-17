@@ -7,8 +7,8 @@ import { t } from '../strings'
 import styles from './Button.module.css'
 
 export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style'> {
-  /** The default button is the accent one; secondary has a field-coloured face; quiet has none, for an icon in a row. */
-  variant?: 'default' | 'secondary' | 'quiet'
+  /** The default button is the accent one; secondary has a field-coloured face; quiet has none, for an icon in a row; danger is red. */
+  variant?: 'default' | 'secondary' | 'quiet' | 'danger'
   /** For moving focus to the button, as when the panel it opened closes */
   ref?: Ref<HTMLButtonElement>
 }
@@ -18,7 +18,7 @@ export interface ButtonProps extends Omit<AriaButtonProps, 'className' | 'style'
  * React Aria adds to the name of a button labelled by `aria-label`, so a screen reader says it's working.
  */
 export function Button({ variant = 'secondary', children, ...props }: ButtonProps) {
-  const face = variant === 'default' ? styles.default : variant === 'quiet' ? styles.quiet : ''
+  const face = variant === 'default' ? styles.default : variant === 'quiet' ? styles.quiet : variant === 'danger' ? styles.danger : ''
   return (
     <AriaButton {...props} className={`${styles.button} ${face}`}>
       {(values) => (

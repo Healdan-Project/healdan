@@ -35,6 +35,11 @@ function open() {
 }
 
 describe('Dialog', () => {
+  it('an alert dialog says so', () => {
+    render(<Dialog title="Release Check-Out" isOpen role="alertdialog" onOpenChange={() => {}}>{() => <Button>OK</Button>}</Dialog>)
+    expect(screen.getByRole('alertdialog', { name: 'Release Check-Out' })).toBeTruthy()
+  })
+
   it('opens with the keyboard, names itself and moves focus inside', async () => {
     render(<Example />)
     open()
