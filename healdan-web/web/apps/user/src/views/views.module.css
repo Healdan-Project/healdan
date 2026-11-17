@@ -209,3 +209,12 @@
   overflow: hidden;
   clip-path: inset(50%);
 }
+
+/* Checked Out to Me's computer, then its app, muted, on one line that ends in an ellipsis when it doesn't fit */
+.computerCell {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

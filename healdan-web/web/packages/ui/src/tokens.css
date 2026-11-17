@@ -28,6 +28,10 @@
   --hd-accent-fill: #0c69c0;
   --hd-accent-on-fill: #ffffff;
   --hd-accent-text: #0c69c0;
+  --hd-danger-fill: #c42b1c;
+  --hd-danger-on-fill: #ffffff;
+  --hd-danger-tint: #fdf0ee;
+  --hd-danger-text: #9b1c11;
   --hd-focus-ring: rgb(34 162 224 / 40%);
   --hd-focus-edge: #0a4f94;
   /* Every focusable control uses this: a solid edge, set off from the control so it shows on a surface and on the accent
@@ -112,6 +116,10 @@
 
     --hd-accent-fill: #1a74c4;
     --hd-accent-text: #5cb3f0;
+    --hd-danger-fill: #d0392b;
+    --hd-danger-on-fill: #ffffff;
+    --hd-danger-tint: #3a1d1a;
+    --hd-danger-text: #ff8a80;
     --hd-focus-edge: #8ccaf5;
 
     --hd-field: #2c2c2e;

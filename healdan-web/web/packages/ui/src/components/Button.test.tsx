@@ -5,6 +5,7 @@ import { render, screen } from '@testing-library/react'
 import { fireEvent } from '@testing-library/react'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
+import buttonCss from './Button.module.css?raw'
 import { Button } from './Button'
 
 describe('Button', () => {
@@ -75,6 +76,14 @@ describe('Button', () => {
     render(<Button variant="quiet" aria-label="Add to Favorites">★</Button>)
     const button = screen.getByRole('button', { name: 'Add to Favorites' })
     expect(button.className).toContain('quiet')
+  })
+
+  it('the danger button has its own face', () => {
+    render(<Button variant="danger">Release</Button>)
+    const button = screen.getByRole('button', { name: 'Release' })
+    expect(button.className).toContain('danger')
+    expect(button.className).not.toContain('default')
+    expect(buttonCss).toMatch(/\.button:not\(\.default\):not\(\.danger\)\[aria-pressed='true'\]/)
   })
 
   it('passes axe', async () => {

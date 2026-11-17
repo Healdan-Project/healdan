@@ -44,6 +44,9 @@ const PAIRS: [string, string][] = [
   ...TEXT.flatMap((fg) => PLAIN.map((bg): [string, string] => [`--hd-${fg}`, `--hd-${bg}`])),
   ...TEXT_ONLY.map((bg): [string, string] => ['--hd-text', `--hd-${bg}`]),
   ['--hd-accent-on-fill', '--hd-accent-fill'],
+  ['--hd-danger-on-fill', '--hd-danger-fill'],
+  ['--hd-danger-text', '--hd-danger-tint'],
+  ['--hd-text', '--hd-danger-tint'],
 ]
 
 // The focus edge shows against every surface the outline can touch (it is set off from the control, so the accent
@@ -100,6 +103,11 @@ describe('tokens.css', () => {
       expect(contrast(tokens['--hd-star-edge']!, tokens[`--hd-${bg}`]!)).toBeGreaterThanOrEqual(3)
     })
 
+    // The red button's face shows against the surface it sits on (WCAG 1.4.11)
+    it(`${scheme}: the danger fill shows on the window`, () => {
+      expect(contrast(tokens['--hd-danger-fill']!, tokens['--hd-window']!)).toBeGreaterThanOrEqual(3)
+    })
+
     // A pressed button's face is pale, so its state shows by an edge too, 3:1 against the surface and the face
     it(`${scheme}: a pressed button's edge shows on the window and on its face`, () => {
       expect(contrast(tokens['--hd-pressed-edge']!, tokens['--hd-window']!)).toBeGreaterThanOrEqual(3)
@@ -109,6 +117,6 @@ describe('tokens.css', () => {
   }
 
   it('gives only the plain and quiet buttons a pressed face, never the accent one', () => {
-    expect(buttonCss).toMatch(/\.button:not\(\.default\)\[aria-pressed='true'\]\s*\{(?=[^}]*var\(--hd-pressed\))(?=[^}]*var\(--hd-pressed-edge\))/)
+    expect(buttonCss).toMatch(/\.button:not\(\.default\):not\(\.danger\)\[aria-pressed='true'\]\s*\{(?=[^}]*var\(--hd-pressed\))(?=[^}]*var\(--hd-pressed-edge\))/)
   })
 })

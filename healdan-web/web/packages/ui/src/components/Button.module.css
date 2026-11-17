@@ -22,6 +22,14 @@
   --hd-icon-on-fill: currentColor;
 }
 
+/* The red button, for what can't be undone or takes from someone else: as the accent one, on the danger tokens */
+.button.danger {
+  border-color: var(--hd-danger-fill);
+  background: var(--hd-danger-fill);
+  color: var(--hd-danger-on-fill);
+  --hd-icon-on-fill: currentColor;
+}
+
 /* No face: it takes the surface it sits on, which holds any text colour, and the text keeps its own. */
 .button.quiet {
   display: inline-flex;
@@ -34,8 +42,8 @@
   color: inherit;
 }
 
-/* Not the accent button, whose face already says it is a button */
-.button:not(.default)[aria-pressed='true'] {
+/* Not the accent or red button, whose face already says it is a button */
+.button:not(.default):not(.danger)[aria-pressed='true'] {
   border-color: var(--hd-pressed-edge);
   background: var(--hd-pressed);
 }
@@ -51,7 +59,9 @@
 }
 
 .button.default[data-disabled],
-.button.default[data-pending] {
+.button.default[data-pending],
+.button.danger[data-disabled],
+.button.danger[data-pending] {
   border-color: var(--hd-line);
   background: var(--hd-line);
 }

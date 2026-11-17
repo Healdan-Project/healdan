@@ -1540,7 +1540,8 @@ paths:
         the caller's other devices are then `409 held-elsewhere`, and so is
         a check-out from them, unless it asks with `move: true` to move the
         check-out to its own device; the move is recorded in the history as
-        a check-out. A
+        a check-out. A release from them isn't, when it sends `elsewhere`
+        with the id of the device that holds it (see `releaseDocument`). A
         token that signed in with no device holds no device's check-out, and
         nor does the web page: such a check-out works from any of the
         caller's devices until a check-out or a save through the API records
@@ -1591,15 +1592,35 @@ paths:
       description: |
         Releases the document's check-out or lock without saving anything,
         and returns the document. The user who holds it can, from the device
-        that holds the check-out (`409 held-elsewhere` from another), and so
-        can an administrator; the release is recorded in the history. An
-        administrator's release also makes an immutable document mutable
-        again, as the web page's does. Anyone else gets `409 checked-out` or
-        `409 locked`, with the `hold`. A free document is returned as it is,
-        and one the caller can't read is `404`.
+        that holds the check-out (`409 held-elsewhere` from another, unless
+        `elsewhere` names the device that holds it), and so can an
+        administrator; the release is recorded in the history. When a device
+        holds the check-out and the release comes from anywhere else,
+        whoever sends it (the holder with `elsewhere`, or an administrator),
+        the history's comment names that device and its app. An
+        administrator's release also makes an
+        immutable document mutable again, as the web page's does. Anyone
+        else gets `409 checked-out` or `409 locked`, with the `hold`. A free
+        document is returned as it is, and one the caller can't read is
+        `404`.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
+        - name: elsewhere
+          in: query
+          required: false
+          description: |
+            The id of the device the person was warned holds the check-out
+            (its `hold.device.id`), to release the caller's own check-out
+            while another of their devices holds it, after the warning that
+            what that device hasn't saved to Healdan is lost. Only a
+            check-out held on that device is released, as it may have moved
+            since the warning: one held on another of the caller's devices is
+            `409 held-elsewhere`, and one no device holds, or someone else's,
+            `409 checked-out`, administrators included. Left out, such a
+            check-out is `409 held-elsewhere`.
+          schema:
+            type: string
       responses:
         '200':
           description: The document, free
@@ -1703,7 +1724,10 @@ paths:
         6. The preconditions. With `ifHeld: true`, `409 not-held` when the
            document isn't checked out to the caller, which after step 5
            means it's free: its check-out was released, or checked in from
-           the web page. Then
+           the web page. From a device, it's `409 not-held` too when no
+           device holds the check-out: the device's own check-out ended, as
+           when it was released from elsewhere, and the document was checked
+           out again where no device holds it, as from the web page. Then
            `409 version-moved` when the document's `version` isn't
            `ifVersion`, with the `document` as it is now: someone changed
            its properties or name, or saved it, after the version the save
@@ -3999,7 +4023,9 @@ components:
           description: |
             `true` when the save is only to be made while the document is
             checked out to the caller: it's `409 not-held` when it's free,
-            and nothing is stored. A check-out held on another of the
+            and nothing is stored. From a device, the check-out must be held
+            on that device: one no device holds, as the web page's, is `409
+            not-held` too. A check-out held on another of the
             caller's devices is `409 held-elsewhere`, with or without
             this. `false` by default, which checks a free document out to
             the caller for the save.

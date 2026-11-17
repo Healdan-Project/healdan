@@ -26,8 +26,9 @@ type S = components['schemas']
 
 /**
  * A document's row: the toolbar's Open, Preview, Download and Check Out (Check In and Release instead, for the person's
- * own web check-out), More's Rename, Move To…, Delete and Copy Link, and Favorites. With several selected only Move To…
- * and Delete are enabled, as on the toolbar.
+ * own web check-out; Release… for one another of their computers holds), More's Rename, Move To…, Delete and Copy Link,
+ * and Favorites. With several selected, Move To… and Delete are enabled, and Release when they're all the person's own
+ * check-outs, as on the toolbar.
  */
 export function DocumentMenuItems({ documents }: { documents: S['DocumentView'][] }) {
   const one = documents.length === 1 ? documents[0] : undefined
@@ -41,7 +42,7 @@ export function DocumentMenuItems({ documents }: { documents: S['DocumentView'][
       <ActionItem action={newTabAction(one && docHref(one.docNumber))} />
       <MenuSeparator />
       <ActionItem action={actions.download} />
-      {actions.checkIn ? (
+      {actions.checkIn || actions.release ? (
         <>
           <ActionItem action={actions.checkIn} />
           <ActionItem action={actions.release} />
