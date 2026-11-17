@@ -2,10 +2,11 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
-import { afterEach } from 'vitest'
-import { clearToasts, toast, ToastRegion } from './Toast'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach } from 'vitest'
+import { clearToasts, toast, toastWithAction, ToastRegion } from './Toast'
 
 describe('Toast', () => {
   afterEach(() => act(clearToasts))
@@ -21,6 +22,91 @@ describe('Toast', () => {
     fireEvent.keyDown(dismiss, { key: 'Enter' })
     fireEvent.keyUp(dismiss, { key: 'Enter' })
     expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('draws the action after the message, and pressing it calls it once and closes the toast', async () => {
+    const onAction = vi.fn()
+    render(<ToastRegion />)
+    act(() => toastWithAction('Moved "Lease.pdf" to the Trash', { label: 'Undo', onAction }))
+    const status = await screen.findByRole('status')
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    expect(status.compareDocumentPosition(undo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(undo)
+    expect(onAction).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('is reached by F6, then Tab to the action, then Enter', async () => {
+    const onAction = vi.fn()
+    render(
+      <>
+        <button>Page</button>
+        <ToastRegion />
+      </>,
+    )
+    act(() => toastWithAction('Moved to the Trash', { label: 'Undo', onAction }))
+    await screen.findByRole('status')
+    screen.getByRole('button', { name: 'Page' }).focus()
+    await userEvent.keyboard('{F6}')
+    expect(screen.getByRole('region').contains(document.activeElement)).toBe(true)
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    for (let i = 0; i < 4 && document.activeElement !== undo; i++) await userEvent.tab()
+    expect(document.activeElement).toBe(undo)
+    await userEvent.keyboard('{Enter}')
+    expect(onAction).toHaveBeenCalledTimes(1)
+  })
+
+  describe('timing', () => {
+    beforeEach(() => vi.useFakeTimers())
+    afterEach(() => vi.useRealTimers())
+
+    it('closes itself after 10 seconds', () => {
+      render(<ToastRegion />)
+      act(() => toastWithAction('Moved to the Trash', { label: 'Undo', onAction: vi.fn() }))
+      expect(screen.queryByRole('status')).not.toBeNull()
+      act(() => vi.advanceTimersByTime(9000))
+      expect(screen.queryByRole('status')).not.toBeNull()
+      act(() => vi.advanceTimersByTime(1500))
+      expect(screen.queryByRole('status')).toBeNull()
+    })
+
+    it('stays while the pointer is on the region', () => {
+      render(<ToastRegion />)
+      act(() => toastWithAction('Moved to the Trash', { label: 'Undo', onAction: vi.fn() }))
+      const region = screen.getByRole('region')
+      fireEvent.pointerEnter(region)
+      fireEvent.mouseEnter(region)
+      act(() => vi.advanceTimersByTime(30000))
+      expect(screen.queryByRole('status')).not.toBeNull()
+      fireEvent.pointerLeave(region)
+      fireEvent.mouseLeave(region)
+      act(() => vi.advanceTimersByTime(11000))
+      expect(screen.queryByRole('status')).toBeNull()
+    })
+
+    it('stays while focus is in the region', () => {
+      render(<ToastRegion />)
+      act(() => toastWithAction('Moved to the Trash', { label: 'Undo', onAction: vi.fn() }))
+      act(() => screen.getByRole('button', { name: 'Undo' }).focus())
+      act(() => vi.advanceTimersByTime(30000))
+      expect(screen.queryByRole('status')).not.toBeNull()
+    })
+  })
+
+  it('shows at most three toasts', async () => {
+    render(<ToastRegion />)
+    act(() => {
+      for (let i = 1; i <= 5; i++) toastWithAction(`Moved ${i}`, { label: 'Undo', onAction: vi.fn() })
+    })
+    await screen.findAllByRole('status')
+    expect(screen.getAllByRole('status')).toHaveLength(3)
+  })
+
+  it('passes axe with an action', async () => {
+    const { container } = render(<ToastRegion />)
+    act(() => toastWithAction('Moved to the Trash', { label: 'Undo', onAction: vi.fn() }))
+    await screen.findByRole('status')
+    await expectNoAxeViolations(container)
   })
 
   it('passes axe', async () => {
