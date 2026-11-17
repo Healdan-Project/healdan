@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createContext, useContext, useRef, useState, type ReactNode } from 'react'
+import { createContext, useContext, useState, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { plural, t, toast } from '@healdan/ui'
 import { SignedInDevices } from '../devices/SignedInDevices'
@@ -11,7 +11,7 @@ import { focusLater, rowAfter } from '../organising/rows'
 import { keys, useMe } from '../queries'
 import { useApi } from '../services'
 import { eachDocument, refusalLines } from './batch'
-import { holdState, release, RELEASE_KEY } from './checkout'
+import { holdState, release, RELEASE_KEY, type ReleaseTarget } from './checkout'
 import { ConfirmRelease } from './ConfirmRelease'
 import { invalidateDocumentLists } from './refresh'
 
@@ -46,21 +46,18 @@ export function ReleaseProvider({ children }: { children: ReactNode }) {
   const [asking, setAsking] = useState<DocumentView[] | undefined>()
   const [showDevices, setShowDevices] = useState(false)
   const [refused, setRefused] = useState<Pick<RefusalsProps, 'title' | 'lines'> | undefined>()
-  // A release's variables are only its doc #s, which every control that offers a change to one of them watches
-  // (useHoldsBusy); the documents go beside them, keyed by the very array
-  const documentsOf = useRef(new WeakMap<readonly number[], DocumentView[]>())
 
   const onComputer = (document: DocumentView) => holdState(document.hold, me.data?.id).kind === 'yourDevice'
 
+  // Its variables are the documents it releases, which every control that offers a change to one of them watches
+  // (useHoldsBusy)
   const mutation = useMutation({
     mutationKey: RELEASE_KEY,
-    mutationFn: async (docNumbers: readonly number[]) => {
-      const documents = documentsOf.current.get(docNumbers) ?? []
-      const elsewhere = new Set(documents.filter(onComputer).map((one) => one.docNumber))
+    mutationFn: async (targets: readonly ReleaseTarget[]) => {
       // Where the focus goes if the rows leave the list, as they do from Checked Out to Me: the dialog that had it is gone
-      const next = rowAfter(docNumbers)
-      const outcome = await eachDocument(documents, async (one) => {
-        const updated = await release(api, one.docNumber, { elsewhere: elsewhere.has(one.docNumber) })
+      const next = rowAfter(targets.map((one) => one.docNumber))
+      const outcome = await eachDocument(targets, async (one) => {
+        const updated = await release(api, one.docNumber, { elsewhere: one.elsewhere })
         queryClient.setQueryData(keys.document(one.docNumber), updated)
       })
       // Every list that shows a hold, whether it worked or not: a refusal usually means the hold isn't what the page showed
@@ -73,9 +70,7 @@ export function ReleaseProvider({ children }: { children: ReactNode }) {
   })
 
   function releaseNow(documents: DocumentView[]) {
-    const docNumbers = documents.map((one) => one.docNumber)
-    documentsOf.current.set(docNumbers, documents)
-    mutation.mutate(docNumbers)
+    mutation.mutate(documents.map((one) => ({ docNumber: one.docNumber, name: one.name, elsewhere: onComputer(one) })))
   }
 
   const value: Releasing = {

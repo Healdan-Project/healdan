@@ -8,7 +8,7 @@ import { fieldErrors, messageFor } from '../frame/errors'
 import { keys, useMe } from '../queries'
 import { useApi } from '../services'
 import { invalidateDocumentLists } from './refresh'
-import { checkIn, checkOut, holdKey, holdState, RELEASE_KEY, type HoldState } from './checkout'
+import { checkIn, checkOut, holdKey, holdState, RELEASE_KEY, type HoldState, type ReleaseTarget } from './checkout'
 
 type DocumentView = components['schemas']['DocumentView']
 
@@ -22,14 +22,14 @@ export interface Checkout {
 
 /**
  * Whether a check-out, check-in or release of any of the documents is under way: one of its own (holdKey), or a release
- * of several that includes it (RELEASE_KEY, whose variables are their doc #s). Nothing with none.
+ * of several that includes it (RELEASE_KEY, whose variables are the documents it releases). Nothing with none.
  */
 export function useHoldsBusy(docNumbers: readonly number[]): boolean {
   const running = useIsMutating({
     mutationKey: ['hold'],
     predicate: (mutation) => {
       const which = mutation.options.mutationKey?.[1]
-      const touched = which === RELEASE_KEY[1] ? ((mutation.state.variables as readonly number[] | undefined) ?? []) : [which]
+      const touched = which === RELEASE_KEY[1] ? ((mutation.state.variables as readonly ReleaseTarget[] | undefined) ?? []).map((one) => one.docNumber) : [which]
       return touched.some((docNumber) => docNumbers.includes(docNumber as number))
     },
   })

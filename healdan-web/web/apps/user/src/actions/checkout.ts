@@ -95,8 +95,15 @@ export function release(api: Api, docNumber: number, options: { elsewhere?: bool
 /** What marks a document's own check-out, check-in or release while it runs (useCheckout), so every control that offers one waits for it */
 export const holdKey = (docNumber: number | undefined) => ['hold', docNumber] as const
 
-/** What marks a release of several documents while it runs (ReleaseProvider), whose variables are their doc #s */
+/** What marks a release of several documents while it runs (ReleaseProvider), whose variables are its ReleaseTargets */
 export const RELEASE_KEY = ['hold', 'release'] as const
+
+/** One document of a release: its doc #, its name for what is said of it, and whether another of the person's computers holds it */
+export interface ReleaseTarget {
+  docNumber: number
+  name: string
+  elsewhere: boolean
+}
 
 export interface SaveOptions {
   /** `snapshot` for an ordinary save (2.1 becomes 2.2), `version` for the next major number (2.2 becomes 3.0) */
