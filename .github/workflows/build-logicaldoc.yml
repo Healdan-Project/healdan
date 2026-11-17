@@ -149,6 +149,7 @@ jobs:
             FolderAclEqualityTest
             HealdanSecretsTest
             LDRepositoryGapsTest
+            ResourceServiceImplTest#testMoveFolder
             LDAuthenticationProviderLogTest
             OrderedPropertiesLineBreaksTest
             LogDownloadSecretsTest

@@ -382,16 +382,24 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 
 	@Test
 	public void testRestoringALiveFolderIsAMove() throws Exception {
-		// CE's restore doesn't check that the folder is deleted, so on a live one it moves it
+		// CE's restore doesn't check that the folder is deleted, so on a live one it moves it: an admin's only, as
+		// for a document (folders and Trash spec, 5.3)
 		Folder inner = fx.folder(template, "Correspondence");
-		// Alice may delete it (the template's folders use the Templates Store's ACL), so only the rules stand in her way
+		// Alice may delete both (the template's folders use the Templates Store's ACL), but neither is in the Trash
 		fx.grant(templates, lawyers, Permission.READ, Permission.DELETE);
 		Folder deep = fx.folder(correspondence, "Deep");
 
-		assertRefused(TOP_LEVEL, () -> folderDao.restore(documents.getId(), correspondence.getId(), folderHistory(alice)));
-		assertRefused(TEMPLATES, () -> folderDao.restore(inner.getId(), loose.getId(), folderHistory(alice)));
+		assertRefused(RESTORE_NOT_IN_TRASH,
+				() -> folderDao.restore(deep.getId(), documents.getId(), folderHistory(alice)));
+		assertRefused(RESTORE_NOT_IN_TRASH,
+				() -> folderDao.restore(inner.getId(), loose.getId(), folderHistory(alice)));
 
-		allowed(() -> folderDao.restore(deep.getId(), documents.getId(), folderHistory(alice)));
+		// The admin's is a move, under the rules a move keeps for admins
+		assertRefused(FOLDER_IN_SEARCH_FOLDER,
+				() -> folderDao.restore(deep.getId(), search.getId(), folderHistory(admin)));
+		assertRefused(FOLDER_IN_STORE, () -> folderDao.restore(deep.getId(), store.getId(), folderHistory(admin)));
+
+		allowed(() -> folderDao.restore(deep.getId(), documents.getId(), folderHistory(admin)));
 		// Restore is JDBC and leaves the cached folder as it was, so ask the database
 		assertEquals(Long.valueOf(documents.getId()),
 				jdbc.queryForObject("select ld_parentid from ld_folder where ld_id = ?", Long.class, deep.getId()));

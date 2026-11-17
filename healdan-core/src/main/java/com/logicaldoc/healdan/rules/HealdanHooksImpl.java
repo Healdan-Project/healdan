@@ -53,9 +53,9 @@ import jakarta.annotation.PreDestroy;
  * rows with JDBC; a folder delete or restore is JDBC throughout; a merge moves
  * documents one by one, and a copy writes files and schedules versions, before
  * the store a listener could veto. A folder delete also checks R74's
- * permissions here, as every route deletes a tree through this hook, refuses
- * it while a document inside is checked out or immutable, and records the
- * delete as a Trash item once the rules let it through. The
+ * permissions here, as every route deletes a tree through this hook, then
+ * refuses it while a document inside is checked out or immutable, and records
+ * the delete as a Trash item once the rules let it through. The
  * once-per-matter rule (M5 spec §6.4) checks moves, restores, merges and
  * folder copies here, for the same reasons.
  */
@@ -186,10 +186,11 @@ public class HealdanHooksImpl implements HealdanHooks {
 		User actor = FilingRules.actor(transaction);
 		Vetoes.check(Vetoes.ids(folderId), List.of(), () -> {
 			rules.checkFolderDelete(folder, actor);
-			// Whoever asks, admins too: a check-out inside, or an immutable document, at which CE's own delete stopped
-			// silently, after writing the folder's history
-			TrashRules.get().checkDeletable(folderId);
 			PermissionRules.get().checkDeleteTree(folderId, actor);
+			// Whoever asks, admins too: a check-out inside, or an immutable document, at which CE's own delete stopped
+			// silently, after writing the folder's history. After the permissions, so someone who may not delete
+			// everything inside learns nothing of what's there (spec 4.2, 6.1)
+			TrashRules.get().checkDeletable(folderId);
 			// Not a rule: once the rules let it through, the tree CE is about to delete is one Trash item, recorded in
 			// the delete's transaction
 			TrashRecorder.get().treeDeleting(folderId, actor);

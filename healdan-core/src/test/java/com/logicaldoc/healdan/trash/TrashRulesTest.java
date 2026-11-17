@@ -59,6 +59,8 @@ public class TrashRulesTest extends AbstractRulesTestCase {
 
 	private static final String MOVE_TREE = "You need the move permission on everything in this folder to move it.";
 
+	private static final String DELETE_TREE = "You need the delete permission on everything in this folder to delete it.";
+
 	private final ChannelHarness harness = new ChannelHarness();
 
 	private Session aliceSession;
@@ -128,6 +130,29 @@ public class TrashRulesTest extends AbstractRulesTestCase {
 		allowed(() -> folderDao.deleteTree(cases.getId(), folderHistory(alice)));
 		assertNull(folderDao.findById(cases.getId()));
 		assertEquals(items + 1, items());
+	}
+
+	@Test
+	public void testItemsSheCantDeleteComeBeforeTheirCheckOuts() throws Exception {
+		Folder cases = fx.folder(correspondence, "Cases");
+		// Bob's group reads it; Alice's has no row, so she can neither see nor delete it
+		Folder hidden = fx.folder(cases, "Hidden");
+		setAcl(hidden, ace(readers(), Permission.READ));
+		Document held = upload(hidden, "held.txt", admin);
+		awaitAsyncWork();
+		DocumentManager.get().checkout(held.getId(), documentHistory(bob));
+		awaitAsyncWork();
+		assertEquals(List.of(held.getId()), TrashRules.get().checkedOutIn(cases.getId()));
+
+		// The permissions are checked first, so the refusal says nothing of the check-out she can't see (spec 4.2,
+		// 6.1), on the routes that check nothing of the tree themselves
+		assertRefused(DELETE_TREE, () -> folderDao.deleteTree(cases.getId(), folderHistory(alice)));
+		assertRefused(DELETE_TREE, davRefusal(DELETE_TREE), () -> webdavDelete(path(cases), alice, aliceSession));
+		assertCmisRefused(DELETE_TREE, () -> harness.cmisFor(cases.getId(), aliceSession).deleteTree(null,
+				"fld." + cases.getId(), false));
+
+		// The admin needs no permission, and meets the check-out
+		assertRefused(TrashRules.CHECKED_OUT, () -> folderDao.deleteTree(cases.getId(), folderHistory(admin)));
 	}
 
 	@Test
@@ -225,6 +250,34 @@ public class TrashRulesTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testWebdavMoveThatRenamesIsChecked() throws Exception {
+		Folder moving = fx.folder(correspondence, "Moving");
+		// Bob's group reads it; Alice's has no row, so she can't see it
+		Folder hidden = fx.folder(moving, "Hidden");
+		setAcl(hidden, ace(readers(), Permission.READ));
+		awaitAsyncWork();
+
+		// A WebDAV MOVE to a new name in another folder is Alice's move, checked as any move, and a refused one
+		// renames nothing either
+		assertRefused(MOVE_TREE, () -> webdavMove(moving, documents, "Moved"));
+		assertEquals(correspondence.getId(), reload(moving).getParentId());
+		assertEquals("Moving", reload(moving).getName());
+
+		setAcl(hidden, ace(lawyers, Permission.values()));
+		allowed(() -> webdavMove(moving, documents, "Moved"));
+		assertEquals(documents.getId(), reload(moving).getParentId());
+		assertEquals("Moved", reload(moving).getName());
+		assertEquals(moving.getId(), reload(hidden).getParentId());
+		assertEquals(1L, history(moving, FolderEvent.MOVED));
+
+		// A MOVE to a new name in the same folder is a rename, as it was
+		allowed(() -> webdavMove(moving, documents, "Renamed"));
+		assertEquals(documents.getId(), reload(moving).getParentId());
+		assertEquals("Renamed", reload(moving).getName());
+		assertEquals(1L, history(moving, FolderEvent.MOVED));
+	}
+
+	@Test
 	public void testRemovedFolderRestoresOnlyForAnAdmin() throws Exception {
 		Folder removed = fx.folder(correspondence, "Removed");
 		Document inside = upload(removed, "inside.txt", admin);
@@ -270,6 +323,21 @@ public class TrashRulesTest extends AbstractRulesTestCase {
 		assertNotNull(source);
 		assertNotNull(destination);
 		harness.webdav().move(source, destination, null, session);
+	}
+
+	/**
+	 * Moves as a WebDAV MOVE to a new name in the target does: CE's
+	 * {@code DavResourceImpl.move} names the source as the request does, and
+	 * passes the name too
+	 */
+	private void webdavMove(Folder folder, Folder target, String name) throws Exception {
+		WebdavSession session = davSession(alice, aliceSession);
+		Resource source = harness.webdav().getResource(path(folder), session);
+		Resource destination = harness.webdav().getResource(path(target), session);
+		assertNotNull(source);
+		assertNotNull(destination);
+		source.setName(name);
+		harness.webdav().move(source, destination, name, session);
 	}
 
 	private void cmisMove(Folder folder, Folder target) throws Exception {
@@ -337,6 +405,11 @@ public class TrashRulesTest extends AbstractRulesTestCase {
 
 	private String path(Folder folder) throws Exception {
 		return folderDao.computePathExtended(folder.getId());
+	}
+
+	private long history(Folder folder, FolderEvent event) {
+		return jdbc.queryForObject("select count(*) from ld_folder_history where ld_folderid = ? and ld_event = ?",
+				Long.class, folder.getId(), event.toString());
 	}
 
 	private long items() {

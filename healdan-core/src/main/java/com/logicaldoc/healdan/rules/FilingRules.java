@@ -310,9 +310,10 @@ public class FilingRules {
 	}
 
 	/**
-	 * A deleted folder is restored, with everything deleted in it. One removed
-	 * from the Trash (deleted with any code but 1) is restored by admins only,
-	 * as a document is.
+	 * A deleted folder is restored, with everything deleted in it. Only an
+	 * admin restores one that isn't in the Trash, as for a document: one
+	 * removed from it (deleted with any code but 1), or a live one, which CE's
+	 * restore would move.
 	 *
 	 * @param folderId the folder
 	 * @param parentId the requested parent (CE puts a Store back under the
@@ -331,12 +332,13 @@ public class FilingRules {
 		boolean admin = isAdmin(user);
 		if (!admin && (user == null || !rows.mayDelete(folderId, user.getId())))
 			throw refuse(RESTORE_PERMISSION, ids);
-		// Removed from the Trash, it is an admin's to restore, as a document is
-		if (!admin && row.deleted() != 0 && row.deleted() != PersistentObject.DELETED_CODE_DEFAULT)
+		// Only from the Trash, as a document: one removed from it is an admin's, and restoring a live one would move it
+		// with no Move asked
+		if (!admin && row.deleted() != PersistentObject.DELETED_CODE_DEFAULT)
 			throw refuse(RESTORE_NOT_IN_TRASH, ids);
 
 		FolderPosition parent = locator.locate(into);
-		// CE doesn't check that the folder is deleted: restoring a live one moves it
+		// CE doesn't check that the folder is deleted: an admin's restore of a live one moves it
 		if (row.deleted() == 0)
 			checkMoveAt(currentPosition(folderId, row), parent, row.alias(), admin, ids);
 		if (locator.locate(row.parentId()).kind() == Kind.STORE) {

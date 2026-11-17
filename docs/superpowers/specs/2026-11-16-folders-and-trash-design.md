@@ -483,7 +483,13 @@ What changes there, each through Healdan's code (§9.1):
   `HealdanHooks` method each, whose default keeps CE's SQL (§4.5).
 - **`FolderServiceImpl.move` and `SoapFolderService.move`** (which REST's calls): call
   `HealdanTreeChecks.movedTrees`, through `HealdanRpcChecks` for the first, before writing, as their deletes call
-  `deletedTrees` (§4.3). WebDAV's and CMIS's moves reach the same check through `RulesFolderListener`.
+  `deletedTrees` (§4.3). WebDAV's and CMIS's moves reach the same check through `RulesFolderListener`, WebDAV's
+  that also renames once `ResourceServiceImpl` moves it (below).
+- **`ResourceServiceImpl.folderRenameOrMove` and `renameFolder`** (WebDAV): a MOVE that also renames stored the new
+  parent in `renameFolder`, with no user, so no folder-move rule, check or re-stamping saw it (changed in the build).
+  `renameFolder` no longer sets the parent, and a folder that moves is renamed by `moveFolder` once `folderDAO.move`
+  has moved it, with the user's history (§4.3), so a refused move renames nothing either. A rename in the same folder
+  is unchanged.
 - **`DocumentManager.destroyDocument`:** its first lookup, for the folder history's `DOCUMENT_DESTROYED` row, has no
   `where` clause, so each destroy writes another document's file name into another folder's history, which that
   folder's readers can see, across matters. It gains `where ld_id = ?` (call, from the builder check: a fix to a leak in
@@ -492,7 +498,7 @@ What changes there, each through Healdan's code (§9.1):
 - **`HealdanHooks`** (fork-owned in core) gains those methods; **`HealdanTreeChecks`** (fork-owned) gains `movedTrees`.
 
 Each upstream edit adds its test class to CI's `UPSTREAM_TESTS` (`HibernateFolderDAOTest` methods for the delete and
-restore, and the RPC services' tests where they exist).
+restore, the RPC services' tests where they exist, and `ResourceServiceImplTest#testMoveFolder` for WebDAV's).
 
 ### 9.2 Fork-owned files
 

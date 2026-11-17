@@ -24,11 +24,12 @@ import com.logicaldoc.util.spring.Context;
 /**
  * What stops a folder's delete whoever asks, admins included (spec 4.2): a
  * live document in its live tree that is checked out, by anyone, or
- * immutable. Healdan's folder-delete hook asks before the permissions and the
- * Trash's record, so a refused delete writes nothing. CE's {@code deleteTree}
- * stopped silently at an immutable document, after writing the folder's
- * history, and its routes reported a success or a failure with no reason.
- * Neither refusal names anything inside.
+ * immutable. Healdan's folder-delete hook asks after the permissions, so the
+ * refusal tells nothing to someone who may not delete everything inside, and
+ * before the Trash's record, so a refused delete writes nothing. CE's
+ * {@code deleteTree} stopped silently at an immutable document, after writing
+ * the folder's history, and its routes reported a success or a failure with
+ * no reason. Neither refusal names anything inside.
  */
 @Component
 public class TrashRules {

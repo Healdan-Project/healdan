@@ -322,9 +322,9 @@ public class PermissionRules {
 	 * included, and ADD on the folder it goes into (folders and Trash spec,
 	 * 4.3). The Classic Interface and the web services check this themselves
 	 * first, a list of folders whole; this covers every route's store of the
-	 * moved folder, WebDAV's and CMIS's among them. A store that names no user,
-	 * as WebDAV's move that also renames does, has nobody to check;
-	 * {@code _system} is checked as any user. The refusal names nothing inside.
+	 * moved folder, WebDAV's and CMIS's among them. A store that names no user
+	 * has nobody to check; {@code _system} is checked as any user. The refusal
+	 * names nothing inside.
 	 *
 	 * @param folderId the folder being moved
 	 * @param targetId where it goes
