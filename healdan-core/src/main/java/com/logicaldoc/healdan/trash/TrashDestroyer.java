@@ -45,20 +45,25 @@ import com.logicaldoc.util.spring.Context;
  * was removed more than {@code trash.removedDays} before, each on its own
  * removal time, and marks it destroyed. The item's record stays.
  * <p>
- * Items go the earliest removal first, in batches, each once a run and each in
- * a transaction of its own, so its rows and its members' state change together
- * or not at all. One that fails is rolled back, logged and left for the next
- * night, and the rest go on. A member is destroyed only while its row is at 2
- * (CMIS's tree delete records its item before it deletes the rows one by one):
- * any other stays as it is.
+ * Items go the earliest removal first, in batches, each once a run. Each
+ * document is destroyed in a transaction of its own, its member's state
+ * written first, so that nothing but the commit follows the store's hold of
+ * its files (Ruling 25): a later failure never leaves another document's file
+ * held while its rows come back. Then the item's folders go in one
+ * transaction with their members' state. A document that fails is logged and
+ * left, with the rest of the item, for the next night; the documents already
+ * destroyed stay so, and the other items go on. A member is destroyed only
+ * while its row is at 2 (CMIS's tree delete records its item before it
+ * deletes the rows one by one): any other stays as it is.
  * <ul>
  * <li>Documents go first, shortcuts before what they point to, each through
  * CE's {@code destroyDocument} as {@code _system}, whose read of Destroy
  * Documents (menu -9) the {@code trash-system-destroy} seed grants: the rows,
  * versions, history, notes, links, bookmarks, tickets, the index hit and the
  * files, which storage holds for its holding period, and the document's
- * {@code hd_local_value} rows. A document stays removed while a live shortcut
- * points to it, as CE's destroy would delete that row too.</li>
+ * {@code hd_local_value} and {@code hd_preview_job} rows. A document stays
+ * removed while a live shortcut points to it, as CE's destroy would delete
+ * that row too.</li>
  * <li>Then the folders, aliases first and then the deepest first, with their
  * rows in CE's folder tables and Healdan's ({@code hd_local_value},
  * {@code hd_searchfolder}), and a default workspace naming them. A folder stays
@@ -149,10 +154,12 @@ public class TrashDestroyer {
 			List<RemovedItem> page = store.removedBefore(cutoff, after, batch);
 			for (RemovedItem item : page) {
 				try {
-					int count = destroy(item.id(), cutoff, now, system);
-					destroyed += count;
-					if (count > 0)
+					Outcome outcome = destroy(item.id(), cutoff, now, system);
+					destroyed += outcome.destroyed();
+					if (outcome.destroyed() > 0)
 						items++;
+					if (outcome.failed())
+						failed++;
 				} catch (RuntimeException e) {
 					failed++;
 					log.warn("Trash item {} couldn't be destroyed ({}), so it stays removed until the next night",
@@ -188,35 +195,40 @@ public class TrashDestroyer {
 		}
 	}
 
-	/**
-	 * Destroys the item's members removed before the cut-off, in one
-	 * transaction with their state
-	 *
-	 * @return how many members it destroyed
-	 */
-	private int destroy(long item, Instant cutoff, Instant now, User system) {
-		Integer count = new TransactionTemplate(transactions).execute(status -> {
-			List<TrashMember> members = store.membersRemovedBefore(item, cutoff);
-			List<TrashMember> done = new ArrayList<>();
-			int along = destroyDocuments(item, members, system, now, done);
-			along += destroyFolders(item, members, now, done);
-			if (!done.isEmpty())
-				store.change(item, done, TrashState.REMOVED, TrashState.DESTROYED, null, null, now);
-			return done.size() + along;
-		});
-		log.debug("Destroyed {} folders and documents of Trash item {}", count, item);
-		return count != null ? count : 0;
+	/** What became of an item: how many members were destroyed, and whether one failed */
+	private record Outcome(int destroyed, boolean failed) {
 	}
 
 	/**
-	 * The documents at 2, shortcuts first: CE's destroy of a document deletes
-	 * the rows of its shortcuts too
-	 *
-	 * @return how many members of shortcuts that went along were marked
-	 *         destroyed
+	 * Destroys the item's members removed before the cut-off: each document in
+	 * a transaction of its own, then, unless one failed, the folders in one
 	 */
-	private int destroyDocuments(long item, List<TrashMember> members, User system, Instant now,
-			List<TrashMember> done) {
+	private Outcome destroy(long item, Instant cutoff, Instant now, User system) {
+		List<TrashMember> members = store.membersRemovedBefore(item, cutoff);
+		Outcome documents = destroyDocuments(item, members, system, now);
+		int count = documents.destroyed();
+		boolean failed = documents.failed();
+		if (!failed)
+			try {
+				Integer folders = new TransactionTemplate(transactions)
+						.execute(status -> destroyFolders(item, members, now));
+				count += folders != null ? folders : 0;
+			} catch (RuntimeException e) {
+				failed = true;
+				log.warn("The folders of Trash item {} couldn't be destroyed ({}), so they stay removed until the"
+						+ " next night", item, rootCause(e).getClass().getSimpleName());
+				log.debug("The folders of Trash item {} couldn't be destroyed", item, e);
+			}
+		log.debug("Destroyed {} folders and documents of Trash item {}", count, item);
+		return new Outcome(count, failed);
+	}
+
+	/**
+	 * The documents at 2, shortcuts first, as CE's destroy of a document
+	 * deletes the rows of its shortcuts too; the first that fails ends the
+	 * item's run
+	 */
+	private Outcome destroyDocuments(long item, List<TrashMember> members, User system, Instant now) {
 		Map<Long, Long> removed = new HashMap<>();
 		for (List<Long> chunk : CollectionUtil.partition(ids(members, 'D'), CHUNK))
 			named.query("select ld_id, ld_docref from ld_document where ld_deleted = :removed and ld_id in (:ids)",
@@ -234,46 +246,101 @@ public class TrashDestroyer {
 				log.debug("Left D {} of Trash item {} removed: its row isn't at 2", id, item);
 		order.sort(Comparator.comparing((Long id) -> removed.get(id) == null).thenComparing(id -> id));
 
-		List<Long> destroyed = new ArrayList<>();
-		int along = 0;
-		try {
-			for (long id : order) {
-				boolean shortcut = removed.get(id) != null;
-				if (!shortcut && count("select count(*) from ld_document s where s.ld_docref = ? and s.ld_id <> ?"
-						+ " and s.ld_deleted = 0", id, id) > 0) {
-					log.debug("Left D {} of Trash item {} removed: a live shortcut points to it", id, item);
-					continue;
-				}
-				TrashMember member = new TrashMember('D', id);
+		int count = 0;
+		for (long id : order) {
+			boolean shortcut = removed.get(id) != null;
+			if (!shortcut && count("select count(*) from ld_document s where s.ld_docref = ? and s.ld_id <> ?"
+					+ " and s.ld_deleted = 0", id, id) > 0) {
+				log.debug("Left D {} of Trash item {} removed: a live shortcut points to it", id, item);
+				continue;
+			}
+			TrashMember member = new TrashMember('D', id);
+			boolean[] begun = { false };
+			try {
 				beforeDestroy.accept(member);
 				if (!shortcut) {
-					// Its shortcuts that aren't live go with it, each through CE's destroy first, which takes their
-					// versions and files too, out of whatever item holds them
+					// Its shortcuts that aren't live go first, each through CE's destroy, which takes their versions
+					// and files too, and out of whatever item holds them
 					for (long other : jdbc.queryForList("select s.ld_id from ld_document s where s.ld_docref = ?"
-							+ " and s.ld_id <> ? and s.ld_deleted <> 0", Long.class, id, id)) {
-						destroyed.add(other);
-						destroyDocument(other, system);
-						along += store.destroyedAlong(new TrashMember('D', other), now);
-					}
+							+ " and s.ld_id <> ? and s.ld_deleted <> 0", Long.class, id, id))
+						count += destroyDocument(other, system, begun, () -> claimAlong(other, id, now));
 				}
-				destroyed.add(id);
-				destroyDocument(id, system);
-				done.add(member);
+				count += destroyDocument(id, system, begun, () -> claimMember(item, member, now));
+			} catch (RuntimeException e) {
+				log.warn("Document {} of Trash item {} couldn't be destroyed ({}), so it and the rest of the item stay"
+						+ " removed until the next night{}", id, item, rootCause(e).getClass().getSimpleName(),
+						begun[0] ? "; its files may be held with no record of them" : "");
+				log.debug("Document {} of Trash item {} couldn't be destroyed", id, item, e);
+				return new Outcome(count, true);
 			}
-		} catch (PersistenceException | PermissionException e) {
-			throw new IllegalStateException("A document of Trash item %d couldn't be destroyed".formatted(item), e);
-		} finally {
-			evictor.evictDocuments(destroyed);
-			evictor.evictDocumentsAfterCompletion(destroyed);
 		}
-		return along;
+		return new Outcome(count, false);
 	}
 
-	/** CE's destroy, and the document's local values, as a folder's go with it */
-	private void destroyDocument(long docId, User system) throws PersistenceException, PermissionException {
-		DocumentManager.get().destroyDocument(docId, history(system));
-		jdbc.update("delete from hd_local_value where hd_objecttype = ? and hd_objectid = ?",
-				String.valueOf(LocalValueDAO.DOCUMENT), docId);
+	/**
+	 * The item's own document, while its row is at 2 and its member removed
+	 *
+	 * @return 1, or -1 to leave it
+	 */
+	private int claimMember(long item, TrashMember member, Instant now) {
+		if (count("select count(*) from ld_document where ld_id = ? and ld_deleted = ?", member.objectId(),
+				PersistentObject.DELETED_CODE_STRONG) == 0)
+			return -1;
+		int changed = store.change(item, List.of(member), TrashState.REMOVED, TrashState.DESTROYED, null, null, now);
+		return changed > 0 ? changed : -1;
+	}
+
+	/**
+	 * A shortcut going with its document, while it still points to it and
+	 * isn't live, out of whatever items hold it
+	 *
+	 * @return how many members it marked destroyed, -1 to leave it
+	 */
+	private int claimAlong(long shortcutId, long docId, Instant now) {
+		if (count("select count(*) from ld_document where ld_id = ? and ld_docref = ? and ld_deleted <> 0",
+				shortcutId, docId) == 0)
+			return -1;
+		return store.destroyedAlong(new TrashMember('D', shortcutId), now);
+	}
+
+	/**
+	 * Claims a document in its destroy's transaction, before CE's destroy runs:
+	 * checks its row and marks its members destroyed
+	 */
+	@FunctionalInterface
+	private interface Claim {
+
+		/** @return how many members it marked destroyed, -1 to leave the document as it is */
+		int claim();
+	}
+
+	/**
+	 * Destroys one document in a transaction of its own: its members' state
+	 * first, then its {@code hd_local_value} and {@code hd_preview_job} rows,
+	 * and last CE's destroy, whose store delete holds its files, so that only
+	 * the commit follows the hold
+	 *
+	 * @param begun set once CE's destroy has begun
+	 * @return how many members it marked destroyed
+	 */
+	private int destroyDocument(long docId, User system, boolean[] begun, Claim claim) {
+		Integer marked = new TransactionTemplate(transactions).execute(status -> {
+			int changed = claim.claim();
+			if (changed < 0)
+				return 0;
+			evictor.evictDocumentsAfterCompletion(List.of(docId));
+			jdbc.update("delete from hd_local_value where hd_objecttype = ? and hd_objectid = ?",
+					String.valueOf(LocalValueDAO.DOCUMENT), docId);
+			jdbc.update("delete from hd_preview_job where hd_docid = ?", docId);
+			begun[0] = true;
+			try {
+				DocumentManager.get().destroyDocument(docId, history(system));
+			} catch (PersistenceException | PermissionException e) {
+				throw new IllegalStateException("Document %d couldn't be destroyed".formatted(docId), e);
+			}
+			return changed;
+		});
+		return marked != null ? marked : 0;
 	}
 
 	/** A folder at 2 and where it hangs */
@@ -284,10 +351,11 @@ public class TrashDestroyer {
 	 * The folders at 2, aliases first (they hold nothing, and a live one keeps
 	 * what it points to), then the deepest first
 	 *
-	 * @return how many members of aliases that went along were marked
-	 *         destroyed
+	 * @return how many members it marked destroyed, its own and those of
+	 *         aliases that went along
 	 */
-	private int destroyFolders(long item, List<TrashMember> members, Instant now, List<TrashMember> done) {
+	private int destroyFolders(long item, List<TrashMember> members, Instant now) {
+		List<TrashMember> done = new ArrayList<>();
 		Map<Long, FolderRow> removed = new HashMap<>();
 		for (List<Long> chunk : CollectionUtil.partition(ids(members, 'F'), CHUNK))
 			named.query(
@@ -335,7 +403,9 @@ public class TrashDestroyer {
 			evictor.evictFolders(destroyed);
 			evictor.evictFoldersAfterCompletion(destroyed);
 		}
-		return along;
+		if (!done.isEmpty())
+			store.change(item, done, TrashState.REMOVED, TrashState.DESTROYED, null, null, now);
+		return done.size() + along;
 	}
 
 	/**

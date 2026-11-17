@@ -127,6 +127,8 @@ public class TrashDestroyerTest extends AbstractRulesTestCase {
 				letters.getId());
 		jdbc.update("insert into hd_local_value (hd_objecttype, hd_objectid, hd_attribute) values ('D', ?, 'client')",
 				a.getId());
+		jdbc.update("insert into hd_preview_job (hd_docid, hd_fileversion, hd_attempts, hd_nexttry, hd_created)"
+				+ " values (?, '9.9', 0, ?, ?)", a.getId(), Timestamp.from(now), Timestamp.from(now));
 		jdbc.update("insert into hd_searchfolder (hd_folderid, hd_days, hd_onlymine, hd_kind) values (?, 7, 0, 'recent')",
 				recent.getId());
 		jdbc.update("update ld_user set ld_defworkspace = ? where ld_id = ?", letters.getId(), alice.getId());
@@ -173,6 +175,7 @@ public class TrashDestroyerTest extends AbstractRulesTestCase {
 					Bookmark.Type.DOCUMENT.ordinal(), id));
 			assertEquals(0, count("select count(*) from hd_local_value where hd_objecttype = 'D' and hd_objectid = ?",
 					id));
+			assertEquals(0, count("select count(*) from hd_preview_job where hd_docid = ?", id));
 		}
 		assertNull(SearchEngine.get().getHit(a.getId()));
 		for (Folder folder : List.of(letters, inner, recent, lettersAlias, oldAlias)) {
@@ -427,11 +430,13 @@ public class TrashDestroyerTest extends AbstractRulesTestCase {
 		};
 
 		try (LogCapture log = LogCapture.of(TrashDestroyer.class)) {
-			assertEquals(2, destroyer.runOnce(now));
+			assertEquals(3, destroyer.runOnce(now));
 
 			List<String> warnings = log.lines().stream().filter(line -> line.startsWith("WARN")).toList();
 			assertEquals(log.lines().toString(), 1, warnings.size());
-			assertTrue(warnings.get(0), warnings.get(0).contains(Long.toString(badItem)));
+			assertTrue(warnings.get(0), warnings.get(0).contains("Document " + x2.getId() + " of Trash item " + badItem));
+			// CE's destroy hadn't begun, so no file of it can be held
+			assertFalse(warnings.get(0), warnings.get(0).contains("held"));
 			for (String line : log.lines()) {
 				assertFalse(line, line.contains("Secret"));
 				assertFalse(line, line.contains("Bad Folder"));
@@ -439,17 +444,23 @@ public class TrashDestroyerTest extends AbstractRulesTestCase {
 			}
 		}
 
-		// The failing item rolled back whole: x1, destroyed before x2 failed, is as it was
-		for (TrashMember member : List.of(folder(bad), document(x1), document(x2))) {
+		// Each document is destroyed in a transaction of its own: x1, before x2 failed, stays destroyed; x2 and the
+		// folder that holds it stay removed
+		assertDestroyed(badItem, document(x1), Duration.ofDays(33));
+		for (TrashMember member : List.of(folder(bad), document(x2))) {
 			assertEquals(member.toString(), 2, rowDeleted(member));
 			assertEquals(member.toString(), TrashState.REMOVED, trash.member(badItem, member).orElseThrow().state());
 		}
 		assertDestroyed(yItem, document(y), Duration.ofDays(32));
 		assertDestroyed(zItem, document(z), Duration.ofDays(31));
 
-		// It is tried again the next night
-		destroyer.beforeDestroy = NOTHING;
-		assertEquals(3, destroyer.runOnce(now));
+		// Once the failure clears, the next run finishes the item: the document left, then the folder
+		List<TrashMember> order = new ArrayList<>();
+		destroyer.beforeDestroy = order::add;
+		assertEquals(2, destroyer.runOnce(now));
+		assertEquals(List.of(document(x2), folder(bad)), order);
+		assertDestroyed(badItem, document(x2), Duration.ofDays(33));
+		assertDestroyed(badItem, folder(bad), Duration.ofDays(33));
 		assertEquals(TrashState.DESTROYED, trash.state(badItem));
 	}
 
