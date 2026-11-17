@@ -204,6 +204,22 @@ public class TrashStore {
 	}
 
 	/**
+	 * Marks destroyed the object's members in every item that holds it in the
+	 * Trash or in Removed: a shortcut or an alias that went with what it
+	 * pointed to
+	 *
+	 * @param member the shortcut or alias
+	 * @param at when it was destroyed
+	 * @return how many members changed
+	 */
+	public int destroyedAlong(TrashMember member, Instant at) {
+		return jdbc.update("update hd_trash_member set hd_state = ?, hd_destroyedat = ? where hd_objecttype = ?"
+				+ " and hd_objectid = ? and hd_state in (?, ?)", TrashState.DESTROYED.code(), Timestamp.from(at),
+				String.valueOf(member.type()), member.objectId(), TrashState.DELETED.code(),
+				TrashState.REMOVED.code());
+	}
+
+	/**
 	 * Adds a member, deleted, to an item.
 	 *
 	 * @param id the item
@@ -247,6 +263,58 @@ public class TrashStore {
 		return jdbc.queryForList("select hd_trashid from hd_trash_member where hd_state = ? and hd_removedat < ?"
 				+ " group by hd_trashid order by min(hd_removedat), hd_trashid limit ?", Long.class,
 				TrashState.REMOVED.code(), Timestamp.from(cutoff), limit);
+	}
+
+	/**
+	 * An item with members removed before a cut-off, and when it first had one
+	 * removed: the place a pass over them has got to
+	 *
+	 * @param id the item
+	 * @param firstRemovedAt the earliest removal of any of its members, in
+	 *        whatever state each is now
+	 */
+	public record RemovedItem(long id, Instant firstRemovedAt) {
+	}
+
+	/**
+	 * A page of the items with members removed before the cut-off, the earliest
+	 * first removal first. An item's first removal is the earliest of its
+	 * members' removal times, which no route changes once set (a destroy or a
+	 * restore keeps it), so a pass that pages on from the last item it read
+	 * meets each item once, whatever it does to them meanwhile.
+	 *
+	 * @param cutoff the time
+	 * @param after the last item of the page before, null for the first page
+	 * @param limit the most items to answer
+	 * @return the items after {@code after}
+	 */
+	public List<RemovedItem> removedBefore(Instant cutoff, RemovedItem after, int limit) {
+		List<Object> args = new ArrayList<>(List.of(TrashState.REMOVED.code(), Timestamp.from(cutoff)));
+		String having = "";
+		if (after != null) {
+			having = " having min(m.hd_removedat) > ? or (min(m.hd_removedat) = ? and m.hd_trashid > ?)";
+			Timestamp first = Timestamp.from(after.firstRemovedAt());
+			args.addAll(List.of(first, first, after.id()));
+		}
+		args.add(limit);
+		return jdbc.query("select m.hd_trashid, min(m.hd_removedat) from hd_trash_member m"
+				+ " where m.hd_removedat is not null and m.hd_trashid in (select r.hd_trashid from hd_trash_member r"
+				+ " where r.hd_state = ? and r.hd_removedat < ?) group by m.hd_trashid" + having
+				+ " order by min(m.hd_removedat), m.hd_trashid limit ?",
+				(rs, n) -> new RemovedItem(rs.getLong(1), rs.getTimestamp(2).toInstant()), args.toArray());
+	}
+
+	/**
+	 * @param id the item
+	 * @param cutoff the time
+	 * @return the item's members that are removed, and were removed before the
+	 *         cut-off
+	 */
+	public List<TrashMember> membersRemovedBefore(long id, Instant cutoff) {
+		return jdbc.query("select hd_objecttype, hd_objectid from hd_trash_member where hd_trashid = ?"
+				+ " and hd_state = ? and hd_removedat < ? order by hd_objecttype, hd_objectid",
+				(rs, n) -> new TrashMember(rs.getString(1).charAt(0), rs.getLong(2)), id, TrashState.REMOVED.code(),
+				Timestamp.from(cutoff));
 	}
 
 	/**

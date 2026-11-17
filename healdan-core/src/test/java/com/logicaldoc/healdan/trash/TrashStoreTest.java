@@ -263,6 +263,35 @@ public class TrashStoreTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testRemovedBeforePagesOnFromTheLastItem() {
+		long a = insertFolder("A", 100, 3L, T0);
+		long b = insertFolder("B", 200, 3L, T0);
+		long c = insertFolder("C", 300, 3L, T0);
+		long d = insertFolder("D", 400, 3L, T0);
+		store.change(a, List.of(doc(1000)), TrashState.DELETED, TrashState.REMOVED, 9L, "Admin", T0.plusSeconds(300));
+		store.change(a, List.of(doc(1001)), TrashState.DELETED, TrashState.REMOVED, 9L, "Admin", T0.plusSeconds(50));
+		store.change(b, List.of(folder(200)), TrashState.DELETED, TrashState.REMOVED, 9L, "Admin", T0.plusSeconds(10));
+		// The same removal as a's, one id later
+		store.change(c, List.of(folder(300)), TrashState.DELETED, TrashState.REMOVED, 9L, "Admin", T0.plusSeconds(50));
+		// Removed after the cut-off
+		store.change(d, List.of(folder(400)), TrashState.DELETED, TrashState.REMOVED, 9L, "Admin", T0.plusSeconds(900));
+		Instant cutoff = T0.plusSeconds(500);
+
+		List<TrashStore.RemovedItem> first = store.removedBefore(cutoff, null, 2);
+		assertEquals(List.of(new TrashStore.RemovedItem(b, T0.plusSeconds(10)),
+				new TrashStore.RemovedItem(a, T0.plusSeconds(50))), first);
+		// a's earliest member is destroyed meanwhile: its first removal stays, so the next page carries on after it
+		store.change(a, List.of(doc(1001)), TrashState.REMOVED, TrashState.DESTROYED, null, null, T0.plusSeconds(600));
+		assertEquals(List.of(new TrashStore.RemovedItem(c, T0.plusSeconds(50))),
+				store.removedBefore(cutoff, first.get(1), 2));
+		assertTrue(store.removedBefore(cutoff, new TrashStore.RemovedItem(c, T0.plusSeconds(50)), 2).isEmpty());
+
+		assertEquals(List.of(doc(1000)), store.membersRemovedBefore(a, cutoff));
+		assertTrue(store.membersRemovedBefore(a, T0.plusSeconds(300)).isEmpty());
+		assertTrue(store.membersRemovedBefore(d, cutoff).isEmpty());
+	}
+
+	@Test
 	public void testItemHoldingFindsTheNewest() {
 		long first = insertFolder("A", 100, 3L, T0);
 		store.change(first, List.of(folder(100)), TrashState.DELETED, TrashState.RESTORED, 3L, "A", T0);

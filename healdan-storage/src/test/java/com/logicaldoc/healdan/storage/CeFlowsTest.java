@@ -31,6 +31,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
@@ -55,9 +56,15 @@ import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.preview.OfficeThumbnailBuilder;
 import com.logicaldoc.healdan.preview.PreviewBridge;
+import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.trash.TrashDestroyer;
+import com.logicaldoc.healdan.trash.TrashMember;
+import com.logicaldoc.healdan.trash.TrashRemoval;
+import com.logicaldoc.healdan.trash.TrashState;
+import com.logicaldoc.healdan.trash.TrashStore;
 import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
 
@@ -388,6 +395,41 @@ public class CeFlowsTest extends AbstractStorageTestCase {
 			DocumentDAO.get().delete(id, history());
 			DocumentManager.get().destroyDocument(id, fx.folderHistory(fx.admin()));
 
+			assertEquals(Long.valueOf(0), StorageFixtures.jdbc()
+					.queryForObject("select count(*) from ld_document where ld_id = ?", Long.class, id));
+			assertTrue(StoredFiles.get().list(id).isEmpty());
+			assertEquals(3, heldRows(id).size());
+			assertHeld(side, id, "1.0", side.backendId());
+			assertHeld(side, id, "1.1", side.saveLandsOn());
+			assertHeld(side, id, "1.1-thumb.png", side.saveLandsOn());
+			for (String resource : List.of("1.0", "1.1", "1.1-thumb.png"))
+				assertFalse(resource, Store.get().exists(resource(id, resource)));
+			if (side.isS3())
+				assertEquals("the bucket's copy is left alone", 0, side.s3().calls(Op.DELETE, key(id, "1.0")));
+		});
+	}
+
+	/** The Trash's nightly job destroys through CE's destroy, so the files are held as above */
+	@Test
+	public void testDestroyedByTheTrash() throws Exception {
+		each(side -> {
+			Document doc = upload(side, "a.txt", "one");
+			long id = doc.getId();
+			checkin(doc, "two");
+			Store.get().store(file("thumb"), resource(id, "1.1-thumb.png"));
+			if (side.isS3())
+				moveToBucket(side, id, "1.0");
+
+			DocumentDAO.get().delete(id, history());
+			TrashMember member = new TrashMember('D', id);
+			long item = TrashStore.get().itemHolding(member, TrashState.DELETED).orElseThrow();
+			TrashRemoval.get().removeItem(item, fx.admin());
+			Instant now = Instant.now();
+			StorageFixtures.jdbc().update("update hd_trash_member set hd_removedat = ? where hd_trashid = ?",
+					Timestamp.from(now.minus(Duration.ofDays(HealdanSettings.get().trashRemovedDays() + 1L))), item);
+			assertEquals(1, TrashDestroyer.get().runOnce(now));
+
+			assertEquals(TrashState.DESTROYED, TrashStore.get().member(item, member).orElseThrow().state());
 			assertEquals(Long.valueOf(0), StorageFixtures.jdbc()
 					.queryForObject("select count(*) from ld_document where ld_id = ?", Long.class, id));
 			assertTrue(StoredFiles.get().list(id).isEmpty());

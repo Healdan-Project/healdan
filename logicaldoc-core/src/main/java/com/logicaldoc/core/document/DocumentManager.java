@@ -2151,7 +2151,11 @@ public class DocumentManager {
         debug("Destroying document {}", docId);
 
         // Just retrieve required informations of the document to destroy
-        documentDAO.query("select ld_folderid, ld_filename, ld_version, ld_fileversion from ld_document",
+        // Healdan: only this document's row; with no where clause it read the table's first row, and the history
+        // and these lines named another document's file and folder, which that folder's readers could see
+        documentDAO.query(
+                "select ld_folderid, ld_filename, ld_version, ld_fileversion from ld_document where ld_id = %d"
+                        .formatted(docId),
                 new RowMapper<Document>() {
 
                     @Override
@@ -2206,13 +2210,9 @@ public class DocumentManager {
         count = documentDAO.jdbcUpdate("delete from ld_history where ld_docid = %d".formatted(docId));
         log.info("Destroyed {} histories of document {}", count, documentTag);
 
-        try {
-            count = documentDAO.jdbcUpdate("delete from ld_readingrequest where ld_docid = %d".formatted(docId));
-            log.info("Destroyed {} reading requests of document {}", count, documentTag);
-        } catch (Exception e) {
-            // Ignore because the table may not exist
-        }
-
+        // Healdan: no delete from ld_readingrequest, which no CE schema has; its failure, swallowed here, made the
+        // caller's transaction rollback-only, so a destroy inside one never committed. A sync that brings the table
+        // puts the delete back without the try
         documentDAO.jdbcUpdate("delete from ld_document where ld_id = %d".formatted(docId));
         log.info("Destroyed the record of document {}", documentTag);
 

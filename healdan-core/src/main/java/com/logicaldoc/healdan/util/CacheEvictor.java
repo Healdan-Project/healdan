@@ -22,6 +22,7 @@ import com.logicaldoc.core.document.AbstractDocument;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -124,6 +125,17 @@ public class CacheEvictor {
 	 */
 	public void evictDocumentsAfterCompletion(Collection<Long> ids) {
 		afterCompletion(Document.class, ids, true);
+	}
+
+	/**
+	 * Evicts users once the current transaction ends, however it ends (see
+	 * {@link #evictFoldersAfterCompletion}). Outside a transaction it evicts
+	 * them at once.
+	 *
+	 * @param ids the user ids
+	 */
+	public void evictUsersAfterCompletion(Collection<Long> ids) {
+		afterCompletion(User.class, ids, true);
 	}
 
 	private void onRollback(Class<?> entity, Collection<Long> ids) {
