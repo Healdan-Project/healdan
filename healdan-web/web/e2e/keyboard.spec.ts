@@ -536,7 +536,13 @@ test('row 10: folders and the Trash are all keys: Delete asks, F6 reaches Undo, 
   await expect(item).toHaveCount(0)
   expect((await get(`/folders/${keyed}`)).status()).toBe(200)
   // The focus stays on the page, in the list or what is left of it, so the next key works
-  await expect.poll(() => page.evaluate(() => document.activeElement !== document.body)).toBe(true)
+  // The Trash puts the focus on a row of its list, or on the list when none is left: both inside the grid of the main region
+  await expect
+    .poll(() => page.evaluate(() => {
+      const active = document.activeElement
+      return active?.getAttribute('role') === 'grid' || (active?.getAttribute('role') === 'row' && active.closest('main [role="grid"]') !== null)
+    }))
+    .toBe(true)
 })
 
 test('row 11: Delete on a folder of the left pane tree asks, Enter moves it to the Trash, and the focus stays in the pane', async () => {
@@ -563,16 +569,9 @@ test('row 11: Delete on a folder of the left pane tree asks, Enter moves it to t
     await expect(page.getByText(`Moved "${FROM_TREE}" to the Trash`)).toBeVisible()
     await expect(child).toHaveCount(0)
     expect((await api!.get(`/api/v1/folders/${fromTree}`, authorized(token))).status()).toBe(404)
-    // Where the focus lands (a row of the open folder's list, which the app picks): not the page itself, and not a row that has
-    // gone, but the tree or the list, so the next key works
-    await expect
-      .poll(() =>
-        page.evaluate(() => {
-          const active = document.activeElement
-          return active !== null && active !== document.body && active.isConnected && (active.closest('[role="treegrid"], [role="grid"], main, nav') !== null)
-        }),
-      )
-      .toBe(true)
+    // The focus goes to the remaining row of the open folder's list (Keyed, which row 10 restored), where the app puts it: not the
+    // page, not the tree and not a row that has gone, so the next key works on the list
+    await expect(main().getByRole('grid').getByRole('row', { name: escape(KEYED) })).toBeFocused()
   } finally {
     await api!.delete(`/api/v1/me/matters/${matterFolder}`, authorized(token))
   }

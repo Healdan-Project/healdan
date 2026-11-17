@@ -5,23 +5,24 @@ import { expect, test, type APIRequestContext, type Locator, type Page } from '@
 import { ADMIN_PASSWORD, ADMIN_USERNAME, PASSWORD, apiContext, authorized, call, deviceToken, escape, escaped, fileDocument, matterFolders, signIn, specsFolder } from './helpers'
 
 // The Trash in the User app (folders and Trash spec 7): a folder deleted from the menu a right-click opens, with Undo on the
-// toast; the same folder deleted again and restored from the Trash, where the toast's Open goes to it; one removed, which an
+// toast; a folder of its own deleted and restored from the Trash, where the toast's Open goes to it; one removed, which an
 // administrator's Removed view then lists; and two documents deleted and the Trash emptied. The folders and documents are this
 // run's own, in a folder of their own inside the specs' E2E folder in matter 1.1's Documents folder (which the smoke fixture
 // makes), and each test makes the delete it checks, so none depends on another or on what an earlier run left in the Trash.
 const RUN = `trs${Date.now().toString(36)}`
 const HOME = `Trash ${RUN}`
 const UNDONE = `Undone ${RUN}`
+const RESTORED = `Restored ${RUN}`
 const REMOVED = `Removed ${RUN}`
 const name = (what: string) => `${what} ${RUN}.txt`
-const DOCUMENTS = { undone: name('In undone'), removed: name('In removed'), emptyOne: name('Empty one'), emptyTwo: name('Empty two') }
+const DOCUMENTS = { undone: name('In undone'), restored: name('In restored'), removed: name('In removed'), emptyOne: name('Empty one'), emptyTwo: name('Empty two') }
 
 let api: APIRequestContext | undefined
 let token = ''
 let adminToken = ''
 let home = 0
-const folders = { undone: 0, removed: 0 }
-const numbers: Record<keyof typeof DOCUMENTS, number> = { undone: 0, removed: 0, emptyOne: 0, emptyTwo: 0 }
+const folders = { undone: 0, restored: 0, removed: 0 }
+const numbers: Record<keyof typeof DOCUMENTS, number> = { undone: 0, restored: 0, removed: 0, emptyOne: 0, emptyTwo: 0 }
 
 const get = (path: string, as = token) => api!.get(`/api/v1${path}`, authorized(as))
 const status = async (path: string) => (await get(path)).status()
@@ -35,8 +36,10 @@ test.beforeAll(async ({ playwright }, testInfo) => {
     (await call<{ id: number }>(api!.post('/api/v1/folders', { ...authorized(token), data: { parentId, name: folderName } }), `making ${folderName}`)).id
   home = await makeFolder(await specsFolder(api, token, where.documents), HOME)
   folders.undone = await makeFolder(home, UNDONE)
+  folders.restored = await makeFolder(home, RESTORED)
   folders.removed = await makeFolder(home, REMOVED)
   numbers.undone = await fileDocument(api, token, folders.undone, DOCUMENTS.undone, 'text/plain', Buffer.from(`undone ${RUN}`))
+  numbers.restored = await fileDocument(api, token, folders.restored, DOCUMENTS.restored, 'text/plain', Buffer.from(`restored ${RUN}`))
   numbers.removed = await fileDocument(api, token, folders.removed, DOCUMENTS.removed, 'text/plain', Buffer.from(`removed ${RUN}`))
   // The two the last test deletes sit in the home folder itself, where nothing else is a document
   numbers.emptyOne = await fileDocument(api, token, home, DOCUMENTS.emptyOne, 'text/plain', Buffer.from(`one ${RUN}`))
@@ -95,12 +98,12 @@ test('deletes a folder from its right-click menu, and Undo on the toast puts it 
   expect(((await (await get(`/documents/${numbers.undone}`)).json()) as { folder: { id: number } }).folder.id).toBe(folders.undone)
 })
 
-test("deletes it again, and Restore in the Trash puts it back where it was deleted from, which the toast's Open goes to", async ({ page }) => {
+test("deletes a folder of its own, and Restore in the Trash puts it back where it was deleted from, which the toast's Open goes to", async ({ page }) => {
   await open(page, home)
-  await deleteFromMenu(page, UNDONE, /1 document/)
+  await deleteFromMenu(page, RESTORED, /1 document/)
 
   await openTrash(page)
-  const item = trashRow(page, UNDONE)
+  const item = trashRow(page, RESTORED)
   await expect(item).toBeVisible()
   // What a delete is called in the Trash: one row for the folder, with how much it holds, and where it was deleted from
   await expect(item).toContainText('1 item')
@@ -108,15 +111,15 @@ test("deletes it again, and Restore in the Trash puts it back where it was delet
   await item.getByRole('rowheader').click()
   await expect(page.getByRole('region', { name: 'Details' })).toBeVisible()
   await main(page).getByRole('toolbar', { name: 'Trash Actions' }).getByRole('button', { name: 'Restore', exact: true }).click()
-  await expect(page.getByText(new RegExp(`^Restored "${escaped(UNDONE)}" to `))).toBeVisible()
+  await expect(page.getByText(new RegExp(`^Restored "${escaped(RESTORED)}" to `))).toBeVisible()
   await expect(item).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Open', exact: true }).click()
   await expect(page).toHaveURL(new RegExp(`/app/folders/${home}$`))
-  await expect(row(main(page).getByRole('grid'), UNDONE)).toBeVisible()
-  const back = (await (await get(`/folders/${folders.undone}`)).json()) as { path: { id: number }[] }
+  await expect(row(main(page).getByRole('grid'), RESTORED)).toBeVisible()
+  const back = (await (await get(`/folders/${folders.restored}`)).json()) as { path: { id: number }[] }
   expect(back.path.at(-2)?.id).toBe(home)
-  expect(await status(`/documents/${numbers.undone}`)).toBe(200)
+  expect(await status(`/documents/${numbers.restored}`)).toBe(200)
 })
 
 test("removes a folder from the Trash after the question, and an administrator's Removed view lists it", async ({ page }) => {

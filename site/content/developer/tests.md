@@ -340,7 +340,7 @@ code is laid out.
       the focus, and Tab goes on to **Undo**) and Enter on **Undo**; Delete again, the **Trash** entry at the foot of the
       left pane by Tab, a row of the Trash by the arrow keys, and **Restore** in the details by Tab and Enter.
     - **Row 11:** Delete on a folder of the left pane's tree (Tab to the tree, the arrow keys and Right to open a folder),
-      Enter in the question, and where the focus lands asserted: not the page, but a row of the open folder's list.
+      Enter in the question, and where the focus lands asserted: on the remaining row of the open folder's list, by name. Row 10 ends by asserting that the Trash leaves the focus on a row of its list, or the list itself.
 
     It leaves out **Copy Link**, as headless browsers' clipboards differ between engines (`finding.spec.ts` covers it), and
     row 9's move into another matter: the smoke fixture's only matter outside Smoke Cloud is 1.1, and a move into Smoke
