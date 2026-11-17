@@ -5,17 +5,20 @@ import { useRef } from 'react'
 import type { components } from '@healdan/api'
 import { Button, t } from '@healdan/ui'
 import { checkInAccept } from './checkout'
+import { useReleasing } from './ReleaseProvider'
 import { useCheckout } from './useCheckout'
 import styles from './actions.module.css'
 
 /**
  * The details panel's check-out buttons, under its Check-Out Info (`details/HoldInfo`): Check Out when the document is
- * free; Check In and Release for the person's own check-out from the web page. A check-out on a computer, someone else's
- * check-out and a lock have none, as the web page is no device and never takes a check-out over (R14). While one runs
- * they're pending, not disabled, so the focus stays on the one pressed.
+ * free; Check In and Release for the person's own check-out from the web page; Release… for theirs on a computer, which
+ * warns that changes there that haven't reached Healdan are lost (ReleaseProvider). Someone else's check-out and a lock
+ * have none, as the web page never takes a check-out over (R14). While one runs they're pending, not disabled, so the
+ * focus stays on the one pressed.
  */
 export function CheckoutControls({ document }: { document: components['schemas']['DocumentView'] }) {
   const checkout = useCheckout(document)
+  const releasing = useReleasing()
   const picker = useRef<HTMLInputElement>(null)
   return (
     <>
@@ -30,7 +33,7 @@ export function CheckoutControls({ document }: { document: components['schemas']
             <Button isPending={checkout.busy} onPress={() => picker.current?.click()}>
               {t('checkout.checkIn')}
             </Button>
-            <Button isPending={checkout.busy} onPress={() => void checkout.release()}>
+            <Button isPending={checkout.busy} onPress={() => releasing.askRelease([document])}>
               {t('checkout.release')}
             </Button>
             <input
@@ -46,6 +49,11 @@ export function CheckoutControls({ document }: { document: components['schemas']
               }}
             />
           </>
+        )}
+        {checkout.state.kind === 'yourDevice' && (
+          <Button isPending={checkout.busy} onPress={() => releasing.askRelease([document])}>
+            {t('checkout.releaseAsk')}
+          </Button>
         )}
       </div>
     </>

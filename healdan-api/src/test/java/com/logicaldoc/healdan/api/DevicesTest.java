@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -15,6 +16,7 @@ import java.util.Map;
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.mock.web.MockHttpSession;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -318,6 +320,130 @@ public class DevicesTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testReleaseElsewhereFromTheWebPage() throws Exception {
+		Document d = file();
+		String mac = signIn("mac-1", "Healdan Helper on MacBook");
+		assertEquals(200, post(checkout(d)).token(mac).json(Map.of("app", "Excel")).send().status());
+		MockHttpSession web = signInWeb(clerk);
+
+		assertHeldElsewhere(delete(checkout(d)).webSession(web).send(), d);
+		// A device that doesn't hold it
+		assertHeldElsewhere(delete(checkout(d) + "?elsewhere=linux-2").webSession(web).send(), d);
+
+		ApiResponse released = delete(checkout(d) + "?elsewhere=mac-1").webSession(web).send();
+		assertEquals(released.toString(), 200, released.status());
+		assertTrue(released.json().path("hold").isNull());
+		assertEquals(DocumentStatus.UNLOCKED, DocumentDAO.get().findById(d.getId()).getStatus());
+		assertEquals(0, (int) jdbc().queryForObject(
+				"select count(*) from hd_hold_device where hd_docid = ? and hd_device is not null", Integer.class, d.getId()));
+		assertEquals("Released while checked out on Healdan Helper on MacBook (Excel)", lastUnlock(d));
+
+		// The computer that had it finds out at its next save
+		ApiResponse late = saveIfHeld(mac, d);
+		assertEquals(late.toString(), 409, late.status());
+		assertEquals("not-held", late.code());
+	}
+
+	@Test
+	public void testReleaseElsewhereFromAnotherDevice() throws Exception {
+		Document d = file();
+		String mac = signIn("mac-1", "MacBook");
+		String linux = signIn("linux-2");
+		assertEquals(200, post(checkout(d)).token(mac).send().status());
+
+		ApiResponse released = delete(checkout(d) + "?elsewhere=mac-1").token(linux).send();
+		assertEquals(released.toString(), 200, released.status());
+		assertTrue(released.json().path("hold").isNull());
+		assertEquals("Released while checked out on MacBook", lastUnlock(d));
+	}
+
+	@Test
+	public void testReleaseElsewhereChangesNothingElse() throws Exception {
+		Document d = file();
+		String mac = signIn("mac-1", "MacBook");
+		String other = signIn(colleague);
+		assertEquals(200, post(checkout(d)).token(mac).send().status());
+
+		// Someone else's check-out is still refused
+		DbSnapshot before = fx.snapshot();
+		ApiResponse refused = delete(checkout(d) + "?elsewhere=mac-1").token(other).send();
+		assertEquals(refused.toString(), 409, refused.status());
+		assertEquals("checked-out", refused.code());
+		before.assertUnchanged();
+
+		// From its own device nothing is lost, so no comment
+		ApiResponse own = delete(checkout(d) + "?elsewhere=mac-1").token(mac).send();
+		assertEquals(own.toString(), 200, own.status());
+		assertNull(lastUnlock(d));
+
+		// A free document is answered as it is
+		before = fx.snapshot();
+		ApiResponse free = delete(checkout(d) + "?elsewhere=mac-1").token(mac).send();
+		assertEquals(free.toString(), 200, free.status());
+		assertTrue(free.json().path("hold").isNull());
+		before.assertUnchanged();
+
+		// An administrator's release names the computer that held it
+		assertEquals(200, post(checkout(d)).token(mac).send().status());
+		ApiResponse admin = delete(checkout(d) + "?elsewhere=mac-1").token(signIn(boss)).send();
+		assertEquals(admin.toString(), 200, admin.status());
+		assertEquals("Released while checked out on MacBook", lastUnlock(d));
+	}
+
+	@Test
+	public void testReleaseElsewhereOnlyTheDeviceNamed() throws Exception {
+		Document d = file();
+		String mac = signIn("mac-1", "MacBook");
+		String linux = signIn("linux-2", "Linux PC");
+		String admin = signIn(boss);
+		assertEquals(200, post(checkout(d)).token(mac).send().status());
+		MockHttpSession web = signInWeb(clerk);
+
+		// Warned about the Mac, but the check-out moved to the Linux PC meanwhile: it stays there
+		assertEquals(200, post(checkout(d)).token(linux).json(Map.of("move", true)).send().status());
+		DbSnapshot before = fx.snapshot();
+		assertHeldElsewhere(delete(checkout(d) + "?elsewhere=mac-1").webSession(web).send(), d, "linux-2");
+		before.assertUnchanged();
+
+		// Nor does an administrator's release free a check-out held on another device than the one named
+		ApiResponse refused = delete(checkout(d) + "?elsewhere=mac-1").token(admin).send();
+		assertEquals(refused.toString(), 409, refused.status());
+		assertEquals("checked-out", refused.code());
+		before.assertUnchanged();
+
+		// A check-out from the web page, which no device holds, isn't the one a device was named for
+		assertEquals(200, delete(checkout(d) + "?elsewhere=linux-2").webSession(web).send().status());
+		assertEquals(200, post(checkout(d)).webSession(web).send().status());
+		before = fx.snapshot();
+		ApiResponse none = delete(checkout(d) + "?elsewhere=linux-2").webSession(web).send();
+		assertEquals(none.toString(), 409, none.status());
+		assertEquals("checked-out", none.code());
+		before.assertUnchanged();
+	}
+
+	@Test
+	public void testReleasedDeviceCantSaveToALaterCheckout() throws Exception {
+		Document d = file();
+		String mac = signIn("mac-1", "MacBook");
+		assertEquals(200, post(checkout(d)).token(mac).json(Map.of("app", "Word")).send().status());
+		MockHttpSession web = signInWeb(clerk);
+		assertEquals(200, delete(checkout(d) + "?elsewhere=mac-1").webSession(web).send().status());
+
+		// Checked out again from the web page, which no device holds: the Mac's own check-out still ended
+		assertEquals(200, post(checkout(d)).webSession(web).send().status());
+		DbSnapshot before = fx.snapshot();
+		ApiResponse late = saveIfHeld(mac, d);
+		assertEquals(late.toString(), 409, late.status());
+		assertEquals("not-held", late.code());
+		before.assertUnchanged();
+
+		// Checked out on the Mac again, its saves go through
+		assertEquals(200, post(checkout(d)).token(mac).send().status());
+		ApiResponse saved = saveIfHeld(mac, d);
+		assertEquals(saved.toString(), 201, saved.status());
+	}
+
+	@Test
 	public void testWebPageCheckoutAnyDevice() throws Exception {
 		Document d = file();
 		String mac = signIn("mac-1");
@@ -461,6 +587,21 @@ public class DevicesTest extends ApiTestCase {
 				.part("version",
 						ApiJson.mapper().writeValueAsString(Map.of("kind", "snapshot", "keepCheckedOut", keepCheckedOut)))
 				.file("file", "a.docx", "two".getBytes(StandardCharsets.UTF_8)).send();
+	}
+
+	private ApiResponse saveIfHeld(String token, Document d) throws JsonProcessingException {
+		return post(document(d) + "/versions").token(token)
+				.part("version", ApiJson.mapper()
+						.writeValueAsString(Map.of("kind", "snapshot", "keepCheckedOut", true, "ifHeld", true)))
+				.file("file", "a.docx", "two".getBytes(StandardCharsets.UTF_8)).send();
+	}
+
+	/** @return the newest release's comment in the history, or null when it has none */
+	private String lastUnlock(Document d) {
+		String comment = jdbc().queryForObject(
+				"select ld_comment from ld_history where ld_docid = ? and ld_event = 'event.unlocked' order by ld_date desc, ld_id desc limit 1",
+				String.class, d.getId());
+		return comment == null || comment.isEmpty() ? null : comment;
 	}
 
 	/** As the old web page checks a document out, for clerk */

@@ -151,13 +151,14 @@ describe("a document row's menu", () => {
     expect(document.querySelector('input[type="file"][aria-label="File to Check In"]')).toBeNull()
   })
 
-  it('has Check Out disabled while the toolbar’s check-out of the document runs, as the toolbar’s is', async () => {
+  // The toolbar's button is pending, not disabled, so it keeps the focus (Release.test.tsx); a menu item has no pending state
+  it('has Check Out disabled while the toolbar’s check-out of the document runs, which is pending there', async () => {
     let finish: (value: unknown) => void = () => {}
     const { all } = routes({ 'POST /v1/documents/10432/checkout': () => new Promise((resolve) => (finish = resolve)) })
     await renderApp('/folders/7?sel=10432', all)
     await row(/Lease/)
     await userEvent.click(within(await toolbar()).getByRole('button', { name: 'Check Out' }))
-    await waitFor(async () => expect(within(await toolbar()).getByRole('button', { name: 'Check Out' }).hasAttribute('disabled')).toBe(true))
+    await waitFor(async () => expect(within(await toolbar()).getByRole('button', { name: 'Check Out' }).getAttribute('aria-disabled')).toBe('true'))
     fireEvent.contextMenu(await row(/Lease/))
     expect((await item('Check Out')).getAttribute('aria-disabled')).toBe('true')
     finish(doc({ ...lease, hold: { kind: 'checkout', by: { id: 5, name: 'Priya Nair' }, since: '2026-11-03T10:00:00Z', device: null, heldOn: null } }))

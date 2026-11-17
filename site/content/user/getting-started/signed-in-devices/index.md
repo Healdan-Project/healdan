@@ -55,8 +55,22 @@ or Signed In Again](../../office/when-things-go-wrong/#signed-out-or-signed-in-a
 Healdan doesn't tell the device why, so the window doesn't say it was revoked. Sign it in again whenever you're ready.
 Revoking doesn't change your password, and doesn't sign you out of this page.
 
-If you lose a Mac or leave it signed in somewhere you shouldn't have, revoke its row, and change your password if you
-want every device out: a new password ends all of them.
+## A Lost or Stolen Computer
+
+If you lose a computer, or it's stolen, do two things:
+
+1. **Revoke its sign-in** here, so it can't reach Healdan any more. Change your password too if you want every device
+   out: a new password ends all of them.
+2. **Release its check-outs** in **Checked Out to Me**, at the top of the left pane: select the documents that name
+   the computer, and choose **Release…**. Revoking doesn't release them, so until you do, they stay checked out to you
+   on that computer. Healdan warns you first that the computer's work that hadn't reached Healdan is lost. See
+   [Your Check-Out on Another Computer](../../documents/checking-out-and-checking-in/#your-check-out-on-another-computer).
+
+Releasing doesn't revoke the sign-in either. The warning before a release has a **Signed-in Devices** link that opens
+this list, so you can do both from there.
+
+For a computer you've only left signed in somewhere you shouldn't have, revoking it is enough: its check-outs stay
+yours on that computer, and carry on once you sign it in again.
 
 ## If Something Goes Wrong
 

@@ -36,3 +36,9 @@
   font-size: var(--hd-font-size-title);
   font-weight: var(--hd-weight-bold);
 }
+
+.withIcon {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+}

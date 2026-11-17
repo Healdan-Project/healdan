@@ -192,6 +192,7 @@ export function defaultRoutes(): Routes {
       document({ docNumber: 10431, name: 'Letter to Dunmere Pryce.docx', lastModified: '2026-11-09T09:42:00Z' }),
       document({ docNumber: 10388, name: 'Letter from Dunmere Pryce.pdf', lastModified: '2026-09-29T09:40:00Z' }),
     ]),
+    'GET /v1/me/checkouts': page([]),
     'GET /v1/matters/recent': page([
       matter({ id: 12, folderId: 120, display: '1002.1 – Commercial Lease', client: client({ id: 2, number: 1002, name: 'Brightwell' }) }),
     ]),
@@ -251,7 +252,7 @@ export function fakeApi(over: Routes = {}, onSignedOut?: () => void): FakeApi {
     get: (path, query, options) => answer('GET', path, query, undefined, options?.signal),
     // A route for a binary answer gives a Response (or throws, as a failed request does)
     getResponse: (path, query, options) => answer<Response>('GET', path, query, undefined, options?.signal),
-    send: (method, path, body) => answer(method, path, undefined, body),
+    send: (method, path, body, query) => answer(method, path, query, body),
     url: (path, query) => {
       const params = new URLSearchParams()
       for (const [name, value] of Object.entries(query ?? {})) if (value !== undefined) params.append(name, String(value))

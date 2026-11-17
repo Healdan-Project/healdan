@@ -5,6 +5,7 @@ import { Outlet, useRouterState } from '@tanstack/react-router'
 import { useEffect, useId, useRef, useState } from 'react'
 import { t } from '@healdan/ui'
 import { OpenInAppProvider } from '../actions/OpenInAppState'
+import { ReleaseProvider } from '../actions/ReleaseProvider'
 import { DetailsTabProvider } from '../details/DetailsTab'
 import { FilingProvider } from '../filing/FilingProvider'
 import { OrganisingProvider } from '../organising/OrganisingProvider'
@@ -32,9 +33,11 @@ export function Frame() {
         <OpenInAppProvider>
           <FilingProvider>
             <OrganisingProvider>
-              <DetailsTabProvider>
-                <Layout />
-              </DetailsTabProvider>
+              <ReleaseProvider>
+                <DetailsTabProvider>
+                  <Layout />
+                </DetailsTabProvider>
+              </ReleaseProvider>
             </OrganisingProvider>
           </FilingProvider>
         </OpenInAppProvider>

@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { formatDateTime } from '@healdan/ui'
-import { holdLabel, holdSentence, holdState } from './checkout'
+import { computerLabel, holdLabel, holdSentence, holdState } from './checkout'
 
 type Hold = components['schemas']['HoldView']
 
@@ -68,5 +68,29 @@ describe('holdSentence', () => {
     for (const hold of [checkout(), checkout({ by: you, device: macBook }), checkout({ kind: 'lock' })]) {
       expect(sentence(hold)).not.toMatch(/Release|released|Unlock|Classic Interface/)
     }
+  })
+})
+
+describe('computerLabel', () => {
+  it('shortens the helper\'s token name to the computer, with the app', () => {
+    expect(computerLabel(checkout({ heldOn: { name: 'Healdan Helper on MacBook', app: 'Excel' } }))).toEqual({ computer: 'MacBook', app: 'Excel' })
+  })
+
+  it('trims what is left, as the helper\'s DeviceNames.Short does', () => {
+    expect(computerLabel(checkout({ heldOn: { name: 'Healdan Helper on  MacBook ', app: 'Excel' } })).computer).toBe('MacBook')
+    expect(computerLabel(checkout({ heldOn: { name: ' e2e 1234 ', app: null } })).computer).toBe('e2e 1234')
+  })
+
+  it('keeps another token name whole', () => {
+    expect(computerLabel(checkout({ heldOn: { name: 'e2e 1234', app: null } }))).toEqual({ computer: 'e2e 1234', app: null })
+  })
+
+  it('says Another Computer when the name is empty or missing', () => {
+    expect(computerLabel(checkout({ heldOn: { name: 'Healdan Helper on ', app: null } })).computer).toBe('Another Computer')
+    expect(computerLabel(checkout({ heldOn: { name: null, app: 'Word' } })).computer).toBe('Another Computer')
+  })
+
+  it('says Web Page for a check-out made in the browser', () => {
+    expect(computerLabel(checkout())).toEqual({ computer: 'Web Page', app: null })
   })
 })

@@ -24,15 +24,16 @@ open it in the main area.
   right arrow: the first press opens the matter, the next moves to **⋯**, and Enter opens its menu; or press
   Shift-F10 on the row. See [Right-Click Menus](../../getting-started/getting-around/#right-click-menus).
 
-![The left pane with My Matters opened to the folders of 1002.1 – Commercial Lease, and the menu of 1001.1 – Charter Dispute open beside it, offering Remove from My Matters](my-matters-menu.png)
+![The left pane, from Checked Out to Me at its top, with My Matters opened to the folders of 1002.1 – Commercial Lease, and the menu of 1001.1 – Charter Dispute open beside it, offering Rename, greyed out, and Remove from My Matters](my-matters-menu.png)
 
 My Matters are kept as bookmarks, so a matter you add also shows in the Classic Interface's **Bookmarks** section,
 and removing that bookmark there removes it from My Matters.
 
 ## Recent
 
-At the top of the left pane, **Recent** has four entries. Each opens a list of what you worked on lately, newest first,
-and sets the scope picker beside the search box to its scope, so your next search looks there.
+Near the top of the left pane, under **Checked Out to Me**, **Recent** has four entries. Each opens a list of what you
+worked on lately, newest first, and sets the scope picker beside the search box to its scope, so your next search
+looks there.
 
 | Entry | Lists |
 |---|---|
