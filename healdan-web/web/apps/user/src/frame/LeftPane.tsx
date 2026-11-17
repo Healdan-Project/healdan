@@ -83,10 +83,24 @@ function CheckedOutEntry() {
   const total = useCheckouts().data?.total ?? 0
   const here = pathname === '/checked-out'
   return (
-    <Link to="/checked-out" className={`${styles.entry} ${styles.checkedOut}`} aria-current={here ? 'page' : undefined} aria-label={total >= 1 ? plural('checkedOutEntry', total) : t('checkedOut.title')}>
+    <Link to="/checked-out" className={`${styles.entry} ${styles.checkedOut}`} aria-current={here ? 'page' : undefined}>
       <Icon name="pencil" />
-      <span className={styles.text}>{t('checkedOut.title')}</span>
-      {total >= 1 && <span className={styles.badge}>{total}</span>}
+      {total >= 1 ? (
+        <>
+          <span className={styles.text} aria-hidden="true">
+            {t('checkedOut.title')}
+          </span>
+          <span className={styles.visuallyHidden}>{`${t('checkedOut.title')}${plural('checkedOutCount', total)}`}</span>
+        </>
+      ) : (
+        <span className={styles.text}>{t('checkedOut.title')}</span>
+      )}
+      {/* With a count the name is one string, "Checked Out to Me, 2 documents", read in place of the drawn words and number */}
+      {total >= 1 && (
+        <span className={styles.badge} aria-hidden="true">
+          {total}
+        </span>
+      )}
     </Link>
   )
 }

@@ -436,7 +436,7 @@ export const enUSPlurals = {
   releaseConfirm: { one: 'Release Document', other: 'Release {n} Documents' },
   released: { one: 'Released {n} document', other: 'Released {n} documents' },
   menuForDocuments: { one: 'Actions for {n} document', other: 'Actions for {n} documents' },
-  checkedOutEntry: { one: 'Checked Out to Me, {n} document', other: 'Checked Out to Me, {n} documents' },
+  checkedOutCount: { one: ', {n} document', other: ', {n} documents' },
   matters: { one: '{n} {matter}', other: '{n} {matters}' },
 } as const
 
