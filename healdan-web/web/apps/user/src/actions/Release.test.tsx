@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ApiError, type components } from '@healdan/api'
@@ -150,6 +150,32 @@ describe('Release', () => {
     // Its row is still drawn, so it isn't taken for gone: no later turn moves the focus to the row before it, as a delete would
     await new Promise((resolve) => setTimeout(resolve, 150))
     expect(focused()).toBe('d10433')
+  })
+
+  it("keeps the focus on the toolbar's Release while it releases, and after", async () => {
+    let answer: (value: S['DocumentView']) => void = () => {}
+    let mine = doc({ ...plan, hold: inBrowser })
+    const { all } = folderRoutes({
+      'GET /v1/folders/7/children': () => children([folderLetter, lease, mine]),
+      'DELETE /v1/documents/10433/checkout': () => new Promise((resolve) => (answer = resolve)),
+    })
+    await renderApp('/folders/7?sel=10433', all)
+    const button = await within(await screen.findByRole('toolbar', { name: 'Folder Actions' })).findByRole('button', { name: 'Release' })
+    button.focus()
+    await userEvent.keyboard('{Enter}')
+
+    // Pending, not disabled: it takes no press, and keeps the focus, which a disabled button loses
+    await waitFor(() => expect(button.getAttribute('aria-disabled')).toBe('true'))
+    expect(button.hasAttribute('disabled')).toBe(false)
+    expect(globalThis.document.activeElement).toBe(button)
+    mine = doc({ ...plan, hold: null })
+    await act(async () => answer(mine))
+
+    // The same button, which offers Check Out now the document is free, still has it
+    expect(await screen.findByText('Released 1 document')).toBeTruthy()
+    await waitFor(() => expect(button.textContent).toContain('Check Out'))
+    await waitFor(() => expect(button.getAttribute('aria-disabled')).toBeNull())
+    expect(globalThis.document.activeElement).toBe(button)
   })
 
   it('offers Release… in the right-click menu, the toolbar and Check-Out Info', async () => {

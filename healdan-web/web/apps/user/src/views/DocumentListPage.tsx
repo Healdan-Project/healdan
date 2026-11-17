@@ -78,8 +78,7 @@ export function ListPage<T extends TableRow>({ heading, empty, columns, rows, qu
 
 /** A list of documents the person didn't browse to: Recent Documents, Recent Emails, Checked Out to Me. A document's details show beside it, as in a folder. */
 export function DocumentListPage({ heading, empty, actionsLabel, query, columns: allColumns }: { heading: string; empty: string; actionsLabel: string; query: UseQueryResult<PageOf<S['DocumentView']>>; columns: TableColumn<ListRow>[] }) {
-  const recent = query
-  const items = recent.data?.items
+  const items = query.data?.items
   const { selected, selection, change } = useRowSelection(items)
   const rows = useMemo(() => (items ?? []).map(rowOf), [items])
   // The reading pane makes the list narrow: it keeps the columns that fit
@@ -95,7 +94,7 @@ export function DocumentListPage({ heading, empty, actionsLabel, query, columns:
       empty={empty}
       columns={columns}
       rows={rows}
-      query={recent}
+      query={query}
       selection={{ keys: selection, change }}
       toolbar={
         <Toolbar label={actionsLabel}>

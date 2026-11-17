@@ -77,7 +77,6 @@ function useCurrentFolder() {
   return useFolder(idFrom(currentFolder(pathname))).data
 }
 
-
 // Above the sections, as it isn't one: the documents the person has checked out, with how many
 function CheckedOutEntry() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })

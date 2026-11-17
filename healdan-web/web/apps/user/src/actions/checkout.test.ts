@@ -76,6 +76,11 @@ describe('computerLabel', () => {
     expect(computerLabel(checkout({ heldOn: { name: 'Healdan Helper on MacBook', app: 'Excel' } }))).toEqual({ computer: 'MacBook', app: 'Excel' })
   })
 
+  it('trims what is left, as the helper\'s DeviceNames.Short does', () => {
+    expect(computerLabel(checkout({ heldOn: { name: 'Healdan Helper on  MacBook ', app: 'Excel' } })).computer).toBe('MacBook')
+    expect(computerLabel(checkout({ heldOn: { name: ' e2e 1234 ', app: null } })).computer).toBe('e2e 1234')
+  })
+
   it('keeps another token name whole', () => {
     expect(computerLabel(checkout({ heldOn: { name: 'e2e 1234', app: null } }))).toEqual({ computer: 'e2e 1234', app: null })
   })

@@ -43,11 +43,9 @@ export function ReleaseProvider({ children }: { children: ReactNode }) {
   const api = useApi()
   const queryClient = useQueryClient()
   const me = useMe()
-  const [asking, setAsking] = useState<DocumentView[] | undefined>()
+  const [asking, setAsking] = useState<ReleaseTarget[] | undefined>()
   const [showDevices, setShowDevices] = useState(false)
   const [refused, setRefused] = useState<Pick<RefusalsProps, 'title' | 'lines'> | undefined>()
-
-  const onComputer = (document: DocumentView) => holdState(document.hold, me.data?.id).kind === 'yourDevice'
 
   // Its variables are the documents it releases, which every control that offers a change to one of them watches
   // (useHoldsBusy)
@@ -69,15 +67,13 @@ export function ReleaseProvider({ children }: { children: ReactNode }) {
     },
   })
 
-  function releaseNow(documents: DocumentView[]) {
-    mutation.mutate(documents.map((one) => ({ docNumber: one.docNumber, name: one.name, elsewhere: onComputer(one) })))
-  }
-
   const value: Releasing = {
     askRelease: (documents) => {
       if (documents.length === 0) return
-      if (documents.some(onComputer)) setAsking(documents)
-      else releaseNow(documents)
+      // Decided once, here: the warning lists what this says another computer holds, and only that is sent with elsewhere
+      const targets = documents.map((document): ReleaseTarget => ({ ...document, elsewhere: holdState(document.hold, me.data?.id).kind === 'yourDevice' }))
+      if (targets.some((one) => one.elsewhere)) setAsking(targets)
+      else mutation.mutate(targets)
     },
   }
 
@@ -89,9 +85,9 @@ export function ReleaseProvider({ children }: { children: ReactNode }) {
           documents={asking}
           onCancel={() => setAsking(undefined)}
           onConfirm={() => {
-            const documents = asking
+            const targets = asking
             setAsking(undefined)
-            releaseNow(documents)
+            mutation.mutate(targets)
           }}
           onShowDevices={() => setShowDevices(true)}
         />

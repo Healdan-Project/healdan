@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useId, type ReactNode } from 'react'
-import type { components } from '@healdan/api'
 import { Button, Dialog, formatDateTime, Icon, plural, t } from '@healdan/ui'
 import { fileIcon } from '../kindIcons'
-import { computerLabel } from './checkout'
+import { computerLabel, type ReleaseTarget } from './checkout'
 import styles from './actions.module.css'
 
-type DocumentView = components['schemas']['DocumentView']
-
 export interface ConfirmReleaseProps {
-  /** The person's own check-outs, in the selection's order: those their other computers hold, and any the web page holds */
-  documents: DocumentView[]
+  /**
+   * The person's own check-outs, in the selection's order, each with ReleaseProvider's decision: those another of their
+   * computers holds (`elsewhere`), which are listed, and any the web page holds, which aren't
+   */
+  documents: ReleaseTarget[]
   onConfirm: () => void
   onCancel: () => void
   /** Signed-in Devices, from the sentence on a lost or stolen computer */
@@ -22,31 +22,30 @@ export interface ConfirmReleaseProps {
 interface Computer {
   /** Its short name, "MacBook" (computerLabel) */
   name: string
-  documents: DocumentView[]
+  documents: ReleaseTarget[]
 }
 
-/**
- * The documents each computer holds, by computer in the selection's order. They're all the person's own, so one with a
- * device is held on a computer (holdState's `yourDevice`); the web page's are left out.
- */
-function byComputer(documents: readonly DocumentView[]): Computer[] {
+/** The documents another computer holds, by computer in the selection's order; the web page's are left out */
+function byComputer(documents: readonly ReleaseTarget[]): Computer[] {
   const computers = new Map<string | null, Computer>()
   for (const document of documents) {
-    const hold = document.hold
-    if (!hold?.device) continue
-    const key = hold.heldOn?.name ?? null
-    const computer = computers.get(key) ?? { name: computerLabel(hold).computer, documents: [] }
+    if (!document.elsewhere) continue
+    const key = document.hold?.heldOn?.name ?? null
+    const computer = computers.get(key) ?? { name: computerLabel(document.hold).computer, documents: [] }
     computer.documents.push(document)
     computers.set(key, computer)
   }
   return [...computers.values()]
 }
 
-/** Each document: its icon, name and doc #, the app that holds it, and when it was last saved to Healdan */
-function DocumentRows({ documents, labelledBy }: { documents: DocumentView[]; labelledBy?: string }) {
+/**
+ * A computer's documents: each one's icon, name and doc #, the app that holds it, and when it was last saved to Healdan.
+ * A long list scrolls, so the list takes the focus, by which the keyboard scrolls it, and is named for it.
+ */
+function DocumentRows({ computer }: { computer: Computer }) {
   return (
-    <ul className={styles.releaseList} aria-labelledby={labelledBy}>
-      {documents.map((document) => (
+    <ul className={styles.releaseList} tabIndex={0} aria-label={t('release.documentsOn', { computer: computer.name })}>
+      {computer.documents.map((document) => (
         <li key={document.docNumber} className={styles.releaseRow}>
           <Icon {...fileIcon(document.name)} />
           <span className={styles.releaseName}>{document.name}</span>
@@ -77,11 +76,12 @@ function withButton(sentence: string, button: ReactNode): ReactNode {
 
 /**
  * The warning before releasing check-outs that another of the person's computers holds (spec 5.4): what is released, by
- * computer, and that changes there which haven't reached Healdan are lost. Cancel has the focus, so Enter releases nothing,
- * and Esc is Cancel; the red button names what it does and counts every document, the web page's too, which aren't listed.
+ * computer, and that changes there which haven't reached Healdan are lost, which a screen reader reads as it opens.
+ * The red button comes first, as in the app's other dialogs; it names what it does and counts every document, the web
+ * page's too, which aren't listed. Cancel, after it, has the focus, so Enter releases nothing, and Esc is Cancel.
  */
 export function ConfirmRelease({ documents, onConfirm, onCancel, onShowDevices }: ConfirmReleaseProps) {
-  const ids = useId()
+  const lossId = useId()
   const computers = byComputer(documents)
   // One computer is named throughout; two or more are "those computers", with a list for each
   const only = computers.length === 1 ? computers[0] : undefined
@@ -102,6 +102,7 @@ export function ConfirmRelease({ documents, onConfirm, onCancel, onShowDevices }
       size="wide"
       title={title}
       icon={<Icon name="alertTriangle" size={24} className={styles.warningSign} />}
+      aria-describedby={lossId}
       isOpen
       onOpenChange={(open) => !open && onCancel()}
     >
@@ -110,19 +111,17 @@ export function ConfirmRelease({ documents, onConfirm, onCancel, onShowDevices }
           {only ? (
             <>
               <p className={styles.releaseText}>{plural('releaseHeldOn', only.documents.length, { computer: only.name })}</p>
-              <DocumentRows documents={only.documents} />
+              <DocumentRows computer={only} />
             </>
           ) : (
             computers.map((computer, i) => (
               <div key={i}>
-                <h3 id={`${ids}-${i}`} className={styles.releaseComputer}>
-                  {t('release.on', { computer: computer.name })}
-                </h3>
-                <DocumentRows documents={computer.documents} labelledBy={`${ids}-${i}`} />
+                <h3 className={styles.releaseComputer}>{t('release.on', { computer: computer.name })}</h3>
+                <DocumentRows computer={computer} />
               </div>
             ))
           )}
-          <div className={styles.releaseLoss}>
+          <div id={lossId} className={styles.releaseLoss}>
             <p>
               <strong>{only ? t('release.lostOne', { computer: only.name }) : t('release.lostMany')}</strong>
             </p>
@@ -133,9 +132,6 @@ export function ConfirmRelease({ documents, onConfirm, onCancel, onShowDevices }
             {withButton(only ? t('release.stolenOne', { computer: only.name, devices: MARK }) : t('release.stolenMany', { devices: MARK }), devices)}
           </p>
           <div className={styles.releaseActions}>
-            <Button autoFocus onPress={close}>
-              {t('common.cancel')}
-            </Button>
             <Button
               variant="danger"
               onPress={() => {
@@ -144,6 +140,9 @@ export function ConfirmRelease({ documents, onConfirm, onCancel, onShowDevices }
               }}
             >
               {plural('releaseConfirm', documents.length)}
+            </Button>
+            <Button autoFocus onPress={close}>
+              {t('common.cancel')}
             </Button>
           </div>
         </>

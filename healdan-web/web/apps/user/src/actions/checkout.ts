@@ -76,8 +76,8 @@ const HELPER_PREFIX = 'Healdan Helper on '
 export function computerLabel(hold: S['HoldView'] | null): { computer: string; app: string | null } {
   if (!hold?.heldOn) return { computer: t('checkedOut.webPage'), app: null }
   const { name, app } = hold.heldOn
-  const short = name?.startsWith(HELPER_PREFIX) ? name.slice(HELPER_PREFIX.length) : name
-  return { computer: short?.trim() ? short : t('checkedOut.unknownComputer'), app }
+  const short = (name?.startsWith(HELPER_PREFIX) ? name.slice(HELPER_PREFIX.length) : name)?.trim()
+  return { computer: short ? short : t('checkedOut.unknownComputer'), app }
 }
 
 export function checkOut(api: Api, docNumber: number): Promise<S['DocumentView']> {
@@ -98,12 +98,12 @@ export const holdKey = (docNumber: number | undefined) => ['hold', docNumber] as
 /** What marks a release of several documents while it runs (ReleaseProvider), whose variables are its ReleaseTargets */
 export const RELEASE_KEY = ['hold', 'release'] as const
 
-/** One document of a release: its doc #, its name for what is said of it, and whether another of the person's computers holds it */
-export interface ReleaseTarget {
-  docNumber: number
-  name: string
-  elsewhere: boolean
-}
+/**
+ * A document of a release, with whether another of the person's computers holds it. ReleaseProvider decides that once,
+ * when Release is pressed, and the decision is the one rule for both what the warning lists and what is sent with
+ * `elsewhere`.
+ */
+export type ReleaseTarget = S['DocumentView'] & { elsewhere: boolean }
 
 export interface SaveOptions {
   /** `snapshot` for an ordinary save (2.1 becomes 2.2), `version` for the next major number (2.2 becomes 3.0) */

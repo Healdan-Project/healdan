@@ -374,6 +374,8 @@ public class CheckoutResource {
 	 *
 	 * @param held the document, as read with its hold
 	 * @param session the caller's session
+	 * @param comment the history row's comment, which names the computer that
+	 *        held a check-out released from elsewhere; null for none
 	 * @throws PersistenceException CE's refusal, or its last failure; also
 	 *         when the hold is still there after the last try
 	 */

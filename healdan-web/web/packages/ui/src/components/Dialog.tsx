@@ -14,17 +14,19 @@ export interface DialogProps {
   role?: 'dialog' | 'alertdialog'
   /** Drawn before the title, as an alert's warning sign; decoration, so it isn't part of the dialog's name */
   icon?: ReactNode
+  /** The id of what a screen reader reads after the title as the dialog opens, as an alert's warning */
+  'aria-describedby'?: string
   onOpenChange: (isOpen: boolean) => void
   /** The dialog's buttons, given a function that closes it. */
   children: ReactNode | ((close: () => void) => ReactNode)
 }
 
 // A modal dialog: focus stays inside it, Esc closes it, and focus goes back to where it came from.
-export function Dialog({ title, isOpen, onOpenChange, size = 'default', role = 'dialog', icon, children }: DialogProps) {
+export function Dialog({ title, isOpen, onOpenChange, size = 'default', role = 'dialog', icon, 'aria-describedby': describedBy, children }: DialogProps) {
   return (
     <ModalOverlay className={styles.overlay} isOpen={isOpen} onOpenChange={onOpenChange} isDismissable>
       <Modal className={size === 'wide' ? `${styles.modal} ${styles.wide}` : styles.modal}>
-        <AriaDialog role={role} className={styles.dialog}>
+        <AriaDialog role={role} aria-describedby={describedBy} className={styles.dialog}>
           {({ close }) => (
             <>
               <Heading slot="title" className={icon ? `${styles.title} ${styles.withIcon}` : styles.title}>

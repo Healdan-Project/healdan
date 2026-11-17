@@ -24,6 +24,11 @@ export interface DocumentAction {
   /** The toolbar's button shows it */
   icon?: IconName
   isDisabled: boolean
+  /**
+   * A change it makes is under way: a toolbar's button is pending, so it keeps the focus while it takes no press, and a
+   * menu's item, which has no pending state, is disabled
+   */
+  isPending?: boolean
   perform: () => void
 }
 
@@ -67,7 +72,7 @@ export interface DocumentActionsOf {
  * What can be done with the selected documents (spec 6.1, 6.7): the one source of the toolbar's buttons, its More (⋯) and
  * a row's right-click menu, so their labels, the rules that disable them and what they do never differ. Actions on one
  * document are disabled with none or several; Release, Move To… and Delete take any number. While a check-out or a
- * release runs, whichever control started it, each control that offers one is disabled. Favorites and Open in New Tab
+ * release runs, whichever control started it, each control that offers one is pending. Favorites and Open in New Tab
  * are only in the menus, which make them with favoriteAction and newTabAction, so a toolbar doesn't watch My Favorites
  * for an action it never shows.
  */
@@ -89,11 +94,13 @@ export function useDocumentActions({ document, documents, preview = document?.do
     open: { id: 'open', label: t('details.open'), icon: 'external', isDisabled: !may, perform: () => document && app.open(document) },
     preview: { id: 'preview', label: t('preview.button'), icon: 'eye', isDisabled: preview === undefined, perform: () => preview !== undefined && quickLook.open(preview) },
     download: { id: 'download', label: t('details.download'), icon: 'download', isDisabled: !may, perform: () => document && app.download(document) },
+    // Check Out and Release share the toolbar's button, which turns from one to the other while it's pending
     checkOut: {
       id: 'checkOut',
       label: t('checkout.checkOut'),
       icon: 'pencil',
-      isDisabled: !document || checkout.busy || checkout.state.kind !== 'free' || !document.canEdit,
+      isDisabled: !document || checkout.state.kind !== 'free' || !document.canEdit,
+      isPending: checkout.busy,
       perform: () => void checkout.checkOut(),
     },
     checkIn:
@@ -111,7 +118,8 @@ export function useDocumentActions({ document, documents, preview = document?.do
           id: 'release',
           label: holds.includes('yourDevice') ? t('checkout.releaseAsk') : t('checkout.release'),
           icon: 'lockOpen',
-          isDisabled: releaseBusy,
+          isDisabled: false,
+          isPending: releaseBusy,
           perform: () => releasing.askRelease(documents),
         }
       : undefined,

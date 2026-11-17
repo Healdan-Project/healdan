@@ -55,6 +55,7 @@
   font-weight: var(--hd-weight-bold);
 }
 
+/* It takes the focus, by which the keyboard scrolls it when it's long */
 .releaseList {
   max-height: 30dvh;
   margin: 0 0 var(--hd-space-4);
@@ -63,6 +64,11 @@
   border: 1px solid var(--hd-line);
   border-radius: var(--hd-radius);
   list-style: none;
+}
+
+.releaseList:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
 }
 
 /* A document: its icon and name, then its doc #, app and last save, which go under the name in a narrow window. A name

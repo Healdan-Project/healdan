@@ -51,6 +51,20 @@ describe('Dialog', () => {
     expect(screen.getByRole('alertdialog', { name: 'Release Check-Out' })).toBeTruthy()
   })
 
+  it('is described by what it names, as an alert says what it warns of', () => {
+    render(
+      <Dialog title="Release Check-Out" isOpen role="alertdialog" aria-describedby="what" onOpenChange={() => {}}>
+        {() => (
+          <>
+            <p id="what">Unsaved changes are lost.</p>
+            <Button>OK</Button>
+          </>
+        )}
+      </Dialog>,
+    )
+    expect(screen.getByRole('alertdialog', { name: 'Release Check-Out', description: 'Unsaved changes are lost.' })).toBeTruthy()
+  })
+
   it('opens with the keyboard, names itself and moves focus inside', async () => {
     render(<Example />)
     open()

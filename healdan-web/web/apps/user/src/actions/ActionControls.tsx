@@ -4,16 +4,22 @@
 import { Button, Icon, MenuItem } from '@healdan/ui'
 import type { DocumentAction, LinkAction } from './useDocumentActions'
 
-/** A toolbar's button for an action: its icon and label, disabled by the action's own rule */
+/**
+ * A toolbar's button for an action: its icon and label, disabled by the action's own rule, and pending while it runs, so
+ * the focus stays on it (a disabled button loses the focus in Chromium)
+ */
 export function ActionButton({ action }: { action: DocumentAction }) {
   return (
-    <Button isDisabled={action.isDisabled} onPress={action.perform}>
+    <Button isDisabled={action.isDisabled} isPending={action.isPending} onPress={action.perform}>
       {action.icon && <Icon name={action.icon} size={14} />} {action.label}
     </Button>
   )
 }
 
-/** A menu's item for an action, More's and a right-click menu's alike; a link opens in a new tab. Nothing for none. */
+/**
+ * A menu's item for an action, More's and a right-click menu's alike, disabled while the action runs; a link opens in a
+ * new tab. Nothing for none.
+ */
 export function ActionItem({ action }: { action: DocumentAction | LinkAction | undefined }) {
   if (!action) return null
   if ('href' in action) {
@@ -24,7 +30,7 @@ export function ActionItem({ action }: { action: DocumentAction | LinkAction | u
     )
   }
   return (
-    <MenuItem id={action.id} isDisabled={action.isDisabled} onAction={action.perform}>
+    <MenuItem id={action.id} isDisabled={action.isDisabled || action.isPending === true} onAction={action.perform}>
       {action.label}
     </MenuItem>
   )

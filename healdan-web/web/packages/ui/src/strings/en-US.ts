@@ -138,6 +138,8 @@ export const enUS = {
   'release.titleOne': 'Release {name} from {computer}?',
   'release.otherComputers': 'Other Computers',
   'release.on': 'On {computer}',
+  // The name of a computer's list, which scrolls when it's long and so takes the focus
+  'release.documentsOn': 'Documents on {computer}',
   'release.saved': 'Saved {when}',
   'release.lostOne': "Changes on {computer} that haven't reached Healdan will be lost.",
   'release.lostMany': "Changes on those computers that haven't reached Healdan will be lost.",
