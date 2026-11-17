@@ -859,7 +859,8 @@ Release builds have none of the variables. For links, notifications and the exte
   the test's certificate, and send what a web page, another program or another Healdan's page would.
   `PairingTests` and `AddinHandlerTests` cover pairing and the routes, and `PendingResultsTests` a route that answers
   `202` and is collected through `result`. Those run with a hold time of milliseconds, and a slow route waits on a gate
-  the test opens rather than for a fixed time. `MailStatusTests` and `SuggestionsTests` cover Outlook's `mail/status`,
+  the test opens rather than for a fixed time. `PairingTests` stop a `PausableClock`, whose time of day stops with it
+  (read once, as it stops), so the time a key was paired equals the test's own reading to the tick. `MailStatusTests` and `SuggestionsTests` cover Outlook's `mail/status`,
   and `MailFileTests` its `mail/file`, against `FakeApi`, which also answers `GET /emails`, `GET /folders`, a folder's
   form, `POST /emails/inspect` and `POST /emails`; `SaveEmailWindowTests` drive the Save window's email mode headless.
 - **`ContractTests`** fail when the client calls a route `openapi.yaml` doesn't have, or a record (`[Schema]`) reads
