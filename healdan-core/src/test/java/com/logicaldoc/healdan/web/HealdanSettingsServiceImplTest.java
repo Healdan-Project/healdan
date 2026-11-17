@@ -355,6 +355,32 @@ public class HealdanSettingsServiceImplTest extends AbstractHealdanTestCase {
 		assertApiRefused(30, 365, "https://ok.test, ftp://a.test", origin("ftp://a.test"));
 	}
 
+	@Test
+	public void testSavesRemovedItemsKept() throws Exception {
+		GUIHealdanSettings settings = as(boss).load();
+		assertEquals(30, settings.getTrashRemovedDays());
+
+		settings.setTrashRemovedDays(60);
+		GUIHealdanSettings saved = as(boss).save(settings);
+
+		assertEquals(60, saved.getTrashRemovedDays());
+		assertEquals(60, as(boss).load().getTrashRemovedDays());
+		assertEquals(60, HealdanSettings.get().trashRemovedDays());
+	}
+
+	@Test
+	public void testRefusesRemovedItemsKeptOutsideOneTo365() throws Exception {
+		for (int days : new int[] { 0, 366, -1 }) {
+			GUIHealdanSettings settings = as(boss).load();
+			settings.setTrashRemovedDays(days);
+
+			ServerException e = assertThrows(ServerException.class, () -> as(boss).save(settings));
+
+			assertEquals("Removed items must be kept for between 1 and 365 days.", e.getMessage());
+			assertEquals(30, HealdanSettings.get().trashRemovedDays());
+		}
+	}
+
 	private static String origin(String value) {
 		return "'%s' isn't an origin. Write it as https://host or https://host:port, with no path.".formatted(value);
 	}
