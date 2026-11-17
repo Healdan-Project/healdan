@@ -232,3 +232,26 @@ permission row that granted nothing:`, then says how many, in a line beginning `
 nothing, removed:`. A person's own group is named `_user_` and the person's user id. Who can open each document
 doesn't change. A document those rows hid shows in the Classic Interface's folder list and in searches to the people
 who could already open it. If one of them should be kept from someone, move it to a folder they can't read.
+
+## What Was Already in the Trash
+
+The upgrade that brings the Trash's three places (In the Trash, Removed and destroyed) makes an item of everything
+already deleted, once, on its first start, so that the Trash, restores and removal all see it. It reads the
+Classic Interface's two deleted states, which Healdan's Trash view and the nightly job didn't know before:
+
+- **What is in LogicalDOC's Trash becomes In the Trash.** Each folder deleted from a live folder, with what it held,
+  is one item, and so is each document deleted from a live folder. Each item shows the person LogicalDOC recorded as
+  deleting it and the time it last changed as the time it was deleted.
+- **What was already removed counts as removed on the upgrade's first start.** An administrator sees those items in
+  **Removed** at once, and can restore any of them. The nightly job destroys what is left once **Removed Items
+  Kept** days have passed, 30 by default (see [Healdan Settings](../../admin/healdan-settings/)). So everything
+  removed before the upgrade is destroyed that many days after it, unless an administrator restores it first.
+  Nobody is shown as having removed those items, as LogicalDOC didn't record who did.
+- **Rows LogicalDOC left in the Trash under a folder that was removed** go to Removed with that folder.
+
+To give yourself longer, raise **Removed Items Kept** (1 to 365 days) on the **Healdan Settings** page before the
+upgrade's first night. The setting arrives with the upgrade, so open it as soon as the new version has started, before
+2:47 in the morning, when the job first runs. Take a [backup](../backup-and-restore/) first, as destroying is for
+good.
+
+The start's log says how many items it made, in a line beginning `Trash items made for what was already deleted:`.

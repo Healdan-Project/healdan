@@ -269,7 +269,7 @@ public class TrashRecorder {
 	 * @return the names from its Store down to it, as the API's paths run;
 	 *         none outside the Stores
 	 */
-	private static List<String> path(Folder from) throws PersistenceException {
+	static List<String> path(Folder from) throws PersistenceException {
 		if (from == null || !MatterLocator.get().locate(from).isUnderAStore())
 			return List.of();
 		List<Folder> chain = new ArrayList<>(FolderDAO.get().findParents(from.getId()));
@@ -282,7 +282,7 @@ public class TrashRecorder {
 	 * @return the matter the folder is, or is in: a folder directly in a Store
 	 *         is a matter's own
 	 */
-	private static Long matterOf(long folderId, Folder parent) throws PersistenceException {
+	static Long matterOf(long folderId, Folder parent) throws PersistenceException {
 		FolderPosition above = MatterLocator.get().locate(parent);
 		Matter matter = above.kind() == FolderPosition.Kind.STORE ? MatterDAO.get().findByFolderId(folderId)
 				: above.matter();
@@ -293,7 +293,13 @@ public class TrashRecorder {
 	 * @return the document's doc #, its custom id when that is a number
 	 */
 	private static String docNumber(Document document) {
-		String customId = document.getCustomId();
+		return docNumber(document.getCustomId());
+	}
+
+	/**
+	 * @return the doc # a custom id is, when it is a number
+	 */
+	static String docNumber(String customId) {
 		boolean numbered = customId != null && !customId.isEmpty() && customId.length() <= 18
 				&& customId.chars().allMatch(c -> c >= '0' && c <= '9');
 		return numbered ? customId : null;
