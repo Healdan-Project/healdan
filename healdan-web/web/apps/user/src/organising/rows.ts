@@ -30,6 +30,11 @@ export function readRows(text: string): Movable[] {
   }
 }
 
+/** Whether a list draws the row with this key now (`d10388` for a document) */
+export function rowDrawn(key: string): boolean {
+  return globalThis.document.querySelector(`[role="grid"] [data-row-key="${key}"]`) !== null
+}
+
 /** The key of the row that follows the documents' rows in the list drawn now, else the one before them, else none */
 export function rowAfter(docNumbers: readonly number[]): string | undefined {
   const gone = new Set(docNumbers.map((n) => `d${n}`))
@@ -46,9 +51,8 @@ export function rowAfter(docNumbers: readonly number[]): string | undefined {
  */
 export function focusLater(key: string | undefined, gone: readonly string[] = []) {
   let tries = 0
-  const drawn = (row: string) => globalThis.document.querySelector(`[role="grid"] [data-row-key="${row}"]`) !== null
   const attempt = () => {
-    const target = gone.some(drawn)
+    const target = gone.some(rowDrawn)
       ? null
       : ((key ? globalThis.document.querySelector<HTMLElement>(`[data-row-key="${key}"]`) : null) ?? (key ? null : globalThis.document.querySelector<HTMLElement>('[role="grid"]')))
     if (target) target.focus()

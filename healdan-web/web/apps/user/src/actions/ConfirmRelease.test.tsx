@@ -19,14 +19,17 @@ const onComputer = (name: string | null, app: string) => ({
   heldOn: { name, app },
 })
 const macBook = (app: string) => onComputer('Healdan Helper on MacBook', app)
-/** A document as ReleaseProvider hands it over: with its decision, which is ReleaseProvider's to make (Release.test.tsx) */
-const target = (over: Parameters<typeof document>[0], elsewhere = true): ReleaseTarget => ({ ...document(over), elsewhere })
+/**
+ * A document as ReleaseProvider hands it over: with its decision, the device that holds it, which is ReleaseProvider's to
+ * make (Release.test.tsx)
+ */
+const target = (over: Parameters<typeof document>[0], elsewhere: string | undefined = over?.hold?.device?.id): ReleaseTarget => ({ ...document(over), elsewhere })
 
 const laytime = target({ docNumber: 10405, name: 'Laytime Calculation – MV Northern Star.xlsx', lastModified: '2026-11-16T17:05:00Z', hold: macBook('Excel') })
 const report = target({ docNumber: 10447, name: 'Report on Lease – Unit 4.odt', lastModified: '2026-11-14T11:30:00Z', hold: macBook('LibreOffice') })
 const grant = target({ docNumber: 10414, name: 'Grant Agreement – Draft.docx', lastModified: '2026-11-12T15:48:00Z', hold: macBook('Word') })
 const letter = target({ docNumber: 10431, name: 'Letter to Dunmere Pryce – Response to Claim.docx', hold: onComputer('Healdan Helper on iMac', 'Word') })
-const capTable = target({ docNumber: 10420, name: 'Cap Table – Series A.xlsx', hold: { kind: 'checkout', by: priya, since: '2026-11-10T09:00:00Z', device: null, heldOn: null } }, false)
+const capTable = target({ docNumber: 10420, name: 'Cap Table – Series A.xlsx', hold: { kind: 'checkout', by: priya, since: '2026-11-10T09:00:00Z', device: null, heldOn: null } }, undefined)
 
 function show(documents: ReleaseTarget[], over: Partial<Parameters<typeof ConfirmRelease>[0]> = {}) {
   const props = { documents, onConfirm: vi.fn(), onCancel: vi.fn(), onShowDevices: vi.fn(), ...over }
@@ -77,9 +80,9 @@ describe('ConfirmRelease', () => {
     expect(within(dialog).getByRole('button', { name: 'Release Document' })).toBeTruthy()
   })
 
-  it('groups by computer and counts every document', async () => {
+  it("groups by computer; the title counts what's listed, the button every document", async () => {
     show([letter, laytime, capTable, report])
-    const dialog = await screen.findByRole('alertdialog', { name: 'Release 4 Documents from Other Computers?' })
+    const dialog = await screen.findByRole('alertdialog', { name: 'Release 3 Documents from Other Computers?' })
     // In the selection's order
     expect(within(dialog).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['On iMac', 'On MacBook'])
     const names = (computer: string) => within(within(dialog).getByRole('list', { name: computer })).getAllByRole('listitem').map((item) => within(item).getByText(/\.(docx|xlsx|odt)$/).textContent)
@@ -99,8 +102,8 @@ describe('ConfirmRelease', () => {
   it('keeps two computers of one name apart', async () => {
     // A new MacBook restored from the stolen one's backup keeps its name, but it's another device
     const onDevice = (id: string, app: string) => ({ ...macBook(app), device: { id, name: 'Healdan Helper on MacBook', app } })
-    const stolenMac = { ...laytime, hold: onDevice('mac-old', 'Excel') }
-    const newMac = { ...report, hold: onDevice('mac-new', 'LibreOffice') }
+    const stolenMac = { ...laytime, hold: onDevice('mac-old', 'Excel'), elsewhere: 'mac-old' }
+    const newMac = { ...report, hold: onDevice('mac-new', 'LibreOffice'), elsewhere: 'mac-new' }
     show([stolenMac, newMac])
     const dialog = await screen.findByRole('alertdialog', { name: 'Release 2 Documents from Other Computers?' })
     expect(within(dialog).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['On MacBook', 'On MacBook'])
@@ -123,8 +126,10 @@ describe('ConfirmRelease', () => {
 
   it("lists what it's told another computer holds, and nothing else", async () => {
     // The decision is ReleaseProvider's alone: a document it sends without elsewhere isn't listed, whatever its hold says
-    show([laytime, { ...report, elsewhere: false }])
-    const dialog = await screen.findByRole('alertdialog', { name: 'Release 2 Documents from MacBook?' })
+    show([laytime, { ...report, elsewhere: undefined }])
+    // Named for what MacBook holds; the button counts both
+    const dialog = await screen.findByRole('alertdialog', { name: 'Release Laytime Calculation – MV Northern Star.xlsx from MacBook?' })
+    expect(within(dialog).getByRole('button', { name: 'Release 2 Documents' })).toBeTruthy()
     expect(within(dialog).getByText(laytime.name)).toBeTruthy()
     expect(within(dialog).queryByText(report.name)).toBeNull()
     expect(within(dialog).getByText("It's checked out to you on MacBook:")).toBeTruthy()

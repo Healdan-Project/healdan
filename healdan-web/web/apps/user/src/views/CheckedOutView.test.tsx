@@ -5,6 +5,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { formatDate } from '@healdan/ui'
+import { comeBack, settle } from '../test/comeBack'
 import { detailsRoutes } from '../test/details'
 import { document, page } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
@@ -31,6 +32,24 @@ const inBrowser = document({
 const two = { 'GET /v1/me/checkouts': page([onMac, inBrowser]) }
 
 describe('Checked Out to Me', () => {
+  // The list stands in for push updates, as the other lists that show a hold do; the left pane's count, on every page,
+  // waits out its 30 seconds, as each read of the list reads every check-out on the server
+  it('asks again at every return to the window, but the left pane alone waits out its 30 seconds', async () => {
+    const { api } = await renderApp('/folders/1', two)
+    const entry = await within(screen.getByRole('navigation', { name: 'Navigation' })).findByRole('link', { name: 'Checked Out to Me, 2 documents' })
+    const asked = () => api.callsTo('GET /v1/me/checkouts').length
+    const before = asked()
+    comeBack()
+    await settle()
+    expect(asked()).toBe(before)
+
+    await userEvent.click(entry)
+    expect(await rows()).toHaveLength(2)
+    const shown = asked()
+    comeBack()
+    await waitFor(() => expect(asked()).toBe(shown + 1))
+  })
+
   it("lists your check-outs in the server's order", async () => {
     await renderApp('/checked-out', two)
     expect(await within(main()).findByRole('heading', { level: 1, name: 'Checked Out to Me' })).toBeTruthy()

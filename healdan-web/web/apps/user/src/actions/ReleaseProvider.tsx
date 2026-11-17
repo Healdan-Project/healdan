@@ -7,7 +7,7 @@ import type { components } from '@healdan/api'
 import { plural, t, toast } from '@healdan/ui'
 import { SignedInDevices } from '../devices/SignedInDevices'
 import { Refusals, type RefusalsProps } from '../organising/Refusals'
-import { focusLater, rowAfter } from '../organising/rows'
+import { focusLater, rowAfter, rowDrawn } from '../organising/rows'
 import { keys, useMe } from '../queries'
 import { useApi } from '../services'
 import { eachDocument, refusalLines } from './batch'
@@ -52,26 +52,35 @@ export function ReleaseProvider({ children }: { children: ReactNode }) {
   const mutation = useMutation({
     mutationKey: RELEASE_KEY,
     mutationFn: async (targets: readonly ReleaseTarget[]) => {
-      // Where the focus goes if the rows leave the list, as they do from Checked Out to Me: the dialog that had it is gone
+      // Where the focus goes if the rows leave the list, as they do from Checked Out to Me: the dialog that had it is gone.
+      // Only from a list that draws them: a release from Check-Out Info whose row isn't drawn leaves the focus alone.
+      const rows = targets.map((one) => `d${one.docNumber}`)
+      const fromList = rows.some(rowDrawn)
       const next = rowAfter(targets.map((one) => one.docNumber))
       const outcome = await eachDocument(targets, async (one) => {
         const updated = await release(api, one.docNumber, { elsewhere: one.elsewhere })
         queryClient.setQueryData(keys.document(one.docNumber), updated)
       })
-      // Every list that shows a hold, whether it worked or not: a refusal usually means the hold isn't what the page showed
-      await invalidateDocumentLists(queryClient, [])
+      // Every list that shows a hold, whether it worked or not: a refusal usually means the hold isn't what the page showed.
+      // Not waited for, so the controls aren't busy while every open list and tree answers, as after a check-out (useCheckout)
+      const lists = invalidateDocumentLists(queryClient, [])
       if (outcome.done.length > 0) toast(plural('released', outcome.done.length))
       if (outcome.refused.length > 0) setRefused({ title: t('release.refusedTitle'), lines: refusalLines(outcome.refused, me.data?.id) })
-      // Where they left the list, the focus goes to the row after them, as after a delete; where they stay, it stays put
-      if (outcome.done.length > 0) focusLater(next, outcome.done.map((one) => `d${one.docNumber}`))
+      // Where they left the list, the focus goes to the row after them, as after a delete, once the lists have answered;
+      // where they stay, it stays put
+      if (outcome.done.length > 0 && fromList) void lists.then(() => focusLater(next, outcome.done.map((one) => `d${one.docNumber}`)))
     },
   })
 
   const value: Releasing = {
     askRelease: (documents) => {
       if (documents.length === 0) return
-      // Decided once, here: the warning lists what this says another computer holds, and only that is sent with elsewhere
-      const targets = documents.map((document): ReleaseTarget => ({ ...document, elsewhere: holdState(document.hold, me.data?.id).kind === 'yourDevice' }))
+      // Decided once, here: the warning lists what this says another computer holds, under that computer, and only that
+      // is sent with elsewhere, naming the computer, so a check-out that has moved on since stays where it is
+      const targets = documents.map((document): ReleaseTarget => {
+        const state = holdState(document.hold, me.data?.id)
+        return { ...document, elsewhere: state.kind === 'yourDevice' ? state.hold.device?.id : undefined }
+      })
       if (targets.some((one) => one.elsewhere)) setAsking(targets)
       else mutation.mutate(targets)
     },

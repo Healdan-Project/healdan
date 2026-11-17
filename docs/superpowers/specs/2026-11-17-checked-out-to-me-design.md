@@ -96,6 +96,11 @@ such a release unless the request says it was meant (§4).
   aside (call; the builder words it, plainly, in English like CE's other comments).
 - **The contract.** `openapi.yaml` adds the parameter, and the operation's description says what it allows. The
   `held-elsewhere` sentence there gains "unless `elsewhere=true`".
+- **Changed in review** (PR #260): `elsewhere` is the id of the device the warning named (`hold.device.id`), not
+  `true`, and only a check-out held on that device is released. One that moved to another of the person's devices
+  since is `409 held-elsewhere`, and one no device holds, or someone else's, `409 checked-out`, administrators
+  included. And a save with `ifHeld: true` from a device is `409 not-held` when no device holds the check-out, so a
+  device whose check-out was released can't save into a later check-out from the web page.
 
 ## 5. The app
 

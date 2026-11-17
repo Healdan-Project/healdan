@@ -86,10 +86,11 @@ export function checkOut(api: Api, docNumber: number): Promise<S['DocumentView']
 
 /**
  * Ends the person's own check-out. One another of their computers holds is refused (`409 held-elsewhere`) unless
- * `elsewhere` says the person was warned that its unsaved work is lost (spec 4.1).
+ * `elsewhere` is the id of the computer the person was warned would lose its unsaved work (spec 4.1); if the check-out
+ * has moved since, it stays where it is, and the release is refused.
  */
-export function release(api: Api, docNumber: number, options: { elsewhere?: boolean } = {}): Promise<S['DocumentView']> {
-  return api.send('DELETE', apiPath`/v1/documents/${docNumber}/checkout`, undefined, options.elsewhere ? { elsewhere: 'true' } : undefined)
+export function release(api: Api, docNumber: number, options: { elsewhere?: string } = {}): Promise<S['DocumentView']> {
+  return api.send('DELETE', apiPath`/v1/documents/${docNumber}/checkout`, undefined, options.elsewhere ? { elsewhere: options.elsewhere } : undefined)
 }
 
 /** What marks a document's own check-out, check-in or release while it runs (useCheckout), so every control that offers one waits for it */
@@ -99,11 +100,11 @@ export const holdKey = (docNumber: number | undefined) => ['hold', docNumber] as
 export const RELEASE_KEY = ['hold', 'release'] as const
 
 /**
- * A document of a release, with whether another of the person's computers holds it. ReleaseProvider decides that once,
- * when Release is pressed, and the decision is the one rule for both what the warning lists and what is sent with
- * `elsewhere`.
+ * A document of a release, with the id of the other computer of the person's that holds it (`hold.device.id`), or
+ * undefined when the web page holds it. ReleaseProvider decides that once, when Release is pressed, and the decision is
+ * the one rule for what the warning lists, which computer it lists it under, and what is sent as `elsewhere`.
  */
-export type ReleaseTarget = S['DocumentView'] & { elsewhere: boolean }
+export type ReleaseTarget = S['DocumentView'] & { elsewhere: string | undefined }
 
 export interface SaveOptions {
   /** `snapshot` for an ordinary save (2.1 becomes 2.2), `version` for the next major number (2.2 becomes 3.0) */

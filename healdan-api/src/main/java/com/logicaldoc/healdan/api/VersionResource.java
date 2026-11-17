@@ -230,7 +230,7 @@ public class VersionResource {
 		// Never over someone else's hold, administrators included (spec section 6.6), nor the caller's elsewhere
 		CheckoutResource.refuseHolds(document, user, docNumber);
 		CheckoutResource.refuseElsewhere(document, caller, docNumber);
-		refusePreconditions(document, request, user, docNumber);
+		refusePreconditions(document, request, caller, docNumber);
 		CheckoutResource.refuseImmutable(document, user, false, docNumber);
 		CheckoutResource.refuseArchived(document, docNumber);
 
@@ -417,14 +417,23 @@ public class VersionResource {
 	 *
 	 * @throws ApiProblem with {@code ifHeld}, {@code 409 not-held} for a
 	 *         document not checked out to the caller, such as one released or
-	 *         checked in from the web page; then {@code 409 version-moved},
-	 *         with the {@code document} as it is, when its {@code version}
-	 *         isn't {@code ifVersion}
+	 *         checked in from the web page, and, from a device, for one no
+	 *         device holds: its own check-out ended, as when it was released
+	 *         from elsewhere, and the document was checked out again where no
+	 *         device holds it, as from the web page; then {@code 409
+	 *         version-moved}, with the {@code document} as it is, when its
+	 *         {@code version} isn't {@code ifVersion}
 	 */
-	private static void refusePreconditions(Document document, NewVersion request, User user, long docNumber)
+	private static void refusePreconditions(Document document, NewVersion request, Caller caller, long docNumber)
 			throws PersistenceException {
+		User user = caller.user();
 		if (Boolean.TRUE.equals(request.ifHeld()) && !ApiViews.checkedOutBy(document, user))
 			throw ApiProblem.conflict(NOT_HELD, "Document #%d isn't checked out to you.".formatted(docNumber));
+		// The holds came first, so another device doesn't hold it: this one does, or none
+		boolean device = caller.token() != null && caller.token().getDevice() != null;
+		if (Boolean.TRUE.equals(request.ifHeld()) && device && DeviceHolds.get().current(document).isEmpty())
+			throw ApiProblem.conflict(NOT_HELD,
+					"Document #%d isn't checked out to you on this device any more.".formatted(docNumber));
 		if (request.ifVersion() != null && !request.ifVersion().equals(document.getVersion()))
 			throw ApiProblem.conflict(VERSION_MOVED,
 					"Document #%d changed since the version this save started from: it's at version %s now."

@@ -102,8 +102,7 @@ is made:
 - **An answer stays fresh for 30 seconds** (`staleTime`), so moving between views doesn't ask again, and a return asks
   again for what's on screen and older than that (TanStack Query's `refetchOnWindowFocus: true`).
 - **A return asks again for what shows a document's state, however fresh the answer is.** A query that shows it carries
-  `meta: ASK_ON_RETURN`: the document, its properties and versions, Recent and Checked Out to Me (`queries.ts`), and a
-  folder's list (`views/useListing.ts`). The return marks them stale (`invalidateQueries` with `refetchType: 'none'`)
+  `meta: ASK_ON_RETURN`: the document, its properties and versions and Recent (`queries.ts`), and a folder's list (`views/useListing.ts`). The return marks them stale (`invalidateQueries` with `refetchType: 'none'`)
   before it tells TanStack Query, which then asks for them as for any stale answer. A document opened in Excel through
   the helper is checked out a few seconds after the click, and saved to minutes later, so an answer from just before
   would show it free, or at its old version. A new query keeps to the 30 seconds unless it carries the same `meta`.
@@ -133,6 +132,7 @@ What shows a document's state but isn't asked again on every return:
 | A list scrolled past its first page (`askedOnReturn` in `queryClient.ts`) | Not marked stale on a return | A return would ask for every page it has, one after another |
 | Search results and their counts (`search/useSearchResults.ts`) | `refetchOnWindowFocus: false` | Each page and each count runs the whole search on the server; a search is asked again when it's run again |
 | An email's message, a picture and a PDF in Quick Look (`preview/`) | `refetchOnWindowFocus: false`, `staleTime: Infinity` | They're read once for each file version, and a new version has a key of its own |
+| The left pane's Checked Out to Me count (`useCheckouts` in `queries.ts`) | No `ASK_ON_RETURN`; the view itself asks with `refetchOnWindowFocus: 'always'` (`useCheckouts({ live: true })`) | The count is on every page, and the list reads every document checked out to the person, each with its device's hold; it's asked again after the person's own changes, as every list is |
 
 The first two are asked again on a return once their answer is over 30 seconds old, as everything else is. Thumbnails
 aren't queries: each is an `<img>` addressed by its file version. A test comes back to the window with `comeBack()` from
@@ -226,9 +226,13 @@ view.
   Check-Out Info: `useReleasing().askRelease(documents)` decides once, by `holdState`'s `yourDevice`, which of them
   another of the person's computers holds. When any is, it shows `ConfirmRelease` first, an alert dialog that lists
   them by computer (by `hold.device.id`, not the name, so two computers of one name are two lists), with the red
-  button first and Cancel focused; then it releases each in turn (`eachDocument`),
-  sending `elsewhere=true` only for those, and names the refusals in `Refusals`. Its mutation's variables are the
-  documents, which `useHoldsBusy` reads to make every control that offers a change to one of them pending.
+  button first and Cancel focused; then it releases each in turn (`eachDocument`), sending `elsewhere` only for
+  those, with the device id the warning named, so a check-out that has moved since stays where it is, and names the
+  refusals in `Refusals`. The warning's title counts what it lists; its red button, everything it releases. Its
+  mutation's variables are the documents, which `useHoldsBusy` reads to make every control that offers a change to
+  one of them pending. It
+  doesn't wait for the lists to answer, as useCheckout doesn't; the focus moves to the next row once they have, and
+  only when the released rows were drawn.
 - **Editing properties** is `details/PropertiesForm.tsx`, made from `GET /v1/documents/{n}/properties` and saved with
   `PATCH`, sending only the fields that changed. `frame/errors.ts`'s `fieldErrors` gives each field a 422 names its
   message from the catalogue (`fields.<code>`). **Overridden** shows only where the API's `overrides` names the folder a

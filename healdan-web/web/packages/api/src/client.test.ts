@@ -55,8 +55,8 @@ describe('createApi', () => {
 
   it('send carries a query', async () => {
     fetchMock.mockResolvedValue(json({ docNumber: 5 }))
-    await createApi().send('DELETE', '/v1/documents/5/checkout', undefined, { elsewhere: 'true' })
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/documents/5/checkout?elsewhere=true')
+    await createApi().send('DELETE', '/v1/documents/5/checkout', undefined, { elsewhere: 'mac-1' })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/v1/documents/5/checkout?elsewhere=mac-1')
     expect((fetchMock.mock.calls[0]?.[1] as RequestInit).method).toBe('DELETE')
     expect(headersOf(0).get('X-Healdan-Client')).toBe('web')
   })

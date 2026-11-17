@@ -121,13 +121,12 @@ function ComputerCell({ hold }: { hold: S['HoldView'] | null }) {
   )
 }
 
-/** Checked Out to Me: the server's order (latest check-out first), so nothing sorts. */
+/** Checked Out to Me: the server's order (latest check-out first), so nothing sorts, as its list takes no `onSort`. */
 export function checkedOutColumns(): TableColumn<ListRow>[] {
-  const plain = (column: TableColumn<ListRow>): TableColumn<ListRow> => ({ ...column, allowsSorting: false })
   return [
-    plain({ ...title, minWidth: 220 }),
-    plain({ ...docNumber, width: 80 }),
-    plain({ ...version, width: 70 }),
+    { ...title, minWidth: 220 },
+    { ...docNumber, width: 80 },
+    { ...version, width: 70 },
     { ...matterColumn(), width: 130 },
     {
       id: 'computer',
@@ -136,6 +135,6 @@ export function checkedOutColumns(): TableColumn<ListRow>[] {
       cell: ({ item }) => item.type === 'document' && <ComputerCell hold={item.hold} />,
     },
     { id: 'checkedOut', name: t('list.checkedOut'), width: 116, cell: ({ item }) => item.type === 'document' && item.hold?.since ? formatDate(item.hold.since) : null },
-    plain({ ...edited, width: 116 }),
+    { ...edited, width: 116 },
   ]
 }

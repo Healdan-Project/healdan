@@ -27,18 +27,16 @@ interface Computer {
 
 /**
  * The documents another computer holds, by computer in the selection's order; the web page's are left out. A computer is
- * its device, which the holder is always told, not its name: a new Mac restored from a stolen one's backup keeps its
- * name, and two computers are never spoken of as one. Without a device, the name is all there is.
+ * its device (`elsewhere`), not its name: a new Mac restored from a stolen one's backup keeps its name, and two
+ * computers are never spoken of as one.
  */
 function byComputer(documents: readonly ReleaseTarget[]): Computer[] {
   const computers = new Map<string, Computer>()
   for (const document of documents) {
     if (!document.elsewhere) continue
-    const device = document.hold?.device?.id
-    const key = device != null ? `device ${device}` : `name ${document.hold?.heldOn?.name ?? ''}`
-    const computer = computers.get(key) ?? { name: computerLabel(document.hold).computer, documents: [] }
+    const computer = computers.get(document.elsewhere) ?? { name: computerLabel(document.hold).computer, documents: [] }
     computer.documents.push(document)
-    computers.set(key, computer)
+    computers.set(document.elsewhere, computer)
   }
   return [...computers.values()]
 }
@@ -82,8 +80,9 @@ function withButton(sentence: string, button: ReactNode): ReactNode {
 /**
  * The warning before releasing check-outs that another of the person's computers holds (spec 5.4): what is released, by
  * computer, and that changes there which haven't reached Healdan are lost, which a screen reader reads as it opens.
- * The red button comes first, as in the app's other dialogs; it names what it does and counts every document, the web
- * page's too, which aren't listed. Cancel, after it, has the focus, so Enter releases nothing, and Esc is Cancel.
+ * The title counts what the computers hold, which is listed. The red button comes first, as in the app's other dialogs;
+ * it names what it does and counts every document, the web page's too, which aren't listed. Cancel, after it, has the
+ * focus, so Enter releases nothing, and Esc is Cancel.
  */
 export function ConfirmRelease({ documents, onConfirm, onCancel, onShowDevices }: ConfirmReleaseProps) {
   const lossId = useId()
@@ -92,9 +91,9 @@ export function ConfirmRelease({ documents, onConfirm, onCancel, onShowDevices }
   const only = computers.length === 1 ? computers[0] : undefined
   const listed = computers.reduce((count, computer) => count + computer.documents.length, 0)
   const title =
-    only && documents.length === 1
-      ? t('release.titleOne', { name: documents[0]!.name, computer: only.name })
-      : plural('releaseTitle', documents.length, { computer: only?.name ?? t('release.otherComputers') })
+    only && listed === 1
+      ? t('release.titleOne', { name: only.documents[0]!.name, computer: only.name })
+      : plural('releaseTitle', listed, { computer: only?.name ?? t('release.otherComputers') })
   const devices = (
     <button type="button" className={styles.link} onClick={onShowDevices}>
       {t('release.devices')}

@@ -418,7 +418,7 @@ export const enUSPlurals = {
   moved: { one: 'Moved {n} document to {folder}', other: 'Moved {n} documents to {folder}' },
   deleteTitle: { one: 'Move {n} document to the Trash?', other: 'Move {n} documents to the Trash?' },
   deleted: { one: 'Moved {n} document to the Trash', other: 'Moved {n} documents to the Trash' },
-  // The warning before a release: the title and the button count every document released, the rest those on the computer
+  // The warning before a release: the button counts every document released, the title and the rest those on the computers
   releaseTitle: { one: 'Release {n} Document from {computer}?', other: 'Release {n} Documents from {computer}?' },
   releaseHeldOn: { one: "It's checked out to you on {computer}:", other: "They're checked out to you on {computer}:" },
   releaseNoMore: {

@@ -38,7 +38,6 @@ import com.logicaldoc.healdan.util.BasicPlane;
 
 import jakarta.persistence.OptimisticLockException;
 import jakarta.ws.rs.DELETE;
-import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -156,16 +155,20 @@ public class CheckoutResource {
 	 * answered as it is.
 	 *
 	 * @param docNumber the doc #
-	 * @param elsewhere true to release a check-out another of the caller's
-	 *        devices holds, which is then recorded with that device
+	 * @param elsewhere the id of the device the person was told holds the
+	 *        check-out, to release it from another of their devices; only a
+	 *        check-out held on that device is released, as it may have moved
+	 *        since, and the release is recorded with that device. Null for
+	 *        none.
 	 * @return the document, free
 	 */
 	@DELETE
 	public DocumentView release(@PathParam("docNumber") long docNumber,
-			@QueryParam("elsewhere") @DefaultValue("false") boolean elsewhere) {
+			@QueryParam("elsewhere") String elsewhere) {
 		Caller caller = Caller.current();
 		User user = caller.user();
 		String failure = "Can't release document #" + docNumber;
+		String warned = StringUtils.trimToNull(elsewhere);
 		try {
 			long id = DocumentResource.readable(docNumber, user).getId();
 			return locks.withLock(id, failure, () -> {
@@ -176,10 +179,19 @@ public class CheckoutResource {
 				boolean holder = document.getLockUserId() != null && document.getLockUserId() == user.getId();
 				if (!holder && !user.isMemberOf(Group.GROUP_ADMIN))
 					throw conflict(document, hold, docNumber, user);
-				if (!elsewhere)
-					refuseElsewhere(document, caller, docNumber);
+				// Read once: the device that holds the check-out decides the refusal and the history's comment
+				Optional<DeviceHolds.Held> held = DeviceHolds.get().held(document);
+				String device = held.map(h -> h.row().getDevice()).orElse(null);
+				boolean onOtherDevice = device != null && !device.equals(deviceOf(caller));
+				boolean own = ApiViews.checkedOutBy(document, user);
+				if (warned != null && !warned.equals(device))
+					// Not the check-out the person was warned about: it moved to another device, or another person
+					throw own && device != null ? heldElsewhere(document, user, docNumber)
+							: conflict(document, hold, docNumber, user);
+				if (warned == null && own && onOtherDevice)
+					throw heldElsewhere(document, user, docNumber);
 
-				unlock(document, caller.session(), releasedElsewhere(document, caller));
+				unlock(document, caller.session(), onOtherDevice ? releasedElsewhere(held.get()) : null);
 				Document released = DocumentDAO.get().findById(document.getId());
 				DeviceHolds.get().clear(released);
 				return ApiViews.document(released, user);
@@ -441,16 +453,22 @@ public class CheckoutResource {
 	}
 
 	/**
-	 * @return the history comment for a release of a check-out another
-	 *         device holds, naming the device and the app, or null when the
-	 *         caller's own device (or none) held it
+	 * @return the device of the caller's token; null for a token with none,
+	 *         and for the web page, which is no device
 	 */
-	private static String releasedElsewhere(Document document, Caller caller) throws PersistenceException {
-		Optional<DeviceHolds.Held> held = DeviceHolds.get().held(document);
-		if (held.isEmpty() || DeviceHolds.get().heldHere(document, caller.token()))
-			return null;
-		String comment = RELEASED_ELSEWHERE.formatted(held.get().name() != null ? held.get().name() : "another device");
-		String app = held.get().row().getApp();
+	private static String deviceOf(Caller caller) {
+		return caller.token() != null ? caller.token().getDevice() : null;
+	}
+
+	/**
+	 * @param held the record of the device that held the check-out, which
+	 *        isn't the caller's
+	 * @return the history comment for the release, naming the device and the
+	 *         app
+	 */
+	private static String releasedElsewhere(DeviceHolds.Held held) {
+		String comment = RELEASED_ELSEWHERE.formatted(held.name() != null ? held.name() : "another device");
+		String app = held.row().getApp();
 		return app != null ? comment + " (%s)".formatted(app) : comment;
 	}
 }

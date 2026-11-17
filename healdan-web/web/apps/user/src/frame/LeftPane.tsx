@@ -5,7 +5,7 @@ import { useQueries } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
-import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, plural, t, toast, type ItemMenu, type TreeNode } from '@healdan/ui'
+import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, VisuallyHidden, plural, t, toast, type ItemMenu, type TreeNode } from '@healdan/ui'
 import { favoriteTooltip } from '../actions/favoriteName'
 import { useMyMattersChange } from '../actions/myMatters'
 import { whyNotRename } from '../actions/rename'
@@ -90,7 +90,7 @@ function CheckedOutEntry() {
           <span className={styles.text} aria-hidden="true">
             {t('checkedOut.title')}
           </span>
-          <span className={styles.visuallyHidden}>{`${t('checkedOut.title')}${plural('checkedOutCount', total)}`}</span>
+          <VisuallyHidden>{`${t('checkedOut.title')}${plural('checkedOutCount', total)}`}</VisuallyHidden>
         </>
       ) : (
         <span className={styles.text}>{t('checkedOut.title')}</span>

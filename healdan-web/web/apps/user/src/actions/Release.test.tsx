@@ -15,7 +15,8 @@ import { renderApp } from '../test/renderApp'
 type S = components['schemas']
 
 // Release… in Checked Out to Me, the toolbar, a row's menu and Check-Out Info (spec 5.3, 5.4): a check-out from the web page
-// is released at once, and one another of the person's computers holds only after the warning, with elsewhere=true.
+// is released at once, and one another of the person's computers holds only after the warning, with elsewhere naming
+// that computer's device.
 
 const priya = { id: 5, name: 'Priya Nair' }
 const since = '2026-11-12T09:00:00Z'
@@ -89,8 +90,8 @@ describe('Release', () => {
 
     await userEvent.click(await toolbarButton('Release…'))
     await userEvent.click(within(await warning()).getByRole('button', { name: 'Release Document' }))
-    await waitFor(() => expect(released).toEqual([{ docNumber: 10405, query: { elsewhere: 'true' } }]))
-    expect(api.callsTo('DELETE /v1/documents/10405/checkout')[0]?.query).toEqual({ elsewhere: 'true' })
+    await waitFor(() => expect(released).toEqual([{ docNumber: 10405, query: { elsewhere: 'MacBook' } }]))
+    expect(api.callsTo('DELETE /v1/documents/10405/checkout')[0]?.query).toEqual({ elsewhere: 'MacBook' })
     expect(await screen.findByText('Released 1 document')).toBeTruthy()
   })
 
@@ -99,11 +100,12 @@ describe('Release', () => {
     await renderApp('/checked-out', all)
     await select(/Report on Lease/, /Cap Table/)
     await userEvent.click(await toolbarButton('Release…'))
-    await userEvent.click(within(await warning('Release 3 Documents from MacBook?')).getByRole('button', { name: 'Release 3 Documents' }))
+    // The title counts what MacBook holds, which is listed; the button everything it releases, the browser's too
+    await userEvent.click(within(await warning('Release 2 Documents from MacBook?')).getByRole('button', { name: 'Release 3 Documents' }))
     await waitFor(() => expect(released).toHaveLength(3))
     expect(released).toEqual([
-      { docNumber: 10447, query: { elsewhere: 'true' } },
-      { docNumber: 10414, query: { elsewhere: 'true' } },
+      { docNumber: 10447, query: { elsewhere: 'MacBook' } },
+      { docNumber: 10414, query: { elsewhere: 'MacBook' } },
       { docNumber: 10420, query: undefined },
     ])
     expect(await screen.findByText('Released 3 documents')).toBeTruthy()
@@ -124,7 +126,7 @@ describe('Release', () => {
     expect(lines[0]!.textContent).toMatch(/^Laytime Calculation – MV Northern Star\.xlsx: It's checked out\. Checked out by Jamie Clarke since .*\.$/)
     expect(screen.queryByText(/server sentence/)).toBeNull()
     // The other was released all the same
-    expect(released).toEqual([{ docNumber: 10447, query: { elsewhere: 'true' } }])
+    expect(released).toEqual([{ docNumber: 10447, query: { elsewhere: 'MacBook' } }])
     expect(await screen.findByText('Released 1 document')).toBeTruthy()
     await expectNoAxeViolations(refusals)
   })
