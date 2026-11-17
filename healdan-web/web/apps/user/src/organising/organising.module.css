@@ -9,6 +9,16 @@
   overflow-wrap: anywhere;
 }
 
+/* A folder's checked-out documents, under its line in Refusals, and what can be done about them */
+.held {
+  margin: var(--hd-space-1) 0;
+  padding-left: var(--hd-space-5);
+}
+
+.after {
+  margin: var(--hd-space-1) 0 0;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

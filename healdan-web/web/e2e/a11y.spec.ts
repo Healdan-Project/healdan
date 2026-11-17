@@ -250,7 +250,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.keyboard.press('Escape')
       await expect(row).toBeFocused()
       await page.keyboard.press('Delete')
-      await expect(page.getByRole('dialog', { name: 'Move 1 document to the Trash?' })).toBeVisible()
+      await expect(page.getByRole('dialog', { name: `Move "${TEXT}" to the Trash?` })).toBeVisible()
       await check('the delete question')
       await page.keyboard.press('Escape')
       await page.getByRole('banner').getByRole('button', { name: 'Help' }).click()

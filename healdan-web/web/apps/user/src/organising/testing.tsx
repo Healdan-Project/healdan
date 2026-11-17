@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event'
 import type { components } from '@healdan/api'
 import { correspondence, filledForm, inFolder, letter, store, workspace } from '../filing/testing'
 import { keys } from '../queries'
-import { children, document, folder, messageView, type Routes } from '../test/fakeApi'
+import { children, document, folder, messageView, problem, trashItem, type Routes } from '../test/fakeApi'
 
 type S = components['schemas']
 
@@ -35,16 +35,26 @@ export interface Written {
   deleted: number[]
   made: { parentId: number; name: string }[]
   renamedFolders: { id: number; name: string }[]
+  deletedFolders: number[]
+  /** Each restore asked for: the Trash item's id, and the body it was sent with */
+  restored: { id: number; body: unknown }[]
 }
 
+/** What Drafts holds that the person can read, as `GET /v1/folders/8/contents` answers */
+export const draftsContents: S['TrashContents'] = { folders: 3, documents: 11 }
+
 /**
- * Routes for folder 7 with three documents that rename, move and delete as the server would, and record what was asked; `over`
- * answers first, so a test can refuse a call.
+ * Routes for folder 7 with three documents and a folder that rename, move, delete and restore as the server would, and
+ * record what was asked; `over` answers first, so a test can refuse a call. Each delete answers a Trash item of its own,
+ * from 700 up, which a restore brings back.
  */
 export function routes(over: Routes = {}) {
   let docs: S['DocumentView'][] = [letter, lease, plan]
   let subfolders: S['FolderView'][] = [drafts]
-  const written: Written = { renamed: [], moved: [], deleted: [], made: [], renamedFolders: [] }
+  const written: Written = { renamed: [], moved: [], deleted: [], made: [], renamedFolders: [], deletedFolders: [], restored: [] }
+  // What each Trash item took, so its restore puts it back
+  const trash = new Map<number, { item: S['TrashItem']; document?: S['DocumentView']; folder?: S['FolderView'] }>()
+  let nextItem = 700
   const all: Routes = {
     'GET /v1/folders/7': correspondence,
     'GET /v1/folders/7/children': () => children([...subfolders, ...docs]),
@@ -78,8 +88,32 @@ export function routes(over: Routes = {}) {
     'DELETE /v1/documents/*': ({ params }: { params: string[] }) => {
       const docNumber = Number(params[0])
       written.deleted.push(docNumber)
+      const gone = docs.find((one) => one.docNumber === docNumber)
       docs = docs.filter((one) => one.docNumber !== docNumber)
-      return undefined
+      const item = trashItem({ id: nextItem++, docNumber, name: gone?.name ?? '' })
+      trash.set(item.id, { item, document: gone })
+      return item
+    },
+    'GET /v1/folders/*/contents': draftsContents,
+    'DELETE /v1/folders/*': ({ params }: { params: string[] }) => {
+      const id = Number(params[0])
+      written.deletedFolders.push(id)
+      const gone = subfolders.find((one) => one.id === id)
+      subfolders = subfolders.filter((one) => one.id !== id)
+      const item = trashItem({ id: nextItem++, type: 'folder', name: gone?.name ?? '', docNumber: null, kind: 'folder', size: null, contents: draftsContents })
+      trash.set(item.id, { item, folder: gone })
+      return item
+    },
+    'POST /v1/trash/*/restore': ({ params, body }: { params: string[]; body?: unknown }) => {
+      const id = Number(params[0])
+      written.restored.push({ id, body })
+      const taken = trash.get(id)
+      // Restored already, or never the person's
+      if (!taken) return problem(404, 'not-found')
+      trash.delete(id)
+      if (taken.document) docs = [...docs, taken.document]
+      if (taken.folder) subfolders = [...subfolders, taken.folder]
+      return { place: correspondence, item: taken.item }
     },
     'POST /v1/folders': ({ body }: { body?: unknown }) => {
       const sent = body as { parentId: number; name: string }

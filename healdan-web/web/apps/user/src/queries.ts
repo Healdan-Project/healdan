@@ -26,6 +26,8 @@ export const keys = {
   // The properties a new document filed into the folder would have
   form: (id: number) => ['folders', id, 'form'] as const,
   subfolders: (id: number) => ['folders', id, 'subfolders'] as const,
+  // What a folder holds that the person can read, which the delete question says
+  contents: (id: number) => ['folders', id, 'contents'] as const,
   // Which facets, counted over what the filters leave, and how many documents the folder holds without filters
   facets: (id: number, options: Record<string, unknown>) => ['folders', id, 'facets', options] as const,
   unfiltered: (id: number) => ['folders', id, 'unfiltered'] as const,

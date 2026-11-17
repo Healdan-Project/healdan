@@ -7,11 +7,12 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import type { components } from '@healdan/api'
 import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, t, toast, type ItemMenu, type TreeNode } from '@healdan/ui'
 import { favoriteTooltip } from '../actions/favoriteName'
+import { movingFolder, whyNotDelete } from '../actions/folders'
 import { useMyMattersChange } from '../actions/myMatters'
 import { whyNotRename } from '../actions/rename'
 import { carriesRows, placeOf, takesDrag, type Place } from '../filing/dropTargets'
 import { useFiling } from '../filing/FilingProvider'
-import { FavoriteMenuItems, folderMenu, MatterMenuItems } from '../menus/ContextMenus'
+import { FavoriteMenuItems, FolderChangeItems, folderMenu, MatterMenuItems } from '../menus/ContextMenus'
 import { useOrganising } from '../organising/OrganisingProvider'
 import { FolderName } from '../organising/RenameField'
 import { fetchSubfolders, idFrom, keys, useFavorites, useFolder, useMe, useMyMatters, useRecentMatters } from '../queries'
@@ -215,6 +216,7 @@ function MyMattersSection() {
           <MenuItem id="rename" isDisabled={!folder.canRename} onAction={() => organising.startRename(`f${folder.id}`, 'tree')}>
             {t('rename.menu')}
           </MenuItem>
+          <FolderChangeItems folder={folder} />
         </Menu>
       ),
     }
@@ -282,6 +284,15 @@ function MyMattersSection() {
             const why = whyNotRename(folder, me.data?.admin)
             if (why) toast(why)
             else organising.startRename(`f${folder.id}`, 'tree')
+          }}
+          onDelete={(id) => {
+            // A matter's own folder is deleted in the Classic Interface (folders and Trash spec 2.2)
+            if (matters.some((matter) => String(matter.folderId) === id)) return toast(t('delete.matterFolder'))
+            const folder = folders.get(id)
+            if (!folder) return
+            const why = whyNotDelete(folder, me.data?.admin)
+            if (why) toast(t(why))
+            else organising.askDelete({ documents: [], folders: [movingFolder(folder)] })
           }}
           // Files are filed into the folder, and the list's own rows are moved there; both light the folder up
           acceptsDrop={(id, types) => places.has(id) && (takesDrag(types) || carriesRows(types))}

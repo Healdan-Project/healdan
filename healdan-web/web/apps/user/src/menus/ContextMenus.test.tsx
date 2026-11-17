@@ -190,13 +190,15 @@ describe('where the browser keeps its own menu', () => {
 })
 
 describe("a folder row's menu", () => {
-  it('offers Open, Open in New Tab, New Folder, Rename and Favorites, and leaves the selection alone', async () => {
-    await renderApp('/folders/7', routes().all)
+  it('offers Open, Open in New Tab, New Folder, Rename, Move To…, Delete and Favorites, and selects the folder first, as a document is', async () => {
+    const { router } = await renderApp('/folders/7', routes().all)
     await select(/Lease/)
     fireEvent.contextMenu(await row(/Drafts/))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'New Folder', 'Rename', 'Add to Favorites'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'New Folder', 'Rename', 'Move To…', 'Delete', 'Add to Favorites'])
     expect((await item('Open in New Tab')).getAttribute('href')).toBe('/app/folders/8')
-    expect(selectedRows()).toEqual(['d10432'])
+    expect(selectedRows()).toEqual(['f8'])
+    // A folder is never in the address
+    await waitFor(() => expect(router.state.location.search).not.toHaveProperty('sel'))
     await userEvent.click(await item('New Folder'))
     expect(await screen.findByRole('dialog', { name: 'New Folder' })).toBeTruthy()
   })
@@ -206,7 +208,23 @@ describe("a folder row's menu", () => {
     const { all } = routes({ 'GET /v1/folders/7/children': children([recentHere, letter]) })
     await renderApp('/folders/7', all)
     fireEvent.contextMenu(await row(/Recent Here/))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to Favorites'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Move To…', 'Delete', 'Add to Favorites'])
+  })
+
+  it('keeps a selection of folders and documents it’s inside, and then offers Move To… and Delete, for all of it', async () => {
+    await renderApp('/folders/7', routes().all)
+    await select(/Lease/)
+    const user = userEvent.setup()
+    await user.keyboard('{Control>}')
+    await user.click(within(await row(/Drafts/)).getByRole('rowheader'))
+    await user.keyboard('{/Control}')
+    fireEvent.contextMenu(await row(/Lease/))
+    expect(await screen.findByRole('menu', { name: 'Actions for 2 items' })).toBeTruthy()
+    expect(await names()).toEqual(['Move To…', 'Delete'])
+    expect(selectedRows()).toEqual(['f8', 'd10432'])
+    await userEvent.click(await item('Delete'))
+    const question = await screen.findByRole('dialog', { name: 'Move 2 items to the Trash?' })
+    expect(within(question).getAllByRole('listitem').map((one) => one.textContent)).toEqual(['Drafts', 'Lease.docx'])
   })
 
   it('opens the folder', async () => {
@@ -264,12 +282,12 @@ describe("the left pane's menus", () => {
     correspondence.focus()
     await userEvent.keyboard('{Shift>}{F10}{/Shift}')
     expect(await screen.findByRole('menu', { name: 'Actions for Correspondence' })).toBeTruthy()
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'New Folder', 'Rename', 'Add to Favorites'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'New Folder', 'Rename', 'Move To…', 'Delete', 'Add to Favorites'])
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(document.activeElement).toBe(correspondence))
 
     fireEvent.contextMenu(within(tree).getByRole('row', { name: /My Recent Docs Here/ }))
-    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to Favorites'])
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Move To…', 'Delete', 'Add to Favorites'])
   })
 
   it('keeps the browser menu on Recent’s links, which open a list of the app', async () => {

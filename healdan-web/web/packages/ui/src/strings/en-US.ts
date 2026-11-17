@@ -340,9 +340,24 @@ export const enUS = {
   'move.sameFolder': "They're in that folder already.",
   'move.thisFolder': 'the folder',
   'delete.menu': 'Delete',
-  'delete.trashNote': 'The Trash is in the Classic Interface, where they can be restored.',
+  // The question before a delete, and the toast after it (folders and Trash spec 7.4; plan correction 14)
+  'delete.oneTitle': 'Move "{name}" to the Trash?',
+  'delete.trashNote': 'You can restore it from the Trash, at the foot of the left pane.',
+  'delete.trashNoteMany': 'You can restore them from the Trash, at the foot of the left pane.',
   'delete.confirm': 'Move to Trash',
-  'delete.refusedTitle': "Some Documents Weren't Moved to the Trash",
+  'delete.done': 'Moved "{name}" to the Trash',
+  'delete.refusedTitle': "Some Items Weren't Moved to the Trash",
+  // Why a folder wasn't deleted, or can't be: never naming what the person can't read (spec 4.2)
+  'delete.notAllowed': "It holds items you don't have permission to delete.",
+  'delete.checkedOut': 'Documents in it are checked out:',
+  'delete.checkedOutAfter': "They can be deleted once they're checked in or released.",
+  'delete.matterFolder': "A {matterLower}'s own folder is deleted by an administrator in the Classic Interface.",
+  'delete.adminsOnly': "Only administrators can delete a {matterLower}'s top-level folders.",
+  'delete.noPermission': "You don't have permission to delete this folder.",
+  // Undo, on the toast after a delete
+  'undo.label': 'Undo',
+  'undo.done': 'Restored "{name}"',
+  'undo.refusedTitle': "Some Items Weren't Restored",
   // The Trash (folders and Trash spec 7.2 to 7.4)
   'trash.title': 'Trash',
   'trash.actions': 'Trash Actions',
@@ -435,9 +450,12 @@ export const enUSPlurals = {
   folders: { one: '{n} folder', other: '{n} folders' },
   moveTitle: { one: 'Move {n} Document', other: 'Move {n} Documents' },
   moved: { one: 'Moved {n} document to {folder}', other: 'Moved {n} documents to {folder}' },
-  deleteTitle: { one: 'Move {n} document to the Trash?', other: 'Move {n} documents to the Trash?' },
-  deleted: { one: 'Moved {n} document to the Trash', other: 'Moved {n} documents to the Trash' },
+  'delete.manyTitle': { one: 'Move {n} item to the Trash?', other: 'Move {n} items to the Trash?' },
+  'delete.doneMany': { one: 'Moved {n} item to the Trash', other: 'Moved {n} items to the Trash' },
+  'undo.doneMany': { one: 'Restored {n} item', other: 'Restored {n} items' },
   menuForDocuments: { one: 'Actions for {n} document', other: 'Actions for {n} documents' },
+  // A selection of folders and documents
+  menuForItems: { one: 'Actions for {n} item', other: 'Actions for {n} items' },
   matters: { one: '{n} {matter}', other: '{n} {matters}' },
   'trash.destroyIn': { one: 'in {n} day', other: 'in {n} days' },
   // Beside a deleted folder's name, and the Trash's count

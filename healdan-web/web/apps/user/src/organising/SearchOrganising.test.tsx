@@ -39,7 +39,7 @@ describe('Organising in search results', () => {
     await renderApp('/search?scope=documents&q=lease', all)
     await select(/Plan/)
     await userEvent.keyboard('{Delete}')
-    expect(await screen.findByRole('dialog', { name: 'Move 1 document to the Trash?' })).toBeTruthy()
+    expect(await screen.findByRole('dialog', { name: 'Move "Plan.pdf" to the Trash?' })).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Move to Trash' }))
     await waitFor(() => expect(written.deleted).toEqual([10433]))
   })

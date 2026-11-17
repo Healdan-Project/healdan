@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@healdan/api'
 import { ROWS_TYPE } from '../filing/dropTargets'
@@ -145,13 +146,26 @@ describe('Dragging rows onto a folder of the tree', () => {
   })
 })
 
-// A row for a document that isn't selectable would be a folder; drafts is one, and carries nothing
+// Folder rows can be selected, and dragged with the documents (folders and Trash spec 7.5): the drag carries both
 describe('Dragging a folder', () => {
-  it('carries nothing', async () => {
+  it('carries it under the app\'s own type, with the documents selected with it, and no document for it', async () => {
     const { all } = routes()
     await renderApp('/folders/7', all)
     const data = transfer()
     fireEvent.dragStart(await row(/Drafts/), { dataTransfer: data })
-    expect(data.types).not.toContain(ROWS_TYPE)
+    expect(data.types).toContain(ROWS_TYPE)
+    const drafted = { id: 8, name: 'Drafts', parentId: 7, matterId: 11, canMove: true, canDelete: true }
+    expect(JSON.parse(data.getData(ROWS_TYPE)).folders).toEqual([drafted])
+    expect(readRows(data.getData(ROWS_TYPE))).toEqual([])
+
+    await select(/Lease/)
+    const user = userEvent.setup()
+    await user.keyboard('{Control>}')
+    await user.click(within(await row(/Drafts/)).getByRole('rowheader'))
+    await user.keyboard('{/Control}')
+    const both = transfer()
+    fireEvent.dragStart(await row(/Lease/), { dataTransfer: both })
+    expect(JSON.parse(both.getData(ROWS_TYPE)).folders).toEqual([drafted])
+    expect(readRows(both.getData(ROWS_TYPE))).toEqual([{ docNumber: 10432, name: 'Lease.docx', folder: { id: 7 } }])
   })
 })

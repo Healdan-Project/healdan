@@ -71,8 +71,11 @@ A list of documents is `@healdan/ui`'s `Table`: React Aria's Table, virtualised 
 with sortable headings and single or multiple selection. It passes Enter (or a double-click) out as `onOpen`, Space as
 `onPreview`, F2 as `onRename`, and Delete or Backspace (the Mac's delete key) as `onDelete`, for the view to act on.
 It takes those keys only from a row or its cells, so a field inside a row keeps them, and leaves them to the browser
-with ⌘, Ctrl or Option held. A row whose `selectable` is false, such as a folder among documents, opens on a click
-instead. Pass `busy` while the rows shown are about to change, as `useListing`'s `isStale` says while a new order
+with ⌘, Ctrl or Option held. A row whose `selectable` is false, such as a matter among a search's results, opens on a
+click instead. So does a row whose `opensOnClick` is true, a folder among documents, though it selects as a document's
+row does, with Shift- or ⌘-click, the arrows, Space and a right-click: the Table stops a plain press of the main button
+on its way down to the row, so React Aria never selects it, and opens the row on the click. A touch or a pen is left to
+React Aria, whose tap opens it. Pass `busy` while the rows shown are about to change, as `useListing`'s `isStale` says while a new order
 loads: the old rows stay, and a screen reader waits for the new ones. Give it `loadMore` and `total`, and it calls `loadMore`
 when the end of the loaded rows comes into view while fewer than `total` are loaded. A folder's list takes its rows
 from `views/useListing.ts`, TanStack Query's infinite query over `GET /folders/{id}/children`, 100 at a time. Offset
@@ -269,16 +272,30 @@ with a `DataTransfer` built in the page.
 
 ## Organising
 
-`organising/` is New Folder, rename, move and delete (M6 spec 6.7). `OrganisingProvider` sits in the frame under the
-filing's and owns what outlives a view: which document's title is a field now, and the dialogs that ask (`ConfirmDelete`,
-`MovePicker`, `NewFolderDialog`) and say what was refused (`Refusals`). Views reach it through `useOrganising`, and
-`useOrganisingTable(rows, selection)` gives a list its `onRename` (F2), `onDelete` and `drag` props and the selected documents
-for the toolbar's More menu (`actions/MoreMenu.tsx`).
+`organising/` is New Folder, rename, move and delete (M6 spec 6.7; folders and Trash spec 7.4 and 7.5).
+`OrganisingProvider` sits in the frame under the filing's and owns what outlives a view: which document's title is a
+field now, and the dialogs that ask (`ConfirmDelete`, `MovePicker`, `NewFolderDialog`) and say what was refused
+(`Refusals`). Views reach it through `useOrganising`, whose `askDelete` and `askMove` take `OrganisingItems`, the
+documents and folders together, and `useOrganisingTable(rows, selection)` gives a list its `onRename` (F2), `onDelete`
+and `drag` props and the selected documents and folders for the toolbar's More menu (`actions/MoreMenu.tsx`).
 
 - **One call each.** `actions/rename.ts`, `move.ts` and `remove.ts` make `PATCH /documents/{n}`, `POST /documents/{n}/move`
-  and `DELETE /documents/{n}`. A change to several documents (`actions/batch.ts`) is a call for each, one after another, which
-  keeps going when one is refused, so what was done stays done; the refusals come back as lines, each the document's name
-  and why, from the catalogue (`filing/refusal.ts`: a hold says who holds it, an `already-filed` names the copy).
+  and `DELETE /documents/{n}`, and `actions/folders.ts` makes `DELETE /folders/{id}`, `POST /folders/{id}/move` and
+  `GET /folders/{id}/contents`. A change to several items (`actions/batch.ts`) is a call for each, one after another,
+  the folders first, as a list shows them, then the documents (`eachItem`); it keeps going when one is refused, so what
+  was done stays done, and the refusals come back as lines, each the item's name and why, from the catalogue
+  (`filing/refusal.ts`: a hold says who holds it, an `already-filed` names the copy).
+- **Deleting folders.** The Delete key on a folder's row or on a folder in the tree, the folder's right-click menu, the
+  tree's ⋯ and the open folder's ⋯ all ask (**Move To…** and **Delete** follow **Rename** in each, and a matter's own
+  folder has neither). `canDelete` greys **Delete** out, and `whyNotDelete` says why the key does nothing, as
+  `whyNotRename` does for F2. The question names one item, "Move "Old Drafts" to the Trash?", with what a folder holds
+  from `GET /folders/{id}/contents`, which counts only what the person can read, and lists several. A refusal is a line
+  of `Refusals` (`folderDeleteRefusal`): `items-not-allowed` names nothing, and `checked-out` lists only the problem's
+  `holds`, the documents the person can read. An open folder that's deleted gives way to its parent.
+- **Undo.** Every delete says what it did with **Undo** (`toastWithAction`), and `organising/undo.ts` restores each Trash
+  item the delete answered with, back where it was (no `folderId`), then says what came back. One already restored
+  (`404`) or whose place is gone (`409 place-gone`) is a line of `Refusals`, and the rest is restored. The action spends
+  itself on its first press, whatever presses it, as the server doesn't serialise two restores of one item.
 - **Renaming folders** uses the same field. `RenameField.tsx` holds one field for documents and folders
   (`DocumentTitle`, `FolderName`), built on `useNameField`, which a favourite's name in My Favorites shares, and `OrganisingProvider`'s `renaming` is a row key and a place (`row`, `tree`,
   `heading`), where the focus goes back once it's done. F2 on a folder's row in a list or in the My Matters tree, the
@@ -294,17 +311,19 @@ for the toolbar's More menu (`actions/MoreMenu.tsx`).
   matter suggestions, then lists the chosen matter's folders from `fetchSubfolders` (also the tree's), a level at a time. It
   never browses Stores, and **Move Here** needs a folder inside the matter.
 - **Dragging rows.** The Table's `drag` prop makes its selectable rows draggable, with the browser's own drag and drop (React
-  Aria's would add some 140 kB to the app's chunk of it), so a drag of a selected row carries every selected row, and of another row only that one. A drag carries `ROWS_TYPE` with the documents as JSON (`rows.ts`);
+  Aria's would add some 140 kB to the app's chunk of it), so a drag of a selected row carries every selected row, and of another row only that one. A drag carries `ROWS_TYPE` with the documents, and the folders dragged with them, as JSON (`rows.ts`);
   `FilingProvider` leaves it alone and the tree takes it (`acceptsDrop`, `dropRows`): the folder lights up as it does for
   files, and a place that holds no documents is refused with the filing rule's words before any call. There's no keyboard
   drag: More › Move To… is the way for a keyboard.
 - **New Folder** is offered inside a matter's folders, and at a matter's top level only to an administrator (`useMe`).
 - **Every list of documents** has it: a folder, search results, Recent Documents and Emails, and the `#` result, each with
-  `useOrganisingTable` and a `Toolbar` holding `SelectionActions`. `useRowSelection(rows)` keeps only the selected rows
-  still listed, so once they're deleted or moved F2 and Delete take the focused row.
+  `useOrganisingTable` and a `Toolbar` holding `SelectionActions`, and Recent › Folders and a Folders search have F2 and
+  Delete. `useRowSelection(rows)` puts one document selected alone in `?sel=`, and keeps several, or any with a folder,
+  in the view, as a folder is never in the address and has no details. It keeps only the selected rows still listed, so
+  once they're deleted or moved F2 and Delete take the focused row.
 
-Test it with `organising/*.test.tsx`; `testing.tsx` has routes for a folder that rename, move and delete as the server
-would, and a `DataTransfer` that keeps what a drag writes. `e2e/organising.spec.ts` does it in a real browser, and `e2e/folders.spec.ts` for renaming folders.
+Test it with `organising/*.test.tsx`; `testing.tsx` has routes for a folder that rename, move, delete and restore as the
+server would, and a `DataTransfer` that keeps what a drag writes. `e2e/organising.spec.ts` does it in a real browser, and `e2e/folders.spec.ts` for renaming folders.
 
 ## The Trash
 
@@ -356,7 +375,7 @@ Docs & Emails scopes send filters or a sort, as the API refuses them for the oth
 answer's `total` is reached, or, when it's `null`, when it's shorter than the 100 asked. `totalAtLeast` is the count's
 "More than". `FiltersPanel` shows no made-up `0` for a ticked value no option offers when the counts are `partial`.
 `views/RecentView.tsx` is the start page and `/recent/<kind>`, a Table each, with `useRowSelection` (the selection of
-document rows, shared with search) putting a document in `?sel=` and its details in the region; a recent client opens
+document and folder rows, shared with search) putting a document in `?sel=` and its details in the region; a recent client opens
 a Clients search.
 
 ## Previews

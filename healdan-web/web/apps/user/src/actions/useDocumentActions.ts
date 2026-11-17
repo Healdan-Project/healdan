@@ -9,6 +9,7 @@ import { useQuickLook } from '../preview/QuickLookState'
 import { checkInAccept } from './checkout'
 import { copyLink } from './copyLink'
 import type { Favorite } from './FavoriteStar'
+import type { MovingFolder } from './folders'
 import { useOpenInApp } from './OpenInAppState'
 import { pickFile } from './pickFile'
 import { useCheckout } from './useCheckout'
@@ -53,6 +54,8 @@ export interface DocumentActionsOf {
   document: DocumentView | undefined
   /** The documents Move To… and Delete act on (the selection); Rename and Copy Link need exactly one */
   documents: DocumentView[]
+  /** The folders selected with them, which Move To… and Delete take too (folders and Trash spec 7.5) */
+  folders?: readonly MovingFolder[]
   /** The document Preview opens, when it isn't `document`'s: the toolbar's is the address's, whose row may not be drawn yet */
   preview?: number
 }
@@ -64,12 +67,13 @@ export interface DocumentActionsOf {
  * control started it, each control that offers it is disabled. Favorites and Open in New Tab are only in the menus, which
  * make them with favoriteAction and newTabAction, so a toolbar doesn't watch My Favorites for an action it never shows.
  */
-export function useDocumentActions({ document, documents, preview = document?.docNumber }: DocumentActionsOf): DocumentActions {
+export function useDocumentActions({ document, documents, folders = [], preview = document?.docNumber }: DocumentActionsOf): DocumentActions {
   const app = useOpenInApp()
   const quickLook = useQuickLook()
   const organising = useOrganising()
   const checkout = useCheckout(document)
-  const one = documents.length === 1 ? documents[0] : undefined
+  const one = documents.length === 1 && folders.length === 0 ? documents[0] : undefined
+  const none = documents.length + folders.length === 0
   const may = document?.canOpen === true
   const yours = checkout.state.kind === 'yours'
 
@@ -96,8 +100,9 @@ export function useDocumentActions({ document, documents, preview = document?.do
         : undefined,
     release: document && yours ? { id: 'release', label: t('checkout.release'), isDisabled: checkout.busy, perform: () => void checkout.release() } : undefined,
     rename: { id: 'rename', label: t('rename.menu'), isDisabled: !one, perform: () => one && organising.startRename(`d${one.docNumber}`) },
-    move: { id: 'move', label: t('move.menu'), isDisabled: documents.length === 0, perform: () => organising.askMove(documents) },
-    delete: { id: 'delete', label: t('delete.menu'), isDisabled: documents.length === 0, perform: () => organising.askDelete(documents) },
+    // A folder that says it can't be moved or deleted greys them out, as its own menus do
+    move: { id: 'move', label: t('move.menu'), isDisabled: none || folders.some((folder) => !folder.canMove), perform: () => organising.askMove({ documents, folders }) },
+    delete: { id: 'delete', label: t('delete.menu'), isDisabled: none || folders.some((folder) => !folder.canDelete), perform: () => organising.askDelete({ documents, folders }) },
     copyLink: { id: 'copyLink', label: t('details.copyLink'), isDisabled: !one, perform: () => one && void copyLink(one.docNumber) },
   }
 }

@@ -6,8 +6,10 @@ import { useNavigate } from '@tanstack/react-router'
 import type { components } from '@healdan/api'
 import { MenuItem, MenuSeparator, t, toast } from '@healdan/ui'
 import { ActionItem } from '../actions/ActionControls'
+import type { OrganisingItems } from '../actions/batch'
 import { favoriteNameRefusal, hasOwnName, renameFavorite } from '../actions/favoriteName'
 import { useFavorite, type Starred } from '../actions/FavoriteStar'
+import { movingFolder } from '../actions/folders'
 import { useMyMattersChange } from '../actions/myMatters'
 import { favoriteAction, newTabAction, useDocumentActions } from '../actions/useDocumentActions'
 import { docHref, folderHref } from '../addresses'
@@ -62,8 +64,9 @@ export function DocumentMenuItems({ documents }: { documents: S['DocumentView'][
 
 /**
  * A folder's row or tree item: Open, New Folder where the toolbar offers it (mayMakeFolderIn: inside a matter, never in a
- * search folder), Rename (greyed out where the folder's `canRename` says no: folder rename spec 5.2), and Favorites, as its
- * star does. Moving and deleting folders are a later phase (M6 spec 16). `renameIn` is where the field opens.
+ * search folder), Rename, Move To… and Delete (each greyed out where the folder's `canRename`, `canMove` or `canDelete`
+ * says no: folder rename spec 5.2, folders and Trash spec 7.5), and Favorites, as its star does. `renameIn` is where the
+ * field opens.
  */
 export function FolderMenuItems({ folder, renameIn }: { folder: S['FolderView']; renameIn: RenamePlace }) {
   const navigate = useNavigate()
@@ -87,8 +90,46 @@ export function FolderMenuItems({ folder, renameIn }: { folder: S['FolderView'];
       <MenuItem id="rename" isDisabled={!folder.canRename} onAction={() => organising.startRename(`f${folder.id}`, renameIn)}>
         {t('rename.menu')}
       </MenuItem>
+      <FolderChangeItems folder={folder} />
       <MenuSeparator />
       <ActionItem action={favoriteAction(favorite)} />
+    </>
+  )
+}
+
+/**
+ * Move To… and Delete for one folder, greyed out where its `canMove` and `canDelete` say no (folders and Trash spec 7.5): in
+ * its right-click menu, the tree's ⋯ and the open folder's heading ⋯, after Rename. A matter's own folder has neither.
+ */
+export function FolderChangeItems({ folder }: { folder: S['FolderView'] }) {
+  const organising = useOrganising()
+  const items: OrganisingItems = { documents: [], folders: [movingFolder(folder)] }
+  return (
+    <>
+      <MenuItem id="move" isDisabled={!folder.canMove} onAction={() => organising.askMove(items)}>
+        {t('move.menu')}
+      </MenuItem>
+      <MenuItem id="delete" isDisabled={!folder.canDelete} onAction={() => organising.askDelete(items)}>
+        {t('delete.menu')}
+      </MenuItem>
+    </>
+  )
+}
+
+/**
+ * A selection of several with a folder in it: Move To… and Delete, which take folders and documents together, each its own
+ * call (folders and Trash spec 7.5). Each is greyed out while a folder in it says it can't be moved or deleted.
+ */
+export function SelectionMenuItems({ items }: { items: OrganisingItems }) {
+  const organising = useOrganising()
+  return (
+    <>
+      <MenuItem id="move" isDisabled={items.folders.some((folder) => !folder.canMove)} onAction={() => organising.askMove(items)}>
+        {t('move.menu')}
+      </MenuItem>
+      <MenuItem id="delete" isDisabled={items.folders.some((folder) => !folder.canDelete)} onAction={() => organising.askDelete(items)}>
+        {t('delete.menu')}
+      </MenuItem>
     </>
   )
 }

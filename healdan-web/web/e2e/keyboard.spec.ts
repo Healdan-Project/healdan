@@ -449,10 +449,10 @@ test('row 9: New Folder, F2, Move To… and Delete are all keys', async () => {
   await page.keyboard.press('ArrowDown')
   await expect(row(NAMES.remove)).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('Delete')
-  const confirm = page.getByRole('dialog', { name: 'Move 1 document to the Trash?' })
+  const confirm = page.getByRole('dialog', { name: `Move "${NAMES.remove}" to the Trash?` })
   await expect(confirm).toBeVisible()
   await page.keyboard.press('Enter')
-  await expect(page.getByText('Moved 1 document to the Trash')).toBeVisible()
+  await expect(page.getByText(`Moved "${NAMES.remove}" to the Trash`)).toBeVisible()
   await expect(row(NAMES.remove)).toHaveCount(0)
   // The focus goes to the row that took its place, so the next key works on the list
   await expect.poll(() => inRow(list())).toBe(true)

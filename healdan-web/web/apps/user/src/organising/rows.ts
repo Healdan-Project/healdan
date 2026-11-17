@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import type { Movable } from '../actions/batch'
+import type { MovingFolder } from '../actions/folders'
 
 /**
  * Names this page's drags: a drag carries it, and a drop moves documents only when it holds this one, so a drag that began in
@@ -10,9 +11,16 @@ import type { Movable } from '../actions/batch'
  */
 export const pageToken = Array.from(globalThis.crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
 
-/** What a drag of rows carries under `ROWS_TYPE`: this page's token, and the documents' numbers, names and folders. */
-export function rowsPayload(documents: readonly Movable[]): string {
-  return JSON.stringify({ token: pageToken, documents: documents.map(({ docNumber, name, folder }) => ({ docNumber, name, folder: folder ? { id: folder.id } : undefined })) })
+/**
+ * What a drag of rows carries under `ROWS_TYPE`: this page's token, the documents' numbers, names and folders, and the
+ * folders dragged with them (folders and Trash spec 7.5), as a move or a delete takes them.
+ */
+export function rowsPayload(documents: readonly Movable[], folders: readonly MovingFolder[] = []): string {
+  return JSON.stringify({
+    token: pageToken,
+    documents: documents.map(({ docNumber, name, folder }) => ({ docNumber, name, folder: folder ? { id: folder.id } : undefined })),
+    folders: folders.map(({ id, name, parentId, matterId, canMove, canDelete }) => ({ id, name, parentId, matterId, canMove, canDelete })),
+  })
 }
 
 /** The documents a drag of this page carried; nothing for data that isn't what `rowsPayload` makes, or has another token. */

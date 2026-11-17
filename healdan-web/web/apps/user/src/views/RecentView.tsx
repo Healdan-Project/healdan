@@ -25,8 +25,6 @@ import styles from './views.module.css'
 
 type S = components['schemas']
 
-const NONE: ReadonlySet<string> = new Set()
-
 /**
  * /recent/<kind> (and the start page, which is Recent Documents): what the person worked on lately, in the order the
  * server gives (newest first), so no header sorts. Opening one sets the scope picker to its scope (the top bar follows
@@ -141,9 +139,22 @@ function RecentFolders() {
   const items = recent.data?.items
   const rows = useMemo(() => (items ?? []).map(rowOf), [items])
   const columns = useMemo(() => hitColumns('folders'), [])
-  // F2 renames the focused folder. A folder's row is never selected, so its menu leaves the (empty) selection as it is
-  const organising = useOrganisingTable(items ?? [], NONE)
-  return <RecentList kind="folders" columns={columns} rows={rows} query={recent} contextMenu={organising.contextMenu} organising={{ onRename: organising.tableProps.onRename }} onOpen={(key) => void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })} />
+  // Folders select as documents do (folders and Trash spec 7.5): F2 renames the focused one, Delete asks about the selection,
+  // and a right-click selects the row first
+  const { selection, change } = useRowSelection(items)
+  const organising = useOrganisingTable(items ?? [], selection, change)
+  return (
+    <RecentList
+      kind="folders"
+      columns={columns}
+      rows={rows}
+      query={recent}
+      selection={{ keys: selection, change }}
+      contextMenu={organising.contextMenu}
+      organising={organising.tableProps}
+      onOpen={(key) => void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })}
+    />
+  )
 }
 
 interface ClientRow extends TableRow {

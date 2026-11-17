@@ -42,12 +42,14 @@ export interface TreeProps {
   contextMenu?: ItemMenu
   /** F2 on a row: rename what it stands for */
   onRename?: (id: string) => void
+  /** Delete, or the Mac's delete key (Backspace), on a row: delete what it stands for */
+  onDelete?: (id: string) => void
 }
 
 const loadingSuffix = '\u0000loading'
 
 // The caller owns what is expanded and what is loaded, so a node's children can be fetched when it is first expanded.
-export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acceptsDrop, onDrop, contextMenu, onRename, ...rest }: TreeProps) {
+export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acceptsDrop, onDrop, contextMenu, onRename, onDelete, ...rest }: TreeProps) {
   // The node something is being dragged over, and takes
   const [over, setOver] = useState<string | undefined>()
   // How many elements of the tree the drag is inside: dragenter and dragleave come in pairs for each element it crosses, and
@@ -132,17 +134,18 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acc
     )
   }
 
-  // F2 is caught ahead of React Aria's keys, as the Table does, and with Alt, Ctrl or ⌘ left alone, as the Table leaves it. A
-  // field inside a row stops its own keys, so typing never gets here.
+  // F2, Delete and Backspace are caught ahead of React Aria's keys, as the Table does, and with Alt, Ctrl or ⌘ left alone, as
+  // the Table leaves them. A field inside a row stops its own keys, so typing never gets here. The Loading row stands for
+  // nothing, and has no key.
   function onKeyDownCapture(event: KeyboardEvent<HTMLDivElement>) {
     const target = event.target instanceof Element ? event.target : null
-    if (!onRename || event.key !== 'F2' || target?.getAttribute('role') !== 'row') return
-    if (event.altKey || event.ctrlKey || event.metaKey) return
+    if (target?.getAttribute('role') !== 'row' || event.altKey || event.ctrlKey || event.metaKey) return
+    const handler = event.key === 'F2' ? onRename : event.key === 'Delete' || event.key === 'Backspace' ? onDelete : undefined
     const id = target.getAttribute('data-tree-key')
-    if (!id || id.endsWith(loadingSuffix)) return
+    if (!handler || !id || id.endsWith(loadingSuffix)) return
     event.preventDefault()
     event.stopPropagation()
-    onRename(id)
+    handler(id)
   }
 
   return (
