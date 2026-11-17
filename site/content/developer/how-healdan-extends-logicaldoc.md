@@ -228,7 +228,6 @@ learn from.
       has no such table, and the failed statement made a transaction around the destroy roll back
       (`DocumentManagerTest`). It fixes the Classic Interface's Destroy Documents too.
     - The fork-owned `HealdanHooks`, `HealdanTreeChecks` and `HealdanRpcChecks` gain the methods above.
-- **One-time setup steps** in
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a
   new default ships as a new step.
