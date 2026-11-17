@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.trash;
 
 import java.util.Map;
 
+import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderHistory;
@@ -19,8 +20,9 @@ import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
  * folder through CE's folder DAO without the hook: CMIS's delete of an empty
  * folder, the source a merge empties, and CE's folder tool. A folder the hook
  * recorded, which CMIS then deletes item by item, records nothing. Last, as
- * {@code healdanTrash} is for documents. Never refuses a store. CE creates it
- * by reflection, hence the public no-arg constructor.
+ * {@code healdanTrash} is for documents. It refuses a delete only when its
+ * record can't be written, as {@code healdanTrash} does. CE creates it by
+ * reflection, hence the public no-arg constructor.
  */
 public class TrashFolderListener implements FolderListener {
 
@@ -41,7 +43,14 @@ public class TrashFolderListener implements FolderListener {
 		if (folder.getId() == 0L || folder.getDeleted() == 0)
 			return;
 		FolderRow stored = StoredRows.get().folder(folder.getId(), dictionary);
-		if (stored != null && stored.deleted() == 0)
+		if (stored == null || stored.deleted() != 0)
+			return;
+		try {
 			TrashRecorder.get().folderDeleted(folder, transaction);
+		} catch (HealdanVetoException veto) {
+			throw veto;
+		} catch (PersistenceException | RuntimeException e) {
+			throw TrashRecorder.notRecorded(new TrashMember('F', folder.getId()), e);
+		}
 	}
 }

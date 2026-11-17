@@ -21,6 +21,7 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentHistory;
@@ -34,6 +35,7 @@ import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
+import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -61,6 +63,12 @@ public class TrashRecorder {
 	static final String FOLDER = "folder";
 
 	static final String DOCUMENT = "document";
+
+	/**
+	 * A delete whose item can't be written is refused, never left in the trash
+	 * unrecorded, where nothing would show or destroy it
+	 */
+	static final String NOT_RECORDED = "The delete couldn't be recorded in the Trash.";
 
 	/** Large id lists are queried in chunks */
 	private static final int CHUNK = 500;
@@ -191,6 +199,26 @@ public class TrashRecorder {
 				user != null ? Long.valueOf(user.getId()) : document.getDeleteUserId(),
 				user != null ? user.getFullName() : document.getDeleteUser(), now(document.getTenantId())), members);
 		log.debug("Recorded the delete of document {} as Trash item {}", document.getId(), id);
+	}
+
+	/**
+	 * For the listeners: the refusal of a delete whose item couldn't be
+	 * written, which rolls the delete back. The folder or document is evicted
+	 * from the second-level cache on rollback, as the rules' refusals are.
+	 *
+	 * @param member the folder or document being deleted
+	 * @param cause why it couldn't be recorded
+	 * @return the refusal to throw
+	 */
+	static HealdanVetoException notRecorded(TrashMember member, Exception cause) {
+		log.warn("A delete was refused: it couldn't be recorded in the Trash ({})", cause.getClass().getSimpleName());
+		log.debug("Couldn't record {} {} in the Trash", member.type(), member.objectId(), cause);
+		CacheEvictor evictor = CacheEvictor.get();
+		if (member.type() == 'F')
+			evictor.evictFoldersOnRollback(List.of(member.objectId()));
+		else
+			evictor.evictDocumentsOnRollback(List.of(member.objectId()));
+		return new HealdanVetoException(NOT_RECORDED, cause);
 	}
 
 	private boolean deletedMember(TrashMember member) {

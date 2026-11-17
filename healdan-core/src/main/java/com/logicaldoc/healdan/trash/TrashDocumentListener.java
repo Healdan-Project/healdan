@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.trash;
 
 import java.util.Map;
 
+import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.document.Document;
@@ -16,8 +17,10 @@ import com.logicaldoc.core.document.DocumentListener;
  * document's item for a shortcut deleted beside it ({@link TrashRecorder}).
  * Every route deletes a document through CE's document DAO, which stores it at
  * 1 and calls the listeners, in the delete's transaction. Last, once every
- * listener that could refuse the store has let it through. Never refuses a
- * store. CE creates it by reflection, hence the public no-arg constructor.
+ * listener that could refuse the store has let it through. It refuses a delete
+ * only when its record can't be written, so that the delete rolls back rather
+ * than leave a document in the trash that no item holds. CE creates it by
+ * reflection, hence the public no-arg constructor.
  */
 public class TrashDocumentListener implements DocumentListener {
 
@@ -33,8 +36,15 @@ public class TrashDocumentListener implements DocumentListener {
 	@Override
 	public void afterStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary)
 			throws PersistenceException {
-		if (document.getDeleted() == PersistentObject.DELETED_CODE_DEFAULT)
+		if (document.getDeleted() != PersistentObject.DELETED_CODE_DEFAULT)
+			return;
+		try {
 			TrashRecorder.get().documentDeleted(document, transaction);
+		} catch (HealdanVetoException veto) {
+			throw veto;
+		} catch (PersistenceException | RuntimeException e) {
+			throw TrashRecorder.notRecorded(new TrashMember('D', document.getId()), e);
+		}
 	}
 
 	@Override

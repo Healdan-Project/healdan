@@ -26,6 +26,7 @@ import org.junit.Test;
 import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
@@ -315,6 +316,57 @@ public class TrashRecordingTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testADeleteThatCantBeRecordedIsRefused() throws Exception {
+		Document d = upload(correspondence, "unrecorded.txt", admin);
+		Folder single = fx.folder(correspondence, "Unrecorded");
+		Folder tree = fx.folder(correspondence, "Unrecorded Tree");
+		Document inTree = upload(tree, "inside.txt", admin);
+		awaitAsyncWork();
+		emptyTrash();
+
+		// Every member's insert fails, once the item's own row is written
+		jdbc.execute("alter table hd_trash_member add constraint hd_test_unrecordable check (hd_objectid < 0)");
+		try {
+			// A document's delete, through the document listener
+			try {
+				documentDao.delete(d.getId(), documentHistory(alice));
+				fail("The unrecorded document delete wasn't refused");
+			} catch (HealdanVetoException e) {
+				assertEquals(TrashRecorder.NOT_RECORDED, e.getMessage());
+			}
+			assertEquals(0, deleted(d));
+
+			// A single folder's delete through FolderDAO.store, through the folder listener
+			Folder stored = folderDao.findById(single.getId(), true);
+			stored.setDeleted(PersistentObject.DELETED_CODE_DEFAULT);
+			stored.setDeleteUserId(alice.getId());
+			try {
+				folderDao.store(stored, folderHistory(alice));
+				fail("The unrecorded folder delete wasn't refused");
+			} catch (HealdanVetoException e) {
+				assertEquals(TrashRecorder.NOT_RECORDED, e.getMessage());
+			}
+			assertEquals(0, folderDeleted(single));
+
+			// A tree's delete, recorded in the hook, rolls back on the failure itself
+			try {
+				folderDao.deleteTree(tree.getId(), folderHistory(alice));
+				fail("The unrecorded tree delete went through");
+			} catch (Exception e) {
+				// Whatever the database said
+			}
+			assertEquals(0, folderDeleted(tree));
+			assertEquals(0, deleted(inTree));
+
+			assertEquals(0, items());
+		} finally {
+			jdbc.execute("alter table hd_trash_member drop constraint hd_test_unrecordable");
+		}
+		assertNotNull(folderDao.findById(single.getId()));
+		assertNotNull(documentDao.findById(d.getId()));
+	}
+
+	@Test
 	public void testAliasesIntoTheTreeAreMembers() throws Exception {
 		Folder tree = fx.folder(correspondence, "Tree");
 		Folder inner = fx.folder(tree, "Inner");
@@ -387,6 +439,10 @@ public class TrashRecordingTest extends AbstractRulesTestCase {
 
 	private Set<TrashMember> members(long id) {
 		return new HashSet<>(trash.members(id, TrashState.DELETED));
+	}
+
+	private int folderDeleted(Folder folder) {
+		return jdbc.queryForObject("select ld_deleted from ld_folder where ld_id = ?", Integer.class, folder.getId());
 	}
 
 	private int deleted(Document document) {
