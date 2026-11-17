@@ -99,6 +99,7 @@ jobs:
             HealdanHooksTest
             DocumentAclEqualityTest
             HibernateFolderDAOTest#testMerge
+            HibernateFolderDAOTest#testDeleteTreeTakesOnlyLiveRows
             StatsCollectorTest
             SettingServiceImplTest
             FolderServiceImplTest

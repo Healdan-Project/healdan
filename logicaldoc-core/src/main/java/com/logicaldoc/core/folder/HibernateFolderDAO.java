@@ -1769,21 +1769,21 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
         /*
          * Delete the aliases
          */
-        int aliases = jdbcUpdate(
-                "update ld_folder set ld_deleted = %d where  ld_foldref in (%s)".formatted(delCode, treeIdsString));
+        // Healdan: only live ones, so an alias already removed stays removed (folders and Trash spec, 4.2)
+        int aliases = jdbcUpdate("update ld_folder set ld_deleted = %d where ld_deleted = 0 and ld_foldref in (%s)"
+                .formatted(delCode, treeIdsString));
         log.warn("Deleted {} folder aliases in tree {} - {}", aliases, folder.getName(), folder.getId());
 
         /*
          * Delete the documents as well
          */
+        // Healdan: only live ones, so a document already in someone's trash keeps its deleter and one removed stays
+        // removed (folders and Trash spec, 4.2)
         int documents = jdbcUpdate(
-                "update ld_document set ld_deleted = %d where ld_folderid in (%s)".formatted(delCode, treeIdsString));
-        log.warn("Deleted {} documents in tree {} - {}", documents, folder.getName(), folder.getId());
-
-        jdbcUpdate("update ld_document set ld_deleteuserid = %d where  ld_folderid in (%s)"
-                .formatted(transaction.getUserId(), treeIdsString));
-        jdbcUpdate("update ld_document set ld_deleteuser=:user where  ld_folderid in (%s)".formatted(treeIdsString),
+                "update ld_document set ld_deleted = %d, ld_deleteuserid = %d, ld_deleteuser = :user where ld_deleted = 0 and ld_folderid in (%s)"
+                        .formatted(delCode, transaction.getUserId(), treeIdsString),
                 Map.of("user", transaction.getUser().getFullName()));
+        log.warn("Deleted {} documents in tree {} - {}", documents, folder.getName(), folder.getId());
 
         if (sessionFactory.getCache() != null)
             sessionFactory.getCache().evictEntityData(Folder.class);

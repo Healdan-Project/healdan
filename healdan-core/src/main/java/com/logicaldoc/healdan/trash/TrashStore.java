@@ -50,6 +50,12 @@ public class TrashStore {
 			+ " t.hd_docnumber, t.hd_fromfolderid, t.hd_frompath, t.hd_matterid, t.hd_folders, t.hd_documents,"
 			+ " t.hd_deletedby, t.hd_deletedbyname, t.hd_deletedat";
 
+	private static final String INSERT_MEMBER = "insert into hd_trash_member (hd_trashid, hd_objecttype, hd_objectid,"
+			+ " hd_state) values (?, ?, ?, ?)";
+
+	/** The most characters {@code hd_frompath} holds */
+	static final int PATH_LIMIT = 4000;
+
 	private final JdbcTemplate jdbc;
 
 	@Autowired
@@ -65,10 +71,15 @@ public class TrashStore {
 	}
 
 	/**
-	 * Inserts the item and its members, all deleted.
+	 * Inserts the item and its members, all deleted. The caller supplies the
+	 * transaction: a delete records its item in its own, so a failure, the
+	 * delete's or the record's, leaves neither once it rolls back. A path too
+	 * long for the column loses its topmost names, keeping the folder's
+	 * nearest ancestors, so that no delete fails on a deep folder.
 	 *
 	 * @param item the item; its id is ignored
-	 * @param members what the delete took, the item's own folder or document included
+	 * @param members what the delete took, the item's own folder or document
+	 *        included, each once
 	 * @return the item's id
 	 */
 	public long insert(TrashItemRow item, Collection<TrashMember> members) {
@@ -96,14 +107,8 @@ public class TrashStore {
 			return ps;
 		}, keys);
 		long id = ((Number) keys.getKeyList().get(0).values().iterator().next()).longValue();
-		try {
-			for (TrashMember member : members)
-				addMember(id, member);
-		} catch (RuntimeException e) {
-			jdbc.update("delete from hd_trash_member where hd_trashid = ?", id);
-			jdbc.update("delete from hd_trash where hd_id = ?", id);
-			throw e;
-		}
+		jdbc.batchUpdate(INSERT_MEMBER, members.stream().map(member -> new Object[] { id,
+				String.valueOf(member.type()), member.objectId(), TrashState.DELETED.code() }).toList());
 		return id;
 	}
 
@@ -195,9 +200,7 @@ public class TrashStore {
 	 * @param member what it also took
 	 */
 	public void addMember(long id, TrashMember member) {
-		jdbc.update("insert into hd_trash_member (hd_trashid, hd_objecttype, hd_objectid, hd_state)"
-				+ " values (?, ?, ?, ?)", id, String.valueOf(member.type()), member.objectId(),
-				TrashState.DELETED.code());
+		jdbc.update(INSERT_MEMBER, id, String.valueOf(member.type()), member.objectId(), TrashState.DELETED.code());
 	}
 
 	/**
@@ -287,10 +290,23 @@ public class TrashStore {
 		return time == null ? null : time.toInstant();
 	}
 
-	/** A name may hold any character, so the path is a JSON array */
+	/**
+	 * A name may hold any character, so the path is a JSON array. One too long
+	 * for the column drops its topmost names until it fits.
+	 */
 	private static String path(List<String> names) {
+		List<String> kept = names == null ? List.of() : names;
+		String json = json(kept);
+		while (json.length() > PATH_LIMIT && !kept.isEmpty()) {
+			kept = kept.subList(1, kept.size());
+			json = json(kept);
+		}
+		return json;
+	}
+
+	private static String json(List<String> names) {
 		try {
-			return JSON.writeValueAsString(names == null ? List.of() : names);
+			return JSON.writeValueAsString(names);
 		} catch (JsonProcessingException e) {
 			throw new IllegalStateException(e);
 		}

@@ -11,14 +11,20 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import org.junit.Test;
+import javax.sql.DataSource;
 
+import org.junit.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.util.plugin.PluginException;
+import com.logicaldoc.util.spring.Context;
 
 public class TrashStoreTest extends AbstractHealdanTestCase {
 
@@ -135,6 +141,27 @@ public class TrashStoreTest extends AbstractHealdanTestCase {
 		long id = insertFolder("A", 100, 3L, T0);
 		store.change(id, List.of(doc(1000)), TrashState.DELETED, TrashState.DESTROYED, null, null, T0.plusSeconds(9));
 		assertEquals(T0.plusSeconds(9), store.member(id, doc(1000)).orElseThrow().destroyedAt());
+	}
+
+	@Test
+	public void testADeepPathKeepsTheNearestNames() throws Exception {
+		List<String> names = new ArrayList<>();
+		for (int i = 0; i < 40; i++)
+			names.add("Folder %02d ".formatted(i) + "x".repeat(190));
+		TrashItemRow in = new TrashItemRow(0, 1, "folder", 100, "Deep", null, 50L, names, 7L, 0, 0, 3L, "Alice", T0);
+		long id = store.insert(in, List.of(folder(100)));
+
+		List<String> kept = store.item(id).orElseThrow().fromPath();
+		assertFalse(kept.isEmpty());
+		assertTrue(kept.size() < names.size());
+		// The folder's nearest ancestors stay; the topmost names go
+		assertEquals(names.subList(names.size() - kept.size(), names.size()), kept);
+		String stored = new JdbcTemplate(Context.get(DataSource.class))
+				.queryForObject("select hd_frompath from hd_trash where hd_id = ?", String.class, id);
+		assertTrue(stored.length() <= 4000);
+		// As many as fit: one more wouldn't
+		ObjectMapper json = new ObjectMapper();
+		assertTrue(json.writeValueAsString(names.subList(names.size() - kept.size() - 1, names.size())).length() > 4000);
 	}
 
 	@Test
