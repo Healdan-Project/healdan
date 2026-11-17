@@ -24,6 +24,9 @@ other's work. Opening the document on another of your computers warns you first,
 check-out there. The first computer then keeps its copy, but can't save it to the document. See
 [Checked Out to You on Another Computer](../../office/opening-documents/#checked-out-to-you-on-another-computer).
 
+When you can't get back to the first computer, because it was lost or stolen, say, release its check-out in the app
+instead: see [Your Check-Out on Another Computer](#your-check-out-on-another-computer).
+
 A check-out from the app or the Classic Interface belongs to no computer: it's yours, wherever you are.
 
 ## In the App
@@ -35,15 +38,41 @@ the toolbar above the list.
 ### In the Lists
 
 Every list of documents marks one that's held, at the end of its title: a pencil for a check-out, and a padlock for a
-lock. That's a folder, search results, Recent and the result of a `#` search. The mark is an icon only, and stays put
-when you point at the row, select it or move to it with the arrow keys. Point at the mark, and its tooltip says who has
-the document, such as "Checked out by Alex Marsh", "Checked out by you" or "Locked by Alex Marsh". A screen reader reads
-the same. The details say since when, and on which computer. A free document has no mark.
+lock. That's a folder, search results, Recent, Checked Out to Me and the result of a `#` search. The mark is an icon
+only, and stays put when you point at the row, select it or move to it with the arrow keys. Point at the mark, and its
+tooltip says who has the document, such as "Checked out by Alex Marsh", "Checked out by you" or "Locked by Alex
+Marsh". A screen reader reads the same. The details say since when, and on which computer. A free document has no
+mark.
 
 The marks are brought up to date with the rest of the page, each time you come back to it (see
 [Keeping Up to Date](../../getting-started/getting-around/#keeping-up-to-date)): a document you open in Word shows the
 pencil when you click back into the web page. Search results are the exception: their marks stay as they were until
 you search again.
+
+### Checked Out to Me
+
+**Checked Out to Me**, at the top of the left pane above **Recent**, lists every document checked out to you,
+wherever you checked it out: in the app, in the Classic Interface, or on any of your computers through the
+[Healdan Helper](../../office/). It's the place to look for work still in progress, or for a document you forgot to
+check in. Beside it, a count says how many there are, once there's at least one.
+
+![Checked Out to Me open in the main area, its entry highlighted at the top of the left pane above Recent, with 4 beside it. No document is selected, so the toolbar's buttons are greyed out. Its list has the columns Title, Doc #, Version, Matter, Computer, Checked Out and Edit Date: Lease – Engrossment.docx, Due Diligence Tracker.xlsx and Licence Review – Advice to Kestrel.odt, each on MacBook, with Word, Excel and LibreOffice under it, checked out at 15:19, 15:18 and 15:17, then Disclosure Letter – Draft.docx on Web Page, checked out at 15:16](checked-out-to-me.png)
+
+| Column | What it shows |
+|---|---|
+| **Title** | The document's name, with the pencil at its end |
+| **Doc #**, **Version** | Its doc # and version |
+| **Matter** | Its matter's number, with the client's name beside it in paler type |
+| **Computer** | The computer it's checked out on, such as "MacBook", with the app under it, such as Word. **Web Page** for one checked out in the app or the Classic Interface, which belongs to no computer |
+| **Checked Out** | When you checked it out, or last saved to it from the computer that holds it, as **Check-Out Time** in its [Check-Out Info](#check-out-info) |
+| **Edit Date** | When it was last saved to Healdan |
+
+The latest check-out comes first, and no column header sorts the list. A document leaves it once it's checked in or
+released. Select, preview, open and right-click its documents as in any list, and release them from it: see
+[Giving Up a Check-Out](#giving-up-a-check-out) and [Your Check-Out on Another Computer](#your-check-out-on-another-computer).
+
+It lists check-outs only. A document locked with the Classic Interface's **Lock** isn't in it (see
+[Locking a Document](../locking-a-document/)), and nor is one you can no longer read.
 
 ### Check-Out Info
 
@@ -84,25 +113,62 @@ saved under the document's own name, whatever the file you chose is called. To s
 
 ### Giving Up a Check-Out
 
-To stop editing without saving anything, choose **Release**. The document stays as it was.
+To stop editing without saving anything, choose **Release**, under its **Check-Out Info**, in the toolbar in place
+of **Check Out**, or in the document's right-click menu. The document stays as it was. Select several documents
+checked out to you, in [Checked Out to Me](#checked-out-to-me) say, to release them all at once.
 
 ### When Someone Else Has It
 
-The details' **Check-Out Info** names who has the document and since when. The app never takes a check-out over, and
-offers no **Check In** or **Release** for it. It's released by the person who made it, on the computer it's checked
-out on, or by an administrator in the Classic Interface, with **Unlock**.
-
-That goes for your own check-out on a computer too. One you made by opening a document from the
-[Healdan Helper](../../office/) belongs to that computer, which **Computer** names. Release it there, or in the
-Classic Interface.
-
-![The details of Lease – Engrossment.docx, # 48, held on a computer: Check-Out Info, with User Priya Nair (You), Check-Out Time 14 Nov 2026, 17:18, Application Word and Computer Healdan Helper on Office PC, and no Check In or Release, below its name and Favorites star and Open, Download and Copy Link](checked-out-on-computer.png)
+The details' **Check-Out Info** names who has the document and since when. The app never takes someone else's
+check-out over, and offers no **Check In** or **Release** for it. It's released by the person who made it, or by an
+administrator in the Classic Interface, with **Unlock**.
 
 A locked document's **Lock Info** says who locked it, and when. A lock is taken off in the Classic Interface (see
 [Locking a Document](../locking-a-document/)).
 
 If the check-out changes under you, or a rule refuses it, the app says so in a few words, such as "It's checked out.",
 and shows the document's hold as it now is.
+
+### Your Check-Out on Another Computer
+
+A check-out you made by opening a document through the [Healdan Helper](../../office/) belongs to that computer,
+which **Computer** names, and the app offers no **Check In** for it. Check it in on that computer, by closing the
+document there. When you can't, because the computer was lost or stolen, or it's somewhere you can't get to, choose
+**Release…** instead: under the **Check-Out Info**, in the toolbar in place of **Check Out**, or in the document's
+right-click menu.
+
+![The details of Lease – Engrossment.docx, # 48, held on a computer: Check-Out Info, with User Priya Nair (You), Check-Out Time 17 Nov 2026, 15:19, Application Word and Computer Healdan Helper on MacBook, and the Release… button under it, below its name and Favorites star and Open, Download and Copy Link](checked-out-on-computer.png)
+
+Releasing it throws away whatever was done on that computer since its last save to Healdan, so Healdan asks first,
+naming the computer:
+
+![The warning Release 3 Documents from MacBook?, over Checked Out to Me with its three MacBook documents selected and Release… in the toolbar. It says they're checked out to you on MacBook, and lists each with its doc #, app and last save to Healdan: Lease – Engrossment.docx, # 48, Word, saved 4 Nov 2026, 11:00; Due Diligence Tracker.xlsx, # 18, Excel, saved 14 Nov 2026, 16:00; and Licence Review – Advice to Kestrel.odt, # 44, LibreOffice, saved 1 Nov 2026, 15:00. A red box says that changes on MacBook that haven't reached Healdan will be lost, that MacBook can't save to these documents again, and that uploading its copies as new versions rescues those changes. A note says to revoke MacBook's sign-in in Signed-in Devices, a link, if it was lost or stolen. Then the red Release 3 Documents button, and Cancel](release-warning.png)
+
+- **The list** has the documents checked out on that computer, each with its doc #, its app and when it was last
+  saved to Healdan. Work done on the computer since then isn't in Healdan.
+- **Cancel** has the focus, so Enter or Esc releases nothing.
+- **Release 3 Documents**, or **Release Document** for one, the red button, releases them. Healdan says "Released
+  3 documents", and they leave **Checked Out to Me**.
+- **Signed-in Devices,** in the note at the end, opens the list of your devices, so you can revoke the computer's
+  sign-in: see [A Lost or Stolen Computer](../../getting-started/signed-in-devices/#a-lost-or-stolen-computer).
+  Releasing doesn't revoke it, and revoking doesn't release its check-outs: for a lost computer, do both.
+
+You can release several documents at once, from one computer or several, as long as each is checked out to you: the
+warning then lists each computer's documents under its name. Check-outs made in the app among them are released too,
+without being listed. If Healdan refuses any, it names them, and the rest are released.
+
+The document's history records the release, naming the computer and the app, such as "Released while checked out on
+Healdan Helper on MacBook (Word)": see [Document History](../document-history/).
+
+#### Rescuing That Computer's Work
+
+Work on the computer that hadn't reached Healdan isn't in the document, but it may not be lost:
+
+- **If the computer comes back,** its Healdan Helper refuses the next save there and keeps its copy: choose
+  **Save as New Document** to file the changes as a document of their own. See
+  [Your Check-Out Ended](../../office/when-things-go-wrong/#your-check-out-ended).
+- **If you have a copy of the file,** drop it on the document's row in the app and choose to save it as the
+  document's next version. See [Dropping a File on a Document](../../working-with-matters/filing-a-document/#dropping-a-file-on-a-document).
 
 ## In the Classic Interface
 
