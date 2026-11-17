@@ -69,6 +69,40 @@ in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests 
   and a manifest that names the server's own address. `/api/addin/` isn't JSON API, so `Contract` and
   `RouteCoverageTest` leave it out, as they do `/docs`.
 
+### The Trash's Tests
+
+The Trash's tests are in `healdan-core` (`com.logicaldoc.healdan.trash`) and `healdan-api`, with the upstream edits' tests
+in `UPSTREAM_TESTS` (see [Continuous Integration](../continuous-integration/)). They use `HealdanFixtures` and
+`AbstractRulesTestCase`'s layout, and call the job's `runOnce` themselves, as no real start happens in a test.
+
+- **`TrashStoreTest`** checks the record's DAO: items, members, their states and the Trash's lists.
+- **`TrashRecordingTest`** deletes a document and a folder by each route, the API's, the Classic Interface's RPC, WebDAV's
+  and CMIS's, and checks that each makes one item with the right members, that a folder delete leaves a colleague's
+  deleted document where it was, and that a delete whose item can't be written is refused.
+- **`TrashRulesTest`** checks the rules on a whole tree: Delete or Move needed on everything inside, hidden items
+  included, with no name in the refusal; a check-out or an immutable document inside; and a non-admin restoring only from
+  the Trash.
+- **`TrashRestoreTest` and `TrashRemovalTest`** check a restore bringing back only what that delete took, back where it
+  was, a removed subfolder staying removed, the queue for indexing, and the removals of every route, a folder's
+  removal taking its contents.
+- **`TrashExistingSeedTest`** checks the seed that makes items of what was already deleted.
+- **`TrashDestroyerTest`** checks `runOnce`: what was removed more than the days before is destroyed, documents and folders
+  deepest first, with Healdan's rows and the record kept; what is within the days isn't; a matter's own folder and a Store
+  stay removed; and a failure leaves the rest of its item, and only that, for the next night. `TrashStartupTest` starts the
+  timer with its waits shortened. `TrashTestHooks` is in the test-jar so that other modules' tests can fail a destroy.
+- **`FolderChangesTest` and `TrashResourceTest`** in `healdan-api` check the folder delete, move and contents, the Trash's
+  three views and who may read them, restore, remove and empty, each answer against `openapi.yaml`.
+- **`HealdanTrashHooksTest`**, in `logicaldoc-webapp`, checks the Classic Interface's removals and moves through the hooks.
+  `CeFlowsTest`, in `healdan-storage`, checks that a document the Trash destroys is held, and that a failed destroy
+  strands no held file.
+
+The upstream tests this adds to `UPSTREAM_TESTS`, one for each upstream file the Trash edits, are
+`HibernateFolderDAOTest#testDeleteTreeTakesOnlyLiveRows` (the folder DAO's delete) and `#testRestore` (CE's own
+restore path, left unchanged when the hook answers null), `HealdanTrashHooksTest` (the RPC services' removals and `DocumentServiceImpl` and `FolderServiceImpl`),
+`DocumentManagerTest#testDestroyDocumentNamesItsOwnFile` and `#testDestroyDocumentInsideATransaction` (`destroyDocument`),
+and `ResourceServiceImplTest#testMoveFolder` (WebDAV's move). `RpcPermissionGapsTest`, `SoapPermissionGapsTest` and
+`HealdanHooksTest` were already there (`HealdanHooksTest#testFolderRestoreTakesTheScope` covers the restore's scope), and now cover `FolderServiceImpl.move`, `SoapFolderService.move` and the new hooks.
+
 ### The Storage Tests
 
 `healdan-storage`'s tests extend `AbstractStorageTestCase`, which builds on `healdan-core`'s `AbstractHealdanTestCase`,

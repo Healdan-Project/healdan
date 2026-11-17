@@ -7,7 +7,9 @@ Healdan never deletes a file from a backend at once. Every removal waits out the
 with, so that a backup restored later still finds every file it names:
 
 - a version that's deleted;
-- a document purged from the trash;
+- a document destroyed, by the Classic Interface's Destroy Documents, or by the Trash's nightly job once it has been
+  removed for [Removed Items Kept](../../healdan-settings/) days (see [The Trash and Removed
+  Items](../../the-trash-and-removed-items/));
 - a preview or thumbnail that's made again;
 - a file's old copy, once the mover has copied it to its Store's new backend;
 - a file's old copy on another backend, when the file is saved again.
@@ -44,6 +46,13 @@ usual.
 
 So a backup restored from before a Replace File gets the new file, unless it's restored while the new file is still
 waiting to be uploaded.
+
+## A Destroyed Document's Files
+
+The nightly job that destroys removed items deletes each document's rows at once, but its files wait out the holding
+period like any other deleted file. So a backup restored from before the destroy still finds them for **Removed Items
+Kept** days, plus the holding period, after the item was removed: the two add up, 60 days with both at their
+defaults.
 
 ## What It Costs
 
