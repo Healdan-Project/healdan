@@ -107,3 +107,23 @@
   color: var(--hd-required);
   font-size: var(--hd-font-size-small);
 }
+
+.checkedOut {
+  margin-top: var(--hd-space-2);
+}
+
+.badge {
+  margin-inline-start: auto;
+  padding: 0 var(--hd-space-2);
+  border-radius: 999px;
+  background: var(--hd-pill);
+  color: var(--hd-text);
+  font-size: var(--hd-font-size-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* On the open entry the pill would vanish into its own background */
+.entry[aria-current='page'] .badge {
+  background: var(--hd-accent-fill);
+  color: var(--hd-accent-on-fill);
+}

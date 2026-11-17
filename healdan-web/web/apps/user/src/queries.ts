@@ -15,6 +15,7 @@ type S = components['schemas']
 export const keys = {
   me: ['me'] as const,
   recentDocuments: ['documents', 'recent'] as const,
+  checkouts: ['documents', 'checkouts'] as const,
   recentEmails: ['documents', 'recent', 'email'] as const,
   recentFolders: ['folders', 'recent'] as const,
   recentClients: ['clients', 'recent'] as const,
@@ -77,6 +78,12 @@ export function useRecentDocuments(kind?: 'email') {
     queryFn: () => api.get<PageOf<S['DocumentView']>>('/v1/documents/recent', kind ? { kind } : undefined),
     meta: ASK_ON_RETURN,
   })
+}
+
+/** The documents the person has checked out, the latest first. */
+export function useCheckouts() {
+  const api = useApi()
+  return useQuery({ queryKey: keys.checkouts, queryFn: () => api.get<PageOf<S['DocumentView']>>('/v1/me/checkouts'), meta: ASK_ON_RETURN })
 }
 
 export function useRecentFolders() {

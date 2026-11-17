@@ -168,6 +168,7 @@ export function defaultRoutes(): Routes {
       document({ docNumber: 10431, name: 'Letter to Dunmere Pryce.docx', lastModified: '2026-11-09T09:42:00Z' }),
       document({ docNumber: 10388, name: 'Letter from Dunmere Pryce.pdf', lastModified: '2026-09-29T09:40:00Z' }),
     ]),
+    'GET /v1/me/checkouts': page([]),
     'GET /v1/matters/recent': page([
       matter({ id: 12, folderId: 120, display: '1002.1 – Commercial Lease', client: client({ id: 2, number: 1002, name: 'Brightwell' }) }),
     ]),

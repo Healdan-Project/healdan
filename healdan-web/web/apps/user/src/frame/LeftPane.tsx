@@ -5,7 +5,7 @@ import { useQueries } from '@tanstack/react-query'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
-import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, t, toast, type ItemMenu, type TreeNode } from '@healdan/ui'
+import { Button, Icon, ItemContextMenu, Menu, MenuItem, Tree, plural, t, toast, type ItemMenu, type TreeNode } from '@healdan/ui'
 import { favoriteTooltip } from '../actions/favoriteName'
 import { useMyMattersChange } from '../actions/myMatters'
 import { whyNotRename } from '../actions/rename'
@@ -14,7 +14,7 @@ import { useFiling } from '../filing/FilingProvider'
 import { FavoriteMenuItems, folderMenu, MatterMenuItems } from '../menus/ContextMenus'
 import { useOrganising } from '../organising/OrganisingProvider'
 import { FolderName } from '../organising/RenameField'
-import { fetchSubfolders, idFrom, keys, useFavorites, useFolder, useMe, useMyMatters, useRecentMatters } from '../queries'
+import { fetchSubfolders, idFrom, keys, useCheckouts, useFavorites, useFolder, useMe, useMyMatters, useRecentMatters } from '../queries'
 import { useApi } from '../services'
 import { fileIcon, folderIcon, matterIcon } from '../kindIcons'
 import { recentKinds, scopeIcons } from '../search/scopes'
@@ -77,6 +77,20 @@ function useCurrentFolder() {
   return useFolder(idFrom(currentFolder(pathname))).data
 }
 
+
+// Above the sections, as it isn't one: the documents the person has checked out, with how many
+function CheckedOutEntry() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const total = useCheckouts().data?.total ?? 0
+  const here = pathname === '/checked-out'
+  return (
+    <Link to="/checked-out" className={`${styles.entry} ${styles.checkedOut}`} aria-current={here ? 'page' : undefined} aria-label={total >= 1 ? plural('checkedOutEntry', total) : t('checkedOut.title')}>
+      <Icon name="pencil" />
+      <span className={styles.text}>{t('checkedOut.title')}</span>
+      {total >= 1 && <span className={styles.badge}>{total}</span>}
+    </Link>
+  )
+}
 
 function RecentSection() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -380,6 +394,7 @@ function FavoritesSection() {
 export function LeftPane() {
   return (
     <nav className={styles.pane} aria-label={t('pane.label')}>
+      <CheckedOutEntry />
       <RecentSection />
       <RecentMattersSection />
       <MyMattersSection />

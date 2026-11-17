@@ -190,6 +190,11 @@ export const enUS = {
   'recent.emails': 'Emails',
   'recent.folders': 'Folders',
   'recent.clients': 'Clients',
+  'checkedOut.title': 'Checked Out to Me',
+  'checkedOut.actions': 'Checked Out Actions',
+  'checkedOut.empty': 'Nothing is checked out to you.',
+  'checkedOut.webPage': 'Web Page',
+  'checkedOut.unknownComputer': 'Another Computer',
   'recent.heading.documents': 'Recent Documents',
   'recent.heading.emails': 'Recent Emails',
   'recent.heading.folders': 'Recent Folders',
@@ -225,6 +230,8 @@ export const enUS = {
   'list.version': 'Version',
   'list.author': 'Author',
   'list.edited': 'Edit Date',
+  'list.computer': 'Computer',
+  'list.checkedOut': 'Checked Out',
   'search.scope': 'Search In',
   'search.label': 'Search',
   'search.placeholder': 'Search, or type # and a number',
@@ -395,6 +402,7 @@ export const enUSPlurals = {
   deleteTitle: { one: 'Move {n} document to the Trash?', other: 'Move {n} documents to the Trash?' },
   deleted: { one: 'Moved {n} document to the Trash', other: 'Moved {n} documents to the Trash' },
   menuForDocuments: { one: 'Actions for {n} document', other: 'Actions for {n} documents' },
+  checkedOutEntry: { one: 'Checked Out to Me, {n} document', other: 'Checked Out to Me, {n} documents' },
   matters: { one: '{n} {matter}', other: '{n} {matters}' },
 } as const
 

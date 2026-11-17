@@ -67,6 +67,19 @@ export function holdSentence(state: HoldState): string | undefined {
   }
 }
 
+const HELPER_PREFIX = 'Healdan Helper on '
+
+/**
+ * Where a check-out is held, for the Checked Out to Me list: the computer (the helper's token name without "Healdan
+ * Helper on ") and the app. A check-out from the web page has no computer.
+ */
+export function computerLabel(hold: S['HoldView'] | null): { computer: string; app: string | null } {
+  if (!hold?.heldOn) return { computer: t('checkedOut.webPage'), app: null }
+  const { name, app } = hold.heldOn
+  const short = name?.startsWith(HELPER_PREFIX) ? name.slice(HELPER_PREFIX.length) : name
+  return { computer: short?.trim() ? short : t('checkedOut.unknownComputer'), app }
+}
+
 export function checkOut(api: Api, docNumber: number): Promise<S['DocumentView']> {
   return api.send('POST', apiPath`/v1/documents/${docNumber}/checkout`)
 }

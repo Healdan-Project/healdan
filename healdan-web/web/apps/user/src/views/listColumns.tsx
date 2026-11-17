@@ -3,6 +3,7 @@
 
 import type { components } from '@healdan/api'
 import { formatDate, formatVersion, Icon, t, type TableColumn, type TableRow } from '@healdan/ui'
+import { computerLabel } from '../actions/checkout'
 import { HoldMarker } from '../actions/HoldMarker'
 import type { SearchScope } from '../search/scopes'
 import { itemIcon } from '../kindIcons'
@@ -94,4 +95,32 @@ export function hitColumns(scope: SearchScope): TableColumn<ListRow>[] {
 /** What a list keeps while the reading pane is open and the list is narrow (spec section 6.4): Title, Doc # and Edit Date. */
 export function narrowed(columns: TableColumn<ListRow>[]): TableColumn<ListRow>[] {
   return columns.filter((column) => column.id === 'title' || column.id === 'docNumber' || column.id === 'edited')
+}
+
+/** Checked Out to Me: the server's order (latest check-out first), so nothing sorts. */
+export function checkedOutColumns(): TableColumn<ListRow>[] {
+  const plain = (column: TableColumn<ListRow>): TableColumn<ListRow> => ({ ...column, allowsSorting: false })
+  return [
+    plain({ ...title, minWidth: 220 }),
+    plain({ ...docNumber, width: 80 }),
+    plain({ ...version, width: 70 }),
+    { ...matterColumn(), width: 130 },
+    {
+      id: 'computer',
+      name: t('list.computer'),
+      width: 130,
+      cell: ({ item }) => {
+        if (item.type !== 'document') return null
+        const { computer, app } = computerLabel(item.hold)
+        return (
+          <span className={styles.stacked}>
+            <span>{computer}</span>
+            {app && <span className={styles.muted}>{app}</span>}
+          </span>
+        )
+      },
+    },
+    { id: 'checkedOut', name: t('list.checkedOut'), width: 116, cell: ({ item }) => item.type === 'document' && item.hold?.since ? formatDate(item.hold.since) : null },
+    plain({ ...edited, width: 116 }),
+  ]
 }

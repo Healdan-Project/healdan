@@ -26,6 +26,22 @@ const correspondence = folder({
 const pane = () => screen.getByRole('navigation', { name: 'Navigation' })
 
 describe('LeftPane', () => {
+  it('puts Checked Out to Me first, with its count', async () => {
+    await renderApp('/checked-out', { 'GET /v1/me/checkouts': page([documentView({ docNumber: 1 }), documentView({ docNumber: 2 })]) })
+    const first = within(pane()).getAllByRole('link')[0]!
+    await waitFor(() => expect(first.getAttribute('aria-label') ?? first.textContent).toContain('Checked Out to Me, 2 documents'))
+    expect(within(pane()).getByRole('link', { name: 'Checked Out to Me, 2 documents' })).toBe(first)
+    expect(first.textContent).toContain('2')
+    expect(first.getAttribute('href')).toBe('/app/checked-out')
+    expect(first.getAttribute('aria-current')).toBe('page')
+  })
+
+  it('shows no count with none checked out', async () => {
+    await renderApp('/folders/1')
+    const entry = await within(pane()).findByRole('link', { name: 'Checked Out to Me' })
+    expect(entry.textContent).toBe('Checked Out to Me')
+  })
+
   it('lists Recent: Documents, Emails, Folders and Clients, each a link to its own address', async () => {
     await renderApp('/folders/1')
     const recent = Object.fromEntries(
