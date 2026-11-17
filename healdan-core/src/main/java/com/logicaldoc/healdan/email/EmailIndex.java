@@ -49,7 +49,7 @@ public class EmailIndex {
 	/** The most hashes one query asks for */
 	private static final int CHUNK = 100;
 
-	/** The most folders one query of {@link #emailsIn} asks about */
+	/** The most folders one query of {@link #emailsIn} asks about, or documents one of {@link #emailsAmong} */
 	private static final int FOLDER_CHUNK = 500;
 
 	/** The documents a lookup answers: not deleted, and not shortcuts */
@@ -190,7 +190,7 @@ public class EmailIndex {
 	 *
 	 * @param folderIds folders, such as a tree's
 	 * @param deleted false for the documents not deleted, true for those
-	 *        deleted with code 1, which a folder restore brings back
+	 *        deleted with code 1, which CE's folder restore brings back
 	 * @return each such document that has a row and isn't a shortcut, with its
 	 *         Message-ID, lowest id first
 	 */
@@ -202,6 +202,27 @@ public class EmailIndex {
 					+ "where d.ld_deleted = :deleted and d.ld_docref is null and d.ld_folderid in (:folders)",
 					new MapSqlParameterSource("deleted", deleted ? 1 : 0).addValue("folders",
 							ids.subList(from, Math.min(from + FOLDER_CHUNK, ids.size()))),
+					rs -> {
+						emails.put(rs.getLong(1), rs.getString(2));
+					});
+		return emails;
+	}
+
+	/**
+	 * The emails among documents a restore brings back, for the
+	 * once-per-matter rule
+	 *
+	 * @param documentIds documents, deleted or not
+	 * @return each of them that has a row and isn't a shortcut, with its
+	 *         Message-ID, lowest id first
+	 */
+	public Map<Long, String> emailsAmong(Collection<Long> documentIds) {
+		List<Long> ids = new ArrayList<>(documentIds);
+		Map<Long, String> emails = new TreeMap<>();
+		for (int from = 0; from < ids.size(); from += FOLDER_CHUNK)
+			named.query("select e.hd_docid, e.hd_messageid from hd_email e join ld_document d on d.ld_id = e.hd_docid "
+					+ "where d.ld_docref is null and d.ld_id in (:ids)",
+					new MapSqlParameterSource("ids", ids.subList(from, Math.min(from + FOLDER_CHUNK, ids.size()))),
 					rs -> {
 						emails.put(rs.getLong(1), rs.getString(2));
 					});

@@ -27,6 +27,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
@@ -44,6 +45,7 @@ import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.trash.TrashRestore;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -275,13 +277,14 @@ public class OncePerMatter {
 	}
 
 	/**
-	 * A deleted folder is restored, also into the matter it was in. CE brings
-	 * back the documents deleted in its tree, and a live document there comes
-	 * back too where a deleted folder hid it; CE restores a live folder by
-	 * moving it, which brings its live emails along. Each such email arrives,
-	 * unless it is a live copy in the parent's matter already. Two copies of a
-	 * message coming back together are refused, such as one deleted on its own
-	 * and one filed after it and deleted with the folder.
+	 * A deleted folder is restored, also into the matter it was in. The
+	 * restore brings back the documents the folder's Trash item took that are
+	 * in its tree, deleted or, from Removed, removed ({@link TrashRestore}), or
+	 * CE's, every document deleted in its tree, for a folder in no item; and a
+	 * live document there comes back too where a deleted folder hid it. CE
+	 * restores a live folder by moving it, which brings its live emails along.
+	 * Each such email arrives, unless it is a live copy in the parent's matter
+	 * already. Two copies of a message coming back together are refused.
 	 *
 	 * @param folderId the folder restored
 	 * @param parentId where to
@@ -295,7 +298,9 @@ public class OncePerMatter {
 		if (target == null)
 			return;
 		Collection<Long> tree = FolderDAO.get().findFolderIdInTree(folderId, true);
-		Map<Long, String> arriving = new TreeMap<>(index.emailsIn(tree, true));
+		HealdanHooks.RestoreScope scope = TrashRestore.get().plan(folderId, tree);
+		Map<Long, String> arriving = new TreeMap<>(
+				scope != null ? index.emailsAmong(scope.documentIds()) : index.emailsIn(tree, true));
 		Map<Long, Matter> matters = new HashMap<>();
 		for (Map.Entry<Long, String> live : index.emailsIn(tree, false).entrySet()) {
 			Document document = DocumentDAO.get().findById(live.getKey());

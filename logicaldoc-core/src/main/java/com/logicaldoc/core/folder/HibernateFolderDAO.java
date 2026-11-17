@@ -857,6 +857,11 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
     @Override
     public void restore(long folderId, long parentId, FolderHistory transaction) throws PersistenceException {
         com.logicaldoc.core.HealdanHooks.get().beforeFolderRestore(folderId, parentId, transaction);
+        // Healdan: what comes back with the folder, asked while its row still shows whether it was deleted or removed
+        // (folders and Trash spec, 4.4)
+        Set<Long> treeIds = findFolderIdInTree(folderId, true);
+        com.logicaldoc.core.HealdanHooks.RestoreScope scope = com.logicaldoc.core.HealdanHooks.get()
+                .folderRestoreScope(folderId, treeIds, transaction);
         // The parent folder
         Folder parent = findFolder(parentId);
         int count = jdbcUpdate(
@@ -880,8 +885,17 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
         }
 
         // Restore all the children
-        Set<Long> treeIds = findFolderIdInTree(folderId, true);
-        if (!treeIds.isEmpty()) {
+        if (scope != null) {
+            // Healdan: only those the scope names, so what others deleted inside stays in their trash
+            if (!scope.folderIds().isEmpty())
+                jdbcUpdate(
+                        "update ld_folder set ld_deleted = 0, ld_lastmodified = CURRENT_TIMESTAMP where ld_deleted <> 0 and ld_id in (%s)"
+                                .formatted(CollectionUtil.join(scope.folderIds())));
+            if (!scope.documentIds().isEmpty())
+                jdbcUpdate(
+                        "update ld_document set ld_deleted = 0, ld_lastmodified = CURRENT_TIMESTAMP where ld_deleted <> 0 and ld_id in (%s)"
+                                .formatted(CollectionUtil.join(scope.documentIds())));
+        } else if (!treeIds.isEmpty()) {
             String idsStr = treeIds.stream().map(id -> Long.toString(id)).collect(Collectors.joining(","));
             jdbcUpdate(
                     "update ld_folder set ld_deleted = 0, ld_lastmodified = CURRENT_TIMESTAMP where ld_deleted = 1 and ld_id in (%s)"

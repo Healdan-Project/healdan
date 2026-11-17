@@ -38,6 +38,7 @@ import com.logicaldoc.healdan.profile.StoredProfile;
 import com.logicaldoc.healdan.security.PermissionRules;
 import com.logicaldoc.healdan.security.PermissionsDocumentListener;
 import com.logicaldoc.healdan.trash.TrashRecorder;
+import com.logicaldoc.healdan.trash.TrashRestore;
 import com.logicaldoc.healdan.trash.TrashRules;
 import com.logicaldoc.healdan.util.CacheEvictor;
 
@@ -55,7 +56,8 @@ import jakarta.annotation.PreDestroy;
  * the store a listener could veto. A folder delete also checks R74's
  * permissions here, as every route deletes a tree through this hook, then
  * refuses it while a document inside is checked out or immutable, and records
- * the delete as a Trash item once the rules let it through. The
+ * the delete as a Trash item once the rules let it through; a folder restore
+ * brings back only what that item took. The
  * once-per-matter rule (M5 spec §6.4) checks moves, restores, merges and
  * folder copies here, for the same reasons.
  */
@@ -222,6 +224,17 @@ public class HealdanHooksImpl implements HealdanHooks {
 			PermissionRules.get().checkRestore(folderId, parentId);
 			oncePerMatter.checkSubtreeRestore(folderId, parentId, FilingRules.actor(transaction));
 		});
+	}
+
+	/**
+	 * Not a rule: a folder's restore brings back what the delete that took it
+	 * took, its Trash item's members in its tree, and leaves what others
+	 * deleted inside earlier, or what was removed since, where it is (spec 4.4)
+	 */
+	@Override
+	public RestoreScope folderRestoreScope(long folderId, Collection<Long> treeIds, FolderHistory transaction)
+			throws PersistenceException {
+		return TrashRestore.get().scope(folderId, treeIds, FilingRules.actor(transaction));
 	}
 
 	/**

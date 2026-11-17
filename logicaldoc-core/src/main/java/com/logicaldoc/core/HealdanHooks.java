@@ -19,10 +19,11 @@ import com.logicaldoc.core.security.user.Group;
  * any side effect (the after-hook at its very end), so a
  * {@link HealdanVetoException} it throws refuses the operation before anything
  * is written. The document and folder DAOs roll back on that exception, not on
- * other {@link PersistenceException}s. {@link #countPages} is the one hook that
- * isn't a check: it corrects a value CE works out. Every method is a no-op by
- * default, and {@link #get()} returns a no-op until healdan-core registers its
- * implementation, so CE behaves as before without Healdan.
+ * other {@link PersistenceException}s. {@link #countPages} and
+ * {@link #folderRestoreScope} aren't only checks: the first corrects a value
+ * CE works out, the second what CE's restore sets live. Every method is a
+ * no-op by default, and {@link #get()} returns a no-op until healdan-core
+ * registers its implementation, so CE behaves as before without Healdan.
  * <p>
  * Healdan addition: lives in its own file so upstream merges don't touch it.
  */
@@ -154,6 +155,38 @@ public interface HealdanHooks {
     default void beforeFolderRestore(long folderId, long parentId, FolderHistory transaction)
             throws PersistenceException {
         // No check by default
+    }
+
+    /**
+     * The folders and documents a folder's restore sets live, besides the
+     * folder itself, which CE always does
+     *
+     * @param folderIds the folders, in the folder's tree or not
+     * @param documentIds the documents
+     */
+    record RestoreScope(Collection<Long> folderIds, Collection<Long> documentIds) {
+    }
+
+    /**
+     * Called in {@code HibernateFolderDAO.restore} after
+     * {@link #beforeFolderRestore}, in its transaction, before any row is
+     * undeleted, so the folder's row still shows whether it was deleted or
+     * removed. CE then runs
+     * {@code update ... set ld_deleted = 0 ... where ld_deleted <> 0 and ld_id in (...)}
+     * for each list of the scope instead of its own two updates.
+     *
+     * @param folderId the folder to restore
+     * @param treeIds the folder and every folder below it, deleted or not
+     * @param transaction the history entry, possibly {@code null}
+     *
+     * @return the folders and documents the restore sets live; {@code null}
+     *         keeps CE's: every folder and document at 1 in the tree
+     *
+     * @throws PersistenceException to refuse the restore
+     */
+    default RestoreScope folderRestoreScope(long folderId, Collection<Long> treeIds, FolderHistory transaction)
+            throws PersistenceException {
+        return null;
     }
 
     /**

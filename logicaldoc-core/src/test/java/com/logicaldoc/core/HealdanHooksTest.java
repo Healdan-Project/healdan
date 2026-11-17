@@ -13,7 +13,9 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import org.junit.After;
@@ -515,6 +517,36 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         assertEquals(List.of("beforeFolderRestore:1204,5 deleted=1", "afterFolderRestore:1204,5 deleted=0 parent=5"),
                 calls);
         assertEquals(0, column("ld_folder", "ld_deleted", 1204L));
+    }
+
+    @Test
+    public void testFolderRestoreTakesTheScope() throws PersistenceException {
+        // Tree 1200 in the trash, with 1201 removed, and two deleted documents in 1201
+        folderDao.jdbcUpdate("update ld_folder set ld_deleted = 1 where ld_id in (1200, 1202, 1302)");
+        folderDao.jdbcUpdate("update ld_folder set ld_deleted = 2 where ld_id = 1201");
+        folderDao.jdbcUpdate("update ld_document set ld_folderid = 1201 where ld_id in (5, 6)");
+
+        HealdanHooks.register(new HealdanHooks() {
+            @Override
+            public RestoreScope folderRestoreScope(long folderId, Collection<Long> treeIds,
+                    FolderHistory transaction) throws PersistenceException {
+                calls.add("folderRestoreScope:%d,%s deleted=%d".formatted(folderId, new TreeSet<>(treeIds),
+                        column("ld_folder", "ld_deleted", folderId)));
+                return new RestoreScope(List.of(1201L), List.of(5L));
+            }
+        });
+
+        folderDao.restore(1200L, 5L, folderTransaction());
+
+        // Asked once, with the tree, while the folder's row still shows it deleted
+        assertEquals(List.of("folderRestoreScope:1200,[1200, 1201, 1202, 1204, 1300, 1302] deleted=1"), calls);
+        // The folder, and only what the scope names, removed or not
+        for (long id : new long[] { 1200L, 1201L })
+            assertEquals("folder " + id, 0, column("ld_folder", "ld_deleted", id));
+        for (long id : new long[] { 1202L, 1204L, 1300L, 1302L })
+            assertEquals("folder " + id, 1, column("ld_folder", "ld_deleted", id));
+        assertEquals(0, column("ld_document", "ld_deleted", 5L));
+        assertEquals(1, column("ld_document", "ld_deleted", 6L));
     }
 
     private static void awaitVersionSaves() throws Exception {
