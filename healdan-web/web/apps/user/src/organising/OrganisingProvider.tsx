@@ -16,7 +16,7 @@ import { ConfirmDelete } from './ConfirmDelete'
 import { MovePicker } from './MovePicker'
 import { NewFolderDialog } from './NewFolder'
 import { Refusals, type RefusalsProps } from './Refusals'
-import { readRows } from './rows'
+import { focusLater, readRows, rowAfter } from './rows'
 
 /** Where a rename's field is: a list's row, the My Matters tree, or the open folder's heading */
 export type RenamePlace = 'row' | 'tree' | 'heading'
@@ -62,26 +62,6 @@ function renameOrigin({ key, place }: Renaming): HTMLElement | null {
   if (place === 'row') return found.querySelector<HTMLElement>(`[role="grid"] [data-row-key="${key}"]`)
   if (place === 'tree') return found.querySelector<HTMLElement>(`[role="treegrid"] [data-tree-key="${key.slice(1)}"]`)
   return found.querySelector<HTMLElement>(`[data-rename-menu="${key}"] button`)
-}
-
-/** The key of the row that follows the documents' rows in the list drawn now, else the one before them, else none */
-function rowAfter(docNumbers: number[]): string | undefined {
-  const gone = new Set(docNumbers.map((n) => `d${n}`))
-  const keys = Array.from(globalThis.document.querySelectorAll('[role="grid"] [data-row-key]'), (row) => row.getAttribute('data-row-key') ?? '')
-  const last = keys.findLastIndex((key) => gone.has(key))
-  if (last < 0) return undefined
-  return keys.slice(last + 1).find((key) => !gone.has(key)) ?? keys.slice(0, last).findLast((key) => !gone.has(key))
-}
-
-/** Focuses a row once it has been drawn again, or the list when there is no such row (as the dialog that had the focus gives it back first) */
-function focusLater(key: string | undefined) {
-  let tries = 0
-  const attempt = () => {
-    const target = (key ? globalThis.document.querySelector<HTMLElement>(`[data-row-key="${key}"]`) : null) ?? (key ? null : globalThis.document.querySelector<HTMLElement>('[role="grid"]'))
-    if (target) target.focus()
-    else if (++tries < 20) setTimeout(attempt, 50)
-  }
-  setTimeout(attempt, 0)
 }
 
 /**

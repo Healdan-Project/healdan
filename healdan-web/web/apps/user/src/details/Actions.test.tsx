@@ -96,8 +96,9 @@ describe('Check Out, Check In and Release in the details', () => {
     expect(within(panel).queryByRole('button', { name: /Check Out|Check In|Release/ })).toBeNull()
   })
 
-  // Where it's released isn't said any more (the owner's dogfooding punch list, 2026-11-14): the section says where it's held
-  it('shows your check-out on a computer, and offers no way to take it over or words on where to release it', async () => {
+  // Where it's released isn't said any more (the owner's dogfooding punch list, 2026-11-14): the section says where it's held.
+  // Release… releases it from here, after a warning (Checked Out to Me, spec 5.3; Release.test.tsx)
+  it('shows your check-out on a computer, and offers only Release…, with no words on where to release it', async () => {
     const onMac = { name: 'Healdan Helper on MacBook', app: 'Word' }
     const mine = document({ ...letter, canEdit: false, hold: held({ device: { id: 'd1', ...onMac }, heldOn: onMac }) })
     await renderApp('/folders/7?sel=10388', routes(mine))
@@ -105,7 +106,7 @@ describe('Check Out, Check In and Release in the details', () => {
     expect(value(await info(), 'Computer')).toBe('Healdan Helper on MacBook')
     const panel = await details()
     expect(within(panel).queryByText(/Release it|released on|Classic Interface \(Unlock\)/)).toBeNull()
-    expect(within(panel).queryByRole('button', { name: /Check Out|Check In|Release/ })).toBeNull()
+    expect(within(panel).getAllByRole('button', { name: /Check Out|Check In|Release/ }).map((button) => button.textContent)).toEqual(['Release…'])
   })
 
   it('says a lock you took yourself is yours, as the check-out does', async () => {

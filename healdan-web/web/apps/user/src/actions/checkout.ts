@@ -84,9 +84,19 @@ export function checkOut(api: Api, docNumber: number): Promise<S['DocumentView']
   return api.send('POST', apiPath`/v1/documents/${docNumber}/checkout`)
 }
 
-export function release(api: Api, docNumber: number): Promise<S['DocumentView']> {
-  return api.send('DELETE', apiPath`/v1/documents/${docNumber}/checkout`)
+/**
+ * Ends the person's own check-out. One another of their computers holds is refused (`409 held-elsewhere`) unless
+ * `elsewhere` says the person was warned that its unsaved work is lost (spec 4.1).
+ */
+export function release(api: Api, docNumber: number, options: { elsewhere?: boolean } = {}): Promise<S['DocumentView']> {
+  return api.send('DELETE', apiPath`/v1/documents/${docNumber}/checkout`, undefined, options.elsewhere ? { elsewhere: 'true' } : undefined)
 }
+
+/** What marks a document's own check-out, check-in or release while it runs (useCheckout), so every control that offers one waits for it */
+export const holdKey = (docNumber: number | undefined) => ['hold', docNumber] as const
+
+/** What marks a release of several documents while it runs (ReleaseProvider), whose variables are their doc #s */
+export const RELEASE_KEY = ['hold', 'release'] as const
 
 export interface SaveOptions {
   /** `snapshot` for an ordinary save (2.1 becomes 2.2), `version` for the next major number (2.2 becomes 3.0) */

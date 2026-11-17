@@ -8,7 +8,7 @@ import { fieldErrors, messageFor } from '../frame/errors'
 import { keys, useMe } from '../queries'
 import { useApi } from '../services'
 import { invalidateDocumentLists } from './refresh'
-import { checkIn, checkOut, holdState, release, type HoldState } from './checkout'
+import { checkIn, checkOut, holdKey, holdState, RELEASE_KEY, type HoldState } from './checkout'
 
 type DocumentView = components['schemas']['DocumentView']
 
@@ -17,24 +17,37 @@ export interface Checkout {
   /** A check-out, check-in or release of the document is under way, from here or from any other control that offers one */
   busy: boolean
   checkOut: () => Promise<void>
-  release: () => Promise<void>
   checkIn: (file: File) => Promise<void>
 }
 
-/** What marks a document's check-out, check-in and release while it runs, so every control that offers one waits for it */
-const holdKey = (docNumber: number | undefined) => ['hold', docNumber] as const
+/**
+ * Whether a check-out, check-in or release of any of the documents is under way: one of its own (holdKey), or a release
+ * of several that includes it (RELEASE_KEY, whose variables are their doc #s). Nothing with none.
+ */
+export function useHoldsBusy(docNumbers: readonly number[]): boolean {
+  const running = useIsMutating({
+    mutationKey: ['hold'],
+    predicate: (mutation) => {
+      const which = mutation.options.mutationKey?.[1]
+      const touched = which === RELEASE_KEY[1] ? ((mutation.state.variables as readonly number[] | undefined) ?? []) : [which]
+      return touched.some((docNumber) => docNumbers.includes(docNumber as number))
+    },
+  })
+  return running > 0
+}
 
 /**
- * Check Out, Check In and Release for a document, which follow its `hold`; none is offered without a document. What the
- * server says is shown from the catalogue, and the document and every list that shows its hold are asked for again,
- * whether it worked or not, as a refusal usually means the hold isn't what the page showed. While one runs, each control
- * that offers them is busy: the toolbar's, the details' and a right-click menu's alike.
+ * Check Out and Check In for a document, which follow its `hold`; none is offered without a document. Release is the
+ * ReleaseProvider's, which warns first when another of the person's computers holds the check-out. What the server says
+ * is shown from the catalogue, and the document and every list that shows its hold are asked for again, whether it worked
+ * or not, as a refusal usually means the hold isn't what the page showed. While one runs, or a release of the document,
+ * each control that offers them is busy: the toolbar's, the details' and a right-click menu's alike.
  */
 export function useCheckout(document: DocumentView | undefined): Checkout {
   const api = useApi()
   const queryClient = useQueryClient()
   const me = useMe()
-  const busy = useIsMutating({ mutationKey: holdKey(document?.docNumber) }) > 0 && document !== undefined
+  const busy = useHoldsBusy(document ? [document.docNumber] : [])
   // The work is all in the mutation, which goes on when the control that started it goes, as a menu's item does
   const mutation = useMutation({
     mutationKey: holdKey(document?.docNumber),
@@ -65,7 +78,6 @@ export function useCheckout(document: DocumentView | undefined): Checkout {
     state: holdState(document?.hold ?? null, me.data?.id),
     busy,
     checkOut: () => run((doc) => checkOut(api, doc.docNumber)),
-    release: () => run((doc) => release(api, doc.docNumber)),
     checkIn: (file) => run((doc) => checkIn(api, doc, file), true),
   }
 }

@@ -29,3 +29,30 @@ export function readRows(text: string): Movable[] {
     return []
   }
 }
+
+/** The key of the row that follows the documents' rows in the list drawn now, else the one before them, else none */
+export function rowAfter(docNumbers: readonly number[]): string | undefined {
+  const gone = new Set(docNumbers.map((n) => `d${n}`))
+  const keys = Array.from(globalThis.document.querySelectorAll('[role="grid"] [data-row-key]'), (row) => row.getAttribute('data-row-key') ?? '')
+  const last = keys.findLastIndex((key) => gone.has(key))
+  if (last < 0) return undefined
+  return keys.slice(last + 1).find((key) => !gone.has(key)) ?? keys.slice(0, last).findLast((key) => !gone.has(key))
+}
+
+/**
+ * Focuses a row once it has been drawn again, or the list when there is no such row (as the dialog that had the focus
+ * gives it back first). With `gone`, the row keys of documents that may have left the list, only once none of them is
+ * drawn: where they stay, as a released document does in a folder, the focus stays where it is.
+ */
+export function focusLater(key: string | undefined, gone: readonly string[] = []) {
+  let tries = 0
+  const drawn = (row: string) => globalThis.document.querySelector(`[role="grid"] [data-row-key="${row}"]`) !== null
+  const attempt = () => {
+    const target = gone.some(drawn)
+      ? null
+      : ((key ? globalThis.document.querySelector<HTMLElement>(`[data-row-key="${key}"]`) : null) ?? (key ? null : globalThis.document.querySelector<HTMLElement>('[role="grid"]')))
+    if (target) target.focus()
+    else if (++tries < 20) setTimeout(attempt, 50)
+  }
+  setTimeout(attempt, 0)
+}

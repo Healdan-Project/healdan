@@ -130,7 +130,22 @@ export const enUS = {
   'checkout.checkOut': 'Check Out',
   'checkout.checkIn': 'Check In',
   'checkout.release': 'Release',
+  // Release for a check-out another of the person's computers holds, which warns first
+  'checkout.releaseAsk': 'Release…',
   'checkout.file': 'File to Check In',
+  // The warning before releasing a check-out held on a computer: {computer} is its short name ("MacBook"), and {devices}
+  // the Signed-in Devices button, inside the sentence
+  'release.titleOne': 'Release {name} from {computer}?',
+  'release.otherComputers': 'Other Computers',
+  'release.on': 'On {computer}',
+  'release.saved': 'Saved {when}',
+  'release.lostOne': "Changes on {computer} that haven't reached Healdan will be lost.",
+  'release.lostMany': "Changes on those computers that haven't reached Healdan will be lost.",
+  'release.rescueMany': 'If you get their copies back, upload each one as a new version of its document to rescue those changes.',
+  'release.stolenOne': 'If {computer} was lost or stolen, also revoke its sign-in in {devices}.',
+  'release.stolenMany': 'If one of them was lost or stolen, also revoke its sign-in in {devices}.',
+  'release.devices': 'Signed-in Devices',
+  'release.refusedTitle': "Some Documents Weren't Released",
   'hold.someone': 'someone',
   'hold.checkedOutBy': 'Checked out by {who}',
   'hold.checkedOutByYou': 'Checked out by you',
@@ -401,6 +416,23 @@ export const enUSPlurals = {
   moved: { one: 'Moved {n} document to {folder}', other: 'Moved {n} documents to {folder}' },
   deleteTitle: { one: 'Move {n} document to the Trash?', other: 'Move {n} documents to the Trash?' },
   deleted: { one: 'Moved {n} document to the Trash', other: 'Moved {n} documents to the Trash' },
+  // The warning before a release: the title and the button count every document released, the rest those on the computer
+  releaseTitle: { one: 'Release {n} Document from {computer}?', other: 'Release {n} Documents from {computer}?' },
+  releaseHeldOn: { one: "It's checked out to you on {computer}:", other: "They're checked out to you on {computer}:" },
+  releaseNoMore: {
+    one: "Once released, {computer} can't save to this document again, and the work in its copy can't be carried on there.",
+    other: "Once released, {computer} can't save to these documents again, and the work in its copies can't be carried on there.",
+  },
+  releaseNoMoreMany: {
+    one: "Once released, they can't save to this document again, and the work in their copies can't be carried on there.",
+    other: "Once released, they can't save to these documents again, and the work in their copies can't be carried on there.",
+  },
+  releaseRescue: {
+    one: 'If you get its copy back, upload it as a new version of its document to rescue those changes.',
+    other: 'If you get its copies back, upload each one as a new version of its document to rescue those changes.',
+  },
+  releaseConfirm: { one: 'Release Document', other: 'Release {n} Documents' },
+  released: { one: 'Released {n} document', other: 'Released {n} documents' },
   menuForDocuments: { one: 'Actions for {n} document', other: 'Actions for {n} documents' },
   checkedOutEntry: { one: 'Checked Out to Me, {n} document', other: 'Checked Out to Me, {n} documents' },
   matters: { one: '{n} {matter}', other: '{n} {matters}' },

@@ -8,7 +8,8 @@ type Query = Record<string, string | number | string[] | undefined>
 export interface Api {
   /** `signal` cancels the request, as when the answer is no longer wanted. */
   get<T>(path: string, query?: Query, options?: RequestOptions): Promise<T>
-  send<T>(method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown | FormData): Promise<T>
+  /** `query` is for a change's flags, such as a release's `elsewhere` */
+  send<T>(method: 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown | FormData, query?: Query): Promise<T>
   /**
    * The response itself, for a binary answer (a PDF, a picture) or one that is read by its status and headers (a 202
    * with Retry-After). A failure is thrown as for `get`: a 401 reports a sign-out, and a problem is an ApiError.
@@ -82,7 +83,7 @@ export function createApi(options: ApiOptions = {}): Api {
 
   return {
     get: (path, query, options) => request('GET', path, query, undefined, options?.signal),
-    send: (method, path, body) => request(method, path, undefined, body),
+    send: (method, path, body, query) => request(method, path, query, body),
     getResponse: (path, query, options) => fetchOk('GET', path, query, undefined, options?.signal),
     url: (path, query) => `${base}${path}${queryString(query)}`,
   }
