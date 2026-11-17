@@ -38,6 +38,7 @@ import com.logicaldoc.healdan.profile.StoredProfile;
 import com.logicaldoc.healdan.security.PermissionRules;
 import com.logicaldoc.healdan.security.PermissionsDocumentListener;
 import com.logicaldoc.healdan.trash.TrashRecorder;
+import com.logicaldoc.healdan.trash.TrashRemoval;
 import com.logicaldoc.healdan.trash.TrashRestore;
 import com.logicaldoc.healdan.trash.TrashRules;
 import com.logicaldoc.healdan.util.CacheEvictor;
@@ -235,6 +236,26 @@ public class HealdanHooksImpl implements HealdanHooks {
 	public RestoreScope folderRestoreScope(long folderId, Collection<Long> treeIds, FolderHistory transaction)
 			throws PersistenceException {
 		return TrashRestore.get().scope(folderId, treeIds, FilingRules.actor(transaction));
+	}
+
+	/**
+	 * Remove, on the Classic Interface's route: the rows go to Removed with the
+	 * members of their Trash items (spec 2.3)
+	 */
+	@Override
+	public boolean removeFromTrash(String table, Collection<Long> ids, User user) throws PersistenceException {
+		TrashRemoval.get().removeMembers("ld_folder".equals(table) ? 'F' : 'D', ids, user);
+		return true;
+	}
+
+	/**
+	 * Empty Trash, on the Classic Interface's route: every item of the user's
+	 * in the Trash goes to Removed
+	 */
+	@Override
+	public boolean emptyTrash(User user) throws PersistenceException {
+		TrashRemoval.get().empty(user);
+		return true;
 	}
 
 	/**

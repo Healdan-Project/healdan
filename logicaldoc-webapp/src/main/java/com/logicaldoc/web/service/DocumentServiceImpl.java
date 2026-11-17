@@ -39,6 +39,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.RowMapper;
 
+import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.automation.Automation;
@@ -2354,8 +2355,11 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         try {
             // Healdan: what is in the trash, and for all but admins what the user deleted, as emptyTrash takes
             HealdanRpcChecks.trash(session, "ld_document", ids);
-            DocumentDAO.get().jdbcUpdate("update ld_document set ld_deleted = 2 where ld_deleted = 1 and ld_id in (%s)"
-                    .formatted(CollectionUtil.join(ids)));
+            // Healdan: Removed takes the item's members, who and when, with the rows
+            if (!HealdanHooks.get().removeFromTrash("ld_document", ids, session.getUser()))
+                DocumentDAO.get()
+                        .jdbcUpdate("update ld_document set ld_deleted = 2 where ld_deleted = 1 and ld_id in (%s)"
+                                .formatted(CollectionUtil.join(ids)));
         } catch (PersistenceException e) {
             throwServerException(session, log, e);
         }
@@ -2367,6 +2371,10 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         Session session = validateSession();
 
         try {
+            // Healdan: every item of the user's, with its members, goes to Removed
+            if (HealdanHooks.get().emptyTrash(session.getUser()))
+                return;
+
             DocumentDAO.get()
                     .jdbcUpdate("update ld_document set ld_deleted = 2 where ld_deleted = 1 and ld_deleteuserid = %d"
                             .formatted(session.getUserId()));

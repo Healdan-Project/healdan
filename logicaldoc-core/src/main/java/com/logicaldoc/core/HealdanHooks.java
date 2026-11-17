@@ -12,6 +12,7 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.metadata.AttributeSet;
 import com.logicaldoc.core.security.user.Group;
+import com.logicaldoc.core.security.user.User;
 
 /**
  * Healdan's checks on the operations whose side effects a listener veto can't
@@ -279,6 +280,38 @@ public interface HealdanHooks {
      */
     default void beforeAttributeSetDelete(AttributeSet set) throws PersistenceException {
         // No check by default
+    }
+
+    /**
+     * Called by the Classic Interface's Delete from the Trash, after its own
+     * checks, before it changes any row: Healdan's removal of the listed rows
+     * (and, for a folder, what its item took with it) to Removed.
+     *
+     * @param table {@code ld_document} or {@code ld_folder}
+     * @param ids the rows the person chose
+     * @param user who removes them
+     *
+     * @return {@code true} when Healdan removed them, so that CE's own update is
+     *         skipped
+     *
+     * @throws PersistenceException error at data layer
+     */
+    default boolean removeFromTrash(String table, Collection<Long> ids, User user) throws PersistenceException {
+        return false;
+    }
+
+    /**
+     * Called by the Classic Interface's Empty Trash, before it changes any row
+     *
+     * @param user whose trash is emptied
+     *
+     * @return {@code true} when Healdan emptied it, so that CE's own updates are
+     *         skipped
+     *
+     * @throws PersistenceException error at data layer
+     */
+    default boolean emptyTrash(User user) throws PersistenceException {
+        return false;
     }
 
     /**

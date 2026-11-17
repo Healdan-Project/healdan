@@ -141,6 +141,16 @@ public class TrashStore {
 	}
 
 	/**
+	 * @param userId a person
+	 * @param state a state
+	 * @return the items the person deleted whose top member is in that state, oldest first
+	 */
+	public List<Long> itemsDeletedBy(long userId, TrashState state) {
+		return jdbc.queryForList("select t.hd_id" + TOP + " where t.hd_deletedby = ? and m.hd_state = ?"
+				+ " order by t.hd_id", Long.class, userId, state.code());
+	}
+
+	/**
 	 * @param id the item
 	 * @param state a state
 	 * @return the item's members in that state
