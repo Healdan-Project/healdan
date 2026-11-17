@@ -68,7 +68,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const organising = useOrganisingTable(listing.rows, selection, changeSelection)
   // What was just filed flashes in the list, and the row the files are over is lit
   const { fresh } = useFiling()
-  const place = useMemo(() => (view ? placeOf(view) : { id: folderId, kind: 'store' as const }), [view, folderId])
+  const place = useMemo(() => (view ? placeOf(view) : { id: folderId, kind: 'store' as const, matterId: null }), [view, folderId])
   // By key, as a drag asks at every dragover which row it is over
   const byKey = useMemo(() => new Map(listing.rows.map((item) => [childKey(item), item])), [listing.rows])
   const zone = useDropZone(place, (key) => {

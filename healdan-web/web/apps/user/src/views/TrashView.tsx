@@ -22,6 +22,8 @@ import styles from './views.module.css'
 
 type S = components['schemas']
 type Item = S['TrashItem']
+/** What the restore picker moves: nothing of its own, so it greys out no place, and the server decides where an item may go back */
+const NOTHING = { documents: [], folders: [] }
 /** What's running: one at a time */
 type Busy = 'restore' | 'remove' | 'empty'
 
@@ -333,7 +335,7 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
       )}
       {/* One at a time, once what's running is done */}
       {picking[0] && busy === undefined && (
-        <MovePicker key={picking[0].id} documents={[]} title={t('trash.restoreTo', { name: picking[0].name })} onCancel={() => picked(picking[0]!)} onChoose={(folder) => restoreInto(picking[0]!, folder.id)} />
+        <MovePicker key={picking[0].id} items={NOTHING} title={t('trash.restoreTo', { name: picking[0].name })} onCancel={() => picked(picking[0]!)} onChoose={(folder) => restoreInto(picking[0]!, folder.id)} />
       )}
     </section>
   )

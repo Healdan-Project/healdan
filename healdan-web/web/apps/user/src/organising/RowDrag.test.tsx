@@ -29,14 +29,14 @@ describe('Dragging rows onto a folder of the tree', () => {
     const data = transfer()
     fireEvent.dragStart(await row(/Lease/), { dataTransfer: data })
     expect(data.types).toContain(ROWS_TYPE)
-    expect(readRows(data.getData(ROWS_TYPE))).toEqual([
+    expect(readRows(data.getData(ROWS_TYPE)).documents).toEqual([
       { docNumber: 10432, name: 'Lease.docx', folder: { id: 7 } },
       { docNumber: 10433, name: 'Plan.pdf', folder: { id: 7 } },
     ])
 
     const other = transfer()
     fireEvent.dragStart(await row(/Letter to Dunmere/), { dataTransfer: other })
-    expect(readRows(other.getData(ROWS_TYPE))).toEqual([{ docNumber: 10431, name: 'Letter to Dunmere Pryce.docx', folder: { id: 7 } }])
+    expect(readRows(other.getData(ROWS_TYPE)).documents).toEqual([{ docNumber: 10431, name: 'Letter to Dunmere Pryce.docx', folder: { id: 7 } }])
   })
 
   it('moves what was dragged into the folder it is dropped on', async () => {
@@ -148,15 +148,14 @@ describe('Dragging rows onto a folder of the tree', () => {
 
 // Folder rows can be selected, and dragged with the documents (folders and Trash spec 7.5): the drag carries both
 describe('Dragging a folder', () => {
-  it('carries it under the app\'s own type, with the documents selected with it, and no document for it', async () => {
+  it("carries the folder under the app's own type, with the documents selected with it", async () => {
     const { all } = routes()
     await renderApp('/folders/7', all)
     const data = transfer()
     fireEvent.dragStart(await row(/Drafts/), { dataTransfer: data })
     expect(data.types).toContain(ROWS_TYPE)
-    const drafted = { id: 8, name: 'Drafts', parentId: 7, matterId: 11, canMove: true, canDelete: true }
-    expect(JSON.parse(data.getData(ROWS_TYPE)).folders).toEqual([drafted])
-    expect(readRows(data.getData(ROWS_TYPE))).toEqual([])
+    const drafted = { id: 8, name: 'Drafts', parentId: 7, matterId: 11, canMove: true, canDelete: true, kind: 'folder', topLevel: false }
+    expect(readRows(data.getData(ROWS_TYPE))).toEqual({ documents: [], folders: [drafted] })
 
     await select(/Lease/)
     const user = userEvent.setup()
@@ -165,7 +164,6 @@ describe('Dragging a folder', () => {
     await user.keyboard('{/Control}')
     const both = transfer()
     fireEvent.dragStart(await row(/Lease/), { dataTransfer: both })
-    expect(JSON.parse(both.getData(ROWS_TYPE)).folders).toEqual([drafted])
-    expect(readRows(both.getData(ROWS_TYPE))).toEqual([{ docNumber: 10432, name: 'Lease.docx', folder: { id: 7 } }])
+    expect(readRows(both.getData(ROWS_TYPE))).toEqual({ documents: [{ docNumber: 10432, name: 'Lease.docx', folder: { id: 7 } }], folders: [drafted] })
   })
 })

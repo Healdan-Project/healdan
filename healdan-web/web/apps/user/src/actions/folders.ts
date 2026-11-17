@@ -3,6 +3,7 @@
 
 import { ApiError, apiPath, type Api, type components } from '@healdan/api'
 import { t, type StringKey } from '@healdan/ui'
+import { refusalText } from '../filing/refusal'
 import { messageFor } from '../frame/errors'
 import { holdSentence, holdState } from './checkout'
 import { isTopLevel } from './rename'
@@ -32,7 +33,7 @@ export interface MovingFolder {
   matterId: number | null
   canMove: boolean
   canDelete: boolean
-  /** Its kind, and whether it's directly in a matter's workspace, which say why it can't be moved or deleted; a drag's doesn't carry them */
+  /** Its kind, and whether it's directly in a matter's workspace, which say why it can't be moved or deleted */
   kind?: S['FolderView']['kind']
   topLevel?: boolean
 }
@@ -72,9 +73,18 @@ export function whyNotDelete(folder: Described & { canDelete: boolean }, admin: 
 /** Why the person can't move the folder; undefined when they can (`canMove`), as whyNotDelete */
 export function whyNotMove(folder: Described & { canMove: boolean }, admin: boolean | undefined): StringKey | undefined {
   if (folder.canMove) return undefined
-  if (folder.kind === 'matter' || folder.kind === 'store') return 'problems.not-movable'
-  if (topLevelOf(folder) && !admin) return 'problems.admins-only'
-  return 'problems.forbidden'
+  if (folder.kind === 'matter') return 'move.matterFolder'
+  if (folder.kind === 'store') return 'problems.not-movable'
+  if (topLevelOf(folder) && !admin) return 'move.adminsOnlyFolder'
+  return 'move.noPermission'
+}
+
+/**
+ * Whether a selection holds anything that can be moved: a document, or a folder whose `canMove` says so. A folder of
+ * several that can't is said in Refusals while the rest is moved (folders and Trash spec 7.5), as anyDeletable.
+ */
+export function anyMovable(items: { documents: readonly unknown[]; folders: readonly Pick<MovingFolder, 'canMove'>[] }): boolean {
+  return items.documents.length > 0 || items.folders.some((folder) => folder.canMove)
 }
 
 /**
@@ -93,7 +103,7 @@ export function anyDeletable(items: { documents: readonly unknown[]; folders: re
   return items.documents.length > 0 || items.folders.some((folder) => folder.canDelete)
 }
 
-/** What a refused folder delete says: why, the checked-out documents it names, and what can be done about them */
+/** What a refused folder delete or move says: why, the checked-out documents it names, and what can be done about them */
 export interface FolderRefusal {
   reason: string
   /** Each checked-out document in it that the person can read, with who has it and since when */
@@ -112,14 +122,34 @@ export function folderDeleteRefusal(error: unknown, meId: number | undefined): F
     if (error.code === 'items-not-allowed') return { reason: t('delete.notAllowed') }
     if (error.code === 'admins-only') return { reason: t('delete.adminsOnly') }
     if (error.code === 'forbidden') return { reason: t('delete.noPermission') }
-    if (error.code === 'checked-out') {
-      const holds = (error.body as { holds?: S['HeldDocument'][] } | null)?.holds
-      const details = (Array.isArray(holds) ? holds : []).map((held) => {
-        const who = holdSentence(holdState(held.hold, meId))
-        return who ? t('organising.refused', { name: held.name, reason: who }) : held.name
-      })
-      return { reason: t('delete.checkedOut'), details, after: t('delete.checkedOutAfter') }
-    }
+    if (error.code === 'checked-out') return { reason: t('delete.checkedOut'), details: heldNames(error, meId), after: t('delete.checkedOutAfter') }
   }
   return { reason: messageFor(error) }
+}
+
+/**
+ * Each checked-out document a `checked-out` refusal names, with who has it and since when: only those in the problem's
+ * `holds`, the documents the person can read
+ */
+function heldNames(error: ApiError, meId: number | undefined): string[] {
+  const holds = (error.body as { holds?: S['HeldDocument'][] } | null)?.holds
+  return (Array.isArray(holds) ? holds : []).map((held) => {
+    const who = holdSentence(holdState(held.hold, meId))
+    return who ? t('organising.refused', { name: held.name, reason: who }) : held.name
+  })
+}
+
+/**
+ * Why a folder wasn't moved, from the catalogue (spec 4.3, 7.5), as folderDeleteRefusal: what it holds that the person
+ * may not move is named by nothing, and of its check-outs only those the problem's `holds` names. A name already taken,
+ * and an email already in the matter it went to, have the words a document's move has.
+ */
+export function folderMoveRefusal(error: unknown, meId: number | undefined): FolderRefusal {
+  if (error instanceof ApiError) {
+    if (error.code === 'items-not-allowed') return { reason: t('move.notAllowed') }
+    if (error.code === 'admins-only') return { reason: t('move.adminsOnlyFolder') }
+    if (error.code === 'forbidden') return { reason: t('move.noPermission') }
+    if (error.code === 'checked-out') return { reason: t('delete.checkedOut'), details: heldNames(error, meId) }
+  }
+  return { reason: refusalText(error, meId) }
 }

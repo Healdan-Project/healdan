@@ -6,17 +6,29 @@ import { useNavigate, useParams } from '@tanstack/react-router'
 import { createContext, useContext, useState, type DragEvent, type ReactNode } from 'react'
 import type { components } from '@healdan/api'
 import { plural, t, toast, toastWithAction } from '@healdan/ui'
-import { eachItem, nameOf, refusalLines, type Movable, type OneItem, type OrganisingItems, type Outcome, type RefusalLine } from '../actions/batch'
-import { deleteFolder, folderContents, folderDeleteRefusal, FolderNotDeletable, whyNotDelete } from '../actions/folders'
-import { moveDocuments } from '../actions/move'
+import { eachItem, nameOf, type ItemDone, type ItemRefusal, type Movable, type OneItem, type OrganisingItems, type RefusalLine } from '../actions/batch'
+import {
+  anyMovable,
+  deleteFolder,
+  folderContents,
+  folderDeleteRefusal,
+  folderMoveRefusal,
+  FolderNotDeletable,
+  moveFolder,
+  whyNotDelete,
+  whyNotMove,
+  type MovingFolder,
+} from '../actions/folders'
+import { moveDocument, planMove, type MovePlan } from '../actions/move'
 import { invalidateDocumentLists } from '../actions/refresh'
 import { removeDocument } from '../actions/remove'
-import { carriesRows, refusalOf, ROWS_TYPE, type Place } from '../filing/dropTargets'
+import { carriesRows, ROWS_TYPE, type Place } from '../filing/dropTargets'
 import { refusalText } from '../filing/refusal'
 import { idFrom, keys, useMe } from '../queries'
 import { useSelection } from '../selection'
 import { useApi } from '../services'
 import { ConfirmDelete } from './ConfirmDelete'
+import { CrossMatter } from './CrossMatter'
 import { MovePicker } from './MovePicker'
 import { NewFolderDialog } from './NewFolder'
 import { Refusals, type RefusalsProps } from './Refusals'
@@ -47,12 +59,13 @@ export interface Organising {
   stopRename: (focusBack?: boolean) => void
   /** Asks first, then moves the folders and documents to the Trash, saying so with Undo */
   askDelete: (items: OrganisingItems) => void
-  /** Opens the picker, then moves the documents where it's told */
+  /** Opens the picker, then moves the folders and documents where it's told, asking first for a folder leaving its matter */
   askMove: (items: OrganisingItems) => void
   askNewFolder: (parent: Place) => void
   /**
-   * Rows dropped on a folder of the tree move there. A drop that doesn't carry them is left alone (the filing's), and one on a
-   * place that holds no documents says so before any call is made.
+   * Rows dropped on a folder of the tree move there, folders and documents. A drop that doesn't carry them is left alone (the
+   * filing's), and what can't go there (documents into a place that holds none, a folder into its own tree) says so
+   * before any call is made.
    */
   dropRows: (event: DragEvent, place: Place) => void
 }
@@ -128,9 +141,22 @@ function lineKey(item: OneItem): string {
 }
 
 /**
- * Renaming documents and folders, moving documents, deleting folders and documents, and making folders (spec 6.7;
- * folders and Trash spec 7.4, 7.5): what is being renamed, the dialogs that ask and the one that says what was refused.
- * Each item is its own call, so a refusal leaves the others done. A delete says so with Undo, which restores what it took.
+ * What a move says it did, where to (folders and Trash spec 7.5): documents alone as before; one folder by the name the
+ * server answered, which CE changes on its way in when a folder the person can't see has its name ("Letters(1)"); else
+ * how many items.
+ */
+function movedText(done: readonly ItemDone<{ name: string }>[], where: string): string {
+  const [one] = done
+  if (done.every((item) => 'document' in item)) return plural('moved', done.length, { folder: where })
+  if (done.length === 1 && one && 'folder' in one) return t('move.doneFolder', { name: one.answer.name, folder: where })
+  return plural('move.doneMany', done.length, { folder: where })
+}
+
+/**
+ * Renaming documents and folders, moving and deleting folders and documents, and making folders (spec 6.7; folders and
+ * Trash spec 7.4, 7.5): what is being renamed, the dialogs that ask and the one that says what was refused. Each item is
+ * its own call, so a refusal leaves the others done. A delete says so with Undo, which restores what it took. A folder
+ * leaving its matter is asked about before it moves.
  */
 export function OrganisingProvider({ children }: { children: ReactNode }) {
   const api = useApi()
@@ -144,6 +170,8 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
   const [moving, setMoving] = useState<OrganisingItems | undefined>()
   const [parent, setParent] = useState<Place | undefined>()
   const [refused, setRefused] = useState<Pick<RefusalsProps, 'title' | 'lines'> | undefined>()
+  // The question a folder leaving its matter asks before it moves: the folder, the matter it goes into, and its answer
+  const [crossing, setCrossing] = useState<{ folder: MovingFolder; matter: string; answer: (move: boolean) => void } | undefined>()
 
   // The one folder the question is about says what it holds that the person can read; asked afresh each time
   const asked = deleting && deleting.documents.length === 0 && deleting.folders.length === 1 ? deleting.folders[0]?.id : undefined
@@ -155,24 +183,90 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     gcTime: 0,
   })
 
-  /** What a change to several documents did, said: one line, and a dialog for what was refused */
-  function report(outcome: Outcome, done: string, title: string) {
-    if (outcome.done.length > 0) toast(done)
-    if (outcome.refused.length > 0) setRefused({ title, lines: refusalLines(outcome.refused, me.data?.id) })
+  // What the folder leaving its matter holds that the person can read, for its question's line; asked afresh each time
+  const crossingContents = useQuery({
+    queryKey: keys.contents(crossing?.folder.id ?? 0),
+    queryFn: () => folderContents(api, crossing?.folder.id ?? 0),
+    enabled: crossing !== undefined,
+    staleTime: 0,
+    gcTime: 0,
+  })
+
+  /** Asks whether the folder may leave its matter for the place's, and answers once: Move, or Cancel (or Esc) */
+  function askCrossing(folder: MovingFolder, place: Place): Promise<boolean> {
+    return new Promise((resolve) => {
+      let answered = false
+      setCrossing({
+        folder,
+        matter: place.matter ?? place.name ?? '',
+        answer: (yes) => {
+          if (answered) return
+          answered = true
+          setCrossing(undefined)
+          resolve(yes)
+        },
+      })
+    })
   }
 
-  /** `dragged`: a drop moved them, which leaves the focus where the person put it */
-  async function move(documents: readonly Movable[], folder: { id: number; name: string }, dragged = false) {
-    // What is in the folder already isn't moved, and isn't counted
-    const todo = documents.filter((one) => one.folder?.id !== folder.id)
-    if (todo.length === 0) return toast(t('move.sameFolder'))
+  /**
+   * Each refusal of a move as a line of Refusals, in the order the list shows the items (folders first): what the plan
+   * refused before any call, with its reason, and what the server refused, in the catalogue's words
+   */
+  function moveLines(items: OrganisingItems, early: MovePlan['refused'], failed: readonly ItemRefusal[]): RefusalLine[] {
+    const lines = new Map<string, RefusalLine>()
+    for (const one of early) lines.set(lineKey(one), { key: lineKey(one), name: nameOf(one), reason: t(one.reason) })
+    for (const one of failed) {
+      const said = 'document' in one ? { reason: refusalText(one.error, me.data?.id) } : folderMoveRefusal(one.error, me.data?.id)
+      lines.set(lineKey(one), { key: lineKey(one), name: nameOf(one), ...said })
+    }
+    return [...items.folders.map((folder) => `f${folder.id}`), ...items.documents.map((document) => `d${document.docNumber}`)].flatMap((key) => lines.get(key) ?? [])
+  }
+
+  /**
+   * Nothing to move: what is in the place already says so, and why the rest can't go is said without a dialog, as the
+   * Delete key does: one item, or documents a place holds none of, by the reason alone, and several by the first, named
+   */
+  function nothingMoved(refused: MovePlan['refused'], count: number) {
+    const [first] = refused
+    if (!first) return toast(t('move.sameFolder'))
+    if (count === 1 || refused.every((one) => 'document' in one)) toast(t(first.reason))
+    else toast(t('organising.refused', { name: nameOf(first), reason: t(first.reason) }))
+  }
+
+  /**
+   * Moves the items into the place, each with its own call (folders and Trash spec 7.5). What can't go there makes no call
+   * and is said in Refusals while the rest is moved; each folder leaving its matter is asked about first, in turn, and
+   * one the person keeps is left where it is; the documents go before the folders, so a document moved into a folder that
+   * is moving too goes where the person saw it go. `dragged`: a drop moved them, which leaves the focus where the person
+   * put it.
+   */
+  async function move(items: OrganisingItems, place: Place, dragged = false) {
+    const plan = planMove(items, place, me.data?.admin)
+    if (plan.documents.length + plan.folders.length === 0) return nothingMoved(plan.refused, items.documents.length + items.folders.length)
+    const folders: MovingFolder[] = []
+    for (const folder of plan.folders) if (folder.matterId === place.matterId || (await askCrossing(folder, place))) folders.push(folder)
+    const title = items.folders.length > 0 ? t('move.refusedItemsTitle') : t('move.refusedTitle')
+    if (plan.documents.length + folders.length === 0) {
+      if (plan.refused.length > 0) setRefused({ title, lines: moveLines(items, plan.refused, []) })
+      return
+    }
     // Where the focus goes once the rows are gone, as after a delete: the picker that had it is gone, and the page would have it
-    const next = rowAfter(todo.map((one) => `d${one.docNumber}`))
-    const outcome = await moveDocuments(api, todo, folder.id)
+    const next = rowAfter([...folders.map((folder) => `f${folder.id}`), ...plan.documents.map((one) => `d${one.docNumber}`)])
+    const calls = {
+      document: (document: Movable) => moveDocument(api, document.docNumber, place.id),
+      folder: (folder: MovingFolder) => moveFolder(api, folder.id, place.id),
+    }
+    const documents = await eachItem<{ name: string }>({ documents: plan.documents, folders: [] }, calls)
+    const moved = await eachItem<{ name: string }>({ documents: [], folders }, calls)
     // No doc #s: a moved copy of an email's attachment is still its copy, wherever it went (invalidateDocumentLists)
     await invalidateDocumentLists(queryClient)
-    report(outcome, plural('moved', outcome.done.length, { folder: folder.name || t('move.thisFolder') }), t('move.refusedTitle'))
-    if (outcome.done.length > 0 && !dragged) focusLater(next?.key)
+    const done = [...documents.done, ...moved.done]
+    if (done.length > 0) toast(movedText(done, place.name || t('move.thisFolder')))
+    const failed = [...documents.refused, ...moved.refused]
+    if (plan.refused.length + failed.length > 0) setRefused({ title, lines: moveLines(items, plan.refused, failed) })
+    // Nor does it move for an item that was no row here (the tree's folder, the open one), where the picker gives it back
+    if (done.length > 0 && next && !dragged) focusLater(next.key)
   }
 
   /** Why each refused item wasn't deleted: a folder's line names its readable check-outs under it */
@@ -243,16 +337,25 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     askDelete: (items) => {
       if (items.documents.length + items.folders.length > 0) setDeleting(items)
     },
-    askMove: setMoving,
+    askMove: (items) => {
+      if (items.documents.length + items.folders.length === 0) return
+      // With nothing that can be moved, the folder says why, as the Delete key does, and nothing is asked: named, of several.
+      // Several with something movable are asked about, and those that can't be moved say why in Refusals
+      if (!anyMovable(items)) {
+        const [blocked] = items.folders
+        const why = blocked && whyNotMove(blocked, me.data?.admin)
+        if (blocked && why) toast(items.folders.length > 1 ? t('organising.refused', { name: blocked.name, reason: t(why) }) : t(why))
+        return
+      }
+      setMoving(items)
+    },
     askNewFolder: setParent,
     dropRows: (event, place) => {
       if (!carriesRows(Array.from(event.dataTransfer.types))) return
       event.preventDefault()
       // Read now: the browser empties the data transfer when the event ends
-      const documents = readRows(event.dataTransfer.getData(ROWS_TYPE))
-      const refusal = refusalOf(place)
-      if (refusal) toast(t(refusal))
-      else if (documents.length > 0) void move(documents, { id: place.id, name: place.name ?? '' }, true)
+      const items = readRows(event.dataTransfer.getData(ROWS_TYPE))
+      if (items.documents.length + items.folders.length > 0) void move(items, place, true)
     },
   }
 
@@ -273,13 +376,24 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
       )}
       {moving && (
         <MovePicker
-          documents={moving.documents}
+          items={moving}
           onCancel={() => setMoving(undefined)}
-          onChoose={(folder) => {
-            const { documents } = moving
+          onChoose={(place) => {
+            const items = moving
             setMoving(undefined)
-            void move(documents, folder)
+            void move(items, place)
           }}
+        />
+      )}
+      {crossing && (
+        <CrossMatter
+          // A dialog of its own for each folder, as one question follows another
+          key={crossing.folder.id}
+          name={crossing.folder.name}
+          matter={crossing.matter}
+          contents={crossingContents.data}
+          onConfirm={() => crossing.answer(true)}
+          onCancel={() => crossing.answer(false)}
         />
       )}
       {parent && <NewFolderDialog parent={parent} onCancel={() => setParent(undefined)} />}

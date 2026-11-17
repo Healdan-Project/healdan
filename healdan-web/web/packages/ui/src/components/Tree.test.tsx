@@ -306,3 +306,51 @@ describe('Tree right-click menu', () => {
     expect(fireEvent.contextMenu(screen.getByRole('row', { name: /My Recent Docs/ }))).toBe(true)
   })
 })
+
+describe('Tree drags', () => {
+  const type = 'application/x-test-rows'
+  /** A DataTransfer whose data is kept, as a drag's source writes it and a drop reads it */
+  function transfer() {
+    const stored = new Map<string, string>()
+    return { setData: (kind: string, data: string) => void stored.set(kind, data), getData: (kind: string) => stored.get(kind) ?? '', effectAllowed: 'uninitialized' }
+  }
+
+  function Draggable() {
+    return (
+      <Tree
+        aria-label="My Matters"
+        nodes={nodes}
+        expanded={new Set(['m1'])}
+        onExpandedChange={() => {}}
+        onAction={() => {}}
+        // A folder drags, a matter doesn't
+        drag={{ type, data: (id) => (id.startsWith('f') ? `payload of ${id}` : undefined) }}
+      />
+    )
+  }
+
+  it('makes a row draggable when its drag has a payload, and carries it under the type, as a move', () => {
+    render(<Draggable />)
+    const folder = screen.getByRole('row', { name: /Correspondence/ })
+    expect(folder.draggable).toBe(true)
+    const data = transfer()
+    expect(fireEvent.dragStart(folder, { dataTransfer: data })).toBe(true)
+    expect(data.getData(type)).toBe('payload of f1')
+    expect(data.effectAllowed).toBe('move')
+  })
+
+  it('leaves a row with no payload undraggable, and cancels a drag that starts on it', () => {
+    render(<Draggable />)
+    const matter = screen.getByRole('row', { name: /1001\.1/ })
+    expect(matter.draggable).toBe(false)
+    expect(screen.getByRole('row', { name: /My Recent Docs/ }).draggable).toBe(false)
+    const data = transfer()
+    expect(fireEvent.dragStart(matter, { dataTransfer: data })).toBe(false)
+    expect(data.getData(type)).toBe('')
+  })
+
+  it('drags nothing without a drag, as before', () => {
+    render(<Harness />)
+    expect(screen.getByRole('row', { name: /1002\.1/ }).draggable).toBe(false)
+  })
+})

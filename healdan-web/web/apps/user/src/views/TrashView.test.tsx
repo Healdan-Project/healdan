@@ -230,6 +230,29 @@ describe('The Trash', () => {
     expect(restoreCalls(api)).toHaveLength(3)
   })
 
+  it("leaves a matter's top level to the server: the picker greys nothing out for the item, and says what the server refused", async () => {
+    const asked: unknown[] = []
+    await renderApp(
+      '/trash',
+      routes({
+        'POST /v1/trash/*/restore': ({ body }: { body?: unknown }) => {
+          asked.push(body)
+          return body === undefined ? problem(409, 'place-gone') : problem(403, 'admins-only')
+        },
+      }),
+    )
+    await selectRows(/Old Drafts/)
+    fireEvent.click(within(await toolbar()).getByRole('button', { name: 'Restore' }))
+    const picker = await screen.findByRole('dialog', { name: 'Restore "Old Drafts" to…' })
+    await userEvent.click(await within(picker).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
+    const here = await within(picker).findByRole('button', { name: 'Move Here' })
+    await waitFor(() => expect(here.hasAttribute('disabled')).toBe(false))
+    expect(within(picker).queryByText(/Open a folder inside the matter/)).toBeNull()
+    await userEvent.click(here)
+    await waitFor(() => expect(asked).toEqual([undefined, { folderId: 110 }]))
+    expect(await screen.findByText(/Only administrators can do that\./)).toBeTruthy()
+  })
+
   it("says an item refused for good can't be restored from here, in the catalogue's words", async () => {
     await renderApp('/trash', routes({ 'POST /v1/trash/*/restore': problem(409, 'refused') }))
     await selectRows(/Old Drafts/)

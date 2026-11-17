@@ -64,6 +64,12 @@
   text-align: start;
 }
 
+/* Why a place is greyed out (the folder itself), after its name, smaller, in the greyed-out row's colour */
+.why {
+  padding-inline-start: var(--hd-space-2);
+  font-size: var(--hd-font-size-small);
+}
+
 .matter {
   min-width: 0;
   overflow: hidden;

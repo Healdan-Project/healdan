@@ -9,7 +9,7 @@ import { useQuickLook } from '../preview/QuickLookState'
 import { checkInAccept } from './checkout'
 import { copyLink } from './copyLink'
 import type { Favorite } from './FavoriteStar'
-import { anyDeletable, type MovingFolder } from './folders'
+import { anyDeletable, anyMovable, type MovingFolder } from './folders'
 import { useOpenInApp } from './OpenInAppState'
 import { pickFile } from './pickFile'
 import { useCheckout } from './useCheckout'
@@ -100,9 +100,9 @@ export function useDocumentActions({ document, documents, folders = [], preview 
         : undefined,
     release: document && yours ? { id: 'release', label: t('checkout.release'), isDisabled: checkout.busy, perform: () => void checkout.release() } : undefined,
     rename: { id: 'rename', label: t('rename.menu'), isDisabled: !one, perform: () => one && organising.startRename(`d${one.docNumber}`) },
-    // A folder that says it can't be moved greys Move To… out, as its own menus do. Delete is there while anything selected
-    // can be deleted: a folder of several that can't is said in Refusals while the rest is deleted (folders and Trash spec 7.5)
-    move: { id: 'move', label: t('move.menu'), isDisabled: none || folders.some((folder) => !folder.canMove), perform: () => organising.askMove({ documents, folders }) },
+    // Move To… and Delete are there while anything selected can be moved or deleted: a folder of several that can't is said
+    // in Refusals while the rest is moved or deleted (folders and Trash spec 7.5)
+    move: { id: 'move', label: t('move.menu'), isDisabled: none || !anyMovable({ documents, folders }), perform: () => organising.askMove({ documents, folders }) },
     delete: { id: 'delete', label: t('delete.menu'), isDisabled: !anyDeletable({ documents, folders }), perform: () => organising.askDelete({ documents, folders }) },
     copyLink: { id: 'copyLink', label: t('details.copyLink'), isDisabled: !one, perform: () => one && void copyLink(one.docNumber) },
   }

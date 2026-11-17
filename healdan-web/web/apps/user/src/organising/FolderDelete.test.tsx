@@ -9,7 +9,7 @@ import { heldByJamie } from '../filing/testing'
 import { expectNoAxeViolations } from '../test/axe'
 import { children, folder, page, problem } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
-import { drafts, lease, matterTop, routes, row, select, store, workspace } from './testing'
+import { closeMenu, drafts, lease, matterTop, routes, row, select, store, workspace } from './testing'
 
 // Deleting folders (folders and Trash spec 4.2, 6.1, 7.4, 7.5): the ways in, the question and what it holds, and what was
 // refused, per item. A click on a folder row opens it, so these focus rows rather than click them.
@@ -230,8 +230,7 @@ describe('Deleting folders and documents together', () => {
     fireEvent.contextMenu(await row(/Lease/))
     expect(await screen.findByRole('menu', { name: 'Actions for 3 items' })).toBeTruthy()
     expect((await item('Delete')).getAttribute('aria-disabled')).toBeNull()
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    await closeMenu()
     await userEvent.click(within(await screen.findByRole('toolbar', { name: 'Folder Actions' })).getByRole('button', { name: 'More' }))
     expect((await item('Delete')).getAttribute('aria-disabled')).toBeNull()
     await userEvent.keyboard('{Escape}')

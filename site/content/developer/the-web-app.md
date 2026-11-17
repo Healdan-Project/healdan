@@ -309,14 +309,28 @@ and `drag` props and the selected documents and folders for the toolbar's More m
   new name saves it. A refusal keeps the field open with the message beside it (`renameRefusal` words another extension
   as what to do about it), and the focus goes back to the row when the field goes. The field stops its key and pointer
   events, so the Table's own keys (Space, Delete, the arrows) and a double-click don't reach the row.
-- **The picker.** `MovePicker` starts from Recent Matters and My Matters (the left pane's queries) and the search box's
-  matter suggestions, then lists the chosen matter's folders from `fetchSubfolders` (also the tree's), a level at a time. It
-  never browses Stores, and **Move Here** needs a folder inside the matter.
+- **The picker.** `MovePicker` takes the `OrganisingItems` being moved. It starts from Recent Matters and My Matters (the left
+  pane's queries) and the search box's matter suggestions, then lists the chosen matter's folders from `fetchSubfolders` (also
+  the tree's), a level at a time. It never browses Stores and lists no search folders. A folder being moved is a greyed-out
+  choice ("The folder itself") that doesn't open, and **Move Here** is greyed out, with the reason as its description, where
+  every item already is ("Already there"), at a matter's top level for documents (as before) and, for folders, for anyone but
+  an administrator ("Administrators only"). The Trash's restore picker passes no items, so it greys nothing out and the server
+  decides.
+- **Moving folders.** `actions/move.ts`'s `planMove` works out a move before any call: what's in the place already is left
+  out, documents go nowhere that holds none, and a folder goes neither into its own tree nor anywhere its `canMove` or M1's
+  placement rules refuse. What it refuses, and what the server refuses (`folderMoveRefusal`: `items-not-allowed` names
+  nothing, and `checked-out` lists only the problem's `holds`), are lines of `Refusals`, while the rest is moved, the
+  documents first and then the folders, each with its own call. **Move To…** is there while anything selected can be moved
+  (`anyMovable`). Before a folder moves into another matter (its `matterId` and the place's differ), `CrossMatter` asks, once
+  for each such folder, in turn, counting its documents with `GET /folders/{id}/contents`; **Cancel** keeps only that folder
+  where it is. The toast names a folder by the name the server answered, which CE changes on its way in when a folder the
+  person can't see already has its name.
 - **Dragging rows.** The Table's `drag` prop makes its selectable rows draggable, with the browser's own drag and drop (React
   Aria's would add some 140 kB to the app's chunk of it), so a drag of a selected row carries every selected row, and of another row only that one. A drag carries `ROWS_TYPE` with the documents, and the folders dragged with them, as JSON (`rows.ts`);
-  `FilingProvider` leaves it alone and the tree takes it (`acceptsDrop`, `dropRows`): the folder lights up as it does for
-  files, and a place that holds no documents is refused with the filing rule's words before any call. There's no keyboard
-  drag: More › Move To… is the way for a keyboard.
+  the tree's own folders drag the same way (`Tree`'s `drag` prop), and a matter in it doesn't. `FilingProvider` leaves the
+  drag alone and the tree takes it (`acceptsDrop`, `dropRows`, then `planMove`): the folder lights up as it does for files,
+  and a place that holds no documents, or a folder dropped into its own tree, is refused before any call. There's no
+  keyboard drag: More › Move To… is the way for a keyboard.
 - **New Folder** is offered inside a matter's folders, and at a matter's top level only to an administrator (`useMe`).
 - **Every list of documents** has it: a folder, search results, Recent Documents and Emails, and the `#` result, each with
   `useOrganisingTable` and a `Toolbar` holding `SelectionActions`, and Recent › Folders and a Folders search have F2 and
@@ -327,7 +341,8 @@ and `drag` props and the selected documents and folders for the toolbar's More m
   once they're deleted or moved F2 and Delete take the focused row.
 
 Test it with `organising/*.test.tsx`; `testing.tsx` has routes for a folder that rename, move, delete and restore as the
-server would, and a `DataTransfer` that keeps what a drag writes. `e2e/organising.spec.ts` does it in a real browser, and `e2e/folders.spec.ts` for renaming folders.
+server would, a second matter for moves out of a matter, a `DataTransfer` that keeps what a drag writes, and `closeMenu`,
+which waits after Esc for React Aria to give the focus back a frame later, before the next control is pressed. `e2e/organising.spec.ts` does it in a real browser, and `e2e/folders.spec.ts` for renaming folders.
 
 ## The Trash
 

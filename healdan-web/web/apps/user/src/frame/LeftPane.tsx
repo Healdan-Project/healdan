@@ -10,11 +10,12 @@ import { favoriteTooltip } from '../actions/favoriteName'
 import { movingFolder, whyNotDelete } from '../actions/folders'
 import { useMyMattersChange } from '../actions/myMatters'
 import { whyNotRename } from '../actions/rename'
-import { carriesRows, placeOf, takesDrag, type Place } from '../filing/dropTargets'
+import { carriesRows, placeOf, ROWS_TYPE, takesDrag, type Place } from '../filing/dropTargets'
 import { useFiling } from '../filing/FilingProvider'
 import { FavoriteMenuItems, FolderChangeItems, folderMenu, MatterMenuItems } from '../menus/ContextMenus'
 import { useOrganising } from '../organising/OrganisingProvider'
 import { FolderName } from '../organising/RenameField'
+import { rowsPayload } from '../organising/rows'
 import { fetchSubfolders, idFrom, keys, useFavorites, useFolder, useMe, useMyMatters, useRecentMatters } from '../queries'
 import { useApi } from '../services'
 import { fileIcon, folderIcon, matterIcon } from '../kindIcons'
@@ -224,7 +225,7 @@ function MyMattersSection() {
 
   const nodes: TreeNode[] = matters.map((matter) => {
     const id = String(matter.folderId)
-    places.set(id, { id: matter.folderId, kind: 'matter', name: matter.display })
+    places.set(id, { id: matter.folderId, kind: 'matter', name: matter.display, matterId: matter.id, matter: matter.display })
     return {
       id,
       textValue: `${matter.display} ${matter.client.name}`,
@@ -294,7 +295,18 @@ function MyMattersSection() {
             if (why) toast(t(why))
             else organising.askDelete({ documents: [], folders: [movingFolder(folder)] })
           }}
-          // Files are filed into the folder, and the list's own rows are moved there; both light the folder up
+          // A folder drags, as a folder's row in a list does, to move it (folders and Trash spec 7.5); a matter doesn't, nor a
+          // folder whose name is a field now
+          drag={{
+            type: ROWS_TYPE,
+            data: (id) => {
+              const folder = folders.get(id)
+              if (!folder || folder.kind === 'matter' || folder.kind === 'store') return undefined
+              if (organising.renaming?.place === 'tree' && organising.renaming.key === `f${folder.id}`) return undefined
+              return rowsPayload([], [movingFolder(folder)])
+            },
+          }}
+          // Files are filed into the folder, and the list's own rows and the tree's folders are moved there; both light it up
           acceptsDrop={(id, types) => places.has(id) && (takesDrag(types) || carriesRows(types))}
           onDrop={(id, event) => {
             const place = places.get(id)

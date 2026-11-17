@@ -339,6 +339,22 @@ export const enUS = {
   'move.refusedTitle': "Some Documents Weren't Moved",
   'move.sameFolder': "They're in that folder already.",
   'move.thisFolder': 'the folder',
+  // Moving folders (folders and Trash spec 7.5): the picker's title for one folder, the places it greys out and why, the
+  // toast, and why a folder can't be moved or wasn't, never naming what the person can't read (spec 4.2)
+  'move.oneTitle': 'Move "{name}"',
+  'move.itself': 'The folder itself',
+  'move.already': 'Already there',
+  'move.adminsOnly': 'Administrators only',
+  'move.notAllowed': "It holds items you don't have permission to move.",
+  'move.doneFolder': 'Moved "{name}" to {folder}',
+  'move.matterFolder': "A {matterLower}'s own folder is moved by an administrator in the Classic Interface.",
+  'move.adminsOnlyFolder': "Only administrators can move a {matterLower}'s top-level folders.",
+  'move.noPermission': "You don't have permission to move this folder.",
+  // Refusals' title once a move took folders, which "Some Documents Weren't Moved" would leave out
+  'move.refusedItemsTitle': "Some Items Weren't Moved",
+  // The question before a folder leaves its matter: {matter} here is the matter it goes into, as people read it
+  'crossMatter.title': 'Move "{name}" into {matter}?',
+  'crossMatter.confirm': 'Move',
   'delete.menu': 'Delete',
   // The question before a delete, and the toast after it (folders and Trash spec 7.4; plan correction 14)
   'delete.oneTitle': 'Move "{name}" to the Trash?',
@@ -450,6 +466,14 @@ export const enUSPlurals = {
   folders: { one: '{n} folder', other: '{n} folders' },
   moveTitle: { one: 'Move {n} Document', other: 'Move {n} Documents' },
   moved: { one: 'Moved {n} document to {folder}', other: 'Moved {n} documents to {folder}' },
+  // Folders and documents moved together
+  'move.manyTitle': { one: 'Move {n} Item', other: 'Move {n} Items' },
+  'move.doneMany': { one: 'Moved {n} item to {folder}', other: 'Moved {n} items to {folder}' },
+  // What the documents of a folder leaving its matter take; {number} is the matter it goes into, `1003.2`
+  'crossMatter.line': {
+    one: "Its {n} document will take {number}'s client and {matterLower}, and the properties its template sets.",
+    other: "Its {n} documents will take {number}'s client and {matterLower}, and the properties its template sets.",
+  },
   'delete.manyTitle': { one: 'Move {n} item to the Trash?', other: 'Move {n} items to the Trash?' },
   'delete.doneMany': { one: 'Moved {n} item to the Trash', other: 'Moved {n} items to the Trash' },
   'undo.doneMany': { one: 'Restored {n} item', other: 'Restored {n} items' },

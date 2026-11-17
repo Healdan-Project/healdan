@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQuery } from '@tanstack/react-query'
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { apiPath, type components } from '@healdan/api'
-import { Button, Dialog, Icon, plural, t, TextField, toast } from '@healdan/ui'
-import type { Movable } from '../actions/batch'
+import { Button, Dialog, Icon, plural, t, TextField, toast, type StringKey } from '@healdan/ui'
+import type { OrganisingItems } from '../actions/batch'
+import { placeOf, type Place } from '../filing/dropTargets'
 import { messageFor } from '../frame/errors'
 import { folderIcon, matterIcon } from '../kindIcons'
-import { fetchSubfolders, keys, useFolder, useMyMatters, useRecentMatters } from '../queries'
+import { fetchSubfolders, keys, useFolder, useMe, useMyMatters, useRecentMatters } from '../queries'
 import { matterLabel, suggestable, useSuggestions } from '../search/Suggestions'
 import { useApi } from '../services'
 import styles from './organising.module.css'
@@ -16,32 +17,45 @@ import styles from './organising.module.css'
 type S = components['schemas']
 
 export interface MovePickerProps {
-  documents: readonly Movable[]
+  /** The folders and documents being moved; none for the Trash's restore, whose places the server alone decides */
+  items: OrganisingItems
   /** The dialog's title, in place of "Move 2 Documents": the Trash's "Restore "Old Drafts" to…" */
   title?: string
-  /** The folder the person chose to move the documents into */
-  onChoose: (folder: { id: number; name: string }) => void
+  /** The folder the person chose to move the items into */
+  onChoose: (place: Place) => void
   onCancel: () => void
 }
 
-/** Matters, or one matter's folders: the choice of a folder to move documents into never browses Stores (spec 6.7). */
-export function MovePicker({ documents, title, onChoose, onCancel }: MovePickerProps) {
+/** "Move 2 Documents" for documents alone, as before; "Move "Old Drafts"" for one folder, and "Move 3 Items" with folders */
+function titleOf(items: OrganisingItems): string {
+  const [folder] = items.folders
+  if (!folder) return plural('moveTitle', items.documents.length)
+  if (items.folders.length === 1 && items.documents.length === 0) return t('move.oneTitle', { name: folder.name })
+  return plural('move.manyTitle', items.folders.length + items.documents.length)
+}
+
+/**
+ * Matters, or one matter's folders: the choice of a folder to move documents and folders into never browses Stores (spec
+ * 6.7). Where they can't go is greyed out with the reason (folders and Trash spec 7.5).
+ */
+export function MovePicker({ items, title, onChoose, onCancel }: MovePickerProps) {
   // The folders from the chosen matter's top level down to the one being looked into; none while a matter is to be chosen
   const [trail, setTrail] = useState<number[]>([])
   return (
-    <Dialog title={title ?? plural('moveTitle', documents.length)} isOpen onOpenChange={(open) => !open && onCancel()}>
+    <Dialog title={title ?? titleOf(items)} isOpen onOpenChange={(open) => !open && onCancel()}>
       {(close) => (
         <div className={styles.picker}>
           {trail.length === 0 ? (
             <Matters onChoose={(folderId) => setTrail([folderId])} />
           ) : (
             <Folders
+              items={items}
               trail={trail}
               onOpen={(id) => setTrail((now) => [...now, id])}
               onBack={() => setTrail((now) => now.slice(0, -1))}
-              onChoose={(folder) => {
+              onChoose={(place) => {
                 close()
-                onChoose(folder)
+                onChoose(place)
               }}
             />
           )}
@@ -54,11 +68,13 @@ export function MovePicker({ documents, title, onChoose, onCancel }: MovePickerP
   )
 }
 
-function Choice({ onPress, children }: { onPress: () => void; children: ReactNode }) {
+/** A place to open, or one greyed out with why it can't be */
+function Choice({ onPress, reason, children }: { onPress?: () => void; reason?: string; children: ReactNode }) {
   return (
     <li>
-      <Button variant="quiet" onPress={onPress}>
+      <Button variant="quiet" isDisabled={reason !== undefined} onPress={onPress}>
         {children}
+        {reason && <span className={styles.why}>{reason}</span>}
       </Button>
     </li>
   )
@@ -140,17 +156,50 @@ function Matters({ onChoose }: { onChoose: (folderId: number) => void }) {
   )
 }
 
-/** One folder of the chosen matter: its subfolders to open, and Move Here, which needs a folder inside the matter */
-function Folders({ trail, onOpen, onBack, onChoose }: { trail: number[]; onOpen: (id: number) => void; onBack: () => void; onChoose: (folder: { id: number; name: string }) => void }) {
+/**
+ * Why Move Here is greyed out for the items where the picker is (folders and Trash spec 7.5): the folder itself or inside
+ * it; where every one of them is already; for documents, a place that holds none (M1), worded at a matter's top level; and
+ * for folders, a matter's top level for anyone but an administrator. Null for a reason with no words; undefined when they
+ * can go there. With no items (the Trash's restore) nothing is greyed out, and the server decides.
+ */
+function whyNotHere(items: OrganisingItems, view: S['FolderView'], admin: boolean | undefined): StringKey | null | undefined {
+  // The path holds the folder itself
+  const inside = new Set(view.path.map((step) => step.id))
+  if (items.folders.some((folder) => inside.has(folder.id))) return 'move.itself'
+  // Only what can be moved counts: a folder that can't is said in Refusals, wherever it was to go
+  const movable = items.folders.filter((folder) => folder.canMove)
+  if (items.documents.length + movable.length > 0 && items.documents.every((one) => one.folder?.id === view.id) && movable.every((one) => one.parentId === view.id)) return 'move.already'
+  if (items.documents.length > 0 && !(view.kind === 'folder' && view.canFile)) return view.kind === 'matter' ? 'move.chooseFolder' : null
+  if (movable.length > 0 && view.kind === 'matter' && !admin) return 'move.adminsOnly'
+  return undefined
+}
+
+/** One folder of the chosen matter: its subfolders to open, and Move Here, greyed out where the items can't go */
+function Folders({
+  items,
+  trail,
+  onOpen,
+  onBack,
+  onChoose,
+}: {
+  items: OrganisingItems
+  trail: number[]
+  onOpen: (id: number) => void
+  onBack: () => void
+  onChoose: (place: Place) => void
+}) {
   const api = useApi()
+  const me = useMe()
+  const reasonId = useId()
   const here = trail[trail.length - 1]!
   const folder = useFolder(here)
   const subfolders = useQuery({ queryKey: keys.subfolders(here), queryFn: () => fetchSubfolders(api, String(here)) })
   const view = folder.data
-  // A matter's top level and a search folder hold no documents (M1); the server says so again
-  const holds = view?.kind === 'folder' && view.canFile
-  // Search folders hold no documents, so they aren't offered
+  const why = view && whyNotHere(items, view, me.data?.admin)
+  // Search folders hold nothing moved into them, so they aren't offered (plan correction 12)
   const folders = (subfolders.data ?? []).filter((one) => one.kind === 'folder')
+  // A folder being moved is a place nothing goes into, and it doesn't open, so nothing inside it can be chosen
+  const moving = new Set(items.folders.map((one) => one.id))
   return (
     <>
       <div>
@@ -164,16 +213,20 @@ function Folders({ trail, onOpen, onBack, onChoose }: { trail: number[]; onOpen:
       ) : (
         <ul className={styles.list} aria-label={view ? t('move.folders', { name: view.name }) : undefined}>
           {folders.map((one) => (
-            <Choice key={one.id} onPress={() => onOpen(one.id)}>
+            <Choice key={one.id} reason={moving.has(one.id) ? t('move.itself') : undefined} onPress={() => onOpen(one.id)}>
               <Icon {...folderIcon()} /> {one.name}
             </Choice>
           ))}
         </ul>
       )}
       {subfolders.isSuccess && folders.length === 0 && <p className={styles.note}>{t('move.noFolders')}</p>}
-      {view && !holds && view.kind === 'matter' && <p className={styles.note}>{t('move.chooseFolder')}</p>}
+      {why && (
+        <p id={reasonId} className={styles.note}>
+          {t(why)}
+        </p>
+      )}
       <div className={styles.actions}>
-        <Button variant="default" isDisabled={!holds} onPress={() => view && onChoose({ id: view.id, name: view.name })}>
+        <Button variant="default" isDisabled={!view || why !== undefined} aria-describedby={why ? reasonId : undefined} onPress={() => view && onChoose(placeOf(view))}>
           {t('move.here')}
         </Button>
       </div>
