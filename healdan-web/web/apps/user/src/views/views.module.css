@@ -210,11 +210,10 @@
   clip-path: inset(50%);
 }
 
-/* A cell with two lines: the computer, and the app under it */
-.stacked {
-  display: flex;
+/* Checked Out to Me's computer, then its app, muted, on one line that ends in an ellipsis when it doesn't fit */
+.computerCell {
+  display: block;
   min-width: 0;
-  flex-direction: column;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

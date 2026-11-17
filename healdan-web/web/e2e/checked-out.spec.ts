@@ -159,7 +159,7 @@ async function openCheckedOut(page: Page) {
 
 test("the list shows the document with the computer that holds it and its app, and the entry's count is the list's", async ({ page }) => {
   await openCheckedOut(page)
-  // The computer's own name, as no Helper made it, with the app under it
+  // The computer's own name, as no Helper made it, with the app beside it
   const computer = row(page).getByRole('gridcell').filter({ hasText: COMPUTER })
   await expect(computer).toHaveCount(1)
   await expect(computer.getByText(COMPUTER, { exact: true })).toBeVisible()

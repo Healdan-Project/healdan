@@ -25,12 +25,17 @@ interface Computer {
   documents: ReleaseTarget[]
 }
 
-/** The documents another computer holds, by computer in the selection's order; the web page's are left out */
+/**
+ * The documents another computer holds, by computer in the selection's order; the web page's are left out. A computer is
+ * its device, which the holder is always told, not its name: a new Mac restored from a stolen one's backup keeps its
+ * name, and two computers are never spoken of as one. Without a device, the name is all there is.
+ */
 function byComputer(documents: readonly ReleaseTarget[]): Computer[] {
-  const computers = new Map<string | null, Computer>()
+  const computers = new Map<string, Computer>()
   for (const document of documents) {
     if (!document.elsewhere) continue
-    const key = document.hold?.heldOn?.name ?? null
+    const device = document.hold?.device?.id
+    const key = device != null ? `device ${device}` : `name ${document.hold?.heldOn?.name ?? ''}`
     const computer = computers.get(key) ?? { name: computerLabel(document.hold).computer, documents: [] }
     computer.documents.push(document)
     computers.set(key, computer)

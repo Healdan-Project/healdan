@@ -117,9 +117,10 @@ such a release unless the request says it was meant (§4).
   first, with no sorting by header, as Recent's lists.
 - **Columns** (owner, from the mockup): Title, with the hold marker as in every list; Doc #; Version; Matter;
   **Computer**; **Checked Out**; Edit Date. Author makes room for the two new ones.
-  - **Computer** is the short name of `hold.heldOn.name`, with the app under it, muted. The short name drops a leading
-    `Healdan Helper on `, as the Helper's `DeviceNames.Short` does, so a Helper's computer reads "MacBook". A check-out
-    from the web page has no `heldOn`, and reads **Web Page**.
+  - **Computer** is the short name of `hold.heldOn.name`, with the app beside it, muted (changed in the build: the
+    Standard row's 34 pixels clip a second line). The short name drops a leading `Healdan Helper on `, as the Helper's
+    `DeviceNames.Short` does, so a Helper's computer reads "MacBook". A check-out from the web page has no `heldOn`, and
+    reads **Web Page**.
   - **Checked Out** is `hold.since`, and **Edit Date** is `lastModified`, both in the list's date format. Edit Date is
     when the document was last saved to Healdan.
   - With the reading pane open, the narrow list keeps Title, Doc # and Edit Date, as everywhere.
@@ -147,7 +148,8 @@ As in the mockup's state 2; the wording is the call the owner approved there.
 
 - An alert dialog titled **Release 3 Documents from MacBook?**, or **Release Grant Agreement – Draft.docx from MacBook?**
   for one. A selection held on two or more computers is titled **Release 3 Documents from Other Computers?**, with a list
-  for each computer.
+  for each computer. A computer is its device (`hold.device.id`), not its name, so two computers with the same name, such
+  as a new Mac restored from the stolen one's backup, are two lists (changed in the build).
 - "They're checked out to you on MacBook:", then each document's icon, name, doc #, app and when it was last saved to
   Healdan ("Saved yesterday, 17:05", from `lastModified`).
 - A red box: **Changes on MacBook that haven't reached Healdan will be lost.** "Once released, MacBook can't save to

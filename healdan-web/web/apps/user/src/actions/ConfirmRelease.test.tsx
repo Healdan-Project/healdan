@@ -96,6 +96,31 @@ describe('ConfirmRelease', () => {
     await expectNoAxeViolations(dialog)
   })
 
+  it('keeps two computers of one name apart', async () => {
+    // A new MacBook restored from the stolen one's backup keeps its name, but it's another device
+    const onDevice = (id: string, app: string) => ({ ...macBook(app), device: { id, name: 'Healdan Helper on MacBook', app } })
+    const stolenMac = { ...laytime, hold: onDevice('mac-old', 'Excel') }
+    const newMac = { ...report, hold: onDevice('mac-new', 'LibreOffice') }
+    show([stolenMac, newMac])
+    const dialog = await screen.findByRole('alertdialog', { name: 'Release 2 Documents from Other Computers?' })
+    expect(within(dialog).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual(['On MacBook', 'On MacBook'])
+    const lists = within(dialog).getAllByRole('list', { name: 'Documents on MacBook' })
+    expect(lists.map((list) => within(list).getAllByRole('listitem').map((item) => within(item).getByText(/\.(xlsx|odt)$/).textContent))).toEqual([[laytime.name], [report.name]])
+    expect(within(dialog).queryByText(/checked out to you on/)).toBeNull()
+    expect(within(dialog).getByText("Changes on those computers that haven't reached Healdan will be lost.")).toBeTruthy()
+    expect(stolen(dialog)).toBe('If one of them was lost or stolen, also revoke its sign-in in Signed-in Devices.')
+    expect(within(dialog).getByRole('button', { name: 'Release 2 Documents' })).toBeTruthy()
+  })
+
+  it('takes one device as one computer, whatever its name', async () => {
+    // A check-out names the token its device last wrote it through, so after signing in again under a new name, one
+    // device's check-outs can carry two
+    const renamed = { ...report, hold: { ...macBook('LibreOffice'), heldOn: { name: 'Healdan Helper on MacBook Pro', app: 'LibreOffice' } } }
+    show([laytime, renamed])
+    const dialog = await screen.findByRole('alertdialog', { name: 'Release 2 Documents from MacBook?' })
+    expect(within(within(dialog).getByRole('list', { name: 'Documents on MacBook' })).getAllByRole('listitem')).toHaveLength(2)
+  })
+
   it("lists what it's told another computer holds, and nothing else", async () => {
     // The decision is ReleaseProvider's alone: a document it sends without elsewhere isn't listed, whatever its hold says
     show([laytime, { ...report, elsewhere: false }])

@@ -97,6 +97,29 @@ export function narrowed(columns: TableColumn<ListRow>[]): TableColumn<ListRow>[
   return columns.filter((column) => column.id === 'title' || column.id === 'docNumber' || column.id === 'edited')
 }
 
+/**
+ * "MacBook · Word": the computer, then the app muted after a dot, on one line, as a Standard row's 34 pixels have room
+ * for one. Each is an element of its own, whose text is just the computer or the app; the dot is drawn only, and the
+ * spaces around it keep the two apart for a screen reader.
+ */
+function ComputerCell({ hold }: { hold: S['HoldView'] | null }) {
+  const { computer, app } = computerLabel(hold)
+  return (
+    <span className={styles.computerCell}>
+      <span>{computer}</span>
+      {app && (
+        <>
+          {' '}
+          <span className={styles.muted} aria-hidden="true">
+            ·
+          </span>{' '}
+          <span className={styles.muted}>{app}</span>
+        </>
+      )}
+    </span>
+  )
+}
+
 /** Checked Out to Me: the server's order (latest check-out first), so nothing sorts. */
 export function checkedOutColumns(): TableColumn<ListRow>[] {
   const plain = (column: TableColumn<ListRow>): TableColumn<ListRow> => ({ ...column, allowsSorting: false })
@@ -109,16 +132,7 @@ export function checkedOutColumns(): TableColumn<ListRow>[] {
       id: 'computer',
       name: t('list.computer'),
       width: 130,
-      cell: ({ item }) => {
-        if (item.type !== 'document') return null
-        const { computer, app } = computerLabel(item.hold)
-        return (
-          <span className={styles.stacked}>
-            <span>{computer}</span>
-            {app && <span className={styles.muted}>{app}</span>}
-          </span>
-        )
-      },
+      cell: ({ item }) => item.type === 'document' && <ComputerCell hold={item.hold} />,
     },
     { id: 'checkedOut', name: t('list.checkedOut'), width: 116, cell: ({ item }) => item.type === 'document' && item.hold?.since ? formatDate(item.hold.since) : null },
     plain({ ...edited, width: 116 }),
