@@ -857,6 +857,11 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
     @Override
     public void restore(long folderId, long parentId, FolderHistory transaction) throws PersistenceException {
         com.logicaldoc.core.HealdanHooks.get().beforeFolderRestore(folderId, parentId, transaction);
+        // Healdan: what comes back with the folder, asked while its row still shows whether it was deleted or removed
+        // (folders and Trash spec, 4.4)
+        Set<Long> treeIds = findFolderIdInTree(folderId, true);
+        com.logicaldoc.core.HealdanHooks.RestoreScope scope = com.logicaldoc.core.HealdanHooks.get()
+                .folderRestoreScope(folderId, treeIds, transaction);
         // The parent folder
         Folder parent = findFolder(parentId);
         int count = jdbcUpdate(
@@ -880,8 +885,18 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
         }
 
         // Restore all the children
-        Set<Long> treeIds = findFolderIdInTree(folderId, true);
-        if (!treeIds.isEmpty()) {
+        if (scope != null) {
+            // Healdan: only those the scope names, so what others deleted inside stays in their trash
+            // in lists of at most 1,000, as the databases take
+            for (List<Long> chunk : CollectionUtil.partition(new ArrayList<>(scope.folderIds()), 1000))
+                jdbcUpdate(
+                        "update ld_folder set ld_deleted = 0, ld_lastmodified = CURRENT_TIMESTAMP where ld_deleted <> 0 and ld_id in (%s)"
+                                .formatted(CollectionUtil.join(chunk)));
+            for (List<Long> chunk : CollectionUtil.partition(new ArrayList<>(scope.documentIds()), 1000))
+                jdbcUpdate(
+                        "update ld_document set ld_deleted = 0, ld_lastmodified = CURRENT_TIMESTAMP where ld_deleted <> 0 and ld_id in (%s)"
+                                .formatted(CollectionUtil.join(chunk)));
+        } else if (!treeIds.isEmpty()) {
             String idsStr = treeIds.stream().map(id -> Long.toString(id)).collect(Collectors.joining(","));
             jdbcUpdate(
                     "update ld_folder set ld_deleted = 0, ld_lastmodified = CURRENT_TIMESTAMP where ld_deleted = 1 and ld_id in (%s)"
@@ -1750,6 +1765,8 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
             log.warn("Found undeletable documents in tree {} - {}", folder.getName(), folder.getId());
             for (Long id : ids)
                 notDeletableFolders.add(findById(id));
+            // Healdan: it stops here, so the Trash's item keeps only what it takes (folders and Trash spec, 9.1)
+            com.logicaldoc.core.HealdanHooks.get().afterFolderDeleteTree(folder.getId(), transaction);
             return notDeletableFolders;
         }
 
@@ -1769,21 +1786,21 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
         /*
          * Delete the aliases
          */
-        int aliases = jdbcUpdate(
-                "update ld_folder set ld_deleted = %d where  ld_foldref in (%s)".formatted(delCode, treeIdsString));
+        // Healdan: only live ones, so an alias already removed stays removed (folders and Trash spec, 4.2)
+        int aliases = jdbcUpdate("update ld_folder set ld_deleted = %d where ld_deleted = 0 and ld_foldref in (%s)"
+                .formatted(delCode, treeIdsString));
         log.warn("Deleted {} folder aliases in tree {} - {}", aliases, folder.getName(), folder.getId());
 
         /*
          * Delete the documents as well
          */
+        // Healdan: only live ones, so a document already in someone's trash keeps its deleter and one removed stays
+        // removed (folders and Trash spec, 4.2)
         int documents = jdbcUpdate(
-                "update ld_document set ld_deleted = %d where ld_folderid in (%s)".formatted(delCode, treeIdsString));
-        log.warn("Deleted {} documents in tree {} - {}", documents, folder.getName(), folder.getId());
-
-        jdbcUpdate("update ld_document set ld_deleteuserid = %d where  ld_folderid in (%s)"
-                .formatted(transaction.getUserId(), treeIdsString));
-        jdbcUpdate("update ld_document set ld_deleteuser=:user where  ld_folderid in (%s)".formatted(treeIdsString),
+                "update ld_document set ld_deleted = %d, ld_deleteuserid = %d, ld_deleteuser = :user where ld_deleted = 0 and ld_folderid in (%s)"
+                        .formatted(delCode, transaction.getUserId(), treeIdsString),
                 Map.of("user", transaction.getUser().getFullName()));
+        log.warn("Deleted {} documents in tree {} - {}", documents, folder.getName(), folder.getId());
 
         if (sessionFactory.getCache() != null)
             sessionFactory.getCache().evictEntityData(Folder.class);

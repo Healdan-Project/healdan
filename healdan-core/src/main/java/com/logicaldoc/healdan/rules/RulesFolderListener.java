@@ -18,12 +18,15 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.email.OncePerMatter;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
+import com.logicaldoc.healdan.security.PermissionRules;
 
 /**
  * Applies the structure rules to every folder store: it compares the folder
  * with its row as stored before (see {@link StoredRows}) to tell a create, a
  * move, a rename, a type change, an alias, a delete or a restore from an
- * ordinary save (an ACL, attributes...), which it leaves alone. Folder deletes
+ * ordinary save (an ACL, attributes...), which it leaves alone. A move also
+ * needs Move on everything the folder holds and Add where it goes
+ * ({@link PermissionRules#checkMoveTree}). Folder deletes
  * and restores through {@code deleteTree} and {@code restore} are JDBC and come
  * through {@link HealdanHooksImpl} instead. CE creates it by reflection, hence
  * the public no-arg constructor.
@@ -66,6 +69,8 @@ public class RulesFolderListener implements FolderListener {
 		boolean moved = stored.parentId() != folder.getParentId();
 		if (moved) {
 			rules.checkFolderMove(folder, parentOf(folder), actor);
+			// Everything in it moves with it
+			PermissionRules.get().checkMoveTree(folder.getId(), folder.getParentId(), actor);
 			// Into another matter, its emails mustn't meet copies there (M5 spec §6.4)
 			OncePerMatter.get().checkSubtree(folder.getId(), folder.getParentId(), actor);
 		}

@@ -85,6 +85,9 @@ public class SoapPermissionGapsTest extends AbstractWebserviceTestCase {
     /** The child's children, and the folder alias in the tree */
     private static final List<Long> REST_OF_TREE = List.of(1202L, 1203L, 1204L);
 
+    /** The child's children */
+    private static final List<Long> GRANDCHILDREN = List.of(1202L, 1203L);
+
     private SoapDocumentService documents;
 
     private SoapFolderService folders;
@@ -297,6 +300,31 @@ public class SoapPermissionGapsTest extends AbstractWebserviceTestCase {
         folders.delete(admin, TREE);
         assertEquals(1, deleted("ld_folder", TREE));
         assertEquals(1, deleted("ld_document", inSource));
+    }
+
+    @Test
+    public void testFolderMoveNeedsMoveOnTheTree() throws Exception {
+        long inChild = create("child.txt", CHILD);
+        // CE asks DELETE on the parent and ADD on the target, which the author has in folder 80; the author may move
+        // the child, but not the child's children
+        grantFolder(TREE, Permission.READ, Permission.DELETE);
+        grantFolder(CHILD, Permission.READ, Permission.MOVE);
+        String author = login("author");
+        refused(() -> folders.move(author, CHILD, AUTHORS_FOLDER));
+        assertEquals(TREE, folderDao.findById(CHILD).getParentId());
+
+        // MOVE on them too, but the document's own ACL gives the author READ only
+        for (long folderId : GRANDCHILDREN)
+            grantFolder(folderId, Permission.READ, Permission.MOVE);
+        grant(inChild, Permission.READ);
+        refused(() -> folders.move(author, CHILD, AUTHORS_FOLDER));
+        assertEquals(TREE, folderDao.findById(CHILD).getParentId());
+        assertEquals(CHILD, docDao.findById(inChild).getFolder().getId());
+
+        grant(inChild, Permission.READ, Permission.MOVE);
+        folders.move(author, CHILD, AUTHORS_FOLDER);
+        assertEquals(AUTHORS_FOLDER, folderDao.findById(CHILD).getParentId());
+        assertEquals(CHILD, docDao.findById(inChild).getFolder().getId());
     }
 
     @Test

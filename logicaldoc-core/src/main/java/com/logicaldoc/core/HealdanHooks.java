@@ -12,6 +12,7 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.metadata.AttributeSet;
 import com.logicaldoc.core.security.user.Group;
+import com.logicaldoc.core.security.user.User;
 
 /**
  * Healdan's checks on the operations whose side effects a listener veto can't
@@ -19,10 +20,11 @@ import com.logicaldoc.core.security.user.Group;
  * any side effect (the after-hook at its very end), so a
  * {@link HealdanVetoException} it throws refuses the operation before anything
  * is written. The document and folder DAOs roll back on that exception, not on
- * other {@link PersistenceException}s. {@link #countPages} is the one hook that
- * isn't a check: it corrects a value CE works out. Every method is a no-op by
- * default, and {@link #get()} returns a no-op until healdan-core registers its
- * implementation, so CE behaves as before without Healdan.
+ * other {@link PersistenceException}s. {@link #countPages} and
+ * {@link #folderRestoreScope} aren't only checks: the first corrects a value
+ * CE works out, the second what CE's restore sets live. Every method is a
+ * no-op by default, and {@link #get()} returns a no-op until healdan-core
+ * registers its implementation, so CE behaves as before without Healdan.
  * <p>
  * Healdan addition: lives in its own file so upstream merges don't touch it.
  */
@@ -104,6 +106,19 @@ public interface HealdanHooks {
     }
 
     /**
+     * Called once a tree's delete is over on a route that can stop short after
+     * {@link #beforeFolderDeleteTree}: when CMIS's {@code deleteTree} ends,
+     * however it ends, and where {@code HibernateFolderDAO.deleteTree} stops at
+     * an immutable document. Not a check: it never throws.
+     *
+     * @param folderId the root of the tree
+     * @param transaction the history entry, possibly {@code null}
+     */
+    default void afterFolderDeleteTree(long folderId, FolderHistory transaction) {
+        // Nothing by default
+    }
+
+    /**
      * Called first in {@code HibernateFolderDAO.merge}, and again for each
      * clashing subfolder it merges, before any document is moved: each move
      * removes the document's hit from the index and saves a version in the
@@ -154,6 +169,38 @@ public interface HealdanHooks {
     default void beforeFolderRestore(long folderId, long parentId, FolderHistory transaction)
             throws PersistenceException {
         // No check by default
+    }
+
+    /**
+     * The folders and documents a folder's restore sets live, besides the
+     * folder itself, which CE always does
+     *
+     * @param folderIds the folders, in the folder's tree or not
+     * @param documentIds the documents
+     */
+    record RestoreScope(Collection<Long> folderIds, Collection<Long> documentIds) {
+    }
+
+    /**
+     * Called in {@code HibernateFolderDAO.restore} after
+     * {@link #beforeFolderRestore}, in its transaction, before any row is
+     * undeleted, so the folder's row still shows whether it was deleted or
+     * removed. CE then runs
+     * {@code update ... set ld_deleted = 0 ... where ld_deleted <> 0 and ld_id in (...)}
+     * for each list of the scope instead of its own two updates.
+     *
+     * @param folderId the folder to restore
+     * @param treeIds the folder and every folder below it, deleted or not
+     * @param transaction the history entry, possibly {@code null}
+     *
+     * @return the folders and documents the restore sets live; {@code null}
+     *         keeps CE's: every folder and document at 1 in the tree
+     *
+     * @throws PersistenceException to refuse the restore
+     */
+    default RestoreScope folderRestoreScope(long folderId, Collection<Long> treeIds, FolderHistory transaction)
+            throws PersistenceException {
+        return null;
     }
 
     /**
@@ -246,6 +293,38 @@ public interface HealdanHooks {
      */
     default void beforeAttributeSetDelete(AttributeSet set) throws PersistenceException {
         // No check by default
+    }
+
+    /**
+     * Called by the Classic Interface's Delete from the Trash, after its own
+     * checks, before it changes any row: Healdan's removal of the listed rows
+     * (and, for a folder, what its item took with it) to Removed.
+     *
+     * @param table {@code ld_document} or {@code ld_folder}
+     * @param ids the rows the person chose
+     * @param user who removes them
+     *
+     * @return {@code true} when Healdan removed them, so that CE's own update is
+     *         skipped
+     *
+     * @throws PersistenceException error at data layer
+     */
+    default boolean removeFromTrash(String table, Collection<Long> ids, User user) throws PersistenceException {
+        return false;
+    }
+
+    /**
+     * Called by the Classic Interface's Empty Trash, before it changes any row
+     *
+     * @param user whose trash is emptied
+     *
+     * @return {@code true} when Healdan emptied it, so that CE's own updates are
+     *         skipped
+     *
+     * @throws PersistenceException error at data layer
+     */
+    default boolean emptyTrash(User user) throws PersistenceException {
+        return false;
     }
 
     /**

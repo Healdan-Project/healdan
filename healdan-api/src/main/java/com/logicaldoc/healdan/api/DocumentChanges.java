@@ -29,7 +29,12 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.HoldView;
+import com.logicaldoc.healdan.api.model.TrashItem;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.trash.TrashItemRow;
+import com.logicaldoc.healdan.trash.TrashMember;
+import com.logicaldoc.healdan.trash.TrashState;
+import com.logicaldoc.healdan.trash.TrashStore;
 
 /**
  * Renaming, moving and deleting a document (M6 spec section 6.7), through
@@ -139,19 +144,20 @@ final class DocumentChanges {
 	}
 
 	/**
-	 * Moves the document, and its shortcuts, to the trash, as the old UI's
-	 * Delete does: the trash is the Classic Interface's, where it can be
-	 * restored.
+	 * Moves the document, and its shortcuts, to the caller's Trash, as the old
+	 * UI's Delete does, where it can be restored (folders and Trash spec 6.4).
 	 *
 	 * @param docNumber the doc #
 	 * @param caller the signed-in caller
+	 * @return the Trash item the delete made, with the shortcuts that went
+	 *         with it among its members
 	 */
-	void delete(long docNumber, Caller caller) {
+	TrashItem delete(long docNumber, Caller caller) {
 		User user = caller.user();
 		String failure = "Can't delete document #" + docNumber;
 		try {
 			long id = DocumentResource.readable(docNumber, user).getId();
-			locks.withLock(id, failure, () -> {
+			return locks.withLock(id, failure, () -> {
 				Document document = DocumentResource.readable(docNumber, user);
 				if (!AccessChecks.allowed(user, Permission.DELETE, document))
 					throw ApiProblem.forbidden("You may not delete document #%d.".formatted(docNumber));
@@ -177,7 +183,12 @@ final class DocumentChanges {
 						log.warn("Shortcut {} of document #{} wasn't moved to the trash with it: {}", shortcut, docNumber,
 								e.getMessage());
 					}
-				return null;
+				// A shortcut deleted beside its document joins the document's item
+				TrashStore store = TrashStore.get();
+				TrashItemRow item = store.itemHolding(new TrashMember('D', id), TrashState.DELETED)
+						.flatMap(store::item).orElseThrow(() -> new IllegalStateException(
+								"Document %d was deleted with no Trash item".formatted(id)));
+				return TrashViews.item(item, user);
 			});
 		} catch (PersistenceException e) {
 			throw new IllegalStateException(failure, e);

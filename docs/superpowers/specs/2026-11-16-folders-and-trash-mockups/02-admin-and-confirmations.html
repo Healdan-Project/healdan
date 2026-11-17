@@ -1,0 +1,190 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Folders and the Trash mockup: the admin's view and the confirmations</title>
+<style>:root{--border:#d1d1d6;--text-secondary:#6e6e73;--bg-secondary:#fff;--bg-tertiary:#e5e5e7}body{margin:24px auto;max-width:1340px;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#1d1d1f;background:#f5f5f7}.subtitle{color:var(--text-secondary)}.options{display:flex;flex-direction:column;gap:.75rem}.option{display:flex;gap:1rem;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem}.option .letter{flex:none;width:28px;height:28px;border-radius:6px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-weight:600}.option h3{margin:0 0 .25rem;font-size:1rem}.option p{margin:0;color:var(--text-secondary);font-size:.9rem}</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+.hd-wrap{position:relative;width:100%;overflow:hidden;border-radius:10px;border:1px solid #d1d1d6;margin-bottom:1.25rem}
+.hd-app{width:1280px;height:560px;transform-origin:0 0;display:grid;grid-template-rows:52px 1fr;font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;background:#fff;text-align:left;
+--a:#0C69C0;--a-soft:#E6F0FA;--side:#F5F5F7;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--matter:#8a5a00;--client:#5b5fc7}
+.hd-app i.ti,.piece i.ti{font-size:16px;line-height:1}
+.top{display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff}
+.brand{display:flex;align-items:center;gap:8px;width:216px;font-weight:600;font-size:15px}
+.mark{width:20px;height:22px}
+.search{flex:1;max-width:640px;display:flex;height:34px;border:1px solid #C7C7CC;border-radius:8px;overflow:hidden}
+.scope{display:flex;align-items:center;gap:6px;padding:0 10px 0 12px;background:var(--side);border-right:1px solid #C7C7CC;font-weight:500;white-space:nowrap}
+.q{flex:1;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--third)}
+.kbd{font:11px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--second)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--second)}
+.avatar{width:28px;height:28px;border-radius:50%;background:#D9E7F7;color:var(--a);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px}
+.body{display:grid;grid-template-columns:248px 1fr;min-height:0}
+.nav{background:var(--side);border-right:1px solid var(--line);padding:10px 8px;overflow:hidden;display:flex;flex-direction:column}
+.navsec{font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;margin:14px 8px 4px}
+.navsec:first-child{margin-top:4px}
+.ni{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ni i{color:var(--second)}
+.ni i.fo{color:var(--a)}.ni i.ma{color:var(--matter)}.ni i.cl{color:var(--client)}
+.ni.on{background:var(--a-soft);color:var(--a);font-weight:500}.ni.on i{color:var(--a)}
+.ni .sub{color:var(--third);font-size:11px;margin-left:2px}
+.bottom{margin-top:auto;border-top:1px solid var(--line);padding-top:6px}
+.main{display:flex;flex-direction:column;min-width:0}
+.title{display:flex;align-items:center;gap:14px;padding:14px 20px 2px}
+.title h1{font-size:20px;font-weight:600;margin:0}
+.seg{display:inline-flex;border:1px solid #C7C7CC;border-radius:7px;overflow:hidden;font-size:12.5px}
+.seg span{padding:4px 12px;border-right:1px solid #C7C7CC;color:#1D1D1F;background:#fff}
+.seg span:last-child{border-right:0}
+.seg span.on{background:var(--a);color:#fff}
+.lede{color:var(--second);font-size:12.5px;padding:4px 20px 10px}
+.bar{display:flex;align-items:center;gap:6px;padding:0 20px 10px;border-bottom:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid #C7C7CC;background:#fff;font-size:12.5px;white-space:nowrap;color:#1D1D1F}
+.btn.pri{background:var(--a);border-color:var(--a);color:#fff}.btn.pri i{color:#fff}
+.btn.red{background:#C4161C;border-color:#C4161C;color:#fff}
+.count{margin-left:auto;color:var(--third);font-size:12px;white-space:nowrap}
+table{width:100%;border-collapse:collapse}
+th{font-size:11.5px;font-weight:500;color:var(--second);text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:0 10px;height:36px;border-bottom:1px solid #F2F2F4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.muted{color:var(--second)}
+td.soon{color:#9a5b00;font-weight:500}
+tr.sel td{background:#DCEAF8}
+.fi{display:flex;align-items:center;gap:8px}
+.fi i{font-size:17px}
+.fi .n{color:var(--third);font-size:11.5px}
+.k-doc{color:#2b579a}.k-pdf{color:#c4161c}.k-mail{color:#0f6cbd}.k-fo{color:#0c69c0}.k-xls{color:#1d7044}
+.state{font-size:.8rem;font-weight:600;color:#6e6e73;text-transform:uppercase;letter-spacing:.05em;margin:1.25rem 0 .5rem}
+.pieces{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;margin-bottom:1rem}
+.piece{font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;text-align:left}
+.dlg{width:400px;background:#fff;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.22),0 0 0 1px rgba(0,0,0,.06);padding:20px}
+.dlg h4{margin:0 0 8px;font-size:15px;font-weight:600}
+.dlg p{margin:0 0 8px;color:#1D1D1F}
+.dlg p.quiet{color:#6E6E73;font-size:12.5px}
+.dlg .row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.dlg ul{margin:0 0 8px 1.1rem;padding:0;font-size:12.5px}
+.toast{width:420px;background:#1D1D1F;color:#fff;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.toast i{color:#fff}
+.toast .undo{margin-left:auto;font-weight:600;color:#7CC4FA}
+.toast .x{color:#AEAEB2}
+.cap{font-size:.8rem;color:#6e6e73;margin:.4rem 0 0}
+.mini{width:248px;height:300px;background:#F5F5F7;border:1px solid #d1d1d6;border-radius:10px;padding:10px 8px;display:flex;flex-direction:column;font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;--a:#0C69C0;--a-soft:#E6F0FA;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--matter:#8a5a00;text-align:left}
+.notes ul{margin:.25rem 0 0 1.1rem;padding:0}.notes li{margin-bottom:.3rem}
+</style>
+
+<h2>The admin's view, and the confirmations</h2>
+<p class="subtitle">Sam Okafor is the demo firm's administrator. Everyone else sees only their own Trash, with no switch.</p>
+
+<div class="state">A · A switch at the top of the Trash, for admins only: Mine · Everyone's · Removed</div>
+<div class="hd-wrap"><div class="hd-app">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan</div>
+    <div class="search"><div class="scope"><i class="ti ti-file-text"></i>Documents<i class="ti ti-chevron-down" style="font-size:13px"></i></div><div class="q"><i class="ti ti-search"></i>Search, or type # and a number<span style="margin-left:auto" class="kbd">/</span></div></div>
+    <div class="topright"><i class="ti ti-help-circle" style="font-size:18px"></i><span class="avatar">SO</span></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="navsec">Recent</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail"></i>Emails</div>
+      <div class="ni"><i class="ti ti-folder fo"></i>Folders</div>
+      <div class="ni"><i class="ti ti-building cl"></i>Clients</div>
+      <div class="navsec">Recent Matters</div>
+      <div class="ni"><i class="ti ti-briefcase ma"></i>1001.1 – Charter Dispute <span class="sub">Saltmarsh</span></div>
+      <div class="navsec">My Favorites</div>
+      <div class="ni"><i class="ti ti-folder fo"></i>Firm Precedents</div>
+      <div class="bottom"><div class="ni on"><i class="ti ti-trash"></i>Trash</div></div>
+    </div>
+    <div class="main">
+      <div class="title"><h1>Trash</h1><span class="seg"><span>Mine</span><span>Everyone's</span><span class="on">Removed</span></span></div>
+      <div class="lede">What people removed from their Trash. Restore puts an item back where it was deleted from; after 30 days it's destroyed.</div>
+      <div class="bar">
+        <span class="btn pri"><i class="ti ti-arrow-back-up"></i>Restore</span>
+        <span class="count">3 items</span>
+      </div>
+      <table>
+        <tr><th style="width:30%">Name</th><th class="num">Doc #</th><th>Deleted From</th><th>Deleted By</th><th>Removed By</th><th>Removed</th><th>Destroyed</th></tr>
+        <tr class="sel"><td><span class="fi"><i class="ti ti-folder k-fo"></i>Kestrel – Board Papers <span class="n">62 items</span></span></td><td class="num muted">–</td><td class="muted">1003.1 › Corporate</td><td>Jamie Clarke</td><td>Jamie Clarke</td><td>Today, 08:02</td><td>in 30 days</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-file-type-xls k-xls"></i>Rent schedule 2027.xlsx</span></td><td class="num">10377.4</td><td class="muted">1002.1 › Schedules</td><td>Chris Doyle</td><td>Chris Doyle</td><td>9 Nov 2026</td><td>in 23 days</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-file-type-docx k-doc"></i>Witness statement – draft 1.docx</span></td><td class="num">10240.1</td><td class="muted">1001.1 › Evidence</td><td>Priya Nair</td><td>Priya Nair</td><td>19 Oct 2026</td><td class="soon">in 2 days</td></tr>
+      </table>
+    </div>
+  </div>
+</div></div>
+
+<div class="state">B · Separate entries at the foot of the pane, for admins only</div>
+<div class="pieces">
+  <div>
+    <div class="mini">
+      <div class="navsec" style="margin-top:4px">Recent</div>
+      <div class="ni"><i class="ti ti-file-text" style="color:#6E6E73"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail" style="color:#6E6E73"></i>Emails</div>
+      <div class="navsec">My Favorites</div>
+      <div class="ni"><i class="ti ti-folder" style="color:#0C69C0"></i>Firm Precedents</div>
+      <div class="bottom">
+        <div class="ni"><i class="ti ti-trash" style="color:#6E6E73"></i>Trash</div>
+        <div class="ni"><i class="ti ti-users" style="color:#6E6E73"></i>Everyone's Trash</div>
+        <div class="ni on"><i class="ti ti-shield-check"></i>Removed Items</div>
+      </div>
+    </div>
+    <p class="cap">The list on the right is the same as A's, under the heading Removed Items.</p>
+  </div>
+</div>
+
+<h3>Which way for admins?</h3>
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>One Trash, with a switch</h3>
+      <p>The pane keeps one entry for everyone, and the three lists read as views of one Trash. The switch is something only admins learn.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Three entries in the pane</h3>
+      <p>Each list is one click from anywhere, and Removed Items stands out as a place of its own. The foot of the pane grows by two rows for admins, which the Admin app may later take over.</p>
+    </div>
+  </div>
+</div>
+
+<div class="state">For everyone · the confirmations and the toast (not a choice; tell me what to change)</div>
+<div class="pieces">
+  <div class="piece">
+    <div class="dlg">
+      <h4>Remove "Old Drafts" from the Trash?</h4>
+      <p>It holds 14 items.</p>
+      <p class="quiet">You won't be able to restore it. An administrator can, for 30 days.</p>
+      <div class="row"><span class="btn">Cancel</span><span class="btn red">Remove</span></div>
+    </div>
+    <p class="cap">Remove… on one item, or several (then "Remove 3 items from the Trash?" with their names listed).</p>
+  </div>
+  <div class="piece">
+    <div class="dlg">
+      <h4>Empty the Trash?</h4>
+      <p>This removes all 4 items you deleted.</p>
+      <p class="quiet">You won't be able to restore them. An administrator can, for 30 days.</p>
+      <div class="row"><span class="btn">Cancel</span><span class="btn red">Empty Trash</span></div>
+    </div>
+    <p class="cap">Empty Trash…</p>
+  </div>
+  <div class="piece">
+    <div class="toast"><i class="ti ti-trash"></i><span>Moved "Old Drafts" to the Trash</span><span class="undo">Undo</span><i class="ti ti-x x"></i></div>
+    <p class="cap">After any Delete, document or folder. Undo restores what that Delete moved, back where it was.<br>It stays 10 seconds, longer while the pointer or the keyboard's focus is on it.</p>
+    <div class="toast" style="margin-top:14px"><i class="ti ti-arrow-back-up"></i><span>Restored "Old Drafts" to 1001.1 › Drafts</span><span class="undo">Open</span><i class="ti ti-x x"></i></div>
+    <p class="cap">After Undo or Restore, with Open to go to where it went back to.</p>
+  </div>
+</div>
+
+<div class="notes">
+  <h3>Behind the screens (my proposals)</h3>
+  <ul>
+    <li><b>Everyone's</b> is every live item in a Trash, with a Deleted By column, and Restore and Remove… as on Mine. It's for admins only in the app. The Classic Interface's Deleted Documents and Deleted Folders reports keep their own menu permission.</li>
+    <li><b>Removed</b> has Restore only. Nothing in the app destroys early: destruction is the nightly job's, after the 30 days (a setting in Healdan Settings).</li>
+    <li><b>Destroyed</b> counts down to the job's night; under a week it's shown in the caution colour.</li>
+    <li><b>Restoring from Removed</b> works as from the Trash: back where it was deleted from, or Healdan asks where.</li>
+    <li><b>The record</b> of who deleted, removed, restored and destroyed each item is kept in Healdan's own table, and outlives the item. Until it's destroyed, Removed's columns show it. Once it's destroyed, nothing in this phase shows it: a screen for it waits for the Admin app, unless you want one now.</li>
+  </ul>
+</div>
+
+<script>
+(function(){function fit(){document.querySelectorAll('.hd-wrap').forEach(function(w){var a=w.querySelector('.hd-app');var s=Math.min(1,w.clientWidth/1280);a.style.transform='scale('+s+')';w.style.height=(560*s)+'px';});}window.addEventListener('resize',fit);fit();setTimeout(fit,50);setTimeout(fit,400);})();
+</script>

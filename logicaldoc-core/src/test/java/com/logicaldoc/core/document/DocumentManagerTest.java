@@ -27,11 +27,15 @@ import java.util.concurrent.ExecutionException;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.AbstractCoreTestCase;
+import com.logicaldoc.core.LogCapture;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.parser.ParsingException;
@@ -1017,6 +1021,59 @@ public class DocumentManagerTest extends AbstractCoreTestCase {
         // We should check that the file does not exist anymore in the store
         // but quite ofter it does not get immediately deleted by the JVM
         // so we do not test in order to complete all the tests without errors
+    }
+
+    /**
+     * Healdan: the destroy reads the destroyed document's own row, so CE's
+     * lines name its own file, and the DOCUMENT_DESTROYED history goes to its
+     * own folder (and that folder's parent) with its own version, not the
+     * table's first row's
+     */
+    @Test
+    public void testDestroyDocumentNamesItsOwnFile() throws PersistenceException, PermissionException {
+        // Document 3, pluto.pdf 1.3, isn't the first row (1, pippo.pdf 1.0 in folder 6), and in folder 7 its
+        // folder isn't the first row's either; both folders are in Workspace X (3000)
+        docDao.jdbcUpdate("update ld_document set ld_folderid = 7 where ld_id = 3");
+
+        FolderHistory transaction = new FolderHistory();
+        transaction.setSessionId("1234");
+        transaction.setUser(userDao.findByUsername("admin", true));
+        try (LogCapture log = new LogCapture(DocumentManager.class)) {
+            testSubject.destroyDocument(3L, transaction);
+
+            List<String> lines = List.copyOf(log.getMessages());
+            assertTrue(lines.toString(), lines.contains("Destroyed the record of document 3 - pluto.pdf"));
+            assertTrue(lines.toString(), lines.stream().noneMatch(line -> line.contains("pippo.pdf")));
+        }
+
+        String destroyed = " from ld_folder_history where ld_docid = 3 and ld_event = '%s' order by ld_folderid"
+                .formatted(FolderEvent.DOCUMENT_DESTROYED);
+        assertEquals(List.of(7L, 3000L), docDao.queryForList("select ld_folderid" + destroyed, Long.class));
+        assertEquals(List.of("1.3", "1.3"), docDao.queryForList("select ld_version" + destroyed, String.class));
+    }
+
+    /**
+     * Healdan: a destroy inside a caller's transaction commits with it (the
+     * Trash's nightly job destroys each item in one); CE's failing delete from a
+     * reading requests table it doesn't have made the transaction rollback-only
+     */
+    @Test
+    public void testDestroyDocumentInsideATransaction() throws PersistenceException {
+        FolderHistory transaction = new FolderHistory();
+        transaction.setSessionId("1234");
+        transaction.setUser(userDao.findByUsername("admin", true));
+        assertEquals(List.of(4L), docDao.queryForList("select count(*) from ld_version where ld_documentid = 3", Long.class));
+
+        new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+            try {
+                testSubject.destroyDocument(3L, transaction);
+            } catch (PersistenceException | PermissionException e) {
+                throw new IllegalStateException(e);
+            }
+        });
+
+        assertEquals(List.of(0L), docDao.queryForList("select count(*) from ld_document where ld_id = 3", Long.class));
+        assertEquals(List.of(0L), docDao.queryForList("select count(*) from ld_version where ld_documentid = 3", Long.class));
     }
 
     @Test

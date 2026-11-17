@@ -271,6 +271,9 @@ public class SoapFolderService extends AbstractService implements FolderService 
 
         // Check add permission on destParentFolder
         checkFolderPermission(Permission.ADD, user, destParentFolder.getId());
+        // Healdan: MOVE on everything the tree holds, folders and documents, and ADD on the target (folders and Trash
+        // spec, 4.3)
+        HealdanTreeChecks.movedTrees(user, List.of(folderId), parentId);
 
         // Add a folder history entry
         FolderHistory transaction = new FolderHistory();

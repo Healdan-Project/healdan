@@ -18,6 +18,7 @@ import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.document.AbstractDocument;
@@ -532,6 +533,9 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void move(List<Long> folderIds, long targetId) throws ServerException {
         Session session = validateSession();
+        // Healdan: MOVE on everything each tree holds, folders and documents, and ADD on the target (folders and
+        // Trash spec, 4.3)
+        HealdanRpcChecks.movedTrees(session, folderIds, targetId);
 
         try {
             for (long folderId : folderIds)
@@ -1133,8 +1137,10 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
         try {
             // Healdan: what is in the trash, and for all but admins what the user deleted, as emptyTrash takes
             HealdanRpcChecks.trash(session, "ld_folder", ids);
-            FolderDAO.get().jdbcUpdate("update ld_folder set ld_deleted = 2 where ld_deleted = 1 and ld_id in (%s)"
-                    .formatted(CollectionUtil.join(ids)));
+            // Healdan: Removed takes the folder's item members in its tree, who and when, with the rows
+            if (!HealdanHooks.get().removeFromTrash("ld_folder", ids, session.getUser()))
+                FolderDAO.get().jdbcUpdate("update ld_folder set ld_deleted = 2 where ld_deleted = 1 and ld_id in (%s)"
+                        .formatted(CollectionUtil.join(ids)));
         } catch (PersistenceException e) {
             throwServerException(session, log, e);
         }

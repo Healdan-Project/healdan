@@ -212,6 +212,18 @@
 		<parameter id="class" value="com.logicaldoc.healdan.navigation.FavoriteNamesFolderListener" />
 	</extension>
 
+	<!-- Last, once every listener that could refuse the store has let it through: a document put in the trash becomes a Trash item, or joins its document's (the folders and Trash spec, section 5.2); refuses a save only when its record can't be written -->
+	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanTrash">
+		<parameter id="position" value="170" />
+		<parameter id="class" value="com.logicaldoc.healdan.trash.TrashDocumentListener" />
+	</extension>
+
+	<!-- Last, as healdanTrash is for documents: a folder deleted without the folder-delete hook, which records trees, becomes a Trash item; refuses a save only when its record can't be written -->
+	<extension plugin-id="logicaldoc-core" point-id="FolderListener" id="healdanTrashFolders">
+		<parameter id="position" value="140" />
+		<parameter id="class" value="com.logicaldoc.healdan.trash.TrashFolderListener" />
+	</extension>
+
 	<!-- The search types are HealdanConstants.SEARCH_* -->
 	<extension plugin-id="logicaldoc-core" point-id="Search" id="healdanDocNumberSearch">
 		<parameter id="type" value="101" />

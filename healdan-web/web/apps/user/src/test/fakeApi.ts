@@ -38,6 +38,8 @@ export function folder(over: Partial<S['FolderView']> = {}): S['FolderView'] {
     path: [],
     canFile: true,
     canRename: true,
+    canMove: true,
+    canDelete: true,
     ...over,
   }
 }
@@ -82,6 +84,28 @@ export function document(over: Partial<S['DocumentView']> = {}): S['DocumentView
     hold: null,
     canEdit: true,
     canOpen: true,
+    ...over,
+  }
+}
+
+/** A document's Trash item, as a delete answers it */
+export function trashItem(over: Partial<S['TrashItem']> = {}): S['TrashItem'] {
+  const name = over.name ?? 'Letter from Dunmere Pryce.pdf'
+  return {
+    id: 700,
+    type: 'document',
+    name,
+    docNumber: 10388,
+    kind: kindOf(name),
+    size: 214_000,
+    contents: null,
+    deletedFrom: { folder: { id: 111, name: 'Correspondence', kind: 'folder' }, path: ['Smoke', '1001.1 – Charter Dispute', 'Correspondence'] },
+    matter: { id: 11, display: '1001.1 – Charter Dispute', client: client() },
+    deletedBy: { id: 5, name: 'Jamie Clarke' },
+    deletedAt: '2026-11-16T09:40:00Z',
+    removedBy: null,
+    removedAt: null,
+    destroyAfter: null,
     ...over,
   }
 }

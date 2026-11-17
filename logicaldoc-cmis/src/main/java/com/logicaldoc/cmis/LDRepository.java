@@ -901,7 +901,12 @@ public class LDRepository {
                 transaction.setEvent(FolderEvent.DELETED);
                 transaction.setSessionId(sid);
                 com.logicaldoc.core.HealdanHooks.get().beforeFolderDeleteTree(folder.getId(), transaction);
-                deleteFolder(folder, cof, result);
+                try {
+                    deleteFolder(folder, cof, result);
+                } finally {
+                    // Healdan: the Trash's item, recorded before, keeps only what the delete took
+                    com.logicaldoc.core.HealdanHooks.get().afterFolderDeleteTree(folder.getId(), transaction);
+                }
             } else {
                 Document doc = (Document) object;
                 DocumentHistory transaction = new DocumentHistory();

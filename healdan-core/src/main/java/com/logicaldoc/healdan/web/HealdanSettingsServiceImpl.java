@@ -77,6 +77,9 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 	/** The longest device sign-in lifetime, in days: ten years */
 	static final int MAX_API_DAYS = 3650;
 
+	/** The longest time removed items are kept, in days */
+	static final int MAX_TRASH_DAYS = 365;
+
 	/** What only an administrator may do with sign-in, for the refusal */
 	private static final String SIGN_IN = "set up sign-in";
 
@@ -358,6 +361,7 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 		gui.setNextDocNumber(DocNumberCounter.get().peekNext());
 		gui.setApiTokenIdleDays(settings.apiTokenIdleDays());
 		gui.setApiTokenMaxDays(settings.apiTokenMaxDays());
+		gui.setTrashRemovedDays(settings.trashRemovedDays());
 		gui.setApiCorsOrigins(StringUtils.defaultString(settings.get(HealdanSettings.API_CORS_ORIGINS)));
 		gui.setUiStart(settings.uiStart());
 		return gui;
@@ -373,8 +377,8 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 
 	/** The settings to save, each one checked */
 	private record Values(String label, String plural, NumberingMode mode, String docClass, int recentDays,
-			Long nextDocNumber, int apiIdleDays, int apiMaxDays, String apiOrigins,
-			String uiStart) {
+			Long nextDocNumber, int apiIdleDays, int apiMaxDays, int trashDays,
+			String apiOrigins, String uiStart) {
 	}
 
 	/*
@@ -418,13 +422,17 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 					"A device sign-in must last between 1 and %d days.".formatted(MAX_API_DAYS));
 		if (maxDays < idleDays)
 			throw new HealdanRuleException("A device sign-in can't last fewer days than it may go unused.");
+		int trashDays = settings.getTrashRemovedDays();
+		if (trashDays < 1 || trashDays > MAX_TRASH_DAYS)
+			throw new HealdanRuleException(
+					"Removed items must be kept for between 1 and %d days.".formatted(MAX_TRASH_DAYS));
 		String origins = origins(settings.getApiCorsOrigins());
 
 		String uiStart = StringUtils.strip(settings.getUiStart());
 		if (!"app".equals(uiStart) && !"classic".equals(uiStart))
 			throw new HealdanRuleException("Start In must be the User App or the Classic Interface.");
 
-		return new Values(label, plural, mode, docClass, days, next, idleDays, maxDays, origins, uiStart);
+		return new Values(label, plural, mode, docClass, days, next, idleDays, maxDays, trashDays, origins, uiStart);
 	}
 
 	private static String label(String value, String which) throws HealdanRuleException {
@@ -479,6 +487,7 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 		settings.set(HealdanSettings.API_TOKEN_MAX_DAYS, Integer.toString(values.apiMaxDays()));
 		// A lower maximum applies to the device sign-ins already made too
 		ApiTokens.get().capLifetime(values.apiMaxDays());
+		settings.set(HealdanSettings.TRASH_REMOVED_DAYS, Integer.toString(values.trashDays()));
 		settings.set(HealdanSettings.API_CORS_ORIGINS, values.apiOrigins());
 		settings.set(HealdanSettings.UI_START, values.uiStart());
 		if (values.nextDocNumber() != null && values.nextDocNumber() > DocNumberCounter.get().peekNext())

@@ -165,6 +165,69 @@ learn from.
     scans on from the cursor, so an email filed since whose row is missing (the listener logs a row it can't add
     and goes on) gets it at the next start. To read every email again, delete the `email.index` and
     `email.index.cursor` rows from `hd_setting` and restart.
+- **The Trash** records each delete, and moves what a delete took through three states, in `healdan-core`'s
+  `com.logicaldoc.healdan.trash`. The Admin Guide's [The Trash and Removed
+  Items](../../admin/the-trash-and-removed-items/) has what an administrator sees.
+  - **`hd_trash` and `hd_trash_member`** (`V11__trash.sql`) are the record. `hd_trash` has a row for each delete: its
+    kind (`document` or `folder`), the top item's id, its name and doc #, the folder it was deleted from by id and by its
+    path's names at the time, the matter it was in, the counts of what it took, and who deleted it and when.
+    `hd_trash_member` has a row for each folder and document the delete took, the top item included, with its **state**
+    (`deleted`, `removed`, `restored` or `destroyed`, from `TrashState`) and who changed it and when. State is kept for
+    each member, so an action on an item (restore, remove, destroy) takes only the members in the state it acts on, and
+    a member restored on its own and deleted again belongs to a new item. The item is in the Trash while its top member
+    is deleted, and removed while it is removed. The rows are never deleted: after a restore or a destroy they are the
+    record, and keep the names so it reads without LogicalDOC's rows. Times are written from the JVM's clock.
+  - **`TrashRecorder` records on every route.** `HealdanHooks.beforeFolderDeleteTree` runs first in a folder delete's
+    transaction and records the folder's item from the live tree it already reads; `TrashDocumentListener`
+    (`healdanTrash`, position 170) records a document when a store sets it from live to deleted, which `HibernateDocumentDAO.delete`
+    does on every route; `TrashFolderListener` (`healdanTrashFolders`, position 140) records a folder deleted through
+    `HibernateFolderDAO.delete`, which CMIS's `deleteObject`, a merge's emptied source and `FolderTool.delete` call
+    without the hook. A recording that fails vetoes the delete, so no row is ever left in the Trash with no item.
+  - **Restoring and removing.** `TrashRestore` works out the tree a restore brings back, and a hook gives it to
+    `HibernateFolderDAO.restore`; `TrashRemoval` writes removals, with who and when. A member is taken only while its
+    own row says the state the member does.
+  - **`TrashDestroyer`**, started by `TrashStartup` (a `HealdanStartListener`, on a daemon thread of its own, at 02:47
+    server time, never in the first 10 minutes after a start), destroys the members removed more than `trash.removedDays`
+    before. Its design is in the folders and Trash spec, §5.4, and the Ruling it cites:
+    - Each document is destroyed through `DocumentManager.destroyDocument` in a transaction of its own, with the
+      member's state written first, so that nothing but the commit follows the store's hold of its files. A failure
+      leaves that document and the rest of its item for the next night. Then the item's folders go in one transaction.
+    - It runs as `_system`. The `trash-system-destroy` seed gives `_system`'s group read on the Destroy Documents menu
+      (-9), so `destroyDocument`'s menu check passes whether or not the `admin` account exists or is enabled.
+    - It keeps a folder removed while it is a matter's own folder or a Store, while a row that isn't destroyed has it as
+      its folder or parent, while a folder not yet destroyed (live or deleted) takes its security from it, or while a live
+      alias points to it. Only a live shortcut keeps its document, and only a live alias its folder: another item's
+      shortcuts and aliases go with what they point to, their members there marked destroyed.
+    - It deletes the folder's rows in `ld_folder_ext`, `ld_foldertag`, `ld_folder_acl` and `ld_folder_store`, which don't
+      cascade, folder bookmarks, the aliases pointing to it, and Healdan's `hd_local_value` and `hd_searchfolder` rows,
+      and clears a user's default workspace that names it. A destroyed document's `hd_local_value` and
+      `hd_preview_job` rows go too.
+  - **The seeds** are `trash-record-existing`, which makes items of what was deleted before the release (see the Install
+    manual's [Upgrading](../../install/upgrading/#what-was-already-in-the-trash)), and `trash-system-destroy`.
+  - **The setting** is `trash.removedDays` in `hd_setting`, 1 to 365 and 30 by default
+    (`HealdanSettings.trashRemovedDays()`), set on the Classic Interface's Healdan Settings tab.
+  - **The hooks** (`HealdanHooks`, which `healdan-core` implements in `HealdanHooksImpl`) are `folderRestoreScope`,
+    asked at the top of `HibernateFolderDAO.restore`; `removeFromTrash`, called by the two RPC services' `deleteFromTrash`
+    methods; and `emptyTrash`. Each has a default that keeps LogicalDOC's own SQL, so a build without `healdan-core`
+    behaves as before. `HealdanTreeChecks.movedTrees` and the webapp's `HealdanRpcChecks.movedTrees` check Move on
+    every live folder and document of a moved tree, for the web services' and the Classic Interface's moves; WebDAV's and
+    CMIS's moves reach the same check through `RulesFolderListener`.
+  - **The upstream files it edits** are small hooks into this code, each marked `// Healdan:`, each with its test in
+    `UPSTREAM_TESTS`:
+    - `HibernateFolderDAO.deleteTree` takes only live rows (`ld_deleted = 0`) in its document, delete-user and alias
+      updates, so a folder delete never takes an item already in a colleague's Trash or removed; and
+      `HibernateFolderDAO.restore` takes only the ids the hook names (`HibernateFolderDAOTest`).
+    - `DocumentServiceImpl.deleteFromTrash` and `emptyTrash`, and `FolderServiceImpl.deleteFromTrash`, ask a hook
+      first (`HealdanTrashHooksTest`).
+    - `FolderServiceImpl.move` calls `HealdanRpcChecks.movedTrees`, and the web services' `SoapFolderService.move`
+      `HealdanTreeChecks.movedTrees` (`RpcPermissionGapsTest`, `SoapPermissionGapsTest`).
+    - WebDAV's `ResourceServiceImpl.folderRenameOrMove` and `renameFolder`: a move that also renames moves through
+      `folderDAO.move`, so the folder-move rules see it, then renames (`ResourceServiceImplTest#testMoveFolder`).
+    - `DocumentManager.destroyDocument` has `where ld_id = ?` on its first lookup, which had none, so each destroy wrote
+      another document's name into another folder's history, and its `ld_readingrequest` block is gone: LogicalDOC's schema
+      has no such table, and the failed statement made a transaction around the destroy roll back
+      (`DocumentManagerTest`). It fixes the Classic Interface's Destroy Documents too.
+    - The fork-owned `HealdanHooks`, `HealdanTreeChecks` and `HealdanRpcChecks` gain the methods above.
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a
   new default ships as a new step.

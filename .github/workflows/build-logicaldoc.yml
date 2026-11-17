@@ -99,6 +99,9 @@ jobs:
             HealdanHooksTest
             DocumentAclEqualityTest
             HibernateFolderDAOTest#testMerge
+            HibernateFolderDAOTest#testDeleteTreeTakesOnlyLiveRows
+            HibernateFolderDAOTest#testRestore
+            HealdanTrashHooksTest
             StatsCollectorTest
             SettingServiceImplTest
             FolderServiceImplTest
@@ -148,12 +151,15 @@ jobs:
             FolderAclEqualityTest
             HealdanSecretsTest
             LDRepositoryGapsTest
+            ResourceServiceImplTest#testMoveFolder
             LDAuthenticationProviderLogTest
             OrderedPropertiesLineBreaksTest
             LogDownloadSecretsTest
             FolderAliasDeleteTest
             LoginServiceImplTest
             FulltextSearchTest
+            DocumentManagerTest#testDestroyDocumentNamesItsOwnFile
+            DocumentManagerTest#testDestroyDocumentInsideATransaction
         run: python3 .github/scripts/test-shards.py plan --times test-times.txt --minutes 5 --max-shards 8 "$UPSTREAM_TESTS"
 
   tests:

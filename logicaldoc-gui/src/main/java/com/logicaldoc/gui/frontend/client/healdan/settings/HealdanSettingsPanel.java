@@ -55,6 +55,8 @@ public class HealdanSettingsPanel extends AdminPanel {
 
 	private static final String API_MAX = "apimaxdays";
 
+	private static final String TRASH_DAYS = "trashremoveddays";
+
 	private static final String API_ORIGINS = "apiorigins";
 
 	private static final String START = "uistart";
@@ -145,6 +147,11 @@ public class HealdanSettingsPanel extends AdminPanel {
 		apiMax.setHint("days");
 		apiMax.setRequired(true);
 
+		SpinnerItem trashDays = ItemFactory.newSpinnerItem(TRASH_DAYS, "Removed Items Kept",
+				settings.getTrashRemovedDays(), 1, 365);
+		trashDays.setHint("days");
+		trashDays.setRequired(true);
+
 		TextItem apiOrigins = ItemFactory.newTextItem(API_ORIGINS, "API origins allowed (CORS)",
 				settings.getApiCorsOrigins());
 		apiOrigins.setWidth(340);
@@ -161,7 +168,7 @@ public class HealdanSettingsPanel extends AdminPanel {
 		start.setRequired(true);
 		start.setHint("Where signing in takes people");
 
-		form.setItems(label, plural, numbering, docClass, recent, next, start, apiIdle, apiMax, apiOrigins);
+		form.setItems(label, plural, numbering, docClass, recent, next, start, apiIdle, apiMax, trashDays, apiOrigins);
 
 		Label clientsTitle = new Label("<b>Clients</b>");
 		clientsTitle.setHeight(20);
@@ -247,6 +254,7 @@ public class HealdanSettingsPanel extends AdminPanel {
 		settings.setRecentMattersDays(Integer.parseInt(form.getValueAsString(RECENT)));
 		settings.setApiTokenIdleDays(Integer.parseInt(form.getValueAsString(API_IDLE)));
 		settings.setApiTokenMaxDays(Integer.parseInt(form.getValueAsString(API_MAX)));
+		settings.setTrashRemovedDays(Integer.parseInt(form.getValueAsString(TRASH_DAYS)));
 		settings.setApiCorsOrigins(form.getValueAsString(API_ORIGINS));
 		settings.setUiStart(form.getValueAsString(START));
 

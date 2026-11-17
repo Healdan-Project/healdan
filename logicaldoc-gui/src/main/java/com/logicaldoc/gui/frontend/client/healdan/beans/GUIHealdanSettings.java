@@ -40,6 +40,9 @@ public class GUIHealdanSettings implements Serializable {
 	/** Days a device sign-in lasts at most */
 	private int apiTokenMaxDays;
 
+	/** Days an administrator can restore a removed item before the nightly job destroys it */
+	private int trashRemovedDays = 30;
+
 	/** The origins the API allows across origins, comma-separated; empty for none */
 	private String apiCorsOrigins = "";
 
@@ -116,6 +119,14 @@ public class GUIHealdanSettings implements Serializable {
 
 	public void setApiTokenMaxDays(int apiTokenMaxDays) {
 		this.apiTokenMaxDays = apiTokenMaxDays;
+	}
+
+	public int getTrashRemovedDays() {
+		return trashRemovedDays;
+	}
+
+	public void setTrashRemovedDays(int trashRemovedDays) {
+		this.trashRemovedDays = trashRemovedDays;
 	}
 
 	public String getApiCorsOrigins() {

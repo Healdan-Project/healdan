@@ -320,7 +320,15 @@ public final class ApiViews {
 	}
 
 	static MatterRef matterOf(FolderPosition position) throws PersistenceException {
-		Matter matter = position.matter();
+		return matterRef(position.matter());
+	}
+
+	/**
+	 * @param matter a matter, or null
+	 * @return a reference to it, with its client; null for none
+	 * @throws PersistenceException error at data layer
+	 */
+	static MatterRef matterRef(Matter matter) throws PersistenceException {
 		if (matter == null)
 			return null;
 		Client client = ClientDAO.get().findById(matter.getClientId());
@@ -367,13 +375,17 @@ public final class ApiViews {
 		String kind = folderKind(position);
 		path.add(new FolderRef(f.getId(), f.getName(), kind));
 
-		// One lookup of the caller's permissions serves both flags; a Store and a matter's own folder need none
-		Set<Permission> allowed = renamableKind(kind) ? folders.getAllowedPermissions(f.getId(), caller.getId())
+		// One lookup of the caller's permissions serves every flag; a Store and a matter's own folder need none
+		Set<Permission> allowed = changeableKind(kind) ? folders.getAllowedPermissions(f.getId(), caller.getId())
 				: Set.of();
 		boolean canFile = "folder".equals(kind) && position.depth() >= 1 && allowed.contains(Permission.WRITE);
-		boolean canRename = canRename(kind, position.isMatterTopLevel(), allowed, new AdminCheck(caller));
+		boolean topLevel = position.isMatterTopLevel();
+		AdminCheck admin = new AdminCheck(caller);
 		return Optional.of(new FolderView("folder", f.getId(), f.getName(), kind, matterOf(position),
-				storeRef(position.storeId()), List.copyOf(path), canFile, canRename));
+				storeRef(position.storeId()), List.copyOf(path), canFile,
+				may(Permission.RENAME, kind, topLevel, allowed, admin),
+				may(Permission.MOVE, kind, topLevel, allowed, admin),
+				may(Permission.DELETE, kind, topLevel, allowed, admin)));
 	}
 
 	/**
@@ -397,31 +409,40 @@ public final class ApiViews {
 		Set<Permission> allowed = FolderDAO.get().getAllowedPermissions(f.getId(), caller.getId());
 		boolean canFile = "folder".equals(kind) && allowed.contains(Permission.WRITE);
 		// The parent is a matter's own folder: the subfolder is at the matter's top level
-		boolean canRename = canRename(kind, "matter".equals(parent.kind()), allowed, admin);
+		boolean topLevel = "matter".equals(parent.kind());
 		return new FolderView("folder", f.getId(), f.getName(), kind, parent.matter(), parent.store(),
-				List.copyOf(path), canFile, canRename);
+				List.copyOf(path), canFile, may(Permission.RENAME, kind, topLevel, allowed, admin),
+				may(Permission.MOVE, kind, topLevel, allowed, admin),
+				may(Permission.DELETE, kind, topLevel, allowed, admin));
 	}
 
-	private static boolean renamableKind(String kind) {
+	/**
+	 * A folder or a search folder: never a Store or a matter's own folder,
+	 * which aren't renamed, moved or deleted here
+	 */
+	private static boolean changeableKind(String kind) {
 		return "folder".equals(kind) || "searchFolder".equals(kind);
 	}
 
 	/**
+	 * @param permission {@code RENAME}, {@code MOVE} or {@code DELETE}
 	 * @param kind the folder's kind, as its view has it
 	 * @param topLevel whether it is directly in a matter's workspace
 	 * @param allowed the caller's permissions on it
 	 * @param admin whether the caller is an administrator, asked only for a
-	 *        top-level folder with the Rename permission
-	 * @return whether {@code PATCH /v1/folders/{id}} would rename it for the
-	 *         caller (folder rename spec section 4.2): a folder or a search
-	 *         folder, never a Store or a matter's own folder; with the Rename
-	 *         permission; and directly in a matter's workspace, only for an
-	 *         administrator
+	 *        top-level folder with the permission
+	 * @return whether the folder itself lets the caller rename, move or delete
+	 *         it, as {@code PATCH}, {@code POST .../move} and {@code DELETE} of
+	 *         {@code /v1/folders/{id}} decide (folder rename spec section 4.2,
+	 *         folders and Trash spec 6.3): a folder or a search folder, never a
+	 *         Store or a matter's own folder; with the permission; and directly
+	 *         in a matter's workspace, only for an administrator. Where a move
+	 *         goes, and what the folder holds, aren't counted.
 	 * @throws PersistenceException error at data layer
 	 */
-	static boolean canRename(String kind, boolean topLevel, Set<Permission> allowed, AdminCheck admin)
-			throws PersistenceException {
-		if (!renamableKind(kind) || !allowed.contains(Permission.RENAME))
+	static boolean may(Permission permission, String kind, boolean topLevel, Set<Permission> allowed,
+			AdminCheck admin) throws PersistenceException {
+		if (!changeableKind(kind) || !allowed.contains(permission))
 			return false;
 		return !topLevel || admin.get();
 	}

@@ -46,6 +46,7 @@ import com.logicaldoc.healdan.api.model.MoveRequest;
 import com.logicaldoc.healdan.api.model.NewDocument;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.RenameRequest;
+import com.logicaldoc.healdan.api.model.TrashItem;
 import com.logicaldoc.healdan.docnumber.LegacyDocNumbers;
 import com.logicaldoc.healdan.email.MediaTypes;
 import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
@@ -309,18 +310,17 @@ public class DocumentResource {
 	}
 
 	/**
-	 * Moves the document to the trash (M6 spec section 6.7), which the
-	 * Classic Interface empties and restores from. It needs the Delete
+	 * Moves the document, and its shortcuts, to the caller's Trash (M6 spec
+	 * section 6.7, folders and Trash spec 6.4). It needs the Delete
 	 * permission.
 	 *
 	 * @param docNumber the doc #
-	 * @return {@code 204}
+	 * @return the Trash item the delete made, whose id a restore takes
 	 */
 	@DELETE
 	@Path("{docNumber: [0-9]+}")
-	public Response delete(@PathParam("docNumber") long docNumber) {
-		changes.delete(docNumber, Caller.current());
-		return Response.noContent().build();
+	public TrashItem delete(@PathParam("docNumber") long docNumber) {
+		return changes.delete(docNumber, Caller.current());
 	}
 
 	/**

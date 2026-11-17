@@ -80,7 +80,7 @@ import jakarta.servlet.http.HttpServlet;
  * The fixture's documents are in the root, where the author's groups have READ
  * and boss has nothing; in folder 6 the author's groups have READ, WRITE, ADD,
  * DELETE, RENAME, MOVE, DOWNLOAD and EMAIL. The core plugin gives CE its format
- * converters. Three tests, because each one builds its database again.
+ * converters. Four tests, because each one builds its database again.
  */
 public class RpcPermissionGapsTest extends AbstractWPTestCase {
 
@@ -404,6 +404,38 @@ public class RpcPermissionGapsTest extends AbstractWPTestCase {
         }
         assertEquals(1, deleted("ld_document", OTHER));
         assertEquals(1, deleted("ld_document", LINKED));
+    }
+
+    @Test
+    public void testFolderMoveNeedsMoveOnTheTree() throws Exception {
+        // Document 4 in the tree's grandchild. CE asks only MOVE on the parent and ADD on the target, which the author
+        // has on the tree and in folder 6; the author may move the child, but not the grandchild
+        move(OTHER, GRANDCHILD);
+        grantFolder(TREE, Permission.READ, Permission.MOVE);
+        grantFolder(CHILD, Permission.READ, Permission.MOVE);
+
+        for (String username : List.of("boss", "author")) {
+            as(username);
+            FolderServiceImpl folders = new FolderServiceImpl();
+            refused(() -> folders.move(List.of(CHILD), AUTHORS_FOLDER));
+
+            assertEquals(TREE, folderDao.findById(CHILD).getParentId());
+            assertEquals(GRANDCHILD, docDao.findById(OTHER).getFolder().getId());
+        }
+
+        // MOVE on the grandchild too, but document 4's own ACL gives the author READ only
+        grantFolder(GRANDCHILD, Permission.READ, Permission.MOVE);
+        grant(OTHER, Permission.READ);
+        as("author");
+        refused(() -> new FolderServiceImpl().move(List.of(CHILD), AUTHORS_FOLDER));
+        assertEquals(TREE, folderDao.findById(CHILD).getParentId());
+
+        as("admin");
+        grant(OTHER, Permission.READ, Permission.MOVE);
+        as("author");
+        new FolderServiceImpl().move(List.of(CHILD), AUTHORS_FOLDER);
+        assertEquals(AUTHORS_FOLDER, folderDao.findById(CHILD).getParentId());
+        assertEquals(CHILD, folderDao.findById(GRANDCHILD).getParentId());
     }
 
     private void as(String username) throws ServerException {

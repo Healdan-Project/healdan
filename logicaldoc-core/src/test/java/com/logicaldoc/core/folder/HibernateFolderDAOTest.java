@@ -290,6 +290,52 @@ public class HibernateFolderDAOTest extends AbstractCoreTestCase {
         assertNull(testSubject.findById(alias.getId()));
     }
 
+    /**
+     * Healdan: a tree's delete takes only its live documents and aliases. One
+     * already in a colleague's trash keeps its deleter, and one removed stays
+     * removed.
+     */
+    @Test
+    public void testDeleteTreeTakesOnlyLiveRows() throws PersistenceException {
+        testSubject.jdbcUpdate("update ld_document set ld_folderid = 1201, ld_deleted = 0 where ld_id = 1");
+        testSubject.jdbcUpdate("update ld_document set ld_folderid = 1202, ld_deleted = 0 where ld_id = 8");
+        testSubject.jdbcUpdate(
+                "update ld_document set ld_folderid = 1200, ld_deleted = 1, ld_deleteuserid = 3, ld_deleteuser = 'Colleague' where ld_id = 3");
+        testSubject.jdbcUpdate(
+                "update ld_document set ld_folderid = 1201, ld_deleted = 2, ld_deleteuserid = 3, ld_deleteuser = 'Colleague' where ld_id = 7");
+
+        User admin = UserDAO.get().findById(User.USERID_ADMIN, true);
+        FolderHistory transaction = new FolderHistory();
+        transaction.setUser(admin);
+        Folder removedAlias = testSubject.createAlias(4L, 1201L, new FolderHistory(transaction));
+        Folder liveAlias = testSubject.createAlias(4L, 1202L, new FolderHistory(transaction));
+        testSubject.jdbcUpdate("update ld_folder set ld_deleted = 2 where ld_id = %d".formatted(removedAlias.getId()));
+
+        testSubject.deleteTree(1200L, PersistentObject.DELETED_CODE_DEFAULT, transaction);
+
+        // The live documents and alias go to the trash, the documents with the transaction's user
+        for (long id : new long[] { 1L, 8L }) {
+            assertEquals(1, testSubject.queryForInt("select ld_deleted from ld_document where ld_id = %d".formatted(id)));
+            assertEquals(User.USERID_ADMIN,
+                    testSubject.queryForLong("select ld_deleteuserid from ld_document where ld_id = %d".formatted(id)));
+            assertEquals(admin.getFullName(),
+                    testSubject.queryForString("select ld_deleteuser from ld_document where ld_id = %d".formatted(id)));
+        }
+        assertEquals(1, testSubject
+                .queryForInt("select ld_deleted from ld_folder where ld_id = %d".formatted(liveAlias.getId())));
+
+        // A document already in a colleague's trash keeps its deleter
+        assertEquals(1, testSubject.queryForInt("select ld_deleted from ld_document where ld_id = 3"));
+        assertEquals(3L, testSubject.queryForLong("select ld_deleteuserid from ld_document where ld_id = 3"));
+        assertEquals("Colleague", testSubject.queryForString("select ld_deleteuser from ld_document where ld_id = 3"));
+
+        // A removed document and a removed alias stay removed
+        assertEquals(2, testSubject.queryForInt("select ld_deleted from ld_document where ld_id = 7"));
+        assertEquals(3L, testSubject.queryForLong("select ld_deleteuserid from ld_document where ld_id = 7"));
+        assertEquals(2, testSubject
+                .queryForInt("select ld_deleted from ld_folder where ld_id = %d".formatted(removedAlias.getId())));
+    }
+
     @Test
     public void testCopy() throws Exception {
         // Create a tree and populate it

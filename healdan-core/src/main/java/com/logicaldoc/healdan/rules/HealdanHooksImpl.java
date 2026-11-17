@@ -8,8 +8,12 @@ import java.util.List;
 import java.util.Map;
 
 import org.hibernate.Hibernate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.PersistenceException;
@@ -37,6 +41,10 @@ import com.logicaldoc.healdan.profile.Propagation;
 import com.logicaldoc.healdan.profile.StoredProfile;
 import com.logicaldoc.healdan.security.PermissionRules;
 import com.logicaldoc.healdan.security.PermissionsDocumentListener;
+import com.logicaldoc.healdan.trash.TrashRecorder;
+import com.logicaldoc.healdan.trash.TrashRemoval;
+import com.logicaldoc.healdan.trash.TrashRestore;
+import com.logicaldoc.healdan.trash.TrashRules;
 import com.logicaldoc.healdan.util.CacheEvictor;
 
 import com.logicaldoc.util.spring.Context;
@@ -51,12 +59,17 @@ import jakarta.annotation.PreDestroy;
  * rows with JDBC; a folder delete or restore is JDBC throughout; a merge moves
  * documents one by one, and a copy writes files and schedules versions, before
  * the store a listener could veto. A folder delete also checks R74's
- * permissions here, as every route deletes a tree through this hook. The
+ * permissions here, as every route deletes a tree through this hook, then
+ * refuses it while a document inside is checked out or immutable, and records
+ * the delete as a Trash item once the rules let it through; a folder restore
+ * brings back only what that item took. The
  * once-per-matter rule (M5 spec §6.4) checks moves, restores, merges and
  * folder copies here, for the same reasons.
  */
 @Component
 public class HealdanHooksImpl implements HealdanHooks {
+
+	private static final Logger log = LoggerFactory.getLogger(HealdanHooksImpl.class);
 
 	static final String EVERYONE_DELETE = "The Everyone group can't be deleted.";
 
@@ -183,8 +196,37 @@ public class HealdanHooksImpl implements HealdanHooks {
 		Vetoes.check(Vetoes.ids(folderId), List.of(), () -> {
 			rules.checkFolderDelete(folder, actor);
 			PermissionRules.get().checkDeleteTree(folderId, actor);
+			// Whoever asks, admins too: a check-out inside, or an immutable document, at which CE's own delete stopped
+			// silently, after writing the folder's history. After the permissions, so someone who may not delete
+			// everything inside learns nothing of what's there (spec 4.2, 6.1)
+			List<Long> tree = rows.tree(folderId);
+			TrashRules.get().checkDeletable(tree);
+			// Not a rule: once the rules let it through, the tree CE is about to delete is one Trash item, recorded in
+			// the delete's transaction
+			TrashRecorder.get().treeDeleting(folderId, tree, actor);
 		});
 		evictTreeAfterCompletion(folderId);
+	}
+
+	/**
+	 * Not a rule: the Trash item the delete recorded keeps only what it took
+	 * ({@link TrashRecorder#settle}). A failure is logged, never thrown, so the
+	 * delete's own outcome stands.
+	 */
+	@Override
+	public void afterFolderDeleteTree(long folderId, FolderHistory transaction) {
+		try {
+			new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+				try {
+					TrashRecorder.get().settle(folderId);
+				} catch (PersistenceException e) {
+					throw new IllegalStateException(e);
+				}
+			});
+		} catch (RuntimeException e) {
+			log.warn("The Trash item of a folder delete couldn't be settled ({})", e.getClass().getSimpleName());
+			log.debug("Couldn't settle the Trash item of folder {}", folderId, e);
+		}
 	}
 
 	/**
@@ -211,6 +253,37 @@ public class HealdanHooksImpl implements HealdanHooks {
 			PermissionRules.get().checkRestore(folderId, parentId);
 			oncePerMatter.checkSubtreeRestore(folderId, parentId, FilingRules.actor(transaction));
 		});
+	}
+
+	/**
+	 * Not a rule: a folder's restore brings back what the delete that took it
+	 * took, its Trash item's members in its tree, and leaves what others
+	 * deleted inside earlier, or what was removed since, where it is (spec 4.4)
+	 */
+	@Override
+	public RestoreScope folderRestoreScope(long folderId, Collection<Long> treeIds, FolderHistory transaction)
+			throws PersistenceException {
+		return TrashRestore.get().scope(folderId, treeIds, FilingRules.actor(transaction));
+	}
+
+	/**
+	 * Remove, on the Classic Interface's route: the rows go to Removed with the
+	 * members of their Trash items (spec 2.3)
+	 */
+	@Override
+	public boolean removeFromTrash(String table, Collection<Long> ids, User user) throws PersistenceException {
+		TrashRemoval.get().removeMembers("ld_folder".equals(table) ? 'F' : 'D', ids, user);
+		return true;
+	}
+
+	/**
+	 * Empty Trash, on the Classic Interface's route: every item of the user's
+	 * in the Trash goes to Removed
+	 */
+	@Override
+	public boolean emptyTrash(User user) throws PersistenceException {
+		TrashRemoval.get().empty(user);
+		return true;
 	}
 
 	/**

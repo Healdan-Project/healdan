@@ -16,7 +16,7 @@ export { correspondence, letter, store, workspace }
 export const lease = document({ docNumber: 10432, name: 'Lease.docx', folder: inFolder })
 export const plan = document({ docNumber: 10433, name: 'Plan.pdf', folder: inFolder })
 export const drafts = folder({ id: 8, name: 'Drafts', path: [store, workspace, { id: 7, name: 'Correspondence', kind: 'folder' }, { id: 8, name: 'Drafts', kind: 'folder' }] })
-export const matterTop = folder({ id: 110, name: '1001.1 – Charter Dispute', kind: 'matter', path: [store, workspace], canFile: false, canRename: false })
+export const matterTop = folder({ id: 110, name: '1001.1 – Charter Dispute', kind: 'matter', path: [store, workspace], canFile: false, canRename: false, canMove: false, canDelete: false })
 
 /**
  * Puts a filed email's message in the cache, as Quick Look read it, with its first attachment shown as Saved as # `copy`,

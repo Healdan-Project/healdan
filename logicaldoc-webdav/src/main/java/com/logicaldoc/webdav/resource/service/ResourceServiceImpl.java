@@ -636,8 +636,12 @@ public class ResourceServiceImpl implements ResourceService {
 			if (!source.isRenameEnabled())
 				throw new DavException(HttpServletResponse.SC_FORBIDDEN, "Rename Permission not granted to this user");
 
-			renameFolder(folder, source.getName(), destinationParentFolder, transaction);
-			folder = getFolder(source);
+			// Healdan: a folder that also moves is renamed by moveFolder once folderDAO.move has moved it, as the
+			// user's move, so a refused move renames nothing either (folders and Trash spec, 9.1)
+			if (currentParentFolder == destinationParentFolder) {
+				renameFolder(folder, source.getName(), transaction);
+				folder = getFolder(source);
+			}
 		}
 
 		// distinction between folder move and folder rename
@@ -656,25 +660,25 @@ public class ResourceServiceImpl implements ResourceService {
 			transaction.setUser(user);
 
 			// we are doing a folder move
-			moveFolder(folder, destinationParentFolder, newName, transaction);
+			// Healdan: with the source's new name if it is renamed too (see above)
+			moveFolder(folder, destinationParentFolder,
+					source.getName().equals(folder.getName()) ? newName : source.getName(), transaction);
 		}
 
 		folder = getFolder(source);
 		return this.marshallFolder(folder, session);
 	}
 
-	private void renameFolder(Folder currentFolder, String newName, long destinationParentFolder,
-			FolderHistory transaction) throws PersistenceException {
+	private void renameFolder(Folder currentFolder, String newName, FolderHistory transaction)
+			throws PersistenceException {
 		// Folder Rename
 		currentFolder.setName(newName);
 
 		// Add a folder history entry
 		folderDAO.store(currentFolder, transaction);
 
-		currentFolder = folderDAO.findById(currentFolder.getId(), true);
-
-		currentFolder.setParentId(destinationParentFolder);
-		folderDAO.store(currentFolder);
+		// Healdan: it no longer stores the new parent here, with no user, past every folder-move rule and the
+		// re-stamping; the move goes through moveFolder (folders and Trash spec, 9.1)
 	}
 
 	private void moveFolder(Folder currentFolder, long destinationParentFolder, String newName,

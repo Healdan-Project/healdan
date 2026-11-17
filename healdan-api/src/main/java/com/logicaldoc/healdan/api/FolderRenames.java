@@ -86,7 +86,7 @@ final class FolderRenames {
 				refuse(now, user);
 				if (name.equals(current.getName()))
 					return now;
-				if (taken(current, name, user))
+				if (taken(current.getParentId(), id, name, user))
 					throw ApiProblem.conflict("name-taken",
 							"Another folder in folder %d is called %s.".formatted(current.getParentId(), name));
 
@@ -106,7 +106,7 @@ final class FolderRenames {
 	}
 
 	/**
-	 * Refuses what the view's {@code canRename} refuses ({@link ApiViews#canRename}
+	 * Refuses what the view's {@code canRename} refuses ({@link ApiViews#may}
 	 * is the rule), with the code for its reason
 	 */
 	private static void refuse(FolderView view, User user) throws PersistenceException {
@@ -173,15 +173,23 @@ final class FolderRenames {
 	}
 
 	/**
-	 * Whether another live folder in the folder's parent, an alias included, has
-	 * the name, without regard to case. Only one the caller can see counts: a
+	 * Whether another live folder in the parent, an alias included, has the
+	 * name, without regard to case. Only one the caller can see counts: a
 	 * hidden one, or one the caller can't read, isn't the caller's to learn of,
-	 * as one the caller can't read is {@code 404} elsewhere.
+	 * as one the caller can't read is {@code 404} elsewhere. A folder move asks
+	 * it of the folder it moves into ({@link FolderChanges}).
+	 *
+	 * @param parentId the folder the name would be in
+	 * @param exceptId the folder that would have the name, which doesn't count
+	 * @param name the name
+	 * @param user the caller, with its groups
+	 * @return true if the name is taken there
+	 * @throws PersistenceException error at data layer
 	 */
-	private static boolean taken(Folder folder, String name, User user) throws PersistenceException {
+	static boolean taken(long parentId, long exceptId, String name, User user) throws PersistenceException {
 		FolderDAO folders = FolderDAO.get();
-		for (FolderRow row : StoredRows.get().children(folder.getParentId())) {
-			if (row.id() == folder.getId() || !name.equalsIgnoreCase(row.name()))
+		for (FolderRow row : StoredRows.get().children(parentId)) {
+			if (row.id() == exceptId || !name.equalsIgnoreCase(row.name()))
 				continue;
 			Folder sibling = folders.findById(row.id());
 			if (sibling != null && !sibling.isHidden() && folders.isReadAllowed(row.id(), user.getId()))

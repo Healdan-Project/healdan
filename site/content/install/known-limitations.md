@@ -159,6 +159,13 @@ weight: 12
     them).
 
   Administration is there as well: the app has no screens for it yet.
+- **The Classic Interface's Trash lists a deleted folder's contents as rows of their own.** Healdan records a folder
+  and what it held as one item, but LogicalDOC's Trash screen lists every deleted row, so a deleted folder's documents
+  and subfolders show beside it. It also restores into the folder open in its tree, not where the item was deleted
+  from. See [The Trash and Removed Items](../../admin/the-trash-and-removed-items/#in-the-classic-interface).
+- **A moved or created folder takes a number when a name is already there out of sight.** Moving a folder through
+  the [API](../../developer/api/) into a folder that holds a same-named folder you can't read makes LogicalDOC name it
+  `Letters(1)`, as creating one does, so that nothing tells you the other exists.
 - **A secure address.** The app works only at an `https://` address, or on the machine Healdan runs on (`localhost`
   or `127.0.0.1`). At a plain `http://` address on the network, browsers don't send the `Sec-Fetch-Site` header the
   web session needs, so the app shows a page that says it needs a secure address, with a link to the Classic Interface,

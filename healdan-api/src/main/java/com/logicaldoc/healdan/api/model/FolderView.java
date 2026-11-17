@@ -18,7 +18,12 @@ import java.util.List;
  * @param canFile whether the caller may file documents into it
  * @param canRename whether {@code PATCH /v1/folders/{id}} would rename it for
  *        the caller (folder rename spec section 4.2)
+ * @param canMove whether the folder itself lets the caller move it, as
+ *        {@code canRename} says for a rename (folders and Trash spec 6.3);
+ *        where it goes, and what it holds, aren't counted
+ * @param canDelete whether the folder itself lets the caller delete it, on
+ *        the same terms; what it holds isn't counted
  */
 public record FolderView(String type, long id, String name, String kind, MatterRef matter, StoreRef store,
-		List<FolderRef> path, boolean canFile, boolean canRename) {
+		List<FolderRef> path, boolean canFile, boolean canRename, boolean canMove, boolean canDelete) {
 }

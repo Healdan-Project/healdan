@@ -313,6 +313,20 @@ public class OncePerMatterTest extends AbstractRulesTestCase {
 
 	@Test
 	public void testFolderRestoreRefusesTwoCopiesComingBack() throws Exception {
+		// Two copies in one folder, as data from before M5 may hold, both taken by its delete
+		Folder letters = fx.folder(documents, "Letters");
+		Document first = fileEmail(letters, alice);
+		Document second = beforeM5(letters);
+		folderDao.deleteTree(letters.getId(), folderHistory(alice));
+		awaitAsyncWork();
+
+		assertRefused(alreadyIn("998.1", first),
+				() -> folderDao.restore(letters.getId(), documents.getId(), folderHistory(alice)), first.getId(),
+				second.getId());
+	}
+
+	@Test
+	public void testFolderRestoreLeavesACopyDeletedOnItsOwn() throws Exception {
 		Folder letters = fx.folder(documents, "Letters");
 		Document trashed = fileEmail(letters, alice);
 		documentDao.delete(trashed.getId(), documentHistory(alice));
@@ -321,9 +335,14 @@ public class OncePerMatterTest extends AbstractRulesTestCase {
 		folderDao.deleteTree(letters.getId(), folderHistory(alice));
 		awaitAsyncWork();
 
-		// CE's restore brings back both, the one deleted on its own too
-		assertRefused(alreadyIn("998.1", trashed),
-				() -> folderDao.restore(letters.getId(), documents.getId(), folderHistory(alice)), trashed.getId(),
+		// The restore brings back what the folder's delete took, not the copy deleted on its own (folders and Trash
+		// spec, 4.4)
+		allowed(() -> folderDao.restore(letters.getId(), documents.getId(), folderHistory(alice)));
+		assertEquals(List.of(later.getId()), copies());
+
+		// Which would be a second copy
+		assertRefused(alreadyIn("998.1", later),
+				() -> documentDao.restore(trashed.getId(), letters.getId(), documentHistory(alice)), trashed.getId(),
 				later.getId());
 	}
 

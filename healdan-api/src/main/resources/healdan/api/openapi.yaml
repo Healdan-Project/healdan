@@ -1057,11 +1057,16 @@ paths:
           $ref: '#/components/responses/Problem'
     delete:
       operationId: deleteDocument
-      summary: Move a document to the trash
+      summary: Move a document to the Trash
       description: |
-        Moves the document, and its shortcuts, to the trash, as the old UI's
-        Delete does. The trash, where a document can be restored, is in the
-        Classic Interface. The document is then `404`.
+        Moves the document, and its shortcuts, to the caller's Trash, as the
+        old UI's Delete does, and returns the Trash item the delete made, with
+        the shortcuts among what it took. The item's `id` is what
+        `restoreTrashItem` takes, to undo the delete. The document is then
+        `404`.
+
+        The answer used to be `204` with no body; it is `200` with the item
+        now.
 
         The checks are those of `renameDocument` but for its name, with the
         Delete permission in place of Rename: `404`, `403`, the holds
@@ -1069,14 +1074,18 @@ paths:
         refused`. A checked-out document is `409 checked-out` for everyone,
         the caller too, as the Classic Interface greys Delete out: release it
         first. The document is deleted before its shortcuts, so a rule that
-        refuses it leaves them. Once the document is in the trash the answer
-        is `204`: a shortcut that can't follow it is left, and logged.
+        refuses it leaves them. Once the document is in the Trash the answer
+        is `200`: a shortcut that can't follow it is left, and logged.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
       responses:
-        '204':
-          description: Moved to the trash
+        '200':
+          description: The Trash item the delete made
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrashItem'
         default:
           $ref: '#/components/responses/Problem'
   /v1/documents/{docNumber}/move:
@@ -2051,6 +2060,135 @@ paths:
                 $ref: '#/components/schemas/FolderView'
         default:
           $ref: '#/components/responses/Problem'
+    delete:
+      operationId: deleteFolder
+      summary: Move a folder to the Trash
+      description: |
+        Moves a folder inside a matter, and everything live in it, to the
+        caller's Trash, through the same call the old UI's Delete uses, and
+        returns the Trash item the delete made. What was already in someone's
+        Trash, or removed from it, stays where it is. A folder's `canDelete`
+        says whether the folder itself allows it. The folder is then `404`.
+
+        The checks run in this order. None names or counts anything the
+        caller can't read.
+
+        1. `404 not-found` for a folder the caller can't read, one outside
+           the Stores (the Templates Store and what is in it too), an alias,
+           and one already deleted, as `getFolder` answers.
+        2. `409 not-deletable` for a Store and a matter's own folder,
+           administrators included.
+        3. `403 forbidden` without the Delete permission on the folder.
+        4. `403 admins-only` for a folder directly in a matter's workspace,
+           search folders included, unless the caller is an administrator.
+        5. `403 items-not-allowed` when the caller lacks the Delete
+           permission on something inside, a folder or a document, whether
+           the caller can see it or not. It names nothing.
+        6. `409 checked-out` while a document inside is checked out, by
+           anyone, the caller too. `holds` lists those the caller can read,
+           with who holds each and since when.
+        7. `409 immutable` while it holds an immutable document,
+           administrators included.
+        8. `409 refused` when one of Healdan's rules refuses.
+      tags: [Folders]
+      parameters:
+        - $ref: '#/components/parameters/FolderId'
+      responses:
+        '200':
+          description: The Trash item the delete made
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrashItem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/folders/{id}/move:
+    post:
+      operationId: moveFolder
+      summary: Move a folder to another folder
+      description: |
+        Moves a folder inside a matter into another folder, with everything
+        in it, through the same call the old UI's Move uses, and returns it
+        in its new place. Healdan's rules apply as everywhere: moving it into
+        another matter gives its documents that matter's Client and Matter
+        and the values its folders pass down, and a matter that holds the
+        same email already refuses it (`409 already-filed`, with the copy as
+        `document`). A move into the folder it is in changes nothing, after
+        the checks up to `admins-only`. A folder's `canMove` says whether
+        the folder itself allows a move.
+
+        The checks run in this order. None names or counts anything the
+        caller can't read.
+
+        1. `400 bad-request` for a body that isn't the JSON expected, or has
+           no `folderId`.
+        2. `404 not-found` for a folder the caller can't read, and for a
+           folder to move it into that the caller can't read, as
+           `getFolder` answers both.
+        3. `409 not-movable` for a Store and a matter's own folder,
+           administrators included.
+        4. `409 filing-rule` into a Store, a search folder, the folder
+           itself, or a folder inside it.
+        5. `403 forbidden` without the Move permission on the folder, or the
+           Add permission on the folder it goes into.
+        6. `403 admins-only` for a folder directly in a matter's workspace,
+           search folders included, and into a matter's top level, unless
+           the caller is an administrator.
+        7. `403 items-not-allowed` when the caller lacks the Move permission
+           on something inside, a folder or a document, whether the caller
+           can see it or not. It names nothing.
+        8. `409 checked-out` while a document inside is checked out, by
+           anyone, the caller too. `holds` lists those the caller can read.
+        9. `409 name-taken` when another folder in the folder it goes into
+           that the caller can see has its name, compared without regard to
+           case: a hidden folder, or one the caller can't read, doesn't
+           count.
+        10. `409 already-filed`, with the copy as `document`, when the
+            matter it goes into holds an email it holds.
+        11. `409 refused` when one of Healdan's rules refuses, or when the
+            folder moved to another folder while it was being moved: try
+            again.
+      tags: [Folders]
+      parameters:
+        - $ref: '#/components/parameters/FolderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveRequest'
+      responses:
+        '200':
+          description: The folder, in its new place
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/folders/{id}/contents:
+    get:
+      operationId: getFolderContents
+      summary: How much a folder holds
+      description: |
+        Counts the live folders and documents in the folder's tree, the
+        folder itself left out, that the caller can read, as a question
+        before a delete or a move says them. What the caller can't read
+        isn't counted, so the counts tell nothing of it; an administrator's
+        take everything. A folder the caller can't read, one outside the
+        Stores, and an alias are `404`, as `getFolder` answers.
+      tags: [Folders]
+      parameters:
+        - $ref: '#/components/parameters/FolderId'
+      responses:
+        '200':
+          description: The counts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrashContents'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/folders/{id}/children:
     get:
       operationId: listFolderChildren
@@ -2262,6 +2400,171 @@ paths:
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/trash:
+    get:
+      operationId: listTrash
+      summary: List the Trash
+      description: |
+        A page of Trash items: each is one delete, a document or a folder
+        with what it took. A folder's counts take only what the caller can
+        read, and `deletedFrom` names a live folder only when the caller can
+        read it. `removedDays` is how long a removed item stays restorable by
+        an administrator before the server destroys it, as the
+        administrators set it.
+
+        - `mine`, the default, is what the caller deleted that is still in
+          the Trash, an administrator's too.
+        - `everyone` is everyone's items in the Trash, and `removed` the items
+          removed from it, with who removed each, when, and the night the
+          server destroys it. Both are for administrators.
+
+        The checks run in this order:
+
+        1. `400 bad-request` for a `view`, `sort` or `order` it doesn't know,
+           and for an `offset` or `limit` out of range.
+        2. `403 admins-only` for `everyone` or `removed`, unless the caller
+           is an administrator.
+      tags: [Trash]
+      parameters:
+        - name: view
+          in: query
+          required: false
+          description: '`mine` (the default), `everyone` or `removed`.'
+          schema:
+            type: string
+            enum: [mine, everyone, removed]
+        - name: sort
+          in: query
+          required: false
+          description: |
+            `name` (ignoring case), `deleted` (when it was deleted) or
+            `removed` (when it was removed, for the `removed` view). By
+            default `removed` in the `removed` view and `deleted` in the
+            others. Ties go by the item's age. Doc # and where it was deleted
+            from don't sort.
+          schema:
+            type: string
+            enum: [name, deleted, removed]
+        - name: order
+          in: query
+          required: false
+          description: |
+            `asc` or `desc`. By default `asc` by name, and `desc` by a time,
+            so the newest come first.
+          schema:
+            type: string
+            enum: [asc, desc]
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: A page of the items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrashPage'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: emptyTrash
+      summary: Empty the caller's Trash
+      description: |
+        Moves every item the caller deleted that is still in the Trash to
+        Removed, an administrator's own too, never anyone else's. Only an
+        administrator can restore them from there, for `removedDays`, after
+        which the server destroys them. It has no checks: an empty Trash
+        stays empty.
+      tags: [Trash]
+      responses:
+        '204':
+          description: Emptied
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/trash/{id}:
+    delete:
+      operationId: removeTrashItem
+      summary: Remove an item from the Trash
+      description: |
+        Moves the item, with what its delete took that is still in the
+        Trash, to Removed. Only an administrator can restore it from there,
+        for `removedDays`, after which the server destroys it.
+
+        The checks:
+
+        1. `404 not-found` for an item that doesn't exist, isn't in the Trash
+           (restored, removed already, or destroyed), or that someone else
+           deleted, unless the caller is an administrator.
+        2. `409 refused` when nothing its delete took is in the Trash any
+           more, though the item still says so. What was destroyed outside
+           the Trash is then recorded as destroyed, and the item leaves it.
+      tags: [Trash]
+      parameters:
+        - $ref: '#/components/parameters/TrashId'
+      responses:
+        '204':
+          description: Removed
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/trash/{id}/restore:
+    post:
+      operationId: restoreTrashItem
+      summary: Restore an item from the Trash
+      description: |
+        Restores the item, and what its delete took that is still in its
+        state, through the same call the old UI's Restore uses, so Healdan's
+        rules apply as everywhere. It goes back to the folder it was deleted
+        from, or into the folder `folderId` names. What others deleted inside
+        a folder before it, and what was removed from it since, stays where
+        it is. The answer is where it went, as `getFolder` gives it, and the
+        item, restored. A caller restores the items they deleted, while in
+        the Trash; an administrator restores anyone's, and from Removed. To
+        undo a delete, restore the item the delete answered with.
+
+        The checks run in this order:
+
+        1. `400 bad-request` for a body that isn't the JSON expected (`415`
+           for one that isn't sent as JSON). The body is optional.
+        2. `404 not-found` for an item that doesn't exist, has been restored
+           or destroyed, that someone else deleted, or is removed, unless
+           the caller is an administrator.
+        3. `403 forbidden` without the Delete permission on the item, unless
+           the caller is an administrator.
+        4. Without `folderId`: `409 place-gone` when the folder it was
+           deleted from isn't there for it: deleted, the caller can't read
+           it, or Healdan's rules or the caller's permissions no longer let
+           it in. Ask where, and restore again with `folderId`.
+        5. With `folderId`, as a move there: `404 not-found` for a folder the
+           caller can't read (one deleted, outside the Stores, or an alias,
+           as `getFolder` answers); `409 filing-rule` for a folder that can't
+           hold it (for a folder, a Store, a search folder, or the folder
+           itself or one inside it; for a document, a Store, a matter's top
+           level or a search folder); `403 forbidden` without the Add
+           permission (a folder) or the Write permission (a document) on it,
+           unless it is the folder it was deleted from; `403 admins-only` for
+           a folder into a matter's top level, unless the caller is an
+           administrator.
+        6. `409 already-filed`, with the copy as `document`, when the matter
+           it goes into holds an email it holds.
+        7. `409 refused` when one of Healdan's rules refuses, such as a
+           shortcut, which can't be restored inside a Store.
+      tags: [Trash]
+      parameters:
+        - $ref: '#/components/parameters/TrashId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreRequest'
+      responses:
+        '200':
+          description: Where it went, and the item, restored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RestoredItem'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
     FavoriteIdPath:
@@ -2287,6 +2590,15 @@ components:
       in: path
       required: true
       description: The folder's id
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    TrashId:
+      name: id
+      in: path
+      required: true
+      description: The Trash item's id
       schema:
         type: integer
         format: int64
@@ -2498,9 +2810,9 @@ components:
       type: object
       description: |
         An RFC 9457 problem. Some codes add members: `validation` adds
-        `fields`, `checked-out` and `locked` add `hold`, `held-elsewhere`
-        adds `hold` and `lastSaved`, and `version-moved` and `already-filed`
-        add `document`.
+        `fields`, `checked-out` and `locked` add `hold` (a folder's
+        `checked-out` adds `holds` instead), `held-elsewhere` adds `hold` and
+        `lastSaved`, and `version-moved` and `already-filed` add `document`.
       required: [type, title, status, detail, code]
       properties:
         type:
@@ -2518,13 +2830,23 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, web-session-refused, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, not-renamable, admins-only, name-taken, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, storage-unreachable, no-preview, not-an-email, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, web-session-refused, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, not-renamable, not-deletable, not-movable, admins-only, items-not-allowed, name-taken, place-gone, already-filed, filing-in-progress, immutable, refused, too-large, validation, too-many-attempts, storage-unreachable, no-preview, not-an-email, server-error]
         fields:
           type: array
           items:
             $ref: '#/components/schemas/FieldError'
         hold:
           $ref: '#/components/schemas/HoldView'
+        holds:
+          type: array
+          description: |
+            For a folder's `checked-out` (`deleteFolder`, `moveFolder`): the
+            checked-out documents in it that the caller can read, with who
+            holds each and since when. Documents the caller can't read are
+            left out, and nothing says there are any, so the list can be
+            empty.
+          items:
+            $ref: '#/components/schemas/HeldDocument'
         lastSaved:
           type: [string, 'null']
           format: date-time
@@ -3194,7 +3516,7 @@ components:
     FolderView:
       type: object
       additionalProperties: false
-      required: [type, id, name, kind, matter, store, path, canFile, canRename]
+      required: [type, id, name, kind, matter, store, path, canFile, canRename, canMove, canDelete]
       properties:
         type:
           type: string
@@ -3230,6 +3552,19 @@ components:
             folder or a search folder, never a Store or a matter's own folder;
             with the Rename permission; and, directly in a matter's workspace,
             only for an administrator.
+        canMove:
+          type: boolean
+          description: |
+            Whether the folder itself lets the caller move it with
+            `moveFolder`, on `canRename`'s terms with the Move permission.
+            Where it would go, and what it holds, aren't counted: a move can
+            still be refused for them.
+        canDelete:
+          type: boolean
+          description: |
+            Whether the folder itself lets the caller delete it with
+            `deleteFolder`, on `canRename`'s terms with the Delete permission.
+            What it holds isn't counted: a delete can still be refused for it.
     MatterView:
       type: object
       additionalProperties: false
@@ -3352,12 +3687,171 @@ components:
       type: object
       additionalProperties: false
       required: [folderId]
-      description: The body of `moveDocument`.
+      description: The body of `moveDocument` and `moveFolder`.
       properties:
         folderId:
           type: integer
           format: int64
-          description: The folder to move the document into
+          description: The folder to move the document or folder into
+    TrashContents:
+      type: object
+      description: |
+        What a folder holds, counting only what the caller can read: the
+        folders and documents in its tree, the folder itself left out. An
+        administrator's counts take everything.
+      additionalProperties: false
+      required: [folders, documents]
+      properties:
+        folders:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The subfolders, at every level
+        documents:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The documents in the folder and its subfolders
+    HeldDocument:
+      type: object
+      description: A checked-out document a folder holds, named in a folder's `checked-out` problem
+      additionalProperties: false
+      required: [docNumber, name, hold]
+      properties:
+        docNumber:
+          type: integer
+          format: int64
+        name:
+          type: string
+          description: The file name
+        hold:
+          $ref: '#/components/schemas/HoldView'
+    DeletedFrom:
+      type: object
+      description: Where a Trash item was deleted from
+      additionalProperties: false
+      required: [folder, path]
+      properties:
+        folder:
+          oneOf:
+            - $ref: '#/components/schemas/FolderRef'
+            - type: 'null'
+          description: |
+            The folder it was in, while that is live, in a Store and readable
+            by the caller; null otherwise.
+        path:
+          type: array
+          description: |
+            The folders' names from the Store down to that folder: as they
+            are now when `folder` is given, else as they were at the delete.
+            Empty outside the Stores.
+          items:
+            type: string
+    TrashItem:
+      type: object
+      description: One delete in the Trash, a folder or a document, with what it took
+      additionalProperties: false
+      required: [id, type, name, docNumber, kind, size, contents, deletedFrom, matter, deletedBy, deletedAt, removedBy, removedAt, destroyAfter]
+      properties:
+        id:
+          type: integer
+          format: int64
+        type:
+          type: string
+          enum: [document, folder]
+        name:
+          type: string
+          description: The document's file name or the folder's name, as it was deleted
+        docNumber:
+          type: [integer, 'null']
+          format: int64
+          description: A document's doc #; null for a folder, and for a document that had none
+        kind:
+          type: string
+          enum: [word, excel, powerpoint, pdf, email, opendocument, picture, other, folder]
+          description: The kind of file, as a document's `kind`, for its icon; `folder` for a folder
+        size:
+          type: [integer, 'null']
+          format: int64
+          description: A document's file size in bytes; null for a folder
+        contents:
+          oneOf:
+            - $ref: '#/components/schemas/TrashContents'
+            - type: 'null'
+          description: |
+            What a folder took that is still in the item's state, counting
+            only what the caller can read; null for a document.
+        deletedFrom:
+          $ref: '#/components/schemas/DeletedFrom'
+        matter:
+          oneOf:
+            - $ref: '#/components/schemas/MatterRef'
+            - type: 'null'
+          description: The matter it was in, or is; null if none
+        deletedBy:
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+          description: Who deleted it; null when the server's data doesn't say
+        deletedAt:
+          type: string
+          format: date-time
+        removedBy:
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+          description: |
+            Who removed it from the Trash; null unless it is removed, and for
+            one removed before the server recorded who.
+        removedAt:
+          type: [string, 'null']
+          format: date-time
+          description: When it was removed from the Trash; null unless it is removed
+        destroyAfter:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            The night the server destroys it for good, once it has been
+            removed for the days the administrators set; null unless it is
+            removed.
+    TrashPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - required: [removedDays]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/TrashItem'
+            removedDays:
+              type: integer
+              minimum: 1
+              maximum: 365
+              description: |
+                How many days a removed item stays restorable by an
+                administrator before the server destroys it, as the
+                administrators set it.
+      unevaluatedProperties: false
+    RestoreRequest:
+      type: object
+      additionalProperties: false
+      description: The body of `restoreTrashItem`, which is optional.
+      properties:
+        folderId:
+          type: [integer, 'null']
+          format: int64
+          description: The folder to restore the item into; null or left out for back where it was
+    RestoredItem:
+      type: object
+      additionalProperties: false
+      required: [place, item]
+      properties:
+        place:
+          $ref: '#/components/schemas/FolderView'
+          description: The folder the item went to, as `getFolder` gives it
+        item:
+          $ref: '#/components/schemas/TrashItem'
+          description: The item, restored
     NewFolder:
       type: object
       additionalProperties: false

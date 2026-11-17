@@ -232,14 +232,21 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 403 | `forbidden` | You can see the object, but may not do this to it |
 | 403 | `token-only` | `DELETE /auth/tokens/current` on the web session, which has no token |
 | 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current` |
+| 403 | `admins-only` | Only an administrator may do this: a folder directly in a matter's workspace, search folders included, or anything in the Templates Store, to rename, move or delete, or into a matter's top level; `GET /trash` with `view=everyone` or `view=removed` |
+| 403 | `items-not-allowed` | A folder delete or move that needs a permission on something inside that you lack, hidden or not. The detail names nothing |
 | 403 | `web-session-refused` | A same-origin request on the web session that breaks one of its rules, such as a change without `X-Healdan-Client: web` (see [Two Ways In](#two-ways-in)). Signing in again doesn't mend it |
 | 404 | `not-found` | It doesn't exist, **or you can't read it**: the two get the same answer |
 | 404 | `no-preview` | `GET /documents/{docNumber}/preview` for a file with no preview: its type has none, or its conversion failed (see [Previews](#previews)); `GET /documents/{docNumber}/message/parts/{id}?inline=true` for an attachment that isn't a PDF or a picture |
 | 404 | `not-an-email` | A `/documents/{docNumber}/message` route for a document that isn't an email, or whose file can't be read as one (see [Reading a Filed Email](#reading-a-filed-email)) |
-| 409 | `checked-out`, `locked` | Someone else has the document checked out, or anyone has it locked with the web page's Lock action. The problem adds the `hold` |
+| 409 | `checked-out`, `locked` | Someone else has the document checked out, or anyone has it locked with the web page's Lock action. The problem adds the `hold`. A folder delete or move is `checked-out` while any document inside is checked out, the caller's too, and the problem adds `holds`: the checked-out documents the caller can read, with who holds each and since when. It never says there are others |
 | 409 | `held-elsewhere` | You have the document checked out on another of your devices. The problem adds the `hold` and `lastSaved`. A release can name the device in `elsewhere` (see [Check-Outs and Devices](#check-outs-and-devices)) |
 | 409 | `not-held` | A save with `ifHeld: true` found the document free, or, from a device, checked out where no device holds it: its check-out was released |
 | 409 | `version-moved` | A save with `ifVersion` found the document at another version. The problem adds the `document` |
+| 409 | `not-renamable` | `PATCH /folders/{id}` on a Store or a matter's own folder, which takes the matter's name through Edit Matter |
+| 409 | `not-deletable`, `not-movable` | `DELETE /folders/{id}` or `POST /folders/{id}/move` on a Store or a matter's own folder, administrators too. They stay the Classic Interface's |
+| 409 | `immutable` | A folder delete found an immutable document inside, administrators too |
+| 409 | `name-taken` | Another folder that you can see in the destination has the folder's name, compared without regard to case. A folder you can't read doesn't count |
+| 409 | `place-gone` | `POST /trash/{id}/restore` with no `folderId`: the folder the item was deleted from is deleted, can't be read by you, or the rules or your permissions no longer let the item in. Restore it again with a `folderId` (see [The Trash](#the-trash)) |
 | 409 | `filing-rule` | The folder can't hold documents: a Store, a matter's top folder or a search folder |
 | 409 | `already-filed` | The matter already holds the email's message, in a copy you can read. `detail` names its doc #, and the problem adds the copy as `document` |
 | 409 | `filing-in-progress` | Another request was filing the same email into the matter, and it didn't end within 30 seconds. Nothing was kept: send the request again |
@@ -303,12 +310,13 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 |---|---|
 | The server and you | `GET /server`, `GET /me`, `GET /users?q=` for user fields such as Author |
 | Signing in | `POST /auth/tokens`, `GET /auth/tokens`, `DELETE /auth/tokens/current`, `DELETE /auth/tokens/{id}`; `DELETE /session` for the web session |
-| Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /clients/recent`, `PUT` and `DELETE /me/matters/{folderId}`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`, `PATCH /folders/{id}` to rename; `GET /stores` and `/stores/{id}/matters` for administrators only |
+| Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /clients/recent`, `PUT` and `DELETE /me/matters/{folderId}`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/{id}/contents`, `/folders/recent`, `POST /folders`, `PATCH /folders/{id}` to rename, `POST /folders/{id}/move` and `DELETE /folders/{id}`; `GET /stores` and `/stores/{id}/matters` for administrators only |
 | Finding | `GET /search?scope=&q=&within=`, with filters and `facets`, `GET /suggest?q=` for the search box as someone types, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
 | A document | `GET /documents/{docNumber}`, `/content`, `/preview`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent`, with `?kind=email` for emails alone; `PATCH /documents/{docNumber}` to rename, `POST /documents/{docNumber}/move` and `DELETE /documents/{docNumber}` |
 | Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are; `GET /documents/{docNumber}/message` and its `/body`, `/parts/{id}` and `POST /attachments/{id}/file` for reading a filed email |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
+| The Trash | `GET /trash`, `POST /trash/{id}/restore`, `DELETE /trash/{id}`, `DELETE /trash` |
 | Favorites | `GET` and `POST /me/favorites`, `PATCH` and `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
 
 The sections below say more about the parts a client needs to know before it starts.
@@ -459,8 +467,9 @@ refused` for an immutable document, unless the caller is an administrator, as CE
 - **`POST /documents/{docNumber}/move`** with `{"folderId": 1234}` answers `200` with the document. Into another matter
   it takes that matter's Client and Matter and the values its folders pass down; a matter that holds the same email
   already answers `409 already-filed` with the copy as `document`. A move into the folder it's in changes nothing.
-- **`DELETE /documents/{docNumber}`** answers `204`. The document, and any shortcuts to it, go to the trash, which
-  only the Classic Interface restores from, and the document is `404` from then on. A checked-out document is
+- **`DELETE /documents/{docNumber}`** answers `200` with the `TrashItem` the delete made (see [The Trash](#the-trash)),
+  where it used to answer `204`. The document, and any shortcuts to it, go to the caller's Trash, and the document is
+  `404` from then on. Restore the item to undo the delete. A checked-out document is
   `409 checked-out` for everyone, the caller too: release it first. The document goes first and then its shortcuts, so a rule
   that refuses it leaves them.
 
@@ -476,6 +485,88 @@ folder, or one you can't read, doesn't count); and `409 refused` when one of Hea
 moved to another folder while it was being renamed (try again). The folder's own name, sent back, changes nothing and
 answers `200`, even one a new name couldn't have.
 Every folder carries `canRename`, which says whether the call would rename it for you.
+
+### Moving and Deleting a Folder
+
+`POST /api/v1/folders/{id}/move` with `{ "folderId": n }` moves a folder, and everything in it, into another folder, and
+answers `200` with the folder in its new place. `DELETE /api/v1/folders/{id}` moves it, and everything live in it, to the
+caller's Trash, and answers `200` with the `TrashItem`, whose `id` undoes the delete. Both go through the calls the
+Classic Interface uses, so the rules decide as they do on every route. The moves and deletes need the permission on the
+folder **and on every live folder and document inside it**, hidden ones included, and a move needs Add on the
+destination too. Moving into the folder it's already in changes nothing and answers `200`.
+
+Their checks run in this order, and none names or counts anything you can't read:
+
+| Order | Answer | When |
+|---|---|---|
+| 1 | `400 bad-request` | A move with no `folderId`, or a body that isn't the JSON expected |
+| 2 | `404 not-found` | A folder you can't read, one outside the Stores (the Templates Store too), an alias, one already deleted, and for a move a destination you can't read |
+| 3 | `409 not-deletable` or `not-movable` | A Store, or a matter's own folder, administrators included |
+| 4 | `409 filing-rule` | A move into a Store, a search folder, the folder itself or a folder inside it |
+| 5 | `403 forbidden` | No Delete, or no Move on the folder, or no Add on the destination |
+| 6 | `403 admins-only` | A folder directly in a matter's workspace, search folders included, unless you're an administrator; a move into a matter's top level likewise |
+| 7 | `403 items-not-allowed` | You lack Delete (or Move) on something inside. The same words whether the item is hidden or not |
+| 8 | `409 checked-out` | A document inside is checked out, by anyone, you too. `holds` lists the ones you can read |
+| 9 | `409 immutable` | A delete found an immutable document inside, administrators too |
+| 10 | `409 name-taken` | A move into a folder that holds another with its name that you can see |
+| 11 | `409 already-filed`, `409 refused` | A move into a matter that already holds an email the folder holds (with the copy as `document`), or another of Healdan's rules, or the folder moved while the call ran: try again |
+
+A folder moved into another matter gives its documents that matter's Client and Matter and the values its folders pass
+down, as a document does. Moving a folder into a folder that holds a same-named folder you can't read makes LogicalDOC
+number it, `Letters(1)`, as creating a folder does: the number is the only trace of the hidden one.
+
+`GET /api/v1/folders/{id}/contents` counts the live folders and documents in a folder's tree that you can read, the
+folder itself left out, as `{ "folders": 3, "documents": 11 }`. A client uses it to say what a delete or a move takes. It
+counts nothing you can't read, so it tells you nothing of that; an administrator's counts take everything.
+
+Every `FolderView` also carries **`canMove`** and **`canDelete`**, beside `canRename`, from the same lookup. Each says
+whether the folder itself allows the call for you: never a Store or a matter's own folder, with the permission on the
+folder, and directly in a matter's workspace only for an administrator. What the folder holds isn't counted, so a move or
+a delete that the flag allows can still be refused for what's inside.
+
+## The Trash
+
+Deleting is recorded as an **item**: one delete, a document or a folder with what it took. The item has an `id`, which
+the delete's answer gives (`200` with the `TrashItem`) and which the calls below take. An item is in the Trash, then
+removed, then destroyed: see the Admin Guide's [The Trash and Removed Items](../../admin/the-trash-and-removed-items/).
+The nightly job that destroys removed items isn't in the API.
+
+A `TrashItem` has:
+
+- `id`, `type` (`document` or `folder`), `name` (as it was deleted), `docNumber` (a document's, else null), `kind` (the
+  file kind for an icon, as a document's, or `folder`) and `size` (a document's, in bytes);
+- `contents`, the `{ folders, documents }` a folder took that is still in the item's state, counting only what the
+  caller can read, and null for a document;
+- `deletedFrom`, `{ folder, path }`: `folder` is a `FolderRef` while the folder it was deleted from is live, in a Store
+  and readable by the caller, else null, and `path` the folders' names from the Store down, as they are now when
+  `folder` is given and as they were at the delete otherwise;
+- `matter`, `deletedBy` and `deletedAt`;
+- `removedBy`, `removedAt` and `destroyAfter`, the night the job will destroy it. They are null unless the item is
+  removed, and `removedBy` is null too for one removed before Healdan recorded who.
+
+The calls:
+
+- **`GET /trash?view=mine|everyone|removed`** lists a page of items, with `removedDays` (the days an administrator can
+  still restore a removed item) beside the usual page fields. `mine` is what the caller deleted that is still in the
+  Trash, and the default. `everyone`, the items in the Trash, and `removed`, the items removed from it, are for
+  administrators: anyone else gets `403 admins-only`. `sort` is `name`, `deleted` or `removed`, `order` `asc` or `desc`.
+  By default it sorts by `removed` in the `removed` view and by `deleted` in the others, newest first. The page's
+  `total` counts the items.
+- **`POST /trash/{id}/restore`** restores an item and what its delete took, and answers `200` with `{ place, item }`:
+  where it went, as the folder's `FolderView`, and the item, restored. With no body, or no `folderId`, it goes back
+  to the folder it was deleted from, and `409 place-gone` says that folder isn't there for it. Ask the person where, and
+  send `{ "folderId": n }`: that is refused as a move there would be (`404`, `409 filing-rule`, `403 forbidden` or
+  `admins-only`, then `409 already-filed` and `refused`). A caller restores the items they deleted, while they are in the
+  Trash, and needs Delete on them; an administrator restores anyone's, from the Trash or from Removed. An item that
+  doesn't exist, is restored or destroyed already, is someone else's, or is removed (for anyone but an administrator) is
+  `404`. A restore brings back only what that delete took, queues the documents for indexing, and never brings back
+  what was removed since.
+- **`DELETE /trash/{id}`** removes an item, moving it and what it holds from the Trash to Removed, and answers `204`.
+  The caller's own, or anyone's for an administrator. After `removedDays`, the nightly job destroys it.
+- **`DELETE /trash`** empties the caller's Trash, moving every item they deleted that is still in it to Removed, and
+  answers `204`. It has no checks.
+
+Healdan's rules decide on all of these as they do on every route, so a client's pre-checks only shape the answer.
 
 ## Favorites
 
