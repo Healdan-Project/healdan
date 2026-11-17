@@ -54,6 +54,9 @@ describe('Checked Out to Me', () => {
     expect(dot.getAttribute('aria-hidden')).toBe('true')
     // The web page's check-out has no app, so no dot
     expect(web!.textContent).toBe('Web Page')
+    // The whole text is the tooltip, so an app the ellipsis cuts short can be read by pointing at it
+    expect(within(mac!).getByTitle('MacBook · Excel', { exact: true }).textContent).toBe('MacBook · Excel')
+    expect(within(web!).getByTitle('Web Page', { exact: true }).textContent).toBe('Web Page')
   })
 
   it('shows when each was checked out and last saved, as the lists show dates', async () => {
