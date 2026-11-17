@@ -1,0 +1,213 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Folders and the Trash mockup: the Trash's place</title>
+<style>:root{--border:#d1d1d6;--text-secondary:#6e6e73;--bg-secondary:#fff;--bg-tertiary:#e5e5e7}body{margin:24px auto;max-width:1340px;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#1d1d1f;background:#f5f5f7}.subtitle{color:var(--text-secondary)}.options{display:flex;flex-direction:column;gap:.75rem}.option{display:flex;gap:1rem;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem}.option .letter{flex:none;width:28px;height:28px;border-radius:6px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-weight:600}.option h3{margin:0 0 .25rem;font-size:1rem}.option p{margin:0;color:var(--text-secondary);font-size:.9rem}</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+.hd-wrap{position:relative;width:100%;overflow:hidden;border-radius:10px;border:1px solid #d1d1d6;margin-bottom:1.25rem}
+.hd-app{width:1280px;height:720px;transform-origin:0 0;display:grid;grid-template-rows:52px 1fr;font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;background:#fff;text-align:left;
+--a:#0C69C0;--a-soft:#E6F0FA;--side:#F5F5F7;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--hover:#EFEFF2;--matter:#8a5a00;--client:#5b5fc7}
+.hd-app i.ti{font-size:16px;line-height:1}
+.top{display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff}
+.brand{display:flex;align-items:center;gap:8px;width:216px;font-weight:600;font-size:15px}
+.mark{width:20px;height:22px}
+.search{flex:1;max-width:640px;display:flex;height:34px;border:1px solid #C7C7CC;border-radius:8px;overflow:hidden}
+.scope{display:flex;align-items:center;gap:6px;padding:0 10px 0 12px;background:var(--side);border-right:1px solid #C7C7CC;font-weight:500;white-space:nowrap}
+.q{flex:1;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--third)}
+.kbd{font:11px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--second)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--second)}
+.avatar{width:28px;height:28px;border-radius:50%;background:#D9E7F7;color:var(--a);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px}
+.body{display:grid;grid-template-columns:248px 1fr 300px;min-height:0}
+.nav{background:var(--side);border-right:1px solid var(--line);padding:10px 8px;overflow:hidden;display:flex;flex-direction:column}
+.navsec{font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;margin:14px 8px 4px;display:flex;justify-content:space-between}
+.navsec:first-child{margin-top:4px}
+.ni{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ni i{color:var(--second)}
+.ni i.fo{color:var(--a)}.ni i.ma{color:var(--matter)}.ni i.cl{color:var(--client)}
+.ni.on{background:var(--a-soft);color:var(--a);font-weight:500}.ni.on i{color:var(--a)}
+.ni .sub{color:var(--third);font-size:11px;margin-left:2px}
+.ni.l2{padding-left:24px}
+.chev{font-size:12px!important;color:var(--third)!important;width:12px}
+.bottom{margin-top:auto;border-top:1px solid var(--line);padding-top:6px}
+.main{display:flex;flex-direction:column;min-width:0}
+.title{display:flex;align-items:baseline;gap:10px;padding:16px 20px 2px}
+.title h1{font-size:20px;font-weight:600;margin:0}
+.lede{color:var(--second);font-size:12.5px;padding:0 20px 10px}
+.bar{display:flex;align-items:center;gap:6px;padding:0 20px 10px;border-bottom:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid #C7C7CC;background:#fff;font-size:12.5px;white-space:nowrap}
+.btn.pri{background:var(--a);border-color:var(--a);color:#fff}.btn.pri i{color:#fff}
+.btn.dis{color:#AEAEB2;border-color:#E5E5EA}.btn.dis i{color:#C7C7CC}
+.count{margin-left:auto;color:var(--third);font-size:12px;white-space:nowrap}
+table{width:100%;border-collapse:collapse}
+th{font-size:11.5px;font-weight:500;color:var(--second);text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th.sorted{color:#1D1D1F}
+td{padding:0 10px;height:36px;border-bottom:1px solid #F2F2F4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.muted{color:var(--second)}
+tr.sel td{background:#DCEAF8}
+.fi{display:flex;align-items:center;gap:8px}
+.fi i{font-size:17px}
+.fi .n{color:var(--third);font-size:11.5px}
+.k-doc{color:#2b579a}.k-pdf{color:#c4161c}.k-mail{color:#0f6cbd}.k-fo{color:#0c69c0}.k-ma{color:#8a5a00}
+.side{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;padding:16px}
+.bigicon{height:110px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;background:#FAFAFB}
+.bigicon i{font-size:52px!important;color:var(--a)}
+.dname{font-weight:600;font-size:14px;margin-bottom:2px}
+.dmeta{color:var(--second);font-size:12px;margin-bottom:12px}
+.acts{display:flex;gap:6px;margin-bottom:14px}
+.kv{display:grid;grid-template-columns:92px 1fr;row-gap:7px;font-size:12.5px}
+.kv dt{color:var(--second)}.kv dd{margin:0}
+.state{font-size:.8rem;font-weight:600;color:#6e6e73;text-transform:uppercase;letter-spacing:.05em;margin:1.25rem 0 .5rem}
+.notes ul{margin:.25rem 0 0 1.1rem;padding:0}.notes li{margin-bottom:.3rem}
+</style>
+
+<h2>Where the Trash lives</h2>
+<p class="subtitle">The same Trash, reached two ways. Both show what you deleted, newest first, and Restore puts each item back where it was. The data is the demo firm's.</p>
+
+<div class="state">A · Its own place at the foot of the left pane</div>
+<div class="hd-wrap"><div class="hd-app">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan</div>
+    <div class="search"><div class="scope"><i class="ti ti-file-text"></i>Documents<i class="ti ti-chevron-down" style="font-size:13px"></i></div><div class="q"><i class="ti ti-search"></i>Search, or type # and a number<span style="margin-left:auto" class="kbd">/</span></div></div>
+    <div class="topright"><i class="ti ti-help-circle" style="font-size:18px"></i><span class="avatar">PN</span></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="navsec">Recent</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail"></i>Emails</div>
+      <div class="ni"><i class="ti ti-folder fo"></i>Folders</div>
+      <div class="ni"><i class="ti ti-building cl"></i>Clients</div>
+      <div class="navsec">Recent Matters</div>
+      <div class="ni"><i class="ti ti-briefcase ma"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-briefcase ma"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Matters <i class="ti ti-plus" style="font-size:13px"></i></div>
+      <div class="ni"><i class="ti ti-chevron-down chev"></i><i class="ti ti-briefcase ma"></i>1001.1 – Charter Dispute <span class="sub">Saltmarsh</span></div>
+      <div class="ni l2"><i class="ti ti-folder fo"></i>Correspondence</div>
+      <div class="ni l2"><i class="ti ti-folder fo"></i>Pleadings</div>
+      <div class="ni l2"><i class="ti ti-folder fo"></i>Drafts</div>
+      <div class="ni l2"><i class="ti ti-folder fo"></i>Emails</div>
+      <div class="navsec">My Favorites</div>
+      <div class="ni"><i class="ti ti-folder fo"></i>Harbour Lease drafts</div>
+      <div class="bottom"><div class="ni on"><i class="ti ti-trash"></i>Trash</div></div>
+    </div>
+    <div class="main">
+      <div class="title"><h1>Trash</h1></div>
+      <div class="lede">What you deleted. Restore puts each item back where it was.</div>
+      <div class="bar">
+        <span class="btn pri"><i class="ti ti-arrow-back-up"></i>Restore</span>
+        <span class="btn"><i class="ti ti-trash-x"></i>Remove…</span>
+        <span class="count">4 items</span>
+        <span class="btn"><i class="ti ti-trash-off"></i>Empty Trash…</span>
+      </div>
+      <table>
+        <tr><th class="sorted" style="width:38%">Name</th><th class="num">Doc #</th><th>Deleted From</th><th class="sorted">Deleted <i class="ti ti-chevron-down" style="font-size:11px"></i></th></tr>
+        <tr class="sel"><td><span class="fi"><i class="ti ti-folder k-fo"></i>Old Drafts <span class="n">14 items</span></span></td><td class="num muted">–</td><td class="muted">1001.1 › Drafts</td><td>Today, 10:42</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-file-type-docx k-doc"></i>Letter to Harbour Master v2.docx</span></td><td class="num">10412.2</td><td class="muted">1001.1 › Correspondence</td><td>Today, 09:15</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-mail k-mail"></i>RE: Rent review schedule</span></td><td class="num">10388.1</td><td class="muted">1002.1 › Emails</td><td>Yesterday, 16:20</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-file-type-pdf k-pdf"></i>Term Sheet – Kestrel (mark-up).pdf</span></td><td class="num">10301.3</td><td class="muted">1003.1 › Drafts</td><td>12 Nov 2026</td></tr>
+      </table>
+    </div>
+    <div class="side">
+      <div class="bigicon"><i class="ti ti-folder"></i></div>
+      <div class="dname">Old Drafts</div>
+      <div class="dmeta">Folder · 14 items</div>
+      <div class="acts"><span class="btn pri"><i class="ti ti-arrow-back-up"></i>Restore</span><span class="btn"><i class="ti ti-trash-x"></i>Remove…</span></div>
+      <dl class="kv">
+        <dt>Deleted From</dt><dd>1001.1 – Charter Dispute › Drafts</dd>
+        <dt>Deleted</dt><dd>Today, 10:42</dd>
+        <dt>Holds</dt><dd>3 folders, 11 documents</dd>
+      </dl>
+    </div>
+  </div>
+</div></div>
+
+<div class="state">B · Under Recent, as Recently Deleted</div>
+<div class="hd-wrap"><div class="hd-app">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan</div>
+    <div class="search"><div class="scope"><i class="ti ti-file-text"></i>Documents<i class="ti ti-chevron-down" style="font-size:13px"></i></div><div class="q"><i class="ti ti-search"></i>Search, or type # and a number<span style="margin-left:auto" class="kbd">/</span></div></div>
+    <div class="topright"><i class="ti ti-help-circle" style="font-size:18px"></i><span class="avatar">PN</span></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="navsec">Recent</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail"></i>Emails</div>
+      <div class="ni"><i class="ti ti-folder fo"></i>Folders</div>
+      <div class="ni"><i class="ti ti-building cl"></i>Clients</div>
+      <div class="ni on"><i class="ti ti-trash"></i>Recently Deleted</div>
+      <div class="navsec">Recent Matters</div>
+      <div class="ni"><i class="ti ti-briefcase ma"></i>1002.1 – Commercial Lease <span class="sub">Brightwell</span></div>
+      <div class="ni"><i class="ti ti-briefcase ma"></i>1003.1 – Series A Investment <span class="sub">Kestrel</span></div>
+      <div class="navsec">My Matters <i class="ti ti-plus" style="font-size:13px"></i></div>
+      <div class="ni"><i class="ti ti-chevron-down chev"></i><i class="ti ti-briefcase ma"></i>1001.1 – Charter Dispute <span class="sub">Saltmarsh</span></div>
+      <div class="ni l2"><i class="ti ti-folder fo"></i>Correspondence</div>
+      <div class="ni l2"><i class="ti ti-folder fo"></i>Pleadings</div>
+      <div class="ni l2"><i class="ti ti-folder fo"></i>Drafts</div>
+      <div class="ni l2"><i class="ti ti-folder fo"></i>Emails</div>
+      <div class="navsec">My Favorites</div>
+      <div class="ni"><i class="ti ti-folder fo"></i>Harbour Lease drafts</div>
+    </div>
+    <div class="main">
+      <div class="title"><h1>Recently Deleted</h1></div>
+      <div class="lede">What you deleted. Restore puts each item back where it was.</div>
+      <div class="bar">
+        <span class="btn pri"><i class="ti ti-arrow-back-up"></i>Restore</span>
+        <span class="btn"><i class="ti ti-trash-x"></i>Remove…</span>
+        <span class="count">4 items</span>
+        <span class="btn"><i class="ti ti-trash-off"></i>Empty Trash…</span>
+      </div>
+      <table>
+        <tr><th class="sorted" style="width:38%">Name</th><th class="num">Doc #</th><th>Deleted From</th><th class="sorted">Deleted <i class="ti ti-chevron-down" style="font-size:11px"></i></th></tr>
+        <tr class="sel"><td><span class="fi"><i class="ti ti-folder k-fo"></i>Old Drafts <span class="n">14 items</span></span></td><td class="num muted">–</td><td class="muted">1001.1 › Drafts</td><td>Today, 10:42</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-file-type-docx k-doc"></i>Letter to Harbour Master v2.docx</span></td><td class="num">10412.2</td><td class="muted">1001.1 › Correspondence</td><td>Today, 09:15</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-mail k-mail"></i>RE: Rent review schedule</span></td><td class="num">10388.1</td><td class="muted">1002.1 › Emails</td><td>Yesterday, 16:20</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-file-type-pdf k-pdf"></i>Term Sheet – Kestrel (mark-up).pdf</span></td><td class="num">10301.3</td><td class="muted">1003.1 › Drafts</td><td>12 Nov 2026</td></tr>
+      </table>
+    </div>
+    <div class="side">
+      <div class="bigicon"><i class="ti ti-folder"></i></div>
+      <div class="dname">Old Drafts</div>
+      <div class="dmeta">Folder · 14 items</div>
+      <div class="acts"><span class="btn pri"><i class="ti ti-arrow-back-up"></i>Restore</span><span class="btn"><i class="ti ti-trash-x"></i>Remove…</span></div>
+      <dl class="kv">
+        <dt>Deleted From</dt><dd>1001.1 – Charter Dispute › Drafts</dd>
+        <dt>Deleted</dt><dd>Today, 10:42</dd>
+        <dt>Holds</dt><dd>3 folders, 11 documents</dd>
+      </dl>
+    </div>
+  </div>
+</div></div>
+
+<script>
+(function(){function fit(){document.querySelectorAll('.hd-wrap').forEach(function(w){var a=w.querySelector('.hd-app');var s=Math.min(1,w.clientWidth/1280);a.style.transform='scale('+s+')';w.style.height=(720*s)+'px';});}window.addEventListener('resize',fit);fit();setTimeout(fit,50);setTimeout(fit,400);})();
+</script>
+
+<h3>Which way in?</h3>
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Its own place at the foot of the left pane</h3>
+      <p>Where the Classic Interface and most desktop apps keep it, and always in view. It takes a row at the bottom of the pane, apart from the lists above.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Under Recent, as Recently Deleted</h3>
+      <p>Beside the other things you've touched lately, as Apple's Photos and Notes put it. Nothing new in the pane's shape, but "Trash" isn't the word on it, and the Classic Interface and the User Guide call it the Trash.</p>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <h3>Either way (my proposals)</h3>
+  <ul>
+    <li><b>A deleted folder is one row,</b> with how many items it holds. What was deleted inside it comes back with it, so its contents aren't listed separately. Documents you deleted on their own get rows of their own.</li>
+    <li><b>Deleted From</b> is the folder each item came from, by matter number. Restore puts it back there; only if that place has gone, or won't take it, does Healdan ask where to.</li>
+    <li><b>Remove…</b> and <b>Empty Trash…</b> each confirm first. You won't be able to restore what you remove; an administrator can, for 30 days. The admin's view and the confirmations are the next screen.</li>
+    <li><b>Keyboard and menus</b> as the other lists: Delete on a row is Remove…, Restore on its right-click menu, Enter restores.</li>
+  </ul>
+</div>

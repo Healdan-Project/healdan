@@ -1,0 +1,222 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Folders and the Trash mockup: moving and deleting folders</title>
+<style>:root{--border:#d1d1d6;--text-secondary:#6e6e73;--bg-secondary:#fff;--bg-tertiary:#e5e5e7}body{margin:24px auto;max-width:1340px;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#1d1d1f;background:#f5f5f7}.subtitle{color:var(--text-secondary)}.options{display:flex;flex-direction:column;gap:.75rem}.option{display:flex;gap:1rem;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem}.option .letter{flex:none;width:28px;height:28px;border-radius:6px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-weight:600}.option h3{margin:0 0 .25rem;font-size:1rem}.option p{margin:0;color:var(--text-secondary);font-size:.9rem}</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+.hd-wrap{position:relative;width:100%;overflow:hidden;border-radius:10px;border:1px solid #d1d1d6;margin-bottom:1.25rem}
+.hd-app{position:relative;width:1280px;height:560px;transform-origin:0 0;display:grid;grid-template-rows:52px 1fr;font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;background:#fff;text-align:left;
+--a:#0C69C0;--a-soft:#E6F0FA;--side:#F5F5F7;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--matter:#8a5a00;--client:#5b5fc7}
+.hd-app i.ti,.piece i.ti{font-size:16px;line-height:1}
+.top{display:flex;align-items:center;gap:16px;padding:0 16px;border-bottom:1px solid var(--line);background:#fff}
+.brand{display:flex;align-items:center;gap:8px;width:216px;font-weight:600;font-size:15px}
+.mark{width:20px;height:22px}
+.search{flex:1;max-width:640px;display:flex;height:34px;border:1px solid #C7C7CC;border-radius:8px;overflow:hidden}
+.scope{display:flex;align-items:center;gap:6px;padding:0 10px 0 12px;background:var(--side);border-right:1px solid #C7C7CC;font-weight:500;white-space:nowrap}
+.q{flex:1;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--third)}
+.kbd{font:11px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--second)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--second)}
+.avatar{width:28px;height:28px;border-radius:50%;background:#D9E7F7;color:var(--a);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px}
+.body{display:grid;grid-template-columns:248px 1fr;min-height:0}
+.nav{background:var(--side);border-right:1px solid var(--line);padding:10px 8px;overflow:hidden;display:flex;flex-direction:column}
+.navsec{font-size:11px;font-weight:600;color:var(--third);text-transform:uppercase;letter-spacing:.04em;margin:14px 8px 4px}
+.navsec:first-child{margin-top:4px}
+.ni{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ni i{color:var(--second)}
+.ni i.fo{color:var(--a)}.ni i.ma{color:var(--matter)}.ni i.cl{color:var(--client)}
+.ni.on{background:var(--a-soft);color:var(--a);font-weight:500}.ni.on i{color:var(--a)}
+.ni.drop{background:#fff;outline:2px solid var(--a);outline-offset:-2px;color:var(--a);font-weight:500}
+.ni .sub{color:var(--third);font-size:11px;margin-left:2px}
+.ni.l2{padding-left:24px}.ni.l3{padding-left:44px}
+.chev{font-size:12px!important;color:var(--third)!important;width:12px}
+.bottom{margin-top:auto;border-top:1px solid var(--line);padding-top:6px}
+.main{display:flex;flex-direction:column;min-width:0}
+.crumbs{display:flex;align-items:center;gap:6px;padding:12px 20px 0;color:var(--second);font-size:12px}
+.title{display:flex;align-items:center;gap:10px;padding:4px 20px 10px}
+.title h1{font-size:20px;font-weight:600;margin:0}
+.bar{display:flex;align-items:center;gap:6px;padding:0 20px 10px;border-bottom:1px solid var(--line)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid #C7C7CC;background:#fff;font-size:12.5px;white-space:nowrap;color:#1D1D1F}
+.btn.pri{background:var(--a);border-color:var(--a);color:#fff}.btn.pri i{color:#fff}
+.btn.red{background:#C4161C;border-color:#C4161C;color:#fff}
+.count{margin-left:auto;color:var(--third);font-size:12px;white-space:nowrap}
+table{width:100%;border-collapse:collapse}
+th{font-size:11.5px;font-weight:500;color:var(--second);text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:0 10px;height:36px;border-bottom:1px solid #F2F2F4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:320px}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.muted{color:var(--second)}
+tr.focus td{background:#EFEFF2}
+.fi{display:flex;align-items:center;gap:8px}
+.fi i{font-size:17px}
+.k-doc{color:#2b579a}.k-pdf{color:#c4161c}.k-mail{color:#0f6cbd}.k-fo{color:#0c69c0}
+.menu{position:absolute;width:220px;background:#fff;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.2),0 0 0 1px rgba(0,0,0,.08);padding:5px;font-size:13px}
+.menu div{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:5px}
+.menu div i{color:#6E6E73}
+.menu div.hi{background:var(--a);color:#fff}.menu div.hi i{color:#fff}
+.menu hr{border:0;border-top:1px solid #E5E5EA;margin:4px 2px}
+.menu .k{margin-left:auto;color:#8E8E93;font-size:11.5px}
+.menu div.hi .k{color:#D6E7F8}
+.ghost{position:absolute;display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #C7C7CC;border-radius:6px;padding:4px 10px;box-shadow:0 6px 18px rgba(0,0,0,.18);font-size:12.5px;opacity:.95}
+.state{font-size:.8rem;font-weight:600;color:#6e6e73;text-transform:uppercase;letter-spacing:.05em;margin:1.25rem 0 .5rem}
+.pieces{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start;margin-bottom:1rem}
+.piece{font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;text-align:left;--a:#0C69C0;--a-soft:#E6F0FA;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--matter:#8a5a00}
+.dlg{width:420px;background:#fff;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.22),0 0 0 1px rgba(0,0,0,.06);padding:20px}
+.dlg h4{margin:0 0 8px;font-size:15px;font-weight:600}
+.dlg p{margin:0 0 8px}
+.dlg p.quiet{color:#6E6E73;font-size:12.5px}
+.dlg .row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.dlg .row .left{margin-right:auto}
+.pick{border:1px solid #E5E5EA;border-radius:8px;height:230px;overflow:hidden;padding:6px}
+.pick .navsec{margin:8px 6px 2px}
+.pick .ni.dis{color:#AEAEB2}.pick .ni.dis i{color:#C7C7CC}
+.pick .ni .why{margin-left:auto;font-size:11px;color:#AEAEB2}
+.field{display:flex;align-items:center;gap:8px;height:30px;border:1px solid #C7C7CC;border-radius:7px;padding:0 10px;color:#8E8E93;margin-bottom:8px}
+.cap{font-size:.8rem;color:#6e6e73;margin:.4rem 0 0;max-width:420px}
+.notes ul{margin:.25rem 0 0 1.1rem;padding:0}.notes li{margin-bottom:.3rem}
+</style>
+
+<h2>Moving and deleting folders</h2>
+<p class="subtitle">Priya Nair, in matter 1001.1's Drafts folder. Folders move and delete the ways documents already do: a right-click or the ⋯ menus, a drag onto the tree, the Delete key, and Move To… for the keyboard.</p>
+
+<div class="state">The ways in: a folder's right-click menu (and its ⋯ in the tree and the heading), or a drag onto the tree</div>
+<div class="hd-wrap"><div class="hd-app">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan</div>
+    <div class="search"><div class="scope"><i class="ti ti-file-text"></i>Documents<i class="ti ti-chevron-down" style="font-size:13px"></i></div><div class="q"><i class="ti ti-search"></i>Search, or type # and a number<span style="margin-left:auto" class="kbd">/</span></div></div>
+    <div class="topright"><i class="ti ti-help-circle" style="font-size:18px"></i><span class="avatar">PN</span></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="navsec">Recent</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Documents</div>
+      <div class="ni"><i class="ti ti-mail"></i>Emails</div>
+      <div class="navsec">My Matters</div>
+      <div class="ni"><i class="ti ti-chevron-down chev"></i><i class="ti ti-briefcase ma"></i>1001.1 – Charter Dispute <span class="sub">Saltmarsh</span></div>
+      <div class="ni l2"><i class="ti ti-folder fo"></i>Correspondence</div>
+      <div class="ni l2"><i class="ti ti-folder fo"></i>Pleadings</div>
+      <div class="ni l2 drop"><i class="ti ti-folder-open fo"></i>Evidence</div>
+      <div class="ni l2 on"><i class="ti ti-folder-open fo"></i>Drafts</div>
+      <div class="ni l2"><i class="ti ti-folder fo"></i>Emails</div>
+      <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase ma"></i>1003.2 – Licence Review <span class="sub">Kestrel</span></div>
+      <div class="bottom"><div class="ni"><i class="ti ti-trash"></i>Trash</div></div>
+    </div>
+    <div class="main">
+      <div class="crumbs">Saltmarsh Shipping <i class="ti ti-chevron-right" style="font-size:11px"></i> 1001.1 – Charter Dispute <i class="ti ti-chevron-right" style="font-size:11px"></i></div>
+      <div class="title"><h1>Drafts</h1><i class="ti ti-star" style="color:#8E8E93"></i><i class="ti ti-dots" style="color:#6E6E73"></i></div>
+      <div class="bar">
+        <span class="btn pri"><i class="ti ti-upload"></i>Upload</span>
+        <span class="btn"><i class="ti ti-folder-plus"></i>New Folder</span>
+        <span class="count">2 folders, 3 documents</span>
+      </div>
+      <table>
+        <tr><th style="width:45%">Title</th><th class="num">Doc #</th><th class="num">Version</th><th>Author</th><th>Edit Date</th></tr>
+        <tr class="focus"><td><span class="fi"><i class="ti ti-folder k-fo"></i>Old Drafts</span></td><td></td><td></td><td></td><td class="muted">Today, 10:12</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-folder k-fo"></i>Counsel's Comments</span></td><td></td><td></td><td></td><td class="muted">13 Nov 2026</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-file-type-docx k-doc"></i>Defence – draft 3.docx</span></td><td class="num">10431.3</td><td class="num">3</td><td>Helen Ashcombe</td><td>Today, 09:58</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-file-type-docx k-doc"></i>Chronology.docx</span></td><td class="num">10398.6</td><td class="num">6</td><td>Priya Nair</td><td>14 Nov 2026</td></tr>
+        <tr><td><span class="fi"><i class="ti ti-file-type-pdf k-pdf"></i>Charterparty (annotated).pdf</span></td><td class="num">10233.1</td><td class="num">1</td><td>Tom Reeve</td><td>2 Nov 2026</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="menu" style="left:420px;top:178px">
+    <div><i class="ti ti-folder-open"></i>Open</div>
+    <div><i class="ti ti-external-link"></i>Open in New Tab</div>
+    <hr>
+    <div><i class="ti ti-folder-plus"></i>New Folder</div>
+    <hr>
+    <div><i class="ti ti-pencil"></i>Rename<span class="k">F2</span></div>
+    <div class="hi"><i class="ti ti-folder-symlink"></i>Move To…</div>
+    <div><i class="ti ti-trash"></i>Delete<span class="k">⌫</span></div>
+    <hr>
+    <div><i class="ti ti-star"></i>Add to Favorites</div>
+  </div>
+  <div class="ghost" style="left:150px;top:252px"><i class="ti ti-folder" style="color:#0C69C0"></i>Counsel's Comments</div>
+</div></div>
+<p class="cap" style="max-width:none;margin-top:-.75rem;margin-bottom:1rem">Drawn together for brevity: the right-click menu on Old Drafts, and Counsel's Comments being dragged onto Evidence in the tree, which outlines where it will land. A drop where it can't go shows the no-entry cursor and outlines nothing, as for documents.</p>
+
+<div class="state">Move To… and Delete</div>
+<div class="pieces">
+  <div class="piece">
+    <div class="dlg">
+      <h4>Move "Old Drafts" to…</h4>
+      <div class="field"><i class="ti ti-search"></i>Find a matter</div>
+      <div class="pick">
+        <div class="navsec">My Matters</div>
+        <div class="ni"><i class="ti ti-chevron-down chev"></i><i class="ti ti-briefcase" style="color:#8a5a00"></i>1001.1 – Charter Dispute<span class="why">Administrators only</span></div>
+        <div class="ni l2"><i class="ti ti-folder" style="color:#0C69C0"></i>Correspondence</div>
+        <div class="ni l2 on"><i class="ti ti-folder" style="color:#0C69C0"></i>Evidence</div>
+        <div class="ni l2 dis"><i class="ti ti-folder"></i>Drafts<span class="why">Already there</span></div>
+        <div class="ni l3 dis"><i class="ti ti-folder"></i>Old Drafts<span class="why">The folder itself</span></div>
+        <div class="navsec">Recent Matters</div>
+        <div class="ni"><i class="ti ti-chevron-right chev"></i><i class="ti ti-briefcase" style="color:#8a5a00"></i>1003.2 – Licence Review</div>
+      </div>
+      <div class="row"><span class="btn">Cancel</span><span class="btn pri">Move Here</span></div>
+    </div>
+    <p class="cap">The documents' picker, which starts from My Matters and Recent Matters and searches matters. A place the folder can't go is greyed out with the reason: the folder itself and what's inside it, where it already is, and a matter's top level for anyone but an admin.</p>
+  </div>
+  <div class="piece">
+    <div class="dlg">
+      <h4>Move "Old Drafts" to the Trash?</h4>
+      <p>It holds 3 folders and 11 documents.</p>
+      <p class="quiet">You can restore it from the Trash, at the foot of the left pane.</p>
+      <div class="row"><span class="btn">Cancel</span><span class="btn red">Move to Trash</span></div>
+    </div>
+    <p class="cap">Then the toast with Undo. Several folders and documents selected together: "Move 4 items to the Trash?", listing them, as documents do now.</p>
+    <div class="dlg" style="margin-top:18px">
+      <h4>"Old Drafts" Wasn't Moved to the Trash</h4>
+      <p>It holds items you don't have permission to delete.</p>
+      <div class="row"><span class="btn pri">OK</span></div>
+    </div>
+    <p class="cap">The same words whether the items are hidden from you or not, so nothing hidden is named. A move refused the same way says "move".</p>
+    <div class="dlg" style="margin-top:18px">
+      <h4>"Old Drafts" Wasn't Moved to the Trash</h4>
+      <p>Documents in it are checked out:</p>
+      <ul style="margin:0 0 8px 1.1rem;padding:0;font-size:12.5px"><li>Defence – draft 2.docx, by Helen Ashcombe since 14 Nov 2026, 15:20</li></ul>
+      <p class="quiet">They can be deleted once they're checked in or released.</p>
+      <div class="row"><span class="btn pri">OK</span></div>
+    </div>
+    <p class="cap">Checked out by anyone, you included, as for a document. Only documents you can read are named.</p>
+  </div>
+</div>
+
+<div class="state">The open question · moving a folder into another matter</div>
+<div class="pieces">
+  <div class="piece">
+    <div class="dlg">
+      <h4>Move "Old Drafts" into 1003.2 – Licence Review?</h4>
+      <p>Its 11 documents will take 1003.2's client and matter, and the properties its template sets.</p>
+      <div class="row"><span class="btn">Cancel</span><span class="btn pri">Move</span></div>
+    </div>
+    <p class="cap">A: asked first, only when a folder leaves its matter.</p>
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Ask first when a folder leaves its matter</h3>
+      <p>A folder can carry dozens of documents into another client's matter, and a drag in the tree can slip. Moves within a matter, and documents moved on their own, go at once as now.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Move at once, as documents do</h3>
+      <p>One rule for everything that moves, with a toast saying where it went. A slip is put right by moving it back, which re-stamps the documents again.</p>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <h3>Behind the screens (my proposals)</h3>
+  <ul>
+    <li><b>Greyed out where it can't be done,</b> as Rename is: Move To… and Delete read new <code>canMove</code> and <code>canDelete</code> on each folder, from the folder itself and M1's rules. The check of everything inside is too costly to make for every row, so it runs when you ask, and a refusal like the ones above answers it.</li>
+    <li><b>The Delete key</b> on a folder's row, or in the tree, deletes it; <b>Move To…</b> is the keyboard's way to move, as for documents.</li>
+    <li><b>Folders and documents selected together</b> move or delete together, each its own call, and what's refused is said per item while the rest is done, as for documents now. That needs folder rows to be selectable, which they aren't today.</li>
+    <li><b>A matter's own folder</b> never shows Move To… or Delete here: moving a matter between Stores and deleting a matter are the Admin app's.</li>
+  </ul>
+</div>
+
+<script>
+(function(){function fit(){document.querySelectorAll('.hd-wrap').forEach(function(w){var a=w.querySelector('.hd-app');var s=Math.min(1,w.clientWidth/1280);a.style.transform='scale('+s+')';w.style.height=(560*s)+'px';});}window.addEventListener('resize',fit);fit();setTimeout(fit,50);setTimeout(fit,400);})();
+</script>
