@@ -32,9 +32,12 @@ import com.logicaldoc.healdan.api.model.FacetsView;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.FolderChildPage;
 import com.logicaldoc.healdan.api.model.FolderView;
+import com.logicaldoc.healdan.api.model.MoveRequest;
 import com.logicaldoc.healdan.api.model.NewFolder;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.RenameRequest;
+import com.logicaldoc.healdan.api.model.TrashContents;
+import com.logicaldoc.healdan.api.model.TrashItem;
 import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.listing.Facets;
 import com.logicaldoc.healdan.listing.FolderListing;
@@ -48,6 +51,7 @@ import com.logicaldoc.healdan.searchfolder.SearchFolderService;
 import com.logicaldoc.healdan.security.AccessChecks;
 
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
@@ -74,6 +78,9 @@ public class FolderResource {
 
 	/** Package private for FolderRenameTest, which holds its lock */
 	final FolderRenames renames = new FolderRenames();
+
+	/** Deleting and moving folders, which take the renames' locks */
+	final FolderChanges changes = new FolderChanges(renames.parents);
 
 	/** The most documents a search folder shows */
 	static final int SEARCH_FOLDER_CAP = 1000;
@@ -183,6 +190,47 @@ public class FolderResource {
 	@Consumes(MediaType.APPLICATION_JSON)
 	public FolderView rename(@PathParam("id") long id, RenameRequest request) {
 		return renames.rename(id, request == null ? null : request.name(), Caller.current());
+	}
+
+	/**
+	 * Moves a folder inside a matter, and everything live in it, to the
+	 * caller's Trash (folders and Trash spec 6.1). See {@link FolderChanges}
+	 * for the checks and their order.
+	 *
+	 * @param id the folder's id
+	 * @return the Trash item the delete made
+	 */
+	@DELETE
+	@Path("{id: [0-9]+}")
+	public TrashItem delete(@PathParam("id") long id) {
+		return changes.delete(id, Caller.current());
+	}
+
+	/**
+	 * Moves a folder inside a matter into another folder, with everything in
+	 * it (folders and Trash spec 6.2). See {@link FolderChanges} for the
+	 * checks and their order.
+	 *
+	 * @param id the folder's id
+	 * @param request the folder to move it into
+	 * @return the folder in its new place
+	 */
+	@POST
+	@Path("{id: [0-9]+}/move")
+	@Consumes(MediaType.APPLICATION_JSON)
+	public FolderView move(@PathParam("id") long id, MoveRequest request) {
+		return changes.move(id, request == null ? null : request.folderId(), Caller.current());
+	}
+
+	/**
+	 * @param id the folder's id
+	 * @return how many folders and documents its tree holds that the caller
+	 *         can read (plan correction 6)
+	 */
+	@GET
+	@Path("{id: [0-9]+}/contents")
+	public TrashContents contents(@PathParam("id") long id) {
+		return changes.contents(id, Caller.current().user());
 	}
 
 	/**

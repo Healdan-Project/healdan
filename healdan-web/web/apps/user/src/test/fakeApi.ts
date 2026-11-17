@@ -38,6 +38,8 @@ export function folder(over: Partial<S['FolderView']> = {}): S['FolderView'] {
     path: [],
     canFile: true,
     canRename: true,
+    canMove: true,
+    canDelete: true,
     ...over,
   }
 }
