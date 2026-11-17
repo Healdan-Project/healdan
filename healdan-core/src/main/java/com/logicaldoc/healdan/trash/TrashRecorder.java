@@ -48,7 +48,8 @@ import com.logicaldoc.util.spring.Context;
  * <li>A document, from the document listener, once a store has put it in the
  * trash, with the shortcuts of it deleted beside it.</li>
  * <li>A folder a route deletes on its own, without the hook (CMIS's delete of
- * an empty folder, the source a merge empties), from the folder listener.</li>
+ * an empty folder, the source a merge empties), from the folder listener,
+ * with the aliases of it CE's store deletes with it.</li>
  * </ul>
  * Something already a deleted member of an item records nothing, so a route
  * that deletes a tree item by item after the hook (CMIS) makes one item.
@@ -133,8 +134,12 @@ public class TrashRecorder {
 
 	/**
 	 * From the folder listener: records a folder a store took from live to
-	 * deleted, unless it is already a deleted member of an item. CE deletes
-	 * nothing else with it.
+	 * deleted, unless it is already a deleted member of an item, with the
+	 * aliases of it CE's store deleted with it. CE's {@code updateAliases}
+	 * gives every live alias of a folder it stores the folder's state, with no
+	 * listener call for the alias, and before the listeners run, so an alias
+	 * this store deleted is told by its row as it was before the session wrote
+	 * it. Like a tree's outside aliases, they aren't counted.
 	 *
 	 * @param folder the folder, deleted
 	 * @param transaction the store's history, possibly null
@@ -145,12 +150,22 @@ public class TrashRecorder {
 		if (deletedMember(self))
 			return;
 
+		Set<TrashMember> members = new LinkedHashSet<>(List.of(self));
+		// As CE's store, which updates the aliases only of a folder that isn't one itself
+		if (folder.getFoldRef() == null)
+			for (Long alias : jdbc.queryForList("select ld_id from ld_folder where ld_foldref = ? and not ld_id = ?",
+					Long.class, folder.getId(), folder.getId())) {
+				FolderRow before = rows.folder(alias);
+				if (before != null && before.deleted() == 0 && !deletedMember(folderMember(alias)))
+					members.add(folderMember(alias));
+			}
+
 		Folder parent = FolderDAO.get().findById(folder.getParentId());
 		User user = transaction != null ? transaction.getUser() : null;
 		long id = store.insert(new TrashItemRow(0L, folder.getTenantId(), FOLDER, folder.getId(), folder.getName(),
 				null, folder.getParentId(), path(parent), matterOf(folder.getId(), parent), 0, 0,
 				user != null ? Long.valueOf(user.getId()) : folder.getDeleteUserId(),
-				user != null ? user.getFullName() : folder.getDeleteUser(), Instant.now()), List.of(self));
+				user != null ? user.getFullName() : folder.getDeleteUser(), Instant.now()), members);
 		log.debug("Recorded the delete of folder {} as Trash item {}", folder.getId(), id);
 	}
 

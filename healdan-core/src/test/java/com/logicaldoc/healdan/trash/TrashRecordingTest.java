@@ -384,6 +384,60 @@ public class TrashRecordingTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testCmisTreeDeleteTakesAliasesFromOutside() throws Exception {
+		Folder tree = fx.folder(correspondence, "Cmis Aliased");
+		Folder sub = fx.folder(tree, "Sub");
+		Document inSub = upload(sub, "sub.txt", admin);
+		Folder inside = fx.legacyAlias(tree, "Inside Alias", sub);
+		Folder outside = fx.legacyAlias(documents, "Outside Alias", sub);
+		awaitAsyncWork();
+
+		// CMIS calls the hook with no transaction, then deletes the tree's rows one by one
+		recordsOnce(folder(tree), () -> harness.cmisFor(tree.getId(), aliceSession).deleteTree(null,
+				"fld." + tree.getId(), false));
+
+		long id = itemHolding(folder(tree)).orElseThrow();
+		assertEquals(Set.of(folder(tree), folder(sub), folder(inside), folder(outside), document(inSub)),
+				members(id));
+		// CMIS deletes the alias inside as a subfolder, and CE's store of Sub deletes the one outside
+		assertEquals(1, folderDeleted(inside));
+		assertEquals(1, folderDeleted(outside));
+		assertEquals(Long.valueOf(alice.getId()), jdbc.queryForObject(
+				"select ld_deleteuserid from ld_folder where ld_id = ?", Long.class, outside.getId()));
+	}
+
+	@Test
+	public void testASingleFolderDeleteTakesItsAliases() throws Exception {
+		Folder empty = fx.folder(correspondence, "Aliased Empty");
+		Folder alias = fx.legacyAlias(documents, "Empty's Alias", empty);
+		Folder other = fx.folder(correspondence, "Aliased Other");
+		Folder otherAlias = fx.legacyAlias(documents, "Other's Alias", other);
+		Folder target = fx.folder(correspondence, "Alias Target");
+		Folder lone = fx.legacyAlias(documents, "Lone Alias", target);
+		awaitAsyncWork();
+
+		// CMIS's delete of an empty folder: CE's store deletes its alias with it
+		recordsOnce(folder(empty), () -> harness.cmisFor(empty.getId(), aliceSession).deleteObject(null,
+				"fld." + empty.getId()));
+		long id = itemHolding(folder(empty)).orElseThrow();
+		assertEquals(Set.of(folder(empty), folder(alias)), members(id));
+		assertEquals(1, folderDeleted(empty));
+		assertEquals(1, folderDeleted(alias));
+		// The aliases were elsewhere: the folder held nothing
+		assertEquals(0, trash.item(id).orElseThrow().folders());
+
+		// The folder DAO's delete of one folder, with a history
+		recordsOnce(folder(other), () -> folderDao.delete(other.getId(), folderHistory(alice)));
+		assertEquals(Set.of(folder(other), folder(otherAlias)), members(itemHolding(folder(other)).orElseThrow()));
+		assertEquals(1, folderDeleted(otherAlias));
+
+		// An alias deleted on its own is an item of its own, and its folder stays
+		recordsOnce(folder(lone), () -> folderDao.delete(lone.getId(), folderHistory(alice)));
+		assertEquals(Set.of(folder(lone)), members(itemHolding(folder(lone)).orElseThrow()));
+		assertEquals(0, folderDeleted(target));
+	}
+
+	@Test
 	public void testADeleteCeRefusesRecordsNothing() throws Exception {
 		long before = items();
 
