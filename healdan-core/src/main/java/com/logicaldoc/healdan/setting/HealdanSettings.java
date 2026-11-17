@@ -49,6 +49,9 @@ public class HealdanSettings {
 	/** Where a plain sign-in lands: <code>app</code> (the default) or <code>classic</code> */
 	public static final String UI_START = "ui.start";
 
+	/** How many days an administrator can still restore an item removed from the Trash */
+	public static final String TRASH_REMOVED_DAYS = "trash.removedDays";
+
 	public static final int DEFAULT_API_TOKEN_IDLE_DAYS = 30;
 
 	public static final int DEFAULT_API_TOKEN_MAX_DAYS = 365;
@@ -62,6 +65,8 @@ public class HealdanSettings {
 	public static final String DEFAULT_CLASS = "Docs";
 
 	public static final int DEFAULT_RECENT_MATTERS_DAYS = 30;
+
+	public static final int DEFAULT_TRASH_REMOVED_DAYS = 30;
 
 	private static final Logger log = LoggerFactory.getLogger(HealdanSettings.class);
 
@@ -204,6 +209,15 @@ public class HealdanSettings {
 	public int apiTokenMaxDays() {
 		Long days = longValue(API_TOKEN_MAX_DAYS);
 		return days != null ? days.intValue() : DEFAULT_API_TOKEN_MAX_DAYS;
+	}
+
+	/**
+	 * @return how many days an administrator can restore a removed item, 30 by
+	 *         default, kept within 1 to 365
+	 */
+	public int trashRemovedDays() {
+		Long days = longValue(TRASH_REMOVED_DAYS);
+		return days == null ? DEFAULT_TRASH_REMOVED_DAYS : (int) Math.max(1, Math.min(365, days));
 	}
 
 	/**
