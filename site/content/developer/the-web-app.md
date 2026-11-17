@@ -307,8 +307,10 @@ and `drag` props and the selected documents and folders for the toolbar's More m
   `holds`, the documents the person can read. An open folder that's deleted gives way to its parent.
 - **Undo.** Every delete says what it did with **Undo** (`toastWithAction`), and `organising/undo.ts` restores each Trash
   item the delete answered with, back where it was (no `folderId`), then says what came back. One already restored
-  (`404`) or whose place is gone (`409 place-gone`) is a line of `Refusals`, and the rest is restored. The action spends
-  itself on its first press, whatever presses it, as the server doesn't serialise two restores of one item.
+  (`404`) or whose place is gone (`409 place-gone`) is a line of `Refusals` in Undo's own words, which say what happened
+  (`undo.alreadyRestored`, and `undo.placeGone`, which sends the person to the Trash, as `Refusals` only closes), and
+  the rest is restored. The action spends itself on its first press, whatever presses it, as the server doesn't
+  serialise two restores of one item.
 - **Renaming folders** uses the same field. `RenameField.tsx` holds one field for documents and folders
   (`DocumentTitle`, `FolderName`), built on `useNameField`, which a favourite's name in My Favorites shares, and `OrganisingProvider`'s `renaming` is a row key and a place (`row`, `tree`,
   `heading`), where the focus goes back once it's done. F2 on a folder's row in a list or in the My Matters tree, the
@@ -331,8 +333,10 @@ and `drag` props and the selected documents and folders for the toolbar's More m
   out, documents go nowhere that holds none, and a folder goes neither into its own tree nor anywhere its `canMove` or M1's
   placement rules refuse. What it refuses, and what the server refuses (`folderMoveRefusal`: `items-not-allowed` names
   nothing, and `checked-out` lists only the problem's `holds`), are lines of `Refusals`, while the rest is moved, the
-  documents first and then the folders, each with its own call. **Move To…** is there while anything selected can be moved
-  (`anyMovable`). Before a folder moves into another matter (its `matterId` and the place's differ), `CrossMatter` asks, once
+  documents first and then the folders, each with its own call. A refusal names the cause the server told apart: the
+  folder's `topLevel` makes `admins-only` its own top level, or else the matter's top level it was going into (as a drop
+  on a matter in the tree is refused before any call), and its `canMove` makes `forbidden` no Move on it, or else no Add
+  where it was going. **Move To…** is there while anything selected can be moved (`anyMovable`). Before a folder moves into another matter (its `matterId` and the place's differ), `CrossMatter` asks, once
   for each such folder, in turn, counting its documents with `GET /folders/{id}/contents`; **Cancel** keeps only that folder
   where it is. The toast names a folder by the name the server answered, which CE changes on its way in when a folder the
   person can't see already has its name.
@@ -370,7 +374,9 @@ administrators alone. Name, Deleted and Removed sort; `?sort=` and `?order=` are
   "Restore "…" to…", one at a time, and its **Move Here** restores with `folderId`; one answered `409 refused` (a Store's
   item, or a shortcut deleted on its own) says it can't be restored from here. The server's own text is never shown.
 - **Remove…** and **Empty Trash…** ask first (`organising/ConfirmRemove.tsx`, with `Button`'s `danger` variant),
-  saying how long an administrator can still restore it from the page's `removedDays`, never a constant. A folder's
+  saying how long an administrator can still restore it from the page's `removedDays`, never a constant. It's an alert
+  dialog with a warning sign, as `ConfirmRelease` is, as the one step a person can't undo themselves; Delete's question
+  and `CrossMatter` can both be undone, and stay plain dialogs. A folder's
   counts come only from its `contents`, which take in only what the person can read.
 - **One at a time.** Restore, Remove and Empty Trash are disabled while one of them runs, so a second press sends nothing:
   the server doesn't serialise two restores of one item. Once the rows have gone, a focus left on the page, a gone row or

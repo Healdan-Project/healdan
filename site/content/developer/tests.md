@@ -314,9 +314,10 @@ code is laid out.
     `admin` (`ADMIN_PASSWORD`, which `test-web.sh` passes: the stack's published password), that the Removed view lists it
     with who removed it and when it is destroyed, and that `webuser` is refused the view; and deletes two documents and
     empties the Trash (**Cancel**, which has the focus, removes nothing), which then says **Nothing in the Trash.**
-  - `keyboard.spec.ts` walks rows 3 to 11 of the spec's manual acceptance by keyboard alone: after the sign-in page it
-    presses keys (`page.keyboard`) and never clicks. A control is reached by Tab (`tabTo` in `helpers.ts`, which presses Tab until
-    the control has the focus and fails after a bound). Not every walk starts where the page does: `focus()` starts a step
+  - `keyboard.spec.ts` walks rows 3 to 11 by keyboard alone: rows 3 to 9 of M6's manual acceptance, then rows 10 and 11
+    of its own, for folders and the Trash. After the sign-in page it presses keys (`page.keyboard`) and never clicks. A
+    control is reached by Tab (`tabTo` in `helpers.ts`, which presses Tab until the control has the focus and fails after
+    a bound). Not every walk starts where the page does: `focus()` starts a step
     at a row, which Tab and the arrow keys reach (row 4 proves Tab gets into the list), at a column header (Shift+Tab and
     the arrow keys reach it from a row), and at a menu item once Enter has opened the menu (its first key is ArrowDown),
     and some `tabTo` walks start from the folder's star, the search box or an attachment's **Preview**, each with a comment

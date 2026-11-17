@@ -255,13 +255,14 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
     void navigate({ to: '/trash', search: { view: next === 'mine' ? undefined : (next as TrashViewName) } })
   }
 
-  // Loading, too, while it isn't known yet which view the person may see
+  // Loading, too, while it isn't known yet which view the person may see. Each view says it's empty in its own words: only
+  // Mine says where what the person deletes goes, and Removed holds what people removed, not what's in the Trash
   const empty = query.isPending ? (
     t('common.loading')
   ) : (
     <div className={styles.trashEmpty}>
-      <p className={styles.trashEmptyTitle}>{t('trash.emptyTitle')}</p>
-      <p>{t('trash.emptyLine')}</p>
+      <p className={styles.trashEmptyTitle}>{view === 'removed' ? t('trash.emptyRemovedTitle') : t('trash.emptyTitle')}</p>
+      {view === 'mine' && <p>{t('trash.emptyLine')}</p>}
     </div>
   )
 

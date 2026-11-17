@@ -5,7 +5,7 @@ import { apiPath, type Api, type components } from '@healdan/api'
 import type { StringKey } from '@healdan/ui'
 import { refusalOf, type Place } from '../filing/dropTargets'
 import type { Movable, OneItem, OrganisingItems } from './batch'
-import { whyNotMove, type MovingFolder } from './folders'
+import { adminsOnlyMove, whyNotMove, type MovingFolder } from './folders'
 
 type S = components['schemas']
 
@@ -32,7 +32,7 @@ export function planMove(items: OrganisingItems, place: Place, admin: boolean | 
     if (folder.parentId === place.id) continue
     // The place's path holds the place itself. Said as a sentence: the picker's "The folder itself" is a label
     const inside = folder.id === place.id || place.path?.includes(folder.id) === true
-    const reason = inside ? 'move.intoItself' : (whyNotMove(folder, admin) ?? folderRule(place, admin))
+    const reason = inside ? 'move.intoItself' : (whyNotMove(folder, admin) ?? folderRule(folder, place, admin))
     if (reason) plan.refused.push({ folder, reason })
     else plan.folders.push(folder)
   }
@@ -45,9 +45,12 @@ export function planMove(items: OrganisingItems, place: Place, admin: boolean | 
   return plan
 }
 
-/** Why no folder goes into the place, by M1's placement rules; undefined when one may */
-function folderRule(place: Place, admin: boolean | undefined): StringKey | undefined {
+/**
+ * Why the folder doesn't go into the place, by M1's placement rules; undefined when it may. A matter's top level is an
+ * administrator's: for a top-level folder that's moving it at all, and for any other moving it into the top level.
+ */
+function folderRule(folder: MovingFolder, place: Place, admin: boolean | undefined): StringKey | undefined {
   if (place.kind === 'store' || place.kind === 'searchFolder') return 'filing.chooseFolder'
-  if (place.kind === 'matter' && !admin) return 'move.adminsOnlyFolder'
+  if (place.kind === 'matter' && !admin) return adminsOnlyMove(folder)
   return undefined
 }

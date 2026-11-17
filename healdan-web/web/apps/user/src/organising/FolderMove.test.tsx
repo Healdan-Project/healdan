@@ -5,6 +5,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@healdan/api'
+import { folderMoveRefusal } from '../actions/folders'
 import { ROWS_TYPE } from '../filing/dropTargets'
 import { heldByJamie } from '../filing/testing'
 import { expectNoAxeViolations } from '../test/axe'
@@ -149,6 +150,17 @@ describe('Dragging a folder', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it("says only administrators move a folder into a matter's top level when one is dropped on the matter, with no call", async () => {
+    const { all, written } = moveRoutes()
+    const { api } = await renderApp('/folders/7', all)
+    // The fake /v1/me isn't an admin, and Drafts isn't a top-level folder: what's refused is where it was going
+    await dragOnto(await row(/Drafts/), /1001\.1/)
+    expect(await screen.findByText("Only administrators can move folders into a matter's top level.")).toBeTruthy()
+    expect(screen.queryByText("Only administrators can move a matter's top-level folders.")).toBeNull()
+    expect(written.movedFolders).toEqual([])
+    expect(api.callsTo('POST /v1/folders/*/move')).toHaveLength(0)
+  })
+
   it('moves nothing from a drag that began in another page', async () => {
     const { all, written } = moveRoutes()
     const { api } = await renderApp('/folders/7', all)
@@ -244,28 +256,38 @@ describe('What a folder move refused', () => {
     const named = (id: number, name: string) => folder({ id, name, path: [...correspondence.path, step({ id, name })] })
     const holds = [{ docNumber: 10460, name: 'Defence – draft 2.docx', hold: heldByJamie }]
     const copy = doc({ docNumber: 10600, name: 'Re: Charter.eml' })
+    // A top-level folder the server refuses as one, which only a fake's canMove lets reach it
+    const exhibits = folder({ id: 16, name: 'Exhibits', path: [store, workspace, step({ id: 16, name: 'Exhibits' })] })
     const { all, written } = moveRoutes({
-      'GET /v1/folders/7/children': () => children([drafts, minutes, named(10, 'Archive'), named(12, 'Notes'), named(14, 'Emails'), lease, plan]),
+      'GET /v1/folders/7/children': () =>
+        children([drafts, minutes, named(10, 'Archive'), named(12, 'Notes'), named(14, 'Emails'), exhibits, named(18, 'Ledger'), lease, plan]),
       'POST /v1/folders/8/move': problem(403, 'items-not-allowed'),
       'POST /v1/folders/9/move': new ApiError(409, 'checked-out', 'A server sentence that must not be shown raw.', { code: 'checked-out', holds }),
       'POST /v1/folders/10/move': problem(409, 'name-taken'),
+      // Not top-level itself: the top level it was going into is what's refused
       'POST /v1/folders/12/move': problem(403, 'admins-only'),
       'POST /v1/folders/14/move': new ApiError(409, 'already-filed', 'A server sentence that must not be shown raw.', { code: 'already-filed', document: copy }),
+      'POST /v1/folders/16/move': problem(403, 'admins-only'),
+      // Its canMove says it may move, so what's missing is Add where it was going
+      'POST /v1/folders/18/move': problem(403, 'forbidden'),
     })
     await renderApp('/folders/7', all)
     await select(/Lease/, /Plan/)
-    for (const name of [/Drafts/, /Minutes/, /Archive/, /Notes/, /Emails/]) await addRow(name)
+    for (const name of [/Drafts/, /Minutes/, /Archive/, /Notes/, /Emails/, /Exhibits/, /Ledger/]) await addRow(name)
     await dragOnto(await row(/Lease/), /Pleadings/)
 
     const dialog = await screen.findByRole('dialog', { name: "Some Items Weren't Moved" })
     const lines = within(dialog).getAllByRole('listitem').map((one) => one.textContent)
     expect(lines[0]).toBe("Drafts: It holds items you don't have permission to move.")
-    expect(lines[1]).toMatch(/^Minutes: Documents in it are checked out:Defence – draft 2\.docx: Checked out by Jamie Clarke since .+\.$/)
+    // The check-outs it names, then what can be done about them, as a delete's refusal says
+    expect(lines[1]).toMatch(/^Minutes: Documents in it are checked out:Defence – draft 2\.docx: Checked out by Jamie Clarke since .+\.It can be moved once they're checked in or released\.$/)
     expect(lines[2]).toMatch(/^Defence – draft 2\.docx: Checked out by Jamie Clarke since .+\.$/)
     expect(lines.slice(3)).toEqual([
       "Archive: There's already one with that name here.",
-      "Notes: Only administrators can move a matter's top-level folders.",
+      "Notes: Only administrators can move folders into a matter's top level.",
       'Emails: Already in this matter as # 10600',
+      "Exhibits: Only administrators can move a matter's top-level folders.",
+      "Ledger: You don't have permission to add folders there.",
     ])
     expect(screen.queryByText(/server sentence/)).toBeNull()
     await expectNoAxeViolations(dialog)
@@ -274,6 +296,12 @@ describe('What a folder move refused', () => {
       { docNumber: 10433, folderId: 113 },
     ])
     expect(await screen.findByText('Moved 2 documents to Pleadings')).toBeTruthy()
+  })
+
+  it("says the server's forbidden is no Move on the folder when its canMove says so, and else no Add where it was going", () => {
+    const refused = problem(403, 'forbidden')
+    expect(folderMoveRefusal(refused, { canMove: false }, undefined).reason).toBe("You don't have permission to move this folder.")
+    expect(folderMoveRefusal(refused, { canMove: true }, undefined).reason).toBe("You don't have permission to add folders there.")
   })
 })
 

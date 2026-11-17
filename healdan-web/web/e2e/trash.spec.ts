@@ -130,7 +130,7 @@ test("removes a folder from the Trash after the question, and an administrator's
   const item = trashRow(page, REMOVED)
   await item.getByRole('rowheader').click()
   await main(page).getByRole('toolbar', { name: 'Trash Actions' }).getByRole('button', { name: 'Remove…' }).click()
-  const question = page.getByRole('dialog', { name: `Remove "${REMOVED}" from the Trash?` })
+  const question = page.getByRole('alertdialog', { name: `Remove "${REMOVED}" from the Trash?` })
   await expect(question.getByText(/You won't be able to restore it\. An administrator can, for \d+ days\./)).toBeVisible()
   await question.getByRole('button', { name: 'Remove', exact: true }).click()
   await expect(item).toHaveCount(0)
@@ -166,7 +166,7 @@ test('deletes two documents and Empty Trash leaves the Trash empty', async ({ pa
   await expect(trashRow(page, DOCUMENTS.emptyTwo)).toBeVisible()
 
   await main(page).getByRole('toolbar', { name: 'Trash Actions' }).getByRole('button', { name: 'Empty Trash…' }).click()
-  const question = page.getByRole('dialog', { name: 'Empty the Trash?' })
+  const question = page.getByRole('alertdialog', { name: 'Empty the Trash?' })
   await expect(question.getByText(/^This removes all \d+ items you deleted\.$/)).toBeVisible()
   await expect(question.getByText(/You won't be able to restore them\. An administrator can, for \d+ days?\./)).toBeVisible()
   // Cancel, which has the focus, removes nothing
@@ -175,7 +175,7 @@ test('deletes two documents and Empty Trash leaves the Trash empty', async ({ pa
   await expect(trashRow(page, DOCUMENTS.emptyOne)).toBeVisible()
 
   await main(page).getByRole('toolbar', { name: 'Trash Actions' }).getByRole('button', { name: 'Empty Trash…' }).click()
-  await page.getByRole('dialog', { name: 'Empty the Trash?' }).getByRole('button', { name: 'Empty Trash', exact: true }).click()
+  await page.getByRole('alertdialog', { name: 'Empty the Trash?' }).getByRole('button', { name: 'Empty Trash', exact: true }).click()
   await expect(main(page).getByText('Nothing in the Trash.')).toBeVisible()
   const mine = (await (await get('/trash')).json()) as { items: unknown[]; total?: number }
   expect(mine.items).toEqual([])

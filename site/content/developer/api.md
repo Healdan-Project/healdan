@@ -540,7 +540,9 @@ A `TrashItem` has:
 - `deletedFrom`, `{ folder, path }`: `folder` is a `FolderRef` while the folder it was deleted from is live, in a Store
   and readable by the caller, else null, and `path` the folders' names from the Store down, as they are now when
   `folder` is given and as they were at the delete otherwise;
-- `matter`, `deletedBy` and `deletedAt`;
+- `matter`, the matter that folder is in now while `deletedFrom.folder` is given, so it goes with the path, and the one
+  recorded at the delete otherwise;
+- `deletedBy` and `deletedAt`;
 - `removedBy`, `removedAt` and `destroyAfter`, the night the job will destroy it. They are null unless the item is
   removed, and `removedBy` is null too for one removed before Healdan recorded who.
 

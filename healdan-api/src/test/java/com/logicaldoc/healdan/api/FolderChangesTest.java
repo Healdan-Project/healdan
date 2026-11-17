@@ -578,6 +578,9 @@ public class FolderChangesTest extends ApiTestCase {
 		ApiResponse moved = move(letters, drafts.getId(), clerkToken);
 		assertEquals(moved.toString(), 200, moved.status());
 		assertEquals(drafts.getId(), FolderDAO.get().findById(letters.getId()).getParentId());
+		// CE numbers it on its way in (Ruling 27), and the answer says so, as the app's toast names it by the answer
+		assertEquals("Letters(1)", FolderDAO.get().findById(letters.getId()).getName());
+		assertEquals("Letters(1)", moved.json().path("name").textValue());
 	}
 
 	@Test

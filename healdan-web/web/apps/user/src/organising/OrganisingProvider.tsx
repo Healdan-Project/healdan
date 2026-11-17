@@ -173,7 +173,7 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     const lines = new Map<string, RefusalLine>()
     for (const one of early) lines.set(lineKey(one), { key: lineKey(one), name: nameOf(one), reason: t(one.reason) })
     for (const one of failed) {
-      const said = 'document' in one ? { reason: refusalText(one.error, me.data?.id) } : folderMoveRefusal(one.error, me.data?.id)
+      const said = 'document' in one ? { reason: refusalText(one.error, me.data?.id) } : folderMoveRefusal(one.error, one.folder, me.data?.id)
       lines.set(lineKey(one), { key: lineKey(one), name: nameOf(one), ...said })
     }
     return rowKeys(items).flatMap((key) => lines.get(key) ?? [])

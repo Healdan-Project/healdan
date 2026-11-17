@@ -80,6 +80,14 @@ export function whyNotMove(folder: Described & { canMove: boolean }, admin: bool
 }
 
 /**
+ * Why only an administrator may make the move: a folder at a matter's top level is moved by them alone, and any other
+ * folder goes into a matter's top level only by them
+ */
+export function adminsOnlyMove(folder: Pick<MovingFolder, 'topLevel'>): StringKey {
+  return folder.topLevel === true ? 'move.adminsOnlyFolder' : 'move.adminsOnlyInto'
+}
+
+/**
  * Whether a selection holds anything that can be moved: a document, or a folder whose `canMove` says so. A folder of
  * several that can't is said in Refusals while the rest is moved (folders and Trash spec 7.5), as anyDeletable.
  */
@@ -141,15 +149,17 @@ function heldNames(error: ApiError, meId: number | undefined): string[] {
 
 /**
  * Why a folder wasn't moved, from the catalogue (spec 4.3, 7.5), as folderDeleteRefusal: what it holds that the person
- * may not move is named by nothing, and of its check-outs only those the problem's `holds` names. A name already taken,
- * and an email already in the matter it went to, have the words a document's move has.
+ * may not move is named by nothing, and of its check-outs only those the problem's `holds` names. The folder says which
+ * cause the server's answer is (`FolderChanges.refuseMove`): `admins-only` is its own top level, or else the matter's top
+ * level it was going into; `forbidden` is no Move on it when its `canMove` says so, or else no Add where it was going. A
+ * name already taken, and an email already in the matter it went to, have the words a document's move has.
  */
-export function folderMoveRefusal(error: unknown, meId: number | undefined): FolderRefusal {
+export function folderMoveRefusal(error: unknown, folder: Pick<MovingFolder, 'canMove' | 'topLevel'>, meId: number | undefined): FolderRefusal {
   if (error instanceof ApiError) {
     if (error.code === 'items-not-allowed') return { reason: t('move.notAllowed') }
-    if (error.code === 'admins-only') return { reason: t('move.adminsOnlyFolder') }
-    if (error.code === 'forbidden') return { reason: t('move.noPermission') }
-    if (error.code === 'checked-out') return { reason: t('delete.checkedOut'), details: heldNames(error, meId) }
+    if (error.code === 'admins-only') return { reason: t(adminsOnlyMove(folder)) }
+    if (error.code === 'forbidden') return { reason: t(folder.canMove ? 'move.noAddThere' : 'move.noPermission') }
+    if (error.code === 'checked-out') return { reason: t('delete.checkedOut'), details: heldNames(error, meId), after: t('move.checkedOutAfter') }
   }
   return { reason: refusalText(error, meId) }
 }

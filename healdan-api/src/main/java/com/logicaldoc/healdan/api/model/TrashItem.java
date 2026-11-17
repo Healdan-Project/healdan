@@ -21,7 +21,9 @@ import java.util.Date;
  * @param contents what a folder holds in the item's state that the caller
  *        can read; null for a document
  * @param deletedFrom where it was deleted from
- * @param matter the matter it was in, or is; null if none
+ * @param matter the matter it was in, or is: the matter of the place it was
+ *        deleted from as that is now while {@code deletedFrom.folder} is
+ *        given, else the one recorded at the delete; null if none
  * @param deletedBy who deleted it
  * @param deletedAt when
  * @param removedBy who removed it from the Trash; null unless it is removed,

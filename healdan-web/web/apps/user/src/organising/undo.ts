@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import type { Api, components } from '@healdan/api'
+import { ApiError, type Api, type components } from '@healdan/api'
 import { plural, t, toast, type ToastAction } from '@healdan/ui'
 import type { RefusalLine } from '../actions/batch'
 import { restoreItems } from '../actions/trash'
@@ -20,10 +20,20 @@ export interface UndoReport {
 }
 
 /**
+ * Why Undo didn't restore an item, saying what happened: one no longer in the Trash (restored already, by the person in
+ * the Trash or by an administrator, or removed) answers 404, and the rest have the catalogue's words for their problem
+ */
+function undoRefusal(error: unknown, meId: number | undefined): string {
+  if (error instanceof ApiError && error.status === 404) return t('undo.alreadyRestored')
+  return refusalText(error, meId)
+}
+
+/**
  * Restores each item a delete made, back where it was, one after another (actions/trash.ts), then says what came back:
  * "Restored "Old Drafts"", or how many. The world can have moved on since the delete (the plan's Review Focus 5): an
- * item already restored, by the person in the Trash or by an administrator, answers 404, and one whose place is gone
- * answers place-gone. Each is said in the Refusals dialog, and the rest is restored all the same.
+ * item already restored answers 404, and one whose place is gone answers place-gone, which Undo can't choose another for
+ * (its dialog only closes), so it says the Trash can. Each is said in the Refusals dialog, and the rest is restored all
+ * the same.
  */
 export async function undoDeletes(api: Api, items: readonly S['TrashItem'][], report: UndoReport): Promise<void> {
   const outcome = await restoreItems(api, items)
@@ -32,8 +42,8 @@ export async function undoDeletes(api: Api, items: readonly S['TrashItem'][], re
   if (outcome.done.length === 1 && one) toast(t('undo.done', { name: one.item.name }))
   else if (outcome.done.length > 1) toast(plural('undo.doneMany', outcome.done.length))
   const why = new Map<number, string>([
-    ...outcome.placeGone.map((item): [number, string] => [item.id, t('problems.place-gone')]),
-    ...outcome.refused.map(({ item, error }): [number, string] => [item.id, refusalText(error, report.meId)]),
+    ...outcome.placeGone.map((item): [number, string] => [item.id, t('undo.placeGone')]),
+    ...outcome.refused.map(({ item, error }): [number, string] => [item.id, undoRefusal(error, report.meId)]),
   ])
   // In the delete's order, as the toast's items are
   const lines = items.flatMap((item) => {

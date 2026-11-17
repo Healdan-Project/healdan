@@ -115,12 +115,15 @@ a matter, an administrator's folders move there, and "Some Items Weren't Moved" 
 does.
 
 - **You need the Move permission** on the folder and on everything inside it, including what you can't see, and the
-  Add permission on the folder you move it to. Without it Healdan says "It holds items you don't have permission to
-  move." or "You don't have permission to move this folder."
-- **A folder can't move while a document in it is checked out.** Healdan names the ones you can read.
+  Add permission on the folder you move it to. Without them Healdan says "You don't have permission to move this
+  folder.", "It holds items you don't have permission to move." or, for the folder you move it to, "You don't have
+  permission to add folders there."
+- **A folder can't move while a document in it is checked out.** Healdan says "Documents in it are checked out:",
+  lists the ones you can read and says "It can be moved once they're checked in or released."
 - **Only administrators move the folders at the top of a matter's workspace,** or move a folder to the top of one:
-  **Move To…** is greyed out there for anyone else. A matter's own folder is moved by an administrator in the Classic
-  Interface.
+  **Move To…** is greyed out there for anyone else, and Healdan says "Only administrators can move a matter's
+  top-level folders." or, for a folder dropped on a matter in **My Matters**, "Only administrators can move folders
+  into a matter's top level." A matter's own folder is moved by an administrator in the Classic Interface.
 - **A folder can't go where another folder has its name.**
 - **Healdan asks before a folder leaves its matter.** "Move "Old Drafts" into 1003.2 – Licence Review?", it says, with
   "Its 11 documents will take 1003.2's client and matter, and the properties its template sets." Choose **Move**, or

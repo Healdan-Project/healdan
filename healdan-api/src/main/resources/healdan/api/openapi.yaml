@@ -3789,7 +3789,12 @@ components:
           oneOf:
             - $ref: '#/components/schemas/MatterRef'
             - type: 'null'
-          description: The matter it was in, or is; null if none
+          description: |
+            The matter it was in, or is; null if none. While
+            `deletedFrom.folder` is given, the matter that folder is in now,
+            which goes with `deletedFrom.path` (a folder moved into another
+            matter since the delete gives the other matter); else the one
+            recorded at the delete.
         deletedBy:
           oneOf:
             - $ref: '#/components/schemas/UserRef'

@@ -375,7 +375,12 @@ export const enUS = {
   'move.doneFolder': 'Moved "{name}" to {folder}',
   'move.matterFolder': "A {matterLower}'s own folder is moved by an administrator in the Classic Interface.",
   'move.adminsOnlyFolder': "Only administrators can move a {matterLower}'s top-level folders.",
+  // A folder that isn't top-level itself, refused a matter's top level: dropped on the matter, or the server's admins-only
+  'move.adminsOnlyInto': "Only administrators can move folders into a {matterLower}'s top level.",
   'move.noPermission': "You don't have permission to move this folder.",
+  // The server's forbidden for a folder whose own canMove says it may move: no Add where it was going
+  'move.noAddThere': "You don't have permission to add folders there.",
+  'move.checkedOutAfter': "It can be moved once they're checked in or released.",
   // Refusals' title once a move took folders, which "Some Documents Weren't Moved" would leave out
   'move.refusedItemsTitle': "Some Items Weren't Moved",
   // The question before a folder leaves its matter: {matter} here is the matter it goes into, as people read it
@@ -400,6 +405,9 @@ export const enUS = {
   'undo.label': 'Undo',
   'undo.done': 'Restored "{name}"',
   'undo.refusedTitle': "Some Items Weren't Restored",
+  // Why Undo didn't restore an item: the world moved on since the delete (the plan's Review Focus 5)
+  'undo.alreadyRestored': "It's already been restored, or it's no longer in the Trash.",
+  'undo.placeGone': 'The folder it was deleted from is gone. Restore it from the Trash to choose another place.',
   // The Trash (folders and Trash spec 7.2 to 7.4)
   'trash.title': 'Trash',
   'trash.actions': 'Trash Actions',
@@ -422,6 +430,8 @@ export const enUS = {
   'trash.folder': 'Folder',
   'trash.emptyTitle': 'Nothing in the Trash.',
   'trash.emptyLine': 'What you delete comes here, and you can restore it from here.',
+  // Removed's empty state: an administrator's view, of what people removed
+  'trash.emptyRemovedTitle': 'Nothing removed.',
   // {days} is the plural trash.days, such as "30 days"
   'trash.removedLede': "What people removed from their Trash. Restore puts an item back where it was deleted from; after {days} it's destroyed.",
   // A Removed By the upgrade didn't record
