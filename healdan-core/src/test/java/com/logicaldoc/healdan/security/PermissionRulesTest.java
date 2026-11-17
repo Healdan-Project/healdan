@@ -460,18 +460,20 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 	@Test
 	public void testMoveIntoNarrowerFolderNarrows() throws Exception {
 		Folder contracts = createFolder(documents, "Contracts", admin);
+		// Carol moves it, so IT has Move on everything in it (folders and Trash spec, 4.3)
 		Folder notes = createFolder(documents, "Notes", admin);
-		setAcl(notes, admin, ace(readers, Permission.READ), ace(it, Permission.READ, Permission.WRITE));
+		setAcl(notes, admin, ace(readers, Permission.READ),
+				ace(it, Permission.READ, Permission.WRITE, Permission.MOVE));
 		Folder inside = createFolder(reload(notes), "Inside", admin);
-		setAcl(inside, admin, ace(readers, Permission.READ), ace(it, Permission.READ));
+		setAcl(inside, admin, ace(readers, Permission.READ), ace(it, Permission.READ, Permission.MOVE));
 
 		allowed(() -> move(contracts, secured, carol));
 		allowed(() -> move(notes, secured, carol));
 
 		assertEquals(Long.valueOf(secured.getId()), reload(contracts).getSecurityRef());
 		assertFalse(folderDao.isReadAllowed(contracts.getId(), bob.getId()));
-		assertEquals(Map.of(it.getId(), Set.of(Permission.READ, Permission.WRITE)), acl(notes));
-		assertEquals(Map.of(it.getId(), Set.of(Permission.READ)), acl(inside));
+		assertEquals(Map.of(it.getId(), Set.of(Permission.READ, Permission.WRITE, Permission.MOVE)), acl(notes));
+		assertEquals(Map.of(it.getId(), Set.of(Permission.READ, Permission.MOVE)), acl(inside));
 	}
 
 	@Test

@@ -427,6 +427,16 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 		assertRefused(DOCUMENT_OUTSIDE, () -> move(letters, loose, admin), letter.getId());
 		assertRefused(DOCUMENT_OUTSIDE, () -> move(letters, template, admin), letter.getId());
 
+		// Out of the Stores, Alice needs ADD where it goes, as any move does (folders and Trash spec, 4.3)
+		Folder open = reload(loose);
+		open.setSecurityRef(null);
+		open.getAccessControlList().clear();
+		FolderAccessControlEntry all = new FolderAccessControlEntry(lawyers.getId());
+		all.grantPermissions(Set.of(Permission.values()));
+		open.addAccessControlEntry(all);
+		FolderHistory history = folderHistory(admin);
+		history.setEvent(FolderEvent.PERMISSION);
+		folderDao.store(open, history);
 		allowed(() -> move(empty, loose, alice));
 		allowed(() -> move(letters, documents, alice));
 		assertEquals(documents.getId(), reload(letters).getParentId());

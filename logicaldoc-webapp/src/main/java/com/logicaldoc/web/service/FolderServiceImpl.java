@@ -532,6 +532,9 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void move(List<Long> folderIds, long targetId) throws ServerException {
         Session session = validateSession();
+        // Healdan: MOVE on everything each tree holds, folders and documents, and ADD on the target (folders and
+        // Trash spec, 4.3)
+        HealdanRpcChecks.movedTrees(session, folderIds, targetId);
 
         try {
             for (long folderId : folderIds)

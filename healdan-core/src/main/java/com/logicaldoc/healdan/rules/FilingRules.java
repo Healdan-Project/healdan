@@ -310,7 +310,9 @@ public class FilingRules {
 	}
 
 	/**
-	 * A deleted folder is restored, with everything deleted in it
+	 * A deleted folder is restored, with everything deleted in it. One removed
+	 * from the Trash (deleted with any code but 1) is restored by admins only,
+	 * as a document is.
 	 *
 	 * @param folderId the folder
 	 * @param parentId the requested parent (CE puts a Store back under the
@@ -329,6 +331,9 @@ public class FilingRules {
 		boolean admin = isAdmin(user);
 		if (!admin && (user == null || !rows.mayDelete(folderId, user.getId())))
 			throw refuse(RESTORE_PERMISSION, ids);
+		// Removed from the Trash, it is an admin's to restore, as a document is
+		if (!admin && row.deleted() != 0 && row.deleted() != PersistentObject.DELETED_CODE_DEFAULT)
+			throw refuse(RESTORE_NOT_IN_TRASH, ids);
 
 		FolderPosition parent = locator.locate(into);
 		// CE doesn't check that the folder is deleted: restoring a live one moves it

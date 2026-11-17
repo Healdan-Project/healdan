@@ -93,6 +93,8 @@ public class PermissionRules {
 
 	static final String DELETE_TREE = "You need the delete permission on everything in this folder to delete it.";
 
+	static final String MOVE_TREE = "You need the move permission on everything in this folder to move it.";
+
 	private static final Logger log = LoggerFactory.getLogger(PermissionRules.class);
 
 	/** Large id lists are queried in chunks */
@@ -311,6 +313,33 @@ public class PermissionRules {
 		} catch (PermissionException e) {
 			log.info(e.getMessage());
 			throw refuse(DELETE_TREE, folderId);
+		}
+	}
+
+	/**
+	 * Moving a folder moves everything in it, so it needs MOVE on every live
+	 * folder of its tree and on every live document in them, hidden ones
+	 * included, and ADD on the folder it goes into (folders and Trash spec,
+	 * 4.3). The Classic Interface and the web services check this themselves
+	 * first, a list of folders whole; this covers every route's store of the
+	 * moved folder, WebDAV's and CMIS's among them. A store that names no user,
+	 * as WebDAV's move that also renames does, has nobody to check;
+	 * {@code _system} is checked as any user. The refusal names nothing inside.
+	 *
+	 * @param folderId the folder being moved
+	 * @param targetId where it goes
+	 * @param user who moves it, possibly null
+	 * @throws PersistenceException the refusal, or an error at data layer
+	 */
+	public void checkMoveTree(long folderId, long targetId, User user) throws PersistenceException {
+		// The DAO's user may lack its groups, which User.isAdmin() reads
+		if (user == null || filingRules.isAdmin(user))
+			return;
+		try {
+			HealdanTreeChecks.movedTrees(user, List.of(folderId), targetId);
+		} catch (PermissionException e) {
+			log.debug(e.getMessage());
+			throw refuse(MOVE_TREE, folderId);
 		}
 	}
 

@@ -585,6 +585,22 @@ public final class HealdanRpcChecks {
     }
 
     /**
+     * Moving a folder moves everything in it: MOVE on every live folder of
+     * each tree and on every live document in them, and ADD on the folder they
+     * go into ({@link HealdanTreeChecks#movedTrees})
+     *
+     * @param session the user's session
+     * @param folderIds the folders to move
+     * @param targetId where they go
+     *
+     * @throws ServerException the refusal, or an error at data layer
+     */
+    public static void movedTrees(Session session, Collection<Long> folderIds, long targetId)
+            throws ServerException {
+        treeCheck(() -> HealdanTreeChecks.movedTrees(session.getUser(), folderIds, targetId));
+    }
+
+    /**
      * Copying a folder needs READ on every folder the copy walks and, unless
      * only folders are copied, DOWNLOAD on every document it copies
      * ({@link HealdanTreeChecks#folderCopies})

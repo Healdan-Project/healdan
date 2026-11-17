@@ -206,14 +206,45 @@ public final class HealdanTreeChecks {
             throws PersistenceException, PermissionException {
         if (user.isAdmin())
             return;
+        treesAndDocuments(user, folderIds, Permission.DELETE);
+    }
+
+    /**
+     * Moving a folder moves everything in it: MOVE on every live folder of
+     * each tree and on every live document in them, and ADD on the folder they
+     * go into, or on the one it points to if it is an alias, where CE's move
+     * puts them. Admins need nothing, as for {@link #deletedTrees}.
+     *
+     * @param user the user
+     * @param folderIds the folders to move
+     * @param targetId where they go
+     *
+     * @throws PersistenceException error at data layer
+     * @throws PermissionException the refusal
+     */
+    public static void movedTrees(User user, Collection<Long> folderIds, long targetId)
+            throws PersistenceException, PermissionException {
+        if (user.isAdmin())
+            return;
+        treesAndDocuments(user, folderIds, Permission.MOVE);
+        Folder target = FolderDAO.get().findFolder(targetId);
+        folder(user, Permission.ADD, target != null ? target.getId() : targetId);
+    }
+
+    /**
+     * Refuses unless the user has the permission on every live folder of each
+     * tree, as {@link #trees} reads it, and on every live document in them
+     */
+    private static void treesAndDocuments(User user, Collection<Long> folderIds, Permission permission)
+            throws PersistenceException, PermissionException {
         Map<Permission, Collection<Long>> allowed = new EnumMap<>(Permission.class);
         for (Long folderId : folderIds) {
             if (folderId == null)
                 continue;
             // The tree is walked once for its folders and its documents
             Collection<Long> treeIds = FolderDAO.get().findFolderIdInTree(folderId, false);
-            tree(user, folderId, treeIds, allowed, Permission.DELETE);
-            documentsIn(user, Permission.DELETE, treeIds);
+            tree(user, folderId, treeIds, allowed, permission);
+            documentsIn(user, permission, treeIds);
         }
     }
 
