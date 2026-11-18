@@ -257,13 +257,20 @@ SMOKE_PROJECT=smoke-b SMOKE_PORT=28080 SMOKE_KEYCLOAK_PORT=28180 SMOKE_GARAGE_PO
 - **The project's name is lowercase letters and digits joined by `-` or `_`.** It also names the image the run
   builds, `<project>:local`, unless `LOGICALDOC_IMAGE` names one, so a second run's build doesn't retag the image
   that the first run's step 8 starts its app from again. The image stays after the run, so
-  `SMOKE_PROJECT=<project> SMOKE_BUILD=0 docker/smoke-test.sh` runs the tests again without building it, and
-  `docker image rm <project>:local` removes it.
-- **It refuses a project that already has containers or volumes,** before it creates anything, and names it. They're
-  another run's, or were left by a run stopped before it could remove its stack. Once no run is using it,
-  `(cd / && docker compose -p <project> down -v --remove-orphans)` removes it: from a folder with no `compose.yaml`,
-  Compose needs only the name. So a run only ever removes the stack it made.
-- **It refuses a port something already answers on,** and names the setting to change.
+  `SMOKE_PROJECT=<project> SMOKE_BUILD=0 docker/smoke-test.sh` runs the tests again without building it, and says
+  when it was built, and `docker image rm <project>:local` removes it. With `SMOKE_BUILD=0` and no such image, it
+  refuses: `docker compose build` tags `logicaldoc-community:local`, which `LOGICALDOC_IMAGE` has to name.
+- **It claims the project and its ports before it builds anything,** with a container, `<project>-claim`, which
+  Docker makes only once, so of two runs started together one gets it. The claim holds the three ports through the
+  build and stops just before the stack takes them, and it keeps the project claimed until the run removes its stack.
+  The run sets its exit trap only once it has the claim, so a run only ever removes the stack it made.
+- **It refuses a claimed project,** which is another run's, possibly still building, or was left by a run stopped
+  before it could remove its stack. Once no run is using it,
+  `docker rm -f <project>-claim && (cd / && docker compose -p <project> down -v --remove-orphans)` removes it: from a
+  folder with no `compose.yaml`, Compose needs only the name. It also refuses a project that has containers or volumes
+  and no claim, which is another stack, such as a development stack, and offers no command to remove it.
+- **It refuses a port setting that isn't a number from 1 to 65535, and a port something already answers on,** such as
+  another run's stack or claim. It names every setting to change at once.
 - **The builds take turns at Maven.** The `Dockerfile`'s Maven cache mount is locked, as each build deletes the
   reactor's own artifacts from it when it ends. A second build waits there for the first, unless it builds the same
   files, which BuildKit builds once for both.
