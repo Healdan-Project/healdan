@@ -9,6 +9,10 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -285,6 +289,70 @@ public class TrashStoreTest extends AbstractHealdanTestCase {
 		assertEquals(Optional.of(first), store.itemHolding(folder(100), TrashState.RESTORED));
 		assertEquals(Optional.empty(), store.itemHolding(folder(100), TrashState.REMOVED));
 		assertEquals(Optional.empty(), store.itemHolding(doc(100), TrashState.DELETED));
+	}
+
+	@Test
+	public void testABigItemChangesInAFewStatements() {
+		// A folder of thousands: 2,000 documents and 500 folders, one of them restored already
+		List<TrashMember> members = new ArrayList<>();
+		for (long i = 1; i <= 2000; i++)
+			members.add(doc(10_000 + i));
+		for (long i = 1; i <= 500; i++)
+			members.add(folder(20_000 + i));
+		long id = store.insert(item("Big", 20_001, 3L, T0), members);
+		long other = store.insert(item("Other", 30_000, 3L, T0), List.of(folder(30_000)));
+		store.change(id, List.of(doc(10_001)), TrashState.DELETED, TrashState.RESTORED, 3L, "Alice", T0);
+		List<String> sent = new ArrayList<>();
+		TrashStore counted = new TrashStore(counting(Context.get(DataSource.class), sent));
+
+		// At most a statement per thousand members of a type, with the state they must be in
+		assertEquals(2499, counted.change(id, members, TrashState.DELETED, TrashState.REMOVED, 9L, "Admin",
+				T0.plusSeconds(5)));
+		assertTrue(sent.size() + " statements", sent.size() <= 3);
+		assertEquals(TrashState.RESTORED, store.member(id, doc(10_001)).orElseThrow().state());
+		TrashMemberRow removed = store.member(id, folder(20_500)).orElseThrow();
+		assertEquals(TrashState.REMOVED, removed.state());
+		assertEquals(Long.valueOf(9), removed.removedById());
+		assertEquals("Admin", removed.removedByName());
+		assertEquals(T0.plusSeconds(5), removed.removedAt());
+		assertEquals(2499, store.members(id, TrashState.REMOVED).size());
+
+		// And moving them into another item
+		sent.clear();
+		assertEquals(2500, counted.moveMembers(id, members, other));
+		assertTrue(sent.size() + " statements", sent.size() <= 3);
+		assertEquals(2499, store.members(other, TrashState.REMOVED).size());
+		assertEquals(List.of(doc(10_001)), store.members(other, TrashState.RESTORED));
+		assertTrue(store.members(id, TrashState.REMOVED).isEmpty());
+	}
+
+	/**
+	 * @param sent gets each update statement prepared on the data source's
+	 *        connections
+	 * @return the data source, counting
+	 */
+	private static DataSource counting(DataSource dataSource, List<String> sent) {
+		return (DataSource) Proxy.newProxyInstance(TrashStoreTest.class.getClassLoader(),
+				new Class<?>[] { DataSource.class }, (proxy, method, args) -> {
+					Object result = invoke(dataSource, method, args);
+					if (!(result instanceof Connection connection))
+						return result;
+					return Proxy.newProxyInstance(TrashStoreTest.class.getClassLoader(),
+							new Class<?>[] { Connection.class }, (p, m, a) -> {
+								if (m.getName().equals("prepareStatement") && a[0] instanceof String sql
+										&& sql.startsWith("update"))
+									sent.add(sql);
+								return invoke(connection, m, a);
+							});
+				});
+	}
+
+	private static Object invoke(Object target, Method method, Object[] args) throws Throwable {
+		try {
+			return method.invoke(target, args);
+		} catch (InvocationTargetException e) {
+			throw e.getCause();
+		}
 	}
 
 	@Test

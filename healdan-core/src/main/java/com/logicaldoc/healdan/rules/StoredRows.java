@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.rules;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -33,8 +34,11 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.util.spring.Context;
 
 import jakarta.annotation.PostConstruct;
@@ -53,6 +57,11 @@ import jakarta.annotation.PostConstruct;
  * the listeners have checked, they record the row as stored. A store is then
  * compared with the earlier of those, and with the database row only if the
  * session hasn't written the row yet.
+ * <p>
+ * It also reads what a person may read and delete among rows that may be
+ * deleted, which CE's own checks see nothing of: one row at a time, and as
+ * counts for the Trash's views and a folder's contents (folders and Trash
+ * spec 4.2), whose SQL states the same rule.
  */
 @Component
 public class StoredRows implements PreUpdateEventListener {
@@ -132,6 +141,34 @@ public class StoredRows implements PreUpdateEventListener {
 
 	/** Large id lists are queried in chunks */
 	private static final int CHUNK = 500;
+
+	/** The user's groups, the user given as {@code :user} */
+	private static final String USER_GROUPS = "select g.ld_groupid from ld_usergroup g where g.ld_userid = :user";
+
+	/**
+	 * The folder {@code f}, deleted or not, is readable: one of the user's
+	 * groups has Read on it, or on the folder it takes its security from
+	 */
+	private static final String FOLDER_READ = """
+			exists (select 1 from ld_folder_acl b where b.ld_folderid = coalesce(f.ld_securityref, f.ld_id)
+			   and b.ld_read = 1 and b.ld_groupid in (%s))""".formatted(USER_GROUPS);
+
+	/**
+	 * The document {@code d}, deleted or not, in the folder {@code f}, is
+	 * readable, as {@link #mayReadDocument} decides: by its own entries for the
+	 * user's groups when they grant anything, else by its folder's. It restates
+	 * {@link AccessChecks#readableDocuments}' rule, which names it.
+	 */
+	private static final String DOCUMENT_READ = """
+			(exists (select 1 from ld_document_acl a where a.ld_docid = d.ld_id and a.ld_read = 1
+			   and a.ld_groupid in (%1$s))
+			 or (not exists (select 1 from ld_document_acl a where a.ld_docid = d.ld_id and a.ld_groupid in (%1$s)
+			   and (%2$s) > 0) and %3$s))""".formatted(USER_GROUPS, AccessChecks.anyPermission("a."), FOLDER_READ);
+
+	/** The document {@code d} is published at {@code :now}, as {@code Document.isPublishing} decides */
+	private static final String PUBLISHED = """
+			d.ld_published = 1 and (d.ld_startpublishing is null or d.ld_startpublishing <= :now)
+			   and (d.ld_stoppublishing is null or d.ld_stoppublishing > :now)""";
 
 	private final SessionFactory sessionFactory;
 
@@ -539,6 +576,72 @@ public class StoredRows implements PreUpdateEventListener {
 			return entries.contains(1);
 		Long folderId = documentFolder(documentId);
 		return folderId != null && folderAllows(folderId, userId, permission);
+	}
+
+	/**
+	 * @param folderIds folders, deleted or not
+	 * @param user the user, with its groups
+	 * @return how many of them the user can read: one of the user's groups has
+	 *         Read on the folder, or on the folder it takes its security from;
+	 *         an administrator, every one
+	 * @throws PersistenceException error at data layer
+	 */
+	public long readableFolders(Collection<Long> folderIds, User user) throws PersistenceException {
+		if (AccessChecks.isAdmin(user))
+			return folderIds.size();
+		long count = 0;
+		for (List<Long> chunk : chunks(folderIds))
+			count += named.queryForObject("select count(*) from ld_folder f where f.ld_id in (:ids) and " + FOLDER_READ,
+					new MapSqlParameterSource("ids", chunk).addValue("user", user.getId()), Long.class);
+		return count;
+	}
+
+	/**
+	 * @param documentIds documents, deleted or not
+	 * @param user the user, with its groups
+	 * @return how many of them the user can read, as {@link #mayReadDocument}
+	 *         decides, and that are published unless the user sees what isn't;
+	 *         an administrator, every one still stored that is published, or
+	 *         every one if they see what isn't
+	 * @throws PersistenceException error at data layer
+	 */
+	public long readableDocuments(Collection<Long> documentIds, User user) throws PersistenceException {
+		return readableDocuments("d.ld_id in (:ids)", documentIds, AccessChecks.isAdmin(user), user);
+	}
+
+	/**
+	 * @param folderIds folders
+	 * @param user the user, with its groups
+	 * @return how many live documents in them the user can read, as
+	 *         {@link #readableDocuments(Collection, User)} decides; an
+	 *         administrator, every published one, or every one if they see what
+	 *         isn't
+	 * @throws PersistenceException error at data layer
+	 */
+	public long readableLiveDocumentsIn(Collection<Long> folderIds, User user) throws PersistenceException {
+		return readableDocuments("d.ld_deleted = 0 and d.ld_folderid in (:ids)", folderIds, AccessChecks.isAdmin(user),
+				user);
+	}
+
+	/**
+	 * @param scope which documents, a condition on {@code d} with the list
+	 *        {@code :ids}
+	 * @param admin true to leave the documents' and folders' permissions out
+	 */
+	private long readableDocuments(String scope, Collection<Long> ids, boolean admin, User user) {
+		StringBuilder where = new StringBuilder(scope);
+		if (!admin)
+			where.append(" and ").append(DOCUMENT_READ);
+		if (!AccessChecks.seesUnpublished(user))
+			where.append(" and ").append(PUBLISHED);
+		long count = 0;
+		for (List<Long> chunk : chunks(ids))
+			count += named.queryForObject(
+					"select count(*) from ld_document d join ld_folder f on f.ld_id = d.ld_folderid where " + where,
+					new MapSqlParameterSource("ids", chunk).addValue("user", user.getId()).addValue("now",
+							new Timestamp(System.currentTimeMillis())),
+					Long.class);
+		return count;
 	}
 
 	private static String deleted(boolean withDeleted) {

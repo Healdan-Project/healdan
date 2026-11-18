@@ -75,11 +75,13 @@ The Trash's tests are in `healdan-core` (`com.logicaldoc.healdan.trash`) and `he
 in `UPSTREAM_TESTS` (see [Continuous Integration](../continuous-integration/)). They use `HealdanFixtures` and
 `AbstractRulesTestCase`'s layout, and call the job's `runOnce` themselves, as no real start happens in a test.
 
-- **`TrashStoreTest`** checks the record's DAO: items, members, their states and the Trash's lists.
-- **`TrashRecordingTest`** deletes a document and a folder by each route, the API's, the Classic Interface's RPC, WebDAV's
-  and CMIS's, and checks that each makes one item with the right members, that a folder delete leaves a colleague's
-  deleted document where it was, that a CMIS delete that stops short keeps only what it took, and that a delete whose
-  item can't be written is refused.
+- **`TrashStoreTest`** checks the record's DAO: items, members, their states and the Trash's lists, and that an item of
+  thousands of members changes state or moves in a few statements. It counts them on a data source of its own.
+- **`TrashRecordingTest`** deletes a document and a folder by each route, the API's, the Classic Interface's RPC, WebDAV's,
+  CMIS's and SOAP's, a merge's emptied source and `FolderTool`'s, and checks that each makes one item with the right
+  members, that a matter's own folder's item names its matter, that a folder delete leaves a colleague's deleted document
+  where it was, that a CMIS delete that stops short keeps only what it took, and that a delete whose item can't be
+  written is refused.
 - **`TrashRulesTest`** checks the rules on a whole tree: Delete or Move needed on everything inside, hidden items
   included, with no name in the refusal; a check-out or an immutable document inside; and a non-admin restoring only from
   the Trash.
@@ -89,10 +91,18 @@ in `UPSTREAM_TESTS` (see [Continuous Integration](../continuous-integration/)). 
 - **`TrashExistingSeedTest`** checks the seed that makes items of what was already deleted.
 - **`TrashDestroyerTest`** checks `runOnce`: what was removed more than the days before is destroyed, documents and folders
   deepest first, with Healdan's rows and the record kept; what is within the days isn't; a matter's own folder and a Store
-  stay removed; and a failure leaves the rest of its item, and only that, for the next night. `TrashStartupTest` starts the
-  timer with its waits shortened. `TrashTestHooks` is in the test-jar so that other modules' tests can fail a destroy.
-- **`FolderChangesTest` and `TrashResourceTest`** in `healdan-api` check the folder delete, move and contents, the Trash's
-  three views and who may read them, restore, remove and empty, each answer against `openapi.yaml`.
+  stay removed; and a failure, an `Error` such as a missing class or service provider included, leaves the rest of its
+  item, and only that, for the next night. It counts the queries for folders that take their security from another,
+  which scan `ld_folder`, in JdbcTemplate's debug log: one an item, and a folder that starts taking its security from one
+  during the run keeps it. `TrashStartupTest` starts the timer with its waits shortened, once in America/Chicago with
+  the first run on a night whose clocks skip 02:47 (skipped if the JDK's time zone data has no such night ahead).
+  `TrashTestHooks` is in the test-jar so that other modules' tests can fail a destroy.
+- **`ReadableCountsTest`**, in `com.logicaldoc.healdan.rules`, checks `StoredRows`' counts of the folders and documents,
+  deleted or not, that a person can read, which the Trash's views and a folder's contents give: publishing dates, a
+  publisher, and an administrator's counts, which take in only documents still stored.
+- **`FolderChangesTest` and `TrashResourceTest`** in `healdan-api` check the folder delete, move and contents, a move into
+  another client's matter re-stamping its Client and Matter, the Trash's three views and who may read them, restore,
+  remove and empty, each answer against `openapi.yaml`.
 - **`HealdanTrashHooksTest`**, in `logicaldoc-webapp`, checks the Classic Interface's removals through the hooks, and
   that its delete takes a document before its shortcuts. Its folder moves are `RpcPermissionGapsTest`'s.
   `CeFlowsTest`, in `healdan-storage`, checks that a document the Trash destroys is held, and that a failed destroy

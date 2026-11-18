@@ -12,10 +12,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import javax.sql.DataSource;
 
@@ -30,6 +32,7 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.logicaldoc.util.CollectionUtil;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -59,11 +62,21 @@ public class TrashStore {
 	/** The most characters {@code hd_frompath} holds */
 	static final int PATH_LIMIT = 4000;
 
+	/** Ids in an {@code in (...)} list at a time */
+	static final int CHUNK = 1000;
+
+	/** An item's folders removed before a cut-off, given as {@code :id}, {@code :removed} and {@code :cutoff} */
+	private static final String REMOVED_FOLDERS = "select m.hd_objectid from hd_trash_member m where m.hd_trashid = :id"
+			+ " and m.hd_objecttype = 'F' and m.hd_state = :removed and m.hd_removedat < :cutoff";
+
 	private final JdbcTemplate jdbc;
+
+	private final NamedParameterJdbcTemplate named;
 
 	@Autowired
 	public TrashStore(DataSource dataSource) {
 		this.jdbc = new JdbcTemplate(dataSource);
+		this.named = new NamedParameterJdbcTemplate(jdbc);
 	}
 
 	/**
@@ -120,7 +133,8 @@ public class TrashStore {
 	}
 
 	/**
-	 * Moves members, in whatever state, from one item to another
+	 * Moves members, in whatever state, from one item to another, up to
+	 * {@link #CHUNK} of a type in a statement
 	 *
 	 * @param from the item that holds them
 	 * @param members the members
@@ -128,11 +142,9 @@ public class TrashStore {
 	 * @return how many moved
 	 */
 	public int moveMembers(long from, Collection<TrashMember> members, long to) {
-		int moved = 0;
-		for (TrashMember member : members)
-			moved += jdbc.update("update hd_trash_member set hd_trashid = ? where hd_trashid = ? and hd_objecttype = ?"
-					+ " and hd_objectid = ?", to, from, String.valueOf(member.type()), member.objectId());
-		return moved;
+		return byType(members, new MapSqlParameterSource("to", to).addValue("from", from),
+				"update hd_trash_member set hd_trashid = :to where hd_trashid = :from and hd_objecttype = :type"
+						+ " and hd_objectid in (:ids)");
 	}
 
 	/**
@@ -230,7 +242,9 @@ public class TrashStore {
 
 	/**
 	 * Moves the listed members from one state to another, stamping who and when.
-	 * A member in another state is left as it is.
+	 * A member in another state is left as it is. A statement takes up to
+	 * {@link #CHUNK} members of a type, so a folder of thousands changes in a
+	 * few.
 	 *
 	 * @param id the item
 	 * @param members the members to move
@@ -244,28 +258,32 @@ public class TrashStore {
 	public int change(long id, Collection<TrashMember> members, TrashState from, TrashState to, Long byId,
 			String byName, Instant at) {
 		String set = switch (to) {
-		case REMOVED -> ", hd_removedby = ?, hd_removedbyname = ?, hd_removedat = ?";
-		case RESTORED -> ", hd_restoredby = ?, hd_restoredbyname = ?, hd_restoredat = ?";
-		case DESTROYED -> ", hd_destroyedat = ?";
+		case REMOVED -> ", hd_removedby = :by, hd_removedbyname = :byName, hd_removedat = :at";
+		case RESTORED -> ", hd_restoredby = :by, hd_restoredbyname = :byName, hd_restoredat = :at";
+		case DESTROYED -> ", hd_destroyedat = :at";
 		case DELETED -> "";
 		};
-		Timestamp time = Timestamp.from(at);
+		MapSqlParameterSource params = new MapSqlParameterSource("to", to.code()).addValue("by", byId)
+				.addValue("byName", byName).addValue("at", Timestamp.from(at)).addValue("id", id)
+				.addValue("from", from.code());
+		return byType(members, params, "update hd_trash_member set hd_state = :to" + set + " where hd_trashid = :id"
+				+ " and hd_objecttype = :type and hd_objectid in (:ids) and hd_state = :from");
+	}
+
+	/**
+	 * Runs an update on members, a statement for each type and chunk of ids
+	 *
+	 * @param params the update's parameters but {@code :type} and {@code :ids}
+	 * @param sql the update, naming the members by {@code :type} and
+	 *        {@code :ids}
+	 * @return how many rows it changed
+	 */
+	private int byType(Collection<TrashMember> members, MapSqlParameterSource params, String sql) {
 		int changed = 0;
-		for (TrashMember member : members) {
-			List<Object> args = new ArrayList<>();
-			args.add(to.code());
-			if (to == TrashState.REMOVED || to == TrashState.RESTORED) {
-				args.add(byId);
-				args.add(byName);
-			}
-			if (to != TrashState.DELETED)
-				args.add(time);
-			args.add(id);
-			args.add(String.valueOf(member.type()));
-			args.add(member.objectId());
-			args.add(from.code());
-			changed += jdbc.update("update hd_trash_member set hd_state = ?" + set + " where hd_trashid = ?"
-					+ " and hd_objecttype = ? and hd_objectid = ? and hd_state = ?", args.toArray());
+		for (char type : new char[] { 'F', 'D' }) {
+			for (List<Long> chunk : CollectionUtil.partition(TrashMember.ids(members, type), CHUNK))
+				changed += named.update(sql, new MapSqlParameterSource(params.getValues())
+						.addValue("type", String.valueOf(type)).addValue("ids", chunk));
 		}
 		return changed;
 	}
@@ -375,6 +393,37 @@ public class TrashStore {
 
 	/**
 	 * @param id the item
+	 * @param cutoff the time
+	 * @return the item's folders that are removed, and were removed before
+	 *         the cut-off
+	 */
+	public List<Long> foldersRemovedBefore(long id, Instant cutoff) {
+		return named.queryForList(REMOVED_FOLDERS, removedFolders(id, cutoff), Long.class);
+	}
+
+	/**
+	 * @param id the item
+	 * @param cutoff the time
+	 * @return by each of {@link #foldersRemovedBefore}, the folders, live or
+	 *         deleted, that take their security from it: one read of
+	 *         {@code ld_folder} whatever their number
+	 */
+	public Map<Long, Set<Long>> securityTakers(long id, Instant cutoff) {
+		Map<Long, Set<Long>> takers = new HashMap<>();
+		named.query("select f.ld_id, f.ld_securityref from ld_folder f where f.ld_id <> f.ld_securityref"
+				+ " and f.ld_securityref in (" + REMOVED_FOLDERS + ")", removedFolders(id, cutoff), rs -> {
+					takers.computeIfAbsent(rs.getLong(2), k -> new HashSet<>()).add(rs.getLong(1));
+				});
+		return takers;
+	}
+
+	private static MapSqlParameterSource removedFolders(long id, Instant cutoff) {
+		return new MapSqlParameterSource("id", id).addValue("removed", TrashState.REMOVED.code()).addValue("cutoff",
+				Timestamp.from(cutoff));
+	}
+
+	/**
+	 * @param id the item
 	 * @param member one of its members
 	 * @return the member's row
 	 */
@@ -393,7 +442,7 @@ public class TrashStore {
 		Map<Long, TrashMemberRow> tops = new HashMap<>();
 		if (ids.isEmpty())
 			return tops;
-		new NamedParameterJdbcTemplate(jdbc).query("select m.hd_trashid, m.hd_objecttype, m.hd_objectid, m.hd_state,"
+		named.query("select m.hd_trashid, m.hd_objecttype, m.hd_objectid, m.hd_state,"
 				+ " m.hd_removedby, m.hd_removedbyname, m.hd_removedat, m.hd_restoredby, m.hd_restoredbyname,"
 				+ " m.hd_restoredat, m.hd_destroyedat" + TOP + " where t.hd_id in (:ids)",
 				new MapSqlParameterSource("ids", new ArrayList<>(ids)), rs -> {

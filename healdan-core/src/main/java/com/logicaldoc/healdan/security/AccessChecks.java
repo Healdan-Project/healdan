@@ -117,7 +117,7 @@ public final class AccessChecks {
 
 	/**
 	 * For SQL that restates {@link #readableDocuments}' rule, as
-	 * {@code FolderListing} does.
+	 * {@code FolderListing} and {@code StoredRows} do.
 	 *
 	 * @param alias the alias of {@code ld_document_acl} with its dot, such as
 	 *        {@code a.}, or empty for none
@@ -173,7 +173,8 @@ public final class AccessChecks {
 	 * a document whose own ACL rows for the user's groups grant anything is
 	 * read if they grant READ; any other document takes its folder's answer.
 	 * {@code FolderListing} restates this rule in SQL, to page a folder in the
-	 * database: a change here changes it there.
+	 * database, and {@code StoredRows} does for the Trash's counts of folders
+	 * and documents, deleted or not: a change here changes both.
 	 *
 	 * @param folder the folder that holds all the documents
 	 * @param documents documents of the folder
