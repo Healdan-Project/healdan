@@ -19,9 +19,12 @@ import org.apache.logging.log4j.Level;
 import org.junit.Test;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.logicaldoc.core.HealdanVetoException;
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.support.LogCapture;
+import com.logicaldoc.healdan.util.StorageUnreachableException;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
@@ -30,6 +33,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.StreamingOutput;
 
 public class ProblemMapperTest extends ApiTestCase {
@@ -197,6 +201,39 @@ public class ProblemMapperTest extends ApiTestCase {
 		assertFalse(response.toString(),
 				String.valueOf(response.header("Content-Type")).startsWith(ProblemMapper.PROBLEM_JSON));
 		assertNoFailureLogged(logged, "GET /api/v1/test/gone-wrapped", "java.io.IOException: Connection reset by peer");
+	}
+
+	@Test
+	public void testUnexpected() {
+		// As toResponse answers each: 500 server-error, logged, for an unexpected failure, and its own answer otherwise
+		PersistenceException failure = new PersistenceException("secret");
+		assertUnexpected(true, failure);
+		assertUnexpected(true, new IllegalStateException("Can't save document #1234", failure));
+		assertUnexpected(false, ApiProblem.conflict("checked-out", "Document #1234 is checked out to Jane Smith."));
+		assertUnexpected(false, new PersistenceException("Can't check in", new HealdanVetoException("No.")));
+		assertUnexpected(false, new PersistenceException("Can't read the file",
+				new StorageUnreachableException("Cloud", true, new IOException("secret host"))));
+
+		// A save or a filing says what's left after such an exception, but an error goes on as it is
+		assertTrue(VersionResource.readsBack(failure));
+		assertFalse(VersionResource.readsBack(new OutOfMemoryError("Java heap space")));
+	}
+
+	/**
+	 * Asserts that {@link ProblemMapper#unexpected} says what
+	 * {@link ProblemMapper#toResponse} answers: true exactly when that is
+	 * {@code 500 server-error} with no message of its own, logged as a failure
+	 */
+	private static void assertUnexpected(boolean expected, Throwable exception) {
+		assertEquals(exception.toString(), expected, ProblemMapper.unexpected(exception));
+		try (LogCapture log = LogCapture.of(ProblemMapper.class)) {
+			Response response = new ProblemMapper().toResponse(exception);
+			Map<?, ?> body = (Map<?, ?>) response.getEntity();
+			boolean serverError = response.getStatus() == 500 && "server-error".equals(body.get("code"))
+					&& "Something went wrong on the server.".equals(body.get("detail"))
+					&& log.lines().contains("ERROR API request failed");
+			assertEquals(exception + ": " + body + " " + log.lines(), expected, serverError);
+		}
 	}
 
 	@Test

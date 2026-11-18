@@ -54,6 +54,9 @@ import jakarta.ws.rs.ext.ExceptionMapper;
  * Tomcat reports a client that stalled past its timeout the same way, which
  * the line's cause tells apart.</li>
  * </ul>
+ * {@link #unexpected} says whether an exception is answered as an
+ * unexpected failure, so that a save that fails part-way can say what's left
+ * instead.
  */
 public class ProblemMapper implements ExceptionMapper<Throwable> {
 
@@ -105,6 +108,27 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 
 		log.error("API request failed", exception);
 		return problem(new ApiProblem(500, "server-error", SERVER_ERROR));
+	}
+
+	/**
+	 * Reads the exception as {@link #toResponse} does, check by check, so
+	 * change the two together ({@code ProblemMapperTest#testUnexpected}).
+	 *
+	 * @return whether {@link #toResponse} would answer this as an unexpected
+	 *         failure, {@code 500 server-error}: it holds no
+	 *         {@link ApiProblem}, {@link AlreadyFiledException},
+	 *         {@link StorageUnreachableException}, {@link HealdanVetoException},
+	 *         {@link JsonProcessingException} or
+	 *         {@link WebApplicationException}, and the client hasn't gone away
+	 */
+	static boolean unexpected(Throwable exception) {
+		return !clientGone(exception)
+				&& !(exception instanceof ApiProblem)
+				&& find(exception, AlreadyFiledException.class) == null
+				&& StorageUnreachableException.in(exception) == null
+				&& find(exception, HealdanVetoException.class) == null
+				&& !(exception instanceof JsonProcessingException)
+				&& !(exception instanceof WebApplicationException);
 	}
 
 	private static Response webApplicationProblem(WebApplicationException wae) {

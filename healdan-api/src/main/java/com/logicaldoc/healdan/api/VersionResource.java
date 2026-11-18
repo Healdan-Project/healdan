@@ -9,6 +9,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
 import java.util.regex.Pattern;
 
 import org.apache.commons.io.FileUtils;
@@ -171,7 +172,8 @@ public class VersionResource {
 	 * document as it was, but checked out to the caller: CE writes nothing
 	 * when a rule refuses it. A check-in another write overtook is asked for
 	 * again ({@link #checkIn}). A
-	 * save CE didn't store is a {@code 500} ({@link #confirmStored}) that says
+	 * save CE didn't store, whether CE returned or failed, is a {@code 500}
+	 * ({@link #confirmStored}) that says
 	 * what's left: the document as it was, or its content the file sent as a
 	 * version missing from its timeline; either way the previous version and
 	 * its file can still be read. Any other failure ({@code 500}) may come
@@ -312,7 +314,9 @@ public class VersionResource {
 	 * record, isn't. CE's check-in never looks at the hold, so once someone
 	 * else holds the document, as when an administrator broke the caller's
 	 * check-out in the web page, it isn't asked again either: the answer says
-	 * what's left ({@link #confirmStored}).
+	 * what's left ({@link #confirmStored}). So it does when CE's check-in
+	 * fails otherwise, as on PostgreSQL once a failed write has ended CE's
+	 * transaction ({@link #confirmStoredAfter}).
 	 *
 	 * @return CE's check-in, once its version record is written
 	 * @throws ApiProblem {@code 500 server-error} ({@link #confirmStored})
@@ -333,9 +337,12 @@ public class VersionResource {
 				// Waits for CE's version record, so the timeline shows the save at once
 				checkedIn = DocumentManager.get().checkin(docId, upload, name, major, null, checkin);
 				checkedIn.get();
-			} catch (PersistenceException | RuntimeException e) {
-				if (!CheckoutResource.overtaken(e))
+			} catch (PersistenceException | RuntimeException | ExecutionException e) {
+				if (!CheckoutResource.overtaken(e)) {
+					// Such as CE's next statement, once a failed write ended its transaction on PostgreSQL
+					confirmStoredAfter(e, docId, docNumber, before, user);
 					throw e;
+				}
 				if (tries < CheckoutResource.TRIES && asRead(docId, before, hold)) {
 					log.info("Checking in document {} again, as another write came first: {}", docId, e.getMessage());
 					continue;
@@ -483,6 +490,55 @@ public class VersionResource {
 				: " It isn't checked out to you.";
 		throw new ApiProblem(500, "server-error",
 				stored + hold + (filed ? " Don't file it again." : " Send the save again."));
+	}
+
+	/**
+	 * Says what's left of a save or a filing that CE failed part-way, as
+	 * {@link #confirmStored} does when CE returns, for a failure the API would
+	 * answer as unexpected ({@link ProblemMapper#unexpected}). On PostgreSQL a
+	 * write that fails ends its transaction, so CE's next statement fails too,
+	 * and the failure CE swallows on MariaDB escapes (spec section 7.3). A
+	 * refusal, such as a veto or a storage outage, is left as it is, and so
+	 * is an error ({@link #readsBack}).
+	 *
+	 * @param failure what CE threw
+	 * @param docId the document's id
+	 * @param docNumber its doc #
+	 * @param before its version before the save, or null for a document just
+	 *        filed
+	 * @param user the caller
+	 * @throws ApiProblem {@code 500 server-error} that says what's left. It
+	 *         returns when the save is whole after all, and when the document
+	 *         can't be read back, whose failure is added to the failure: the
+	 *         caller then throws the failure, as before.
+	 */
+	static void confirmStoredAfter(Throwable failure, long docId, long docNumber, String before, User user) {
+		if (!readsBack(failure))
+			return;
+		try {
+			confirmStored(docId, docNumber, before, user);
+		} catch (ApiProblem whatsLeft) {
+			/*
+			 * It answers in the failure's place, which nothing else then logs. PostgreSQL's message can quote the
+			 * row, with the file's name, which may be an email's subject or an attachment's name: only at debug
+			 */
+			String what = before == null ? "filing" : "save";
+			log.error("The {} of document #{} failed: {}", what, docNumber, failure.getClass().getName());
+			log.debug("The {} of document #{} failed", what, docNumber, failure);
+			throw whatsLeft;
+		} catch (PersistenceException | RuntimeException readBack) {
+			failure.addSuppressed(readBack);
+		}
+	}
+
+	/**
+	 * @return whether {@link #confirmStoredAfter} reads the document back
+	 *         after this failure: an exception the API would answer as
+	 *         unexpected, never an error, such as running out of memory,
+	 *         which goes on as it is
+	 */
+	static boolean readsBack(Throwable failure) {
+		return failure instanceof Exception && ProblemMapper.unexpected(failure);
 	}
 
 	/**

@@ -26,7 +26,6 @@ import java.util.function.Consumer;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -473,7 +472,6 @@ public class SaveTest extends ApiTestCase {
 		assertEquals("Lease.docx", blank.json().path("name").textValue());
 	}
 
-	@Ignore("PostgreSQL: plan Task 7")
 	@Test
 	public void testUnrecordedVersionIsAnError() throws Exception {
 		// Concern 4: CE writes the version record after the check-in returns, and only logs a failure. Here the
@@ -483,33 +481,20 @@ public class SaveTest extends ApiTestCase {
 
 		ApiResponse failed = saveFailing(token, d, List.of("ld_version"), version("snapshot", "Sent to the client", true));
 
-		assertEquals(failed.toString(), 500, failed.status());
-		assertEquals("server-error", failed.code());
-		assertEquals(("Document #%d's save wasn't stored completely: its content is the file sent, as version 1.1, but "
-				+ "that version isn't in its timeline. It isn't checked out to you. Send the save again.")
-				.formatted(number(d)), failed.json().path("detail").textValue());
-		// What the client sees: the document at 1.1 with the file sent, free; no 1.1 in the timeline; 1.0 as it was
-		JsonNode doc = get("/api/v1/documents/" + number(d)).token(token).send().json();
-		assertEquals("1.1", doc.path("fileVersion").textValue());
-		assertTrue(doc.path("hold").isNull());
-		assertEquals(List.of("1.0 version"), versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
-		assertArrayEquals(bytes("two"), content(token, d, null));
-		assertArrayEquals(bytes("one"), content(token, d, "1.0"));
-		assertEquals(404,
-				get("/api/v1/documents/" + number(d) + "/content?version=1.1").token(token).send().status());
+		String at = assertSaysWhatsLeft(failed, token, d);
 
-		// Sent again, the save is recorded
+		// Sent again, the save is recorded, as the version after the one the document is at
 		ApiResponse again = save(token, d, version("snapshot", "Sent to the client", true), "a.docx", "two");
 		assertEquals(again.toString(), 201, again.status());
-		assertEquals("1.2", again.json().path("fileVersion").textValue());
-		assertEquals(List.of("1.2 snapshot", "1.0 version"),
+		String next = after(at);
+		assertEquals(next, again.json().path("fileVersion").textValue());
+		assertEquals(List.of(next + " snapshot", "1.0 version"),
 				versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
 	}
 
-	@Ignore("PostgreSQL: plan Task 7")
 	@Test
 	public void testUnstoredSaveIsAnError() throws Exception {
-		// Concern 4: here the document's own record can't be written either, so nothing changes
+		// Concern 4: here the document's own record can't be written either
 		Document d = file("a.docx");
 		String token = signIn(clerk);
 
@@ -523,27 +508,69 @@ public class SaveTest extends ApiTestCase {
 			DocumentListenerManager.get().getListeners().remove(checkins);
 		}
 
-		assertEquals(failed.toString(), 500, failed.status());
-		assertEquals("server-error", failed.code());
-		assertEquals("Document #%d's save wasn't stored: its content is as it was. It's still checked out to you. "
-				.formatted(number(d)) + "Send the save again.", failed.json().path("detail").textValue());
+		String at = assertSaysWhatsLeft(failed, token, d);
 		// No other write overtook CE's check-in, which kept no version of the save, so it isn't asked for again
 		assertEquals(1, checkins.count);
-		JsonNode doc = get("/api/v1/documents/" + number(d)).token(token).send().json();
-		assertEquals("1.0", doc.path("fileVersion").textValue());
-		assertEquals("checkout", doc.path("hold").path("kind").textValue());
-		assertEquals(clerk.getId(), doc.path("hold").path("by").path("id").asLong());
-		assertEquals(List.of("1.0 version"), versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
-		assertArrayEquals(bytes("one"), content(token, d, null));
 
-		// Sent again, the save is stored
+		// Sent again, the save is stored, as the version after the one the document is at
 		ApiResponse again = save(token, d, version("snapshot", "Sent to the client", null), "a.docx", "two");
 		assertEquals(again.toString(), 201, again.status());
-		assertEquals("1.1", again.json().path("fileVersion").textValue());
+		String next = after(at);
+		assertEquals(next, again.json().path("fileVersion").textValue());
 		assertTrue(again.json().path("hold").isNull());
-		assertEquals(List.of("1.1 snapshot", "1.0 version"),
+		assertEquals(List.of(next + " snapshot", "1.0 version"),
 				versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
 		assertArrayEquals(bytes("two"), content(token, d, null));
+	}
+
+	/**
+	 * Asserts that a save of "two" over "one" that CE didn't store whole is a
+	 * {@code 500} that agrees with the document read back. On PostgreSQL a
+	 * statement that fails ends its transaction, so what CE leaves may differ
+	 * from what MariaDB leaves: the document at the version after 1.0 with the
+	 * file sent, or as it was. Either way the save isn't in its timeline, and
+	 * version 1.0 is as it was.
+	 *
+	 * @return the version the document is at
+	 */
+	private String assertSaysWhatsLeft(ApiResponse failed, String token, Document d) {
+		assertEquals(failed.toString(), 500, failed.status());
+		assertEquals("server-error", failed.code());
+		String detail = failed.json().path("detail").textValue();
+
+		JsonNode doc = get("/api/v1/documents/" + number(d)).token(token).send().json();
+		String at = doc.path("fileVersion").textValue();
+		boolean moved = !"1.0".equals(at);
+		JsonNode hold = doc.path("hold");
+		String stored = moved
+				? ("Document #%d's save wasn't stored completely: its content is the file sent, as version 1.1, but "
+						+ "that version isn't in its timeline.").formatted(number(d))
+				: "Document #%d's save wasn't stored: its content is as it was.".formatted(number(d));
+		String held = hold.isNull() ? " It isn't checked out to you." : " It's still checked out to you.";
+		assertEquals(doc.toString(), stored + held + " Send the save again.", detail);
+
+		assertEquals(doc.toString(), at, doc.path("version").textValue());
+		if (moved) {
+			assertEquals(doc.toString(), "1.1", at);
+			assertArrayEquals(bytes("two"), content(token, d, null));
+			assertEquals(404,
+					get("/api/v1/documents/" + number(d) + "/content?version=1.1").token(token).send().status());
+		} else {
+			assertArrayEquals(bytes("one"), content(token, d, null));
+		}
+		// The check-out it then has: the caller's, or none
+		if (!hold.isNull()) {
+			assertEquals(hold.toString(), "checkout", hold.path("kind").textValue());
+			assertEquals(hold.toString(), clerk.getId(), hold.path("by").path("id").asLong());
+		}
+		assertEquals(List.of("1.0 version"), versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
+		assertArrayEquals(bytes("one"), content(token, d, "1.0"));
+		return at;
+	}
+
+	/** @return the snapshot after the version, which is 1.0 or 1.1 */
+	private static String after(String version) {
+		return "1.0".equals(version) ? "1.1" : "1.2";
 	}
 
 	/**

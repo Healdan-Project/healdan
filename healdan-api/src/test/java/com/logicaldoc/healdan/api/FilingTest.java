@@ -19,7 +19,6 @@ import java.util.Set;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -225,7 +224,6 @@ public class FilingTest extends ApiTestCase {
 				clerk.getId()).intValue());
 	}
 
-	@Ignore("PostgreSQL: plan Task 7")
 	@Test
 	public void testUnrecordedFirstVersionIsAnError() throws Exception {
 		// As for a save (SaveTest): CE writes the version record after it creates the document, and only logs a
@@ -243,15 +241,43 @@ public class FilingTest extends ApiTestCase {
 
 		assertEquals(failed.toString(), 500, failed.status());
 		assertEquals("server-error", failed.code());
-		assertEquals(("Document #%d was filed, but its version 1.0 isn't in its timeline. Its content is the file "
-				+ "sent. It isn't checked out to you. Don't file it again.").formatted(next),
-				failed.json().path("detail").textValue());
-		// What the client sees: the document with the file sent, free, and nothing in its timeline
-		JsonNode doc = get("/api/v1/documents/" + next).token(token).send().json();
+		String detail = failed.json().path("detail").textValue();
+		// The answer agrees with what the client then sees, which on PostgreSQL, where a statement that fails ends
+		// its transaction, may differ from what MariaDB leaves
+		ApiResponse read = get("/api/v1/documents/" + next).token(token).send();
+		if (read.status() == 404) {
+			// Nothing was filed: the failure is the server's, and filing again files the document
+			assertEquals(read.toString(), "not-found", read.code());
+			assertEquals("Something went wrong on the server.", detail);
+			ApiResponse again = file(token, document(documents, null, null, null), "a.docx", CONTENT);
+			assertEquals(again.toString(), 201, again.status());
+			assertEquals("1.0", again.json().path("fileVersion").textValue());
+			return;
+		}
+
+		// The document with the file sent, and nothing in its timeline
+		assertEquals(read.toString(), 200, read.status());
+		JsonNode doc = read.json();
+		JsonNode hold = doc.path("hold");
+		String held = hold.isNull() ? " It isn't checked out to you." : " It's still checked out to you.";
+		assertEquals(doc.toString(), ("Document #%d was filed, but its version 1.0 isn't in its timeline. Its content "
+				+ "is the file sent.").formatted(next) + held + " Don't file it again.", detail);
+		if (!hold.isNull()) {
+			assertEquals(hold.toString(), "checkout", hold.path("kind").textValue());
+			assertEquals(hold.toString(), clerk.getId(), hold.path("by").path("id").asLong());
+		}
+		assertEquals("1.0", doc.path("version").textValue());
 		assertEquals("1.0", doc.path("fileVersion").textValue());
-		assertTrue(doc.path("hold").isNull());
 		assertEquals(0, get("/api/v1/documents/" + next + "/versions").token(token).send().json().path("items").size());
 		assertArrayEquals(CONTENT, get("/api/v1/documents/" + next + "/content").token(token).send().body());
+
+		// A save of it is stored, as the version after 1.0
+		ApiResponse saved = post("/api/v1/documents/" + next + "/versions").token(token)
+				.part("version", "{\"kind\": \"snapshot\"}").file("file", "a.docx", CONTENT).send();
+		assertEquals(saved.toString(), 201, saved.status());
+		assertEquals("1.1", saved.json().path("fileVersion").textValue());
+		assertEquals(List.of("1.1"), versionNumbers(
+				get("/api/v1/documents/" + next + "/versions").token(token).send().json().path("items")));
 	}
 
 	@Test
@@ -625,6 +651,14 @@ public class FilingTest extends ApiTestCase {
 	private static void assertBadRequest(ApiResponse response) {
 		assertEquals(response.toString(), 400, response.status());
 		assertEquals("bad-request", response.code());
+	}
+
+	/** @return the versions of a timeline, newest first */
+	private static List<String> versionNumbers(JsonNode items) {
+		List<String> versions = new ArrayList<>();
+		for (JsonNode v : items)
+			versions.add(v.path("version").textValue());
+		return versions;
 	}
 
 	private static JsonNode field(JsonNode items, String name) {
