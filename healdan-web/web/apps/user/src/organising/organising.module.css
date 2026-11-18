@@ -82,6 +82,16 @@
   color: var(--hd-text-secondary);
 }
 
+/* Under the folder filter; takes no room until it has words */
+.filterResult {
+  margin: 0;
+  color: var(--hd-text-secondary);
+}
+
+.filterResult:not(:empty) {
+  margin-top: var(--hd-space-3);
+}
+
 /* The title of a row being renamed: the field takes the name's place, with what is wrong beside it */
 .rename {
   display: flex;

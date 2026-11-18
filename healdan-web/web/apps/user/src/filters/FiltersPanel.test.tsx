@@ -65,6 +65,21 @@ describe('FiltersPanel', () => {
     expect(screen.getByRole('group', { name: 'Matter' })).toBeTruthy()
   })
 
+  it('names a ticked client and matter the counts have not offered', () => {
+    render(
+      <Panel
+        context="search"
+        facets={undefined}
+        initial={{ ...noFilters, client: ['1002', '1009'], matter: ['1002.1'] }}
+        clients={new Map([['1002', '1002 – Brightwell']])}
+        matters={new Map([['1002.1', '1002.1 – Commercial Lease']])}
+      />,
+    )
+    expect(screen.getByRole('checkbox', { name: '1002 – Brightwell' })).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: '1002.1 – Commercial Lease' })).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: '1009' })).toBeTruthy()
+  })
+
   it("says the counts are the most relevant matches' when the server says they are partial", () => {
     const { rerender } = render(<Panel />)
     expect(screen.queryByText('Counts from the most relevant matches')).toBeNull()

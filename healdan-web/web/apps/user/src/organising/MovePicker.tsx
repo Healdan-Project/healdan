@@ -216,7 +216,9 @@ function Folders({
     setFiltered(here)
     setFilter('')
   }
-  const wanted = filter.trim().toLocaleLowerCase()
+  const filterable = folders.length >= FILTER_FROM
+  // A refetch can take the field away; what was typed in it then hides nothing, as nothing could clear it
+  const wanted = filterable ? filter.trim().toLocaleLowerCase() : ''
   const listed = wanted ? folders.filter((one) => one.name.toLocaleLowerCase().includes(wanted)) : folders
   return (
     <>
@@ -226,8 +228,14 @@ function Folders({
         </Button>
       </div>
       <h3 className={styles.heading}>{view ? t('move.folders', { name: view.name }) : t('common.loading')}</h3>
-      {folders.length >= FILTER_FROM && (
-        <TextField label={t('move.filter')} value={filter} onChange={setFilter} />
+      {filterable && (
+        <div>
+          <TextField label={t('move.filter')} value={filter} onChange={setFilter} />
+          {/* There before it has words, so a screen reader says them as they come */}
+          <p role="status" className={styles.filterResult}>
+            {listed.length === 0 && t('move.nothing')}
+          </p>
+        </div>
       )}
       {subfolders.isError ? (
         <p className={styles.note}>{messageFor(subfolders.error)}</p>
@@ -241,7 +249,6 @@ function Folders({
         </ul>
       )}
       {subfolders.isSuccess && folders.length === 0 && <p className={styles.note}>{t('move.noFolders')}</p>}
-      {folders.length > 0 && listed.length === 0 && <p className={styles.note}>{t('move.nothing')}</p>}
       {why && (
         <p id={reasonId} className={styles.note}>
           {t(why)}

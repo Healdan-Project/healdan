@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.UnaryOperator;
 
 import org.apache.commons.lang.StringUtils;
 import org.springframework.stereotype.Component;
@@ -33,6 +34,7 @@ import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.FolderChildPage;
 import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.api.model.MoveRequest;
+import com.logicaldoc.healdan.api.model.NamedFacetCount;
 import com.logicaldoc.healdan.api.model.NewFolder;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.RenameRequest;
@@ -45,6 +47,7 @@ import com.logicaldoc.healdan.listing.ListedPage;
 import com.logicaldoc.healdan.listing.ListingQuery;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.matter.MatterNames;
 import com.logicaldoc.healdan.navigation.RecentFolders;
 import com.logicaldoc.healdan.navigation.RecentFolders.RecentFolder;
 import com.logicaldoc.healdan.searchfolder.SearchFolderService;
@@ -414,9 +417,11 @@ public class FolderResource {
 						option.getValue()));
 			}
 		}
-		FacetNames names = new FacetNames(counts.get(Facets.CLIENT), counts.get(Facets.MATTER), reads);
+		MatterNames names = new MatterNames(counts.getOrDefault(Facets.CLIENT, Map.of()).keySet(),
+				counts.getOrDefault(Facets.MATTER, Map.of()).keySet(), reads);
 		return new FacetsView(options(counts.get(Facets.TYPE)), authors, options(counts.get(Facets.CLASS)),
-				names.clients(), names.matters(), partial ? Boolean.TRUE : null);
+				namedOptions(counts.get(Facets.CLIENT), names::client),
+				namedOptions(counts.get(Facets.MATTER), names::matter), partial ? Boolean.TRUE : null);
 	}
 
 	private static List<FacetCount> options(Map<String, Long> counts) {
@@ -424,6 +429,14 @@ public class FolderResource {
 			return null;
 		List<FacetCount> options = new ArrayList<>();
 		counts.forEach((value, count) -> options.add(new FacetCount(value, count)));
+		return options;
+	}
+
+	private static List<NamedFacetCount> namedOptions(Map<String, Long> counts, UnaryOperator<String> name) {
+		if (counts == null)
+			return null;
+		List<NamedFacetCount> options = new ArrayList<>();
+		counts.forEach((value, count) -> options.add(new NamedFacetCount(value, name.apply(value), count)));
 		return options;
 	}
 

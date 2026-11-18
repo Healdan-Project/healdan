@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useId, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, apiPath, type components } from '@healdan/api'
 import { Button, formatDateTime, formatSize, Icon, t, toast } from '@healdan/ui'
+import { launch } from '../actions/launch'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { messageFor } from '../frame/errors'
 import { fileIcon } from '../kindIcons'
@@ -26,12 +27,6 @@ const shownAs = (attachment: Attachment) => attachmentShownAs(attachment.type, a
 /** A version's query, or none for the current file */
 const versionQuery = (version?: string) => (version ? { version } : undefined)
 
-/**
- * For a link to an attachment. Dragged out of the page, to the Finder say, it would download outside the page, where the
- * web session is refused, and the refusal would be saved under the attachment's name.
- */
-const staysInPage = { draggable: false, onDragStart: (event: DragEvent) => event.preventDefault() }
-
 function Detail({ label, value }: { label: string; value: string | null }) {
   if (!value) return null
   return (
@@ -52,8 +47,13 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, noFiling, onP
   const queryClient = useQueryClient()
   const [saving, setSaving] = useState(false)
   // The attachment's own control, which stays when Save to Matter gives way to the # it was filed as
-  const main = useRef<HTMLButtonElement & HTMLAnchorElement>(null)
+  const main = useRef<HTMLButtonElement>(null)
+  const save = useRef<HTMLButtonElement>(null)
   const saveHadFocus = useRef(false)
+  useLayoutEffect(() => {
+    // Greyed out with the focus on it, the focus would fall to the page at the next paint, as below
+    if (noFiling !== undefined && save.current && save.current.ownerDocument.activeElement === save.current) main.current?.focus()
+  }, [noFiling])
   useEffect(() => {
     // The save the focus was on is gone: the focus would fall to the page, from where Esc reaches no dialog, so it goes to
     // the attachment, in the same chip
@@ -95,22 +95,26 @@ function Chip({ attachment, docNumber, version, folderId, canOpen, noFiling, onP
         <button ref={main} type="button" className={styles.chipMain} aria-label={t('email.previewAttachment', { name: attachment.name })} onClick={onPreview}>
           {label}
         </button>
-      ) : !canOpen ? (
-        // The person may preview the email but not download it, which the server would refuse
-        <button ref={main} type="button" className={styles.chipMain} disabled aria-label={t('email.downloadAttachment', { name: attachment.name })}>
+      ) : (
+        // Greyed out for someone who may preview the email but not download it, which the server would refuse. A button, as
+        // a link could be dragged out of the page or saved from its menu, where the web session is refused and the refusal
+        // would be saved under the attachment's name. The server records the download.
+        <button
+          ref={main}
+          type="button"
+          className={styles.chipMain}
+          disabled={!canOpen}
+          aria-label={t('email.downloadAttachment', { name: attachment.name })}
+          onClick={() => launch(api.url(apiPath`/v1/documents/${docNumber}/message/parts/${attachment.index}`, versionQuery(version)), attachment.name)}
+        >
           {label}
         </button>
-      ) : (
-        // A plain link to the attachment: the web session carries it, and the server records the download
-        <a ref={main} className={styles.chipMain} href={api.url(apiPath`/v1/documents/${docNumber}/message/parts/${attachment.index}`, versionQuery(version))} download={attachment.name} aria-label={t('email.downloadAttachment', { name: attachment.name })} {...staysInPage}>
-          {label}
-        </a>
       )}
       <span className={styles.chipSize}>{formatSize(attachment.size)}</span>
       {attachment.docNumber !== null ? (
         <span className={styles.saved}>{t('email.saved', { n: attachment.docNumber })}</span>
       ) : (
-        <Button variant="quiet" aria-label={t('email.saveAttachment', { name: attachment.name })} aria-describedby={noFiling} isDisabled={!canOpen || noFiling !== undefined} isPending={saving} onPress={(event) => void saveToMatter(event.target.ownerDocument.activeElement === event.target)}>
+        <Button ref={save} variant="quiet" aria-label={t('email.saveAttachment', { name: attachment.name })} aria-describedby={noFiling} isDisabled={!canOpen || noFiling !== undefined} isPending={saving} onPress={(event) => void saveToMatter(event.target.ownerDocument.activeElement === event.target)}>
           {t('email.saveToMatter')}
         </Button>
       )}
@@ -190,18 +194,11 @@ export function EmailView({ document, version, showActions }: PreviewProps) {
               <Icon name="chevronLeft" size={18} />
               {t('email.backToMessage')}
             </Button>
-            {/* The file itself, as a plain link the server records, whether or not its preview could be drawn */}
-            {document.canOpen ? (
-              <a className={styles.download} href={api.url(part, versionQuery(version))} download={viewing.name} aria-label={t('email.downloadAttachment', { name: viewing.name })} {...staysInPage}>
-                <Icon name="download" size={18} />
-                {t('details.download')}
-              </a>
-            ) : (
-              <Button variant="quiet" isDisabled aria-label={t('email.downloadAttachment', { name: viewing.name })}>
-                <Icon name="download" size={18} />
-                {t('details.download')}
-              </Button>
-            )}
+            {/* The file itself, which the server records, whether or not its preview could be drawn; a button, as on the chips */}
+            <Button variant="quiet" isDisabled={!document.canOpen} aria-label={t('email.downloadAttachment', { name: viewing.name })} onPress={() => launch(api.url(part, versionQuery(version)), viewing.name)}>
+              <Icon name="download" size={18} />
+              {t('details.download')}
+            </Button>
           </div>
           {shownAs(viewing) === 'pdf' ? (
             <PdfView key={source.path} document={document} source={source} showActions={false} />

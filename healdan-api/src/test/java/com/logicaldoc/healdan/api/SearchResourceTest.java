@@ -43,6 +43,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.search.ExtensionFilteredSearch;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.BulkHits;
@@ -878,6 +879,36 @@ public class SearchResourceTest extends ApiTestCase {
 
 		assertEquals(Map.of("998.9", "998.9"), names(facets.path("matter")));
 		assertEquals(Map.of("998", "998 \u2013 Healdan"), names(facets.path("client")));
+	}
+
+	/**
+	 * A matter whose own folder is deleted names nothing, as
+	 * {@code GET /matters/{id}} shows nothing: neither itself nor, as the
+	 * client's only matter, its client, even to the admin
+	 */
+	@Test
+	public void testFacetsNameNoMatterWhoseFolderIsDeleted() throws Exception {
+		Matter closed = fx.matter(fx.client(997, "Closing"), 1, "Closed", store, "Documents");
+		BulkHits bulk = new BulkHits();
+		List<Long> indexed = new ArrayList<>();
+		group(bulk, new ArrayList<>(), indexed, source(documents, "stray.pdf"), documents, 2, i -> "s-" + i + ".pdf",
+				"1.0", fx.user("jclarke"), null, "pdf", true, "1", false);
+		bulk.set(indexed, HealdanConstants.ATTR_CLIENT, Attribute.Type.STRING, "997", null);
+		bulk.evict(indexed);
+		bulk.index(indexed, "Notes on the harrierapi");
+		String query = "q=harrierapi&limit=1&facets=client,matter";
+
+		JsonNode facets = page(query, signIn(clerk)).path("facets");
+		assertEquals(Map.of("997", "997 \u2013 Closing"), names(facets.path("client")));
+		assertEquals(Map.of("997.1", "997.1 \u2013 Closed"), names(facets.path("matter")));
+
+		jdbc().update("update ld_folder set ld_deleted = 1 where ld_id = ?", closed.getFolderId());
+
+		for (String token : List.of(signIn(clerk), signInAdmin())) {
+			facets = page(query, token).path("facets");
+			assertEquals(Map.of("997", "997"), names(facets.path("client")));
+			assertEquals(Map.of("997.1", "997.1"), names(facets.path("matter")));
+		}
 	}
 
 	/**

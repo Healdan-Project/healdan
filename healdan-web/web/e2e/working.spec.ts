@@ -200,7 +200,7 @@ test('Quick Look shows an email as a message, with the sender\'s picture blocked
   await popup.close()
 
   // A chip that isn't a PDF or a picture downloads, through the web session as a navigation, under its own name
-  const [download] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('link', { name: `Download ${TEXT_NAME}` }).click()])
+  const [download] = await Promise.all([page.waitForEvent('download'), dialog.getByRole('button', { name: `Download ${TEXT_NAME}` }).click()])
   expect(download.suggestedFilename()).toBe(TEXT_NAME)
 
   // The attachment is a chip: Save to Matter files it as a document of its own, whose # the chip then shows

@@ -117,8 +117,9 @@ scopes have them; Folders, Matters and Clients don't.
 | **Client** | in search results only: the clients of the matters the results are in, such as `1001 – Saltmarsh Shipping Ltd` |
 | **Matter** | in search results only: the matters the results are in, such as `1001.1 – Charter Dispute` |
 
-A matter shows as its number alone if you can't open its own folder, and a client if you can't open the own folder of
-any of its matters.
+In the Filters panel, a matter shows as its number alone if you can't open its own folder, and a client if you can't
+open the own folder of any of its matters. A result still names the matter it's in, so the filter's chip above the
+list, or a ticked filter the panel has no count for, can show that name.
 
 Today and the days of a range are your own: they follow your computer's time zone, as the dates in the list do. A
 document saved late in the evening counts as that day's, wherever the server is.

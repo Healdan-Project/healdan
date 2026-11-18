@@ -31,8 +31,8 @@ Select a filed email and press **Space**, or dock the preview as the reading pan
 - **The attachments** are chips under them, each with its size. Click a PDF's or a picture's to see it in place of the
   message, with **Back to Message** to return and **Download** to save the file. Healdan knows one by its type or by
   its name, as some mail programs send every file as a plain file. Any other file, a TIFF or a HEIC included,
-  downloads when you click its chip. A chip can't be dragged out of the page: click it, or use **Download**, to save
-  the file.
+  downloads when you click its chip. A chip isn't a link, so it can't be dragged out of the page: click it, or use
+  **Download**, to save the file.
 - **Then the message itself,** as the sender wrote it: their fonts, colours, tables and links. Healdan takes out
   anything that could run or fetch something on its own: scripts, forms, embedded pages and plug-ins. A link opens in
   a new window, and the page it opens can't reach back into Healdan.

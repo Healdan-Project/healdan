@@ -5,14 +5,18 @@ package com.logicaldoc.healdan.matter;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
 import com.logicaldoc.core.HibernatePersistentObjectDAO;
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.user.User;
 
 import jakarta.transaction.Transactional;
 
@@ -61,12 +65,48 @@ public class HibernateMatterDAO extends HibernatePersistentObjectDAO<Matter> imp
 	}
 
 	@Override
-	public List<Matter> findLiveByClients(Collection<Long> clientIds) throws PersistenceException {
-		if (clientIds.isEmpty())
+	public List<Matter> findLiveByClientsAndNumbers(Collection<Long> clientIds, Collection<Long> numbers)
+			throws PersistenceException {
+		if (clientIds.isEmpty() || numbers.isEmpty())
 			return List.of();
-		return findByWhere(
-				"_entity.clientId in (:clientIds) and _entity.folderId in (select f.id from Folder f where f.deleted = 0)",
-				Map.of("clientIds", clientIds), null, null);
+		return findByWhere("""
+				_entity.clientId in (:clientIds) and _entity.number in (:numbers)
+				and _entity.folderId in (select f.id from Folder f where f.deleted = 0)""",
+				Map.of("clientIds", clientIds, "numbers", numbers), null, null);
+	}
+
+	/** The clients, by their ids, that have a live matter */
+	private static final String WITH_LIVE_MATTER = """
+			select distinct m.hd_clientid
+			  from hd_matter m
+			  join ld_folder f on f.ld_id = m.hd_folderid
+			 where m.ld_deleted = 0
+			   and f.ld_deleted = 0
+			   and m.hd_clientid in (%s)
+			""";
+
+	/**
+	 * The matter's own folder is readable, as in
+	 * {@code FolderDAO.isReadAllowed}: one of the user's groups may read the
+	 * folder its permissions come from
+	 */
+	private static final String READABLE = """
+			   and exists (select 1 from ld_folder_acl a
+			                where a.ld_folderid = coalesce(f.ld_securityref, f.ld_id)
+			                  and a.ld_read = 1
+			                  and a.ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = :user))
+			""";
+
+	@Override
+	public Set<Long> findClientsWithReadableMatter(Collection<Long> clientIds, User user)
+			throws PersistenceException {
+		if (clientIds.isEmpty())
+			return Set.of();
+		// Ids, which CE's named statements can't take as a list
+		String sql = WITH_LIVE_MATTER
+				.formatted(clientIds.stream().map(String::valueOf).collect(Collectors.joining(",")));
+		return new HashSet<>(user.isAdmin() ? queryForList(sql, Long.class)
+				: queryForList(sql + READABLE, Map.of("user", user.getId()), Long.class, null));
 	}
 
 	/** The live matters in a Store */

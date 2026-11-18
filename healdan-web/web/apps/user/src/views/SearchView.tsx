@@ -148,6 +148,8 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               unavailable={facets.isError}
               busy={facets.isPlaceholderData}
               context="search"
+              clients={clients}
+              matters={matters}
               onChange={change}
               onClose={() => {
                 region.close()

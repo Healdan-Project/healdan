@@ -156,7 +156,8 @@ days the list's dates show. `useListing` sends them with every page; `filters/us
 asks for the counts on their own (`GET /folders/{id}/children` with `facets`, `limit=1`) only while the panel is open,
 and for the folder's count with no filters only while one is in use, which is the "7" of "3 of 7 documents".
 The chips name Authors, clients and matters from the list's rows and the panel's options (`useAuthorNames`,
-`useMatterNames`), and show a username or a number they have no name for.
+`useMatterNames`), and show a username or a number they have no name for. The panel takes the same client and matter
+names for a ticked option its counts don't offer.
 
 The right of a list is one region (`frame/RightRegion.tsx`): `useRightRegion()` gives `show` (`'filters'`, `'details'`,
 `'preview'` or null), `docked`, `open(kind)` and `close()`. Details are the default while a document is selected; the
@@ -441,9 +442,10 @@ attachments as chips, then the body. The body is `EmailBodyFrame`, an `<iframe>`
 Content-Security-Policy, so the app's (`AppServlet`'s) stays as it is. Pictures from the internet are removed from it
 until **Show Pictures**, which reloads the frame with `?pictures=true`, for that viewing only (`EmailView` has no
 state that outlives its document: `PreviewBody` keys it on the document). A chip is a button that previews a PDF or a
-picture in place of the body (`/message/parts/{id}?inline=true`, with **Back to Message**) or a plain link that
-downloads anything else, which can't be dragged out of the page: a download started there has no `Sec-Fetch-Site`, so
-the web session would refuse it and the refusal would be saved under the file's name. **Save to Matter** posts to
+picture in place of the body (`/message/parts/{id}?inline=true`, with **Back to Message**) or downloads anything else
+through `launch`. It's no link, and neither is **Download** beside **Back to Message**: a link could be dragged out of
+the page or saved from its menu, and a download started there can lack the `Sec-Fetch-Site` the web session needs, so
+the refusal would be saved under the file's name. **Save to Matter** posts to
 `/message/attachments/{id}/file`, is greyed out when the email's folder has `canFile: false` (asked only while an
 attachment could be saved), and the chip shows the new document's # when the message is read again. `working.spec.ts` checks the whole path in both browsers, with a tracking
 picture on a host that never resolves.
