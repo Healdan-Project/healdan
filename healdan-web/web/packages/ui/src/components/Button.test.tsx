@@ -45,13 +45,13 @@ describe('Button', () => {
     // The module's rules are in the page (vite.config.ts), so what jsdom applies to each state is compared, not their text.
     // Each colour token gets a value of its own, so a state that took another token would look different.
     const tokens = document.head.appendChild(document.createElement('style'))
-    tokens.textContent = `:root { ${['text', 'text-muted', 'line', 'accent-fill', 'accent-on-fill', 'button-secondary', 'button-secondary-line'].map((name, i) => `--hd-${name}: rgb(${i + 1}, 0, 0);`).join(' ')} }`
+    tokens.textContent = `:root { ${['text', 'text-muted', 'line', 'accent-fill', 'accent-on-fill', 'button-secondary', 'button-secondary-line', 'danger-fill', 'danger-on-fill'].map((name, i) => `--hd-${name}: rgb(${i + 1}, 0, 0);`).join(' ')} }`
     onTestFinished(() => tokens.remove())
     const look = (button: HTMLElement) => {
       const style = getComputedStyle(button)
       return { color: style.color, background: style.backgroundColor, border: style.borderColor }
     }
-    for (const variant of ['default', 'secondary', 'quiet'] as const) {
+    for (const variant of ['default', 'secondary', 'quiet', 'danger'] as const) {
       const { unmount } = render(
         <>
           <Button variant={variant} aria-label="Enabled">Enabled</Button>
@@ -86,8 +86,18 @@ describe('Button', () => {
     expect(buttonCss).toMatch(/\.button:not\(\.default\):not\(\.danger\)\[aria-pressed='true'\]/)
   })
 
+  it('the danger button takes its face and text from the danger tokens', () => {
+    const tokens = document.head.appendChild(document.createElement('style'))
+    tokens.textContent = ':root { --hd-danger-fill: rgb(196, 43, 28); --hd-danger-on-fill: rgb(255, 255, 255); }'
+    onTestFinished(() => tokens.remove())
+    render(<Button variant="danger">Remove</Button>)
+    const button = screen.getByRole('button', { name: 'Remove' })
+    expect(getComputedStyle(button).backgroundColor).toBe('rgb(196, 43, 28)')
+    expect(getComputedStyle(button).color).toBe('rgb(255, 255, 255)')
+  })
+
   it('passes axe', async () => {
-    const { container } = render(<><Button>Cancel</Button><Button variant="default">Save</Button><Button variant="quiet" aria-label="More">⋯</Button></>)
+    const { container } = render(<><Button>Cancel</Button><Button variant="default">Save</Button><Button variant="danger">Remove</Button><Button variant="quiet" aria-label="More">⋯</Button></>)
     await expectNoAxeViolations(container)
   })
 })

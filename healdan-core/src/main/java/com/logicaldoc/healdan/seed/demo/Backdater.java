@@ -112,6 +112,19 @@ public final class Backdater {
 	}
 
 	/**
+	 * Dates the Trash item a delete recorded, whose time is the real one. A
+	 * delete records no member with a time of its own while the rows are
+	 * deleted, so the item's is the only one.
+	 *
+	 * @param kind {@code document} or {@code folder}
+	 * @param objectId the id of the document or folder the delete was of
+	 */
+	public void touchTrash(String kind, long objectId, Date when) {
+		jdbc.update("update hd_trash set hd_deletedat = ? where hd_kind = ? and hd_objectid = ?",
+				new Timestamp(when.getTime()), kind, objectId);
+	}
+
+	/**
 	 * Clears every region of the second-level cache (entities, collections and
 	 * queries), since the writes above can touch any of the tables
 	 */

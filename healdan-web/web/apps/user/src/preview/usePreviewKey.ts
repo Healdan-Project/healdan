@@ -12,12 +12,14 @@ export function documentsOf(items: { type: string }[]): DocumentView[] {
 }
 
 /**
- * What a list does with Space on a row (rows are keyed `d<number>`): selects the document, as a click does, and opens
- * Quick Look on it. Folders and matters have no preview, so Space on them does nothing.
+ * What a list does with Space on a row (rows are keyed `d<number>` and `f<id>`): selects the document, as a click does, and
+ * opens Quick Look on it. A folder has no preview, so Space only selects it, as it selects a document (folders and Trash
+ * spec 7.5); a matter, which isn't selected, it leaves alone.
  */
 export function usePreviewKey(select: (keys: Set<string>) => void): (key: string) => void {
   const quickLook = useQuickLook()
   return (key) => {
+    if (key.startsWith('f')) return select(new Set([key]))
     if (!key.startsWith('d')) return
     select(new Set([key]))
     quickLook.open(Number(key.slice(1)))

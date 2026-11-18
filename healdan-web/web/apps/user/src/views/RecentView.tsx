@@ -12,6 +12,7 @@ import { isRecentKind } from '../search/scopes'
 import { DocumentListPage, ListPage } from './DocumentListPage'
 import { NotFound } from './NotFound'
 import { hitColumns, rowOf } from './listColumns'
+import { useRowSelection } from './useRowSelection'
 import styles from './views.module.css'
 
 type S = components['schemas']
@@ -21,8 +22,6 @@ function RecentDocuments({ kind }: { kind: 'documents' | 'emails' }) {
   const columns = useMemo(() => hitColumns('documents'), [])
   return <DocumentListPage heading={t(`recent.heading.${kind}`)} empty={t(`recent.empty.${kind}`)} actionsLabel={t('recent.actions')} query={recent} columns={columns} />
 }
-
-const NONE: ReadonlySet<string> = new Set()
 
 /**
  * /recent/<kind> (and the start page, which is Recent Documents): what the person worked on lately, in the order the
@@ -42,9 +41,23 @@ function RecentFolders() {
   const items = recent.data?.items
   const rows = useMemo(() => (items ?? []).map(rowOf), [items])
   const columns = useMemo(() => hitColumns('folders'), [])
-  // F2 renames the focused folder. A folder's row is never selected, so its menu leaves the (empty) selection as it is
-  const organising = useOrganisingTable(items ?? [], NONE)
-  return <ListPage heading={t('recent.heading.folders')} empty={t('recent.empty.folders')} columns={columns} rows={rows} query={recent} contextMenu={organising.contextMenu} organising={{ onRename: organising.tableProps.onRename }} onOpen={(key) => void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })} />
+  // Folders select as documents do (folders and Trash spec 7.5): F2 renames the focused one, Delete asks about the selection,
+  // and a right-click selects the row first
+  const { selection, change } = useRowSelection(items)
+  const organising = useOrganisingTable(items ?? [], selection, change)
+  return (
+    <ListPage
+      heading={t('recent.heading.folders')}
+      empty={t('recent.empty.folders')}
+      columns={columns}
+      rows={rows}
+      query={recent}
+      selection={{ keys: selection, change }}
+      contextMenu={organising.contextMenu}
+      organising={organising.tableProps}
+      onOpen={(key) => void navigate({ to: '/folders/$id', params: { id: key.slice(1) } })}
+    />
+  )
 }
 
 interface ClientRow extends TableRow {

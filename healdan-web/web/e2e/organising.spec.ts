@@ -167,14 +167,14 @@ test('moves two rows by dragging them onto a folder of the tree, and deletes two
   expect((await document(numbers.dragOne)).folder.id).toBe(folders.dragged)
   expect((await document(numbers.dragTwo)).folder.id).toBe(folders.dragged)
 
-  // Delete asks first, naming both, and says where the Trash is
+  // Delete asks first, naming both, and says where they can be restored from
   await selectTwo(list, NAMES.deleteTwo, NAMES.deleteOne)
   await page.keyboard.press('Delete')
-  const question = page.getByRole('dialog', { name: 'Move 2 documents to the Trash?' })
+  const question = page.getByRole('dialog', { name: 'Move 2 items to the Trash?' })
   // Both are named, whatever their order in the list
   await expect(question.getByRole('listitem')).toHaveCount(2)
   expect((await question.getByRole('listitem').allTextContents()).sort()).toEqual([NAMES.deleteOne, NAMES.deleteTwo].sort())
-  await expect(question.getByText('The Trash is in the Classic Interface, where they can be restored.')).toBeVisible()
+  await expect(question.getByText('You can restore them from the Trash, at the foot of the left pane.')).toBeVisible()
   await question.getByRole('button', { name: 'Cancel' }).click()
   await expect(question).toHaveCount(0)
   expect((await document(numbers.deleteOne)).name).toBe(NAMES.deleteOne)
@@ -183,8 +183,8 @@ test('moves two rows by dragging them onto a folder of the tree, and deletes two
   // it has gone, which a slow WebKit did after the next key (2026-11-14): Delete waits for it, as a person waits for the ring
   await expect.poll(() => row(list, NAMES.deleteOne).evaluate((element) => element.contains(globalThis.document.activeElement))).toBe(true)
   await page.keyboard.press('Delete')
-  await page.getByRole('dialog', { name: 'Move 2 documents to the Trash?' }).getByRole('button', { name: 'Move to Trash' }).click()
-  await expect(page.getByText('Moved 2 documents to the Trash')).toBeVisible()
+  await page.getByRole('dialog', { name: 'Move 2 items to the Trash?' }).getByRole('button', { name: 'Move to Trash' }).click()
+  await expect(page.getByText('Moved 2 items to the Trash')).toBeVisible()
   await expect(row(list, NAMES.deleteOne)).toHaveCount(0)
   for (const key of ['deleteOne', 'deleteTwo'] as const) {
     const gone = await api!.get(`/api/v1/documents/${numbers[key]}`, authorized(token))

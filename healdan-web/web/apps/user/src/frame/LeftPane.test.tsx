@@ -406,6 +406,21 @@ describe('LeftPane', () => {
     expect(document.body.textContent).not.toContain('server sentence')
   })
 
+  it('ends with the Trash, apart from the sections, which is the open entry at its address', async () => {
+    const { router } = await renderApp('/folders/1')
+    const links = within(pane()).getAllByRole('link')
+    const trash = links.at(-1)!
+    expect(trash.textContent).toBe('Trash')
+    expect(trash.getAttribute('href')).toBe('/app/trash')
+    expect(trash.hasAttribute('aria-current')).toBe(false)
+    // Not inside a section of the pane
+    expect(trash.closest('section')).toBeNull()
+
+    fireEvent.click(trash)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/trash'))
+    await waitFor(() => expect(within(pane()).getByRole('link', { name: 'Trash' }).getAttribute('aria-current')).toBe('page'))
+  })
+
   it('passes axe, with a check-out showing in the entry', async () => {
     await renderApp('/checked-out', { 'GET /v1/me/checkouts': page([documentView({ docNumber: 1 })]) })
     await within(pane()).findByRole('link', { name: 'Checked Out to Me, 1 document' })

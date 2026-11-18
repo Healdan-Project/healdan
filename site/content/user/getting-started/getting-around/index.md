@@ -44,6 +44,8 @@ The left pane scrolls on its own when it's longer than the window. From the top 
 - **My Favorites:** documents and folders you've added as favourites, each with the icon of its kind, as in the
   lists, folders first and then by name. The star beside a folder's name, or beside a document's name in its details,
   adds one. A favourite can have a name of its own: see [A Favourite's Own Name](#a-favourites-own-name).
+- **Trash:** at the foot, apart from the sections above it, what you deleted, which you can restore from there. See
+  [The Trash](../../documents/the-trash/).
 
 [My Matters and Recent Matters](../../finding-documents/my-matters-and-recent-matters/) explains the first two.
 If your firm calls matters something else, such as projects, the headings use its word: Recent Projects and My
@@ -161,8 +163,9 @@ is a shortcut, never the only way.
   computers; **Rename**, **Move To…** and **Delete**; **Copy Link** and **Add to Favorites** (or **Remove
   from Favorites**). They work as the toolbar's buttons and its **⋯** (More) menu do.
 - **A folder,** in a list or in the **My Matters** tree: **Open**, **Open in New Tab**, **New Folder** where you can
-  make one (inside a matter, and never in a search folder), **Rename** (greyed out where you can't rename the folder,
-  and on a matter's own folder), and **Add to Favorites** or **Remove from Favorites**.
+  make one (inside a matter, and never in a search folder), **Rename**, **Move To…** and **Delete** (each greyed
+  out where you can't do it to the folder, and **Rename** on a matter's own folder, which has no **Move To…** or
+  **Delete** either), and **Add to Favorites** or **Remove from Favorites**.
 - **A matter,** in **My Matters**, **Recent Matters** or a search for matters: **Open**, **Open in New Tab**,
   **Rename**, which is always greyed out (a matter takes its name from **Edit Matter…** in the Classic Interface), and
   **Add to My Matters** or **Remove from My Matters**.
@@ -171,8 +174,8 @@ is a shortcut, never the only way.
 
 Right-clicking a document that isn't selected selects it first, in place of what was selected, as the Finder does.
 Right-clicking one of several selected documents keeps them all selected, and the menu then acts on all of them: only
-**Move To…**, **Delete** and, when they're all checked out to you, **Release** take several documents, so the rest are
-greyed out, as they are on the toolbar.
+**Move To…**, **Delete** and, when they're all checked out to you, **Release** take several documents, and
+**Move To…** and **Delete** folders too, so the rest are greyed out, as they are on the toolbar.
 
 **Open in New Tab** opens the document's or folder's page in a new browser tab. Anywhere else, such as a text box, the
 search box, an email's message, a preview, or the space in a list below its last row, right-clicking shows your
@@ -198,7 +201,8 @@ once the list has the focus.
 | Enter | Opens the document in its app (the Healdan Helper), or a folder |
 | Space | Opens Quick Look; Esc closes it |
 | F2 | Renames the selected document in place, the folder with the focus in a list or in the **My Matters** tree, or in **My Favorites** the favourite with the focus |
-| Delete | Moves the selected documents to the Trash, after asking |
+| Delete | Moves the selected documents and folders, or the folder with the focus in the **My Matters** tree, to the Trash, after asking |
+| F6 | Moves to the message that follows a delete, where Tab reaches **Undo** |
 | Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row, tree item or left-pane link with the focus; Esc closes it |
 | Option-Enter on **Upload** | Files with the form first |
 

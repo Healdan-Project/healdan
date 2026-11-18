@@ -29,6 +29,8 @@ function items(count: number): Item[] {
 }
 
 const folderRow: Item = { id: 'f1', textValue: 'Pleadings', name: 'Pleadings', selectable: false }
+// A folder that can be selected, with the documents, though a click opens it
+const openingRow: Item = { id: 'f2', textValue: 'Drafts', name: 'Drafts', opensOnClick: true }
 
 type HarnessProps = Partial<Omit<TableProps<Item>, 'selection' | 'onSelectionChange'>> & {
   initial?: string[]
@@ -117,6 +119,59 @@ describe('Table', () => {
     await user.dblClick(within(row(/Letter 2/)).getByRole('rowheader'))
     expect(onOpen).toHaveBeenLastCalledWith('d2')
     expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(['d2']))
+  })
+
+  it('opens a row that opens on a click, and selects it with Shift or Cmd as any row', async () => {
+    const user = userEvent.setup()
+    const onOpen = vi.fn()
+    const onSelectionChange = vi.fn()
+    render(<Harness rows={[openingRow, ...items(2)]} onOpen={onOpen} onSelectionChange={onSelectionChange} />)
+    await user.click(within(row(/Drafts/)).getByRole('rowheader'))
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith('f2')
+    expect(onSelectionChange).not.toHaveBeenCalled()
+
+    await user.click(within(row(/Letter 1/)).getByRole('rowheader'))
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(['d1']))
+    await user.keyboard('{Shift>}')
+    await user.click(within(row(/Drafts/)).getByRole('rowheader'))
+    await user.keyboard('{/Shift}')
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(['f2', 'd1']))
+    expect(row(/Drafts/).getAttribute('aria-selected')).toBe('true')
+    // Cmd on a Mac; jsdom isn't one, so React Aria takes Ctrl there
+    await user.keyboard('{Control>}')
+    await user.click(within(row(/Drafts/)).getByRole('rowheader'))
+    await user.keyboard('{/Control}')
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(['d1']))
+    expect(onOpen).toHaveBeenCalledOnce()
+  })
+
+  it('opens a row that opens on a click once for a double-click, and leaves a right-click to the menu', async () => {
+    const user = userEvent.setup()
+    const onOpen = vi.fn()
+    const onSelectionChange = vi.fn()
+    render(<Harness rows={[openingRow, ...items(1)]} onOpen={onOpen} onSelectionChange={onSelectionChange} />)
+    await user.dblClick(within(row(/Drafts/)).getByRole('rowheader'))
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith('f2')
+    await user.pointer({ keys: '[MouseRight]', target: within(row(/Drafts/)).getByRole('rowheader') })
+    expect(onOpen).toHaveBeenCalledOnce()
+    expect(onSelectionChange).not.toHaveBeenCalled()
+  })
+
+  it('leaves a tap on a row that opens on a click to React Aria, which opens it once', async () => {
+    const user = userEvent.setup()
+    const onOpen = vi.fn()
+    render(<Harness rows={[openingRow, ...items(1)]} onOpen={onOpen} />)
+    await user.pointer({ keys: '[TouchA]', target: within(row(/Drafts/)).getByRole('rowheader') })
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith('f2')
+  })
+
+  it('selects a row that opens on a click with the arrows, as any row', () => {
+    const onSelectionChange = vi.fn()
+    render(<Harness rows={[...items(1), openingRow]} onSelectionChange={onSelectionChange} />)
+    const first = row(/Letter 1/)
+    act(() => first.focus())
+    press(first, 'ArrowDown')
+    expect(onSelectionChange).toHaveBeenLastCalledWith(new Set(['f2']))
   })
 
   it('works from the keyboard: the arrows move the selection; Enter opens, Space previews, F2 renames, Delete deletes', () => {

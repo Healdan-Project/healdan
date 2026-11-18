@@ -3,7 +3,7 @@
 
 import { expect, test, type APIRequestContext, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import { expectNoViolations } from './axe'
-import { PASSWORD, USERNAME, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
+import { PASSWORD, USERNAME, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, secondMatterFolders, signIn, specsFolder } from './helpers'
 
 // Signed-in Devices fits its dialog: nothing scrolls sideways, every Revoke is inside the dialog, and at 1280 a device's name
 // takes no more than two lines (the dialog is as wide as its table needs; at 768 a name may wrap between words further)
@@ -39,6 +39,9 @@ const PDF = `Accessible ${RUN}.pdf`
 const TEXT = `Plain ${RUN}.txt`
 const SUBJECT = `Accessible email ${RUN}`
 const WORK = `Access ${RUN}`
+// The folders and the Trash are checked from a folder of their own, so the list above holds nothing of them
+const TRASH_HOME = `Access Trash ${RUN}`
+const TRASH_DOCUMENT = `Trashed ${RUN}.txt`
 // Checked out through the API, so a held row, with its marker, is on screen while axe looks
 const HELD = `Held ${RUN}.txt`
 
@@ -67,6 +70,8 @@ let matterFolder = 0
 let pdfNumber = 0
 let emailNumber = 0
 let heldNumber = 0
+let trashHome = 0
+let secondMatterFolder = 0
 
 test.beforeAll(async ({ playwright }, testInfo) => {
   expect(PASSWORD, 'WEBUSER_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
@@ -82,12 +87,18 @@ test.beforeAll(async ({ playwright }, testInfo) => {
   emailNumber = await fileDocument(api, token, workFolder, `${SUBJECT}.eml`, 'message/rfc822', email())
   heldNumber = await fileDocument(api, token, workFolder, HELD, 'text/plain', Buffer.from(`held ${RUN}`))
   await call(api.post(`/api/v1/documents/${heldNumber}/checkout`, { ...authorized(token), data: {} }), 'checking the held document out')
+  const home = await call<{ id: number }>(api.post('/api/v1/folders', { ...authorized(token), data: { parentId: await specsFolder(api, token, where.documents), name: TRASH_HOME } }), 'making the Trash folder')
+  trashHome = home.id
+  // Matter 1.4, which the move picker offers from My Matters, for the question before a folder leaves its matter
+  secondMatterFolder = (await secondMatterFolders(api, token)).matter
+  await call(api.put(`/api/v1/me/matters/${secondMatterFolder}`, authorized(token)), 'adding matter 1.4 to My Matters')
 })
 
 test.afterAll(async () => {
   if (!api) return
   // Released before its device's token goes, so no run leaves a row held that nobody can release from the app
   if (token && heldNumber) await api.delete(`/api/v1/documents/${heldNumber}/checkout`, authorized(token))
+  if (token && secondMatterFolder) await api.delete(`/api/v1/me/matters/${secondMatterFolder}`, authorized(token))
   if (token) await api.delete('/api/v1/auth/tokens/current', authorized(token))
   await api.dispose()
 })
@@ -271,13 +282,85 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.keyboard.press('Escape')
       await expect(row).toBeFocused()
       await page.keyboard.press('Delete')
-      await expect(page.getByRole('dialog', { name: 'Move 1 document to the Trash?' })).toBeVisible()
+      await expect(page.getByRole('dialog', { name: `Move "${TEXT}" to the Trash?` })).toBeVisible()
       await check('the delete question')
       await page.keyboard.press('Escape')
       await page.getByRole('banner').getByRole('button', { name: 'Help' }).click()
       await expect(page.getByRole('menu')).toBeVisible()
       await check('the Help menu')
       await page.keyboard.press('Escape')
+    })
+
+    test('folders and the Trash: the delete question and its toast, the picker and the question before a folder leaves its matter, the Trash and its questions', async () => {
+      const trash = async (folderName: string, documentName?: string) => {
+        const made = await call<{ id: number }>(api!.post('/api/v1/folders', { ...authorized(token), data: { parentId: trashHome, name: folderName } }), `making ${folderName}`)
+        if (documentName) await fileDocument(api!, token, made.id, documentName, 'text/plain', Buffer.from(`trashed ${RUN}`))
+        return made.id
+      }
+      const first = `Delete ${scheme} ${RUN}`
+      const second = `Move ${scheme} ${RUN}`
+      await trash(first, `${scheme} ${TRASH_DOCUMENT}`)
+      await trash(second)
+      await page.goto(`/app/folders/${trashHome}?sort=title&order=asc`)
+      const row = (folderName: string) => main().getByRole('grid').getByRole('row', { name: escape(folderName) })
+      await expect(row(first)).toBeVisible()
+
+      // The question for a folder, with the line of what it holds, then the toast that follows it, with Undo
+      await row(first).focus()
+      await page.keyboard.press('Delete')
+      const question = page.getByRole('dialog', { name: `Move "${first}" to the Trash?` })
+      await expect(question.getByText(/1 document/)).toBeVisible()
+      await check('the delete question with a folder')
+      await page.keyboard.press('Enter')
+      await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible()
+      await check('the toast with Undo')
+
+      // The picker for a folder, in the folder that holds it: the folder itself greyed out with why, and Move Here greyed out
+      // with its reason
+      await row(second).getByRole('rowheader').click({ button: 'right' })
+      await page.getByRole('menu', { name: `Actions for ${second}` }).getByRole('menuitem', { name: 'Move To…' }).click()
+      const picker = page.getByRole('dialog', { name: `Move "${second}"` })
+      await picker.getByRole('button', { name: /Smoke Matter/ }).first().click()
+      await picker.getByRole('button', { name: /^Documents/ }).click()
+      await picker.getByRole('button', { name: /^E2E/ }).click()
+      await picker.getByRole('button', { name: escape(TRASH_HOME) }).click()
+      await expect(picker.getByRole('heading', { name: `Folders in ${TRASH_HOME}` })).toBeVisible()
+      await expect(picker.getByText('The folder itself')).toBeVisible()
+      await expect(picker.getByText('Already there')).toBeVisible()
+      await check('the Move To… picker with greyed choices')
+      // Then out of the matter: the question that asks first
+      // Up to the list of matters, a level at a time
+      for (let i = 0; i < 6 && !(await picker.getByRole('button', { name: /Second Matter/ }).first().isVisible()); i++) await picker.getByRole('button', { name: /^(Back to|Up One Level)/ }).click()
+      await picker.getByRole('button', { name: /Second Matter/ }).first().click()
+      await picker.getByRole('button', { name: /^Documents/ }).click()
+      await picker.getByRole('button', { name: 'Move Here' }).click()
+      const crossing = page.getByRole('dialog', { name: /^Move ".*" into .*Second Matter\?$/ })
+      await expect(crossing).toBeVisible()
+      await check('the question before a folder leaves its matter')
+      await crossing.getByRole('button', { name: 'Cancel' }).click()
+      await expect(crossing).toHaveCount(0)
+
+      // The Trash, with what the person deleted, its details, and each question; then emptied
+      await page.goto('/app/trash')
+      await expect(main().getByRole('heading', { level: 1, name: 'Trash' })).toBeVisible()
+      const item = main().getByRole('grid').getByRole('row', { name: escape(first) })
+      await expect(item).toBeVisible()
+      await check('the Trash')
+      await item.getByRole('rowheader').click()
+      await expect(page.getByRole('region', { name: 'Details' })).toBeVisible()
+      await check('the Trash with an item selected')
+      await main().getByRole('toolbar', { name: 'Trash Actions' }).getByRole('button', { name: 'Remove…' }).click()
+      const remove = page.getByRole('dialog', { name: `Remove "${first}" from the Trash?` })
+      await expect(remove.getByText(/An administrator can, for \d+ days\./)).toBeVisible()
+      await check('the Remove question')
+      await remove.getByRole('button', { name: 'Cancel' }).click()
+      await main().getByRole('toolbar', { name: 'Trash Actions' }).getByRole('button', { name: 'Empty Trash…' }).click()
+      const empty = page.getByRole('dialog', { name: 'Empty the Trash?' })
+      await expect(empty).toBeVisible()
+      await check('the Empty Trash question')
+      await empty.getByRole('button', { name: 'Empty Trash', exact: true }).click()
+      await expect(main().getByText('Nothing in the Trash.')).toBeVisible()
+      await check('the empty Trash')
     })
 
     test('search results for a word, with their Filters', async () => {

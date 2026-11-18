@@ -65,7 +65,8 @@ describe('the address', () => {
   it('keeps repeated filters, the selection and the sort through a round trip', async () => {
     const router = await at('/folders/7?type=pdf&type=word&author=pnair&sel=10388&sort=author&order=desc')
     expect(router.state.location.search).toMatchObject({ type: ['pdf', 'word'], author: ['pnair'], sel: '10388', sort: 'author', order: 'desc' })
-    await router.navigate({ to: '/folders/$id', params: { id: '7' }, search: (prev) => ({ ...prev, from: '2026-11-01' }) })
+    // As a filter changes it, where it is: the Trash's sorts aren't a folder's, so a search kept whole is typed for any route
+    await router.navigate({ to: '.', search: (prev) => ({ ...prev, from: '2026-11-01' }) })
     expect(router.history.location.search).toBe('?type=pdf&type=word&author=pnair&sel=10388&sort=author&order=desc&from=2026-11-01')
   })
 })

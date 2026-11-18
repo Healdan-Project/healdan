@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { Button, Tree as AriaTree, TreeItem as AriaTreeItem, TreeItemContent, type Key } from 'react-aria-components'
 import { Icon } from '../icons'
 import { t } from '../strings'
@@ -42,17 +42,48 @@ export interface TreeProps {
   contextMenu?: ItemMenu
   /** F2 on a row: rename what it stands for */
   onRename?: (id: string) => void
+  /** Delete, or the Mac's delete key (Backspace), on a row: delete what it stands for */
+  onDelete?: (id: string) => void
+  /**
+   * What a drag of a row carries, under `type`: a row drags only when `data` gives it a payload, as a move (the browser's own
+   * drag and drop, as the Table's rows)
+   */
+  drag?: { type: string; data: (id: string) => string | undefined }
 }
 
 const loadingSuffix = '\u0000loading'
 
 // The caller owns what is expanded and what is loaded, so a node's children can be fetched when it is first expanded.
-export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acceptsDrop, onDrop, contextMenu, onRename, ...rest }: TreeProps) {
+export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acceptsDrop, onDrop, contextMenu, onRename, onDelete, drag, ...rest }: TreeProps) {
   // The node something is being dragged over, and takes
   const [over, setOver] = useState<string | undefined>()
   // How many elements of the tree the drag is inside: dragenter and dragleave come in pairs for each element it crosses, and
   // WebKit may name none as dragleave's relatedTarget, which is why they are counted
   const inside = useRef(0)
+
+  // React Aria's TreeItem has no prop for it, so a row takes `draggable` from `drag` when it's drawn (React Aria draws rows
+  // after the tree, and apart from it), and every row drawn already takes it again after each render, as what a row carries
+  // can change (a row whose name is a field drags nothing). The row's callback reads the latest `drag`, as the Table's does.
+  const latestDrag = useRef(drag)
+  const frame = useRef<HTMLDivElement>(null)
+  const canDrag = (id: string) => latestDrag.current !== undefined && latestDrag.current.data(id) !== undefined
+  useEffect(() => {
+    latestDrag.current = drag
+    for (const row of frame.current?.querySelectorAll<HTMLElement>('[role="row"][data-tree-key]') ?? []) row.draggable = canDrag(row.getAttribute('data-tree-key') ?? '')
+  })
+
+  // A drag that starts on a row carries what `drag` gives for it; one on a row with nothing to carry is cancelled, and text
+  // dragged out of a field in a row is the field's
+  function onDragStart(event: DragEvent<HTMLDivElement>) {
+    if (!drag) return
+    const target = event.target instanceof Element ? event.target : null
+    if (target?.closest('input, textarea')) return
+    const id = target?.closest('[data-tree-key]')?.getAttribute('data-tree-key')
+    const data = id ? drag.data(id) : undefined
+    if (data === undefined) return event.preventDefault()
+    event.dataTransfer.setData(drag.type, data)
+    event.dataTransfer.effectAllowed = 'move'
+  }
 
   function dropProps(node: TreeNode) {
     if (!acceptsDrop) return {}
@@ -99,6 +130,7 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acc
         ref={(row) => {
           if (current === node.id) row?.setAttribute('aria-current', 'page')
           else row?.removeAttribute('aria-current')
+          if (row) row.draggable = canDrag(node.id)
         }}
       >
         <TreeItemContent>
@@ -132,22 +164,23 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acc
     )
   }
 
-  // F2 is caught ahead of React Aria's keys, as the Table does, and with Alt, Ctrl or ⌘ left alone, as the Table leaves it. A
-  // field inside a row stops its own keys, so typing never gets here.
+  // F2, Delete and Backspace are caught ahead of React Aria's keys, as the Table does, and with Alt, Ctrl or ⌘ left alone, as
+  // the Table leaves them. A field inside a row stops its own keys, so typing never gets here. The Loading row stands for
+  // nothing, and has no key.
   function onKeyDownCapture(event: KeyboardEvent<HTMLDivElement>) {
     const target = event.target instanceof Element ? event.target : null
-    if (!onRename || event.key !== 'F2' || target?.getAttribute('role') !== 'row') return
-    if (event.altKey || event.ctrlKey || event.metaKey) return
+    if (target?.getAttribute('role') !== 'row' || event.altKey || event.ctrlKey || event.metaKey) return
+    const handler = event.key === 'F2' ? onRename : event.key === 'Delete' || event.key === 'Backspace' ? onDelete : undefined
     const id = target.getAttribute('data-tree-key')
-    if (!id || id.endsWith(loadingSuffix)) return
+    if (!handler || !id || id.endsWith(loadingSuffix)) return
     event.preventDefault()
     event.stopPropagation()
-    onRename(id)
+    handler(id)
   }
 
   return (
     <ItemContextMenu attribute="data-tree-key" menu={contextMenu}>
-      <div className={styles.frame} onKeyDownCapture={onKeyDownCapture}>
+      <div ref={frame} className={styles.frame} onKeyDownCapture={onKeyDownCapture} onDragStart={onDragStart}>
         <AriaTree
           {...rest}
           className={styles.tree}

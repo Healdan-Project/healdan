@@ -30,12 +30,14 @@ function Harness({
   current,
   contextMenu,
   onRename,
+  onDelete,
 }: {
   onAction?: (id: string) => void
   onExpand?: (id: string) => void
   current?: string
   contextMenu?: TreeProps['contextMenu']
   onRename?: TreeProps['onRename']
+  onDelete?: TreeProps['onDelete']
 }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   return (
@@ -51,6 +53,7 @@ function Harness({
       onAction={onAction}
       contextMenu={contextMenu}
       onRename={onRename}
+      onDelete={onDelete}
     />
   )
 }
@@ -177,6 +180,37 @@ describe('Tree', () => {
     expect(onRename).toHaveBeenCalledExactlyOnceWith('m1')
   })
 
+  it('deletes the focused row on Delete and on the Mac\'s delete key (Backspace), and leaves them with Alt, Ctrl or ⌘ alone', () => {
+    const onDelete = vi.fn()
+    render(<Harness onDelete={onDelete} />)
+    const first = screen.getByRole('row', { name: /1001\.1/ })
+    act(() => first.focus())
+    for (const key of ['Delete', 'Backspace']) {
+      fireEvent.keyDown(first, { key, altKey: true })
+      fireEvent.keyDown(first, { key, ctrlKey: true })
+      fireEvent.keyDown(first, { key, metaKey: true })
+    }
+    expect(onDelete).not.toHaveBeenCalled()
+    fireEvent.keyDown(first, { key: 'Delete' })
+    expect(onDelete).toHaveBeenLastCalledWith('m1')
+    const second = screen.getByRole('row', { name: /1002\.1/ })
+    act(() => second.focus())
+    fireEvent.keyDown(second, { key: 'Backspace' })
+    expect(onDelete).toHaveBeenLastCalledWith('m2')
+    expect(onDelete).toHaveBeenCalledTimes(2)
+  })
+
+  it('never deletes the Loading row an expanded node shows while its children come', () => {
+    const onDelete = vi.fn()
+    render(<Harness onDelete={onDelete} />)
+    fireEvent.click(screen.getAllByRole('button', { name: /expand/i })[1] as HTMLElement)
+    const loading = screen.getByRole('row', { name: 'Loading…' })
+    act(() => loading.focus())
+    fireEvent.keyDown(loading, { key: 'Delete' })
+    fireEvent.keyDown(loading, { key: 'Backspace' })
+    expect(onDelete).not.toHaveBeenCalled()
+  })
+
   it('shows Loading while an expanded node has no children yet', () => {
     render(<Harness />)
     fireEvent.click(screen.getAllByRole('button', { name: /expand/i })[1] as HTMLElement)
@@ -270,5 +304,53 @@ describe('Tree right-click menu', () => {
     render(<Harness contextMenu={contextMenu} />)
     fireEvent.click(screen.getAllByRole('button', { name: /expand/i })[0] as HTMLElement)
     expect(fireEvent.contextMenu(screen.getByRole('row', { name: /My Recent Docs/ }))).toBe(true)
+  })
+})
+
+describe('Tree drags', () => {
+  const type = 'application/x-test-rows'
+  /** A DataTransfer whose data is kept, as a drag's source writes it and a drop reads it */
+  function transfer() {
+    const stored = new Map<string, string>()
+    return { setData: (kind: string, data: string) => void stored.set(kind, data), getData: (kind: string) => stored.get(kind) ?? '', effectAllowed: 'uninitialized' }
+  }
+
+  function Draggable() {
+    return (
+      <Tree
+        aria-label="My Matters"
+        nodes={nodes}
+        expanded={new Set(['m1'])}
+        onExpandedChange={() => {}}
+        onAction={() => {}}
+        // A folder drags, a matter doesn't
+        drag={{ type, data: (id) => (id.startsWith('f') ? `payload of ${id}` : undefined) }}
+      />
+    )
+  }
+
+  it('makes a row draggable when its drag has a payload, and carries it under the type, as a move', () => {
+    render(<Draggable />)
+    const folder = screen.getByRole('row', { name: /Correspondence/ })
+    expect(folder.draggable).toBe(true)
+    const data = transfer()
+    expect(fireEvent.dragStart(folder, { dataTransfer: data })).toBe(true)
+    expect(data.getData(type)).toBe('payload of f1')
+    expect(data.effectAllowed).toBe('move')
+  })
+
+  it('leaves a row with no payload undraggable, and cancels a drag that starts on it', () => {
+    render(<Draggable />)
+    const matter = screen.getByRole('row', { name: /1001\.1/ })
+    expect(matter.draggable).toBe(false)
+    expect(screen.getByRole('row', { name: /My Recent Docs/ }).draggable).toBe(false)
+    const data = transfer()
+    expect(fireEvent.dragStart(matter, { dataTransfer: data })).toBe(false)
+    expect(data.getData(type)).toBe('')
+  })
+
+  it('drags nothing without a drag, as before', () => {
+    render(<Harness />)
+    expect(screen.getByRole('row', { name: /1002\.1/ }).draggable).toBe(false)
   })
 })

@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
-import { document as doc, folder, matter } from '../test/fakeApi'
+import { children, document as doc, folder, matter, me } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
-import { cacheMessage, routes, select, toolbar } from './testing'
+import { addRow, cacheMessage, correspondence, row, pleadings, routes, select, toolbar } from './testing'
 
 async function openPicker() {
   await userEvent.click(within(await toolbar()).getByRole('button', { name: 'More' }))
@@ -170,5 +170,101 @@ describe('The Move To… picker', () => {
     expect(within(dialog).getByRole('listitem').textContent).toBe('Lease.docx: Already in this matter as # 10600')
     expect(written.moved).toEqual([{ docNumber: 10433, folderId: 111 }])
     expect(await screen.findByText('Moved 1 document to Correspondence')).toBeTruthy()
+  })
+})
+
+// Moving a folder with the picker (folders and Trash spec 7.5): the places it can't go are greyed out, with the reason
+describe('The Move To… picker, for a folder', () => {
+  const admin = { 'GET /v1/me': { ...me, admin: true } }
+  /** Matter 1001.1 holds Correspondence (7), where Drafts is, Pleadings and a search folder */
+  const pickerRoutes = (over = {}) =>
+    routes({
+      'GET /v1/folders/110/children': children([correspondence, pleadings, folder({ id: 114, name: 'My Recent Docs Here', kind: 'searchFolder' })]),
+      'GET /v1/folders/113': pleadings,
+      'GET /v1/folders/113/children': children([]),
+      ...over,
+    })
+
+  async function pickFor(name: RegExp, title: string) {
+    fireEvent.contextMenu(await row(name))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Move To…' }))
+    return screen.findByRole('dialog', { name: title })
+  }
+  const here = (dialog: HTMLElement) => within(dialog).findByRole('button', { name: 'Move Here' })
+  /** What says why Move Here is greyed out */
+  const why = (button: HTMLElement) => globalThis.document.getElementById(button.getAttribute('aria-describedby') ?? '')?.textContent
+
+  it("greys out the folder itself, which doesn't open, and Move Here where it already is", async () => {
+    const { all } = pickerRoutes()
+    const { api } = await renderApp('/folders/7', all)
+    const dialog = await pickFor(/Drafts/, 'Move "Drafts"')
+    await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
+    await userEvent.click(await within(dialog).findByRole('button', { name: /Correspondence/ }))
+
+    const itself = await within(dialog).findByRole('button', { name: 'Drafts The folder itself' })
+    expect(itself.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(itself)
+    expect(api.callsTo('GET /v1/folders/8/children')).toHaveLength(0)
+    const button = await here(dialog)
+    await waitFor(() => expect(why(button)).toBe('Already there'))
+    expect(button.hasAttribute('disabled')).toBe(true)
+    await expectNoAxeViolations(dialog)
+  })
+
+  it("greys Move Here out at a matter's top level for anyone but an administrator, and lists no search folder", async () => {
+    const { all } = pickerRoutes()
+    await renderApp('/folders/7', all)
+    const dialog = await pickFor(/Drafts/, 'Move "Drafts"')
+    await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
+    expect(await within(dialog).findByRole('button', { name: /Pleadings/ })).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: /My Recent Docs Here/ })).toBeNull()
+    const button = await here(dialog)
+    await waitFor(() => expect(why(button)).toBe('Administrators only'))
+    expect(button.hasAttribute('disabled')).toBe(true)
+  })
+
+  it("lets an administrator move a folder to a matter's top level", async () => {
+    const { all, written } = pickerRoutes(admin)
+    await renderApp('/folders/7', all)
+    const dialog = await pickFor(/Drafts/, 'Move "Drafts"')
+    await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
+    const button = await here(dialog)
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
+    expect(button.getAttribute('aria-describedby')).toBeNull()
+    await userEvent.click(button)
+    await waitFor(() => expect(written.movedFolders).toEqual([{ id: 8, folderId: 110 }]))
+    expect(await screen.findByText('Moved "Drafts" to 1001.1 – Charter Dispute')).toBeTruthy()
+  })
+
+  it("with documents in the selection, greys a matter's top level out for them, as it does now", async () => {
+    const { all } = pickerRoutes(admin)
+    await renderApp('/folders/7', all)
+    await select(/Lease/)
+    await addRow(/Drafts/)
+    const dialog = await pickFor(/Lease/, 'Move 2 Items')
+    await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
+    expect(await within(dialog).findByText('Open a folder inside the matter to move the documents into it.')).toBeTruthy()
+    expect((await here(dialog)).hasAttribute('disabled')).toBe(true)
+  })
+
+  it("moves each item with its own call, the documents first, and says where they went", async () => {
+    const { all, written } = pickerRoutes()
+    const { api } = await renderApp('/folders/7', all)
+    await select(/Lease/, /Plan/)
+    await addRow(/Drafts/)
+    const dialog = await pickFor(/Lease/, 'Move 3 Items')
+    await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
+    await userEvent.click(await within(dialog).findByRole('button', { name: /Pleadings/ }))
+    const button = await here(dialog)
+    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
+    await userEvent.click(button)
+
+    await waitFor(() => expect(written.movedFolders).toEqual([{ id: 8, folderId: 113 }]))
+    expect(written.moved).toEqual([
+      { docNumber: 10432, folderId: 113 },
+      { docNumber: 10433, folderId: 113 },
+    ])
+    expect(api.calls.filter((call) => call.method === 'POST').map((call) => call.path)).toEqual(['/v1/documents/10432/move', '/v1/documents/10433/move', '/v1/folders/8/move'])
+    expect(await screen.findByText('Moved 3 items to Pleadings')).toBeTruthy()
   })
 })

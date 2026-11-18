@@ -61,25 +61,27 @@ with it. Every document that comes back is queued for indexing, so search finds 
 
 ### In the Classic Interface
 
-The Classic Interface keeps its Trash, and its **Deleted documents** and **Deleted folders** reports (see
-[Reports](../system/reports/)). Two things differ from the Trash above:
+The Classic Interface keeps its **Trash** section in the Documents screen's left pane, and its **Deleted documents** and
+**Deleted folders** reports under **Administration → Reports** (see [Reports](../system/reports/)). Two things differ
+from the Trash above:
 
 - **Its Trash lists a deleted folder's contents as rows of their own,** as it always has, with the folder.
 - **It restores into the folder that is open in its tree,** not necessarily where the item was deleted from.
 
 What it restores follows the same rules as the rest: a restore of a folder brings back only what that delete took, and
 a folder that has been removed from the Trash comes back only for an administrator. The reports list what is in the
-Trash and what was removed, one row at a time, everyone's for administrators, and restore them. Restoring or removing
+Trash and what was removed, one row at a time, everyone's for administrators, and **Restore** them. Restoring or removing
 one row changes that row alone. A row removed on its own, such as one subfolder of a deleted folder, leaves that folder's
 item for an item of its own in Removed, where you can restore it before the nightly job destroys it.
 
-**Removing** takes a folder's contents with it, whichever of the Classic Interface's three removal actions you use:
-deleting a folder from the Trash, deleting a document from the Trash, and Empty trash. Each records who removed what
-and when.
+**Removing** takes a folder's contents with it, whichever way you do it in the Classic Interface: **Remove** on a
+folder in its Trash, **Remove** on a document there, or **Empty trash**, each after a question ("Do you want to delete
+the selected elements?", or "Do you want to clear the trash can?"). Each records who removed what and when.
 
-The reports' **Destroy Documents** action (it asks for the menu of that name) stays outside the tiers. It destroys a
-document at once, whatever its state and however recently it was deleted, and only administrators have it. Use it with
-care: there's nothing to restore afterwards.
+The **Deleted documents** report's **Permanently Delete** action, which also needs the **Destroy documents** menu (see
+[Reports](../system/reports/)), stays outside the tiers. It destroys a document at once, whatever its state and
+however recently it was deleted, and only people with those menus have it. Use it with care: there's nothing to restore
+afterwards.
 
 ## The Nightly Job
 

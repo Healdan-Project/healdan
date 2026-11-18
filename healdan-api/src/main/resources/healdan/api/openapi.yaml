@@ -2529,11 +2529,13 @@ paths:
            the caller is an administrator.
         3. `403 forbidden` without the Delete permission on the item, unless
            the caller is an administrator.
-        4. Without `folderId`: `409 place-gone` when the folder it was
+        4. `409 refused` for a Store, with or without `folderId`: a Store
+           is restored in the Classic Interface.
+        5. Without `folderId`: `409 place-gone` when the folder it was
            deleted from isn't there for it: deleted, the caller can't read
            it, or Healdan's rules or the caller's permissions no longer let
            it in. Ask where, and restore again with `folderId`.
-        5. With `folderId`, as a move there: `404 not-found` for a folder the
+        6. With `folderId`, as a move there: `404 not-found` for a folder the
            caller can't read (one deleted, outside the Stores, or an alias,
            as `getFolder` answers); `409 filing-rule` for a folder that can't
            hold it (for a folder, a Store, a search folder, or the folder
@@ -2543,9 +2545,9 @@ paths:
            unless it is the folder it was deleted from; `403 admins-only` for
            a folder into a matter's top level, unless the caller is an
            administrator.
-        6. `409 already-filed`, with the copy as `document`, when the matter
+        7. `409 already-filed`, with the copy as `document`, when the matter
            it goes into holds an email it holds.
-        7. `409 refused` when one of Healdan's rules refuses, such as a
+        8. `409 refused` when one of Healdan's rules refuses, such as a
            shortcut, which can't be restored inside a Store.
       tags: [Trash]
       parameters:
