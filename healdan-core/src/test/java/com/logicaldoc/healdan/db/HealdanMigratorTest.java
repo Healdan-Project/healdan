@@ -16,18 +16,16 @@ import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 import javax.sql.DataSource;
 
 import org.flywaydb.core.api.MigrationVersion;
-import org.hsqldb.jdbc.JDBCDataSource;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanStartupException;
+import com.logicaldoc.healdan.TestDatabase;
 import com.logicaldoc.healdan.db.HealdanMigrator.Status;
 import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.plugin.PluginException;
@@ -39,11 +37,23 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 
 	private JdbcTemplate jdbc;
 
+	/** The databases a test made besides its own, dropped after it */
+	private final List<String> freshDatabases = new ArrayList<>();
+
 	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
 		migrator = Context.get(HealdanMigrator.class);
 		jdbc = new JdbcTemplate(Context.get(DataSource.class));
+	}
+
+	@Override
+	public void tearDown() throws IOException {
+		try {
+			super.tearDown();
+		} finally {
+			freshDatabases.forEach(TestDatabase::drop);
+		}
 	}
 
 	@Test
@@ -66,18 +76,24 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 		assertEquals(rows, historyRows());
 	}
 
-	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testFailingScriptFailsStartup() {
+		int rows = historyRows();
+
+		// V9999__broken.sql comes after every real script: it makes a table, then fails on a line that isn't SQL
 		HealdanStartupException e = assertThrows(HealdanStartupException.class, () -> migrator
 				.migrate("classpath:healdan/db/migration/{vendor}", "classpath:healdan/db/failing/{vendor}"));
 
 		// The message says how to recover
 		assertTrue(e.getMessage(), e.getMessage().contains("drop the hd_ tables"));
 		assertTrue(e.getMessage(), e.getMessage().contains("from hd_schema_history"));
+		// The script ran, past its create table, rather than Flyway refusing it before it began
+		assertEquals(e.getMessage(), "42601", sqlState(e));
+		// PostgreSQL rolled the script back whole: no table and no history row is left behind
+		assertFalse(tableExists(jdbc, "hd_broken"));
+		assertEquals(rows, historyRows());
 	}
 
-	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testMisnamedScriptFailsStartup() {
 		// Flyway ignores a script whose name it can't parse unless naming is validated
@@ -148,11 +164,11 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testRefusesUnsupportedDatabase() {
-		for (String product : List.of("Oracle", "Microsoft SQL Server", "MySQL")) {
+		for (String product : List.of("Oracle", "Microsoft SQL Server", "MySQL", "HSQL Database Engine")) {
 			HealdanStartupException e = assertThrows(product, HealdanStartupException.class,
 					() -> HealdanMigrator.defaultLocation(metaData(product, "8.0.36")));
 			assertTrue(e.getMessage(),
-					e.getMessage().contains("MariaDB, PostgreSQL and HSQLDB only; found " + product + " 8.0.36"));
+					e.getMessage().contains("MariaDB and PostgreSQL only; found " + product + " 8.0.36"));
 		}
 	}
 
@@ -165,7 +181,7 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 		HealdanStartupException e = assertThrows(HealdanStartupException.class,
 				() -> new HealdanMigrator(posingAs(real, "MySQL", "8.0.36", statements)).migrate());
 
-		assertTrue(e.getMessage(), e.getMessage().contains("MariaDB, PostgreSQL and HSQLDB only; found MySQL 8.0.36"));
+		assertTrue(e.getMessage(), e.getMessage().contains("MariaDB and PostgreSQL only; found MySQL 8.0.36"));
 		assertEquals(List.of(), statements);
 		assertFalse(tableExists(new JdbcTemplate(real), "hd_schema_history"));
 		assertFalse(tableExists(new JdbcTemplate(real), "hd_setting"));
@@ -180,8 +196,6 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 				HealdanMigrator.defaultLocation(metaData("MySQL", "11.4.2-MariaDB-ubu2404")));
 		assertEquals("classpath:healdan/db/migration/mariadb",
 				HealdanMigrator.defaultLocation(metaData("MariaDB", "11.4.2-MariaDB-ubu2404")));
-		assertEquals("classpath:healdan/db/migration/hsqldb",
-				HealdanMigrator.defaultLocation(metaData("HSQL Database Engine", "2.7.1")));
 		assertEquals("classpath:healdan/db/migration/postgresql",
 				HealdanMigrator.defaultLocation(metaData("PostgreSQL", "18.4")));
 	}
@@ -191,16 +205,29 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 	}
 
 	private static boolean tableExists(JdbcTemplate jdbc, String table) {
-		return jdbc.queryForObject("select count(*) from information_schema.tables where lower(table_name) = ?", Integer.class,
-				table) > 0;
+		return jdbc.queryForObject(
+				"select count(*) from information_schema.tables where table_schema = current_schema() and table_name = ?",
+				Integer.class, table) > 0;
 	}
 
-	private static DataSource freshDatabase() {
-		JDBCDataSource ds = new JDBCDataSource();
-		ds.setUrl("jdbc:hsqldb:mem:fresh" + UUID.randomUUID().toString().replace("-", ""));
-		ds.setUser("sa");
-		ds.setPassword("");
-		return ds;
+	/**
+	 * @return the SQL state of the first SQLException among the causes, or null
+	 */
+	private static String sqlState(Throwable thrown) {
+		for (Throwable cause = thrown; cause != null; cause = cause.getCause())
+			if (cause instanceof SQLException sql)
+				return sql.getSQLState();
+		return null;
+	}
+
+	/**
+	 * @return an empty database of its own on the test server, dropped after
+	 *         the test
+	 */
+	private DataSource freshDatabase() {
+		String name = TestDatabase.create();
+		freshDatabases.add(name);
+		return TestDatabase.dataSource(name);
 	}
 
 	private static DatabaseMetaData metaData(String product, String version) {

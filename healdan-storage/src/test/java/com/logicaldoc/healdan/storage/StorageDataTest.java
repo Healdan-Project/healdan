@@ -69,13 +69,14 @@ public class StorageDataTest extends AbstractStorageTestCase {
 				new Timestamp(when.getTime()), docId, resource);
 	}
 
-	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testMigrationMadeTheTables() throws Exception {
-		for (String table : List.of("HD_STORAGE_BACKEND", "HD_STORAGE_STORE", "HD_STORAGE_FILE", "HD_STORAGE_HELD",
-				"HD_STORAGE_EVENT"))
+		for (String table : List.of("hd_storage_backend", "hd_storage_store", "hd_storage_file", "hd_storage_held",
+				"hd_storage_event"))
 			assertEquals(table, Integer.valueOf(1), jdbc().queryForObject(
-					"select count(*) from INFORMATION_SCHEMA.TABLES where TABLE_NAME = ?", Integer.class, table));
+					"select count(*) from information_schema.tables where table_schema = current_schema() "
+							+ "and table_name = ?",
+					Integer.class, table));
 		assertEquals(Integer.valueOf(1), jdbc().queryForObject(
 				"select count(*) from \"hd_schema_history\" where \"version\" = '9' and \"success\" = true",
 				Integer.class));

@@ -47,7 +47,6 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import org.junit.Assume;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.function.ThrowingRunnable;
 
@@ -177,6 +176,15 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 	/** @return how many showings and enterings of recovery keys are recorded */
 	private static long events() {
 		return jdbc().queryForObject("select count(*) from hd_storage_event", Long.class);
+	}
+
+	/**
+	 * Makes hd_test_refuse(), a trigger function that fails the write it fires for, as a failing disk or a dropped
+	 * connection would; a test makes its trigger, then drops both
+	 */
+	private static void createRefusal() {
+		jdbc().execute("create function hd_test_refuse() returns trigger language plpgsql as "
+				+ "$$ begin raise exception 'refused by the test' using errcode = '45000'; end $$");
 	}
 
 	/**
@@ -769,17 +777,17 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 	 * A database that refuses the second of the three writes, as a failing disk or a dropped connection would: the
 	 * first is rolled back with it, as the tab's "all of them or none" says
 	 */
-	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testSaveSettingsInOneTransaction() throws Exception {
 		admin.saveSettings(10, 5, 2, boss);
-		jdbc().execute("create trigger hd_test_refuse_cache before update on hd_setting referencing new row as newrow "
-				+ "for each row when (newrow.name = 'storage.cacheGb') begin atomic "
-				+ "signal sqlstate '45000' set message_text = 'refused by the test'; end");
+		createRefusal();
+		jdbc().execute("create trigger hd_test_refuse_cache before update on hd_setting "
+				+ "for each row when (new.name = 'storage.cacheGb') execute function hd_test_refuse()");
 		try {
 			assertThrows(RuntimeException.class, () -> admin.saveSettings(20, 6, 3, boss));
 		} finally {
-			jdbc().execute("drop trigger hd_test_refuse_cache");
+			jdbc().execute("drop trigger hd_test_refuse_cache on hd_setting");
+			jdbc().execute("drop function hd_test_refuse()");
 		}
 
 		assertEquals(10, StorageSettings.get().holdDays());
@@ -1006,7 +1014,6 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 	 * An add that fails is undone, and records no showing of the recovery key it never shows: neither when its full
 	 * Test fails, nor when the record of the showing can't be written, so no key is answered unrecorded
 	 */
-	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testFailedAddRecordsNothing() throws Exception {
 		long count = backends();
@@ -1040,14 +1047,15 @@ public class StorageAdminTest extends AbstractStorageTestCase {
 
 		// The showing's record can't be written: the add is undone, rather than answer a key with no record
 		Path folder = freshFolder("refused");
-		jdbc().execute("create trigger hd_test_refuse_event before insert on hd_storage_event referencing new row as "
-				+ "newrow for each row begin atomic signal sqlstate '45000' set message_text = 'refused by the test'; "
-				+ "end");
+		createRefusal();
+		jdbc().execute("create trigger hd_test_refuse_event before insert on hd_storage_event "
+				+ "for each row execute function hd_test_refuse()");
 		try {
 			refused("the showing's record refused", "wasn't added",
 					() -> admin.add(local("Refused", folder, true), null, boss));
 		} finally {
-			jdbc().execute("drop trigger hd_test_refuse_event");
+			jdbc().execute("drop trigger hd_test_refuse_event on hd_storage_event");
+			jdbc().execute("drop function hd_test_refuse()");
 		}
 		assertEquals(count, backends());
 		assertEquals(events, events());

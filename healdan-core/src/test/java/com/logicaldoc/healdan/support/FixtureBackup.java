@@ -117,14 +117,16 @@ public final class FixtureBackup {
 	public void restore() throws IOException, PersistenceException, IndexException {
 		jdbc.execute((ConnectionCallback<Void>) con -> {
 			try (Statement statement = con.createStatement()) {
-				statement.execute("set database referential integrity false");
+				// No foreign key is checked on this connection meanwhile, so the tables go in any order; it needs a
+				// superuser, as the test server's is
+				statement.execute("set session_replication_role = replica");
 				try {
 					for (String table : tables.keySet())
 						statement.executeUpdate("delete from " + table);
 					for (Map.Entry<String, Table> table : tables.entrySet())
 						insert(con, table.getKey(), table.getValue());
 				} finally {
-					statement.execute("set database referential integrity true");
+					statement.execute("set session_replication_role = origin");
 				}
 			}
 			return null;
@@ -170,7 +172,8 @@ public final class FixtureBackup {
 			DatabaseMetaData meta = con.getMetaData();
 			String quote = meta.getIdentifierQuoteString().trim();
 			List<String> names = new ArrayList<>();
-			try (ResultSet rs = meta.getTables(null, "PUBLIC", "%", new String[] { "TABLE" })) {
+			// The tables of the connection's schema, current_schema()
+			try (ResultSet rs = meta.getTables(null, con.getSchema(), "%", new String[] { "TABLE" })) {
 				while (rs.next())
 					names.add(quote + rs.getString("TABLE_NAME") + quote);
 			}

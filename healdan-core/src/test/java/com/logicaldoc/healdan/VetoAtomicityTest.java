@@ -30,7 +30,6 @@ import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -83,7 +82,6 @@ import com.logicaldoc.util.spring.Context;
  * on: the test hooks hand over to them) let every route through, so each
  * refusal here is the test veto's.
  */
-@Ignore("PostgreSQL: plan Task 5")
 public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 	private static final String CONTENT = "Healdan veto atomicity";

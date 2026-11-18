@@ -21,7 +21,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import javax.sql.DataSource;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -256,8 +255,9 @@ public class EmailIndexWorkerTest extends AbstractHealdanTestCase {
 		List<Long> ids = new ArrayList<>();
 		for (int n = 0; n < count; n++) {
 			long id = next + n;
-			row.put("LD_ID", id);
-			row.put("LD_CUSTOMID", "copy-" + id);
+			// The keys as the map has them: in another case the value would move to the end, out of step with columns
+			row.put("ld_id", id);
+			row.put("ld_customid", "copy-" + id);
 			jdbc.update("insert into ld_document (" + columns + ") values (" + marks + ")", row.values().toArray());
 			File eml = eml(n);
 			try {
@@ -271,7 +271,6 @@ public class EmailIndexWorkerTest extends AbstractHealdanTestCase {
 		return ids;
 	}
 
-	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testResumesFromItsCursor() throws Exception {
 		Document model = file("healdan-cc.eml", "model.eml");
@@ -300,7 +299,6 @@ public class EmailIndexWorkerTest extends AbstractHealdanTestCase {
 		assertEquals("done", HealdanSettings.get().get(DONE));
 	}
 
-	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testAFullBatchThenNothingIsDone() throws Exception {
 		Document model = file("healdan-cc.eml", "model.eml");
