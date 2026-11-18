@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.Test;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.Device;
@@ -28,6 +29,7 @@ import com.logicaldoc.core.security.apikey.ApiKeyDAO;
 import com.logicaldoc.core.security.menu.Menu;
 import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.core.security.user.Group;
+import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.WorkingTime;
@@ -35,11 +37,14 @@ import com.logicaldoc.core.sequence.SequenceDAO;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
+import com.logicaldoc.gui.common.client.beans.GUIGroup;
 import com.logicaldoc.gui.common.client.beans.GUIMenu;
 import com.logicaldoc.gui.common.client.beans.GUISequence;
 import com.logicaldoc.gui.common.client.beans.GUIUser;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.io.FileUtil;
+import com.logicaldoc.util.servlet.MockServletRequest;
+import com.logicaldoc.util.servlet.MockServletSession;
 import com.logicaldoc.util.spring.Context;
 import com.logicaldoc.web.AbstractWPTestCase;
 import com.logicaldoc.web.AuthorMenus;
@@ -61,6 +66,11 @@ import com.logicaldoc.web.UploadServlet;
  * <p>
  * Reading another user's account needs Access control, and never gives their
  * second factor's key, which saving their account then keeps.
+ * <p>
+ * A password changes only for someone signed in: their own, with the current
+ * one, or with Access control any account's. An account and a group are saved
+ * only with Access control, whose screens are the only ones that save them;
+ * Account > Profile saves the user's own profile through its own RPC.
  */
 public class SecurityServiceImplAuthorizationTest extends AbstractWPTestCase {
 
@@ -78,6 +88,11 @@ public class SecurityServiceImplAuthorizationTest extends AbstractWPTestCase {
     private static final long AUTHOR_SIGNIN_FAILURES = -29556736L;
 
     private static final String GEOLOCATION_KEY = "security.geolocation.apikey";
+
+    // The fixture's password of both users
+    private static final String CURRENT_PASSWORD = "admin";
+
+    private static final String NEW_PASSWORD = "Fresh-Strong-Pw-91!";
 
     private SecurityServiceImpl testSubject = new SecurityServiceImpl();
 
@@ -392,6 +407,178 @@ public class SecurityServiceImplAuthorizationTest extends AbstractWPTestCase {
         assertEquals("author's key", UserDAO.get().findById(AUTHOR_ID).getKey());
     }
 
+    @Test
+    public void testChangingAPasswordNeedsASession() throws PersistenceException {
+        String before = password(ADMIN_ID);
+        SecurityContextHolder.clearContext();
+
+        // Neither called directly nor as a request that carries no session
+        assertRefused(ADMIN_ID, ADMIN_ID, null);
+        assertRefused(ADMIN_ID, ADMIN_ID, CURRENT_PASSWORD);
+        testSubject.setThreadRequest(new MockServletRequest(new MockServletSession()));
+        assertRefused(ADMIN_ID, ADMIN_ID, null);
+        assertRefused(ADMIN_ID, ADMIN_ID, CURRENT_PASSWORD);
+        assertRefused(null, ADMIN_ID, null);
+
+        assertEquals(before, password(ADMIN_ID));
+    }
+
+    @Test
+    public void testChangingYourOwnPasswordNeedsTheCurrentOne() throws ServerException, PersistenceException {
+        prepareSession("author", CURRENT_PASSWORD);
+        String before = password(AUTHOR_ID);
+
+        assertRefused(AUTHOR_ID, AUTHOR_ID, null);
+        assertRefused(AUTHOR_ID, AUTHOR_ID, "");
+        assertRefused(AUTHOR_ID, AUTHOR_ID, "not-the-password");
+        assertEquals(before, password(AUTHOR_ID));
+
+        // Account > Change password
+        assertEquals("0", testSubject.changePassword(AUTHOR_ID, AUTHOR_ID, CURRENT_PASSWORD, NEW_PASSWORD, false)
+                .getCode());
+        assertNotEquals(before, password(AUTHOR_ID));
+        assertFalse(UserDAO.get().findById(AUTHOR_ID).isPasswordExpired());
+    }
+
+    @Test
+    public void testChangingAnotherUsersPasswordNeedsAccessControl() throws ServerException, PersistenceException {
+        String adminsBefore = password(ADMIN_ID);
+        prepareSession("author", CURRENT_PASSWORD);
+
+        // The requestor is who is signed in, whoever the call names
+        assertRefused(AUTHOR_ID, ADMIN_ID, null);
+        assertRefused(ADMIN_ID, ADMIN_ID, null);
+        assertRefused(ADMIN_ID, ADMIN_ID, CURRENT_PASSWORD);
+        assertEquals(adminsBefore, password(ADMIN_ID));
+
+        // Access control > Users > Change password asks for no current password
+        AuthorMenus.grant(Menu.ACCESS_CONTROL);
+        assertEquals("0", testSubject.changePassword(AUTHOR_ID, ADMIN_ID, null, NEW_PASSWORD, false).getCode());
+        assertNotEquals(adminsBefore, password(ADMIN_ID));
+        assertTrue(UserDAO.get().findById(ADMIN_ID).isPasswordExpired());
+    }
+
+    @Test
+    public void testAPasswordSetForSomeoneElseHasToChange() throws ServerException, PersistenceException {
+        // Naming the account as the requestor doesn't make it its owner's choice
+        assertEquals("0", testSubject.changePassword(AUTHOR_ID, AUTHOR_ID, null, NEW_PASSWORD, false).getCode());
+        assertTrue(UserDAO.get().findById(AUTHOR_ID).isPasswordExpired());
+    }
+
+    @Test
+    public void testAnAdministratorCanSetTheirOwnPasswordFromTheUsersScreen() throws PersistenceException {
+        String before = password(ADMIN_ID);
+        assertEquals("0", testSubject.changePassword(ADMIN_ID, ADMIN_ID, null, NEW_PASSWORD, false).getCode());
+        assertNotEquals(before, password(ADMIN_ID));
+        assertFalse(UserDAO.get().findById(ADMIN_ID).isPasswordExpired());
+    }
+
+    @Test
+    public void testSavingAnAccountNeedsAccessControl() throws ServerException, PersistenceException {
+        prepareSession("author", CURRENT_PASSWORD);
+        UserDAO dao = UserDAO.get();
+        GUIUser own = testSubject.getUser(AUTHOR_ID);
+        GUIGroup adminGroup = new GUIGroup();
+        adminGroup.setId(Group.GROUPID_ADMIN);
+        adminGroup.setName(Group.GROUP_ADMIN);
+        own.addGroup(adminGroup);
+        own.setCity("Carpi");
+
+        assertThrows(AccessDeniedException.class, () -> testSubject.saveUser(own, guiSession.getInfo()));
+        User stored = dao.findById(AUTHOR_ID, true);
+        assertFalse(stored.isMemberOf(Group.GROUP_ADMIN));
+        assertNotEquals("Carpi", stored.getCity());
+
+        // Whatever the account's other administrative fields hold
+        GUIUser plain = testSubject.getUser(AUTHOR_ID);
+        plain.setPasswordExpires(!plain.isPasswordExpires());
+        plain.setIpWhitelist("10.0.0.1");
+        assertThrows(AccessDeniedException.class, () -> testSubject.saveUser(plain, guiSession.getInfo()));
+        assertNotEquals("10.0.0.1", dao.findById(AUTHOR_ID).getIpWhiteList());
+
+        // Access control > Users saves any account, the user's own too
+        AuthorMenus.grant(Menu.ACCESS_CONTROL);
+        own.setCity("Modena");
+        testSubject.saveUser(own, guiSession.getInfo());
+        assertEquals("Modena", dao.findById(AUTHOR_ID).getCity());
+    }
+
+    @Test
+    public void testSavingYourProfileNeedsNoMenuAndChangesOnlyTheProfile()
+            throws ServerException, PersistenceException {
+        prepareSession("author", CURRENT_PASSWORD);
+        UserDAO dao = UserDAO.get();
+        GUIUser own = testSubject.getUser(AUTHOR_ID);
+        own.setCity("Carpi");
+        own.setEmail("author@example.com");
+
+        // What Account > Profile doesn't show stays as it is
+        GUIGroup adminGroup = new GUIGroup();
+        adminGroup.setId(Group.GROUPID_ADMIN);
+        adminGroup.setName(Group.GROUP_ADMIN);
+        own.addGroup(adminGroup);
+        own.setEnabled(false);
+        own.setIpWhitelist("10.0.0.1");
+
+        testSubject.saveProfile(own);
+
+        User stored = dao.findById(AUTHOR_ID, true);
+        assertEquals("Carpi", stored.getCity());
+        assertEquals("author@example.com", stored.getEmail());
+        assertFalse(stored.isMemberOf(Group.GROUP_ADMIN));
+        assertTrue(stored.isEnabled());
+        assertNotEquals("10.0.0.1", stored.getIpWhiteList());
+
+        // Nor another user's profile
+        GUIUser other = new GUIUser();
+        other.setId(ADMIN_ID);
+        assertThrows(AccessDeniedException.class, () -> testSubject.saveProfile(other));
+    }
+
+    @Test
+    public void testSavingAGroupNeedsAccessControl() throws ServerException, PersistenceException {
+        GroupDAO dao = GroupDAO.get();
+        prepareSession("author", CURRENT_PASSWORD);
+        // Administration alone, which CE's poweruser group holds, isn't enough
+        AuthorMenus.grant(Menu.ADMINISTRATION);
+
+        GUIGroup existing = new GUIGroup();
+        existing.setId(AUTHOR_GROUP);
+        existing.setName("renamed");
+        assertThrows(AccessDeniedException.class, () -> testSubject.saveGroup(existing));
+        assertEquals("author", dao.findById(AUTHOR_GROUP).getName());
+
+        GUIGroup added = new GUIGroup();
+        added.setName("added");
+        added.setInheritGroupId(Group.GROUPID_ADMIN);
+        assertThrows(AccessDeniedException.class, () -> testSubject.saveGroup(added));
+        assertNull(dao.findByName("added", session.getTenantId()));
+
+        AuthorMenus.grant(Menu.ACCESS_CONTROL);
+        added.setInheritGroupId(null);
+        assertEquals("added", dao.findById(testSubject.saveGroup(added).getId()).getName());
+    }
+
+    @Test
+    public void testChangingAGroupsMembersNeedsAccessControl() throws ServerException, PersistenceException {
+        UserDAO dao = UserDAO.get();
+        prepareSession("author", CURRENT_PASSWORD);
+        AuthorMenus.grant(Menu.ADMINISTRATION);
+
+        assertThrows(AccessDeniedException.class,
+                () -> testSubject.removeFromGroup(Group.GROUPID_ADMIN, List.of(ADMIN_ID)));
+        assertTrue(dao.findById(ADMIN_ID, true).isMemberOf(Group.GROUP_ADMIN));
+        assertThrows(AccessDeniedException.class,
+                () -> testSubject.addUserToGroup(Group.GROUPID_ADMIN, AUTHOR_ID));
+        assertFalse(dao.findById(AUTHOR_ID, true).isMemberOf(Group.GROUP_ADMIN));
+
+        AuthorMenus.grant(Menu.ACCESS_CONTROL);
+        testSubject.addUserToGroup(AUTHOR_GROUP, 2L);
+        assertTrue(dao.findById(2L, true).isMemberOf("author"));
+        testSubject.removeFromGroup(AUTHOR_GROUP, List.of(2L));
+        assertFalse(dao.findById(2L, true).isMemberOf("author"));
+    }
+
     /**
      * Adds Custom actions' menu (1300), the custom actions' parent, which
      * LogicalDOC's paid edition has and CE's database lacks
@@ -414,6 +601,15 @@ public class SecurityServiceImplAuthorizationTest extends AbstractWPTestCase {
         action.setEnabled(true);
         action.setParentId(Menu.CUSTOM_ACTIONS);
         return action;
+    }
+
+    private void assertRefused(Long requestorId, long userId, String currentPassword) {
+        assertNotEquals("0",
+                testSubject.changePassword(requestorId, userId, currentPassword, NEW_PASSWORD, false).getCode());
+    }
+
+    private static String password(long userId) throws PersistenceException {
+        return UserDAO.get().findById(userId).getPassword();
     }
 
     private static GUIAccessControlEntry ace(long groupId) {
