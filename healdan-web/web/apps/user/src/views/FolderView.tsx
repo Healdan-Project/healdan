@@ -11,6 +11,7 @@ import { FiltersPanel } from '../filters/FiltersPanel'
 import { useAuthorNames } from '../filters/useAuthorNames'
 import { useFacets, useUnfilteredDocuments } from '../filters/useFacets'
 import { useFilters } from '../filters/useFilters'
+import { useMatterNames } from '../filters/useMatterNames'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { RightRegionView, useRegionKind, useRightRegion } from '../frame/RightRegion'
 import { useFolder } from '../queries'
@@ -96,6 +97,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   // The reading pane makes the list narrow: it keeps the columns that fit
   const columns = useRegionKind({ preview: !store, details: selected !== undefined }) === 'preview' ? narrowed(listColumns) : listColumns
   const authors = useAuthorNames(listing.rows, facets.data)
+  const { clients, matters } = useMatterNames(listing.rows, facets.data)
 
   if (folder.isError) {
     if (folder.error instanceof ApiError && folder.error.status === 404) return <NotFound />
@@ -176,7 +178,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               <NewFolderButton place={place} />
               <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} selected={organising.selected} folders={organising.folders} />
             </Toolbar>
-            <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />
+            <FilterChips filters={filters} authors={authors} clients={clients} matters={matters} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />
             <Table
               aria-labelledby={headingId}
               columns={columns}

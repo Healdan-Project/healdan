@@ -31,7 +31,8 @@ Select a filed email and press **Space**, or dock the preview as the reading pan
 - **The attachments** are chips under them, each with its size. Click a PDF's or a picture's to see it in place of the
   message, with **Back to Message** to return and **Download** to save the file. Healdan knows one by its type or by
   its name, as some mail programs send every file as a plain file. Any other file, a TIFF or a HEIC included,
-  downloads when you click its chip.
+  downloads when you click its chip. A chip isn't a link, so it can't be dragged out of the page: click it, or use
+  **Download**, to save the file.
 - **Then the message itself,** as the sender wrote it: their fonts, colours, tables and links. Healdan takes out
   anything that could run or fetch something on its own: scripts, forms, embedded pages and plug-ins. A link opens in
   a new window, and the page it opens can't reach back into Healdan.
@@ -61,6 +62,9 @@ too (the email's own From, To, Subject and dates stay the email's, and so does i
 folder's, as any upload does. A value the email has that a new document can't take now, such as an author whose
 account has since been deleted, is left out rather than refusing the save. Healdan links it to the email, as it does when you file email from Outlook. The chip then says **Saved as # 10412**, as it does when you open an email
 whose attachment was filed already.
+
+Where you can't file into the email's folder, **Save to Matter** is greyed out, and "You can't file into this folder."
+is under the chips.
 
 - **You need to be able to write to the folder,** and to download the email.
 - **Saving it again files another copy,** as uploading a file twice does, but a message attached to the email can

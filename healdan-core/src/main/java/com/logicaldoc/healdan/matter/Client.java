@@ -42,7 +42,6 @@ public class Client extends PersistentObject {
 
 	@Override
 	public String toString() {
-		// An escape: the build reads sources as ISO-8859-1
-		return "%d \u2013 %s".formatted(number, name);
+		return MatterDisplay.client(number, name);
 	}
 }

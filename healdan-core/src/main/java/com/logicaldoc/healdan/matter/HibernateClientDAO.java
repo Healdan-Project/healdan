@@ -3,6 +3,7 @@
 
 package com.logicaldoc.healdan.matter;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -30,6 +31,13 @@ public class HibernateClientDAO extends HibernatePersistentObjectDAO<Client> imp
 	public Client findByNumber(long number) throws PersistenceException {
 		return findByWhere("_entity.number = :number", Map.of("number", number), null, null).stream().findFirst()
 				.orElse(null);
+	}
+
+	@Override
+	public List<Client> findByNumbers(Collection<Long> numbers) throws PersistenceException {
+		if (numbers.isEmpty())
+			return List.of();
+		return findByWhere("_entity.number in (:numbers)", Map.of("numbers", numbers), null, null);
 	}
 
 	@Override

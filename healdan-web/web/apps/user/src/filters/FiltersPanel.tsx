@@ -19,6 +19,10 @@ export interface FiltersPanelProps {
   busy?: boolean
   /** A search offers Client and {matter} as well; a folder is in one already */
   context: 'folder' | 'search'
+  /** Clients' names by number, as far as known, for a ticked one the counts don't offer */
+  clients?: ReadonlyMap<string, string>
+  /** Matters' names by number, as far as known, for a ticked one the counts don't offer */
+  matters?: ReadonlyMap<string, string>
   onChange: (patch: Partial<Filters>) => void
   onClose: () => void
 }
@@ -58,7 +62,7 @@ const presetChoices: Choice[] = [
 ]
 
 /** Filters, in the right region: Edit Date, then a tick list for each of the others, each option with its count. */
-export function FiltersPanel({ filters, facets, unavailable, busy, context, onChange, onClose }: FiltersPanelProps) {
+export function FiltersPanel({ filters, facets, unavailable, busy, context, clients, matters, onChange, onClose }: FiltersPanelProps) {
   // Between… chosen but no day given yet is no filter, so it isn't in the address; the panel remembers it.
   const [between, setBetween] = useState(false)
   // The range being edited is the panel's own until it is a good one: typing a month goes through others on the way,
@@ -129,8 +133,8 @@ export function FiltersPanel({ filters, facets, unavailable, busy, context, onCh
           group('class', t('filters.class'), facets?.class?.map(({ value, count }) => ({ value, label: value, count }))),
           ...(context === 'search'
             ? [
-                group('client', t('filters.client'), facets?.client?.map(({ value, count }) => ({ value, label: value, count }))),
-                group('matter', t('filters.matter'), facets?.matter?.map(({ value, count }) => ({ value, label: value, count }))),
+                group('client', t('filters.client'), facets?.client?.map(({ value, displayName, count }) => ({ value, label: displayName, count })), (value) => clients?.get(value) ?? value),
+                group('matter', t('filters.matter'), facets?.matter?.map(({ value, displayName, count }) => ({ value, label: displayName, count })), (value) => matters?.get(value) ?? value),
               ]
             : []),
         ].map((one, i) => one && <div key={i} className={styles.group}>{one}</div>)}

@@ -431,11 +431,16 @@ database, so a folder of thousands of documents answers as fast as a small one.
 ```json
 "facets": {
   "type": [{ "value": "pdf", "count": 12 }, { "value": "word", "count": 7 }],
-  "author": [{ "value": "pnair", "displayName": "Priya Nair", "count": 9 }]
+  "author": [{ "value": "pnair", "displayName": "Priya Nair", "count": 9 }],
+  "matter": [{ "value": "998.1", "displayName": "998.1 – Demo", "count": 12 }]
 }
 ```
 
-An Author's `value` is the username, which `author` takes, and `displayName` the name to show. A value the
+An Author's `value` is the username, which `author` takes, and `displayName` the name to show. A client's or a
+matter's `value` is its number, which `client` or `matter` takes, and `displayName` is how people read it
+(`998 – Healdan`, `998.1 – Demo`). It's the number alone when the caller can't read the matter's own folder, or, for a
+client, the own folder of any of its matters, or when nothing has that number any more. That rule is the options':
+a document's own `matter` names its matter to anyone who can read the document. A value the
 filters don't take, such as `sort=size` or `type=docx`, is `400 bad-request`.
 
 ## Creating a Folder

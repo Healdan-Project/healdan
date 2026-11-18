@@ -23,8 +23,8 @@ const facets: S['Facets'] = {
     { value: 'jclarke', displayName: 'Jamie Clarke', count: 2 },
   ],
   class: [{ value: 'Correspondence', count: 6 }],
-  client: [{ value: '1001', count: 4 }],
-  matter: [{ value: '1001.1', count: 4 }],
+  client: [{ value: '1001', displayName: '1001 – Saltmarsh Shipping Ltd', count: 4 }],
+  matter: [{ value: '1001.1', displayName: '1001.1 – Charter Dispute', count: 4 }],
 }
 
 function Panel({ initial = noFilters, onChange = () => {}, ...rest }: Partial<FiltersPanelProps> & { initial?: Filters }) {
@@ -60,9 +60,24 @@ describe('FiltersPanel', () => {
     expect(screen.queryByRole('group', { name: 'Client' })).toBeNull()
     expect(screen.queryByRole('group', { name: 'Matter' })).toBeNull()
     rerender(<Panel context="search" />)
-    expect(screen.getByRole('checkbox', { name: '1001, 4' })).toBeTruthy()
-    expect(screen.getByRole('checkbox', { name: '1001.1, 4' })).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: '1001 – Saltmarsh Shipping Ltd, 4' })).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: '1001.1 – Charter Dispute, 4' })).toBeTruthy()
     expect(screen.getByRole('group', { name: 'Matter' })).toBeTruthy()
+  })
+
+  it('names a ticked client and matter the counts have not offered', () => {
+    render(
+      <Panel
+        context="search"
+        facets={undefined}
+        initial={{ ...noFilters, client: ['1002', '1009'], matter: ['1002.1'] }}
+        clients={new Map([['1002', '1002 – Brightwell']])}
+        matters={new Map([['1002.1', '1002.1 – Commercial Lease']])}
+      />,
+    )
+    expect(screen.getByRole('checkbox', { name: '1002 – Brightwell' })).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: '1002.1 – Commercial Lease' })).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: '1009' })).toBeTruthy()
   })
 
   it("says the counts are the most relevant matches' when the server says they are partial", () => {

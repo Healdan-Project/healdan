@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.UnaryOperator;
 
 import org.apache.commons.lang.StringUtils;
 import org.springframework.stereotype.Component;
@@ -33,6 +34,7 @@ import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.FolderChildPage;
 import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.api.model.MoveRequest;
+import com.logicaldoc.healdan.api.model.NamedFacetCount;
 import com.logicaldoc.healdan.api.model.NewFolder;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.RenameRequest;
@@ -45,10 +47,12 @@ import com.logicaldoc.healdan.listing.ListedPage;
 import com.logicaldoc.healdan.listing.ListingQuery;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.matter.MatterNames;
 import com.logicaldoc.healdan.navigation.RecentFolders;
 import com.logicaldoc.healdan.navigation.RecentFolders.RecentFolder;
 import com.logicaldoc.healdan.searchfolder.SearchFolderService;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.security.FolderReads;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -309,7 +313,7 @@ public class FolderResource {
 				items.add(ApiViews.document(d, caller, view.kind(), view.matter(), authors));
 
 			FacetsView counts = filters.facets().isEmpty() ? null
-					: facetsView(FolderListing.get().facets(folder, caller, query, filters.facets()));
+					: facetsView(FolderListing.get().facets(folder, caller, query, filters.facets()), caller);
 			return new FolderChildPage(items, paging.offset(), paging.limit(), subfolders.size() + listed.total(),
 					listed.total(), counts);
 		} catch (PersistenceException e) {
@@ -337,7 +341,7 @@ public class FolderResource {
 		for (Document d : page)
 			items.add(ApiViews.document(d, caller, authors));
 		FacetsView counts = filters.facets().isEmpty() ? null
-				: facetsView(FolderListing.get().facets(ids, filters.query(), filters.facets()));
+				: facetsView(FolderListing.get().facets(ids, filters.query(), filters.facets()), caller);
 		return new FolderChildPage(items, paging.offset(), paging.limit(), listed.total(), listed.total(), counts);
 	}
 
@@ -384,19 +388,21 @@ public class FolderResource {
 	}
 
 	/**
-	 * @return the counts as the API shows them, each Author with the name
-	 *         people know them by
+	 * @return the counts as the API shows them, each Author, client and matter
+	 *         with the name people know them by
 	 */
-	private static FacetsView facetsView(Facets facets) throws PersistenceException {
-		return facetsView(facets, false);
+	private static FacetsView facetsView(Facets facets, User caller) throws PersistenceException {
+		return facetsView(facets, new FolderReads(caller), false);
 	}
 
 	/**
+	 * @param reads what the caller can read, which decides the clients and
+	 *        matters it is told the names of
 	 * @param partial whether the counts cover the first results only
-	 * @return the counts as the API shows them, each Author with the name
-	 *         people know them by
+	 * @return the counts as the API shows them, each Author, client and matter
+	 *         with the name people know them by
 	 */
-	static FacetsView facetsView(Facets facets, boolean partial) throws PersistenceException {
+	static FacetsView facetsView(Facets facets, FolderReads reads, boolean partial) throws PersistenceException {
 		Map<String, Map<String, Long>> counts = facets.counts();
 		List<AuthorFacetCount> authors = null;
 		if (counts.containsKey(Facets.AUTHOR)) {
@@ -411,8 +417,11 @@ public class FolderResource {
 						option.getValue()));
 			}
 		}
+		MatterNames names = new MatterNames(counts.getOrDefault(Facets.CLIENT, Map.of()).keySet(),
+				counts.getOrDefault(Facets.MATTER, Map.of()).keySet(), reads);
 		return new FacetsView(options(counts.get(Facets.TYPE)), authors, options(counts.get(Facets.CLASS)),
-				options(counts.get(Facets.CLIENT)), options(counts.get(Facets.MATTER)), partial ? Boolean.TRUE : null);
+				namedOptions(counts.get(Facets.CLIENT), names::client),
+				namedOptions(counts.get(Facets.MATTER), names::matter), partial ? Boolean.TRUE : null);
 	}
 
 	private static List<FacetCount> options(Map<String, Long> counts) {
@@ -420,6 +429,14 @@ public class FolderResource {
 			return null;
 		List<FacetCount> options = new ArrayList<>();
 		counts.forEach((value, count) -> options.add(new FacetCount(value, count)));
+		return options;
+	}
+
+	private static List<NamedFacetCount> namedOptions(Map<String, Long> counts, UnaryOperator<String> name) {
+		if (counts == null)
+			return null;
+		List<NamedFacetCount> options = new ArrayList<>();
+		counts.forEach((value, count) -> options.add(new NamedFacetCount(value, name.apply(value), count)));
 		return options;
 	}
 
