@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { formatDateTime, setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
-import { document, messageView, problem } from '../test/fakeApi'
+import { document, folder, messageView, problem } from '../test/fakeApi'
 import { resetPdf } from '../test/fakePdf'
 import { pdfResponse, renderPreview } from '../test/renderPreview'
 import { invalidateDocumentLists } from '../actions/refresh'
@@ -158,6 +158,49 @@ describe('EmailView', () => {
     expect(link.hasAttribute('download')).toBe(true)
     expect(screen.queryByRole('button', { name: 'Preview Schedule.xlsx' })).toBeNull()
     expect(api.callsTo(part)).toHaveLength(0)
+  })
+
+  it("won't let an attachment's link be dragged out of the page, where its download would have no session", async () => {
+    renderPreview(<EmailView document={mail} />, { [message]: messageView(), [part]: () => problem(404, 'no-preview') })
+
+    const chip = await screen.findByRole('link', { name: 'Download Schedule.xlsx' })
+    expect(chip.getAttribute('draggable')).toBe('false')
+    // fireEvent answers false when the page cancelled the event
+    expect(fireEvent.dragStart(chip)).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview Contract.pdf' }))
+    const download = await screen.findByRole('link', { name: 'Download Contract.pdf' })
+    expect(download.getAttribute('draggable')).toBe('false')
+    expect(fireEvent.dragStart(download)).toBe(false)
+  })
+
+  it('greys out Save to Matter, and says why, where the person cannot file into the email\'s folder', async () => {
+    renderPreview(<EmailView document={mail} />, { [message]: messageView(), 'GET /v1/folders/111': folder({ id: 111, canFile: false }) })
+
+    const note = await screen.findByText("You can't file into this folder.")
+    const save = screen.getByRole('button', { name: 'Save to Matter: Contract.pdf' })
+    expect(save.hasAttribute('disabled')).toBe(true)
+    expect(save.getAttribute('aria-describedby')).toBe(note.id)
+    // Reading the attachment needs no more than it did
+    expect(screen.getByRole('link', { name: 'Download Schedule.xlsx' })).toBeTruthy()
+  })
+
+  it('keeps Save to Matter where the person can file into the folder', async () => {
+    const { api } = renderPreview(<EmailView document={mail} />, { [message]: messageView(), 'GET /v1/folders/111': folder({ id: 111, canFile: true }) })
+
+    const save = await screen.findByRole('button', { name: 'Save to Matter: Contract.pdf' })
+    await waitFor(() => expect(api.callsTo('GET /v1/folders/111')).toHaveLength(1))
+    await waitFor(() => expect(save.hasAttribute('disabled')).toBe(false))
+    expect(screen.queryByText("You can't file into this folder.")).toBeNull()
+  })
+
+  it('asks about the folder only when an attachment could be saved', async () => {
+    const saved = messageView({ attachments: messageView().attachments.map((one) => ({ ...one, docNumber: 10500 + one.index })) })
+    const { api } = renderPreview(<EmailView document={mail} />, { [message]: saved, 'GET /v1/folders/111': folder({ id: 111, canFile: false }) })
+
+    await screen.findByText('Saved as # 10501')
+    expect(api.callsTo('GET /v1/folders/111')).toHaveLength(0)
+    expect(screen.queryByText("You can't file into this folder.")).toBeNull()
   })
 
   it('previews a PDF or a picture by its name when the sender sent it as a plain file, and downloads a TIFF', async () => {

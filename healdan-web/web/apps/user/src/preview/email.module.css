@@ -106,6 +106,12 @@
   white-space: nowrap;
 }
 
+.noFiling {
+  margin: var(--hd-space-2) 0 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
 .pictures {
   display: flex;
   flex: none;

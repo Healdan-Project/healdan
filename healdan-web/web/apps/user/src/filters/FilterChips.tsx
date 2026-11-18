@@ -11,6 +11,10 @@ export interface FilterChipsProps {
   filters: Filters
   /** Authors' names by username, as far as known; a username shows as itself otherwise */
   authors?: ReadonlyMap<string, string>
+  /** Clients' names by number, as far as known; a number shows as itself otherwise */
+  clients?: ReadonlyMap<string, string>
+  /** Matters' names by number, such as 1001.1, as far as known; a number shows as itself otherwise */
+  matters?: ReadonlyMap<string, string>
   onRemove: (kind: FilterKind) => void
   onClear: () => void
   /** Where focus goes when no chip is left to take it: the funnel, which the chips are the filters of */
@@ -26,7 +30,7 @@ function dateText(filters: Filters): string {
 }
 
 /** A chip for each filter in use, above the list, so a filter that hides documents is never out of sight. */
-export function FilterChips({ filters, authors, onRemove, onClear, onEmpty }: FilterChipsProps) {
+export function FilterChips({ filters, authors, clients, matters, onRemove, onClear, onEmpty }: FilterChipsProps) {
   const buttons = useRef(new Map<FilterKind, HTMLButtonElement>())
   if (activeCount(filters) === 0) return null
   const chips: { kind: FilterKind; name: string; text: string }[] = []
@@ -34,8 +38,8 @@ export function FilterChips({ filters, authors, onRemove, onClear, onEmpty }: Fi
   if (filters.type.length) chips.push({ kind: 'type', name: t('filters.type'), text: formatList(filters.type.map(typeLabel)) })
   if (filters.author.length) chips.push({ kind: 'author', name: t('filters.author'), text: formatList(filters.author.map((u) => authors?.get(u) ?? u)) })
   if (filters.class.length) chips.push({ kind: 'class', name: t('filters.class'), text: formatList(filters.class) })
-  if (filters.client.length) chips.push({ kind: 'client', name: t('filters.client'), text: formatList(filters.client) })
-  if (filters.matter.length) chips.push({ kind: 'matter', name: t('filters.matter'), text: formatList(filters.matter) })
+  if (filters.client.length) chips.push({ kind: 'client', name: t('filters.client'), text: formatList(filters.client.map((n) => clients?.get(n) ?? n)) })
+  if (filters.matter.length) chips.push({ kind: 'matter', name: t('filters.matter'), text: formatList(filters.matter.map((n) => matters?.get(n) ?? n)) })
 
   // The chip dropped is gone from the page, taking focus with it: it goes to the next chip's ×, else the previous
   // one's, else (with none left) to the funnel (spec section 5).

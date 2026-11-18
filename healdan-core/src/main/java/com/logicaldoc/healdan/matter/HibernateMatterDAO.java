@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.matter;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -57,6 +58,15 @@ public class HibernateMatterDAO extends HibernatePersistentObjectDAO<Matter> imp
 	public List<Matter> findLive() throws PersistenceException {
 		return findByWhere("_entity.folderId in (select f.id from Folder f where f.deleted = 0)", null,
 				"_entity.id asc", null);
+	}
+
+	@Override
+	public List<Matter> findLiveByClients(Collection<Long> clientIds) throws PersistenceException {
+		if (clientIds.isEmpty())
+			return List.of();
+		return findByWhere(
+				"_entity.clientId in (:clientIds) and _entity.folderId in (select f.id from Folder f where f.deleted = 0)",
+				Map.of("clientIds", clientIds), null, null);
 	}
 
 	/** The live matters in a Store */

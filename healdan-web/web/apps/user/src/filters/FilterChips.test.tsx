@@ -33,6 +33,21 @@ describe('FilterChips', () => {
     expect(chips.getByText('Matter: 998.1')).toBeTruthy()
   })
 
+  it('names the clients and matters it knows, and shows the number of any other', () => {
+    render(
+      <FilterChips
+        filters={{ ...noFilters, client: ['998', '999'], matter: ['998.1', '999.2'] }}
+        clients={new Map([['998', '998 – Saltmarsh']])}
+        matters={new Map([['998.1', '998.1 – Charter Dispute']])}
+        onRemove={() => {}}
+        onClear={() => {}} onEmpty={() => {}}
+      />,
+    )
+    const chips = within(screen.getByRole('group', { name: 'Filters in Use' }))
+    expect(chips.getByText('Client: 998 – Saltmarsh, 999')).toBeTruthy()
+    expect(chips.getByText('Matter: 998.1 – Charter Dispute, 999.2')).toBeTruthy()
+  })
+
   it('shows a range of days as the person reads them', () => {
     const { rerender } = render(<FilterChips filters={{ ...noFilters, from: '2026-11-01', to: '2026-11-09' }} onRemove={() => {}} onClear={() => {}} onEmpty={() => {}} />)
     expect(screen.getByText('Edit Date: Nov 1, 2026 – Nov 9, 2026')).toBeTruthy()

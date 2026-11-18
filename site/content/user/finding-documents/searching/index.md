@@ -114,8 +114,11 @@ scopes have them; Folders, Matters and Clients don't.
 | **File Type** | Word, Excel, PowerPoint, PDF, Email, OpenDocument, Picture, Other |
 | **Author** | the people who are an Author of documents in the folder, or among the results |
 | **Class** | the classes of documents in the folder, or among the results |
-| **Client** | in search results only: the clients of the matters the results are in, by number |
-| **Matter** | in search results only: the matters the results are in, such as `1001.1` |
+| **Client** | in search results only: the clients of the matters the results are in, such as `1001 – Saltmarsh Shipping Ltd` |
+| **Matter** | in search results only: the matters the results are in, such as `1001.1 – Charter Dispute` |
+
+A matter shows as its number alone if you can't open its own folder, and a client if you can't open the own folder of
+any of its matters.
 
 Today and the days of a range are your own: they follow your computer's time zone, as the dates in the list do. A
 document saved late in the evening counts as that day's, wherever the server is.

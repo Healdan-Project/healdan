@@ -830,6 +830,79 @@ public class SearchResourceTest extends ApiTestCase {
 		assertEquals(Map.of("pdf", 6L, "word", 4L), counts(ticked.path("facets").path("type")));
 	}
 
+	/**
+	 * The Client and Matter options are named only through a matter whose own
+	 * folder the caller can read, the rule of {@code GET /matters/{id}}: a
+	 * document the caller reads in it names nothing by itself.
+	 */
+	@Test
+	public void testFacetsNameOnlyMattersTheCallerCanRead() throws Exception {
+		filtersLayout();
+		String query = "q=harrierapi&limit=1&facets=client,matter";
+
+		JsonNode facets = page(query, signIn(clerk)).path("facets");
+		assertEquals(Map.of("998", "998 \u2013 Healdan"), names(facets.path("client")));
+		assertEquals(Map.of("998.1", "998.1 \u2013 Demo", "998.2", "998.2 \u2013 Other"), names(facets.path("matter")));
+
+		// Matter 998.2's own folder is shut to the clerk, who still reads the documents inside it
+		shut(otherWorkspace, otherDocuments);
+		facets = page(query, signIn(clerk)).path("facets");
+		assertEquals(Map.of("998.1", 18L, "998.2", 4L), counts(facets.path("matter")));
+		assertEquals(Map.of("998", "998 \u2013 Healdan"), names(facets.path("client")));
+		assertEquals(Map.of("998.1", "998.1 \u2013 Demo", "998.2", "998.2"), names(facets.path("matter")));
+
+		// With no matter of the client readable, the client has no name either
+		shut(workspace, documents);
+		facets = page(query, signIn(clerk)).path("facets");
+		assertEquals(Map.of("998", 22L), counts(facets.path("client")));
+		assertEquals(Map.of("998", "998"), names(facets.path("client")));
+		assertEquals(Map.of("998.1", "998.1", "998.2", "998.2"), names(facets.path("matter")));
+
+		// The admin reads every folder
+		facets = page(query, signInAdmin()).path("facets");
+		assertEquals(Map.of("998", "998 \u2013 Healdan"), names(facets.path("client")));
+		assertEquals("998.2 \u2013 Other", names(facets.path("matter")).get("998.2"));
+	}
+
+	/** A number no client or matter has any more shows as itself */
+	@Test
+	public void testFacetsShowANumberNothingHas() throws Exception {
+		BulkHits bulk = new BulkHits();
+		List<Long> indexed = new ArrayList<>();
+		group(bulk, new ArrayList<>(), indexed, source(documents, "stray.pdf"), documents, 2, i -> "s-" + i + ".pdf",
+				"1.0", fx.user("jclarke"), null, "pdf", true, "9", false);
+		bulk.evict(indexed);
+		bulk.index(indexed, "Notes on the harrierapi");
+
+		JsonNode facets = page("q=harrierapi&limit=1&facets=client,matter", signIn(clerk)).path("facets");
+
+		assertEquals(Map.of("998.9", "998.9"), names(facets.path("matter")));
+		assertEquals(Map.of("998", "998 \u2013 Healdan"), names(facets.path("client")));
+	}
+
+	/**
+	 * Leaves a matter's own folder to the admin group alone, the folder inside
+	 * it keeping the clerk's rights in security of its own
+	 */
+	private void shut(Folder workspace, Folder inside) throws Exception {
+		Folder kept = FolderDAO.get().findById(inside.getId(), true);
+		kept.setSecurityRef(null);
+		FolderDAO.get().store(kept, fx.folderHistory(fx.admin()));
+		fx.grant(kept, clerk.getUserGroup(), Permission.READ, Permission.WRITE, Permission.DOWNLOAD);
+
+		Folder own = FolderDAO.get().findById(workspace.getId(), true);
+		own.setSecurityRef(null);
+		own.getAccessControlList().clear();
+		FolderDAO.get().store(own, fx.folderHistory(fx.admin()));
+		fx.grant(own, fx.admin().getUserGroup(), Permission.READ, Permission.WRITE);
+	}
+
+	private static Map<String, String> names(JsonNode options) {
+		Map<String, String> names = new LinkedHashMap<>();
+		options.forEach(option -> names.put(option.path("value").textValue(), option.path("displayName").textValue()));
+		return names;
+	}
+
 	@Test
 	public void testSortedAsAFolderIs() throws Exception {
 		List<Made> made = new ArrayList<>(filtersLayout());

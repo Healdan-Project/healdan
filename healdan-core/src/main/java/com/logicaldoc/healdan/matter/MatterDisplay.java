@@ -27,6 +27,15 @@ public final class MatterDisplay {
 	}
 
 	/**
+	 * @param number the client number
+	 * @param name the client name
+	 * @return for example {@code 998 \u2013 Healdan}
+	 */
+	public static String client(long number, String name) {
+		return "%d \u2013 %s".formatted(number, name);
+	}
+
+	/**
 	 * @param client the client number
 	 * @param matter the matter number
 	 * @return the matter's number alone, for example {@code 998.1}

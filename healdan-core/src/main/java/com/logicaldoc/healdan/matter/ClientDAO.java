@@ -3,6 +3,7 @@
 
 package com.logicaldoc.healdan.matter;
 
+import java.util.Collection;
 import java.util.List;
 
 import com.logicaldoc.core.PersistenceException;
@@ -27,6 +28,13 @@ public interface ClientDAO extends PersistentObjectDAO<Client> {
 	 * @throws PersistenceException error at data layer
 	 */
 	public Client findByNumber(long number) throws PersistenceException;
+
+	/**
+	 * @param numbers client numbers
+	 * @return the clients that have them, in no particular order
+	 * @throws PersistenceException error at data layer
+	 */
+	public List<Client> findByNumbers(Collection<Long> numbers) throws PersistenceException;
 
 	/**
 	 * @return the highest client number, 0 when there are no clients

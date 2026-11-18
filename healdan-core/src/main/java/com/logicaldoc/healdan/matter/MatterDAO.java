@@ -3,6 +3,7 @@
 
 package com.logicaldoc.healdan.matter;
 
+import java.util.Collection;
 import java.util.List;
 
 import com.logicaldoc.core.PersistenceException;
@@ -57,6 +58,14 @@ public interface MatterDAO extends PersistentObjectDAO<Matter> {
 	 * @throws PersistenceException error at data layer
 	 */
 	public List<Matter> findLive() throws PersistenceException;
+
+	/**
+	 * @param clientIds clients' ids
+	 * @return their matters whose own folders aren't deleted, in no particular
+	 *         order
+	 * @throws PersistenceException error at data layer
+	 */
+	public List<Matter> findLiveByClients(Collection<Long> clientIds) throws PersistenceException;
 
 	/**
 	 * @param storeId the id of a Store

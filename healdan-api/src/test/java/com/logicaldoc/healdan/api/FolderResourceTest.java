@@ -539,6 +539,13 @@ public class FolderResourceTest extends ApiTestCase {
 		assertEquals(1, authors.get(1).path("count").asInt());
 		assertFalse(page.path("facets").has("class"));
 
+		// Client and Matter are named as people read them
+		JsonNode labelled = get(base + "?facets=client,matter").token(token).send().json().path("facets");
+		assertEquals("998", labelled.path("client").get(0).path("value").textValue());
+		assertEquals("998 \u2013 Healdan", labelled.path("client").get(0).path("displayName").textValue());
+		assertEquals("998.1", labelled.path("matter").get(0).path("value").textValue());
+		assertEquals("998.1 \u2013 Demo", labelled.path("matter").get(0).path("displayName").textValue());
+
 		// Without facets= the answer has none
 		JsonNode plain = get(base).token(token).send().json();
 		assertFalse(plain.has("facets"));

@@ -129,8 +129,8 @@ export function FiltersPanel({ filters, facets, unavailable, busy, context, onCh
           group('class', t('filters.class'), facets?.class?.map(({ value, count }) => ({ value, label: value, count }))),
           ...(context === 'search'
             ? [
-                group('client', t('filters.client'), facets?.client?.map(({ value, count }) => ({ value, label: value, count }))),
-                group('matter', t('filters.matter'), facets?.matter?.map(({ value, count }) => ({ value, label: value, count }))),
+                group('client', t('filters.client'), facets?.client?.map(({ value, displayName, count }) => ({ value, label: displayName, count }))),
+                group('matter', t('filters.matter'), facets?.matter?.map(({ value, displayName, count }) => ({ value, label: displayName, count }))),
               ]
             : []),
         ].map((one, i) => one && <div key={i} className={styles.group}>{one}</div>)}

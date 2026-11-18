@@ -126,6 +126,57 @@ describe('The Move To… picker', () => {
     expect(await within(dialog).findByRole('region', { name: 'Recent Matters' })).toBeTruthy()
   })
 
+  describe('in a folder of many subfolders', () => {
+    const names = ['Advice', 'Board Papers', 'Correspondence', 'Drafts', 'Evidence', 'Filings', 'Invoices', 'Pleadings']
+    const many = names.map((name, i) => folder({ id: 200 + i, name }))
+    const manyRoutes = {
+      'GET /v1/folders/110/children': children(many),
+      'GET /v1/folders/207': folder({ id: 207, name: 'Pleadings' }),
+      'GET /v1/folders/207/children': children([]),
+    }
+    const shown = (dialog: HTMLElement) => within(within(dialog).getByRole('list', { name: /^Folders in / })).getAllByRole('button').map((one) => one.textContent?.trim())
+
+    async function openMatter() {
+      const { all } = routes(manyRoutes)
+      await renderApp('/folders/7', all)
+      await select(/Lease/)
+      const dialog = await openPicker()
+      await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
+      return { dialog, filter: await within(dialog).findByRole('textbox', { name: 'Filter Folders' }) }
+    }
+
+    it('narrows them to the ones whose names hold what is typed, whatever its case', async () => {
+      const { dialog, filter } = await openMatter()
+      expect(shown(dialog)).toEqual(names)
+      await userEvent.type(filter, 'PLEAD')
+      expect(shown(dialog)).toEqual(['Pleadings'])
+      await expectNoAxeViolations(dialog)
+    })
+
+    it('says so when none matches, and keeps Move Here to the folder the person is in', async () => {
+      const { dialog, filter } = await openMatter()
+      await userEvent.type(filter, 'zzz')
+      expect(await within(dialog).findByText('Nothing found.')).toBeTruthy()
+      expect(within(dialog).queryByText('No folders in here.')).toBeNull()
+      expect(within(dialog).getByRole('button', { name: 'Move Here' })).toBeTruthy()
+    })
+
+    it('starts again in each folder, keeping the focus in the window', async () => {
+      const { dialog, filter } = await openMatter()
+      await userEvent.type(filter, 'plead')
+      await userEvent.click(within(dialog).getByRole('button', { name: /Pleadings/ }))
+      await within(dialog).findByText('No folders in here.')
+      // A folder of few subfolders has no filter to tab through
+      expect(within(dialog).queryByRole('textbox', { name: 'Filter Folders' })).toBeNull()
+      const up = within(dialog).getByRole('button', { name: 'Up One Level' })
+      await userEvent.click(up)
+      const again = await within(dialog).findByRole('textbox', { name: 'Filter Folders' })
+      expect((again as HTMLInputElement).value).toBe('')
+      expect(shown(dialog)).toEqual(names)
+      expect(dialog.contains(globalThis.document.activeElement)).toBe(true)
+    })
+  })
+
   it('searches matters with the search box\'s suggestions', async () => {
     const { all } = routes({
       'GET /v1/suggest': { matters: [{ id: 14, number: 3, name: 'Harbour Lease', client: { number: 1003, name: 'Quay Holdings' } }], documents: [] },

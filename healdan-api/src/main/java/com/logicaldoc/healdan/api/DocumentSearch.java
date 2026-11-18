@@ -169,6 +169,7 @@ final class DocumentSearch {
 				counted = readable.stream().filter(first::contains).toList();
 			}
 		}
-		return FolderResource.facetsView(HitFacets.count(counted, checks.reads(), query, filters.facets()), !all);
+		return FolderResource.facetsView(HitFacets.count(counted, checks.reads(), query, filters.facets()),
+				checks.reads(), !all);
 	}
 }
