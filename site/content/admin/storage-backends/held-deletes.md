@@ -21,7 +21,7 @@ with, so that a backup restored later still finds every file it names:
 - **On a local folder,** the file moves into the `.held` folder at the backend's root, under the same path, which is
   instant on the same disk. If a file is missing from its place, as after a database restored from a backup, Healdan
   looks for it there. If the delete doesn't go through, as when the operation around it fails, the file moves back to
-  its place.
+  its place, or, if the folder can't be reached just then, at the purge's next run.
 
 Once a day, the purge deletes the held copies whose date has come, but not in the first 10 minutes after the server
 starts. It leaves an S3 object that Healdan is using again, as when the same file was uploaded to it since.

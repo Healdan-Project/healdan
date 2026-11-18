@@ -59,6 +59,20 @@ public final class Held {
 			return true;
 		}
 
+		if (HoldRollback.heldHere(backendId, key)) {
+			// This transaction holds the key's copy already, and nobody else has written the file since, so what is in
+			// its place is this transaction's own write, never committed: it goes, and the held copy stays, for a
+			// rollback to put back
+			try {
+				entry.backend().delete(key);
+			} catch (IOException e) {
+				log.warn("Document {}'s {} can't be deleted from storage backend {}: {}", docId, resource, backendId,
+						e.getMessage());
+				return false;
+			}
+			return true;
+		}
+
 		String location;
 		try {
 			location = entry.backend().hold(key);
@@ -81,11 +95,31 @@ public final class Held {
 			return false;
 		}
 		// A hold that moved the copy gives a location other than its key (S3's moves nothing). Noted before its row is
-		// written, so a rollback after a failure there puts it back too
-		if (!location.equals(key))
-			HoldRollback.moved(backendId, key, docId, resource);
-		record(backendId, location, docId, resource);
+		// written; if either fails, the copy goes back at once, as a caller that goes on and commits wouldn't roll back
+		boolean moved = !location.equals(key);
+		try {
+			if (moved)
+				HoldRollback.moved(backendId, key, docId, resource);
+			record(backendId, location, docId, resource);
+		} catch (RuntimeException e) {
+			if (moved)
+				putBack(entry, backendId, key, docId, resource, e);
+			throw e;
+		}
 		return true;
+	}
+
+	/** Puts back a copy whose hold couldn't be recorded; one that can't go back stays under .held/, read from there */
+	private static void putBack(Backends.Entry entry, long backendId, String key, long docId, String resource,
+			RuntimeException failure) {
+		HoldRollback.forget(backendId, key);
+		try {
+			if (!entry.backend().unhold(key, false))
+				log.warn("Document {}'s {} stays under .held/ on storage backend {}, as its hold couldn't be recorded",
+						docId, resource, backendId);
+		} catch (IOException | RuntimeException e) {
+			failure.addSuppressed(e);
+		}
 	}
 
 	private static boolean isS3(long backendId) {

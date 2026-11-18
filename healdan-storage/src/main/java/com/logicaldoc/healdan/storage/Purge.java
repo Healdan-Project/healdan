@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
 import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 import com.logicaldoc.util.spring.Context;
@@ -32,7 +33,8 @@ import com.logicaldoc.util.spring.Context;
  * <li>an S3 object that a row points at again, on the same backend, is left, and its hold dropped: the mover uploaded
  * the file under the same key (spec section 6.2);</li>
  * <li>an S3 object whose file the mover is moving now is left, its hold kept for the next purge;</li>
- * <li>a local copy is deleted only from the backend's {@code .held/}.</li>
+ * <li>a local copy is deleted only from the backend's {@code .held/}, and one whose row reads it from there, its
+ * place empty, as after a rollback that couldn't put it back, goes back in its place instead, its hold dropped.</li>
  * </ul>
  * The delete itself runs holding the lock too, so that no save or delete holds the location afresh between the checks
  * and it; an S3 backend bounds that delete's whole call ({@code S3Backend.purgeHeld}), so a bucket that stalls holds
@@ -71,6 +73,8 @@ public class Purge {
 	 * Purges every held copy that is due. One that can't be purged is logged and kept for the next run.
 	 */
 	public void run() {
+		// The copies rollbacks couldn't put back go first, so none is taken for a due hold's
+		HoldRollback.retry();
 		Date now = new Date();
 		Map<Long, Boolean> healthy = new HashMap<>();
 		int purged = 0;
@@ -122,7 +126,8 @@ public class Purge {
 							copy.docId(), copy.resource());
 					return false;
 				}
-			}
+			} else if (readFromHeld(entry, copy))
+				return false;
 			try {
 				entry.backend().purgeHeld(copy.location());
 			} catch (BackendUnreachableException e) {
@@ -141,6 +146,32 @@ public class Purge {
 					copy.backendId());
 			return true;
 		}
+	}
+
+	/**
+	 * Puts a local held copy back in its place, and drops its hold, if its file's row reads it from {@code .held/}: an
+	 * older hold of the location that a rollback brought back, whose own copy was replaced, mustn't delete the copy the
+	 * row needs. Called holding the file's lock.
+	 *
+	 * @return whether the copy is the row's, and isn't to be purged
+	 */
+	private static boolean readFromHeld(Backends.Entry entry, HeldCopy copy) {
+		String key = ((HealdanStorage) Store.get()).keyOf(copy.docId(), copy.resource());
+		if (!entry.backend().held(key).map(copy.location()::equals).orElse(false))
+			return false;
+		try {
+			if (!HoldRollback.putBackLive(entry, copy.backendId(), key, copy.docId(), copy.resource()))
+				return false;
+		} catch (IOException e) {
+			log.warn("The held copy of document {}'s {} on storage backend {} may be its row's, and can't be put back "
+					+ "in its place: it is kept for the next run ({})", copy.docId(), copy.resource(), copy.backendId(),
+					e.getMessage());
+			return true;
+		}
+		HeldCopies.get().drop(copy.backendId(), copy.location());
+		log.info("The held copy of document {}'s {} on storage backend {} was its row's, read from .held/: it is back in "
+				+ "its place, not purged", copy.docId(), copy.resource(), copy.backendId());
+		return true;
 	}
 
 	/**

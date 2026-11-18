@@ -62,7 +62,7 @@ import com.logicaldoc.util.spring.Context;
  * <li>A save that replaces a copy on another backend, and every delete, holds the old copy (spec section 8): a local
  * one moves under its backend's {@code .held/}, an S3 one stays where it is, and a row in {@code hd_storage_held}
  * keeps it until its purge date. A local copy moved inside a transaction that rolls back goes back in its place
- * ({@link HoldRollback}), as its rows do.</li>
+ * ({@link HoldRollback}), as its rows do, and so does one whose hold can't be recorded.</li>
  * <li>Reads go to the row's place. {@code exists}, {@code size} and {@code listResources} answer from the rows, never
  * a backend, and a file version is matched exactly ({@code 1.2} is not {@code 1.20}). While the row's backend is a
  * known outage ({@link BackendHealth#knownOutage}), a read the read cache can't serve fails at once. A file with no row
@@ -256,8 +256,8 @@ public class HealdanStorage extends AbstractStore {
 			// The save stands: reporting it as failed would leave CE out of step with the row just written. The hold's
 			// statements ran in a savepoint (HeldCopies.hold), so the caller's transaction is still usable
 			log.error("The save of document {}'s {} stands, but the copy it replaced on storage backend {} couldn't be "
-					+ "recorded as held ({}): it is held with no row in hd_storage_held, under the backend's .held/ or, "
-					+ "on S3, where it was, and no purge will delete it", docId, name, backendId, e.getMessage(), e);
+					+ "recorded as held ({}): it stays where it was, with no row in hd_storage_held, and no purge will "
+					+ "delete it", docId, name, backendId, e.getMessage(), e);
 		}
 	}
 

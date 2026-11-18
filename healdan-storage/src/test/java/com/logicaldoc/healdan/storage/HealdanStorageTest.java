@@ -237,12 +237,14 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 		sf.map(local.store().getId(), cloud.backendId());
 		StorageFixtures.jdbc().execute("alter table hd_storage_held rename to away_hd_storage_held");
 		try (LogCapture log = LogCapture.of(HealdanStorage.class)) {
-			// The save lands in staging, and the old copy's held row can't be written
+			// The save lands in staging, and the old copy's held row can't be written, so the copy goes back in its
+			// place rather than wait under .held/ for a purge that would never come
 			store().store(file("new"), resource);
 
 			assertEquals(0L, row(doc.getId(), "1.0").backendId());
 			assertEquals("new", text(resource));
-			assertEquals("old", Files.readString(held(local.root(), doc.getId(), "1.0")));
+			assertEquals("old", Files.readString(local(local.root(), doc.getId(), "1.0")));
+			assertFalse(Files.exists(held(local.root(), doc.getId(), "1.0")));
 			String error = log.lines().stream().filter(l -> l.startsWith("ERROR ")).findFirst()
 					.orElseThrow(() -> new AssertionError(log.lines().toString()));
 			assertTrue(error, error.contains(Long.toString(doc.getId())) && error.contains("1.0")

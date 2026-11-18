@@ -259,7 +259,7 @@ public class LocalBackendTest extends BackendContract {
 		backend.hold("1/2/doc/1.0");
 		assertFalse(Files.exists(root.resolve("1")));
 
-		assertTrue(backend.unhold("1/2/doc/1.0"));
+		assertTrue(backend.unhold("1/2/doc/1.0", false));
 		assertArrayEquals(data, Files.readAllBytes(root.resolve("1/2/doc/1.0")));
 		assertFalse(Files.exists(root.resolve(".held/1")));
 		assertTrue(Files.isDirectory(root.resolve(".held")));
@@ -268,7 +268,7 @@ public class LocalBackendTest extends BackendContract {
 		backend.hold("1/2/doc/1.0");
 		Files.delete(root.resolve(".healdan-backend"));
 		try {
-			backend.unhold("1/2/doc/1.0");
+			backend.unhold("1/2/doc/1.0", false);
 			fail("An unhold into a folder with no marker worked");
 		} catch (BackendFailingException expected) {
 			// as it should

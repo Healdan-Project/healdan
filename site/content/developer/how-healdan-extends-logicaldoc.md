@@ -112,12 +112,19 @@ learn from.
     tree came back into another Store.
   - **A hold inside LogicalDOC's transaction is undone if it rolls back.** `Held.hold` moves a local backend's or
     staging's copy under `.held/` at once, holding the file's lock, while its `hd_storage_held` row and the delete of
-    the file's `hd_storage_file` row are the transaction's. `HoldRollback`, a transaction synchronization, puts each
+    the file's `hd_storage_file` row are the transaction's. `HoldRollback`, a transaction synchronisation, puts each
     copy back in its place on a rollback, holding its lock, before `FileLocks`' marks clear: the mover and the purge
-    leave a file an open transaction wrote, so neither finds its row back before its copy. It never moves a copy over
-    a file written in its place since; that copy stays under `.held/` until the key's next hold, which replaces it.
-    And a delete that finds a file missing from its place but under `.held/` holds that copy again, so the purge
-    deletes it in its time.
+    leave a file an open transaction wrote, so neither finds its row back before its copy. Each copy notes the file's
+    marks when it was held (`FileLocks.marksMade`, which counts writes and deletes, in a transaction or not, while one
+    is open on the file). If nobody else has written or deleted the file since, anything in its place is the
+    transaction's own write, which the copy replaces; if another has, the copy stays under `.held/`, as that one's hold
+    may name it. A second hold of the key in the same transaction deletes the transaction's own write rather than
+    replace the first held copy. A hold whose row can't be written puts its copy back at once.
+  - **A copy left under `.held/` is mended.** A copy a rollback couldn't put back waits for the purge's next run,
+    which puts it back if its row is on that backend and its place is empty. The purge does the same for any local
+    held copy whose row reads it from `.held/`, rather than delete it: a rollback can bring back an older hold of the
+    location. And a delete that finds a file missing from its place but under `.held/` holds that copy again, so the
+    purge deletes it in its time.
   - **A delete may build a backend's S3 client inside LogicalDOC's transaction.** `Held.hold`, which holds a deleted
     file's copy while holding that file's lock, inside the transaction of LogicalDOC's delete, builds the backend's
     client if nothing has yet. For an `http://` endpoint that's a DNS lookup, as the endpoint rule checks the host's

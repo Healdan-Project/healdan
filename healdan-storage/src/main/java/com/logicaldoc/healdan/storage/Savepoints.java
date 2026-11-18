@@ -37,11 +37,13 @@ final class Savepoints {
 	 * @throws RuntimeException what the work throws, once the savepoint is rolled back
 	 */
 	static <T> T run(JdbcTemplate jdbc, Supplier<T> work) {
-		if (!inTransaction(jdbc))
-			return work.get();
 		DataSource dataSource = jdbc.getDataSource();
+		if (dataSource == null || TransactionSynchronizationManager.getResource(dataSource) == null)
+			return work.get();
 		Connection connection = DataSourceUtils.getConnection(dataSource);
 		try {
+			if (!transactional(connection, dataSource))
+				return work.get();
 			Savepoint savepoint = connection.setSavepoint();
 			T result;
 			try {
@@ -75,13 +77,18 @@ final class Savepoints {
 			return false;
 		Connection connection = DataSourceUtils.getConnection(dataSource);
 		try {
-			return DataSourceUtils.isConnectionTransactional(connection, dataSource) && !connection.getAutoCommit();
+			return transactional(connection, dataSource);
 		} catch (SQLException e) {
 			DataAccessException translated = jdbc.getExceptionTranslator().translate("autocommit", null, e);
 			throw translated != null ? translated : new UncategorizedSQLException("autocommit", null, e);
 		} finally {
 			DataSourceUtils.releaseConnection(connection, dataSource);
 		}
+	}
+
+	/** @return whether the connection is the caller's transaction's, and doesn't commit each statement */
+	private static boolean transactional(Connection connection, DataSource dataSource) throws SQLException {
+		return DataSourceUtils.isConnectionTransactional(connection, dataSource) && !connection.getAutoCommit();
 	}
 
 	/**

@@ -630,7 +630,7 @@ public final class S3Backend implements Backend, Closeable {
 
 	/** S3: its hold left the object where it was, so there is nothing to put back, and nothing is sent */
 	@Override
-	public boolean unhold(String key) {
+	public boolean unhold(String key, boolean replace) {
 		objectKey(key);
 		return false;
 	}

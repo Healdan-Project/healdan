@@ -15,6 +15,7 @@ import static com.logicaldoc.healdan.storage.StorageFixtures.text;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -28,6 +29,7 @@ import java.util.List;
 import org.junit.Test;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -230,9 +232,9 @@ public class HoldRollbackTest extends AbstractStorageTestCase {
 		StorageFixtures.useBackend(local.backendId(),
 				new LocalBackend(local.backendId(), StorageSettings.get().installId(), local.root(), false) {
 					@Override
-					public boolean unhold(String key) throws IOException {
+					public boolean unhold(String key, boolean replace) throws IOException {
 						marked.add(FileLocks.writtenByOpenTransaction(id, "1.0"));
-						return super.unhold(key);
+						return super.unhold(key, replace);
 					}
 				});
 
@@ -246,9 +248,221 @@ public class HoldRollbackTest extends AbstractStorageTestCase {
 		assertEquals("kept", Files.readString(local(local.root(), id, "1.0")));
 	}
 
+	/** A file the transaction itself wrote in the copy's place since its hold is undone, and the copy goes back */
+	@Test
+	public void testARollbackUndoesItsOwnWriteOverTheCopy() throws Exception {
+		Document doc = upload(local, "first");
+		long id = doc.getId();
+		StoredFile before = row(id, "1.0");
+		Path place = local(local.root(), id, "1.0");
+
+		transaction.executeWithoutResult(status -> {
+			delete(id, "1.0");
+			save(id, "1.0", "second");
+			status.setRollbackOnly();
+		});
+
+		assertEquals(before, row(id, "1.0"));
+		assertEquals("first", Files.readString(place));
+		assertFalse(Files.exists(held(local.root(), id, "1.0")));
+		assertTrue(heldRows(id).isEmpty());
+		assertEquals("first", text(resource(id, "1.0")));
+	}
+
 	/**
-	 * A copy that can't go back, as when its place has a file written since, stays under .held/ and is logged; the
-	 * key's next hold replaces it, with a row for the purge
+	 * A second hold of the key in one transaction drops the transaction's own write rather than replace the copy the
+	 * first held: a rollback puts that copy back, and a commit holds it, the last bytes committed
+	 */
+	@Test
+	public void testTwoHoldsInOneTransactionKeepTheFirstCopy() throws Exception {
+		long rolledBack = upload(local, "first").getId();
+		long committed = upload(local, "kept").getId();
+
+		transaction.executeWithoutResult(status -> {
+			delete(rolledBack, "1.0");
+			save(rolledBack, "1.0", "second");
+			delete(rolledBack, "1.0");
+			status.setRollbackOnly();
+		});
+		transaction.executeWithoutResult(status -> {
+			delete(committed, "1.0");
+			save(committed, "1.0", "never committed");
+			delete(committed, "1.0");
+		});
+
+		assertEquals("first", Files.readString(local(local.root(), rolledBack, "1.0")));
+		assertFalse(Files.exists(held(local.root(), rolledBack, "1.0")));
+		assertTrue(heldRows(rolledBack).isEmpty());
+		assertFalse(Files.exists(local(local.root(), committed, "1.0")));
+		assertEquals("kept", Files.readString(held(local.root(), committed, "1.0")));
+		assertEquals(1, heldRows(committed).size());
+		assertTrue(StoredFiles.get().find(committed, "1.0").isEmpty());
+	}
+
+	/** Runs on a thread of its own, as another writer, and waits for it */
+	private static void elsewhere(Runnable work) throws InterruptedException {
+		Throwable[] failure = new Throwable[1];
+		Thread thread = new Thread(() -> {
+			try {
+				work.run();
+			} catch (Throwable t) {
+				failure[0] = t;
+			}
+		});
+		thread.start();
+		thread.join();
+		if (failure[0] != null)
+			throw new IllegalStateException(failure[0]);
+	}
+
+	/**
+	 * A copy another transaction has touched since the hold stays under .held/, as a hold of its own may name it: here
+	 * a delete that marked the file and committed. The purge's next run puts it back, as its row reads it from there.
+	 */
+	@Test
+	public void testACopyAnotherTransactionTouchedStays() throws Exception {
+		Document doc = upload(local, "kept");
+		long id = doc.getId();
+		StoredFile before = row(id, "1.0");
+		Path place = local(local.root(), id, "1.0");
+
+		transaction.executeWithoutResult(status -> {
+			delete(id, "1.0");
+			try {
+				elsewhere(() -> own.executeWithoutResult(other -> FileLocks.writtenInTransaction(id, "1.0")));
+			} catch (InterruptedException e) {
+				throw new IllegalStateException(e);
+			}
+			status.setRollbackOnly();
+		});
+
+		assertEquals(before, row(id, "1.0"));
+		assertFalse("left under .held/", Files.exists(place));
+		assertEquals("read from there", "kept", text(resource(id, "1.0")));
+
+		Purge.get().run();
+		assertEquals("kept", Files.readString(place));
+		assertFalse(Files.exists(held(local.root(), id, "1.0")));
+		assertTrue(heldRows(id).isEmpty());
+	}
+
+	/** A put back that fails, as on a share that stalls, is tried again by the purge's next run */
+	@Test
+	public void testAPutBackThatFailsIsRetriedByThePurge() throws Exception {
+		Document doc = upload(local, "kept");
+		long id = doc.getId();
+		Path place = local(local.root(), id, "1.0");
+		int[] calls = new int[1];
+		StorageFixtures.useBackend(local.backendId(),
+				new LocalBackend(local.backendId(), StorageSettings.get().installId(), local.root(), false) {
+					@Override
+					public boolean unhold(String key, boolean replace) throws IOException {
+						if (calls[0]++ == 0)
+							throw new IOException("A share that stalled");
+						return super.unhold(key, replace);
+					}
+				});
+
+		transaction.executeWithoutResult(status -> {
+			delete(id, "1.0");
+			status.setRollbackOnly();
+		});
+		assertFalse(Files.exists(place));
+		assertEquals("kept", text(resource(id, "1.0")));
+
+		Purge.get().run();
+		assertEquals(2, calls[0]);
+		assertEquals("kept", Files.readString(place));
+		assertFalse(Files.exists(held(local.root(), id, "1.0")));
+	}
+
+	/**
+	 * An older hold of the location that a rollback brings back, whose own copy the rolled-back hold replaced, doesn't
+	 * purge the copy the row now reads from .held/: the purge puts it back and drops the hold
+	 */
+	@Test
+	public void testAnOlderHoldDoesntPurgeTheRowsCopy() throws Exception {
+		Document doc = upload(local, "first");
+		long id = doc.getId();
+		Path place = local(local.root(), id, "1.0");
+		delete(id, "1.0");
+		save(id, "1.0", "second");
+		assertEquals("the older hold", 1, heldRows(id).size());
+		boolean[] failing = { true };
+		StorageFixtures.useBackend(local.backendId(),
+				new LocalBackend(local.backendId(), StorageSettings.get().installId(), local.root(), false) {
+					@Override
+					public boolean unhold(String key, boolean replace) throws IOException {
+						if (failing[0])
+							throw new IOException("A share that stalled");
+						return super.unhold(key, replace);
+					}
+				});
+
+		transaction.executeWithoutResult(status -> {
+			delete(id, "1.0");
+			status.setRollbackOnly();
+		});
+		assertEquals("the older hold, back", 1, heldRows(id).size());
+		assertEquals("second", text(resource(id, "1.0")));
+
+		// As after a restart, which forgets the copies waiting to be put back, once the share answers again
+		HoldRollback.reset();
+		failing[0] = false;
+		StorageFixtures.jdbc().update("update hd_storage_held set hd_purge = ?",
+				new Timestamp(System.currentTimeMillis() - 1000));
+		Purge.get().run();
+
+		assertEquals("second", Files.readString(place));
+		assertFalse(Files.exists(held(local.root(), id, "1.0")));
+		assertTrue(heldRows(id).isEmpty());
+		assertEquals("second", text(resource(id, "1.0")));
+	}
+
+	/** An outcome that can't be told leaves the copies held, as a commit does */
+	@Test
+	public void testAnUnknownOutcomeKeepsTheHold() throws Exception {
+		Document doc = upload(local, "held");
+		long id = doc.getId();
+
+		transaction.executeWithoutResult(status -> {
+			delete(id, "1.0");
+			// Told directly, as no transaction manager here ends in one; the commit that follows changes nothing
+			TransactionSynchronizationManager.getSynchronizations().stream().filter(s -> s instanceof HoldRollback)
+					.findFirst().orElseThrow().afterCompletion(TransactionSynchronization.STATUS_UNKNOWN);
+			assertFalse("not put back", Files.exists(local(local.root(), id, "1.0")));
+			assertTrue(Files.isRegularFile(held(local.root(), id, "1.0")));
+		});
+
+		assertEquals("held", Files.readString(held(local.root(), id, "1.0")));
+		assertFalse(Files.exists(local(local.root(), id, "1.0")));
+	}
+
+	/** A hold whose row can't be written puts the copy back at once, as a caller may go on and commit */
+	@Test
+	public void testAHoldThatCantBeRecordedPutsTheCopyBack() throws Exception {
+		Document doc = upload(local, "kept");
+		long id = doc.getId();
+		StoredFile before = row(id, "1.0");
+		StorageFixtures.jdbc().execute("alter table hd_storage_held rename to hd_storage_held_off");
+		try {
+			delete(id, "1.0");
+			fail("The delete went on with no hold recorded");
+		} catch (RuntimeException expected) {
+			// as it should
+		} finally {
+			StorageFixtures.jdbc().execute("alter table hd_storage_held_off rename to hd_storage_held");
+		}
+
+		assertEquals(before, row(id, "1.0"));
+		assertEquals("kept", Files.readString(local(local.root(), id, "1.0")));
+		assertFalse(Files.exists(held(local.root(), id, "1.0")));
+		assertTrue(heldRows(id).isEmpty());
+	}
+
+	/**
+	 * A copy that can't go back, as when its place has a file another wrote since, stays under .held/ and is logged;
+	 * the key's next hold replaces it, with a row for the purge
 	 */
 	@Test
 	public void testACopyThatCantGoBackWaitsForTheNextHold() throws Exception {
@@ -258,8 +472,21 @@ public class HoldRollbackTest extends AbstractStorageTestCase {
 
 		transaction.executeWithoutResult(status -> {
 			delete(id, "1.0");
-			// Written in its place since the hold, as by a save the rollback doesn't undo
-			save(id, "1.0", "second");
+			// Written in its place since the hold by another writer, outside any transaction
+			try {
+				elsewhere(() -> {
+					FileLocks.writtenInTransaction(id, "1.0");
+					try {
+						// The hold took the emptied folders with it
+						Files.createDirectories(place.getParent());
+						Files.writeString(place, "second");
+					} catch (IOException e) {
+						throw new UncheckedIOException(e);
+					}
+				});
+			} catch (InterruptedException e) {
+				throw new IllegalStateException(e);
+			}
 			status.setRollbackOnly();
 		});
 

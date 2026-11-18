@@ -286,9 +286,9 @@ public class GatedBackend implements Backend {
 	}
 
 	@Override
-	public boolean unhold(String key) throws IOException {
+	public boolean unhold(String key, boolean replace) throws IOException {
 		calls.add("unhold " + key);
-		return inner.unhold(key);
+		return inner.unhold(key, replace);
 	}
 
 	@Override

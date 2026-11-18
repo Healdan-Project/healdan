@@ -135,9 +135,11 @@ CI's runners have no S3 service, and the test shards don't run Docker, so storag
 
 `BackendContract` holds the tests every backend must pass, which `LocalBackendTest`, `MemoryBackendTest`,
 `MemoryBackendS3LikeTest` and `S3BackendTest` each run. `HoldRollbackTest` checks that a delete whose transaction
-rolls back puts each copy back from `.held/`, before the transaction's file marks clear, and that a transaction of its
-own inside it keeps its own; `CeFlowsTest#testDestroyRolledBack` does the same for LogicalDOC's destroy on a local
-Store and an S3 one. `TinkClasspathTest` checks that encryption runs without the
+rolls back puts each copy back from `.held/`, before the transaction's file marks clear, over the transaction's own
+write but never another's, and that a transaction of its own inside it keeps its own; `CeFlowsTest#testDestroyRolledBack`
+does the same for LogicalDOC's destroy on a local Store and an S3 one. `HoldRollbackTest` also checks what mends a
+copy left under `.held/`: the purge's retry of a put back that failed, a due older hold that puts the row's copy back
+rather than purge it, and a hold whose row can't be written. `TinkClasspathTest` checks that encryption runs without the
 `gson` and `protobuf` classes Tink brings, which the plugin zip leaves out.
 
 #### The Fake S3 Server
