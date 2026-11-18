@@ -6,17 +6,50 @@
 # env file and removes everything it created on exit. Usage: docker/smoke-test.sh
 # SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image> docker/smoke-test.sh tests an existing image instead of building one
 # (CI builds it beforehand with Buildx).
+# Two can run on one machine at once, each with a project name and host ports of its own, for example:
+#   SMOKE_PROJECT=smoke-b SMOKE_PORT=28080 SMOKE_KEYCLOAK_PORT=28180 SMOKE_GARAGE_PORT=23900 docker/smoke-test.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . docker/tests/lib.sh
 
-PROJECT=logicaldoc-smoke
+# The Compose project, which names the stack's containers, volumes and network. CI keeps the default.
+PROJECT=${SMOKE_PROJECT:-logicaldoc-smoke}
+# Lowercase letters and digits joined by - or _, which is both a Compose project name and an image name.
+if ! [[ $PROJECT =~ ^[a-z0-9]+([-_][a-z0-9]+)*$ ]]; then
+  echo "SMOKE_PROJECT '$PROJECT' isn't a project name this script takes: lowercase letters and digits, joined by - or _"
+  exit 1
+fi
+# The image the app runs, which the build tags. The project names it: a second run's build would otherwise retag it,
+# and step 8 would start this run's app again on the other run's image.
+IMAGE=${LOGICALDOC_IMAGE:-$PROJECT:local}
 PORT=${SMOKE_PORT:-18080}
 BASE="http://127.0.0.1:$PORT"
 # The stand-in sign-in provider's host port (docker/tests/compose.signin.yaml), on 127.0.0.1 only.
 KEYCLOAK_PORT=${SMOKE_KEYCLOAK_PORT:-18180}
 # The stand-in S3 server's host port (docker/tests/compose.storage.yaml), on 127.0.0.1 only.
 GARAGE_PORT=${SMOKE_GARAGE_PORT:-13900}
+
+# A project that already has containers or volumes is another run's, or was left by one stopped before it could
+# remove its stack. This run uses neither: it stops here, before the trap below is set, so that its removal on exit
+# only ever removes a stack it made.
+in_use=$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT"
+  docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT")
+if [ -n "$in_use" ]; then
+  echo "Compose project $PROJECT already has containers or volumes: another smoke test is using it, or one stopped"
+  echo "before it could remove its stack. Set SMOKE_PROJECT to another name, or, once no run is using it, remove it:"
+  echo "  (cd / && docker compose -p $PROJECT down -v --remove-orphans)"
+  exit 1
+fi
+# A port something already answers on, such as another run's, would fail the start.
+port_in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+for setting in "SMOKE_PORT $PORT" "SMOKE_KEYCLOAK_PORT $KEYCLOAK_PORT" "SMOKE_GARAGE_PORT $GARAGE_PORT"; do
+  if port_in_use "${setting#* }"; then
+    echo "Port ${setting#* } on 127.0.0.1 is in use, by another smoke test or something else:" \
+      "set ${setting% *} to a free one"
+    exit 1
+  fi
+done
+
 WORK=$(mktemp -d)
 ENV_FILE=$WORK/smoke.env
 # Awkward on purpose: exercises .env quoting, context.properties escaping and the JDBC login.
@@ -87,8 +120,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-printf "DB_PASSWORD='%s'\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\nSMOKE_GARAGE_PORT=%s\n" "$PW" "$PORT" \
-  "$KEYCLOAK_PORT" "$GARAGE_PORT" > "$ENV_FILE"
+printf "DB_PASSWORD='%s'\nLOGICALDOC_IMAGE=%s\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\nSMOKE_GARAGE_PORT=%s\n" \
+  "$PW" "$IMAGE" "$PORT" "$KEYCLOAK_PORT" "$GARAGE_PORT" > "$ENV_FILE"
 
 # Fixtures: a 16x16 PNG and a one-page PDF with a correct xref table.
 python3 - "$WORK" <<'PY'
