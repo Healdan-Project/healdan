@@ -70,9 +70,9 @@ public abstract class AbstractHealdanTestCase extends AbstractTestCase {
 		String base = baseConfigResource();
 		String name = "pg-" + base;
 		File target = new File(TEST_CLASSES, name);
-		// CE writes a changed setting back to its file, and a later test reads it, as each did from context.properties
-		// on HSQLDB: so that one carries on from what the last test left. Any other base is written by its test class
-		File source = CONTEXT_PROPERTIES.equals(base) && target.isFile() ? target : new File(TEST_CLASSES, base);
+		// Only context.properties carries on between tests (configSource); any other base is written by its test class
+		File source = CONTEXT_PROPERTIES.equals(base) ? configSource(new File(TEST_CLASSES, base), target)
+				: new File(TEST_CLASSES, base);
 		try {
 			String text = Files.readString(source.toPath(), ISO_8859_1);
 			text = set(text, "jdbc.url", TestDatabase.serverUrl() + database);
@@ -83,6 +83,22 @@ public abstract class AbstractHealdanTestCase extends AbstractTestCase {
 			throw new IllegalStateException("Can't write " + target + " from " + source, e);
 		}
 		return name;
+	}
+
+	/**
+	 * The file context.properties is written again from. CE writes a changed
+	 * setting back to its file, and a later test reads it, as each did from
+	 * context.properties on HSQLDB: so within a run the pg- copy carries on
+	 * from what the last test left. When the source is edited, Maven copies it
+	 * over the base, which is then newer than the copy: so the edit reaches the
+	 * next run rather than staying behind the copy for good.
+	 *
+	 * @param base context.properties in target/test-classes
+	 * @param written its pg- copy, which may not exist yet
+	 * @return the copy when it is at least as new as the base, else the base
+	 */
+	static File configSource(File base, File written) {
+		return written.isFile() && written.lastModified() >= base.lastModified() ? written : base;
 	}
 
 	/**
