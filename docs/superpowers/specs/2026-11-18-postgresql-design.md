@@ -6,8 +6,8 @@
   principle 9).
 - **Status:** designed with the owner on 2026-11-18, choice by choice and then through two playbacks, with a trial
   running beside the session (§4). The owner approved this written spec the same day. Implementation plan:
-  [`docs/superpowers/plans/2026-11-18-postgresql.md`](../plans/2026-11-18-postgresql.md); its "Spec Corrections and Calls This
-  Plan Makes" lists where it decides what this spec left open. Not built.
+  [`docs/superpowers/plans/2026-11-18-postgresql.md`](../plans/2026-11-18-postgresql.md); its "Spec Corrections and
+  Calls This Plan Makes" lists where it decides what this spec left open. Not built.
 - **Inputs:**
   - the [PostgreSQL recon](../../reference/postgresql-recon.md) of 2026-11-03, re-checked on 2026-11-18, whose
     sections this spec cites as "recon §n" and whose questions Q1 to Q15 it answers (§15);
