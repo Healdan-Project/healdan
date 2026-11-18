@@ -130,6 +130,9 @@ public class HeldDeletesTest extends AbstractStorageTestCase {
 		assertTrue(Files.exists(held(root, id, "1.0")));
 		assertEquals(1, heldRows(id).size());
 
+		// Deleted again, as by the database as it is now: a due copy a row still reads is put back, not purged
+		// (HoldRollbackTest#testAnOlderHoldDoesntPurgeTheRowsCopy)
+		StoredFiles.get().delete(id, "1.0");
 		age();
 		try (LogCapture log = LogCapture.of(Purge.class)) {
 			Purge.get().run();

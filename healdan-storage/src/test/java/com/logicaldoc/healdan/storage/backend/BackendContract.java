@@ -304,4 +304,41 @@ public abstract class BackendContract {
 		backend.purgeHeld(location);
 		assertTrue(backend.held("1/2/doc/1.0").isEmpty());
 	}
+
+	/** A hold whose delete rolled back is undone: the copy goes back, but never over a file written since */
+	@Test
+	public void testUnhold() throws IOException {
+		byte[] data = bytes(10);
+		backend.put("1/2/doc/1.0", source(data), md5(data));
+		if (!holdMovesTheFile()) {
+			backend.hold("1/2/doc/1.0");
+			long before = sent();
+			assertFalse("nothing moved, so nothing goes back", backend.unhold("1/2/doc/1.0", false));
+			assertFalse(backend.unhold("1/2/doc/1.0", true));
+			assertEquals("unhold sends nothing", before, sent());
+			assertArrayEquals(data, read("1/2/doc/1.0"));
+			return;
+		}
+		assertFalse("not held", backend.unhold("1/2/doc/1.0", false));
+		assertArrayEquals(data, read("1/2/doc/1.0"));
+
+		backend.hold("1/2/doc/1.0");
+		assertTrue(backend.unhold("1/2/doc/1.0", false));
+		assertArrayEquals("back in its place", data, read("1/2/doc/1.0"));
+		assertTrue(backend.held("1/2/doc/1.0").isEmpty());
+		assertFalse("once", backend.unhold("1/2/doc/1.0", false));
+
+		// A file written in its place since the hold stays, and so does the held copy, for the key's next hold
+		String location = backend.hold("1/2/doc/1.0");
+		byte[] newer = bytes(12);
+		backend.put("1/2/doc/1.0", source(newer), null);
+		assertFalse(backend.unhold("1/2/doc/1.0", false));
+		assertArrayEquals(newer, read("1/2/doc/1.0"));
+		assertEquals(java.util.Optional.of(location), backend.held("1/2/doc/1.0"));
+
+		// Replacing it, as when the rolled-back transaction wrote it itself
+		assertTrue(backend.unhold("1/2/doc/1.0", true));
+		assertArrayEquals(data, read("1/2/doc/1.0"));
+		assertTrue(backend.held("1/2/doc/1.0").isEmpty());
+	}
 }

@@ -42,7 +42,7 @@ final class Savepoints {
 			return work.get();
 		Connection connection = DataSourceUtils.getConnection(dataSource);
 		try {
-			if (!DataSourceUtils.isConnectionTransactional(connection, dataSource) || connection.getAutoCommit())
+			if (!transactional(connection, dataSource))
 				return work.get();
 			Savepoint savepoint = connection.setSavepoint();
 			T result;
@@ -64,6 +64,31 @@ final class Savepoints {
 		} finally {
 			DataSourceUtils.releaseConnection(connection, dataSource);
 		}
+	}
+
+	/**
+	 * @param jdbc a template
+	 * @return whether its statements run in the caller's transaction, which holds the data source's connection: they
+	 *         commit or roll back with it; otherwise each commits on its own
+	 */
+	static boolean inTransaction(JdbcTemplate jdbc) {
+		DataSource dataSource = jdbc.getDataSource();
+		if (dataSource == null || TransactionSynchronizationManager.getResource(dataSource) == null)
+			return false;
+		Connection connection = DataSourceUtils.getConnection(dataSource);
+		try {
+			return transactional(connection, dataSource);
+		} catch (SQLException e) {
+			DataAccessException translated = jdbc.getExceptionTranslator().translate("autocommit", null, e);
+			throw translated != null ? translated : new UncategorizedSQLException("autocommit", null, e);
+		} finally {
+			DataSourceUtils.releaseConnection(connection, dataSource);
+		}
+	}
+
+	/** @return whether the connection is the caller's transaction's, and doesn't commit each statement */
+	private static boolean transactional(Connection connection, DataSource dataSource) throws SQLException {
+		return DataSourceUtils.isConnectionTransactional(connection, dataSource) && !connection.getAutoCommit();
 	}
 
 	/**

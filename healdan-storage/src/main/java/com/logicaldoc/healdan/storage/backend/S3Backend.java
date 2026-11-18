@@ -628,6 +628,13 @@ public final class S3Backend implements Backend, Closeable {
 		return key;
 	}
 
+	/** S3: its hold left the object where it was, so there is nothing to put back, and nothing is sent */
+	@Override
+	public boolean unhold(String key, boolean replace) {
+		objectKey(key);
+		return false;
+	}
+
 	/**
 	 * Deletes a held object, with a bound on the whole call, attempts included: the purge holds the file's lock while
 	 * it deletes, so that no save or delete holds the location afresh in between, and a bucket that stalls would

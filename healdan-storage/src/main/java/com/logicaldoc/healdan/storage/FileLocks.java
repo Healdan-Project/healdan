@@ -9,8 +9,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-import org.springframework.core.Ordered;
-import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
@@ -46,8 +44,14 @@ public final class FileLocks {
 
 	private static final ReentrantLock[] LOCKS = new ReentrantLock[STRIPES];
 
-	/** The files open transactions wrote holding their lock, as {@code <docId>/<resource>}: how many transactions */
-	private static final Map<String, Integer> OPEN = new ConcurrentHashMap<>();
+	/**
+	 * The files open transactions wrote holding their lock, as {@code <docId>/<resource>}: how many marks are open, and
+	 * how many writes and deletes the file has had since its first open mark ({@link #marksMade})
+	 */
+	private static final Map<String, Open> OPEN = new ConcurrentHashMap<>();
+
+	private record Open(int count, long made) {
+	}
 
 	/** The documents of those files: how many of their files' marks there are */
 	private static final Map<Long, Integer> OPEN_DOCUMENTS = new ConcurrentHashMap<>();
@@ -92,14 +96,15 @@ public final class FileLocks {
 	 * @param resource its resource
 	 */
 	public static void writtenInTransaction(long docId, String resource) {
-		if (!TransactionSynchronizationManager.isSynchronizationActive())
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			// Counted all the same while an open transaction has marked the file, so its rollback knows the file was
+			// written or deleted by another since (HoldRollback)
+			OPEN.computeIfPresent(docId + "/" + resource, (key, open) -> new Open(open.count(), open.made() + 1));
 			return;
-		Marks marks = (Marks) TransactionSynchronizationManager.getResource(MARKS);
-		if (marks == null) {
-			marks = new Marks();
-			TransactionSynchronizationManager.registerSynchronization(marks);
-			TransactionSynchronizationManager.bindResource(MARKS, marks);
 		}
+		Marks marks = TransactionBound.find(MARKS);
+		if (marks == null)
+			marks = TransactionBound.bind(new Marks());
 		marks.mark(docId, resource);
 	}
 
@@ -108,47 +113,67 @@ public final class FileLocks {
 	 * suspended, so that a transaction of its own inside it keeps marks of its own; the outer transaction's stay meanwhile,
 	 * as it is still open.
 	 */
-	private static final class Marks implements TransactionSynchronization {
+	private static final class Marks extends TransactionBound {
 
 		private final List<String> files = new ArrayList<>();
 
 		private final List<Long> documents = new ArrayList<>();
 
+		Marks() {
+			super(MARKS);
+		}
+
 		void mark(long docId, String resource) {
 			String file = docId + "/" + resource;
-			OPEN.merge(file, 1, Integer::sum);
+			OPEN.merge(file, new Open(1, 1), (open, one) -> new Open(open.count() + 1, open.made() + 1));
 			OPEN_DOCUMENTS.merge(docId, 1, Integer::sum);
 			files.add(file);
 			documents.add(docId);
 		}
 
+		int count(String file) {
+			int count = 0;
+			for (String marked : files)
+				if (marked.equals(file))
+					count++;
+			return count;
+		}
+
 		@Override
 		public int getOrder() {
-			// Before anything the transaction's end wakes, such as the mover
-			return Ordered.HIGHEST_PRECEDENCE;
+			// Before anything the transaction's end wakes, such as the mover, and after a rollback's copies are put
+			// back from .held/ (HoldRollback), which the mover and the purge mustn't see the rows back without
+			return HoldRollback.ORDER + 1;
 		}
 
 		@Override
-		public void suspend() {
-			TransactionSynchronizationManager.unbindResourceIfPossible(MARKS);
-		}
-
-		@Override
-		public void resume() {
-			TransactionSynchronizationManager.bindResource(MARKS, this);
-		}
-
-		@Override
-		public void afterCompletion(int status) {
-			TransactionSynchronizationManager.unbindResourceIfPossible(MARKS);
+		void completed(int status) {
 			for (int i = 0; i < files.size(); i++)
 				unmark(files.get(i), documents.get(i));
 		}
 	}
 
 	private static void unmark(String file, long docId) {
-		OPEN.computeIfPresent(file, (key, count) -> count > 1 ? count - 1 : null);
+		OPEN.computeIfPresent(file, (key, open) -> open.count() > 1 ? new Open(open.count() - 1, open.made()) : null);
 		OPEN_DOCUMENTS.computeIfPresent(docId, (key, count) -> count > 1 ? count - 1 : null);
+	}
+
+	/**
+	 * @return how many writes and deletes the file has had, by any transaction or none, since the first of the marks
+	 *         open on it now; 0 when none is. With {@link #marksHere} it tells a transaction whether another has written
+	 *         or deleted the file since a point in it, while it still has a mark open on the file.
+	 */
+	static long marksMade(long docId, String resource) {
+		Open open = OPEN.get(docId + "/" + resource);
+		return open == null ? 0 : open.made();
+	}
+
+	/**
+	 * @return how many times the current transaction has marked the file
+	 */
+	static int marksHere(long docId, String resource) {
+		Marks marks = TransactionBound.find(MARKS);
+		return marks == null ? 0 : marks.count(docId + "/" + resource);
 	}
 
 	/**

@@ -41,6 +41,8 @@ import java.util.Map;
 import java.util.Random;
 
 import org.junit.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
@@ -408,6 +410,64 @@ public class CeFlowsTest extends AbstractStorageTestCase {
 				assertFalse(resource, Store.get().exists(resource(id, resource)));
 			if (side.isS3())
 				assertEquals("the bucket's copy is left alone", 0, side.s3().calls(Op.DELETE, key(id, "1.0")));
+		});
+	}
+
+	/**
+	 * A destroy whose transaction rolls back leaves each file where it was, readable, and holds nothing: the rows come
+	 * back with the rollback, and each copy moved under {@code .held/} is put back in its place, so the document
+	 * restores with its files and a later destroy holds them again
+	 */
+	@Test
+	public void testDestroyRolledBack() throws Exception {
+		each(side -> {
+			Document doc = upload(side, "a.txt", "one");
+			long id = doc.getId();
+			checkin(doc, "two");
+			Store.get().store(file("thumb"), resource(id, "1.1-thumb.png"));
+			// On S3, one file uploaded and two still staged, whose hold moves them under staging's .held/
+			if (side.isS3())
+				moveToBucket(side, id, "1.0");
+			DocumentDAO.get().delete(id, history());
+			Map<String, StoredFile> before = rows(id);
+			Map<String, String> texts = Map.of("1.0", "one", "1.1", "two", "1.1-thumb.png", "thumb");
+
+			new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+				try {
+					DocumentManager.get().destroyDocument(id, fx.folderHistory(fx.admin()));
+				} catch (Exception e) {
+					throw new IllegalStateException(e);
+				}
+				assertTrue("destroyed inside the transaction", StoredFiles.get().list(id).isEmpty());
+				status.setRollbackOnly();
+			});
+
+			assertEquals(Long.valueOf(1), StorageFixtures.jdbc()
+					.queryForObject("select count(*) from ld_document where ld_id = ?", Long.class, id));
+			assertEquals(before, rows(id));
+			assertTrue(heldRows(id).isEmpty());
+			for (Map.Entry<String, String> file : texts.entrySet()) {
+				String resource = file.getKey();
+				long backendId = before.get(resource).backendId();
+				if (backendId == side.backendId() && side.isS3())
+					assertNotNull(resource + " stays in the bucket", side.s3().bytes(key(id, resource)));
+				else {
+					Path root = backendId == 0L ? Staging.folder() : side.root();
+					assertTrue(resource + " back in its place", Files.isRegularFile(root.resolve(key(id, resource))));
+					assertFalse(resource + " not under .held/", Files.exists(held(root, id, resource)));
+				}
+				assertEquals(resource, file.getValue(), text(resource(id, resource)));
+			}
+			if (side.isS3())
+				assertEquals("the bucket's copy is left alone", 0, side.s3().calls(Op.DELETE, key(id, "1.0")));
+
+			// A destroy that commits holds them, as testDestroyDocument does
+			DocumentManager.get().destroyDocument(id, fx.folderHistory(fx.admin()));
+			assertTrue(StoredFiles.get().list(id).isEmpty());
+			assertEquals(3, heldRows(id).size());
+			assertHeld(side, id, "1.0", side.backendId());
+			assertHeld(side, id, "1.1", side.saveLandsOn());
+			assertHeld(side, id, "1.1-thumb.png", side.saveLandsOn());
 		});
 	}
 
