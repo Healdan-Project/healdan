@@ -25,9 +25,9 @@ import com.logicaldoc.healdan.HealdanStartupException;
 
 /**
  * Creates and upgrades Healdan's own tables (prefix {@code hd_}) with Flyway.
- * LogicalDOC's tables are never touched. Only MariaDB (production) and HSQLDB
- * (tests) are supported; any other database, MySQL included, is refused before
- * Flyway runs.
+ * LogicalDOC's tables are never touched. Only MariaDB (production), PostgreSQL
+ * and HSQLDB (tests) are supported; any other database, MySQL included, is
+ * refused before Flyway runs.
  */
 @Component
 public class HealdanMigrator {
@@ -169,10 +169,12 @@ public class HealdanMigrator {
 		String lowerVersion = version == null ? "" : version.toLowerCase(Locale.ROOT);
 		if (lowerProduct.contains("mariadb") || lowerVersion.contains("mariadb"))
 			return "mariadb";
+		if (lowerProduct.contains("postgresql"))
+			return "postgresql";
 		if (lowerProduct.contains("hsql"))
 			return "hsqldb";
 		throw new HealdanStartupException(
-				"Healdan's tables support MariaDB and HSQLDB only; found " + product + " " + version);
+				"Healdan's tables support MariaDB, PostgreSQL and HSQLDB only; found " + product + " " + version);
 	}
 
 	static FluentConfiguration configure(DataSource dataSource, String... locations) {

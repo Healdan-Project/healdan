@@ -145,11 +145,11 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testRefusesUnsupportedDatabase() {
-		for (String product : List.of("PostgreSQL", "Oracle", "Microsoft SQL Server", "MySQL")) {
+		for (String product : List.of("Oracle", "Microsoft SQL Server", "MySQL")) {
 			HealdanStartupException e = assertThrows(product, HealdanStartupException.class,
 					() -> HealdanMigrator.defaultLocation(metaData(product, "8.0.36")));
 			assertTrue(e.getMessage(),
-					e.getMessage().contains("MariaDB and HSQLDB only; found " + product + " 8.0.36"));
+					e.getMessage().contains("MariaDB, PostgreSQL and HSQLDB only; found " + product + " 8.0.36"));
 		}
 	}
 
@@ -162,7 +162,7 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 		HealdanStartupException e = assertThrows(HealdanStartupException.class,
 				() -> new HealdanMigrator(posingAs(real, "MySQL", "8.0.36", statements)).migrate());
 
-		assertTrue(e.getMessage(), e.getMessage().contains("MariaDB and HSQLDB only; found MySQL 8.0.36"));
+		assertTrue(e.getMessage(), e.getMessage().contains("MariaDB, PostgreSQL and HSQLDB only; found MySQL 8.0.36"));
 		assertEquals(List.of(), statements);
 		assertFalse(tableExists(new JdbcTemplate(real), "hd_schema_history"));
 		assertFalse(tableExists(new JdbcTemplate(real), "hd_setting"));
@@ -179,6 +179,8 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 				HealdanMigrator.defaultLocation(metaData("MariaDB", "11.4.2-MariaDB-ubu2404")));
 		assertEquals("classpath:healdan/db/migration/hsqldb",
 				HealdanMigrator.defaultLocation(metaData("HSQL Database Engine", "2.7.1")));
+		assertEquals("classpath:healdan/db/migration/postgresql",
+				HealdanMigrator.defaultLocation(metaData("PostgreSQL", "18.4")));
 	}
 
 	private int historyRows() {
