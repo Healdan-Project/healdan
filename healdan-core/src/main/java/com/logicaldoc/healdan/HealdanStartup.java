@@ -34,10 +34,12 @@ import jakarta.annotation.PostConstruct;
  */
 /*
  * The seeds reach the DAOs and the config through Context.get(), which is only
- * set once CE's "context" bean exists.
+ * set once CE's "context" bean exists. They also need Healdan's hooks, which
+ * HealdanHooksImpl registers when Spring makes it: without them a seed's folder
+ * delete, move or restore records no Trash item and skips Healdan's checks.
  */
 @Component
-@DependsOn("context")
+@DependsOn({ "context", "healdanHooksImpl" })
 public class HealdanStartup {
 
 	private static final Logger log = LoggerFactory.getLogger(HealdanStartup.class);

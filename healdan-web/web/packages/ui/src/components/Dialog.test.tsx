@@ -35,25 +35,29 @@ function open() {
 }
 
 describe('Dialog', () => {
-  it('an alert dialog says so', () => {
-    render(<Dialog title="Release Check-Out" isOpen role="alertdialog" onOpenChange={() => {}}>{() => <Button>OK</Button>}</Dialog>)
+  it('a warning is an alert dialog, and says so', () => {
+    render(<Dialog title="Release Check-Out" isOpen warning onOpenChange={() => {}}>{() => <Button>OK</Button>}</Dialog>)
     expect(screen.getByRole('alertdialog', { name: 'Release Check-Out' })).toBeTruthy()
   })
 
-  it('draws an icon before the title, which is no part of its name', () => {
-    render(
-      <Dialog title="Release Check-Out" isOpen role="alertdialog" icon={<svg aria-hidden="true" data-testid="sign" />} onOpenChange={() => {}}>
+  it("draws a warning's sign before the title, which is no part of its name, and none for a plain dialog", () => {
+    const { unmount } = render(
+      <Dialog title="Release Check-Out" isOpen warning onOpenChange={() => {}}>
         {() => <Button>OK</Button>}
       </Dialog>,
     )
-    const heading = screen.getByRole('heading', { name: 'Release Check-Out' })
-    expect(heading.firstElementChild).toBe(screen.getByTestId('sign'))
-    expect(screen.getByRole('alertdialog', { name: 'Release Check-Out' })).toBeTruthy()
+    const sign = screen.getByRole('heading', { name: 'Release Check-Out' }).firstElementChild
+    expect(sign?.tagName.toLowerCase()).toBe('svg')
+    expect(sign?.getAttribute('aria-hidden')).toBe('true')
+    unmount()
+    render(<Dialog title="Rename Folder" isOpen onOpenChange={() => {}}>{() => <Button>OK</Button>}</Dialog>)
+    expect(screen.getByRole('dialog', { name: 'Rename Folder' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Rename Folder' }).firstElementChild).toBeNull()
   })
 
   it('is described by what it names, as an alert says what it warns of', () => {
     render(
-      <Dialog title="Release Check-Out" isOpen role="alertdialog" aria-describedby="what" onOpenChange={() => {}}>
+      <Dialog title="Release Check-Out" isOpen warning aria-describedby="what" onOpenChange={() => {}}>
         {() => (
           <>
             <p id="what">Unsaved changes are lost.</p>

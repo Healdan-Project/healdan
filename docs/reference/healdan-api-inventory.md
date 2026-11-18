@@ -3,6 +3,7 @@
 - **What:** every server call the old GWT UI makes, with the milestone that first needs it in the new JSON API, and where it lands there.
 - **Written:** 2026-10-23, for the [M2 design](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) (§12), from the code at `808d5395b`.
 - **Kept current:** each milestone that adds endpoints updates its entries' tags and endpoints in the same pull request.
+- **After M6**, the User app's later phases add their endpoints to §0.3, each marked "built after M6", and their old calls move from `Later` to `M6`: a favourite's name and renaming folders (2026-11-14), and moving and deleting folders and the Trash (2026-11-17, the [folders and Trash spec](../superpowers/specs/2026-11-16-folders-and-trash-design.md) §6).
 - **M6 built** its endpoints on 2026-11-10 to 2026-11-12 (§0.3), and its design left the rest of the old calls it weighed to later phases of the User app (`Later`) or to none (M6 spec §4, §16).
 - **M3 built** its endpoints on 2026-10-24 (§0.2): the bookmarks, `FolderService.create` and `/thumbnail` moved from M6 to M3, and the rest of M3's additions have no old call behind them.
 - **M2 built** every `M2` endpoint named here on 2026-10-23 and 2026-10-24 (§0.1). Its `openapi.yaml` (`healdan-api/src/main/resources/healdan/api/openapi.yaml`) is the reference for what they do; this file only maps the old calls to them.
@@ -27,10 +28,10 @@
 | M2 | 31 | 6 | 3 | 40 |
 | M3 | 3 | 1 | 1 | 5 |
 | M5 | 0 | 0 | 0 | 0 |
-| M6 | 10 | 1 | 2 | 13 |
+| M6 | 18 | 4 | 2 | 24 |
 | M7 | 0 | 0 | 0 | 0 |
-| Later | 73 | 17 | 7 | 97 |
-| Admin | 122 | 20 | 3 | 145 |
+| Later | 64 | 14 | 7 | 85 |
+| Admin | 123 | 20 | 3 | 146 |
 | none | 236 | 7 | 7 | 250 |
 | **all** | 475 | 52 | 23 | 550 |
 
@@ -93,8 +94,16 @@ M6 built every endpoint in this table, for the User app ([M6 spec](../superpower
 | `HealdanMatterService.addToMyMatters`, `removeFromMyMatters` | `PUT /me/matters/{folderId}`, `DELETE /me/matters/{folderId}` |
 | `DocumentService.rename` | `PATCH /documents/{docNumber}` |
 | `DocumentService.updateBookmark`, a bookmark's name | `PATCH /me/favorites/{id}`, and `name` in `FavoriteView` (built after M6: the owner's dogfooding punch list, 2026-11-14) |
-| `DocumentService.delete` | `DELETE /documents/{docNumber}` |
+| `DocumentService.delete` | `DELETE /documents/{docNumber}`, which answers the delete's `TrashItem` (since the folders and Trash spec; `204` before) |
 | `FolderService.paste`, a cut's move | `POST /documents/{docNumber}/move` |
+| `FolderService.rename` | `PATCH /folders/{id}` with `{ name }`, and `canRename` in `FolderView` (built after M6: the [folder rename spec](../superpowers/specs/2026-11-14-folder-rename-design.md), 2026-11-14) |
+| `FolderService.delete` | `DELETE /folders/{id}`, answering the delete's `TrashItem` (built after M6: the folders and Trash spec, 2026-11-17) |
+| `FolderService.move` | `POST /folders/{id}/move` (built after M6: the same) |
+| `DocumentService.restore`, `FolderService.restore` | `POST /trash/{id}/restore`, back where it was or into `folderId` (built after M6: the same) |
+| `DocumentService.deleteFromTrash`, `FolderService.deleteFromTrash` | `DELETE /trash/{id}`, to Removed (built after M6: the same) |
+| `DocumentService.emptyTrash` | `DELETE /trash` (built after M6: the same) |
+| `/data/garbage.xml`, `/data/deleteddocs.xml`, `/data/deletedfolders.xml` | `GET /trash?view=mine`, and `everyone` and `removed` for administrators (built after M6: the same) |
+| (none: the counts before a folder's delete or move are new) | `GET /folders/{id}/contents`, and `canMove` and `canDelete` in `FolderView` (built after M6: the same) |
 | `DocumentService.extractEmail`, `saveEmailAttachment` | `GET /documents/{docNumber}/message`, `GET /documents/{docNumber}/message/body`, `POST /documents/{docNumber}/message/attachments/{id}/file` |
 | `/download-attachment` | `GET /documents/{docNumber}/message/parts/{id}` |
 | `/convertpdf/*` | `GET /documents/{docNumber}/preview` |
@@ -127,9 +136,9 @@ M6 built every endpoint in this table, for the User app ([M6 spec](../superpower
 | ContactService | 5 |  |  |  |  |  |  |  | 5 |
 | DashletService | 7 |  |  |  |  |  |  | 3 | 4 |
 | DocuSignService | 6 |  |  |  |  |  |  |  | 6 |
-| DocumentService | 72 | 12 | 2 |  | 5 |  | 32 | 7 | 14 |
+| DocumentService | 72 | 12 | 2 |  | 8 |  | 28 | 8 | 14 |
 | EmailAccountService | 8 |  |  |  |  |  |  |  | 8 |
-| FolderService | 27 | 2 | 1 |  | 1 |  | 15 | 7 | 1 |
+| FolderService | 27 | 2 | 1 |  | 6 |  | 10 | 7 | 1 |
 | FormService | 6 |  |  |  |  |  |  |  | 6 |
 | ImpexService | 12 |  |  |  |  |  |  |  | 12 |
 | ImportFolderService | 8 |  |  |  |  |  |  |  | 8 |
@@ -377,8 +386,8 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/frontend/client/services/DocumentService.java`; RPC URL `/frontend/document` (`@RemoteServiceRelativePath("document")`)
 - Server impl: **DocumentServiceImpl**
-- Methods: 72 (M2 12, M3 2, M6 5, Later 32, Admin 7, none 14)
-- Lands in: `/documents/{docNumber}`, `/documents/{docNumber}/checkout`, `/documents/{docNumber}/versions`, `/documents/{docNumber}/properties`, `POST /documents` (M2); `/me/favorites` (M3); `PATCH` and `DELETE /documents/{docNumber}`, `/documents/{docNumber}/message`, and `PATCH /me/favorites/{id}` for a favourite's name (M6, after M6); `/documents/{docNumber}/…` for notes, links, tickets and permissions, a bookmark's description, and `/trash` (Later); `/admin/documents` (Admin)
+- Methods: 72 (M2 12, M3 2, M6 8, Later 28, Admin 8, none 14)
+- Lands in: `/documents/{docNumber}`, `/documents/{docNumber}/checkout`, `/documents/{docNumber}/versions`, `/documents/{docNumber}/properties`, `POST /documents` (M2); `/me/favorites` (M3); `PATCH` and `DELETE /documents/{docNumber}`, `/documents/{docNumber}/message`, and `PATCH /me/favorites/{id}` for a favourite's name and `/trash` (M6, after M6); `/documents/{docNumber}/…` for notes, links, tickets and permissions, and a bookmark's description (Later); `/admin/documents` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
@@ -399,7 +408,8 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 | `rename` | Rename document. Built as `PATCH /documents/{docNumber}` with `{ name }`. | M6 |
 | `lock` | Lock documents with comment. | Later |
 | `delete` | Move to trash. Built as `DELETE /documents/{docNumber}`. | M6 |
-| `restore`, `deleteFromTrash`, `emptyTrash`, `destroyDocuments` | Restore, purge from trash, empty trash, hard delete. | Later |
+| `restore`, `deleteFromTrash`, `emptyTrash` | Restore, purge from trash, empty trash. Built as `POST /trash/{id}/restore`, `DELETE /trash/{id}` (to Removed, which an administrator can still restore) and `DELETE /trash` (after M6: the folders and Trash spec, 2026-11-17). | M6 |
+| `destroyDocuments` | Hard delete. The User app never offers it: the nightly job destroys what was removed, and Destroy Documents stays the Classic Interface's, for administrators (folders and Trash spec §2.2). | Admin |
 | `bulkUpdate` | Apply the same properties to many documents. | Later |
 | `getAllowedPermissions` | Effective permissions of the user over a set of documents (enables/disables actions). The API returns it as `canEdit`. | M2 |
 | `saveACL`, `applyParentFolderSecurity` | Edit a document's ACL; reset to the folder's. | Later |
@@ -435,18 +445,20 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/frontend/client/services/FolderService.java`; RPC URL `/frontend/folder` (`@RemoteServiceRelativePath("folder")`)
 - Server impl: **FolderServiceImpl**
-- Methods: 27 (M2 2, M3 1, M6 1, Later 15, Admin 7, none 1)
-- Lands in: `/folders/{id}` (M2); `POST /folders` (M3); `POST /documents/{docNumber}/move` (M6); `/folders/{id}/…` for move, copy, permissions and trash (Later); `/admin/folders` (Admin)
+- Methods: 27 (M2 2, M3 1, M6 6, Later 10, Admin 7, none 1)
+- Lands in: `/folders/{id}` (M2); `POST /folders` (M3); `POST /documents/{docNumber}/move` (M6); `PATCH` and `DELETE /folders/{id}`, `POST /folders/{id}/move` and `/trash` (M6, after M6); `/folders/{id}/…` for merge, copy and permissions (Later); `/admin/folders` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
 | `getFolder` | Folder bean (path, permissions, template/attributes, counts) with optional path/doc count/subfolder count. The browse call. | M2 |
 | `getAllowedPermissions` | Effective permissions over a set of folders (can I add/write here). | M2 |
 | `create` | Create a folder. (Healdan restricts Client/Matter structure.) Built as `POST /folders`, New Folder in the helper's Save window. | M3 |
-| `createAlias`, `save`, `rename` | Alias, update properties, rename a folder. | Later |
-| `delete`, `restore`, `deleteFromTrash` | Delete to trash, restore, purge. | Later |
+| `createAlias`, `save` | Alias, update properties. | Later |
+| `rename` | Rename a folder. Built as `PATCH /folders/{id}` with `{ name }` (after M6: the folder rename spec, 2026-11-14). | M6 |
+| `delete`, `restore`, `deleteFromTrash` | Delete to trash, restore, purge. Built as `DELETE /folders/{id}`, `POST /trash/{id}/restore` and `DELETE /trash/{id}` (after M6: the folders and Trash spec, 2026-11-17). | M6 |
 | `paste` | Paste documents (copy/cut, links, notes, security options). A cut's move is built as `POST /documents/{docNumber}/move`; copying waits for its phase. | M6 |
-| `move`, `merge`, `copyFolders`, `pasteAsAlias` | Move/merge/copy folders; paste documents as aliases. | Later |
+| `move` | Move a folder. Built as `POST /folders/{id}/move` (after M6: the folders and Trash spec, 2026-11-17). | M6 |
+| `merge`, `copyFolders`, `pasteAsAlias` | Merge/copy folders; paste documents as aliases. | Later |
 | `saveACL`, `inheritACL` | Edit folder ACL (optionally to subfolders); inherit from another folder. | Later |
 | `applyTemplate` | Apply a folder template (structure) to a folder. | Later |
 | `setFolderPagination` | Per-folder list paging preference. The User app loads every list 100 rows at a time (M6 spec §10.2). | none |
@@ -808,9 +820,9 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/data/folderaliases.xml` | FolderAliasesDataServlet | folderId | Aliases pointing to a folder. | Later | – (shortcuts are refused inside Stores) |
 | `/data/tags.xml` | TagsDataServlet | docId, folderId, firstLetter, editing | Tags (cloud or per document/folder). | none | – (never in the User app, M6 spec §4) |
 | `/data/tickets.xml` | TicketsDataServlet | docId (+ standard) | Download/view tickets of a document. | Later | `/documents/{docNumber}/tickets` |
-| `/data/deleteddocs.xml` | DeletedDocsDataServlet | folderId, userId | Documents in the trash (Healdan checks the menu right). | Later | `/trash` |
-| `/data/deletedfolders.xml` | DeletedFoldersDataServlet | parentId, userId | Folders in the trash. | Later | `/trash` |
-| `/data/garbage.xml` | GarbageDataServlet | (none) | Mixed latest 100 deleted docs/folders for the user (trash dashlet). | Later | `/trash` |
+| `/data/deleteddocs.xml` | DeletedDocsDataServlet | folderId, userId | Documents in the trash (Healdan checks the menu right). | M6 | `GET /trash?view=everyone` and `removed`, one row per delete (built after M6: the folders and Trash spec, 2026-11-17) |
+| `/data/deletedfolders.xml` | DeletedFoldersDataServlet | parentId, userId | Folders in the trash. | M6 | `GET /trash?view=everyone` and `removed`, a folder one row with what it took (built after M6: the same) |
+| `/data/garbage.xml` | GarbageDataServlet | (none) | Mixed latest 100 deleted docs/folders for the user (trash dashlet). | M6 | `GET /trash` (`view=mine`, paged; built after M6: the same) |
 | `/data/users.xml` | UsersDataServlet | groupId, required, skipdisabled, impersonifiers | Users (optionally of a group), for pickers and admin grid. Needed by permission UIs (Later) and Walls (M7) too. | M6 | `GET /users?q=` (built in M2; the User app's Author and Typist pickers use it) |
 | `/data/groups.xml` | GroupsDataServlet | (none) | Groups (name, description, source). | Later | `/groups` |
 | `/data/dashlets.xml` | DashletsDataServlet | (none) | Defined dashlets. | none | – (the User app has no dashlets, M6 spec §4) |

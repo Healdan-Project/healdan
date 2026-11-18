@@ -4,19 +4,72 @@
 
 # End-to-end acceptance test for the compose stack (spec §10). Runs as its own compose project with its own
 # env file and removes everything it created on exit. Usage: docker/smoke-test.sh
-# SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image> docker/smoke-test.sh tests an existing image instead of building one
-# (CI builds it beforehand with Buildx).
+# SMOKE_BUILD=0 docker/smoke-test.sh tests the image an earlier run of the same project built, <project>:local,
+# instead of building one, and SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image> another image (CI builds it beforehand with
+# Buildx).
+# Two can run on one machine at once, each with a project name and host ports of its own, for example:
+#   SMOKE_PROJECT=smoke-b SMOKE_PORT=28080 SMOKE_KEYCLOAK_PORT=28180 SMOKE_GARAGE_PORT=23900 docker/smoke-test.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . docker/tests/lib.sh
 
-PROJECT=logicaldoc-smoke
+# The Compose project, which names the stack's containers, volumes and network. CI keeps the default.
+PROJECT=${SMOKE_PROJECT:-logicaldoc-smoke}
+# Lowercase letters and digits joined by - or _, which is both a Compose project name and an image name.
+if ! [[ $PROJECT =~ ^[a-z0-9]+([-_][a-z0-9]+)*$ ]]; then
+  echo "SMOKE_PROJECT '$PROJECT' isn't a project name this script takes: lowercase letters and digits, joined by - or _"
+  exit 1
+fi
+# The image the app runs, which the build tags. The project names it: a second run's build would otherwise retag it,
+# and step 8 would start this run's app again on the other run's image.
+IMAGE=${LOGICALDOC_IMAGE:-$PROJECT:local}
 PORT=${SMOKE_PORT:-18080}
 BASE="http://127.0.0.1:$PORT"
 # The stand-in sign-in provider's host port (docker/tests/compose.signin.yaml), on 127.0.0.1 only.
 KEYCLOAK_PORT=${SMOKE_KEYCLOAK_PORT:-18180}
 # The stand-in S3 server's host port (docker/tests/compose.storage.yaml), on 127.0.0.1 only.
 GARAGE_PORT=${SMOKE_GARAGE_PORT:-13900}
+
+# The refusals below come before this run claims anything, and it shows them all before it stops.
+refused=0
+# A run claims its project with a container (see the trap below). A claimed project is another run's, which may still
+# be building, or was left by one stopped before it could remove its stack. A project with containers or volumes and no
+# claim is another stack, such as a development stack, which this script never offers to remove.
+CLAIM=$PROJECT-claim
+if [ -n "$(docker ps -aq --filter "label=healdan.smoke-claim=$PROJECT")" ]; then
+  echo "Another smoke test is using Compose project $PROJECT, or one stopped before it could remove its stack. Set"
+  echo "SMOKE_PROJECT to another name, or, once no run is using it, remove it:"
+  echo "  docker rm -f $CLAIM && (cd / && docker compose -p $PROJECT down -v --remove-orphans)"
+  refused=1
+elif [ -n "$(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT"
+  docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT")" ]; then
+  echo "Compose project $PROJECT has containers or volumes that no smoke test claimed: it's another stack, which this"
+  echo "script leaves alone. Set SMOKE_PROJECT to another name."
+  refused=1
+fi
+# usable_port <setting> <port>: refuses one that isn't a port number, and one something already answers on, such as
+# another run's stack or the claim that holds its ports while it builds.
+usable_port() {
+  if ! [[ $2 =~ ^[0-9]{1,5}$ ]] || [ "$2" -lt 1 ] || [ "$2" -gt 65535 ]; then
+    echo "$1 '$2' isn't a port number: set it to one from 1 to 65535"
+    refused=1
+  elif (exec 3<>"/dev/tcp/127.0.0.1/$2") 2>/dev/null; then
+    echo "Port $2 on 127.0.0.1 is in use, by another smoke test or something else: set $1 to a free one"
+    refused=1
+  fi
+}
+usable_port SMOKE_PORT "$PORT"
+usable_port SMOKE_KEYCLOAK_PORT "$KEYCLOAK_PORT"
+usable_port SMOKE_GARAGE_PORT "$GARAGE_PORT"
+# Without LOGICALDOC_IMAGE, SMOKE_BUILD=0 tests the image an earlier run of this project built, not the one docker
+# compose build tags (logicaldoc-community:local), so step 1 says when it was built.
+if [ "${SMOKE_BUILD:-1}" = 0 ] && [ -z "${LOGICALDOC_IMAGE:-}" ] && ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  echo "SMOKE_BUILD=0 tests $IMAGE, which a run of project $PROJECT builds, and there's none. Run without SMOKE_BUILD=0,"
+  echo "or name the image with LOGICALDOC_IMAGE, such as logicaldoc-community:local, which docker compose build tags."
+  refused=1
+fi
+[ "$refused" = 0 ] || exit 1
+
 WORK=$(mktemp -d)
 ENV_FILE=$WORK/smoke.env
 # Awkward on purpose: exercises .env quoting, context.properties escaping and the JDBC login.
@@ -83,12 +136,32 @@ cleanup() {
     show_server_log
   fi
   compose down -v --remove-orphans >/dev/null 2>&1
+  docker rm -f "$CLAIM" >/dev/null 2>&1
   rm -rf "$WORK"
 }
+# The claim: a container named for the project, which Docker makes only once, so of two runs started together one
+# gets it. Running, it holds the three ports through the build, where another run's check above finds them in use,
+# until step 1 stops it just before the stack takes them. Stopped, it still claims the project until cleanup removes
+# it. The trap is set only once this run has it, so cleanup only ever removes the stack this run made. Its image is the
+# one compose.storage.yaml's garage-setup runs.
+if ! docker create --name "$CLAIM" --label "healdan.smoke-claim=$PROJECT" -p "127.0.0.1:$PORT:80" \
+  -p "127.0.0.1:$KEYCLOAK_PORT:80" -p "127.0.0.1:$GARAGE_PORT:80" busybox:1.37 sleep 86400 >/dev/null; then
+  echo "Couldn't claim Compose project $PROJECT with a container named $CLAIM (Docker's message above): another run"
+  echo "may have claimed it just now. Set SMOKE_PROJECT to another name."
+  rm -rf "$WORK"
+  exit 1
+fi
+if ! docker start "$CLAIM" >/dev/null; then
+  docker rm -f "$CLAIM" >/dev/null
+  echo "Docker couldn't publish this run's ports (its message above names the one in use): set SMOKE_PORT,"
+  echo "SMOKE_KEYCLOAK_PORT or SMOKE_GARAGE_PORT, whichever it is, to a free one"
+  rm -rf "$WORK"
+  exit 1
+fi
 trap cleanup EXIT
 
-printf "DB_PASSWORD='%s'\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\nSMOKE_GARAGE_PORT=%s\n" "$PW" "$PORT" \
-  "$KEYCLOAK_PORT" "$GARAGE_PORT" > "$ENV_FILE"
+printf "DB_PASSWORD='%s'\nLOGICALDOC_IMAGE=%s\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\nSMOKE_GARAGE_PORT=%s\n" \
+  "$PW" "$IMAGE" "$PORT" "$KEYCLOAK_PORT" "$GARAGE_PORT" > "$ENV_FILE"
 
 # Fixtures: a 16x16 PNG and a one-page PDF with a correct xref table.
 python3 - "$WORK" <<'PY'
@@ -143,7 +216,15 @@ csp_directives() {
 }
 
 echo "== 1. build and start"
-if [ "${SMOKE_BUILD:-1}" = 0 ]; then compose up -d --no-build; else compose up -d --build; fi
+if [ "${SMOKE_BUILD:-1}" = 0 ]; then
+  built=$(docker image inspect -f '{{.Created}}' "$IMAGE" 2>/dev/null || true)
+  echo "Testing $IMAGE${built:+, built $built}"
+else
+  compose build
+fi
+# The claim has held the ports through the build. Stopped, it keeps the project claimed, and the stack takes them.
+docker kill "$CLAIM" >/dev/null 2>&1 || true
+compose up -d --no-build
 check "app healthy" wait_healthy "$(compose ps -q app)" 900
 # Keycloak starts beside the app and takes far less time, so this rarely waits.
 check "Keycloak healthy" wait_healthy "$(compose ps -q keycloak)" 300

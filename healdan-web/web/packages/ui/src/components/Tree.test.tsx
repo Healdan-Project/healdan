@@ -315,7 +315,8 @@ describe('Tree drags', () => {
     return { setData: (kind: string, data: string) => void stored.set(kind, data), getData: (kind: string) => stored.get(kind) ?? '', effectAllowed: 'uninitialized' }
   }
 
-  function Draggable() {
+  /** `made` records each payload made, by row */
+  function Draggable({ made = [] }: { made?: string[] }) {
     return (
       <Tree
         aria-label="My Matters"
@@ -324,22 +325,26 @@ describe('Tree drags', () => {
         onExpandedChange={() => {}}
         onAction={() => {}}
         // A folder drags, a matter doesn't
-        drag={{ type, data: (id) => (id.startsWith('f') ? `payload of ${id}` : undefined) }}
+        drag={{ type, can: (id) => id.startsWith('f'), data: (id) => (made.push(id), `payload of ${id}`) }}
       />
     )
   }
 
-  it('makes a row draggable when its drag has a payload, and carries it under the type, as a move', () => {
-    render(<Draggable />)
+  it('makes a row draggable where its drag says it can, and carries its payload under the type, as a move', () => {
+    const made: string[] = []
+    render(<Draggable made={made} />)
     const folder = screen.getByRole('row', { name: /Correspondence/ })
     expect(folder.draggable).toBe(true)
+    // The payload is made only once a drag starts, not for each row drawn
+    expect(made).toEqual([])
     const data = transfer()
     expect(fireEvent.dragStart(folder, { dataTransfer: data })).toBe(true)
     expect(data.getData(type)).toBe('payload of f1')
     expect(data.effectAllowed).toBe('move')
+    expect(made).toEqual(['f1'])
   })
 
-  it('leaves a row with no payload undraggable, and cancels a drag that starts on it', () => {
+  it("leaves a row its drag says can't undraggable, and cancels a drag that starts on it", () => {
     render(<Draggable />)
     const matter = screen.getByRole('row', { name: /1001\.1/ })
     expect(matter.draggable).toBe(false)

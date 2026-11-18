@@ -207,13 +207,17 @@ learn from.
     - Each document is destroyed through `DocumentManager.destroyDocument` in a transaction of its own, with the
       member's state written first, so that nothing but the commit follows the store's hold of its files, and a
       failure undoes only that document's destroy, its files going back in their places. A failure leaves that
-      document and the rest of its item for the next night. Then the item's folders go in one transaction.
+      document and the rest of its item for the next night, and the other items go on, whatever it failed with but
+      a `VirtualMachineError`: a class missing from a plugin's zip fails only its item. Then the item's folders go in
+      one transaction.
     - It runs as `_system`. The `trash-system-destroy` seed gives `_system`'s group read on the Destroy Documents menu
       (-9), so `destroyDocument`'s menu check passes whether or not the `admin` account exists or is enabled.
     - It keeps a folder removed while it is a matter's own folder or a Store, while a row that isn't destroyed has it as
       its folder or parent, while a folder not yet destroyed (live or deleted) takes its security from it, or while a live
-      alias points to it. Only a live shortcut keeps its document, and only a live alias its folder: another item's
-      shortcuts and aliases go with what they point to, their members there marked destroyed.
+      alias points to it. `ld_securityref` has no index, and Healdan doesn't change CE's tables, so it reads which
+      folders take their security from an item's folders once an item, whatever their number, in the transaction that
+      destroys them. Only a live shortcut keeps its document, and only a live alias its folder: another item's shortcuts
+      and aliases go with what they point to, their members there marked destroyed.
     - It deletes the folder's rows in `ld_folder_ext`, `ld_foldertag`, `ld_folder_acl` and `ld_folder_store`, which don't
       cascade, folder bookmarks, the aliases pointing to it, and Healdan's `hd_local_value` and `hd_searchfolder` rows,
       and clears a user's default workspace that names it. A destroyed document's `hd_local_value` and

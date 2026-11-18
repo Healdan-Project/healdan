@@ -65,6 +65,10 @@ public class TrashResourceTest extends ApiTestCase {
 
 	private User boss;
 
+	private Client client;
+
+	private Folder store;
+
 	private Folder workspace;
 
 	private Folder documents;
@@ -87,12 +91,12 @@ public class TrashResourceTest extends ApiTestCase {
 		clerk = fx.user("clerk");
 		reader = fx.user("reader");
 		boss = fx.user("boss", "admin");
-		Folder store = fx.store("Client Work");
+		store = fx.store("Client Work");
 		fx.grant(store, clerk.getUserGroup(), Permission.READ, Permission.WRITE, Permission.ADD, Permission.DOWNLOAD,
 				Permission.RENAME, Permission.MOVE, Permission.DELETE);
 		fx.grant(store, reader.getUserGroup(), Permission.READ, Permission.WRITE, Permission.DOWNLOAD,
 				Permission.DELETE);
-		Client client = fx.client(998, "Healdan");
+		client = fx.client(998, "Healdan");
 		workspace = FolderDAO.get().findById(fx.matter(client, 1, "Demo", store, "Documents").getFolderId());
 		documents = FolderDAO.get().findByName(workspace, "Documents", Tenant.DEFAULT_ID, true).get(0);
 		letters = fx.folder(documents, "Letters");
@@ -247,6 +251,48 @@ public class TrashResourceTest extends ApiTestCase {
 		JsonNode gone = item(list("", clerkToken), a).path("deletedFrom");
 		assertTrue(gone.path("folder").isNull());
 		assertEquals(lettersPath, names(gone.path("path")));
+	}
+
+	@Test
+	public void testTheMatterGoesWithThePlaceMovedIntoAnotherMatter() throws Exception {
+		Folder otherWorkspace = FolderDAO.get()
+				.findById(fx.matter(client, 2, "Other", store, "Other Documents").getFolderId());
+		Folder otherDocuments = FolderDAO.get()
+				.findByName(otherWorkspace, "Other Documents", Tenant.DEFAULT_ID, true).get(0);
+		long a = deleteDocument(file(letters, "a.docx"), clerkToken);
+
+		JsonNode before = only(list("", clerkToken));
+		assertTrue(before.toString(), before.path("matter").path("display").textValue().startsWith("998.1"));
+
+		// Moved into matter 998.2 since: its present path, and that matter with it
+		ApiResponse moved = post("/api/v1/folders/" + letters.getId() + "/move").token(clerkToken)
+				.json(Map.of("folderId", otherDocuments.getId())).send();
+		assertEquals(moved.toString(), 200, moved.status());
+		JsonNode elsewhere = only(list("", clerkToken));
+		assertEquals(letters.getId(), elsewhere.path("deletedFrom").path("folder").path("id").asLong());
+		assertEquals(List.of("Client Work", otherWorkspace.getName(), "Other Documents", "Letters"),
+				names(elsewhere.path("deletedFrom").path("path")));
+		assertTrue(elsewhere.toString(), elsewhere.path("matter").path("display").textValue().startsWith("998.2"));
+
+		// Deleted since: the matter recorded at the delete, with the path recorded then
+		deleteFolder(letters, clerkToken);
+		JsonNode gone = item(list("", clerkToken), a);
+		assertTrue(gone.path("deletedFrom").path("folder").isNull());
+		assertEquals(List.of("Client Work", workspace.getName(), "Documents", "Letters"),
+				names(gone.path("deletedFrom").path("path")));
+		assertTrue(gone.toString(), gone.path("matter").path("display").textValue().startsWith("998.1"));
+	}
+
+	@Test
+	public void testAMattersOwnFolderKeepsItsMatter() throws Exception {
+		// Deleted in the Classic Interface: its place is the Store, which is in no matter
+		FolderDAO.get().deleteTree(workspace.getId(), fx.folderHistory(boss));
+		long item = TrashStore.get().itemHolding(new TrashMember('F', workspace.getId()), TrashState.DELETED)
+				.orElseThrow();
+
+		JsonNode listed = item(list("", bossToken), item);
+		assertEquals(store.getId(), listed.path("deletedFrom").path("folder").path("id").asLong());
+		assertTrue(listed.toString(), listed.path("matter").path("display").textValue().startsWith("998.1"));
 	}
 
 	// Restore

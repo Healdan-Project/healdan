@@ -282,28 +282,41 @@ describe('The Trash', () => {
     const { api } = await renderApp('/trash', routes({ 'GET /v1/trash': trashPage(mine, 45) }))
     await selectRows(/Old Drafts/)
     fireEvent.click(within(await toolbar()).getByRole('button', { name: 'Remove…' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Remove "Old Drafts" from the Trash?' })
+    // An alert, as the one step the person can't undo themselves: its warning sign, and the line a screen reader reads
+    const dialog = await screen.findByRole('alertdialog', {
+      name: 'Remove "Old Drafts" from the Trash?',
+      description: "You won't be able to restore it. An administrator can, for 45 days.",
+    })
+    expect(within(dialog).getByRole('heading').querySelector('svg[aria-hidden="true"]')).toBeTruthy()
     expect(within(dialog).getByText('It holds 3 folders and 11 documents.')).toBeTruthy()
     expect(within(dialog).getByText("You won't be able to restore it. An administrator can, for 45 days.")).toBeTruthy()
     expect(within(dialog).getByRole('button', { name: 'Remove' }).className).toContain('danger')
     await expectNoAxeViolations(dialog)
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(api.callsTo('DELETE /v1/trash/*')).toHaveLength(0)
 
     fireEvent.click(within(await toolbar()).getByRole('button', { name: 'Remove…' }))
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove' }))
+    await userEvent.click(within(await screen.findByRole('alertdialog', { name: 'Remove "Old Drafts" from the Trash?' })).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(api.callsTo('DELETE /v1/trash/*').map((call) => call.path)).toEqual(['/v1/trash/701']))
+  })
+
+  it('says a single day as a day', async () => {
+    await renderApp('/trash', routes({ 'GET /v1/trash': trashPage(mine, 1) }))
+    await selectRows(/Old Drafts/)
+    fireEvent.click(within(await toolbar()).getByRole('button', { name: 'Remove…' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Remove "Old Drafts" from the Trash?' })
+    expect(within(dialog).getByText("You won't be able to restore it. An administrator can, for 1 day.")).toBeTruthy()
   })
 
   it('asks before removing several, listing them', async () => {
     const { api } = await renderApp('/trash', routes())
     await selectRows(/Old Drafts/, 1)
     fireEvent.click(within(await toolbar()).getByRole('button', { name: 'Remove…' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Remove 2 items from the Trash?' })
+    const dialog = await screen.findByRole('alertdialog', { name: 'Remove 2 items from the Trash?' })
     expect(within(dialog).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Old Drafts', 'Letter to Harbour Master v2.docx'])
-    expect(within(dialog).getByText("You won't be able to restore it. An administrator can, for 30 days.")).toBeTruthy()
+    expect(within(dialog).getByText("You won't be able to restore them. An administrator can, for 30 days.")).toBeTruthy()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(api.callsTo('DELETE /v1/trash/*').map((call) => call.path)).toEqual(['/v1/trash/701', '/v1/trash/702']))
   })
@@ -312,19 +325,19 @@ describe('The Trash', () => {
     const { api } = await renderApp('/trash', routes({ 'GET /v1/trash': trashPage(mine, 45) }))
     await row(/Old Drafts/)
     fireEvent.click(within(await toolbar()).getByRole('button', { name: 'Empty Trash…' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Empty the Trash?' })
+    const dialog = await screen.findByRole('alertdialog', { name: 'Empty the Trash?' })
     expect(within(dialog).getByText('This removes all 3 items you deleted.')).toBeTruthy()
-    expect(within(dialog).getByText("You won't be able to restore it. An administrator can, for 45 days.")).toBeTruthy()
+    expect(within(dialog).getByText("You won't be able to restore them. An administrator can, for 45 days.")).toBeTruthy()
     const confirm = within(dialog).getByRole('button', { name: 'Empty Trash' })
     expect(confirm.className).toContain('danger')
     await expectNoAxeViolations(dialog)
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(api.callsTo('DELETE /v1/trash')).toHaveLength(0)
 
     fireEvent.click(within(await toolbar()).getByRole('button', { name: 'Empty Trash…' }))
-    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Empty Trash' }))
+    await userEvent.click(within(await screen.findByRole('alertdialog', { name: 'Empty the Trash?' })).getByRole('button', { name: 'Empty Trash' }))
     await waitFor(() => expect(api.callsTo('DELETE /v1/trash')).toHaveLength(1))
   })
 
@@ -337,9 +350,9 @@ describe('The Trash', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
 
     await userEvent.keyboard('{Delete}')
-    const dialog = await screen.findByRole('dialog', { name: 'Remove "Letter to Harbour Master v2.docx" from the Trash?' })
+    const dialog = await screen.findByRole('alertdialog', { name: 'Remove "Letter to Harbour Master v2.docx" from the Trash?' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
 
     fireEvent.contextMenu(await row(/Old Drafts/))
     const menu = await screen.findByRole('menu', { name: 'Actions for Old Drafts' })
@@ -347,7 +360,7 @@ describe('The Trash', () => {
     // The right-clicked row is what it acts on
     expect(Array.from(document.querySelectorAll('[data-row-key][aria-selected="true"]'), (one) => one.getAttribute('data-row-key'))).toEqual(['t701'])
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Remove…' }))
-    expect(await screen.findByRole('dialog', { name: 'Remove "Old Drafts" from the Trash?' })).toBeTruthy()
+    expect(await screen.findByRole('alertdialog', { name: 'Remove "Old Drafts" from the Trash?' })).toBeTruthy()
   })
 
   it('leaves the focus on the row that follows what was removed, not on the button the change disabled', async () => {
@@ -430,6 +443,27 @@ describe('The Trash, for an administrator', () => {
     expect(values).toMatchObject({ 'Deleted By': 'Priya Nair', 'Removed By': 'Not recorded', Destroyed: 'in 2 days' })
     expect(within(panel).queryByRole('button', { name: 'Remove…' })).toBeNull()
     expect(within(panel).getByRole('button', { name: 'Restore' })).toBeTruthy()
+    await expectNoAxeViolations(main())
+  })
+
+  it('says a day in the lede, not "1 days", when removed items are kept for one', async () => {
+    await renderApp('/trash?view=removed', routes({ 'GET /v1/me': admin, 'GET /v1/trash': trashPage([removedRent], 1) }))
+    await row(/Rent schedule 2027/)
+    expect(within(main()).getByText("What people removed from their Trash. Restore puts an item back where it was deleted from; after 1 day it's destroyed.")).toBeTruthy()
+  })
+
+  it("says Everyone's is empty with the title alone, as where things go is the person's own", async () => {
+    await renderApp('/trash?view=everyone', routes({ 'GET /v1/me': admin }, { everyone: [] }))
+    expect(await within(main()).findByText('Nothing in the Trash.')).toBeTruthy()
+    expect(within(main()).queryByText('What you delete comes here, and you can restore it from here.')).toBeNull()
+    await expectNoAxeViolations(main())
+  })
+
+  it('says Removed is empty in its own words, as it holds what people removed', async () => {
+    await renderApp('/trash?view=removed', routes({ 'GET /v1/me': admin }, { removed: [] }))
+    expect(await within(main()).findByText('Nothing removed.')).toBeTruthy()
+    expect(within(main()).queryByText('Nothing in the Trash.')).toBeNull()
+    expect(within(main()).queryByText('What you delete comes here, and you can restore it from here.')).toBeNull()
     await expectNoAxeViolations(main())
   })
 })

@@ -2130,10 +2130,10 @@ paths:
         4. `409 filing-rule` into a Store, a search folder, the folder
            itself, or a folder inside it.
         5. `403 forbidden` without the Move permission on the folder, or the
-           Add permission on the folder it goes into.
+           Add permission on the folder it goes into; `cause` says which.
         6. `403 admins-only` for a folder directly in a matter's workspace,
            search folders included, and into a matter's top level, unless
-           the caller is an administrator.
+           the caller is an administrator; `cause` says which.
         7. `403 items-not-allowed` when the caller lacks the Move permission
            on something inside, a folder or a document, whether the caller
            can see it or not. It names nothing.
@@ -2814,7 +2814,8 @@ components:
         An RFC 9457 problem. Some codes add members: `validation` adds
         `fields`, `checked-out` and `locked` add `hold` (a folder's
         `checked-out` adds `holds` instead), `held-elsewhere` adds `hold` and
-        `lastSaved`, and `version-moved` and `already-filed` add `document`.
+        `lastSaved`, `version-moved` and `already-filed` add `document`, and
+        `moveFolder`'s `forbidden` and `admins-only` add `cause`.
       required: [type, title, status, detail, code]
       properties:
         type:
@@ -2857,6 +2858,15 @@ components:
             (its latest save, or its filing), so a client can warn that what
             the other device hasn't sent since isn't in Healdan. Null when
             the server's data doesn't say.
+        cause:
+          type: string
+          enum: [no-move, no-add, top-level, into-top-level]
+          description: |
+            For `moveFolder`'s `forbidden` and `admins-only`, which check
+            refused it, as each code has two: no Move on the folder (`no-move`)
+            or no Add on the folder it goes into (`no-add`); a folder directly
+            in a matter's workspace (`top-level`) or a move into a matter's top
+            level (`into-top-level`), which only an administrator makes.
         document:
           $ref: '#/components/schemas/DocumentView'
           description: |
@@ -3789,7 +3799,12 @@ components:
           oneOf:
             - $ref: '#/components/schemas/MatterRef'
             - type: 'null'
-          description: The matter it was in, or is; null if none
+          description: |
+            The matter it was in, or is; null if none. While
+            `deletedFrom.folder` is given, the matter that folder is in now,
+            which goes with `deletedFrom.path` (a folder moved into another
+            matter since the delete gives the other matter); else the one
+            recorded at the delete.
         deletedBy:
           oneOf:
             - $ref: '#/components/schemas/UserRef'

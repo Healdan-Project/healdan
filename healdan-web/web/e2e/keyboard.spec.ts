@@ -545,7 +545,7 @@ test('row 10: folders and the Trash are all keys: Delete asks, F6 reaches Undo, 
     .toBe(true)
 })
 
-test('row 11: Delete on a folder of the left pane tree asks, Enter moves it to the Trash, and the focus stays in the pane', async () => {
+test("row 11: Delete on a folder of the left pane tree asks, Enter moves it to the Trash, and the focus goes to the open folder's remaining row", async () => {
   // The tree is My Matters, which a person adds a matter to with the plus; the spec does it through the API and takes it out after
   await call(api!.put(`/api/v1/me/matters/${matterFolder}`, authorized(token)), 'adding the matter to My Matters')
   try {

@@ -440,6 +440,31 @@ public class FolderChangesTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testMoveIntoAnotherClientsMatterRestampsTheClientAndTheMatter() throws Exception {
+		Folder inner = fx.folder(letters, "Inner");
+		Document lease = fx.upload(inner, "Lease.docx", "lease", boss);
+		Folder elsewhere = FolderDAO.get()
+				.findById(fx.matter(fx.client(997, "Elsewhere"), 3, "Elsewhere", store, "Elsewhere Documents")
+						.getFolderId());
+		Folder into = FolderDAO.get().findByName(elsewhere, "Elsewhere Documents", Tenant.DEFAULT_ID, true).get(0);
+		awaitAsyncWork();
+		assertEquals("998", value(lease, HealdanConstants.ATTR_CLIENT));
+		assertEquals("1", value(lease, HealdanConstants.ATTR_MATTER));
+
+		ApiResponse moved = move(letters, into.getId(), clerkToken);
+
+		assertEquals(moved.toString(), 200, moved.status());
+		assertTrue(moved.json().path("matter").path("display").textValue().startsWith("997.3"));
+		for (Folder folder : List.of(letters, inner)) {
+			Folder stamped = FolderDAO.get().findById(folder.getId(), true);
+			assertEquals(folder.getName(), "997", stamped.getAttribute(HealdanConstants.ATTR_CLIENT).getStringValue());
+			assertEquals(folder.getName(), "3", stamped.getAttribute(HealdanConstants.ATTR_MATTER).getStringValue());
+		}
+		assertEquals("997", value(lease, HealdanConstants.ATTR_CLIENT));
+		assertEquals("3", value(lease, HealdanConstants.ATTR_MATTER));
+	}
+
+	@Test
 	public void testMoveIntoTheFolderItIsInChangesNothing() throws Exception {
 		DbSnapshot before = fx.snapshot();
 		ApiResponse response = move(letters, documents.getId(), clerkToken);
@@ -505,12 +530,15 @@ public class FolderChangesTest extends ApiTestCase {
 		String readerToken = signIn(reader);
 		DbSnapshot before = fx.snapshot();
 
-		assertProblem(move(letters, drafts.getId(), readerToken), 403, "forbidden");
+		ApiResponse noMove = move(letters, drafts.getId(), readerToken);
+		assertProblem(noMove, 403, "forbidden");
+		assertEquals("no-move", noMove.json().path("cause").textValue());
 		// Not items-not-allowed, which would say it's what the folder holds
 		ApiResponse refused = move(letters, closed.getId(), clerkToken);
 		assertProblem(refused, 403, "forbidden");
 		assertEquals("You may not add folders to folder %d.".formatted(closed.getId()),
 				refused.json().path("detail").textValue());
+		assertEquals("no-add", refused.json().path("cause").textValue());
 		before.assertUnchanged();
 	}
 
@@ -518,9 +546,14 @@ public class FolderChangesTest extends ApiTestCase {
 	public void testMovesAtTheTopLevelAreForAdmins() throws Exception {
 		Folder archive = fx.folder(workspace, "Archive");
 		DbSnapshot before = fx.snapshot();
-		assertProblem(move(letters, workspace.getId(), clerkToken), 403, "admins-only");
-		assertProblem(move(archive, drafts.getId(), clerkToken), 403, "admins-only");
-		assertProblem(move(search, drafts.getId(), clerkToken), 403, "admins-only");
+		ApiResponse into = move(letters, workspace.getId(), clerkToken);
+		assertProblem(into, 403, "admins-only");
+		assertEquals("into-top-level", into.json().path("cause").textValue());
+		for (ApiResponse topLevel : List.of(move(archive, drafts.getId(), clerkToken),
+				move(search, drafts.getId(), clerkToken))) {
+			assertProblem(topLevel, 403, "admins-only");
+			assertEquals("top-level", topLevel.json().path("cause").textValue());
+		}
 		before.assertUnchanged();
 
 		ApiResponse moved = move(letters, workspace.getId(), bossToken);
@@ -578,6 +611,9 @@ public class FolderChangesTest extends ApiTestCase {
 		ApiResponse moved = move(letters, drafts.getId(), clerkToken);
 		assertEquals(moved.toString(), 200, moved.status());
 		assertEquals(drafts.getId(), FolderDAO.get().findById(letters.getId()).getParentId());
+		// CE numbers it on its way in (Ruling 27), and the answer says so, as the app's toast names it by the answer
+		assertEquals("Letters(1)", FolderDAO.get().findById(letters.getId()).getName());
+		assertEquals("Letters(1)", moved.json().path("name").textValue());
 	}
 
 	@Test

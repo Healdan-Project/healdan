@@ -45,10 +45,11 @@ export interface TreeProps {
   /** Delete, or the Mac's delete key (Backspace), on a row: delete what it stands for */
   onDelete?: (id: string) => void
   /**
-   * What a drag of a row carries, under `type`: a row drags only when `data` gives it a payload, as a move (the browser's own
-   * drag and drop, as the Table's rows)
+   * What a drag of a row carries, under `type`, as a move (the browser's own drag and drop, as the Table's rows): a row drags
+   * only where `can` says so, which is asked of every row drawn after each render, so it must be cheap, and `data` makes the
+   * payload once a drag starts
    */
-  drag?: { type: string; data: (id: string) => string | undefined }
+  drag?: { type: string; can: (id: string) => boolean; data: (id: string) => string | undefined }
 }
 
 const loadingSuffix = '\u0000loading'
@@ -66,7 +67,7 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acc
   // can change (a row whose name is a field drags nothing). The row's callback reads the latest `drag`, as the Table's does.
   const latestDrag = useRef(drag)
   const frame = useRef<HTMLDivElement>(null)
-  const canDrag = (id: string) => latestDrag.current !== undefined && latestDrag.current.data(id) !== undefined
+  const canDrag = (id: string) => latestDrag.current?.can(id) === true
   useEffect(() => {
     latestDrag.current = drag
     for (const row of frame.current?.querySelectorAll<HTMLElement>('[role="row"][data-tree-key]') ?? []) row.draggable = canDrag(row.getAttribute('data-tree-key') ?? '')
@@ -79,7 +80,7 @@ export function Tree({ nodes, expanded, onExpandedChange, onAction, current, acc
     const target = event.target instanceof Element ? event.target : null
     if (target?.closest('input, textarea')) return
     const id = target?.closest('[data-tree-key]')?.getAttribute('data-tree-key')
-    const data = id ? drag.data(id) : undefined
+    const data = id && drag.can(id) ? drag.data(id) : undefined
     if (data === undefined) return event.preventDefault()
     event.dataTransfer.setData(drag.type, data)
     event.dataTransfer.effectAllowed = 'move'

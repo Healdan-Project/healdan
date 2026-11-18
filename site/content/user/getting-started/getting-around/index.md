@@ -199,9 +199,9 @@ once the list has the focus.
 | `/` | Jumps to the search box |
 | Up and down arrows | Move through the list |
 | Enter | Opens the document in its app (the Healdan Helper), or a folder |
-| Space | Opens Quick Look; Esc closes it |
+| Space | On a document's row, opens Quick Look, which Esc closes; on a folder's row, selects it |
 | F2 | Renames the selected document in place, the folder with the focus in a list or in the **My Matters** tree, or in **My Favorites** the favourite with the focus |
-| Delete | Moves the selected documents and folders, or the folder with the focus in the **My Matters** tree, to the Trash, after asking |
+| Delete | Moves the selected documents and folders, or the folder with the focus in the **My Matters** tree, to the Trash, after asking. In the Trash, it's **Remove…** |
 | F6 | Moves to the message that follows a delete, where Tab reaches **Undo** |
 | Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row, tree item or left-pane link with the focus; Esc closes it |
 | Option-Enter on **Upload** | Files with the form first |

@@ -27,6 +27,7 @@ import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.PersistentObject;
+import com.logicaldoc.core.automation.FolderTool;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
@@ -113,6 +114,14 @@ public class TrashRecordingTest extends AbstractRulesTestCase {
 		assertEquals(0, draftsItem.documents());
 		assertEquals(Long.valueOf(alice.getId()), draftsItem.deletedById());
 		assertEquals(alice.getFullName(), draftsItem.deletedByName());
+
+		// A matter's own folder, directly in its Store, by an admin: the item is the matter's, which the Store above
+		// it doesn't name
+		folderDao.deleteTree(workspace.getId(), folderHistory(admin));
+		TrashItemRow matterItem = trash.item(itemHolding(folder(workspace)).orElseThrow()).orElseThrow();
+		assertEquals(Long.valueOf(store.getId()), matterItem.fromFolderId());
+		assertEquals(List.of(store.getName()), matterItem.fromPath());
+		assertEquals(Long.valueOf(matter.getId()), matterItem.matterId());
 	}
 
 	@Test
@@ -237,6 +246,12 @@ public class TrashRecordingTest extends AbstractRulesTestCase {
 		// SOAP
 		Folder soap = fx.folder(correspondence, "Soap");
 		Document soapDoc = upload(soap, "soap.txt", admin);
+		// A merge, which deletes the source it empties on its own
+		Folder source = fx.folder(correspondence, "Merge Source");
+		Document merged = upload(source, "merged.txt", admin);
+		Folder mergeTarget = fx.folder(correspondence, "Merge Target");
+		// Automation's FolderTool, which deletes one folder
+		Folder automated = fx.folder(correspondence, "Automated");
 		awaitAsyncWork();
 
 		recordsOnce(folder(dao), () -> folderDao.deleteTree(dao.getId(), folderHistory(alice)));
@@ -263,6 +278,25 @@ public class TrashRecordingTest extends AbstractRulesTestCase {
 
 		recordsOnce(folder(soap), () -> harness.soapFoldersWithSessions().delete(aliceSession.getSid(), soap.getId()));
 		assertEquals(Set.of(folder(soap), document(soapDoc)), members(itemHolding(folder(soap)).orElseThrow()));
+
+		// The merge moves the document out, then deletes the source alone, as Alice
+		recordsOnce(folder(source), () -> folderDao.merge(folderDao.findById(source.getId()),
+				folderDao.findById(mergeTarget.getId()), folderHistory(alice)));
+		long mergedItem = itemHolding(folder(source)).orElseThrow();
+		assertEquals(Set.of(folder(source)), members(mergedItem));
+		TrashItemRow mergedRow = trash.item(mergedItem).orElseThrow();
+		assertEquals(Long.valueOf(correspondence.getId()), mergedRow.fromFolderId());
+		assertEquals(Long.valueOf(matter.getId()), mergedRow.matterId());
+		assertEquals(Long.valueOf(alice.getId()), mergedRow.deletedById());
+		assertEquals(1, folderDeleted(source));
+		assertEquals(0, deleted(merged));
+		assertEquals(Long.valueOf(mergeTarget.getId()), jdbc.queryForObject(
+				"select ld_folderid from ld_document where ld_id = ?", Long.class, merged.getId()));
+
+		recordsOnce(folder(automated), () -> new FolderTool().delete(automated.getId(), alice.getUsername()));
+		assertEquals(Set.of(folder(automated)), members(itemHolding(folder(automated)).orElseThrow()));
+		assertEquals(Long.valueOf(alice.getId()),
+				trash.item(itemHolding(folder(automated)).orElseThrow()).orElseThrow().deletedById());
 	}
 
 	@Test

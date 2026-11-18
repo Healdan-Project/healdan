@@ -109,7 +109,7 @@ export function DocumentListPage({ heading, empty, actionsLabel, query, columns:
       region={
         <>
           <RightRegionView
-            details={selected !== undefined && <DetailsPanel key={selected} docNumber={selected} row={row} context="search" />}
+            details={selected !== undefined && <DetailsPanel key={selected} docNumber={selected} row={row} context="search" onGone={() => change(new Set())} />}
             preview={<ReadingPane docNumber={selected} row={row} />}
           />
           <QuickLook documents={items ?? []} />

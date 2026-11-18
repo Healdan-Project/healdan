@@ -42,6 +42,19 @@ describe('invalidateDocumentLists', () => {
     await expect(invalidateDocumentLists(client, [10432])).resolves.toBeDefined()
   })
 
+  // A folder deleted or restored took documents the page can't name
+  it('marks every message that shows an attachment\'s copy stale for a folder\'s change, and no other', async () => {
+    const client = new QueryClient()
+    const message = messageView()
+    const savedAs = (docNumber: number | null) => ({ ...message, attachments: message.attachments.map((one, i) => (i === 0 ? { ...one, docNumber } : one)) })
+    client.setQueryData(keys.message(10500, '1.0'), savedAs(10432))
+    client.setQueryData(keys.message(10502, '1.0'), savedAs(null))
+
+    await invalidateDocumentLists(client, 'any')
+    expect(client.getQueryState(keys.message(10500, '1.0'))?.isInvalidated).toBe(true)
+    expect(client.getQueryState(keys.message(10502, '1.0'))?.isInvalidated).toBe(false)
+  })
+
   it('leaves every message alone when no document is named', async () => {
     const client = new QueryClient()
     const message = messageView()

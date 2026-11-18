@@ -6,6 +6,7 @@ import { useId, useState, type ReactNode } from 'react'
 import { apiPath, type components } from '@healdan/api'
 import { Button, Dialog, Icon, plural, t, TextField, toast, type StringKey } from '@healdan/ui'
 import type { OrganisingItems } from '../actions/batch'
+import { planMove } from '../actions/move'
 import { placeOf, type Place } from '../filing/dropTargets'
 import { messageFor } from '../frame/errors'
 import { folderIcon, matterIcon } from '../kindIcons'
@@ -158,9 +159,11 @@ function Matters({ onChoose }: { onChoose: (folderId: number) => void }) {
 
 /**
  * Why Move Here is greyed out for the items where the picker is (folders and Trash spec 7.5): the folder itself or inside
- * it; where every one of them is already; for documents, a place that holds none (M1), worded at a matter's top level; and
- * for folders, a matter's top level for anyone but an administrator. Null for a reason with no words; undefined when they
- * can go there. With no items (the Trash's restore) nothing is greyed out, and the server decides.
+ * it; and wherever planMove would move none of them: where every one of them is already, and where none of them can go:
+ * for documents, a place that holds none (M1), worded at a matter's top level, and for folders, a matter's top level for
+ * anyone but an administrator. While some can go, Move Here moves them and Refusals says the rest, as a drop does. Null
+ * for a reason with no words; undefined when they can go there. With no items (the Trash's restore) nothing is greyed out,
+ * and the server decides.
  */
 function whyNotHere(items: OrganisingItems, view: S['FolderView'], admin: boolean | undefined): StringKey | null | undefined {
   // The path holds the folder itself
@@ -168,10 +171,12 @@ function whyNotHere(items: OrganisingItems, view: S['FolderView'], admin: boolea
   if (items.folders.some((folder) => inside.has(folder.id))) return 'move.itself'
   // Only what can be moved counts: a folder that can't is said in Refusals, wherever it was to go
   const movable = items.folders.filter((folder) => folder.canMove)
-  if (items.documents.length + movable.length > 0 && items.documents.every((one) => one.folder?.id === view.id) && movable.every((one) => one.parentId === view.id)) return 'move.already'
-  if (items.documents.length > 0 && !(view.kind === 'folder' && view.canFile)) return view.kind === 'matter' ? 'move.chooseFolder' : null
-  if (movable.length > 0 && view.kind === 'matter' && !admin) return 'move.adminsOnly'
-  return undefined
+  if (items.documents.length + movable.length === 0) return undefined
+  const plan = planMove({ documents: items.documents, folders: movable }, placeOf(view), admin)
+  if (plan.documents.length + plan.folders.length > 0) return undefined
+  if (plan.refused.length === 0) return 'move.already'
+  if (plan.refused.some((one) => 'document' in one)) return view.kind === 'matter' ? 'move.chooseFolder' : null
+  return 'move.adminsOnly'
 }
 
 /** One folder of the chosen matter: its subfolders to open, and Move Here, greyed out where the items can't go */

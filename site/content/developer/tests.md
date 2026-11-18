@@ -75,11 +75,13 @@ The Trash's tests are in `healdan-core` (`com.logicaldoc.healdan.trash`) and `he
 in `UPSTREAM_TESTS` (see [Continuous Integration](../continuous-integration/)). They use `HealdanFixtures` and
 `AbstractRulesTestCase`'s layout, and call the job's `runOnce` themselves, as no real start happens in a test.
 
-- **`TrashStoreTest`** checks the record's DAO: items, members, their states and the Trash's lists.
-- **`TrashRecordingTest`** deletes a document and a folder by each route, the API's, the Classic Interface's RPC, WebDAV's
-  and CMIS's, and checks that each makes one item with the right members, that a folder delete leaves a colleague's
-  deleted document where it was, that a CMIS delete that stops short keeps only what it took, and that a delete whose
-  item can't be written is refused.
+- **`TrashStoreTest`** checks the record's DAO: items, members, their states and the Trash's lists, and that an item of
+  thousands of members changes state or moves in a few statements. It counts them on a data source of its own.
+- **`TrashRecordingTest`** deletes a document and a folder by each route, the API's, the Classic Interface's RPC, WebDAV's,
+  CMIS's and SOAP's, a merge's emptied source and `FolderTool`'s, and checks that each makes one item with the right
+  members, that a matter's own folder's item names its matter, that a folder delete leaves a colleague's deleted document
+  where it was, that a CMIS delete that stops short keeps only what it took, and that a delete whose item can't be
+  written is refused.
 - **`TrashRulesTest`** checks the rules on a whole tree: Delete or Move needed on everything inside, hidden items
   included, with no name in the refusal; a check-out or an immutable document inside; and a non-admin restoring only from
   the Trash.
@@ -89,10 +91,18 @@ in `UPSTREAM_TESTS` (see [Continuous Integration](../continuous-integration/)). 
 - **`TrashExistingSeedTest`** checks the seed that makes items of what was already deleted.
 - **`TrashDestroyerTest`** checks `runOnce`: what was removed more than the days before is destroyed, documents and folders
   deepest first, with Healdan's rows and the record kept; what is within the days isn't; a matter's own folder and a Store
-  stay removed; and a failure leaves the rest of its item, and only that, for the next night. `TrashStartupTest` starts the
-  timer with its waits shortened. `TrashTestHooks` is in the test-jar so that other modules' tests can fail a destroy.
-- **`FolderChangesTest` and `TrashResourceTest`** in `healdan-api` check the folder delete, move and contents, the Trash's
-  three views and who may read them, restore, remove and empty, each answer against `openapi.yaml`.
+  stay removed; and a failure, an `Error` such as a missing class or service provider included, leaves the rest of its
+  item, and only that, for the next night. It counts the queries for folders that take their security from another,
+  which scan `ld_folder`, in JdbcTemplate's debug log: one an item, and a folder that starts taking its security from one
+  during the run keeps it. `TrashStartupTest` starts the timer with its waits shortened, once in America/Chicago with
+  the first run on a night whose clocks skip 02:47 (skipped if the JDK's time zone data has no such night ahead).
+  `TrashTestHooks` is in the test-jar so that other modules' tests can fail a destroy.
+- **`ReadableCountsTest`**, in `com.logicaldoc.healdan.rules`, checks `StoredRows`' counts of the folders and documents,
+  deleted or not, that a person can read, which the Trash's views and a folder's contents give: publishing dates, a
+  publisher, and an administrator's counts, which take in only documents still stored.
+- **`FolderChangesTest` and `TrashResourceTest`** in `healdan-api` check the folder delete, move and contents, a move into
+  another client's matter re-stamping its Client and Matter, the Trash's three views and who may read them, restore,
+  remove and empty, each answer against `openapi.yaml`.
 - **`HealdanTrashHooksTest`**, in `logicaldoc-webapp`, checks the Classic Interface's removals through the hooks, and
   that its delete takes a document before its shortcuts. Its folder moves are `RpcPermissionGapsTest`'s.
   `CeFlowsTest`, in `healdan-storage`, checks that a document the Trash destroys is held, and that a failed destroy
@@ -181,7 +191,7 @@ uploads in parts (create, upload a part, complete, abort).
 | `docker/tests/test-web.sh` | the User app in a browser, against a stack with the smoke overlay (see [The User App's Tests](#the-user-apps-tests)): Playwright's specs in Chromium and WebKit, then `curl` checks of the web session's forgery refusals. Needs Docker, curl and Python 3: `BASE=http://127.0.0.1:18080 docker/tests/test-web.sh`, which `docker/smoke-test.sh` runs as step 9, the last. It needs the Indexer set to every few seconds (see [The User App's Tests](#the-user-apps-tests)) |
 | `docker/tests/test-signin.sh` | provider sign-in through the stand-in Keycloak (see below), with `curl` and a cookie jar: the web page's sign-in ending at the User app, signed in, a local account linked by email losing its password and its device token, the gate refusing someone in none of the mapped groups, the helper's sign-in handing a code to a pretend loopback address and the code exchanged for a device token, and a person disabled at Keycloak losing that token at its next re-check. Run it against a fresh stack with the sign-in overlay: `BASE=http://127.0.0.1:8080 KEYCLOAK=127.0.0.1:18180 docker/tests/test-signin.sh` |
 | `docker/tests/test-storage.sh` | storage backends against the stand-in Garage (see below): a file filed in Smoke Cloud reaching Garage encrypted, files moved in from Smoke moving up and not cached, reads through Garage and from the read cache, then with Garage stopped a save waiting in staging, an uncached file answering `503` through the API, `/download` and a shared link, and `/convertpdf` of an uncached PDF serving LogicalDOC's placeholder, and a matter moved to Smoke bringing its files home while Garage keeps them held. With `after-restart` it checks the same rows after a restart, a first read through Garage, and a read from the cache rebuilt from its folder with Garage stopped. It stops and starts Garage itself, and needs curl 8.0.0 or later, jq, sha256sum and docker: `docker/smoke-test.sh` runs it, passing it the stack's containers, as step 5f and again in step 8 |
-| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache` and a Content-Security-Policy with `object-src 'none'` (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the stack running on Healdan's storage (its setup steps recorded and Original's marker written, step 5), M2's client flow through the API (`test-api.sh`, step 5c), the User app in Chromium and WebKit (`test-web.sh`, step 9, the last), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), storage backends against a stand-in S3 server, Garage (`test-storage.sh`, step 5f, and again after step 8's restart), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which checks LogicalDOC's tables, replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one |
+| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache` and a Content-Security-Policy with `object-src 'none'` (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the stack running on Healdan's storage (its setup steps recorded and Original's marker written, step 5), M2's client flow through the API (`test-api.sh`, step 5c), the User app in Chromium and WebKit (`test-web.sh`, step 9, the last), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), storage backends against a stand-in S3 server, Garage (`test-storage.sh`, step 5f, and again after step 8's restart), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which checks LogicalDOC's tables, replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one. Two can run on one machine at once (see [Two Smoke Tests at Once](#two-smoke-tests-at-once)) |
 
 `docker/tests/bulk-documents.sh` isn't a test: it fills a folder on a throwaway stack with generated `.docx`, `.pdf`,
 `.xlsx`, `.eml` and `.odt` files, five uploads at a time, to measure big folders and searches. Give it the stack's
@@ -247,6 +257,43 @@ Step 5f runs `test-storage.sh`, which stops and starts Garage itself, and step 8
 It needs curl 8.0.0 or later: only from 8.0.0 does `--aws-sigv4` send the `x-amz-content-sha256` header, without which
 Garage refuses a request. Step 5f prints how long it took. The first read to meet the outage waits about 20 seconds
 for the S3 client to give up, and later reads fail at once, as they would on a server.
+
+### Two Smoke Tests at Once
+
+`docker/smoke-test.sh` runs its stack as a Compose project of its own, `logicaldoc-smoke`, which names the stack's
+containers, volumes and network, and publishes the app, Keycloak and Garage on `127.0.0.1` ports `18080`, `18180` and
+`13900`. CI uses those. A second run on the same machine, such as another Claude session's, gives itself another
+project name and three other ports:
+
+```bash
+SMOKE_PROJECT=smoke-b SMOKE_PORT=28080 SMOKE_KEYCLOAK_PORT=28180 SMOKE_GARAGE_PORT=23900 docker/smoke-test.sh
+```
+
+- **The project's name is lowercase letters and digits joined by `-` or `_`.** It also names the image the run
+  builds, `<project>:local`, unless `LOGICALDOC_IMAGE` names one, so a second run's build doesn't retag the image
+  that the first run's step 8 starts its app from again. The image stays after the run, so
+  `SMOKE_PROJECT=<project> SMOKE_BUILD=0 docker/smoke-test.sh` runs the tests again without building it, and says
+  when it was built, and `docker image rm <project>:local` removes it. With `SMOKE_BUILD=0` and no such image, it
+  refuses: `docker compose build` tags `logicaldoc-community:local`, which `LOGICALDOC_IMAGE` has to name.
+- **It claims the project and its ports before it builds anything,** with a container, `<project>-claim`, which
+  Docker makes only once, so of two runs started together one gets it. The claim holds the three ports through the
+  build and stops just before the stack takes them, and it keeps the project claimed until the run removes its stack.
+  The run sets its exit trap only once it has the claim, so a run only ever removes the stack it made.
+- **It refuses a claimed project,** which is another run's, possibly still building, or was left by a run stopped
+  before it could remove its stack. Once no run is using it,
+  `docker rm -f <project>-claim && (cd / && docker compose -p <project> down -v --remove-orphans)` removes it: from a
+  folder with no `compose.yaml`, Compose needs only the name. It also refuses a project that has containers or volumes
+  and no claim, which is another stack, such as a development stack, and offers no command to remove it.
+- **It refuses a port setting that isn't a number from 1 to 65535, and a port something already answers on,** such as
+  another run's stack or claim. It names every setting to change at once.
+- **The builds take turns at Maven.** The `Dockerfile`'s Maven cache mount is locked, as each build deletes the
+  reactor's own artifacts from it when it ends. A second build waits there for the first, unless it builds the same
+  files, which BuildKit builds once for both.
+- **Step 5d builds the helper's tests in the checkout,** so two runs from one checkout can't both set
+  `SMOKE_HELPER_TEST=1`. Runs from separate worktrees can.
+
+In two runs side by side on a Mac, each stack used up to about 2 GB of Docker's memory, besides step 9's browser
+container.
 
 ### When a Smoke Check Fails
 
@@ -319,9 +366,10 @@ code is laid out.
     `admin` (`ADMIN_PASSWORD`, which `test-web.sh` passes: the stack's published password), that the Removed view lists it
     with who removed it and when it is destroyed, and that `webuser` is refused the view; and deletes two documents and
     empties the Trash (**Cancel**, which has the focus, removes nothing), which then says **Nothing in the Trash.**
-  - `keyboard.spec.ts` walks rows 3 to 11 of the spec's manual acceptance by keyboard alone: after the sign-in page it
-    presses keys (`page.keyboard`) and never clicks. A control is reached by Tab (`tabTo` in `helpers.ts`, which presses Tab until
-    the control has the focus and fails after a bound). Not every walk starts where the page does: `focus()` starts a step
+  - `keyboard.spec.ts` walks rows 3 to 11 by keyboard alone: rows 3 to 9 of M6's manual acceptance, then rows 10 and 11
+    of its own, for folders and the Trash. After the sign-in page it presses keys (`page.keyboard`) and never clicks. A
+    control is reached by Tab (`tabTo` in `helpers.ts`, which presses Tab until the control has the focus and fails after
+    a bound). Not every walk starts where the page does: `focus()` starts a step
     at a row, which Tab and the arrow keys reach (row 4 proves Tab gets into the list), at a column header (Shift+Tab and
     the arrow keys reach it from a row), and at a menu item once Enter has opened the menu (its first key is ArrowDown),
     and some `tabTo` walks start from the folder's star, the search box or an attachment's **Preview**, each with a comment

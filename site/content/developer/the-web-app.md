@@ -307,8 +307,10 @@ and `drag` props and the selected documents and folders for the toolbar's More m
   `holds`, the documents the person can read. An open folder that's deleted gives way to its parent.
 - **Undo.** Every delete says what it did with **Undo** (`toastWithAction`), and `organising/undo.ts` restores each Trash
   item the delete answered with, back where it was (no `folderId`), then says what came back. One already restored
-  (`404`) or whose place is gone (`409 place-gone`) is a line of `Refusals`, and the rest is restored. The action spends
-  itself on its first press, whatever presses it, as the server doesn't serialise two restores of one item.
+  (`404`) or whose place is gone (`409 place-gone`) is a line of `Refusals` in Undo's own words, which say what happened
+  (`undo.alreadyRestored`, and `undo.placeGone`, which sends the person to the Trash, as `Refusals` only closes), and
+  the rest is restored. The action spends itself on its first press, whatever presses it, as the server doesn't
+  serialise two restores of one item.
 - **Renaming folders** uses the same field. `RenameField.tsx` holds one field for documents and folders
   (`DocumentTitle`, `FolderName`), built on `useNameField`, which a favourite's name in My Favorites shares, and `OrganisingProvider`'s `renaming` is a row key and a place (`row`, `tree`,
   `heading`), where the focus goes back once it's done. F2 on a folder's row in a list or in the My Matters tree, the
@@ -323,16 +325,19 @@ and `drag` props and the selected documents and folders for the toolbar's More m
 - **The picker.** `MovePicker` takes the `OrganisingItems` being moved. It starts from Recent Matters and My Matters (the left
   pane's queries) and the search box's matter suggestions, then lists the chosen matter's folders from `fetchSubfolders` (also
   the tree's), a level at a time. It never browses Stores and lists no search folders. A folder being moved is a greyed-out
-  choice ("The folder itself") that doesn't open, and **Move Here** is greyed out, with the reason as its description, where
-  every item already is ("Already there"), at a matter's top level for documents (as before) and, for folders, for anyone but
-  an administrator ("Administrators only"). The Trash's restore picker passes no items, so it greys nothing out and the server
-  decides.
+  choice ("The folder itself") that doesn't open, and **Move Here** is greyed out, with the reason as its description, only
+  where nothing being moved can go: where every item already is ("Already there"), and where none of them can go, which for
+  documents is a place that holds none (at a matter's top level, as before) and for folders a matter's top level for anyone
+  but an administrator ("Administrators only"). While some of them can go, Move Here moves those and Refusals says the rest,
+  as a drop does (`whyNotHere`, `planMove`). The Trash's restore picker passes no items, so it greys nothing out and the
+  server decides.
 - **Moving folders.** `actions/move.ts`'s `planMove` works out a move before any call: what's in the place already is left
   out, documents go nowhere that holds none, and a folder goes neither into its own tree nor anywhere its `canMove` or M1's
   placement rules refuse. What it refuses, and what the server refuses (`folderMoveRefusal`: `items-not-allowed` names
   nothing, and `checked-out` lists only the problem's `holds`), are lines of `Refusals`, while the rest is moved, the
-  documents first and then the folders, each with its own call. **Move To…** is there while anything selected can be moved
-  (`anyMovable`). Before a folder moves into another matter (its `matterId` and the place's differ), `CrossMatter` asks, once
+  documents first and then the folders, each with its own call. A refusal names the check the server's `cause` says:
+  for `admins-only` the folder's own top level, or the matter's top level it was going into (as a drop on a matter in the
+  tree is refused before any call), and for `forbidden` no Move on the folder, or no Add where it was going. **Move To…** is there while anything selected can be moved (`anyMovable`). Before a folder moves into another matter (its `matterId` and the place's differ), `CrossMatter` asks, once
   for each such folder, in turn, counting its documents with `GET /folders/{id}/contents`; **Cancel** keeps only that folder
   where it is. The toast names a folder by the name the server answered, which CE changes on its way in when a folder the
   person can't see already has its name.
@@ -370,7 +375,9 @@ administrators alone. Name, Deleted and Removed sort; `?sort=` and `?order=` are
   "Restore "…" to…", one at a time, and its **Move Here** restores with `folderId`; one answered `409 refused` (a Store's
   item, or a shortcut deleted on its own) says it can't be restored from here. The server's own text is never shown.
 - **Remove…** and **Empty Trash…** ask first (`organising/ConfirmRemove.tsx`, with `Button`'s `danger` variant),
-  saying how long an administrator can still restore it from the page's `removedDays`, never a constant. A folder's
+  saying how long an administrator can still restore it from the page's `removedDays`, never a constant. It's an alert
+  dialog with a warning sign, as `ConfirmRelease` is, as the one step a person can't undo themselves; Delete's question
+  and `CrossMatter` can both be undone, and stay plain dialogs. A folder's
   counts come only from its `contents`, which take in only what the person can read.
 - **One at a time.** Restore, Remove and Empty Trash are disabled while one of them runs, so a second press sends nothing:
   the server doesn't serialise two restores of one item. Once the rows have gone, a focus left on the page, a gone row or

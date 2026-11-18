@@ -8,8 +8,10 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import javax.sql.DataSource;
@@ -52,7 +54,9 @@ import com.logicaldoc.util.spring.Context;
  * held while its rows come back. Then the item's folders go in one
  * transaction with their members' state. A document that fails is logged and
  * left, with the rest of the item, for the next night; the documents already
- * destroyed stay so, and the other items go on. A member is destroyed only
+ * destroyed stay so, and the other items go on, whatever it failed with but a
+ * {@link VirtualMachineError}: an Error such as a class missing from a
+ * plugin's zip fails only its item. A member is destroyed only
  * while its row is at 2 (CMIS's tree delete records its item before it
  * deletes the rows one by one): any other stays as it is.
  * <ul>
@@ -69,7 +73,10 @@ import com.logicaldoc.util.spring.Context;
  * {@code hd_searchfolder}), and a default workspace naming them. A folder stays
  * removed while it is a matter's own folder or a Store, while a row that isn't
  * destroyed has it as its folder or parent, while another folder, live or
- * deleted, takes its security from it, or while a live alias points to it.</li>
+ * deleted, takes its security from it, or while a live alias points to it.
+ * Which folders take their security from an item's folders is read once an
+ * item, in the transaction that destroys them, as each read scans
+ * {@code ld_folder}.</li>
  * </ul>
  * Only a live shortcut or alias keeps what it points to (plan, Ruling 22): one
  * that isn't live goes with its document or folder, whatever item holds it,
@@ -85,9 +92,6 @@ public class TrashDestroyer {
 
 	/** Items read at a time */
 	static final int BATCH = 100;
-
-	/** Ids in an {@code in (...)} list at a time */
-	private static final int CHUNK = 1000;
 
 	private final TrashStore store;
 
@@ -160,10 +164,11 @@ public class TrashDestroyer {
 						items++;
 					if (outcome.failed())
 						failed++;
-				} catch (RuntimeException e) {
+				} catch (Throwable e) {
+					String cause = failure(e);
 					failed++;
 					log.warn("Trash item {} couldn't be destroyed ({}), so it stays removed until the next night",
-							item.id(), rootCause(e).getClass().getSimpleName());
+							item.id(), cause);
 					log.debug("Trash item {} couldn't be destroyed", item.id(), e);
 				}
 			}
@@ -176,7 +181,20 @@ public class TrashDestroyer {
 		return destroyed;
 	}
 
-	/** The type of what failed is all a warning may say: a message can name a folder or file */
+	/**
+	 * What a failure while destroying does: a {@link VirtualMachineError} ends
+	 * the run, and anything else, an Error such as a class missing from a
+	 * plugin's zip included, fails only what it was destroying
+	 *
+	 * @return the type of what failed, all a warning may say: a message can
+	 *         name a folder or file
+	 */
+	private static String failure(Throwable e) {
+		if (e instanceof VirtualMachineError error)
+			throw error;
+		return rootCause(e).getClass().getSimpleName();
+	}
+
 	private static Throwable rootCause(Throwable e) {
 		Throwable root = e;
 		while (root.getCause() != null && root.getCause() != root)
@@ -214,12 +232,14 @@ public class TrashDestroyer {
 		if (!failed)
 			try {
 				Integer folders = new TransactionTemplate(transactions)
-						.execute(status -> destroyFolders(item, members, now));
+						.execute(status -> destroyFolders(item, members, cutoff, now));
 				count += folders != null ? folders : 0;
-			} catch (RuntimeException e) {
+			} catch (Throwable e) {
+				// The transaction rethrows an Error once it has rolled back
+				String cause = failure(e);
 				failed = true;
 				log.warn("The folders of Trash item {} couldn't be destroyed ({}), so they stay removed until the"
-						+ " next night", item, rootCause(e).getClass().getSimpleName());
+						+ " next night", item, cause);
 				log.debug("The folders of Trash item {} couldn't be destroyed", item, e);
 			}
 		log.debug("Destroyed {} folders and documents of Trash item {}", count, item);
@@ -233,7 +253,7 @@ public class TrashDestroyer {
 	 */
 	private Outcome destroyDocuments(long item, List<TrashMember> members, User system, Instant now) {
 		Map<Long, Long> removed = new HashMap<>();
-		for (List<Long> chunk : CollectionUtil.partition(ids(members, 'D'), CHUNK))
+		for (List<Long> chunk : CollectionUtil.partition(TrashMember.ids(members, 'D'), TrashStore.CHUNK))
 			named.query("select ld_id, ld_docref from ld_document where ld_deleted = :removed and ld_id in (:ids)",
 					new MapSqlParameterSource("removed", PersistentObject.DELETED_CODE_STRONG).addValue("ids", chunk),
 					rs -> {
@@ -242,7 +262,7 @@ public class TrashDestroyer {
 						removed.put(id, rs.wasNull() ? null : docRef);
 					});
 		List<Long> order = new ArrayList<>();
-		for (long id : ids(members, 'D'))
+		for (long id : TrashMember.ids(members, 'D'))
 			if (removed.containsKey(id))
 				order.add(id);
 			else
@@ -269,9 +289,10 @@ public class TrashDestroyer {
 						count += destroyDocument(other, system, begun, () -> claimAlong(other, id, now));
 				}
 				count += destroyDocument(id, system, begun, () -> claimMember(item, member, now));
-			} catch (RuntimeException e) {
+			} catch (Throwable e) {
+				String cause = failure(e);
 				log.warn("Document {} of Trash item {} couldn't be destroyed ({}), so it and the rest of the item stay"
-						+ " removed until the next night{}", id, item, rootCause(e).getClass().getSimpleName(),
+						+ " removed until the next night{}", id, item, cause,
 						begun[0] ? "; its files may be held with no record of them" : "");
 				log.debug("Document {} of Trash item {} couldn't be destroyed", id, item, e);
 				return new Outcome(count, true);
@@ -357,10 +378,10 @@ public class TrashDestroyer {
 	 * @return how many members it marked destroyed, its own and those of
 	 *         aliases that went along
 	 */
-	private int destroyFolders(long item, List<TrashMember> members, Instant now) {
+	private int destroyFolders(long item, List<TrashMember> members, Instant cutoff, Instant now) {
 		List<TrashMember> done = new ArrayList<>();
 		Map<Long, FolderRow> removed = new HashMap<>();
-		for (List<Long> chunk : CollectionUtil.partition(ids(members, 'F'), CHUNK))
+		for (List<Long> chunk : CollectionUtil.partition(TrashMember.ids(members, 'F'), TrashStore.CHUNK))
 			named.query(
 					"select ld_id, ld_parentid, ld_foldref from ld_folder where ld_deleted = :removed and ld_id in (:ids)",
 					new MapSqlParameterSource("removed", PersistentObject.DELETED_CODE_STRONG).addValue("ids", chunk),
@@ -371,20 +392,25 @@ public class TrashDestroyer {
 						removed.put(id, new FolderRow(id, parentId, rs.wasNull() ? null : folderRef));
 					});
 		List<FolderRow> order = new ArrayList<>();
-		for (long id : ids(members, 'F'))
+		for (long id : TrashMember.ids(members, 'F'))
 			if (removed.containsKey(id))
 				order.add(removed.get(id));
 			else
 				log.debug("Left F {} of Trash item {} removed: its row isn't at 2", id, item);
+		if (order.isEmpty())
+			return 0;
 		Map<Long, Integer> depths = new HashMap<>();
 		order.sort(Comparator.comparing((FolderRow row) -> row.folderRef() == null)
 				.thenComparing(row -> -depth(row, removed, depths)).thenComparing(FolderRow::id));
 
-		List<Long> destroyed = new ArrayList<>();
+		// Read in this transaction: what an earlier item's commit destroyed is gone, and a folder that has started
+		// taking its security from one of these since the run began is seen
+		SecurityTakers takers = securityTakers(item, cutoff);
+		Set<Long> destroyed = new LinkedHashSet<>();
 		int along = 0;
 		try {
 			for (FolderRow folder : order) {
-				String kept = keptBecause(folder.id());
+				String kept = keptBecause(folder.id(), takers, destroyed);
 				if (kept != null) {
 					log.debug("Left F {} of Trash item {} removed: {}", folder.id(), item, kept);
 					continue;
@@ -432,9 +458,11 @@ public class TrashDestroyer {
 	}
 
 	/**
+	 * @param takers what takes its security from the item's folders
+	 * @param destroying the folders destroyed so far in this transaction
 	 * @return why the folder must stay removed, null if nothing keeps it
 	 */
-	private String keptBecause(long folderId) {
+	private String keptBecause(long folderId, SecurityTakers takers, Set<Long> destroying) {
 		if (count("select count(*) from ld_folder f where f.ld_id = ? and (f.ld_id = f.ld_parentid"
 				+ " or (f.ld_parentid = ? and f.ld_type = ?) or exists (select 1 from hd_matter m"
 				+ " where m.hd_folderid = f.ld_id))", folderId, Folder.ROOTID, Folder.TYPE_WORKSPACE) > 0)
@@ -444,12 +472,54 @@ public class TrashDestroyer {
 						folderId) > 0)
 			return "rows that aren't destroyed are in it";
 		// Live or deleted: a deleted folder that takes its security from it can be restored (Ruling 23)
-		if (count("select count(*) from ld_folder where ld_securityref = ? and ld_id <> ?", folderId, folderId) > 0)
+		if (taken(takers, folderId, destroying))
 			return "a folder takes its security from it";
 		if (count("select count(*) from ld_folder a where a.ld_foldref = ? and a.ld_id <> ? and a.ld_deleted = 0",
 				folderId, folderId) > 0)
 			return "a live alias points to it";
 		return null;
+	}
+
+	/**
+	 * Reads the folders that take their security from the item's folders
+	 * removed before the cut-off: {@code ld_securityref} has no index, and
+	 * Healdan doesn't change CE's tables, so the read scans {@code ld_folder},
+	 * once an item whatever its folders rather than once a folder. The takers
+	 * are read before the folders they cover, so that a folder that leaves the
+	 * item between the two is looked up on its own.
+	 *
+	 * @param item the item
+	 * @param cutoff what was removed before this is destroyed
+	 * @return the folders that take their security from the item's
+	 */
+	private SecurityTakers securityTakers(long item, Instant cutoff) {
+		Map<Long, Set<Long>> takers = store.securityTakers(item, cutoff);
+		return new SecurityTakers(Set.copyOf(store.foldersRemovedBefore(item, cutoff)), takers);
+	}
+
+	/**
+	 * The folders, live or deleted, that take their security from an item's
+	 * folders, read in the transaction that destroys them. A folder the read
+	 * didn't take in, one that left the item since its members were read, is
+	 * looked up on its own.
+	 *
+	 * @param read the folders whose takers were read
+	 * @param takers by folder, the folders that take their security from it
+	 */
+	private record SecurityTakers(Set<Long> read, Map<Long, Set<Long>> takers) {
+	}
+
+	/**
+	 * @param destroying the folders destroyed so far in this transaction,
+	 *        which isn't committed
+	 * @return true if a folder that isn't destroyed takes its security from the
+	 *         folder
+	 */
+	private boolean taken(SecurityTakers takers, long folderId, Set<Long> destroying) {
+		if (!takers.read().contains(folderId))
+			return count("select count(*) from ld_folder where ld_securityref = ? and ld_id <> ?", folderId,
+					folderId) > 0;
+		return takers.takers().getOrDefault(folderId, Set.of()).stream().anyMatch(taker -> !destroying.contains(taker));
 	}
 
 	/**
@@ -484,9 +554,5 @@ public class TrashDestroyer {
 		FolderHistory history = new FolderHistory();
 		history.setUser(system);
 		return history;
-	}
-
-	private static List<Long> ids(List<TrashMember> members, char type) {
-		return members.stream().filter(member -> member.type() == type).map(TrashMember::objectId).toList();
 	}
 }

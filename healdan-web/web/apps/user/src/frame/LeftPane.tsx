@@ -229,6 +229,14 @@ function MyMattersSection() {
   // And what each folder is, for its right-click menu
   const folders = new Map<string, S['FolderView']>()
 
+  /** The folder a drag of its row moves: none for a matter or a Store, nor for a folder whose name is a field now */
+  function draggableFolder(id: string): S['FolderView'] | undefined {
+    const folder = folders.get(id)
+    if (!folder || folder.kind === 'matter' || folder.kind === 'store') return undefined
+    if (organising.renaming?.place === 'tree' && organising.renaming.key === `f${folder.id}`) return undefined
+    return folder
+  }
+
   function folderNode(folder: S['FolderView']): TreeNode {
     const id = String(folder.id)
     places.set(id, placeOf(folder))
@@ -323,14 +331,13 @@ function MyMattersSection() {
             else organising.askDelete({ documents: [], folders: [movingFolder(folder)] })
           }}
           // A folder drags, as a folder's row in a list does, to move it (folders and Trash spec 7.5); a matter doesn't, nor a
-          // folder whose name is a field now
+          // folder whose name is a field now. The payload is made only once a drag starts
           drag={{
             type: ROWS_TYPE,
+            can: (id) => draggableFolder(id) !== undefined,
             data: (id) => {
-              const folder = folders.get(id)
-              if (!folder || folder.kind === 'matter' || folder.kind === 'store') return undefined
-              if (organising.renaming?.place === 'tree' && organising.renaming.key === `f${folder.id}`) return undefined
-              return rowsPayload([], [movingFolder(folder)])
+              const folder = draggableFolder(id)
+              return folder && rowsPayload([], [movingFolder(folder)])
             },
           }}
           // Files are filed into the folder, and the list's own rows and the tree's folders are moved there; both light it up
