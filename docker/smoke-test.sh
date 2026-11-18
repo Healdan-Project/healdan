@@ -162,6 +162,8 @@ trap cleanup EXIT
 
 printf "DB_PASSWORD='%s'\nLOGICALDOC_IMAGE=%s\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\nSMOKE_GARAGE_PORT=%s\n" \
   "$PW" "$IMAGE" "$PORT" "$KEYCLOAK_PORT" "$GARAGE_PORT" > "$ENV_FILE"
+# Asks for the JVM's Base64 intrinsics and has it print its final flags, for step 2's check (Docker spec §17).
+echo "CATALINA_OPTS='-Xmx2g -XX:+UseBASE64Intrinsics -XX:+PrintFlagsFinal'" >> "$ENV_FILE"
 
 # Fixtures: a 16x16 PNG and a one-page PDF with a correct xref table.
 python3 - "$WORK" <<'PY'
@@ -276,17 +278,10 @@ build=
 check "its $build.cache.js keeps max-age=600" test "$(cache_control "$BASE/login/$build.cache.js")" = max-age=600
 # Upstream's policy had a non-breaking space after object-src, which browsers dropped as unrecognised (Docker spec §14).
 check "the Content-Security-Policy has object-src 'none'" grep -qx "object-src 'none'" <(csp_directives "$BASE/login.jsp")
-# CVE-2026-114938, until the image's Java has the fix (Docker spec §17). The JVM takes the last of these options. Tomcat
-# is the JVM running Catalina's Bootstrap; the brackets keep the scan from matching its own command line.
-tomcat_base64_options() {
-  compose exec -T app sh -c 'for d in /proc/[0-9]*; do
-      if tr "\0" " " 2>/dev/null <"$d/cmdline" | grep -q "catalina[.]startup[.]Bootstrap"; then
-        tr "\0" "\n" 2>/dev/null <"$d/cmdline" | grep "UseBASE64Intrinsic[s]"
-      fi
-    done; true'
-}
-check "Tomcat runs with the JVM's Base64 intrinsics off" \
-  test "$(tomcat_base64_options | tail -n 1)" = -XX:-UseBASE64Intrinsics
+# CVE-2026-114938, until the image's Java has the fix (Docker spec §17). This stack's CATALINA_OPTS asks for the
+# intrinsics and prints the JVM's final flags, so this passes only if setenv.sh's option wins and the JVM took it.
+check "Tomcat's JVM has the Base64 intrinsics off, though CATALINA_OPTS asks for them" \
+  app_logs_have 'bool  *UseBASE64Intrinsics  *= *false'
 
 echo "== 2b. forwarded addresses (docker/tests/test-proxies.sh)"
 # Fails three sign-ins with made-up X-Forwarded-For headers and checks which address the throttle counted; its
