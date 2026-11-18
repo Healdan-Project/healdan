@@ -43,6 +43,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.search.ExtensionFilteredSearch;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.BulkHits;
@@ -828,6 +829,109 @@ public class SearchResourceTest extends ApiTestCase {
 		assertEquals(10, ticked.path("total").asLong());
 		assertEquals(Map.of("treeve", 12L, "jclarke", 10L), counts(ticked.path("facets").path("author")));
 		assertEquals(Map.of("pdf", 6L, "word", 4L), counts(ticked.path("facets").path("type")));
+	}
+
+	/**
+	 * The Client and Matter options are named only through a matter whose own
+	 * folder the caller can read, the rule of {@code GET /matters/{id}}: a
+	 * document the caller reads in it names nothing by itself.
+	 */
+	@Test
+	public void testFacetsNameOnlyMattersTheCallerCanRead() throws Exception {
+		filtersLayout();
+		String query = "q=harrierapi&limit=1&facets=client,matter";
+
+		JsonNode facets = page(query, signIn(clerk)).path("facets");
+		assertEquals(Map.of("998", "998 \u2013 Healdan"), names(facets.path("client")));
+		assertEquals(Map.of("998.1", "998.1 \u2013 Demo", "998.2", "998.2 \u2013 Other"), names(facets.path("matter")));
+
+		// Matter 998.2's own folder is shut to the clerk, who still reads the documents inside it
+		shut(otherWorkspace, otherDocuments);
+		facets = page(query, signIn(clerk)).path("facets");
+		assertEquals(Map.of("998.1", 18L, "998.2", 4L), counts(facets.path("matter")));
+		assertEquals(Map.of("998", "998 \u2013 Healdan"), names(facets.path("client")));
+		assertEquals(Map.of("998.1", "998.1 \u2013 Demo", "998.2", "998.2"), names(facets.path("matter")));
+
+		// With no matter of the client readable, the client has no name either
+		shut(workspace, documents);
+		facets = page(query, signIn(clerk)).path("facets");
+		assertEquals(Map.of("998", 22L), counts(facets.path("client")));
+		assertEquals(Map.of("998", "998"), names(facets.path("client")));
+		assertEquals(Map.of("998.1", "998.1", "998.2", "998.2"), names(facets.path("matter")));
+
+		// The admin reads every folder
+		facets = page(query, signInAdmin()).path("facets");
+		assertEquals(Map.of("998", "998 \u2013 Healdan"), names(facets.path("client")));
+		assertEquals("998.2 \u2013 Other", names(facets.path("matter")).get("998.2"));
+	}
+
+	/** A number no client or matter has any more shows as itself */
+	@Test
+	public void testFacetsShowANumberNothingHas() throws Exception {
+		BulkHits bulk = new BulkHits();
+		List<Long> indexed = new ArrayList<>();
+		group(bulk, new ArrayList<>(), indexed, source(documents, "stray.pdf"), documents, 2, i -> "s-" + i + ".pdf",
+				"1.0", fx.user("jclarke"), null, "pdf", true, "9", false);
+		bulk.evict(indexed);
+		bulk.index(indexed, "Notes on the harrierapi");
+
+		JsonNode facets = page("q=harrierapi&limit=1&facets=client,matter", signIn(clerk)).path("facets");
+
+		assertEquals(Map.of("998.9", "998.9"), names(facets.path("matter")));
+		assertEquals(Map.of("998", "998 \u2013 Healdan"), names(facets.path("client")));
+	}
+
+	/**
+	 * A matter whose own folder is deleted names nothing, as
+	 * {@code GET /matters/{id}} shows nothing: neither itself nor, as the
+	 * client's only matter, its client, even to the admin
+	 */
+	@Test
+	public void testFacetsNameNoMatterWhoseFolderIsDeleted() throws Exception {
+		Matter closed = fx.matter(fx.client(997, "Closing"), 1, "Closed", store, "Documents");
+		BulkHits bulk = new BulkHits();
+		List<Long> indexed = new ArrayList<>();
+		group(bulk, new ArrayList<>(), indexed, source(documents, "stray.pdf"), documents, 2, i -> "s-" + i + ".pdf",
+				"1.0", fx.user("jclarke"), null, "pdf", true, "1", false);
+		bulk.set(indexed, HealdanConstants.ATTR_CLIENT, Attribute.Type.STRING, "997", null);
+		bulk.evict(indexed);
+		bulk.index(indexed, "Notes on the harrierapi");
+		String query = "q=harrierapi&limit=1&facets=client,matter";
+
+		JsonNode facets = page(query, signIn(clerk)).path("facets");
+		assertEquals(Map.of("997", "997 \u2013 Closing"), names(facets.path("client")));
+		assertEquals(Map.of("997.1", "997.1 \u2013 Closed"), names(facets.path("matter")));
+
+		jdbc().update("update ld_folder set ld_deleted = 1 where ld_id = ?", closed.getFolderId());
+
+		for (String token : List.of(signIn(clerk), signInAdmin())) {
+			facets = page(query, token).path("facets");
+			assertEquals(Map.of("997", "997"), names(facets.path("client")));
+			assertEquals(Map.of("997.1", "997.1"), names(facets.path("matter")));
+		}
+	}
+
+	/**
+	 * Leaves a matter's own folder to the admin group alone, the folder inside
+	 * it keeping the clerk's rights in security of its own
+	 */
+	private void shut(Folder workspace, Folder inside) throws Exception {
+		Folder kept = FolderDAO.get().findById(inside.getId(), true);
+		kept.setSecurityRef(null);
+		FolderDAO.get().store(kept, fx.folderHistory(fx.admin()));
+		fx.grant(kept, clerk.getUserGroup(), Permission.READ, Permission.WRITE, Permission.DOWNLOAD);
+
+		Folder own = FolderDAO.get().findById(workspace.getId(), true);
+		own.setSecurityRef(null);
+		own.getAccessControlList().clear();
+		FolderDAO.get().store(own, fx.folderHistory(fx.admin()));
+		fx.grant(own, fx.admin().getUserGroup(), Permission.READ, Permission.WRITE);
+	}
+
+	private static Map<String, String> names(JsonNode options) {
+		Map<String, String> names = new LinkedHashMap<>();
+		options.forEach(option -> names.put(option.path("value").textValue(), option.path("displayName").textValue()));
+		return names;
 	}
 
 	@Test

@@ -3,10 +3,13 @@
 
 package com.logicaldoc.healdan.matter;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.PersistentObjectDAO;
+import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -57,6 +60,26 @@ public interface MatterDAO extends PersistentObjectDAO<Matter> {
 	 * @throws PersistenceException error at data layer
 	 */
 	public List<Matter> findLive() throws PersistenceException;
+
+	/**
+	 * @param clientIds clients' ids
+	 * @param numbers matter numbers
+	 * @return the matters of those clients that have one of those numbers and
+	 *         whose own folders aren't deleted, in no particular order
+	 * @throws PersistenceException error at data layer
+	 */
+	public List<Matter> findLiveByClientsAndNumbers(Collection<Long> clientIds, Collection<Long> numbers)
+			throws PersistenceException;
+
+	/**
+	 * @param clientIds clients' ids
+	 * @param user who reads, with its groups
+	 * @return those of the clients with a matter whose own folder isn't deleted
+	 *         and the user may read, as {@code FolderDAO.isReadAllowed} decides
+	 * @throws PersistenceException error at data layer
+	 */
+	public Set<Long> findClientsWithReadableMatter(Collection<Long> clientIds, User user)
+			throws PersistenceException;
 
 	/**
 	 * @param storeId the id of a Store

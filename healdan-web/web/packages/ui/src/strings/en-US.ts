@@ -357,6 +357,7 @@ export const enUS = {
   'move.up': 'Up One Level',
   'move.here': 'Move Here',
   'move.folders': 'Folders in {name}',
+  'move.filter': 'Filter Folders',
   'move.noFolders': 'No folders in here.',
   'move.nothing': 'Nothing found.',
   'move.chooseFolder': 'Open a folder inside the {matterLower} to move the documents into it.',

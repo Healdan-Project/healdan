@@ -33,12 +33,12 @@ const facets: S['Facets'] = {
   author: [{ value: 'jclarke', displayName: 'Jamie Clarke', count: 1 }],
   class: [{ value: 'Correspondence', count: 2 }],
   client: [
-    { value: '1001', count: 1 },
-    { value: '1002', count: 1 },
+    { value: '1001', displayName: '1001 – Saltmarsh Shipping Ltd', count: 1 },
+    { value: '1002', displayName: '1002 – Brightwell', count: 1 },
   ],
   matter: [
-    { value: '1001.1', count: 1 },
-    { value: '1002.1', count: 1 },
+    { value: '1001.1', displayName: '1001.1 – Charter Dispute', count: 1 },
+    { value: '1002.1', displayName: '1002.1 – Commercial Lease', count: 1 },
   ],
 }
 
@@ -168,8 +168,17 @@ describe('SearchView', () => {
     const region = await screen.findByRole('region', { name: 'Filters' })
     await within(region).findByRole('checkbox', { name: 'Word, 1' })
     for (const group of ['File Type', 'Author', 'Class', 'Client', 'Matter']) expect(within(region).getByRole('group', { name: group })).toBeTruthy()
-    expect(within(region).getByRole('checkbox', { name: '1001.1, 1' })).toBeTruthy()
+    expect(within(region).getByRole('checkbox', { name: '1001 – Saltmarsh Shipping Ltd, 1' })).toBeTruthy()
+    expect(within(region).getByRole('checkbox', { name: '1001.1 – Charter Dispute, 1' })).toBeTruthy()
     expect(api.callsTo('GET /v1/search').some((c) => c.query?.facets === 'type,author,class,client,matter' && c.query?.limit === 1)).toBe(true)
+  })
+
+  it("names a client and a matter in the chips from the results, with Filters closed, and the number of one they don't show", async () => {
+    await renderApp('/search?scope=documents&q=charter&client=1002&matter=1002.1&matter=1009.4', routes())
+    await rows()
+    const chips = within(within(main()).getByRole('group', { name: 'Filters in Use' }))
+    expect(chips.getByText('Client: 1002 – Brightwell')).toBeTruthy()
+    expect(chips.getByText('Matter: 1002.1 – Commercial Lease, 1009.4')).toBeTruthy()
   })
 
   it('filters through the address and the server, with the facets counted over the other filters', async () => {

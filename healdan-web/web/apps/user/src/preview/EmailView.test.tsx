@@ -5,8 +5,9 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { formatDateTime, setLabels } from '@healdan/ui'
+import { launch } from '../actions/launch'
 import { expectNoAxeViolations } from '../test/axe'
-import { document, messageView, problem } from '../test/fakeApi'
+import { document, folder, messageView, problem } from '../test/fakeApi'
 import { resetPdf } from '../test/fakePdf'
 import { pdfResponse, renderPreview } from '../test/renderPreview'
 import { invalidateDocumentLists } from '../actions/refresh'
@@ -21,6 +22,7 @@ const save = 'POST /v1/documents/10388/message/attachments/*/file'
 
 beforeEach(() => {
   resetPdf()
+  vi.mocked(launch).mockClear()
   Object.defineProperty(URL, 'createObjectURL', { value: () => 'blob:attachment', configurable: true, writable: true })
   Object.defineProperty(URL, 'revokeObjectURL', { value: () => {}, configurable: true, writable: true })
 })
@@ -149,15 +151,69 @@ describe('EmailView', () => {
     expect(api.callsTo(part)[0]?.query).toEqual({ inline: 'true' })
   })
 
-  it('downloads anything else, as a link to the attachment, with no preview asked for', async () => {
+  it('downloads anything else from the page, under its own name, with no preview asked for', async () => {
     const { api } = renderPreview(<EmailView document={mail} />, { [message]: messageView() })
 
-    const link = await screen.findByRole('link', { name: 'Download Schedule.xlsx' })
+    fireEvent.click(await screen.findByRole('button', { name: 'Download Schedule.xlsx' }))
 
-    expect(link.getAttribute('href')).toBe('/api/v1/documents/10388/message/parts/3')
-    expect(link.hasAttribute('download')).toBe(true)
+    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/3', 'Schedule.xlsx')
     expect(screen.queryByRole('button', { name: 'Preview Schedule.xlsx' })).toBeNull()
     expect(api.callsTo(part)).toHaveLength(0)
+  })
+
+  it("gives an attachment no link to drag out of the page or save from its menu, where its download would have no session", async () => {
+    renderPreview(<EmailView document={mail} />, { [message]: messageView(), [part]: () => problem(404, 'no-preview') })
+
+    await screen.findByRole('button', { name: 'Download Schedule.xlsx' })
+    expect(screen.queryByRole('link', { name: /^Download / })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Preview Contract.pdf' }))
+    await screen.findByRole('button', { name: 'Download Contract.pdf' })
+    expect(screen.queryByRole('link', { name: /^Download / })).toBeNull()
+  })
+
+  it('greys out Save to Matter, and says why, where the person cannot file into the email\'s folder', async () => {
+    renderPreview(<EmailView document={mail} />, { [message]: messageView(), 'GET /v1/folders/111': folder({ id: 111, canFile: false }) })
+
+    const note = await screen.findByText("You can't file into this folder.")
+    const save = screen.getByRole('button', { name: 'Save to Matter: Contract.pdf' })
+    expect(save.hasAttribute('disabled')).toBe(true)
+    expect(save.getAttribute('aria-describedby')).toBe(note.id)
+    // Reading the attachment needs no more than it did
+    expect(screen.getByRole('button', { name: 'Download Schedule.xlsx' }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('moves the focus to the attachment when Save to Matter is greyed out with the focus on it', async () => {
+    let answer: (view: ReturnType<typeof folder>) => void = () => {}
+    const asked = new Promise<ReturnType<typeof folder>>((resolve) => {
+      answer = resolve
+    })
+    renderPreview(<EmailView document={mail} />, { [message]: messageView(), 'GET /v1/folders/111': () => asked })
+
+    const save = await screen.findByRole('button', { name: 'Save to Matter: Contract.pdf' })
+    act(() => save.focus())
+    await act(async () => answer(folder({ id: 111, canFile: false })))
+
+    await screen.findByText("You can't file into this folder.")
+    expect(globalThis.document.activeElement).toBe(screen.getByRole('button', { name: 'Preview Contract.pdf' }))
+  })
+
+  it('keeps Save to Matter where the person can file into the folder', async () => {
+    const { api } = renderPreview(<EmailView document={mail} />, { [message]: messageView(), 'GET /v1/folders/111': folder({ id: 111, canFile: true }) })
+
+    const save = await screen.findByRole('button', { name: 'Save to Matter: Contract.pdf' })
+    await waitFor(() => expect(api.callsTo('GET /v1/folders/111')).toHaveLength(1))
+    await waitFor(() => expect(save.hasAttribute('disabled')).toBe(false))
+    expect(screen.queryByText("You can't file into this folder.")).toBeNull()
+  })
+
+  it('asks about the folder only when an attachment could be saved', async () => {
+    const saved = messageView({ attachments: messageView().attachments.map((one) => ({ ...one, docNumber: 10500 + one.index })) })
+    const { api } = renderPreview(<EmailView document={mail} />, { [message]: saved, 'GET /v1/folders/111': folder({ id: 111, canFile: false }) })
+
+    await screen.findByText('Saved as # 10501')
+    expect(api.callsTo('GET /v1/folders/111')).toHaveLength(0)
+    expect(screen.queryByText("You can't file into this folder.")).toBeNull()
   })
 
   it('previews a PDF or a picture by its name when the sender sent it as a plain file, and downloads a TIFF', async () => {
@@ -171,7 +227,8 @@ describe('EmailView', () => {
 
     expect(await screen.findByRole('button', { name: 'Preview Report.pdf' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Preview Logo.JPG' })).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Download Fax.tif' }).getAttribute('href')).toBe('/api/v1/documents/10388/message/parts/6')
+    fireEvent.click(screen.getByRole('button', { name: 'Download Fax.tif' }))
+    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/6', 'Fax.tif')
     expect(screen.queryByRole('button', { name: 'Preview Fax.tif' })).toBeNull()
   })
 
@@ -180,9 +237,8 @@ describe('EmailView', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Preview Contract.pdf' }))
 
     expect(await screen.findByText("There's no preview for this kind of file.")).toBeTruthy()
-    const link = screen.getByRole('link', { name: 'Download Contract.pdf' })
-    expect(link.getAttribute('href')).toBe('/api/v1/documents/10388/message/parts/1')
-    expect(link.getAttribute('download')).toBe('Contract.pdf')
+    fireEvent.click(screen.getByRole('button', { name: 'Download Contract.pdf' }))
+    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/1', 'Contract.pdf')
   })
 
   it('offers no Download of the attachment shown to someone who may not download the email', async () => {
@@ -204,7 +260,8 @@ describe('EmailView', () => {
 
     expect((await screen.findByTitle('Message Body')).getAttribute('src')).toBe('/api/v1/documents/10388/message/body?version=1.0')
     expect(api.callsTo(message)[0]?.query).toEqual({ version: '1.0' })
-    expect(screen.getByRole('link', { name: 'Download Schedule.xlsx' }).getAttribute('href')).toBe('/api/v1/documents/10388/message/parts/3?version=1.0')
+    fireEvent.click(screen.getByRole('button', { name: 'Download Schedule.xlsx' }))
+    expect(launch).toHaveBeenLastCalledWith('/api/v1/documents/10388/message/parts/3?version=1.0', 'Schedule.xlsx')
     fireEvent.click(screen.getByRole('button', { name: 'Save to Matter: Contract.pdf' }))
     await waitFor(() => expect(api.callsTo(versioned)).toHaveLength(1))
 

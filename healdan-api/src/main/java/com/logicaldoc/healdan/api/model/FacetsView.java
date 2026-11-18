@@ -25,7 +25,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public record FacetsView(@JsonInclude(JsonInclude.Include.NON_NULL) List<FacetCount> type,
 		@JsonInclude(JsonInclude.Include.NON_NULL) List<AuthorFacetCount> author,
 		@JsonInclude(JsonInclude.Include.NON_NULL) @JsonProperty("class") List<FacetCount> docClass,
-		@JsonInclude(JsonInclude.Include.NON_NULL) List<FacetCount> client,
-		@JsonInclude(JsonInclude.Include.NON_NULL) List<FacetCount> matter,
+		@JsonInclude(JsonInclude.Include.NON_NULL) List<NamedFacetCount> client,
+		@JsonInclude(JsonInclude.Include.NON_NULL) List<NamedFacetCount> matter,
 		@JsonInclude(JsonInclude.Include.NON_NULL) Boolean partial) {
 }

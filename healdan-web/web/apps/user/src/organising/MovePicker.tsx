@@ -179,6 +179,9 @@ function whyNotHere(items: OrganisingItems, view: S['FolderView'], admin: boolea
   return 'move.adminsOnly'
 }
 
+/** From this many subfolders the picker offers a filter: fewer are quicker to tab through than to type for */
+const FILTER_FROM = 8
+
 /** One folder of the chosen matter: its subfolders to open, and Move Here, greyed out where the items can't go */
 function Folders({
   items,
@@ -205,6 +208,18 @@ function Folders({
   const folders = (subfolders.data ?? []).filter((one) => one.kind === 'folder')
   // A folder being moved is a place nothing goes into, and it doesn't open, so nothing inside it can be chosen
   const moving = new Set(items.folders.map((one) => one.id))
+  // Each folder starts unfiltered. This is done here, not with a key, as a new component would drop the focus from Up One
+  // Level to the page
+  const [filter, setFilter] = useState('')
+  const [filtered, setFiltered] = useState(here)
+  if (filtered !== here) {
+    setFiltered(here)
+    setFilter('')
+  }
+  const filterable = folders.length >= FILTER_FROM
+  // A refetch can take the field away; what was typed in it then hides nothing, as nothing could clear it
+  const wanted = filterable ? filter.trim().toLocaleLowerCase() : ''
+  const listed = wanted ? folders.filter((one) => one.name.toLocaleLowerCase().includes(wanted)) : folders
   return (
     <>
       <div>
@@ -213,11 +228,20 @@ function Folders({
         </Button>
       </div>
       <h3 className={styles.heading}>{view ? t('move.folders', { name: view.name }) : t('common.loading')}</h3>
+      {filterable && (
+        <div>
+          <TextField label={t('move.filter')} value={filter} onChange={setFilter} />
+          {/* There before it has words, so a screen reader says them as they come */}
+          <p role="status" className={styles.filterResult}>
+            {listed.length === 0 && t('move.nothing')}
+          </p>
+        </div>
+      )}
       {subfolders.isError ? (
         <p className={styles.note}>{messageFor(subfolders.error)}</p>
       ) : (
         <ul className={styles.list} aria-label={view ? t('move.folders', { name: view.name }) : undefined}>
-          {folders.map((one) => (
+          {listed.map((one) => (
             <Choice key={one.id} reason={moving.has(one.id) ? t('move.itself') : undefined} onPress={() => onOpen(one.id)}>
               <Icon {...folderIcon()} /> {one.name}
             </Choice>

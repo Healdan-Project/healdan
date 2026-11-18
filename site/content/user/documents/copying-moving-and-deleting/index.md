@@ -39,7 +39,8 @@ Select the documents, then choose the **⋯** (More) button, then **Move To…**
 
 1. Choose the matter. The window lists its folders.
 2. Open the folders until you're in the one to move into. **Up One Level** goes back a folder, and **Back to Matters**
-   to the matters.
+   to the matters. A folder with eight or more folders inside it has **Filter Folders**, which narrows them to those
+   whose names hold what you type.
 3. Choose **Move Here**. It's greyed out at the top of a matter, which holds no documents: "Open a folder inside the
    matter to move the documents into it."
 

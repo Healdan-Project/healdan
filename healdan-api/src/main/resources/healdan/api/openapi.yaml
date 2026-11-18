@@ -3990,14 +3990,14 @@ components:
             $ref: '#/components/schemas/FacetCount'
         client:
           type: array
-          description: The client numbers.
+          description: The clients, by number.
           items:
-            $ref: '#/components/schemas/FacetCount'
+            $ref: '#/components/schemas/NamedFacetCount'
         matter:
           type: array
           description: The matters, by client and matter number, such as `998.1`.
           items:
-            $ref: '#/components/schemas/FacetCount'
+            $ref: '#/components/schemas/NamedFacetCount'
         partial:
           type: boolean
           const: true
@@ -4030,6 +4030,25 @@ components:
         displayName:
           type: string
           description: The Author's name, to show; the username when the Author is no longer a user.
+        count:
+          type: integer
+          minimum: 1
+          description: How many documents it would leave.
+    NamedFacetCount:
+      type: object
+      additionalProperties: false
+      required: [value, displayName, count]
+      properties:
+        value:
+          type: string
+          description: The number, which `client` or `matter` takes, such as `998.1`.
+        displayName:
+          type: string
+          description: |
+            The client or matter as people read it, such as `998.1 – Demo`.
+            The number alone when the caller can't read the own folder of the
+            matter, or of any matter of the client, or when no client or matter
+            has the number any more.
         count:
           type: integer
           minimum: 1

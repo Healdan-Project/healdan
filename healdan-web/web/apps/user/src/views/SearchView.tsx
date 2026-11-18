@@ -16,6 +16,7 @@ import { FiltersButton } from '../filters/FiltersButton'
 import { FiltersPanel } from '../filters/FiltersPanel'
 import { useAuthorNames } from '../filters/useAuthorNames'
 import { useFilters } from '../filters/useFilters'
+import { useMatterNames } from '../filters/useMatterNames'
 import { ErrorPanel } from '../frame/ErrorPanel'
 import { RightRegionView, useRegionKind, useRightRegion } from '../frame/RightRegion'
 import { searchesDocuments, type SearchScope } from '../search/scopes'
@@ -62,6 +63,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const preview = usePreviewKey(changeSelection)
   const openDocument = useOpenKey(hitDocuments, changeSelection)
   const authors = useAuthorNames(results.rows, facets.data)
+  const { clients, matters } = useMatterNames(results.rows, facets.data)
 
   if (text === '') {
     return (
@@ -113,7 +115,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
             >
               {documents && <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} selected={organising.selected} />}
             </Toolbar>
-            {documents && <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />}
+            {documents && <FilterChips filters={filters} authors={authors} clients={clients} matters={matters} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />}
             <Table
               aria-labelledby={headingId}
               columns={columns}
@@ -146,6 +148,8 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               unavailable={facets.isError}
               busy={facets.isPlaceholderData}
               context="search"
+              clients={clients}
+              matters={matters}
               onChange={change}
               onClose={() => {
                 region.close()
