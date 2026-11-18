@@ -440,6 +440,31 @@ public class FolderChangesTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testMoveIntoAnotherClientsMatterRestampsTheClientAndTheMatter() throws Exception {
+		Folder inner = fx.folder(letters, "Inner");
+		Document lease = fx.upload(inner, "Lease.docx", "lease", boss);
+		Folder elsewhere = FolderDAO.get()
+				.findById(fx.matter(fx.client(997, "Elsewhere"), 3, "Elsewhere", store, "Elsewhere Documents")
+						.getFolderId());
+		Folder into = FolderDAO.get().findByName(elsewhere, "Elsewhere Documents", Tenant.DEFAULT_ID, true).get(0);
+		awaitAsyncWork();
+		assertEquals("998", value(lease, HealdanConstants.ATTR_CLIENT));
+		assertEquals("1", value(lease, HealdanConstants.ATTR_MATTER));
+
+		ApiResponse moved = move(letters, into.getId(), clerkToken);
+
+		assertEquals(moved.toString(), 200, moved.status());
+		assertTrue(moved.json().path("matter").path("display").textValue().startsWith("997.3"));
+		for (Folder folder : List.of(letters, inner)) {
+			Folder stamped = FolderDAO.get().findById(folder.getId(), true);
+			assertEquals(folder.getName(), "997", stamped.getAttribute(HealdanConstants.ATTR_CLIENT).getStringValue());
+			assertEquals(folder.getName(), "3", stamped.getAttribute(HealdanConstants.ATTR_MATTER).getStringValue());
+		}
+		assertEquals("997", value(lease, HealdanConstants.ATTR_CLIENT));
+		assertEquals("3", value(lease, HealdanConstants.ATTR_MATTER));
+	}
+
+	@Test
 	public void testMoveIntoTheFolderItIsInChangesNothing() throws Exception {
 		DbSnapshot before = fx.snapshot();
 		ApiResponse response = move(letters, documents.getId(), clerkToken);

@@ -9,10 +9,14 @@ import static org.junit.Assert.assertTrue;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
+import java.time.zone.ZoneOffsetTransition;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -52,19 +56,57 @@ public class TrashStartupTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testWaitsOutTheStartsDelay() throws Exception {
+		firstRunAfter(Duration.ofDays(2));
+	}
+
+	@Test
+	public void testWaitsOutTheStartsDelayIntoANightThatSkips0247() throws Exception {
+		// A zone whose clocks skip from 02:00 to 03:00 in the spring, as the owner's Mac's do
+		ZoneId chicago = ZoneId.of("America/Chicago");
+		ZoneOffsetTransition gap = chicago.getRules().nextTransition(Instant.now().plus(Duration.ofDays(1)));
+		while (!gap.isGap())
+			gap = chicago.getRules().nextTransition(gap.getInstant());
+		LocalDate night = gap.getDateTimeBefore().toLocalDate();
+		TimeZone zone = TimeZone.getDefault();
+		TimeZone.setDefault(TimeZone.getTimeZone(chicago));
+		try {
+			// The delay ends just after midnight before the clocks change
+			ZonedDateTime at = firstRunAfter(Duration.between(Instant.now(), night.atTime(0, 30).atZone(chicago)));
+
+			// That night has no 02:47: it runs an hour of the clocks later, at the time 02:47 would have been
+			assertEquals(night, at.toLocalDate());
+			assertEquals(LocalTime.of(3, 47), at.toLocalTime());
+			assertEquals(chicago, at.getZone());
+		} finally {
+			TimeZone.setDefault(zone);
+		}
+	}
+
+	/**
+	 * Starts the job with the delay, and checks it is first scheduled for the
+	 * first night after the delay, in the JVM's zone
+	 *
+	 * @return when it is first scheduled
+	 */
+	private static ZonedDateTime firstRunAfter(Duration delay) throws Exception {
 		TrashStartup startup = new TrashStartup(TrashDestroyer.get());
-		startup.afterStart = Duration.ofDays(2);
+		startup.afterStart = delay;
 		CompletableFuture<ZonedDateTime> first = new CompletableFuture<>();
 		startup.nightlyScheduled = first::complete;
 		ZonedDateTime before = ZonedDateTime.now();
 		try {
 			startup.started();
+			ZonedDateTime after = ZonedDateTime.now();
 
 			ZonedDateTime at = first.get(20, TimeUnit.SECONDS);
 			assertFalse("not within the delay after the start: " + at, at.isBefore(before.plus(startup.afterStart)));
-			assertTrue("the first 02:47 after it: " + at, at.isBefore(before.plus(startup.afterStart).plusDays(1)));
-			assertEquals(TrashStartup.NIGHTLY, at.toLocalTime());
+			// The first night after the delay ended, which started() reads between the two; not 02:47 itself, which a
+			// night whose clocks skip it doesn't have
+			assertTrue("the first night after it: " + at,
+					at.equals(TrashStartup.nightlyAfter(before.plus(startup.afterStart)))
+							|| at.equals(TrashStartup.nightlyAfter(after.plus(startup.afterStart))));
 			assertEquals(ZoneId.systemDefault(), at.getZone());
+			return at;
 		} finally {
 			startup.stop();
 		}

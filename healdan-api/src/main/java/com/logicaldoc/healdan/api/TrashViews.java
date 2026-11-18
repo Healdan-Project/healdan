@@ -3,7 +3,6 @@
 
 package com.logicaldoc.healdan.api;
 
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -49,15 +48,9 @@ import com.logicaldoc.util.spring.Context;
  * Trash spec 6.5), and counts what a folder holds as the caller may see it
  * (spec 4.2): a count never takes in what the caller can't read, so it tells
  * nothing of a hidden folder or document. An administrator's counts take
- * everything.
- * <p>
- * The caller reads a folder, deleted or not, when one of its groups has Read
- * on it, or on the folder it takes its security from; and a document as CE's
- * {@code DocumentDAO.getAllowedPermissions} reads a live one: by its own
- * entries for the caller's groups when they grant anything, else by its
- * folder's, and published unless the caller sees what isn't, as
- * {@link AccessChecks#readableDocument} decides. CE's own checks see nothing
- * on a deleted folder or document, so the rule is SQL here.
+ * everything. CE's own checks see nothing on a deleted folder or document, so
+ * the counts are {@link StoredRows}', which states the read rule for rows that
+ * may be deleted.
  */
 final class TrashViews {
 
@@ -65,25 +58,6 @@ final class TrashViews {
 
 	/** Ids per query, to stay under the databases' limits on a list */
 	private static final int CHUNK = 500;
-
-	private static final String USER_GROUPS = "select g.ld_groupid from ld_usergroup g where g.ld_userid = :user";
-
-	/** The folder {@code f} is readable */
-	private static final String FOLDER_READ = """
-			exists (select 1 from ld_folder_acl b where b.ld_folderid = coalesce(f.ld_securityref, f.ld_id)
-			   and b.ld_read = 1 and b.ld_groupid in (%s))""".formatted(USER_GROUPS);
-
-	/** The document {@code d}, in the folder {@code f}, is readable */
-	private static final String DOCUMENT_READ = """
-			(exists (select 1 from ld_document_acl a where a.ld_docid = d.ld_id and a.ld_read = 1
-			   and a.ld_groupid in (%1$s))
-			 or (not exists (select 1 from ld_document_acl a where a.ld_docid = d.ld_id and a.ld_groupid in (%1$s)
-			   and (%2$s) > 0) and %3$s))""".formatted(USER_GROUPS, AccessChecks.anyPermission("a."), FOLDER_READ);
-
-	/** The document {@code d} is published now, as {@code Document.isPublishing} decides */
-	private static final String PUBLISHED = """
-			d.ld_published = 1 and (d.ld_startpublishing is null or d.ld_startpublishing <= :now)
-			   and (d.ld_stoppublishing is null or d.ld_stoppublishing > :now)""";
 
 	private TrashViews() {
 	}
@@ -159,10 +133,10 @@ final class TrashViews {
 	 * @throws PersistenceException error at data layer
 	 */
 	static TrashContents liveContents(long folderId, User caller) throws PersistenceException {
-		List<Long> tree = StoredRows.get().tree(folderId);
-		boolean admin = AccessChecks.isAdmin(caller);
-		return new TrashContents(folders(tree.subList(1, tree.size()), admin, caller),
-				documents("d.ld_deleted = 0 and d.ld_folderid in (:ids)", tree, admin, caller));
+		StoredRows rows = StoredRows.get();
+		List<Long> tree = rows.tree(folderId);
+		return new TrashContents(rows.readableFolders(tree.subList(1, tree.size()), caller),
+				rows.readableLiveDocumentsIn(tree, caller));
 	}
 
 	/**
@@ -191,9 +165,8 @@ final class TrashViews {
 							inside.add(id);
 					});
 
-		boolean admin = AccessChecks.isAdmin(caller);
-		return new TrashContents(admin ? inside.size() : folders(inside, false, caller),
-				admin ? documentIds.size() : documents("d.ld_id in (:ids)", documentIds, false, caller));
+		StoredRows rows = StoredRows.get();
+		return new TrashContents(rows.readableFolders(inside, caller), rows.readableDocuments(documentIds, caller));
 	}
 
 	/**
@@ -218,39 +191,6 @@ final class TrashViews {
 	private static Long size(long docId) {
 		return jdbc().queryForList("select ld_filesize from ld_document where ld_id = :id",
 				new MapSqlParameterSource("id", docId), Long.class).stream().findFirst().orElse(null);
-	}
-
-	/** @return how many of the folders the caller can read */
-	private static long folders(Collection<Long> ids, boolean admin, User caller) {
-		if (admin)
-			return ids.size();
-		long count = 0;
-		for (List<Long> chunk : chunks(ids))
-			count += jdbc().queryForObject(
-					"select count(*) from ld_folder f where f.ld_id in (:ids) and " + FOLDER_READ,
-					new MapSqlParameterSource("ids", chunk).addValue("user", caller.getId()), Long.class);
-		return count;
-	}
-
-	/**
-	 * @param scope which documents, a condition on {@code d} with the list
-	 *        {@code :ids}
-	 * @return how many of the documents the caller can read
-	 */
-	private static long documents(String scope, Collection<Long> ids, boolean admin, User caller) {
-		StringBuilder where = new StringBuilder(scope);
-		if (!admin)
-			where.append(" and ").append(DOCUMENT_READ);
-		if (!AccessChecks.seesUnpublished(caller))
-			where.append(" and ").append(PUBLISHED);
-		long count = 0;
-		for (List<Long> chunk : chunks(ids))
-			count += jdbc().queryForObject(
-					"select count(*) from ld_document d join ld_folder f on f.ld_id = d.ld_folderid where " + where,
-					new MapSqlParameterSource("ids", chunk).addValue("user", caller.getId()).addValue("now",
-							new Timestamp(System.currentTimeMillis())),
-					Long.class);
-		return count;
 	}
 
 	private static Collection<List<Long>> chunks(Collection<Long> ids) {

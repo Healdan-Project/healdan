@@ -18,11 +18,13 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 
 import org.apache.logging.log4j.Level;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.document.Bookmark;
 import com.logicaldoc.core.document.Document;
@@ -55,6 +57,9 @@ public class TrashDestroyerTest extends AbstractRulesTestCase {
 
 	private static final Consumer<TrashMember> NOTHING = member -> {
 	};
+
+	/** A query that looks folders up by the folder they take their security from, a scan of ld_folder */
+	private static final Pattern SECURITY_SCAN = Pattern.compile("ld_securityref\\s*(=|in\\b)");
 
 	/** The permissions of a folder's own ACL row */
 	private static final List<String> ACL_COLUMNS = List.of("ld_read", "ld_write", "ld_add", "ld_security",
@@ -462,6 +467,77 @@ public class TrashDestroyerTest extends AbstractRulesTestCase {
 		assertDestroyed(badItem, document(x2), Duration.ofDays(33));
 		assertDestroyed(badItem, folder(bad), Duration.ofDays(33));
 		assertEquals(TrashState.DESTROYED, trash.state(badItem));
+	}
+
+	@Test
+	public void testAnErrorInOneItemLeavesTheRestToGoOn() throws Exception {
+		Document x = upload(correspondence, "x.txt", alice);
+		Folder linked = fx.folder(correspondence, "Linked");
+		Document y = upload(correspondence, "y.txt", alice);
+		awaitAsyncWork();
+		documentDao.delete(x.getId(), documentHistory(alice));
+		folderDao.deleteTree(linked.getId(), folderHistory(alice));
+		documentDao.delete(y.getId(), documentHistory(alice));
+		long xItem = holding(document(x));
+		long linkedItem = holding(folder(linked));
+		long yItem = holding(document(y));
+		// The failing items go first: a document's, and a folder's, whose transaction rethrows the Error
+		remove(xItem, Duration.ofDays(33));
+		remove(linkedItem, Duration.ofDays(32));
+		remove(yItem, Duration.ofDays(31));
+		destroyer.beforeDestroy = member -> {
+			if (member.equals(document(x)) || member.equals(folder(linked)))
+				throw new NoClassDefFoundError("a class missing from a plugin's zip");
+		};
+
+		try (LogCapture log = LogCapture.of(TrashDestroyer.class)) {
+			assertEquals(1, destroyer.runOnce(now));
+
+			List<String> warnings = log.lines().stream().filter(line -> line.startsWith("WARN")).toList();
+			assertEquals(log.lines().toString(), 2, warnings.size());
+			for (String warning : warnings)
+				assertTrue(warning, warning.contains("NoClassDefFoundError"));
+		}
+		assertEquals(TrashState.REMOVED, trash.state(xItem));
+		assertEquals(2, rowDeleted(document(x)));
+		assertKeptRemoved(linkedItem, linked);
+		assertDestroyed(yItem, document(y), Duration.ofDays(31));
+	}
+
+	@Test
+	public void testReadsTheSecurityReferencesOnceABatch() throws Exception {
+		Folder own = fx.folder(correspondence, "Own Permissions");
+		Folder inner = fx.folder(own, "Inner");
+		Folder deeper = fx.folder(inner, "Deeper");
+		Folder first = fx.folder(correspondence, "First");
+		Folder second = fx.folder(correspondence, "Second");
+		awaitAsyncWork();
+		// The tree's top has permissions of its own, and its folders take their security from it, as CE sets them:
+		// they go first, so the top goes in the same run
+		jdbc.update("update ld_folder set ld_securityref = null where ld_id = ?", own.getId());
+		CacheEvictor.get().evictFolders(List.of(own.getId()));
+		fx.grant(own, lawyers, Permission.values());
+		jdbc.update("update ld_folder set ld_securityref = ? where ld_id in (?, ?)", own.getId(), inner.getId(),
+				deeper.getId());
+		CacheEvictor.get().evictFolders(List.of(inner.getId(), deeper.getId()));
+		List<Long> items = new ArrayList<>();
+		for (Folder folder : List.of(own, first, second)) {
+			folderDao.deleteTree(folder.getId(), folderHistory(alice));
+			items.add(holding(folder(folder)));
+			remove(items.get(items.size() - 1), Duration.ofDays(31));
+		}
+
+		try (LogCapture sql = LogCapture.of(JdbcTemplate.class, Level.DEBUG)) {
+			assertEquals(5, destroyer.runOnce(now));
+
+			List<String> scans = sql.lines().stream().filter(line -> SECURITY_SCAN.matcher(line).find()).toList();
+			assertEquals(scans.toString(), 1, scans.size());
+		}
+		assertDestroyed(items.get(0), folder(own), Duration.ofDays(31));
+		assertDestroyed(items.get(0), folder(inner), Duration.ofDays(31));
+		assertDestroyed(items.get(0), folder(deeper), Duration.ofDays(31));
+		assertDestroyed(items.get(1), folder(first), Duration.ofDays(31));
+		assertDestroyed(items.get(2), folder(second), Duration.ofDays(31));
 	}
 
 	@Test
