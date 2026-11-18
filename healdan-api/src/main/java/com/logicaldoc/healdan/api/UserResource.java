@@ -54,8 +54,9 @@ public class UserResource {
 		Map<String, Object> parameters = Map.of("tenantId", Caller.current().user().getTenantId(), "enabled",
 				Boolean.TRUE, "type", User.Type.DEFAULT, "q", "%" + escape(q.strip().toLowerCase(Locale.ROOT)) + "%");
 		try {
+			// A missing name first, where MariaDB puts it
 			List<User> users = UserDAO.get().findByWhere(where, parameters,
-					"lower(_entity.firstName), lower(_entity.name), _entity.id", MAX_HITS);
+					"lower(_entity.firstName) nulls first, lower(_entity.name) nulls first, _entity.id", MAX_HITS);
 			return Page.whole(users.stream().map(u -> new UserHit(u.getId(), u.getUsername(), u.getFullName())).toList());
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't search the users", e);

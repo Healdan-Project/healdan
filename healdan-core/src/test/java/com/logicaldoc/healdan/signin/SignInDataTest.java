@@ -12,14 +12,13 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 
 import javax.sql.DataSource;
 
-import org.hibernate.exception.ConstraintViolationException;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -37,6 +36,11 @@ public class SignInDataTest extends AbstractHealdanTestCase {
 
 	private JdbcTemplate jdbc() {
 		return new JdbcTemplate(Context.get(DataSource.class));
+	}
+
+	/** The table's rows as the database holds them, every column */
+	private List<Map<String, Object>> rows(String table) {
+		return jdbc().queryForList("select * from " + table + " order by ld_id");
 	}
 
 	private Set<String> columns(String table) {
@@ -117,24 +121,29 @@ public class SignInDataTest extends AbstractHealdanTestCase {
 		assertFalse(SignInIdentityDAO.get().findLinked("authentik", "abc").isPresent());
 	}
 
-	@Ignore("PostgreSQL: plan Task 8")
 	@Test
 	public void testOneLinkPerIdentityAndUser() throws Exception {
 		User clerk = fx.user("clerk");
 		User paralegal = fx.user("paralegal");
 		SignInIdentityDAO.get().store(linked("entra", "oid-1", clerk.getId()));
+		List<Map<String, Object>> before = rows("hd_signin_identity");
+		assertEquals(1, before.size());
 
+		// A second link fails the store and stores nothing, whatever the exception: on PostgreSQL the commit meets
+		// the transaction the refused insert ended, and Hibernate throws a GenericJDBCException
 		// The identity is taken
-		assertThrows(ConstraintViolationException.class,
+		assertThrows(RuntimeException.class,
 				() -> SignInIdentityDAO.get().store(linked("entra", "oid-1", paralegal.getId())));
+		assertEquals(before, rows("hd_signin_identity"));
 		// The user is taken, even at another provider
-		assertThrows(ConstraintViolationException.class,
+		assertThrows(RuntimeException.class,
 				() -> SignInIdentityDAO.get().store(linked("entra", "oid-2", clerk.getId())));
-		assertThrows(ConstraintViolationException.class,
+		assertEquals(before, rows("hd_signin_identity"));
+		assertThrows(RuntimeException.class,
 				() -> SignInIdentityDAO.get().store(linked("authentik", "sub-9", clerk.getId())));
+		assertEquals(before, rows("hd_signin_identity"));
 
-		// and the one link stands, with nothing else stored
-		assertEquals(1, jdbc().queryForObject("select count(*) from hd_signin_identity", Integer.class).intValue());
+		// and the one link stands
 		assertEquals(clerk.getId(), SignInIdentityDAO.get().findLinked("entra", "oid-1").orElseThrow().getUserId());
 
 		// The same identity text at another provider is another identity
@@ -297,16 +306,18 @@ public class SignInDataTest extends AbstractHealdanTestCase {
 		assertEquals(1, jdbc().queryForObject("select count(*) from hd_signin_group", Integer.class).intValue());
 	}
 
-	@Ignore("PostgreSQL: plan Task 8")
 	@Test
 	public void testGroupReplaceKeepsTheOldRowsWhenTheNewOnesFail() throws Exception {
 		SignInGroupDAO dao = SignInGroupDAO.get();
 		dao.replace("entra", List.of(group("entra", "Partners", 10)));
+		List<Map<String, Object>> before = rows("hd_signin_group");
+		assertEquals(1, before.size());
 
-		// The same row twice breaks the unique index
-		assertThrows(ConstraintViolationException.class,
+		// The same row twice breaks the unique index: the replace fails and stores nothing, whatever the exception
+		assertThrows(RuntimeException.class,
 				() -> dao.replace("entra", List.of(group("entra", "Staff", 11), group("entra", "Staff", 11))));
 
+		assertEquals(before, rows("hd_signin_group"));
 		assertEquals(List.of("Partners"), dao.findByProvider("entra").stream().map(SignInGroup::getValue).toList());
 	}
 

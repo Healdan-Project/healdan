@@ -15,8 +15,9 @@ import com.logicaldoc.util.spring.Context;
 
 /**
  * Finds documents by the legacy doc # they carry from the system they came
- * from (the {@code legacydocnum} attribute, spec 6.3). The match is exact and
- * the number is never read as a doc #.
+ * from (the {@code legacydocnum} attribute, spec 6.3). The match is exact,
+ * once the number asked for is stripped of the whitespace a person may type
+ * or paste around it, and the number is never read as a doc #.
  */
 public final class LegacyDocNumbers {
 
@@ -35,7 +36,8 @@ public final class LegacyDocNumbers {
 	}
 
 	/**
-	 * @param legacyNumber the legacy doc #, matched exactly
+	 * @param legacyNumber the legacy doc #, matched exactly once stripped of
+	 *        whitespace at either end
 	 * @param tenantId the tenant whose documents are searched
 	 * @return the ids of the live documents with that legacy doc #, lowest
 	 *         first; none for a null or blank number
@@ -45,8 +47,9 @@ public final class LegacyDocNumbers {
 		if (legacyNumber == null || legacyNumber.isBlank())
 			return List.of();
 		try {
+			// Stripped here, as MariaDB's comparison ignores trailing spaces and PostgreSQL's doesn't
 			return new JdbcTemplate(Context.get(DataSource.class)).queryForList(QUERY, Long.class,
-					HealdanConstants.ATTR_LEGACYDOCNUM, legacyNumber, tenantId);
+					HealdanConstants.ATTR_LEGACYDOCNUM, legacyNumber.strip(), tenantId);
 		} catch (RuntimeException e) {
 			throw new PersistenceException(e);
 		}

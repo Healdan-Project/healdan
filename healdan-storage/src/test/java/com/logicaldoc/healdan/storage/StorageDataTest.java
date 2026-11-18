@@ -19,8 +19,6 @@ import java.util.Set;
 
 import javax.sql.DataSource;
 
-import org.hibernate.exception.ConstraintViolationException;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -170,14 +168,21 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		assertNull(waiting(4, "1.0"));
 	}
 
-	@Ignore("PostgreSQL: plan Task 8")
 	@Test
 	public void testOneBackendPerStore() throws Exception {
 		long other = backend("other");
 		useBackend(10, other);
 		assertEquals(other, StoreBackendDAO.get().findByStore(10).orElseThrow().getBackendId());
 		assertTrue(StoreBackendDAO.get().findByStore(11).isEmpty());
-		assertThrows(ConstraintViolationException.class, () -> useBackend(10, 1));
+		List<Map<String, Object>> before = jdbc().queryForList("select * from hd_storage_store order by ld_id");
+
+		// A second backend for the Store fails the store and stores nothing, whatever the exception: on PostgreSQL
+		// the commit meets the transaction the refused insert ended, and Hibernate throws a GenericJDBCException
+		assertThrows(RuntimeException.class, () -> useBackend(10, 1));
+
+		assertEquals(before, jdbc().queryForList("select * from hd_storage_store order by ld_id"));
+		assertEquals(List.of(other),
+				jdbc().queryForList("select hd_backendid from hd_storage_store where hd_storeid = 10", Long.class));
 	}
 
 	@Test

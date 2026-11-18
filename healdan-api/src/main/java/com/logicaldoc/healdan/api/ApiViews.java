@@ -303,7 +303,7 @@ public final class ApiViews {
 			List<DocumentHistory> latest = DocumentHistoryDAO.get().findByWhere(
 					"_entity.docId = :docId and _entity.event = :event and _entity.userId = :userId",
 					Map.of("docId", d.getId(), "event", event.toKey(), "userId", d.getLockUserId()),
-					"_entity.date desc, _entity.id desc", 1);
+					"_entity.date desc nulls last, _entity.id desc", 1);
 			if (!latest.isEmpty())
 				since = latest.get(0).getDate();
 		}

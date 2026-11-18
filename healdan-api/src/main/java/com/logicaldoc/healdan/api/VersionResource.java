@@ -115,10 +115,10 @@ public class VersionResource {
 		Paging paging = Paging.of(offset, limit);
 		try {
 			Document document = DocumentResource.readable(docNumber, Caller.current().user());
-			// CE's findByDocId orders by date alone, and a date has one-second precision
+			// CE's findByDocId orders by date alone, and a version's date may tie with another's
 			List<VersionView> all = VersionDAO.get()
 					.findByWhere("_entity.docId = :docId", Map.of("docId", document.getId()),
-							"_entity.versionDate desc, _entity.id desc", null)
+							"_entity.versionDate desc nulls last, _entity.id desc", null)
 					.stream().map(VersionResource::view).toList();
 			return paging.slice(all);
 		} catch (PersistenceException e) {

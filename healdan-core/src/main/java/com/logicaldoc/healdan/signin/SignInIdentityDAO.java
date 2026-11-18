@@ -56,9 +56,9 @@ public interface SignInIdentityDAO extends PersistentObjectDAO<SignInIdentity> {
 	/**
 	 * Stores a link, setting {@code linkKey} and {@code linkUser} from the rest
 	 * of the row first. A link that would be a second one in use for its
-	 * identity or its account breaks a unique index: the store fails with
-	 * Hibernate's {@code ConstraintViolationException}, a runtime exception, and
-	 * rolls back.
+	 * identity or its account breaks a unique index: the store fails, with a
+	 * runtime exception whose type depends on the database, and stores
+	 * nothing.
 	 * 
 	 * @param identity the link to store
 	 * @throws PersistenceException error at data layer

@@ -112,7 +112,7 @@ public class DocumentResource {
 
 	/**
 	 * @param legacy the legacy doc # a document carries from the system it came
-	 *        from, matched exactly
+	 *        from, matched exactly once stripped of whitespace at either end
 	 * @return the documents with it that the caller can read, lowest doc # first
 	 */
 	@GET
@@ -122,7 +122,7 @@ public class DocumentResource {
 		User caller = Caller.current().user();
 		try {
 			List<Document> found = new ArrayList<>();
-			for (long id : LegacyDocNumbers.find(legacy, caller.getTenantId())) {
+			for (long id : LegacyDocNumbers.find(legacy.strip(), caller.getTenantId())) {
 				Optional<Document> document = AccessChecks.readableDocument(DocumentDAO.get().findById(id), caller);
 				if (document.isPresent() && ApiViews.shows(document.get()))
 					found.add(document.get());
@@ -581,7 +581,7 @@ public class DocumentResource {
 			List<DocumentHistory> latest = histories.findByWhere(
 					"_entity.userId = :userId and _entity.event = :event and _entity.sessionId = :sessionId",
 					Map.of("userId", user.getId(), "event", history.getEvent(), "sessionId", session.getSid()),
-					"_entity.date desc, _entity.id desc", 1);
+					"_entity.date desc nulls last, _entity.id desc", 1);
 			if (!latest.isEmpty()) {
 				Calendar oldest = Calendar.getInstance();
 				oldest.setTime(history.getDate());

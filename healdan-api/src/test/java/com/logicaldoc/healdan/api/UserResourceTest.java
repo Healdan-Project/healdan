@@ -73,6 +73,18 @@ public class UserResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testAUserWithNoFirstNameSortsFirst() throws Exception {
+		User alice = fx.user("sortalice");
+		rename(alice, "Alice", "Able");
+		User nameless = fx.user("sortnameless");
+		rename(nameless, null, "Zed");
+		String token = signIn(alice);
+
+		// As MariaDB sorts a NULL, before any name
+		assertEquals(List.of("sortnameless", "sortalice"), usernames(get(USERS + "?q=sort").token(token).send()));
+	}
+
+	@Test
 	public void testBlankQuery() throws Exception {
 		String token = signIn(fx.user("clerk"));
 
