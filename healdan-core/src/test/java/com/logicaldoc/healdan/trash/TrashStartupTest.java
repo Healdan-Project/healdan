@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.trash;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeNotNull;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -61,11 +62,12 @@ public class TrashStartupTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testWaitsOutTheStartsDelayIntoANightThatSkips0247() throws Exception {
-		// A zone whose clocks skip from 02:00 to 03:00 in the spring, as the owner's Mac's do
+		// A zone whose clocks skip from 02:00 to 03:00 in the spring, while the JDK's time zone data still has them do so
 		ZoneId chicago = ZoneId.of("America/Chicago");
 		ZoneOffsetTransition gap = chicago.getRules().nextTransition(Instant.now().plus(Duration.ofDays(1)));
-		while (!gap.isGap())
+		while (gap != null && !gap.isGap())
 			gap = chicago.getRules().nextTransition(gap.getInstant());
+		assumeNotNull(gap);
 		LocalDate night = gap.getDateTimeBefore().toLocalDate();
 		TimeZone zone = TimeZone.getDefault();
 		TimeZone.setDefault(TimeZone.getTimeZone(chicago));

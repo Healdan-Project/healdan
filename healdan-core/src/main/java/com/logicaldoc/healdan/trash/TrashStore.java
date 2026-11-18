@@ -12,10 +12,12 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import javax.sql.DataSource;
 
@@ -62,6 +64,10 @@ public class TrashStore {
 
 	/** Ids in an {@code in (...)} list at a time */
 	static final int CHUNK = 1000;
+
+	/** An item's folders removed before a cut-off, given as {@code :id}, {@code :removed} and {@code :cutoff} */
+	private static final String REMOVED_FOLDERS = "select m.hd_objectid from hd_trash_member m where m.hd_trashid = :id"
+			+ " and m.hd_objecttype = 'F' and m.hd_state = :removed and m.hd_removedat < :cutoff";
 
 	private final JdbcTemplate jdbc;
 
@@ -275,9 +281,7 @@ public class TrashStore {
 	private int byType(Collection<TrashMember> members, MapSqlParameterSource params, String sql) {
 		int changed = 0;
 		for (char type : new char[] { 'F', 'D' }) {
-			List<Long> ids = members.stream().filter(member -> member.type() == type).map(TrashMember::objectId)
-					.distinct().toList();
-			for (List<Long> chunk : CollectionUtil.partition(ids, CHUNK))
+			for (List<Long> chunk : CollectionUtil.partition(TrashMember.ids(members, type), CHUNK))
 				changed += named.update(sql, new MapSqlParameterSource(params.getValues())
 						.addValue("type", String.valueOf(type)).addValue("ids", chunk));
 		}
@@ -388,20 +392,34 @@ public class TrashStore {
 	}
 
 	/**
-	 * @param ids items
+	 * @param id the item
 	 * @param cutoff the time
-	 * @return the folders among the items' members that are removed, and were
-	 *         removed before the cut-off
+	 * @return the item's folders that are removed, and were removed before
+	 *         the cut-off
 	 */
-	public List<Long> foldersRemovedBefore(Collection<Long> ids, Instant cutoff) {
-		List<Long> folders = new ArrayList<>();
-		for (List<Long> chunk : CollectionUtil.partition(List.copyOf(ids), CHUNK))
-			folders.addAll(named.queryForList("select distinct hd_objectid from hd_trash_member where hd_trashid in (:ids)"
-					+ " and hd_objecttype = 'F' and hd_state = :removed and hd_removedat < :cutoff",
-					new MapSqlParameterSource("ids", chunk).addValue("removed", TrashState.REMOVED.code())
-							.addValue("cutoff", Timestamp.from(cutoff)),
-					Long.class));
-		return folders;
+	public List<Long> foldersRemovedBefore(long id, Instant cutoff) {
+		return named.queryForList(REMOVED_FOLDERS, removedFolders(id, cutoff), Long.class);
+	}
+
+	/**
+	 * @param id the item
+	 * @param cutoff the time
+	 * @return by each of {@link #foldersRemovedBefore}, the folders, live or
+	 *         deleted, that take their security from it: one read of
+	 *         {@code ld_folder} whatever their number
+	 */
+	public Map<Long, Set<Long>> securityTakers(long id, Instant cutoff) {
+		Map<Long, Set<Long>> takers = new HashMap<>();
+		named.query("select f.ld_id, f.ld_securityref from ld_folder f where f.ld_id <> f.ld_securityref"
+				+ " and f.ld_securityref in (" + REMOVED_FOLDERS + ")", removedFolders(id, cutoff), rs -> {
+					takers.computeIfAbsent(rs.getLong(2), k -> new HashSet<>()).add(rs.getLong(1));
+				});
+		return takers;
+	}
+
+	private static MapSqlParameterSource removedFolders(long id, Instant cutoff) {
+		return new MapSqlParameterSource("id", id).addValue("removed", TrashState.REMOVED.code()).addValue("cutoff",
+				Timestamp.from(cutoff));
 	}
 
 	/**

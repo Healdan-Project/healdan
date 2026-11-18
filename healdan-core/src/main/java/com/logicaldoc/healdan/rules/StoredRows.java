@@ -156,7 +156,8 @@ public class StoredRows implements PreUpdateEventListener {
 	/**
 	 * The document {@code d}, deleted or not, in the folder {@code f}, is
 	 * readable, as {@link #mayReadDocument} decides: by its own entries for the
-	 * user's groups when they grant anything, else by its folder's
+	 * user's groups when they grant anything, else by its folder's. It restates
+	 * {@link AccessChecks#readableDocuments}' rule, which names it.
 	 */
 	private static final String DOCUMENT_READ = """
 			(exists (select 1 from ld_document_acl a where a.ld_docid = d.ld_id and a.ld_read = 1
@@ -600,13 +601,12 @@ public class StoredRows implements PreUpdateEventListener {
 	 * @param user the user, with its groups
 	 * @return how many of them the user can read, as {@link #mayReadDocument}
 	 *         decides, and that are published unless the user sees what isn't;
-	 *         an administrator, every one
+	 *         an administrator, every one still stored that is published, or
+	 *         every one if they see what isn't
 	 * @throws PersistenceException error at data layer
 	 */
 	public long readableDocuments(Collection<Long> documentIds, User user) throws PersistenceException {
-		if (AccessChecks.isAdmin(user))
-			return documentIds.size();
-		return readableDocuments("d.ld_id in (:ids)", documentIds, false, user);
+		return readableDocuments("d.ld_id in (:ids)", documentIds, AccessChecks.isAdmin(user), user);
 	}
 
 	/**

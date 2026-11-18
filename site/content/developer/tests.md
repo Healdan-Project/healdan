@@ -91,13 +91,15 @@ in `UPSTREAM_TESTS` (see [Continuous Integration](../continuous-integration/)). 
 - **`TrashExistingSeedTest`** checks the seed that makes items of what was already deleted.
 - **`TrashDestroyerTest`** checks `runOnce`: what was removed more than the days before is destroyed, documents and folders
   deepest first, with Healdan's rows and the record kept; what is within the days isn't; a matter's own folder and a Store
-  stay removed; and a failure, an `Error` such as a missing class included, leaves the rest of its item, and only that,
-  for the next night. It counts the queries for folders that take their security from another, which scan `ld_folder`,
-  in JdbcTemplate's debug log: one a batch. `TrashStartupTest` starts the timer with its waits shortened, once in
-  America/Chicago with the first run on a night whose clocks skip 02:47. `TrashTestHooks` is in the test-jar so that
-  other modules' tests can fail a destroy.
+  stay removed; and a failure, an `Error` such as a missing class or service provider included, leaves the rest of its
+  item, and only that, for the next night. It counts the queries for folders that take their security from another,
+  which scan `ld_folder`, in JdbcTemplate's debug log: one an item, and a folder that starts taking its security from one
+  during the run keeps it. `TrashStartupTest` starts the timer with its waits shortened, once in America/Chicago with
+  the first run on a night whose clocks skip 02:47 (skipped if the JDK's time zone data has no such night ahead).
+  `TrashTestHooks` is in the test-jar so that other modules' tests can fail a destroy.
 - **`ReadableCountsTest`**, in `com.logicaldoc.healdan.rules`, checks `StoredRows`' counts of the folders and documents,
-  deleted or not, that a person can read, which the Trash's views and a folder's contents give.
+  deleted or not, that a person can read, which the Trash's views and a folder's contents give: publishing dates, a
+  publisher, and an administrator's counts, which take in only documents still stored.
 - **`FolderChangesTest` and `TrashResourceTest`** in `healdan-api` check the folder delete, move and contents, a move into
   another client's matter re-stamping its Client and Matter, the Trash's three views and who may read them, restore,
   remove and empty, each answer against `openapi.yaml`.

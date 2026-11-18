@@ -5,6 +5,9 @@ package com.logicaldoc.healdan.rules;
 
 import static org.junit.Assert.assertEquals;
 
+import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -24,14 +27,17 @@ import com.logicaldoc.healdan.util.CacheEvictor;
  * as the Trash's views and a folder's contents count them (folders and Trash
  * spec 4.2): a folder by its own Read or the Read of the folder it takes its
  * security from; a document by its own rows that grant anything, else by its
- * folder's; and published unless the person sees what isn't. An
- * administrator's counts take everything.
+ * folder's; and published, within its publishing dates, unless the person is
+ * an administrator or a publisher, who see what isn't. An administrator's
+ * counts take every folder and every document still stored.
  */
 public class ReadableCountsTest extends AbstractRulesTestCase {
 
 	@Test
 	public void testCountsOnlyWhatEachPersonCanRead() throws Exception {
 		User outsider = fx.user("outsider");
+		// Carol reads as Bob does, and as a publisher sees what isn't published
+		User carol = fx.user("carol", "readers", "publisher");
 		// Walled has permissions of its own, Bob's group's alone, and Inside takes its security from it
 		Group readers = GroupDAO.get().findByName("readers", Tenant.DEFAULT_ID);
 		Folder walled = fx.folder(correspondence, "Walled");
@@ -50,18 +56,32 @@ public class ReadableCountsTest extends AbstractRulesTestCase {
 		Document own = upload(correspondence, "own.txt", admin);
 		Document plan = upload(inside, "plan.txt", admin);
 		Document unpublished = upload(correspondence, "unpublished.txt", admin);
+		// Published from tomorrow, until yesterday, and from yesterday until tomorrow
+		Document future = upload(correspondence, "future.txt", admin);
+		Document ended = upload(correspondence, "ended.txt", admin);
+		Document current = upload(correspondence, "current.txt", admin);
 		awaitAsyncWork();
 		fx.documentRow(own.getId(), bob.getUserGroup().getId(), Permission.DELETE);
 		jdbc.update("update ld_document set ld_published = 0 where ld_id = ?", unpublished.getId());
-		CacheEvictor.get().evictDocuments(List.of(unpublished.getId()));
+		Timestamp yesterday = Timestamp.from(Instant.now().minus(Duration.ofDays(1)));
+		Timestamp tomorrow = Timestamp.from(Instant.now().plus(Duration.ofDays(1)));
+		jdbc.update("update ld_document set ld_startpublishing = ? where ld_id = ?", tomorrow, future.getId());
+		jdbc.update("update ld_document set ld_stoppublishing = ? where ld_id = ?", yesterday, ended.getId());
+		jdbc.update("update ld_document set ld_startpublishing = ?, ld_stoppublishing = ? where ld_id = ?", yesterday,
+				tomorrow, current.getId());
+		CacheEvictor.get()
+				.evictDocuments(List.of(unpublished.getId(), future.getId(), ended.getId(), current.getId()));
 		StoredRows rows = StoredRows.get();
 		List<Long> folders = List.of(correspondence.getId(), walled.getId(), inside.getId());
-		List<Long> documents = List.of(doc.getId(), open.getId(), own.getId(), plan.getId(), unpublished.getId());
+		// And an id with no row, which no count takes in, an administrator's included
+		List<Long> documents = List.of(doc.getId(), open.getId(), own.getId(), plan.getId(), unpublished.getId(),
+				future.getId(), ended.getId(), current.getId(), Long.MAX_VALUE);
 
-		Map<User, Long> readsFolders = Map.of(alice, 1L, bob, 3L, outsider, 0L, admin, 3L);
-		// The deleted document in Correspondence isn't live
-		Map<User, Long> readsDocuments = Map.of(alice, 3L, bob, 3L, outsider, 0L, admin, 5L);
-		for (User user : List.of(alice, bob, outsider, admin)) {
+		Map<User, Long> readsFolders = Map.of(alice, 1L, bob, 3L, carol, 3L, outsider, 0L, admin, 3L);
+		// The deleted document in Correspondence isn't live; of the publishing windows, only the current one counts
+		// for those who don't see what isn't published
+		Map<User, Long> readsDocuments = Map.of(alice, 4L, bob, 4L, carol, 8L, outsider, 0L, admin, 8L);
+		for (User user : List.of(alice, bob, carol, outsider, admin)) {
 			assertEquals(user.getUsername(), readsFolders.get(user), Long.valueOf(rows.readableFolders(folders, user)));
 			assertEquals(user.getUsername(), readsDocuments.get(user),
 					Long.valueOf(rows.readableLiveDocumentsIn(folders, user)));
@@ -71,7 +91,7 @@ public class ReadableCountsTest extends AbstractRulesTestCase {
 
 		// Deleted, they read the same; none is live
 		folderDao.deleteTree(correspondence.getId(), folderHistory(admin));
-		for (User user : List.of(alice, bob, outsider, admin)) {
+		for (User user : List.of(alice, bob, carol, outsider, admin)) {
 			assertEquals(user.getUsername(), readsFolders.get(user), Long.valueOf(rows.readableFolders(folders, user)));
 			assertEquals(user.getUsername(), 0L, rows.readableLiveDocumentsIn(folders, user));
 			assertEquals(user.getUsername(), readsDocuments.get(user),

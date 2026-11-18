@@ -16,6 +16,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.ServiceConfigurationError;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -481,13 +482,16 @@ public class TrashDestroyerTest extends AbstractRulesTestCase {
 		long xItem = holding(document(x));
 		long linkedItem = holding(folder(linked));
 		long yItem = holding(document(y));
-		// The failing items go first: a document's, and a folder's, whose transaction rethrows the Error
+		// The failing items go first: a document's, and a folder's, whose transaction rethrows the Error, one that
+		// isn't a LinkageError
 		remove(xItem, Duration.ofDays(33));
 		remove(linkedItem, Duration.ofDays(32));
 		remove(yItem, Duration.ofDays(31));
 		destroyer.beforeDestroy = member -> {
-			if (member.equals(document(x)) || member.equals(folder(linked)))
+			if (member.equals(document(x)))
 				throw new NoClassDefFoundError("a class missing from a plugin's zip");
+			if (member.equals(folder(linked)))
+				throw new ServiceConfigurationError("a provider missing from a plugin's zip");
 		};
 
 		try (LogCapture log = LogCapture.of(TrashDestroyer.class)) {
@@ -495,8 +499,8 @@ public class TrashDestroyerTest extends AbstractRulesTestCase {
 
 			List<String> warnings = log.lines().stream().filter(line -> line.startsWith("WARN")).toList();
 			assertEquals(log.lines().toString(), 2, warnings.size());
-			for (String warning : warnings)
-				assertTrue(warning, warning.contains("NoClassDefFoundError"));
+			assertTrue(warnings.get(0), warnings.get(0).contains("NoClassDefFoundError"));
+			assertTrue(warnings.get(1), warnings.get(1).contains("ServiceConfigurationError"));
 		}
 		assertEquals(TrashState.REMOVED, trash.state(xItem));
 		assertEquals(2, rowDeleted(document(x)));
@@ -505,7 +509,7 @@ public class TrashDestroyerTest extends AbstractRulesTestCase {
 	}
 
 	@Test
-	public void testReadsTheSecurityReferencesOnceABatch() throws Exception {
+	public void testReadsTheSecurityReferencesOnceAnItem() throws Exception {
 		Folder own = fx.folder(correspondence, "Own Permissions");
 		Folder inner = fx.folder(own, "Inner");
 		Folder deeper = fx.folder(inner, "Deeper");
@@ -530,14 +534,39 @@ public class TrashDestroyerTest extends AbstractRulesTestCase {
 		try (LogCapture sql = LogCapture.of(JdbcTemplate.class, Level.DEBUG)) {
 			assertEquals(5, destroyer.runOnce(now));
 
+			// One an item, the tree of three folders included
 			List<String> scans = sql.lines().stream().filter(line -> SECURITY_SCAN.matcher(line).find()).toList();
-			assertEquals(scans.toString(), 1, scans.size());
+			assertEquals(scans.toString(), items.size(), scans.size());
 		}
 		assertDestroyed(items.get(0), folder(own), Duration.ofDays(31));
 		assertDestroyed(items.get(0), folder(inner), Duration.ofDays(31));
 		assertDestroyed(items.get(0), folder(deeper), Duration.ofDays(31));
 		assertDestroyed(items.get(1), folder(first), Duration.ofDays(31));
 		assertDestroyed(items.get(2), folder(second), Duration.ofDays(31));
+	}
+
+	@Test
+	public void testSeesAFolderThatStartsTakingItsSecurityFromOneDuringTheRun() throws Exception {
+		Document first = upload(correspondence, "first.txt", alice);
+		Folder later = fx.folder(correspondence, "Later");
+		Folder taker = fx.folder(correspondence, "Taker");
+		awaitAsyncWork();
+		documentDao.delete(first.getId(), documentHistory(alice));
+		folderDao.deleteTree(later.getId(), folderHistory(alice));
+		long firstItem = holding(document(first));
+		long laterItem = holding(folder(later));
+		remove(firstItem, Duration.ofDays(32));
+		remove(laterItem, Duration.ofDays(31));
+		// While the run destroys the first item, a live folder starts taking its security from Later
+		destroyer.beforeDestroy = member -> {
+			if (member.equals(document(first)))
+				jdbc.update("update ld_folder set ld_securityref = ? where ld_id = ?", later.getId(), taker.getId());
+		};
+
+		assertEquals(1, destroyer.runOnce(now));
+
+		assertDestroyed(firstItem, document(first), Duration.ofDays(32));
+		assertKeptRemoved(laterItem, later);
 	}
 
 	@Test

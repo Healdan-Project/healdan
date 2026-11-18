@@ -199,9 +199,9 @@ learn from.
     - It keeps a folder removed while it is a matter's own folder or a Store, while a row that isn't destroyed has it as
       its folder or parent, while a folder not yet destroyed (live or deleted) takes its security from it, or while a live
       alias points to it. `ld_securityref` has no index, and Healdan doesn't change CE's tables, so it reads which
-      folders take their security from a batch's folders once a batch. Only a live shortcut keeps its document, and
-      only a live alias its folder: another item's shortcuts and aliases go with what they point to, their members there
-      marked destroyed.
+      folders take their security from an item's folders once an item, whatever their number, in the transaction that
+      destroys them. Only a live shortcut keeps its document, and only a live alias its folder: another item's shortcuts
+      and aliases go with what they point to, their members there marked destroyed.
     - It deletes the folder's rows in `ld_folder_ext`, `ld_foldertag`, `ld_folder_acl` and `ld_folder_store`, which don't
       cascade, folder bookmarks, the aliases pointing to it, and Healdan's `hd_local_value` and `hd_searchfolder` rows,
       and clears a user's default workspace that names it. A destroyed document's `hd_local_value` and
