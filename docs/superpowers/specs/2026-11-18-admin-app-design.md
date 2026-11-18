@@ -1,7 +1,7 @@
 # The Admin App: design
 
 - **Date:** 2026-11-18
-- **Status:** designed with the owner on 2026-11-18, question by question and through mockups in the browser ([`2026-11-18-admin-app-mockups/`](2026-11-18-admin-app-mockups/README.md)). The owner approved this written spec the same day. Not built: the build plan comes first, and the server code waits for the PostgreSQL work's PR A (§9.9, §14).
+- **Status:** designed with the owner on 2026-11-18, question by question and through mockups in the browser ([`2026-11-18-admin-app-mockups/`](2026-11-18-admin-app-mockups/README.md)). The owner approved this written spec the same day. Implementation plan: [`docs/superpowers/plans/2026-11-18-admin-app.md`](../plans/2026-11-18-admin-app.md). Not built: the work waits for the PostgreSQL work's PR A (§9.9, §14).
 - **Roadmap:** the backlog row "Admin app, then retiring the old GWT UI" in [`docs/ROADMAP.md`](../../ROADMAP.md).
 - **Inputs:**
   - the roadmap's glossary and its M6 decisions "Three separate units" and "Hosting";
