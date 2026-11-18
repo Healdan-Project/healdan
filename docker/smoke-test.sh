@@ -276,6 +276,17 @@ build=
 check "its $build.cache.js keeps max-age=600" test "$(cache_control "$BASE/login/$build.cache.js")" = max-age=600
 # Upstream's policy had a non-breaking space after object-src, which browsers dropped as unrecognised (Docker spec §14).
 check "the Content-Security-Policy has object-src 'none'" grep -qx "object-src 'none'" <(csp_directives "$BASE/login.jsp")
+# CVE-2026-114938, until the image's Java has the fix (Docker spec §17). The JVM takes the last of these options. Tomcat
+# is the JVM running Catalina's Bootstrap; the brackets keep the scan from matching its own command line.
+tomcat_base64_options() {
+  compose exec -T app sh -c 'for d in /proc/[0-9]*; do
+      if tr "\0" " " 2>/dev/null <"$d/cmdline" | grep -q "catalina[.]startup[.]Bootstrap"; then
+        tr "\0" "\n" 2>/dev/null <"$d/cmdline" | grep "UseBASE64Intrinsic[s]"
+      fi
+    done; true'
+}
+check "Tomcat runs with the JVM's Base64 intrinsics off" \
+  test "$(tomcat_base64_options | tail -n 1)" = -XX:-UseBASE64Intrinsics
 
 echo "== 2b. forwarded addresses (docker/tests/test-proxies.sh)"
 # Fails three sign-ins with made-up X-Forwarded-For headers and checks which address the throttle counted; its

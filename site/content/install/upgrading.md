@@ -63,6 +63,35 @@ that was running keeps running. [The Build Stops with "Illegal
 Instruction"](../troubleshooting/#the-build-stops-with-illegal-instruction) says how to check the processor, and
 what to change.
 
+## Getting a Newer Java
+
+Healdan's image is built on Tomcat's, which brings Java. `docker compose up -d --build` reuses the copy of that image
+your server already has, so it doesn't bring a newer Java. To get the newest one, ask for it in the build:
+
+```bash
+docker compose build --pull
+docker compose up -d
+```
+
+To see which Java the app runs:
+
+```bash
+docker compose exec app java -version
+```
+
+### CVE-2026-114938 ("Java4Shell")
+
+This flaw in Java's Base64 decoder, published in November 2026, lets a request corrupt the server's memory before
+signing in, on x86-64 processors with AVX-512 VBMI. Java 25.0.5.1 and later have the fix. Healdan's image turns the
+affected decoder off, so upgrading to this version protects your server whichever Java it has.
+
+Until you can upgrade, add the same option to `CATALINA_OPTS` in `.env`, keeping your memory limit beside it, and run
+`docker compose up -d`:
+
+```bash
+CATALINA_OPTS="-Xmx2g -XX:-UseBASE64Intrinsics"
+```
+
 ## Changes to LogicalDOC's Tables
 
 Healdan upgrades its own tables when it starts, but never LogicalDOC's. So when a new version needs a change to them,
