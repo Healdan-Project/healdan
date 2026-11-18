@@ -63,6 +63,14 @@ public interface Backend {
 	 */
 	String hold(String key) throws IOException;
 
+	/**
+	 * Undoes a {@link #hold} whose delete rolled back. Local: moves the key's copy under {@code .held/} back into its
+	 * place, unless the place has a file, which is never replaced. S3: sends nothing, as its hold moved nothing.
+	 *
+	 * @return whether a copy was put back; false if none is held, or its place has a file
+	 */
+	boolean unhold(String key) throws IOException;
+
 	/** Deletes a held copy, by the location {@link #hold} or {@link #held} gave. */
 	void purgeHeld(String location) throws IOException;
 }

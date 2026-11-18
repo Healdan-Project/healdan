@@ -9,7 +9,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
-import org.springframework.core.Ordered;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -124,8 +123,9 @@ public final class FileLocks {
 
 		@Override
 		public int getOrder() {
-			// Before anything the transaction's end wakes, such as the mover
-			return Ordered.HIGHEST_PRECEDENCE;
+			// Before anything the transaction's end wakes, such as the mover, and after a rollback's copies are put
+			// back from .held/ (HoldRollback), which the mover and the purge mustn't see the rows back without
+			return HoldRollback.ORDER + 1;
 		}
 
 		@Override

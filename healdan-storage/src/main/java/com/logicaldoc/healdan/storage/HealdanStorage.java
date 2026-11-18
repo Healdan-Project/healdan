@@ -61,7 +61,8 @@ import com.logicaldoc.util.spring.Context;
  * checked first ({@link BackendHealth}).</li>
  * <li>A save that replaces a copy on another backend, and every delete, holds the old copy (spec section 8): a local
  * one moves under its backend's {@code .held/}, an S3 one stays where it is, and a row in {@code hd_storage_held}
- * keeps it until its purge date.</li>
+ * keeps it until its purge date. A local copy moved inside a transaction that rolls back goes back in its place
+ * ({@link HoldRollback}), as its rows do.</li>
  * <li>Reads go to the row's place. {@code exists}, {@code size} and {@code listResources} answer from the rows, never
  * a backend, and a file version is matched exactly ({@code 1.2} is not {@code 1.20}). While the row's backend is a
  * known outage ({@link BackendHealth#knownOutage}), a read the read cache can't serve fails at once. A file with no row

@@ -79,6 +79,14 @@ public class HeldCopies {
 	}
 
 	/**
+	 * @return whether a hold made now is the caller's transaction's, which a rollback takes away ({@link HoldRollback});
+	 *         otherwise it stands at once
+	 */
+	public boolean inTransaction() {
+		return Savepoints.inTransaction(jdbc);
+	}
+
+	/**
 	 * @param backendId the backend
 	 * @param location the object key, or the path under {@code .held/}
 	 * @return the hold of the location, if there is one

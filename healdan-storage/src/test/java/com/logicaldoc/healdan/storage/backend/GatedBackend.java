@@ -286,6 +286,12 @@ public class GatedBackend implements Backend {
 	}
 
 	@Override
+	public boolean unhold(String key) throws IOException {
+		calls.add("unhold " + key);
+		return inner.unhold(key);
+	}
+
+	@Override
 	public void purgeHeld(String location) throws IOException {
 		calls.add("purge " + location);
 		beforePurge.pass();

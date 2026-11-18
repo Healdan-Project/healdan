@@ -251,6 +251,32 @@ public class LocalBackendTest extends BackendContract {
 		assertArrayEquals(newer, Files.readAllBytes(root.resolve(backend.held("1/2/doc/thumb.png").orElseThrow())));
 	}
 
+	/** The hold removed the file's emptied folders, and the copy's return makes them again and removes .held/'s */
+	@Test
+	public void testUnholdRestoresTheFolders() throws IOException {
+		byte[] data = bytes(30);
+		backend.put("1/2/doc/1.0", source(data), null);
+		backend.hold("1/2/doc/1.0");
+		assertFalse(Files.exists(root.resolve("1")));
+
+		assertTrue(backend.unhold("1/2/doc/1.0"));
+		assertArrayEquals(data, Files.readAllBytes(root.resolve("1/2/doc/1.0")));
+		assertFalse(Files.exists(root.resolve(".held/1")));
+		assertTrue(Files.isDirectory(root.resolve(".held")));
+
+		// Never into a folder whose marker is gone, as an unmounted share's
+		backend.hold("1/2/doc/1.0");
+		Files.delete(root.resolve(".healdan-backend"));
+		try {
+			backend.unhold("1/2/doc/1.0");
+			fail("An unhold into a folder with no marker worked");
+		} catch (BackendFailingException expected) {
+			// as it should
+		}
+		assertFalse(Files.exists(root.resolve("1")));
+		assertTrue(Files.isRegularFile(root.resolve(".held/1/2/doc/1.0")));
+	}
+
 	@Test
 	public void testPurgeOnlyReachesTheHeldFolder() throws IOException {
 		backend.put("1/2/doc/1.0", source(bytes(5)), null);

@@ -15,8 +15,10 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
@@ -492,6 +494,39 @@ public class LocalBackend implements Backend {
 		// The file's folders go with it when this was their last file, as CE's own store removes them
 		prune(from.getParent(), root);
 		return HELD + "/" + key;
+	}
+
+	/**
+	 * Moves a held copy back into its place, as {@link #hold} moved it out, folders and all, unless the place has a
+	 * file: one written there since the hold is never replaced, and the held copy then waits for the key's next hold,
+	 * which replaces it.
+	 */
+	@Override
+	public boolean unhold(String key) throws IOException {
+		Path to = path(key);
+		check();
+		Path from = heldPath(key);
+		if (!Files.isRegularFile(from) || Files.exists(to, LinkOption.NOFOLLOW_LINKS))
+			return false;
+		for (int attempt = 1;; attempt++) {
+			Files.createDirectories(to.getParent());
+			try {
+				// No REPLACE_EXISTING: a file in the place stays
+				Files.move(from, to);
+				break;
+			} catch (FileAlreadyExistsException e) {
+				return false;
+			} catch (NoSuchFileException e) {
+				// A purge removed the folder just made, as it was empty; or the held copy is gone
+				if (!Files.isRegularFile(from))
+					return false;
+				if (attempt >= FOLDER_RETRIES)
+					throw e;
+			}
+		}
+		sync(to.getParent());
+		prune(from.getParent(), root.resolve(HELD));
+		return true;
 	}
 
 	@Override

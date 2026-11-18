@@ -134,7 +134,10 @@ CI's runners have no S3 service, and the test shards don't run Docker, so storag
 | Garage, a real S3 server | the smoke test's step 5f (see [The Stand-In S3 Server](#the-stand-in-s3-server)) | the whole flow through the image: uploads, moves, reads, an outage and a restart |
 
 `BackendContract` holds the tests every backend must pass, which `LocalBackendTest`, `MemoryBackendTest`,
-`MemoryBackendS3LikeTest` and `S3BackendTest` each run. `TinkClasspathTest` checks that encryption runs without the
+`MemoryBackendS3LikeTest` and `S3BackendTest` each run. `HoldRollbackTest` checks that a delete whose transaction
+rolls back puts each copy back from `.held/`, before the transaction's file marks clear, and that a transaction of its
+own inside it keeps its own; `CeFlowsTest#testDestroyRolledBack` does the same for LogicalDOC's destroy on a local
+Store and an S3 one. `TinkClasspathTest` checks that encryption runs without the
 `gson` and `protobuf` classes Tink brings, which the plugin zip leaves out.
 
 #### The Fake S3 Server

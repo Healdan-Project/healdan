@@ -110,6 +110,14 @@ learn from.
     from the trash with JDBC, telling no folder listener, so `HealdanHooksImpl.afterFolderRestore` calls each
     `FolderTreeListener` bean with the tree's documents: `StoreTracking` works their Stores out again, in case the
     tree came back into another Store.
+  - **A hold inside LogicalDOC's transaction is undone if it rolls back.** `Held.hold` moves a local backend's or
+    staging's copy under `.held/` at once, holding the file's lock, while its `hd_storage_held` row and the delete of
+    the file's `hd_storage_file` row are the transaction's. `HoldRollback`, a transaction synchronization, puts each
+    copy back in its place on a rollback, holding its lock, before `FileLocks`' marks clear: the mover and the purge
+    leave a file an open transaction wrote, so neither finds its row back before its copy. It never moves a copy over
+    a file written in its place since; that copy stays under `.held/` until the key's next hold, which replaces it.
+    And a delete that finds a file missing from its place but under `.held/` holds that copy again, so the purge
+    deletes it in its time.
   - **A delete may build a backend's S3 client inside LogicalDOC's transaction.** `Held.hold`, which holds a deleted
     file's copy while holding that file's lock, inside the transaction of LogicalDOC's delete, builds the backend's
     client if nothing has yet. For an `http://` endpoint that's a DNS lookup, as the endpoint rule checks the host's
@@ -190,8 +198,9 @@ learn from.
     server time, never in the first 10 minutes after a start), destroys the members removed more than `trash.removedDays`
     before. Its design is in the folders and Trash spec, §5.4, and the Ruling it cites:
     - Each document is destroyed through `DocumentManager.destroyDocument` in a transaction of its own, with the
-      member's state written first, so that nothing but the commit follows the store's hold of its files. A failure
-      leaves that document and the rest of its item for the next night. Then the item's folders go in one transaction.
+      member's state written first, so that nothing but the commit follows the store's hold of its files, and a
+      failure undoes only that document's destroy, its files going back in their places. A failure leaves that
+      document and the rest of its item for the next night. Then the item's folders go in one transaction.
     - It runs as `_system`. The `trash-system-destroy` seed gives `_system`'s group read on the Destroy Documents menu
       (-9), so `destroyDocument`'s menu check passes whether or not the `admin` account exists or is enabled.
     - It keeps a folder removed while it is a matter's own folder or a Store, while a row that isn't destroyed has it as

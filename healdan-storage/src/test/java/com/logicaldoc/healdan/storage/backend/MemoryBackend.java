@@ -450,6 +450,25 @@ public class MemoryBackend implements Backend {
 		return HELD + key;
 	}
 
+	/**
+	 * Like S3's when S3-like: nothing. Like a local folder's otherwise: moves the held bytes back unless the key has
+	 * bytes, and refuses any while unreachable.
+	 */
+	@Override
+	public boolean unhold(String key) throws IOException {
+		if (stagesInPlace)
+			return false;
+		if (unreachable)
+			throw new BackendUnreachableException("Backend " + id + " is unreachable");
+		if (objects.containsKey(key))
+			return false;
+		byte[] bytes = heldObjects.remove(key);
+		if (bytes == null)
+			return false;
+		objects.put(key, bytes);
+		return true;
+	}
+
 	@Override
 	public void purgeHeld(String location) throws IOException {
 		if (stagesInPlace) {

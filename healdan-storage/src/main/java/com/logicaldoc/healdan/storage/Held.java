@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.storage;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Date;
+import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,9 @@ import com.logicaldoc.healdan.storage.backend.BackendFailingException;
  * {@code hd_storage_held} says where it is and its purge date, {@code storage.holdDays} from now, which {@link Purge}
  * acts on. Every delete, every save that replaces a copy on another backend, and the mover's source copies go through
  * here.
+ * <p>
+ * A local move happens at once, while the row is the caller's transaction's, so a rollback puts the copy back in its
+ * place ({@link HoldRollback}).
  */
 public final class Held {
 
@@ -59,7 +63,16 @@ public final class Held {
 		try {
 			location = entry.backend().hold(key);
 		} catch (FileNotFoundException e) {
-			log.warn("Document {}'s {} wasn't on storage backend {} to be held", docId, resource, backendId);
+			Optional<String> held = entry.backend().held(key);
+			if (held.isEmpty()) {
+				log.warn("Document {}'s {} wasn't on storage backend {} to be held", docId, resource, backendId);
+				return true;
+			}
+			// Under .held/ with its row, as after a restored database, or a rollback whose copy couldn't be put back:
+			// held again, so the purge deletes it in its time
+			log.warn("Document {}'s {} wasn't in its place on storage backend {}; its copy under .held/ is held again",
+					docId, resource, backendId);
+			record(backendId, held.get(), docId, resource);
 			return true;
 		} catch (IOException | IllegalArgumentException e) {
 			// A local folder that fails its marker, or a stray file whose name is no storage key
@@ -67,6 +80,10 @@ public final class Held {
 					e.getMessage());
 			return false;
 		}
+		// A hold that moved the copy gives a location other than its key (S3's moves nothing). Noted before its row is
+		// written, so a rollback after a failure there puts it back too
+		if (!location.equals(key))
+			HoldRollback.moved(backendId, key, docId, resource);
 		record(backendId, location, docId, resource);
 		return true;
 	}
