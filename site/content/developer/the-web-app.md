@@ -325,10 +325,12 @@ and `drag` props and the selected documents and folders for the toolbar's More m
 - **The picker.** `MovePicker` takes the `OrganisingItems` being moved. It starts from Recent Matters and My Matters (the left
   pane's queries) and the search box's matter suggestions, then lists the chosen matter's folders from `fetchSubfolders` (also
   the tree's), a level at a time. It never browses Stores and lists no search folders. A folder being moved is a greyed-out
-  choice ("The folder itself") that doesn't open, and **Move Here** is greyed out, with the reason as its description, where
-  every item already is ("Already there"), at a matter's top level for documents (as before) and, for folders, for anyone but
-  an administrator ("Administrators only"). The Trash's restore picker passes no items, so it greys nothing out and the server
-  decides.
+  choice ("The folder itself") that doesn't open, and **Move Here** is greyed out, with the reason as its description, only
+  where nothing being moved can go: where every item already is ("Already there"), and where none of them can go, which for
+  documents is a place that holds none (at a matter's top level, as before) and for folders a matter's top level for anyone
+  but an administrator ("Administrators only"). While some of them can go, Move Here moves those and Refusals says the rest,
+  as a drop does (`whyNotHere`, `planMove`). The Trash's restore picker passes no items, so it greys nothing out and the
+  server decides.
 - **Moving folders.** `actions/move.ts`'s `planMove` works out a move before any call: what's in the place already is left
   out, documents go nowhere that holds none, and a folder goes neither into its own tree nor anywhere its `canMove` or M1's
   placement rules refuse. What it refuses, and what the server refuses (`folderMoveRefusal`: `items-not-allowed` names

@@ -520,8 +520,8 @@ A **Trash** entry at the foot of the left pane, below My Favorites, apart from t
 - **Keyboard and menus:** rows select as in any list; a right-click menu has Restore and Remove…; the Delete key is
   Remove…; Enter opens nothing (call: a deleted item has no page).
 - **Empty:** "Nothing in the Trash." with a line on where deleted items go. Changed in the build (final review): that's
-  Mine's; Everyone's says "Nothing in the Trash." alone, and Removed "Nothing removed.", as neither holds what the
-  person deleted.
+  Mine's; Everyone's says "Nothing in the Trash." alone, and Removed "Nothing removed.", as the line speaks of the
+  person's own deletes, and neither view is only theirs.
 - **Restore** sends each selected item back where it was, then a toast "Restored "Old Drafts" to 1001.1 › Drafts" with
   Open. One that answers `409 place-gone` opens the picker, titled "Restore "Old Drafts" to…". Changed in the build:
   - several items restored give a toast each, at most three showing at once, as the region allows (Ruling 34);
@@ -549,8 +549,8 @@ days, "after 1 day" for one (changed in the build (final review)).
   `danger` Button variant, which Checked Out to Me's Release uses too (changed in the build: Ruling 33 made a
   `destructive` variant, which the merge with master's Checked Out to Me replaced with its `danger` one). Changed in the
   build (final review):
-  - the last line says "them" for several items and for Empty Trash, "You won't be able to restore them. An
-    administrator can, for 30 days.", and counts the days, "for 1 day" for one;
+  - the last line says "it" or "them" by how many items there are, Empty Trash's counted as the rest, "You won't be able
+    to restore them. An administrator can, for 30 days.", and counts the days, "for 1 day" for one;
   - Remove's and Empty Trash's question is an alert dialog with a warning sign beside its title, as the release's warning
     is, since removing is the one step a person can't undo themselves; Delete's question and the one before a folder
     leaves its matter stay plain dialogs, as both can be undone.
