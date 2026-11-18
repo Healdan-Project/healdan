@@ -169,17 +169,22 @@ jobs:
     if: needs.checks.outputs.code == 'true'
     runs-on: ubuntu-latest
     # The PostgreSQL Healdan's tests run on, as docker/tests/test-db.sh runs one locally: each test makes a database of
-    # its own on it (TestDatabase), whose defaults reach it at localhost:5432.
+    # its own on it (TestDatabase), whose defaults reach it at localhost:5432. Every test makes a database and loads CE's
+    # schema, so it runs as the local one does: on a tmpfs, without fsync, with 300 connections (initdb writes each -c
+    # into postgresql.conf).
     services:
       postgres:
         image: postgres:18
         env:
           POSTGRES_USER: healdan
           POSTGRES_PASSWORD: healdan-test
-          POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C"
+          POSTGRES_INITDB_ARGS: >-
+            --encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C
+            -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=300
         ports:
           - 5432:5432
         options: >-
+          --tmpfs /var/lib/postgresql
           --health-cmd "pg_isready -h 127.0.0.1 -U healdan" --health-interval 5s --health-timeout 5s --health-retries 20
     strategy:
       # A failing shard leaves the others running, so one run shows every failing test.

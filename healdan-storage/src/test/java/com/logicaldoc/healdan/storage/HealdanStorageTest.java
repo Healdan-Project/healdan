@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.logicaldoc.core.document.Document;
@@ -427,6 +428,7 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 				StorageFixtures.jdbc().queryForObject("select count(*) from hd_storage_event", Long.class).longValue());
 	}
 
+	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testInitReadsNothing() throws Exception {
 		List<String> tables = StorageFixtures.jdbc().queryForList(

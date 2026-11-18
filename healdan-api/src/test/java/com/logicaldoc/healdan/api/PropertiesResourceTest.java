@@ -528,7 +528,6 @@ public class PropertiesResourceTest extends ApiTestCase {
 		Document d = file("a.docx");
 		String token = signIn(clerk);
 		String legacy = HealdanConstants.ATTR_LEGACYDOCNUM;
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId()).start()) {
 			response = patch(properties(d)).token(token).json(values(legacy, "OLD-1")).send();
@@ -549,7 +548,6 @@ public class PropertiesResourceTest extends ApiTestCase {
 		Document d = file("a.docx");
 		String token = signIn(clerk);
 		String legacy = HealdanConstants.ATTR_LEGACYDOCNUM;
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).start()) {
 			response = patch(properties(d)).token(token).json(values(legacy, "OLD-1")).send();

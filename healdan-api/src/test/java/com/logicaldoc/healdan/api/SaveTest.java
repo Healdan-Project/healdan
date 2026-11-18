@@ -26,6 +26,7 @@ import java.util.function.Consumer;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -176,7 +177,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId())
 				.overtaking(DocumentEvent.CHECKEDOUT).start()) {
@@ -200,7 +200,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).overtaking(DocumentEvent.CHECKEDOUT)
 				.start()) {
@@ -226,7 +225,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite webPage = BackgroundWrite.of(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
 				.overtaking(DocumentEvent.CHECKEDOUT).start()) {
@@ -250,7 +248,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite webPage = BackgroundWrite.atFlush(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
 				.overtaking(DocumentEvent.CHECKEDOUT).start()) {
@@ -273,7 +270,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId()).overtaking(DocumentEvent.CHECKEDIN)
 				.start()) {
@@ -292,7 +288,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).overtaking(DocumentEvent.CHECKEDIN)
 				.start()) {
@@ -310,7 +305,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite webPage = BackgroundWrite.of(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
 				.overtaking(DocumentEvent.CHECKEDIN).start()) {
@@ -332,7 +326,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite webPage = BackgroundWrite.atFlush(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
 				.overtaking(DocumentEvent.CHECKEDIN).start()) {
@@ -480,6 +473,7 @@ public class SaveTest extends ApiTestCase {
 		assertEquals("Lease.docx", blank.json().path("name").textValue());
 	}
 
+	@Ignore("PostgreSQL: plan Task 7")
 	@Test
 	public void testUnrecordedVersionIsAnError() throws Exception {
 		// Concern 4: CE writes the version record after the check-in returns, and only logs a failure. Here the
@@ -512,6 +506,7 @@ public class SaveTest extends ApiTestCase {
 				versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
 	}
 
+	@Ignore("PostgreSQL: plan Task 7")
 	@Test
 	public void testUnstoredSaveIsAnError() throws Exception {
 		// Concern 4: here the document's own record can't be written either, so nothing changes

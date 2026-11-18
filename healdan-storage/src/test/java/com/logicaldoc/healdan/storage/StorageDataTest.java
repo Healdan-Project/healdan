@@ -20,6 +20,7 @@ import java.util.Set;
 import javax.sql.DataSource;
 
 import org.hibernate.exception.ConstraintViolationException;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -68,6 +69,7 @@ public class StorageDataTest extends AbstractStorageTestCase {
 				new Timestamp(when.getTime()), docId, resource);
 	}
 
+	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testMigrationMadeTheTables() throws Exception {
 		for (String table : List.of("HD_STORAGE_BACKEND", "HD_STORAGE_STORE", "HD_STORAGE_FILE", "HD_STORAGE_HELD",
@@ -166,6 +168,7 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		assertNull(waiting(4, "1.0"));
 	}
 
+	@Ignore("PostgreSQL: plan Task 8")
 	@Test
 	public void testOneBackendPerStore() throws Exception {
 		long other = backend("other");

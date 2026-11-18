@@ -405,8 +405,6 @@ public class HeldDeletesTest extends AbstractStorageTestCase {
 
 	@Test
 	public void testPurgeLeavesAHoldAnOpenTransactionMadeAgain() throws Exception {
-		// Reads see what is committed while a transaction is open, as MariaDB's do
-		StorageFixtures.jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		Document doc = upload(local, "first");
 		long id = doc.getId();
 		Path root = local.root();

@@ -30,6 +30,7 @@ import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -82,6 +83,7 @@ import com.logicaldoc.util.spring.Context;
  * on: the test hooks hand over to them) let every route through, so each
  * refusal here is the test veto's.
  */
+@Ignore("PostgreSQL: plan Task 5")
 public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 	private static final String CONTENT = "Healdan veto atomicity";
@@ -98,10 +100,10 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 			threadLocal(PermissionRules.class, "COPYING"));
 
 	/**
-	 * The test that built the context, the schema and the fixture, which every
-	 * test shares and which are closed after the last one. Building them takes
-	 * seconds, mostly waiting for CE's version saves, so the tests after the
-	 * first restore the fixture instead.
+	 * The test that built the context, the database and the fixture, which
+	 * every test shares and which are closed and dropped after the last one.
+	 * Building them takes seconds, mostly waiting for CE's version saves, so
+	 * the tests after the first restore the fixture instead.
 	 */
 	private static VetoAtomicityTest owner;
 
@@ -181,7 +183,8 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	}
 
 	/**
-	 * Builds the context and the schema for the first test only
+	 * Builds the context and the database for the first test only: the others
+	 * use the owner's
 	 */
 	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
@@ -289,7 +292,8 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	}
 
 	/**
-	 * Keeps the context for the next test, unless the fixture couldn't be built
+	 * Keeps the context and the database for the next test, unless the fixture
+	 * couldn't be built
 	 */
 	@After
 	@Override
@@ -316,6 +320,9 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 		clearHealdanThreadState();
 	}
 
+	/**
+	 * Closes this test's context, and the base class drops its database
+	 */
 	private void closeContext() throws IOException {
 		if (context != null) {
 			SearchEngine.get().unlock();

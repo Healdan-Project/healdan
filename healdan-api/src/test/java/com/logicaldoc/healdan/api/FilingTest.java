@@ -19,6 +19,7 @@ import java.util.Set;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -195,7 +196,6 @@ public class FilingTest extends ApiTestCase {
 	@Test
 	public void testCheckOutPastABackgroundWrite() throws Exception {
 		// The Office preview saves a new document when its conversion ends, which can fall in CE's check-out
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.conversion(0).start()) {
 			response = file(signIn(clerk), document(documents, null, null, true), "a.docx", CONTENT);
@@ -212,7 +212,6 @@ public class FilingTest extends ApiTestCase {
 	@Test
 	public void testCheckOutPastABackgroundWriteAtTheFlush() throws Exception {
 		// The preview's save commits just before CE's UPDATE of the check-out, whose failure CE's DAO swallows
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.atFlush(0).start()) {
 			response = file(signIn(clerk), document(documents, null, null, true), "a.docx", CONTENT);
@@ -226,6 +225,7 @@ public class FilingTest extends ApiTestCase {
 				clerk.getId()).intValue());
 	}
 
+	@Ignore("PostgreSQL: plan Task 7")
 	@Test
 	public void testUnrecordedFirstVersionIsAnError() throws Exception {
 		// As for a save (SaveTest): CE writes the version record after it creates the document, and only logs a

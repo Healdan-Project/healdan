@@ -34,10 +34,10 @@ public abstract class AbstractStorageTestCase extends AbstractHealdanTestCase {
 
 	/**
 	 * healdan-core's test {@code context.properties} with the store swapped. CE reads the file by name, so it is
-	 * written before the context starts.
+	 * written before the context starts; the base class then writes it again with the test's database.
 	 */
 	@Override
-	protected String getConfigResource() {
+	protected String baseConfigResource() {
 		try {
 			File base = new File("target/test-classes/context.properties");
 			String text = Files.readString(base.toPath(), StandardCharsets.ISO_8859_1)

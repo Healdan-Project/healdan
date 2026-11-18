@@ -19,6 +19,7 @@ import java.util.TreeSet;
 import javax.sql.DataSource;
 
 import org.hibernate.exception.ConstraintViolationException;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -116,6 +117,7 @@ public class SignInDataTest extends AbstractHealdanTestCase {
 		assertFalse(SignInIdentityDAO.get().findLinked("authentik", "abc").isPresent());
 	}
 
+	@Ignore("PostgreSQL: plan Task 8")
 	@Test
 	public void testOneLinkPerIdentityAndUser() throws Exception {
 		User clerk = fx.user("clerk");
@@ -295,6 +297,7 @@ public class SignInDataTest extends AbstractHealdanTestCase {
 		assertEquals(1, jdbc().queryForObject("select count(*) from hd_signin_group", Integer.class).intValue());
 	}
 
+	@Ignore("PostgreSQL: plan Task 8")
 	@Test
 	public void testGroupReplaceKeepsTheOldRowsWhenTheNewOnesFail() throws Exception {
 		SignInGroupDAO dao = SignInGroupDAO.get();

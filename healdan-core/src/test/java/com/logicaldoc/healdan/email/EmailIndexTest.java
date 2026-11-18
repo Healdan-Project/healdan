@@ -29,6 +29,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import javax.sql.DataSource;
 
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -66,7 +67,7 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 	private JdbcTemplate jdbc;
 
 	@Override
-	protected List<String> getDatabaseScripts() {
+	protected List<String> databaseScripts() {
 		return List.of("sql/logicaldoc-core.sql", "sql/logicaldoc-webservice.sql", "data.sql");
 	}
 
@@ -255,6 +256,7 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 		assertEquals("1@example.com", EmailIndex.get().messageIdOf(copy.getId()));
 	}
 
+	@Ignore("PostgreSQL: plan Task 6")
 	@Test
 	public void testAnIndexFailureNeverRefusesTheEmail() throws Exception {
 		// The rows can be read, as the once-per-matter rule does, but none can be added

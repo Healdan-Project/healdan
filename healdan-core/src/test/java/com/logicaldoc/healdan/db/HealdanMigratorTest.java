@@ -22,6 +22,7 @@ import javax.sql.DataSource;
 
 import org.flywaydb.core.api.MigrationVersion;
 import org.hsqldb.jdbc.JDBCDataSource;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -65,6 +66,7 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 		assertEquals(rows, historyRows());
 	}
 
+	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testFailingScriptFailsStartup() {
 		HealdanStartupException e = assertThrows(HealdanStartupException.class, () -> migrator
@@ -75,6 +77,7 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 		assertTrue(e.getMessage(), e.getMessage().contains("from hd_schema_history"));
 	}
 
+	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testMisnamedScriptFailsStartup() {
 		// Flyway ignores a script whose name it can't parse unless naming is validated

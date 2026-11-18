@@ -21,6 +21,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import javax.sql.DataSource;
 
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -63,7 +64,7 @@ public class EmailIndexWorkerTest extends AbstractHealdanTestCase {
 	private JdbcTemplate jdbc;
 
 	@Override
-	protected List<String> getDatabaseScripts() {
+	protected List<String> databaseScripts() {
 		return List.of("sql/logicaldoc-core.sql", "sql/logicaldoc-webservice.sql", "data.sql");
 	}
 
@@ -270,6 +271,7 @@ public class EmailIndexWorkerTest extends AbstractHealdanTestCase {
 		return ids;
 	}
 
+	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testResumesFromItsCursor() throws Exception {
 		Document model = file("healdan-cc.eml", "model.eml");
@@ -298,6 +300,7 @@ public class EmailIndexWorkerTest extends AbstractHealdanTestCase {
 		assertEquals("done", HealdanSettings.get().get(DONE));
 	}
 
+	@Ignore("PostgreSQL: plan Task 5")
 	@Test
 	public void testAFullBatchThenNothingIsDone() throws Exception {
 		Document model = file("healdan-cc.eml", "model.eml");

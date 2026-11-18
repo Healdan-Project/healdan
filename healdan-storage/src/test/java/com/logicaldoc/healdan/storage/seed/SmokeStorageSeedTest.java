@@ -70,8 +70,6 @@ public class SmokeStorageSeedTest extends AbstractStorageTestCase {
 	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
-		// The Store switch's transaction of its own reads what the seed's committed, as on MariaDB
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		fake = FakeS3.start().createBucket(BUCKET);
 	}
 
