@@ -5,6 +5,7 @@
 # Compiles the container init tool against the WAR's libraries, runs its tests and packages it. WarParsersTest also
 # parses a .pptx, an .xlsx and an .xls with the server's parsers on those libraries, which catches a dependency of
 # POI's that no plugin zip ships. WarStorageTest builds the S3 client and Tink's streaming AEAD on them the same way.
+# WarHibernateTest checks they hold one hibernate.properties, Healdan's, which binds booleans as integers.
 # It also writes the WAR's web.xml with the plugins' installs' edits, which the image ships.
 # Usage: build.sh <WEB-INF/lib dir> <default context.properties> <output jar> <output web.xml>
 set -euo pipefail
@@ -27,6 +28,7 @@ run_test TrustedProxiesTest
 run_test ConfigFileTest "$defaults"
 run_test WarParsersTest "$here/test/fixtures"
 run_test WarStorageTest
+run_test WarHibernateTest
 
 # PluginInstallTest starts the WAR's plugins twice, as DockerInit and then Tomcat do: with a conf folder on the
 # classpath, as the entrypoint has it, and copies of the WAR's plugin jars, its util jar (whose folder is where the
