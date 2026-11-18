@@ -77,7 +77,8 @@ public class LoginServiceImpl extends RemoteServiceServlet implements LoginServi
         }
 
         SecurityServiceImpl ser = new SecurityServiceImpl();
-        return ser.changePassword(userId, userId, oldPassword, newPassword, false);
+        // Healdan: the RPC needs a session, which this page's caller can't have yet
+        return ser.changePasswordAtSignIn(userId, oldPassword, newPassword);
     }
 
     @Override

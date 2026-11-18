@@ -329,21 +329,50 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
             String oldPassword,
             String newPassword,
             boolean notify) {
+        // Healdan: the requestor is who is signed in, never who the call names
+        Session session = SessionManager.get().getSession(getThreadLocalRequest());
+        if (session == null) {
+            log.warn("Refused to change the password of user {}: no session", userId);
+            return new GUIValue("1", null);
+        }
+        return changePassword(session.getUser(), userId, oldPassword, newPassword, notify);
+    }
+
+    /**
+     * Healdan: the sign-in page's change, for someone who can't sign in until
+     * their password has changed. {@link LoginServiceImpl} calls it once it
+     * has checked that the password has to change. It isn't part of
+     * {@link SecurityService}, so no RPC reaches it.
+     *
+     * @param userId the account
+     * @param oldPassword the account's current password
+     * @param newPassword the new password
+     *
+     * @return the same codes as the RPC
+     */
+    GUIValue changePasswordAtSignIn(long userId, String oldPassword, String newPassword) {
+        try {
+            User user = UserDAO.get().findById(userId);
+            if (user == null || StringUtils.isEmpty(oldPassword))
+                return new GUIValue("1", null);
+            return changePassword(user, userId, oldPassword, newPassword, false);
+        } catch (PersistenceException e) {
+            log.error(e.getMessage(), e);
+            return new GUIValue("1", null);
+        }
+    }
+
+    private GUIValue changePassword(
+            User requestor,
+            long userId,
+            String oldPassword,
+            String newPassword,
+            boolean notify) {
         try {
             UserDAO userDao = UserDAO.get();
             User user = userDao.findById(userId, true);
             if (user == null)
                 throw new ServerException(String.format("User %s not found", userId));
-
-            User requestor = null;
-
-            // Session may not exist in case the user is required to change the
-            // password at login screen
-            Session session = SessionManager.get().getSession(getThreadLocalRequest());
-            if (session != null)
-                requestor = session.getUser();
-            else
-                requestor = userDao.findById(requestorUserId, true);
 
             /*
              * A non admin user cannot change the password of other users
@@ -351,6 +380,11 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
             if (requestor.getId() != userId && !MenuDAO.get().isReadAllowed(Menu.ACCESS_CONTROL, requestor.getId()))
                 throw new PermissionException(
                         String.format("User %s not allowed to change the password of user %s", requestor, user));
+
+            // Healdan: only Access control's Change password goes without the
+            // current password
+            if (oldPassword == null && !MenuDAO.get().isReadAllowed(Menu.ACCESS_CONTROL, requestor.getId()))
+                throw new ServerException("The current password is required");
 
             if (oldPassword != null && !Encrypter.encryptSHA256(oldPassword).equals(user.getPassword()))
                 throw new ServerException("Wrong old passord");
@@ -372,7 +406,7 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
              * as expired for security reasons, so the user will change it at
              * first login.
              */
-            user.setPasswordExpired(notify || requestorUserId == null || !requestorUserId.equals(userId));
+            user.setPasswordExpired(notify || requestor.getId() != userId);
 
             userDao.store(user, history);
             if (notify)
@@ -614,9 +648,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
 
     @Override
     public void removeFromGroup(long groupId, List<Long> userIds) throws ServerException {
-        Session session = checkMenu(getThreadLocalRequest(), Menu.ADMINISTRATION);
-
-        checkMenu(getThreadLocalRequest(), Menu.ADMINISTRATION);
+        // Healdan: Access control, whose Groups screen calls it
+        Session session = checkMenu(getThreadLocalRequest(), Menu.ACCESS_CONTROL);
 
         try {
             UserDAO userDao = UserDAO.get();
@@ -633,7 +666,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
 
     @Override
     public GUIGroup saveGroup(GUIGroup group) throws ServerException {
-        Session session = checkMenu(getThreadLocalRequest(), Menu.ADMINISTRATION);
+        // Healdan: Access control, whose Groups screen calls it
+        Session session = checkMenu(getThreadLocalRequest(), Menu.ACCESS_CONTROL);
 
         try {
             GroupDAO groupDao = GroupDAO.get();
@@ -674,9 +708,9 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
         UserDAO userDao = UserDAO.get();
         boolean createNew = false;
 
-        // Disallow the editing of other users if you do not have access to
-        // the Security
-        disallowEditingOfOtherUsers(guiUser, session);
+        // Healdan: Access control, whose Users screen is the only caller, for
+        // any account. Account > Profile saves through saveProfile
+        checkMenu(getThreadLocalRequest(), Menu.ACCESS_CONTROL);
 
         try {
             User user = getOrCreateUser(guiUser);
@@ -783,12 +817,6 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
             throws MessagingException, AutomationException {
         if (createNew && guiUser.isNotifyCredentials())
             notifyAccount(user, user.getDecodedPassword());
-    }
-
-    private void disallowEditingOfOtherUsers(GUIUser guiUser, Session session)
-            throws InvalidSessionServerException, AccessDeniedException {
-        if (guiUser.getId() != session.getUserId() && getThreadLocalRequest() != null)
-            checkMenu(getThreadLocalRequest(), Menu.ACCESS_CONTROL);
     }
 
     private void setGroups(User user, GUIUser guiUser, UserHistory transaction) throws PersistenceException {
