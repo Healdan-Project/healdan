@@ -16,15 +16,16 @@ const DOCUMENT_LISTS = ['documents', 'folders', 'search', 'favorites', 'matters'
  * that shows one as an attachment's copy (Saved as # n) is asked again too: the server pairs each attachment with the
  * documents filed from the email by name and size, and leaves out deleted ones. A move changes neither, wherever the
  * copy goes. Only those, as each read of a message reads the whole email on the server, and without waiting for them,
- * so what follows the change (its toast, the focus) doesn't wait for an email.
+ * so what follows the change (its toast, the focus) doesn't wait for an email. `'any'` is for a folder deleted or
+ * restored, whose documents the page can't name: every message that shows a copy is asked again.
  */
-export function invalidateDocumentLists(queryClient: QueryClient, changed: readonly number[] = []): Promise<unknown> {
+export function invalidateDocumentLists(queryClient: QueryClient, changed: readonly number[] | 'any' = []): Promise<unknown> {
   const lists = DOCUMENT_LISTS.map((root) => queryClient.invalidateQueries({ queryKey: [root] }))
-  if (changed.length > 0) {
-    const named = new Set(changed)
+  if (changed === 'any' || changed.length > 0) {
+    const named = new Set(changed === 'any' ? [] : changed)
     // Partial: only data that has attachments is looked at, whatever else comes to sit under 'messages'
     const showsOne = (query: Query) =>
-      (query.state.data as Partial<components['schemas']['MessageView']> | undefined)?.attachments?.some((one) => one.docNumber !== null && named.has(one.docNumber)) ?? false
+      (query.state.data as Partial<components['schemas']['MessageView']> | undefined)?.attachments?.some((one) => one.docNumber !== null && (changed === 'any' || named.has(one.docNumber))) ?? false
     void queryClient.invalidateQueries({ queryKey: ['messages'], predicate: showsOne })
   }
   return Promise.all(lists)

@@ -216,7 +216,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
               }}
             />
           }
-          details={selected !== undefined && <DetailsPanel key={selected} docNumber={selected} row={selectedRow?.type === 'document' ? selectedRow : undefined} />}
+          details={selected !== undefined && <DetailsPanel key={selected} docNumber={selected} row={selectedRow?.type === 'document' ? selectedRow : undefined} onGone={() => changeSelection(new Set())} />}
           preview={<ReadingPane docNumber={selected} row={selectedRow?.type === 'document' ? selectedRow : undefined} />}
         />
       )}

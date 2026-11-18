@@ -226,7 +226,10 @@ final class FolderChanges {
 
 	/**
 	 * Refuses a move for what the folder and its new parent say, from
-	 * {@code not-movable} to {@code admins-only}
+	 * {@code not-movable} to {@code admins-only}. A {@code forbidden} or an
+	 * {@code admins-only} says which check it was in {@code cause}, as each
+	 * code has two: {@code no-move} or {@code no-add}, and {@code top-level}
+	 * or {@code into-top-level}
 	 */
 	private static void refuseMove(FolderView view, FolderView target, User user) throws PersistenceException {
 		if ("store".equals(view.kind()) || "matter".equals(view.kind()))
@@ -240,15 +243,18 @@ final class FolderChanges {
 
 		FolderDAO folders = FolderDAO.get();
 		if (!folders.isPermissionAllowed(Permission.MOVE, view.id(), user.getId()))
-			throw ApiProblem.forbidden("You may not move folder %d.".formatted(view.id()));
+			throw ApiProblem.forbidden("You may not move folder %d.".formatted(view.id())).with("cause", "no-move");
 		if (!folders.isPermissionAllowed(Permission.ADD, target.id(), user.getId()))
-			throw ApiProblem.forbidden("You may not add folders to folder %d.".formatted(target.id()));
+			throw ApiProblem.forbidden("You may not add folders to folder %d.".formatted(target.id())).with("cause",
+					"no-add");
 		// With the Move permission, the folder's other reason is a top-level folder and a caller who isn't an
 		// administrator
 		if (!view.canMove())
-			throw new ApiProblem(403, "admins-only", "Only administrators can move a matter's top-level folders.");
+			throw new ApiProblem(403, "admins-only", "Only administrators can move a matter's top-level folders.")
+					.with("cause", "top-level");
 		if ("matter".equals(target.kind()) && !AccessChecks.isAdmin(user))
-			throw new ApiProblem(403, "admins-only", "Only administrators can move folders into a matter's top level.");
+			throw new ApiProblem(403, "admins-only", "Only administrators can move folders into a matter's top level.")
+					.with("cause", "into-top-level");
 	}
 
 	/**

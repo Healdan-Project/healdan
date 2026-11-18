@@ -98,8 +98,8 @@ describe('Undo', () => {
 
     const dialog = await screen.findByRole('dialog', { name: "Some Items Weren't Restored" })
     expect(within(dialog).getAllByRole('listitem').map((one) => one.textContent)).toEqual([
-      "Drafts: Not found, or you can't see it.",
-      "Lease.docx: The folder it was deleted from is gone, or you can't restore into it. Choose another.",
+      "Drafts: It's already been restored, or it's no longer in the Trash.",
+      "Lease.docx: The folder it was deleted from is gone, or you can't restore into it. Restore it from the Trash to choose another place.",
     ])
     expect(screen.queryByText(/server sentence/)).toBeNull()
     expect(api.callsTo('POST /v1/trash/*/restore').map((call) => call.path)).toEqual(['/v1/trash/700/restore', '/v1/trash/701/restore', '/v1/trash/702/restore'])

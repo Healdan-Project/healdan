@@ -4,7 +4,7 @@
 import { useMemo } from 'react'
 import type { components } from '@healdan/api'
 import { plural, t, type ItemMenu } from '@healdan/ui'
-import { movingFolder } from '../actions/folders'
+import type { MovingFolder } from '../actions/folders'
 import { childKey, selectable, type Hit } from '../views/useListing'
 import { DocumentMenuItems, folderMenu, MatterMenuItems, SelectionMenuItems } from './ContextMenus'
 
@@ -17,6 +17,8 @@ export interface ListMenuOf {
   onSelect?: (keys: Set<string>, options: { showDetails: boolean }) => void
   /** The selected documents, in the list's order: what the toolbar's More acts on */
   selected: components['schemas']['DocumentView'][]
+  /** The selected folders, in the list's order: a selection of several with one of them in it is a selection's, not a row's */
+  folders: readonly MovingFolder[]
 }
 
 function nameOf(hit: Hit): string {
@@ -31,10 +33,8 @@ function nameOf(hit: Hit): string {
  * matter's own folder's, isn't selected, and leaves the selection alone. The right-click doesn't show the row's details in place of Filters, as a click
  * does: it only asked for a menu.
  */
-export function useListMenu({ rows, selection, onSelect, selected }: ListMenuOf): ItemMenu {
+export function useListMenu({ rows, selection, onSelect, selected, folders }: ListMenuOf): ItemMenu {
   const byKey = useMemo(() => new Map(rows.map((row) => [childKey(row), row])), [rows])
-  // The selected folders, in the list's order: a selection of several with one of them in it is a selection's, not a row's
-  const folders = rows.flatMap((row) => (row.type === 'folder' && selection.has(childKey(row)) ? [movingFolder(row)] : []))
   const several = (key: string) => selection.has(key) && selection.size > 1
   const documentsFor = (key: string, hit: components['schemas']['DocumentView']) => (selection.has(key) && selected.length > 0 ? selected : [hit])
   const mixed = (key: string) => several(key) && folders.length > 0

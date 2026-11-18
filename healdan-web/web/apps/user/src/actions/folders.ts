@@ -80,6 +80,14 @@ export function whyNotMove(folder: Described & { canMove: boolean }, admin: bool
 }
 
 /**
+ * Why only an administrator may make the move: a folder at a matter's top level is moved by them alone, and any other
+ * folder goes into a matter's top level only by them
+ */
+export function adminsOnlyMove(folder: Pick<MovingFolder, 'topLevel'>): StringKey {
+  return folder.topLevel === true ? 'move.adminsOnlyFolder' : 'move.adminsOnlyInto'
+}
+
+/**
  * Whether a selection holds anything that can be moved: a document, or a folder whose `canMove` says so. A folder of
  * several that can't is said in Refusals while the rest is moved (folders and Trash spec 7.5), as anyDeletable.
  */
@@ -139,17 +147,27 @@ function heldNames(error: ApiError, meId: number | undefined): string[] {
   })
 }
 
+/** The words for each check a folder move's `forbidden` or `admins-only` names in its `cause` (`FolderChanges.refuseMove`) */
+const MOVE_CAUSES: Record<NonNullable<S['Problem']['cause']>, StringKey> = {
+  'no-move': 'move.noPermission',
+  'no-add': 'move.noAddThere',
+  'top-level': 'move.adminsOnlyFolder',
+  'into-top-level': 'move.adminsOnlyInto',
+}
+
 /**
  * Why a folder wasn't moved, from the catalogue (spec 4.3, 7.5), as folderDeleteRefusal: what it holds that the person
- * may not move is named by nothing, and of its check-outs only those the problem's `holds` names. A name already taken,
- * and an email already in the matter it went to, have the words a document's move has.
+ * may not move is named by nothing, and of its check-outs only those the problem's `holds` names. A `forbidden` or an
+ * `admins-only` says by its `cause` which check refused it: no Move on the folder or no Add where it was going, its own
+ * top level or the matter's top level it was going into. A name already taken, and an email already in the matter it
+ * went to, have the words a document's move has.
  */
 export function folderMoveRefusal(error: unknown, meId: number | undefined): FolderRefusal {
   if (error instanceof ApiError) {
     if (error.code === 'items-not-allowed') return { reason: t('move.notAllowed') }
-    if (error.code === 'admins-only') return { reason: t('move.adminsOnlyFolder') }
-    if (error.code === 'forbidden') return { reason: t('move.noPermission') }
-    if (error.code === 'checked-out') return { reason: t('delete.checkedOut'), details: heldNames(error, meId) }
+    const cause = (error.body as Partial<S['Problem']> | null)?.cause
+    if ((error.code === 'forbidden' || error.code === 'admins-only') && cause !== undefined && Object.hasOwn(MOVE_CAUSES, cause)) return { reason: t(MOVE_CAUSES[cause]) }
+    if (error.code === 'checked-out') return { reason: t('delete.checkedOut'), details: heldNames(error, meId), after: t('move.checkedOutAfter') }
   }
   return { reason: refusalText(error, meId) }
 }

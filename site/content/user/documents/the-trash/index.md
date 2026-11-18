@@ -29,6 +29,15 @@ longer while the pointer or the keyboard's focus is on it. **Undo** puts back wh
 says "Restored "Old Drafts"". From the keyboard, press **F6** to move to the message, then Tab to **Undo** and press
 Enter.
 
+If something changed in the meantime, a window, "Some Items Weren't Restored", says which items **Undo** didn't put
+back, and why, and the rest come back all the same:
+
+- **"It's already been restored, or it's no longer in the Trash."** Someone restored it first, perhaps you from the
+  Trash or an administrator, or it was removed from the Trash.
+- **"The folder it was deleted from is gone, or you can't restore into it. Restore it from the Trash to choose another
+  place."** The folder was deleted, or it can't take the item back: you can no longer add to it, say, or the matter
+  already holds the same email. The item is still in your Trash: **Restore** there asks where to put it.
+
 A delete takes a folder with everything in it that was in it, and its trash entry is that folder as one item. It
 doesn't take what was already in the Trash, yours or a colleague's, or already removed.
 
@@ -61,15 +70,14 @@ Drafts" to 1001.1 › Drafts", with **Open**, which takes you to that folder.
 - **A restored folder brings back what was deleted with it,** and only that. A document someone deleted from the
   folder earlier stays in its deleter's Trash, and can be restored into the folder once it's back.
 - **If that folder is gone,** or you can't put anything back into it, Healdan opens a window, "Restore "Old Drafts"
-  to…", where you choose another folder as you do for **Move To…**. The reason is "The folder it was deleted from is
-  gone, or you can't restore into it. Choose another."
+  to…", where you choose another folder as you do for **Move To…**.
 - **You need the Delete permission** on what you restore, as you did to delete it. The usual filing rules apply: a
   document can only come back into a folder inside a matter's workspace, and a restore into another matter gives its
   documents that matter's client and matter. A matter that already holds a copy of an email refuses a second one.
 - **Some items can't be restored here.** Healdan says ""Lease.pdf" can't be restored from here." An administrator
   restores a Store in the Classic Interface.
 
-## Removing for Good
+## Removing from the Trash
 
 **Remove…**, in the toolbar, the details, an item's right-click menu and on the **Delete** key, takes the selected
 items out of your Trash after you confirm. Healdan asks "Remove "Old Drafts" from the Trash?", and for a folder what it
@@ -77,8 +85,9 @@ holds. Choose **Remove**, in red, or **Cancel**, which has the focus.
 
 > You won't be able to restore it. An administrator can, for 30 days.
 
-The days are the number your administrator has set. **Empty Trash…**, at the right of the toolbar, asks "Empty the
-Trash?", says "This removes all 4 items you deleted." and ends the same way. Choose **Empty Trash**.
+The days are the number your administrator has set. For several items it says "them". **Empty Trash…**, at the right
+of the toolbar, asks "Empty the Trash?", says "This removes all 4 items you deleted." and ends the same way. Choose
+**Empty Trash**.
 
 Nothing in the app destroys anything. After the days an administrator sets, a nightly job destroys what was removed.
 
@@ -86,8 +95,9 @@ Nothing in the app destroys anything. After the days an administrator sets, a ni
 
 An administrator sees **Mine**, **Everyone's** and **Removed** beside the heading. **Everyone's** adds who deleted each
 item, and restores anyone's. **Removed** lists what people took out of their Trash, with who removed it and when, and
-how long is left before it's destroyed, and has **Restore** only. See [The Trash and Removed
-Items](../../../admin/the-trash-and-removed-items/) in the Admin Guide.
+how long is left before it's destroyed, and has **Restore** only. With nothing in them, **Everyone's** says "Nothing in
+the Trash." and **Removed** "Nothing removed." See [The Trash and Removed Items](../../../admin/the-trash-and-removed-items/)
+in the Admin Guide.
 
 ## In the Classic Interface
 

@@ -104,3 +104,24 @@ export function focusLater(key: string | undefined, gone: readonly string[] = []
   }
   setTimeout(attempt, 0)
 }
+
+/**
+ * Once the list is drawn again, a focus the change left nowhere (on the page, on an element that has gone, or on a button
+ * that no longer applies) goes to the row with this key, or to the list, so a keyboard user keeps their place. A focus
+ * somewhere else, such as a dialog that asks, stays. It keeps looking for a second, as the list can be drawn again later.
+ */
+export function focusIfLost(key?: string) {
+  let tries = 0
+  const attempt = () => {
+    // A test's page can go with the timer still set, as focusLater's can
+    if (!globalThis.document) return
+    const active = globalThis.document.activeElement
+    const lost = !active || active === globalThis.document.body || !active.isConnected || (active instanceof HTMLButtonElement && active.disabled)
+    const target = lost
+      ? ((key ? globalThis.document.querySelector<HTMLElement>(`[role="grid"] [data-row-key="${key}"]`) : null) ?? globalThis.document.querySelector<HTMLElement>('[role="grid"]'))
+      : null
+    if (target) target.focus()
+    else if (++tries < 20) setTimeout(attempt, 50)
+  }
+  setTimeout(attempt, 0)
+}

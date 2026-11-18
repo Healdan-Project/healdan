@@ -26,11 +26,11 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.api.model.DeletedFrom;
 import com.logicaldoc.healdan.api.model.FolderRef;
 import com.logicaldoc.healdan.api.model.FolderView;
+import com.logicaldoc.healdan.api.model.MatterRef;
 import com.logicaldoc.healdan.api.model.TrashContents;
 import com.logicaldoc.healdan.api.model.TrashItem;
 import com.logicaldoc.healdan.api.model.UserRef;
 import com.logicaldoc.healdan.listing.FileKinds;
-import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.security.AccessChecks;
@@ -93,7 +93,10 @@ final class TrashViews {
 	 * @param caller the signed-in user, with its groups
 	 * @return the item as the API shows it: {@code contents} counts the
 	 *         members in the item's state that the caller can read, an
-	 *         admin's every one; and {@code removedBy}, {@code removedAt} and
+	 *         admin's every one; {@code deletedFrom} and {@code matter} are
+	 *         the place as it is now while it is live, in a Store and
+	 *         readable by the caller, else as they were recorded at the
+	 *         delete; and {@code removedBy}, {@code removedAt} and
 	 *         {@code destroyAfter} only for an item in Removed
 	 * @throws PersistenceException error at data layer
 	 */
@@ -133,14 +136,28 @@ final class TrashViews {
 			}
 		}
 
-		Matter matter = row.matterId() != null ? MatterDAO.get().findById(row.matterId()) : null;
+		// The place's present path goes with its present matter, so the two never mix (a place moved into another matter
+		// since the delete); without the place, both are as recorded at the delete. A place in no matter is a Store, which
+		// a matter's own folder was deleted from: its matter is the one recorded, the folder's own (TrashRecorder.matterOf)
+		Optional<FolderView> place = livePlace(row, caller);
+		DeletedFrom deletedFrom;
+		MatterRef matter = null;
+		if (place.isPresent()) {
+			FolderView view = place.get();
+			deletedFrom = new DeletedFrom(new FolderRef(view.id(), view.name(), view.kind()),
+					view.path().stream().map(FolderRef::name).toList());
+			matter = view.matter();
+		} else {
+			deletedFrom = new DeletedFrom(null, row.fromPath());
+		}
+		if (matter == null && row.matterId() != null)
+			matter = ApiViews.matterRef(MatterDAO.get().findById(row.matterId()));
 		return new TrashItem(row.id(), row.kind(), row.name(),
 				row.docNumber() != null ? Long.valueOf(row.docNumber()) : null,
 				folder ? FOLDER : FileKinds.of(FilenameUtils.getExtension(row.name())),
-				folder ? null : size(row.objectId()), folder ? contents(row, state, caller) : null,
-				deletedFrom(row, caller), ApiViews.matterRef(matter),
-				ApiViews.userRef(row.deletedById(), row.deletedByName()), Date.from(row.deletedAt()), removedBy,
-				removedAt, destroyAfter);
+				folder ? null : size(row.objectId()), folder ? contents(row, state, caller) : null, deletedFrom,
+				matter, ApiViews.userRef(row.deletedById(), row.deletedByName()), Date.from(row.deletedAt()),
+				removedBy, removedAt, destroyAfter);
 	}
 
 	/**
@@ -197,21 +214,15 @@ final class TrashViews {
 	}
 
 	/**
-	 * @return where the item was deleted from: the folder with its present
-	 *         path while it is live, in a Store and readable by the caller,
-	 *         else the path recorded at the delete
+	 * @return the folder the item was deleted from, as it is now, while it is
+	 *         live, in a Store and readable by the caller; empty otherwise
 	 */
-	private static DeletedFrom deletedFrom(TrashItemRow row, User caller) throws PersistenceException {
-		if (row.fromFolderId() != null) {
-			Optional<Folder> from = AccessChecks.readableFolder(row.fromFolderId(), caller);
-			Optional<FolderView> view = from.isPresent() && from.get().getType() != Folder.TYPE_ALIAS
-					? ApiViews.folder(from.get(), caller)
-					: Optional.empty();
-			if (view.isPresent())
-				return new DeletedFrom(new FolderRef(view.get().id(), view.get().name(), view.get().kind()),
-						view.get().path().stream().map(FolderRef::name).toList());
-		}
-		return new DeletedFrom(null, row.fromPath());
+	private static Optional<FolderView> livePlace(TrashItemRow row, User caller) throws PersistenceException {
+		if (row.fromFolderId() == null)
+			return Optional.empty();
+		Optional<Folder> from = AccessChecks.readableFolder(row.fromFolderId(), caller);
+		return from.isPresent() && from.get().getType() != Folder.TYPE_ALIAS ? ApiViews.folder(from.get(), caller)
+				: Optional.empty();
 	}
 
 	/** @return a document's file size, deleted or not; null when its row is gone */

@@ -32,7 +32,7 @@ import { CrossMatter } from './CrossMatter'
 import { MovePicker } from './MovePicker'
 import { NewFolderDialog } from './NewFolder'
 import { Refusals, type RefusalsProps } from './Refusals'
-import { focusLater, readRows, rowAfterKeys } from './rows'
+import { focusIfLost, focusLater, readRows, rowAfterKeys } from './rows'
 import { undoAction } from './undo'
 
 export type { OrganisingItems } from '../actions/batch'
@@ -89,25 +89,6 @@ function renameOrigin({ key, place }: Renaming): HTMLElement | null {
 /** The rows' keys of the items: `d10388` for a document, `f45` for a folder */
 function rowKeys(items: OrganisingItems): string[] {
   return [...items.folders.map((folder) => `f${folder.id}`), ...items.documents.map((document) => `d${document.docNumber}`)]
-}
-
-/**
- * Focuses the list once it's drawn, if the focus was lost meanwhile: the open folder's ⋯, which asked, went with the
- * folder, and its parent's list is where the person is now. A focus put elsewhere (the tree, from which a folder above
- * the open one was deleted) stays.
- */
-function focusListIfLost() {
-  let tries = 0
-  const attempt = () => {
-    // A test's page can go with the timer still set, as focusLater's can (rows.ts)
-    if (!globalThis.document) return
-    const now = globalThis.document.activeElement
-    if (now && now !== globalThis.document.body) return
-    const list = globalThis.document.querySelector<HTMLElement>('[role="grid"]')
-    if (list) list.focus()
-    else if (++tries < 20) setTimeout(attempt, 50)
-  }
-  setTimeout(attempt, 0)
 }
 
 /** The key a refusal's line has: an item's own, so a document and a folder with the same number never share one */
@@ -195,7 +176,7 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
       const said = 'document' in one ? { reason: refusalText(one.error, me.data?.id) } : folderMoveRefusal(one.error, me.data?.id)
       lines.set(lineKey(one), { key: lineKey(one), name: nameOf(one), ...said })
     }
-    return [...items.folders.map((folder) => `f${folder.id}`), ...items.documents.map((document) => `d${document.docNumber}`)].flatMap((key) => lines.get(key) ?? [])
+    return rowKeys(items).flatMap((key) => lines.get(key) ?? [])
   }
 
   /**
@@ -254,8 +235,11 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  /** Asks again for what the change shows in: documents that went or came back are named, for an email's copies */
-  function refresh(documents: readonly number[]) {
+  /**
+   * Asks again for what the change shows in: documents that went or came back are named, for an email's copies, and a
+   * folder's change, whose documents the page can't name, is `'any'`
+   */
+  function refresh(documents: readonly number[] | 'any') {
     return invalidateDocumentLists(queryClient, documents)
   }
 
@@ -268,7 +252,9 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
         folder.canDelete ? deleteFolder(api, folder.id) : Promise.reject(new FolderNotDeletable(whyNotDelete(folder, me.data?.admin) ?? 'delete.noPermission')),
     })
     const done = outcome.done.flatMap((one) => ('document' in one ? [one.document.docNumber] : []))
-    // What was deleted can't stay selected: its details would answer 404
+    const tookFolder = outcome.done.some((one) => 'folder' in one)
+    // What was deleted can't stay selected: its details would answer 404. One a deleted folder took, which only the server
+    // knows of, is forgotten by its details once the refresh asks for it again and it answers 404 (DetailsPanel's onGone)
     if (selected !== undefined && done.includes(selected)) select(undefined)
     // The open folder, deleted or in a deleted folder, would answer 404: its deleted folder's parent opens in its place
     const open = idFrom(openId)
@@ -276,7 +262,7 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     const gone = outcome.done.flatMap((one) => ('folder' in one && one.folder.parentId > 0 && (one.folder.id === open || path?.some((step) => step.id === one.folder.id)) ? [one.folder] : []))
     const [leaving] = gone
     if (leaving) await navigate({ to: '/folders/$id', params: { id: String(leaving.parentId) } })
-    await refresh(done)
+    await refresh(tookFolder ? 'any' : done)
 
     const [first] = outcome.done
     if (first) {
@@ -285,7 +271,8 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
       toastWithAction(
         message,
         undoAction(api, items, {
-          refresh: (restored) => refresh(restored.flatMap((one) => (one.item.docNumber === null ? [] : [one.item.docNumber]))),
+          refresh: (restored) =>
+            refresh(restored.some((one) => one.item.type === 'folder') ? 'any' : restored.flatMap((one) => (one.item.docNumber === null ? [] : [one.item.docNumber]))),
           refuse: setRefused,
           meId: me.data?.id,
         }),
@@ -295,7 +282,9 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     // Where the focus goes once the rows are gone: the next row, or the one before, or the list. With none gone, it stays
     // where it was, as the dialog that says why gives it back there; nor does it move for a folder that was no row here
     if (outcome.done.length > 0 && next && !leaving) focusLater(next.key)
-    if (leaving) focusListIfLost()
+    // The open folder's ⋯, which asked, went with the folder, and its parent's list is where the person is now; a focus put
+    // elsewhere (the tree, from which a folder above the open one was deleted) stays
+    if (leaving) focusIfLost()
   }
 
   const value: Organising = {

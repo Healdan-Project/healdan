@@ -38,11 +38,6 @@
   align-items: center;
 }
 
-/* The warning before a release (ConfirmRelease): the warning sign beside its title, on the dialog's surface */
-.warningSign {
-  color: var(--hd-danger-fill);
-}
-
 .releaseText {
   margin: 0 0 var(--hd-space-3);
 }

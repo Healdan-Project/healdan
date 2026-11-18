@@ -154,7 +154,9 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
             />
           )
         }
-        details={selected !== undefined && <DetailsPanel key={selected} docNumber={selected} row={selectedRow?.type === 'document' ? selectedRow : undefined} context="search" />}
+        details={selected !== undefined && (
+          <DetailsPanel key={selected} docNumber={selected} row={selectedRow?.type === 'document' ? selectedRow : undefined} context="search" onGone={() => changeSelection(new Set())} />
+        )}
         preview={documents && <ReadingPane docNumber={selected} row={selectedRow?.type === 'document' ? selectedRow : undefined} />}
       />
       <QuickLook documents={hitDocuments} total={results.total} loadMore={results.loadMore} />

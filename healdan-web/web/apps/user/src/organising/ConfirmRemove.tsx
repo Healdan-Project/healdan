@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { useId } from 'react'
 import type { components } from '@healdan/api'
 import { Button, Dialog, plural, t } from '@healdan/ui'
 import styles from './organising.module.css'
@@ -27,7 +28,9 @@ export interface ConfirmRemoveProps {
  * Remove… and Empty Trash… ask first (folders and Trash spec 7.4): "Remove "Old Drafts" from the Trash?" with what it holds,
  * "Remove 3 items from the Trash?" naming them, or "Empty the Trash?" with how many; each says the person won't be able to
  * restore it, and an administrator can, for the days set. The red button removes; Cancel, which has the focus, and Esc
- * don't.
+ * don't. It's the one step a person can't undo themselves, so it's an alert, with the warning sign, as the release's
+ * warning is (ConfirmRelease), and a screen reader reads that line as it opens; Delete's question and a folder leaving
+ * its matter can both be undone, and stay plain questions.
  */
 export function ConfirmRemove({ question, removedDays, onConfirm, onCancel }: ConfirmRemoveProps) {
   const empty = 'empty' in question
@@ -36,8 +39,15 @@ export function ConfirmRemove({ question, removedDays, onConfirm, onCancel }: Co
   const title = empty ? t('remove.emptyTitle') : one ? t('remove.oneTitle', { name: one.name }) : plural('remove.manyTitle', items.length)
   // Only what the person can read is counted (TrashItem.contents), and an empty folder says nothing of it
   const holds = one?.contents && one.contents.folders + one.contents.documents > 0 ? holdsLine(one.contents) : undefined
+  const warningId = useId()
   return (
-    <Dialog title={title} isOpen onOpenChange={(open) => !open && onCancel()}>
+    <Dialog
+      warning
+      title={title}
+      aria-describedby={warningId}
+      isOpen
+      onOpenChange={(open) => !open && onCancel()}
+    >
       {(close) => (
         <>
           {empty && <p>{plural('remove.emptyLine', question.empty)}</p>}
@@ -49,7 +59,8 @@ export function ConfirmRemove({ question, removedDays, onConfirm, onCancel }: Co
               ))}
             </ul>
           )}
-          <p>{t('remove.adminCan', { days: removedDays })}</p>
+          {/* "it" for one item, "them" for several or all the person deleted, and the days counted as days are */}
+          <p id={warningId}>{plural('remove.adminCan', empty ? question.empty : items.length, { days: plural('trash.days', removedDays) })}</p>
           <div className={styles.actions}>
             <Button autoFocus onPress={close}>
               {t('common.cancel')}

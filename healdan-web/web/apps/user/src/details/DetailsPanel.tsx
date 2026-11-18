@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, apiPath, type components } from '@healdan/api'
 import { Button, formatSize, formatVersion, Icon, plural, t, Tabs } from '@healdan/ui'
 import { CheckoutControls } from '../actions/CheckoutControls'
@@ -33,6 +33,8 @@ export interface DetailsPanelProps {
   version?: string
   /** In search results Location says which folder the document is in */
   context?: DetailsContext
+  /** Forgets the selection once the document, shown here before, is gone: asked again, it answers 404 */
+  onGone?: () => void
 }
 
 /**
@@ -42,8 +44,15 @@ export interface DetailsPanelProps {
  * Quick Look; Edit Properties, in the Properties tab, changes them in place. A # that named a version opens Versions with
  * it marked.
  */
-export function DetailsPanel({ docNumber, row, version, context = 'folder' }: DetailsPanelProps) {
+export function DetailsPanel({ docNumber, row, version, context = 'folder', onGone }: DetailsPanelProps) {
   const document = useDocument(docNumber, row)
+  // A document that was here and answers 404 when asked again is gone (a deleted folder took it, or another tab or person
+  // deleted it), so it can't stay selected; one that answered 404 from the start says so, with Try Again
+  const gone = document.data !== undefined && document.error instanceof ApiError && document.error.status === 404
+  const forget = useEffectEvent(() => onGone?.())
+  useEffect(() => {
+    if (gone) forget()
+  }, [gone])
   const properties = useProperties(docNumber)
   const versions = useVersions(docNumber, version)
   const quickLook = useQuickLook()

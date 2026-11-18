@@ -42,3 +42,9 @@
   align-items: center;
   gap: var(--hd-space-3);
 }
+
+/* A warning's sign, beside its title, on the dialog's surface */
+.warningSign {
+  flex: none;
+  color: var(--hd-danger-fill);
+}

@@ -25,7 +25,7 @@
 
 **Spec:** [`docs/superpowers/specs/2026-11-16-folders-and-trash-design.md`](../specs/2026-11-16-folders-and-trash-design.md), with its [mockups](../specs/2026-11-16-folders-and-trash-mockups/README.md). It was approved by the owner on 2026-11-16. Read it with this plan: tasks cite its sections.
 
-**Status:** written on 2026-11-16, after the spec's approval, and chosen by the owner the same day for subagent-driven building.
+**Status:** written on 2026-11-16, after the spec's approval, and chosen by the owner the same day for subagent-driven building. **Built** on 2026-11-16 and 2026-11-17, subagent-driven, each task reviewed against the spec and its brief before the next began, and each review's fixes re-reviewed: Tasks 1 to 18, with a merge of master (Checked Out to Me and two fixes) between Tasks 15 and 16. The pull requests, each stacked on the one before: [Healdan-Project/healdan#261](https://github.com/Healdan-Project/healdan/pull/261) (A, Tasks 1 to 11), merged on 2026-11-17 after the owner's review, which added a commit of fixes; [#264](https://github.com/Healdan-Project/healdan/pull/264) (B, Tasks 12 to 17, and the merge); and PR C (Task 18, the records). The spec carries the corrections below and the build's rulings, marked "changed in the build"; the decision log lists every ruling, 1 to 39, and what else changed. The reviews' minor findings wait for the branch's final review.
 
 ## Global Constraints
 
@@ -939,7 +939,7 @@ export function restoreItems(api: Api, items: readonly S['TrashItem'][]): Promis
   - The details show the icon, name, kind and size or count, Deleted From in full, Deleted, and a folder's "3 folders, 11 documents", with Restore and Remove….
   - The empty state.
   - Restore on two selected items calls each and toasts "Restored "Old Drafts" to 1001.1 › Drafts" with Open. One answering `409 place-gone` opens `MovePicker` titled "Restore "Old Drafts" to…", whose Move Here restores with `folderId`.
-  - Remove… asks with the one-item, several-item and Empty Trash wordings, `{days}` from `removedDays` (a page with 45 says 45). The confirm button is the destructive variant. Cancel calls nothing.
+  - Remove… asks with the one-item, several-item and Empty Trash wordings, `{days}` from `removedDays` (a page with 45 says 45). The confirm button is the destructive variant. Cancel calls nothing. *The merge with master replaced Task 13's `destructive` variant with Checked Out to Me's `danger` one; see the decision log.*
   - The keyboard: rows select as in any list; Delete on a row is Remove…; Enter opens nothing; the right-click menu has Restore and Remove….
   - The switch is absent for a non-admin (`me.admin` false), and `/trash?view=everyone` shows Mine for one.
   - For an admin:
@@ -1199,3 +1199,63 @@ PR B ends here.
 
 Expected: PASS.
 - [ ] **Step 3: Commit:** "Record the folders and Trash build". Open PR C, stacked on PR B.
+
+---
+
+## Decision log
+
+Every ruling made while building that the plan or the spec didn't settle, one line each, by number, with the task that made it and what it costs if it was wrong. The owner's own decisions come first. The plan's corrections are under "Spec corrections and calls this plan makes", and the spec carries each that changed it, and each ruling that did, marked "changed in the build".
+
+**The owner's decisions in the build**
+
+- 2026-11-16: the spec approved, and subagent-driven building chosen.
+- 2026-11-17: PR A pushed and opened as #261, then reviewed by the owner in another session, which added a commit of fixes (below), and merged.
+- 2026-11-17: PR B pushed and opened as #264.
+
+**Rulings**
+
+- **Ruling 1** (Task 7): `testCesReadsWorkAfterward` runs `DeletedFoldersDataServlet`'s SQL by JDBC, and `FolderDAO.findDeleted`, in place of the servlet, which `healdan-core` can't load. Cost: a weaker check of one Classic report.
+- **Ruling 2** (Task 2): `TrashStore.insert` runs inside CE's delete transaction, so it drops its compensating deletes; member inserts are batched; the stored path keeps within 4,000 characters by dropping its top-most names, so a delete never fails on a deep path. Cost: a small rework of `TrashStore`.
+- **Ruling 3** (Task 2): correction 5 as built: a shortcut deleted with a history is an item of its own, so WebDAV's delete of a document with legacy shortcuts shows them as items beside the document's. Cost: a few extra Trash rows for legacy shortcuts.
+- **Ruling 4** (Task 2): the Trash's listeners turn a recording failure into a `HealdanVetoException`, so the delete rolls back rather than commit a row at 1 that no item holds. Cost: a refused delete, retried, during a database fault.
+- **Ruling 5** (Task 2): withdrawn. Its premise, that CMIS's item-by-item delete leaves a tree's outside aliases live, was false (`HFD.store` calls `updateAliases`), so outside aliases stay members on every tree route, with a CMIS test as proof.
+- **Ruling 6** (Task 2): an item's time is the JVM's `Instant.now()`, written with `Timestamp.from`, not the database's `CURRENT_TIMESTAMP`, as every other Trash time is. Cost: none measurable.
+- **Ruling 7** (Task 2): a folder deleted alone through `HFD.delete` takes its aliases into its item, as CE's `updateAliases` deletes them with it. Cost: alias members on an item whose aliases CE didn't delete.
+- **Ruling 8** (Task 3): the check-out and immutable refusals run after `checkDeleteTree`, still before the item is recorded, in spec §6.1's order, so a person without Delete inside learns nothing of what's there. Cost: which message such a person sees.
+- **Ruling 9** (Task 3): WebDAV's rename-and-move moves through `folderDAO.move`, then renames, as `renameFolder` no longer sets the parent (an upstream edit, spec §9.1), so the folder-move rules, the tree check and re-stamping see it. Cost: an extra `MOVED` history row.
+- **Ruling 10** (Task 3): `checkFolderRestore` refuses a non-admin anything but 1, a live folder too, as spec §5.3 says ("as for documents"). Cost: a CE quirk no screen uses.
+- **Ruling 11** (Task 3): merges keep the tree check on the subfolders they move. Cost: a Classic merge refused that CE allowed, which an admin can still do.
+- **Ruling 12** (Task 4): a restore's scope includes the item's folder-alias members outside the tree that point into it. Cost: a live alias the folder had before its delete.
+- **Ruling 13** (Task 4): `folderRestoreScope` is asked at the top of `HFD.restore`, before CE's first update sets the folder live, with the tree's ids read there. Cost: a slightly larger upstream hunk.
+- **Ruling 14** (Task 4): an admin's restore of a live folder gets an empty scope; null only for no row or a folder in no item, with a warning. Cost: deleted subfolders staying deleted after such a restore, which the Trash still restores.
+- **Ruling 15** (Task 4): a document item's shortcut members come back by JDBC into their own live folders, not through `DocumentDAO.restore`, which Healdan's rules refuse for a shortcut. Cost: a shortcut restore with no CE history row.
+- **Ruling 16** (Task 4): `OncePerMatter.checkSubtreeRestore` counts the emails among what the restore brings back (`EmailIndex.emailsAmong`). Cost: a rewritten test.
+- **Ruling 17** (Task 6): the `trash-record-existing` seed's folder items take the folder aliases outside their trees that point in, and such an alias is never an item of its own. Cost: an alias restored with a tree it was deleted beside but not by.
+- **Ruling 18** (Task 6): the seed's last pass makes an item of each folder alias or shortcut at 1 or 2 that no folder or document item took. Cost: an extra item per stray alias or shortcut.
+- **Ruling 19** (Task 7): a run of the job tries each item once, paging past the items it keeps removed. Cost: a `TrashStore` overload.
+- **Ruling 20** (Task 7): the job knows a matter's own folder and a Store from Healdan's tables, not `MatterLocator.locate`, which answers outside for a deleted folder. Cost: none beyond a different lookup.
+- **Ruling 21** (Task 7): `DocumentManager.destroyDocument` no longer deletes from `ld_readingrequest`, which no CE schema has: the swallowed failure made the caller's transaction rollback-only. An upstream edit, with `DocumentManagerTest#testDestroyDocumentInsideATransaction` in `UPSTREAM_TESTS`. Cost: one more upstream hunk a sync may touch.
+- **Ruling 22** (Task 7): only a live shortcut or alias keeps what it points to removed; one another item holds goes with its target, its member there marked destroyed. Cost: a stale pointer's Trash entry marked destroyed early.
+- **Ruling 23** (Task 7): a folder stays removed while any folder not destroyed, live or deleted, takes its security from it. Cost: an empty removed folder kept longer.
+- **Ruling 24** (Task 7): a destroyed document's `hd_local_value` rows go with it, as a folder's do. Cost: none.
+- **Ruling 25** (Task 7's review): each document is destroyed in a transaction of its own, its member written destroyed first, then the item's folders and aliases in one, as `healdan-storage`'s hold of a local file isn't undone by a rollback. Cost: a partly destroyed item for a night, its record exact per member.
+- **Ruling 26** (Task 7's review): a destroyed document's `hd_preview_job` rows go with it, as the preview worker would spend the job's tries on a document with no row. Cost: none.
+- **Ruling 27** (Task 9): CE's numbering of a folder moved where a hidden folder has its name stays, as a known limit in spec §4.3. Cost: a hint, to someone with Add there, that a folder of that name exists.
+- **Ruling 28** (Task 10): the Removed view sorts by removed time by default, the others by deleted time, as spec §6.5 says. Cost: one line and a test.
+- **Ruling 29** (Task 11): PR A's docs describe only what PR A ships; Top-Level Folders' and Known Limitations' lines on the app waited for Task 17. Cost: two lines moved between PRs.
+- **Ruling 30** (Task 11): the docs task's `UPSTREAM_TESTS` line named a method that doesn't exist; `HibernateFolderDAOTest#testRestore`, CE's test of the edited restore's null path, replaced it. Cost: one more upstream test in CI.
+- **Ruling 31** (Task 12): `ToastRegion` remounts React Aria's region when the first toast appears, so F6 reaches a toast made after the page loaded, plain toasts' too. Cost: a remount of an empty region.
+- **Ruling 32** (Task 13): the API refuses a Store's Trash item `409 refused` before writing anything, and the Trash view toasts that the item "can't be restored from here." for a `409 refused`; a Store is restored in the Classic Interface. Cost: one string and one API check.
+- **Ruling 33** (Task 13): the Trash view's additions stand: `RightRegionView`'s `selected`, a red Button variant and its tokens, `ToggleButtons` and the trash icon in `@healdan/ui`, the toolbar's "N items", four strings, a typing fix and a Developer Guide section. Cost: a wider diff.
+- **Ruling 34** (Task 13): restoring several items toasts once per item, three showing at most. Cost: a queue of toasts after a large restore.
+- **Ruling 35** (Task 14): the folder deletes' additions stand: `Table`'s `opensOnClick` (a plain click opens a folder row; Shift- and Command-click, the arrow keys, Space and a right-click select it), "Actions for {n} items", `whyNotDelete` and `whyNotMove`, Undo's report, More taking folders, Delete in a Folders search, and the docs. Cost: a wider diff.
+- **Ruling 36** (Task 14): several documents alone keep the documents' menu; a selection with a folder in it gets `SelectionMenuItems`. Cost: a different menu for several documents.
+- **Ruling 37** (Task 15): the folder moves' additions stand: "Some Items Weren't Moved", `Place`'s matter and path, the drag payload's folder kind and level, "Already there" greying Move Here when every selected document is already there, and a test helper. Cost: a wider diff.
+- **Ruling 38** (the merge with master): Release needs no folder in the selection, so the toolbar matches the mixed-selection menu. Cost: Release hidden for a mixed selection.
+- **Ruling 39** (Task 17): the demo fixture asks Spring for `HealdanHooksImpl` before its timeline, as seeds can run before it registers Healdan's hooks, and `Backdater` dates the demo's Trash items; the User Guide's `trash.png` comes from the demo's own deleted folder. Cost: another demo-stack run.
+
+**Other changes in the build**
+
+- **PR A's review** (`eec8426a8`, before PR A merged): a tree delete that stops short (CMIS's, or CE's at an immutable document) calls a new hook, `afterFolderDeleteTree`, which keeps the item to what it took; a restore that leaves a shortcut or an outside alias behind moves it to the item holding its folder, or to one of its own; the Classic Interface deletes a document before its shortcuts; a member removed on its own leaves its item for one of its own, so Removed lists it; removing an item answers `409 refused` when nothing of it is in the Trash, and members destroyed outside the Trash are marked destroyed. It updated the spec's §9.1, CLAUDE.md and the Tests and Trash pages, and closed several of the reviews' deferred minors.
+- **The merge with master** (`26058c731`, between Tasks 15 and 16) brought Checked Out to Me (#260), whose `danger` Button variant replaced Task 13's `destructive` one, which Task 13's text above still names; with it came #262 and #263.
+- **Accepted as built** (Task 7): `TrashStore.removedBefore` pages over (first removal time, id), oldest first, Ruling 19's keyset.
