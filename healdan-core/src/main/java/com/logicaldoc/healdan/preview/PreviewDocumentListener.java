@@ -8,9 +8,12 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.sql.DataSource;
+
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
@@ -19,6 +22,8 @@ import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentListener;
 import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.document.VersionDAO;
+import com.logicaldoc.healdan.util.Savepoints;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Queues an Office document's new file version for conversion (spec section 7.1).
@@ -26,8 +31,10 @@ import com.logicaldoc.core.document.VersionDAO;
  * covers a replaced file, and queues the file version that was replaced, its
  * job starting over. {@code beforeStore} keeps the page count the worker filled
  * in from being undone by CE's indexer. The listener never refuses anything: a
- * failure is logged and the save goes on. CE creates it by reflection, hence
- * the public no-arg constructor.
+ * failure is logged and the save goes on. Its statements run inside a
+ * savepoint ({@link Savepoints}), so that on PostgreSQL too a failure leaves
+ * the save's transaction usable. CE creates it by reflection, hence the public
+ * no-arg constructor.
  */
 public class PreviewDocumentListener implements DocumentListener {
 
@@ -43,11 +50,17 @@ public class PreviewDocumentListener implements DocumentListener {
 		// Instantiated by CE
 	}
 
+	/** The template a savepoint is set with: the shared data source's, which a save's transaction holds */
+	private static JdbcTemplate jdbc() {
+		return new JdbcTemplate(Context.get(DataSource.class));
+	}
+
 	@Override
 	public void afterFileStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
 		try {
 			if (document != null && OfficeFormats.isOffice(document.getFileName()))
-				PreviewJobs.get().add(document.getId(), document.getFileVersion(), Instant.now());
+				Savepoints.run(jdbc(),
+						() -> PreviewJobs.get().add(document.getId(), document.getFileVersion(), Instant.now()));
 		} catch (Throwable t) {
 			log.warn("Cannot queue the preview of a document: {}", t.getMessage());
 		}
@@ -57,13 +70,52 @@ public class PreviewDocumentListener implements DocumentListener {
 	public void afterStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
 		try {
 			if (document != null && transaction != null
-					&& DocumentEvent.VERSION_REPLACED.toKey().equals(transaction.getEvent())) {
-				String fileVersion = replacedFileVersion(document, transaction);
-				if (OfficeFormats.isOffice(fileNameOf(document, fileVersion)))
-					PreviewJobs.get().requeue(document.getId(), fileVersion, Instant.now());
-			}
+					&& DocumentEvent.VERSION_REPLACED.toKey().equals(transaction.getEvent()))
+				requeueReplaced(document, transaction);
 		} catch (Throwable t) {
 			log.warn("Cannot queue the preview of a replaced file: {}", t.getMessage());
+		}
+	}
+
+	/**
+	 * Starts over the job of the file version that the replace replaced, if it
+	 * holds an Office file, inside a savepoint
+	 *
+	 * @throws PersistenceException if the version can't be read, as the read
+	 *         threw it, once the savepoint is rolled back
+	 */
+	private static void requeueReplaced(Document document, DocumentHistory transaction) throws PersistenceException {
+		try {
+			Savepoints.run(jdbc(), () -> {
+				String fileVersion = replacedFileVersion(document, transaction);
+				String fileName;
+				try {
+					fileName = fileNameOf(document, fileVersion);
+				} catch (PersistenceException e) {
+					throw new Checked(e);
+				}
+				if (OfficeFormats.isOffice(fileName))
+					PreviewJobs.get().requeue(document.getId(), fileVersion, Instant.now());
+			});
+		} catch (Checked e) {
+			throw e.wrapped;
+		}
+	}
+
+	/**
+	 * Carries a checked exception out of a savepoint's work, which can throw
+	 * none, so that the savepoint is rolled back and the caller gets the
+	 * exception itself
+	 */
+	private static final class Checked extends RuntimeException {
+
+		private static final long serialVersionUID = 1L;
+
+		private final transient PersistenceException wrapped;
+
+		Checked(PersistenceException wrapped) {
+			super(wrapped);
+			this.wrapped = wrapped;
 		}
 	}
 
@@ -93,7 +145,7 @@ public class PreviewDocumentListener implements DocumentListener {
 		try {
 			if (document != null && transaction != null
 					&& DocumentEvent.INDEXED.toKey().equals(transaction.getEvent()))
-				ConversionPages.keepStoredPages(document);
+				Savepoints.run(jdbc(), () -> ConversionPages.keepStoredPages(document));
 		} catch (Throwable t) {
 			log.warn("Cannot keep the page count of document {}: {}", document.getId(), t.getMessage());
 		}

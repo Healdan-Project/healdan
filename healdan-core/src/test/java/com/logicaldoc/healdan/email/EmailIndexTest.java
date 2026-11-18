@@ -29,9 +29,10 @@ import java.util.concurrent.ThreadPoolExecutor;
 import javax.sql.DataSource;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
@@ -256,7 +257,6 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 		assertEquals("1@example.com", EmailIndex.get().messageIdOf(copy.getId()));
 	}
 
-	@Ignore("PostgreSQL: plan Task 6")
 	@Test
 	public void testAnIndexFailureNeverRefusesTheEmail() throws Exception {
 		// The rows can be read, as the once-per-matter rule does, but none can be added
@@ -473,6 +473,28 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 		assertNull(index.messageIdOf(79L));
 		assertEquals(0, rows());
 		assertEquals(1, statements.stream().filter(s -> s.startsWith("delete")).count());
+	}
+
+	/**
+	 * Inside a transaction, as a check-in inside one puts the new version's Message-ID: the insert that finds the row
+	 * there fails in a savepoint, the update follows, and the transaction goes on (spec section 7.3)
+	 */
+	@Test
+	public void testPutTwiceInsideATransactionKeepsIt() {
+		jdbc.update("insert into hd_setting (name, value) values ('email.test', 'before')");
+		EmailIndex index = EmailIndex.get();
+
+		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+			index.put(80L, "a@example.com");
+			index.put(80L, "b@example.com");
+			jdbc.update("update hd_setting set value = 'after' where name = 'email.test'");
+		});
+
+		assertEquals(1, rows());
+		assertEquals("b@example.com", index.messageIdOf(80L));
+		assertEquals(MessageIds.hash("b@example.com"),
+				jdbc.queryForObject("select hd_messageidhash from hd_email where hd_docid = 80", String.class));
+		assertEquals("after", jdbc.queryForObject("select value from hd_setting where name = 'email.test'", String.class));
 	}
 
 	@Test

@@ -8,14 +8,19 @@ import java.util.Date;
 import java.util.Map;
 import java.util.Optional;
 
+import javax.sql.DataSource;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentListener;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.util.Savepoints;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Sets the Date filed of every new document to now, whatever came with it, and
@@ -33,8 +38,11 @@ import com.logicaldoc.healdan.HealdanConstants;
  * which has added the email attributes with the template's definitions. It
  * never refuses anything: an email that can't be read is filed with blank
  * fields and its own name, and an index row that can't be added is logged (the
- * index worker mends it at its next start, which scans on from its cursor). CE
- * creates it by reflection, hence the public no-arg constructor.
+ * index worker mends it at its next start, which scans on from its cursor).
+ * What it reads and writes inside a save runs in a savepoint
+ * ({@link Savepoints}), so that on PostgreSQL too a failure leaves the save's
+ * transaction usable. CE creates it by reflection, hence the public no-arg
+ * constructor.
  */
 public class EmailDocumentListener implements DocumentListener {
 
@@ -51,6 +59,11 @@ public class EmailDocumentListener implements DocumentListener {
 
 	public EmailDocumentListener() {
 		// Instantiated by CE
+	}
+
+	/** The template a savepoint is set with: the shared data source's, which a save's transaction holds */
+	private static JdbcTemplate jdbc() {
+		return new JdbcTemplate(Context.get(DataSource.class));
 	}
 
 	@Override
@@ -142,7 +155,7 @@ public class EmailDocumentListener implements DocumentListener {
 		if (!(messageId instanceof String id))
 			return;
 		try {
-			EmailIndex.get().put(document.getId(), id);
+			Savepoints.run(jdbc(), () -> EmailIndex.get().put(document.getId(), id));
 		} catch (Throwable t) {
 			// The listener never refuses; the index worker mends a missing row at its next start.
 			// The class only: a driver's message can hold the values it was given
@@ -162,18 +175,20 @@ public class EmailDocumentListener implements DocumentListener {
 		if (transaction == null)
 			return;
 		try {
-			String extension = emailExtension(transaction.getFilename());
-			String messageId = null;
-			if (extension != null) {
-				File file = transaction.getFile();
-				if (file != null)
-					messageId = EmailFields.extract(file, extension).map(EmailFields::messageId).orElse(null);
-			} else if (EmailIndex.get().messageIdOf(document.getId()) == null) {
-				// Neither the new version nor the old is a message
-				return;
-			}
-			dictionary.put(MESSAGE_ID, messageId);
-			set(document, HealdanConstants.ATTR_EMAILMESSAGEID, messageId);
+			Savepoints.run(jdbc(), () -> {
+				String extension = emailExtension(transaction.getFilename());
+				String messageId = null;
+				if (extension != null) {
+					File file = transaction.getFile();
+					if (file != null)
+						messageId = EmailFields.extract(file, extension).map(EmailFields::messageId).orElse(null);
+				} else if (EmailIndex.get().messageIdOf(document.getId()) == null) {
+					// Neither the new version nor the old is a message
+					return;
+				}
+				dictionary.put(MESSAGE_ID, messageId);
+				set(document, HealdanConstants.ATTR_EMAILMESSAGEID, messageId);
+			});
 		} catch (Throwable t) {
 			// A new version is never refused; the index keeps the old Message-ID
 			log.warn("Cannot read the Message-ID of document {}'s new version: {}", document.getId(),
@@ -188,7 +203,7 @@ public class EmailDocumentListener implements DocumentListener {
 		if (!dictionary.containsKey(MESSAGE_ID))
 			return;
 		try {
-			EmailIndex.get().put(document.getId(), (String) dictionary.get(MESSAGE_ID));
+			Savepoints.run(jdbc(), () -> EmailIndex.get().put(document.getId(), (String) dictionary.get(MESSAGE_ID)));
 		} catch (Throwable t) {
 			// The class only: a driver's message can hold the values it was given
 			log.warn("Cannot index the Message-ID of document {}: {}", document.getId(), t.getClass().getName());

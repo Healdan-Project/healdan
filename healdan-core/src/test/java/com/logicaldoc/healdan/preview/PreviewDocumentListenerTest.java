@@ -20,6 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
@@ -28,6 +29,7 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.spring.Context;
 
 public class PreviewDocumentListenerTest extends AbstractHealdanTestCase {
@@ -174,6 +176,35 @@ public class PreviewDocumentListenerTest extends AbstractHealdanTestCase {
 		assertEquals("1.4", PreviewDocumentListener.replacedFileVersion(doc, transaction));
 		transaction.setComment(null);
 		assertEquals("1.4", PreviewDocumentListener.replacedFileVersion(doc, transaction));
+	}
+
+	/**
+	 * The listener's queueing runs inside the replace's own save, so its failure is swallowed in a savepoint and the
+	 * save commits (spec section 7.3), on PostgreSQL as on MariaDB
+	 */
+	@Test
+	public void testAReplacedFilesQueueFailureKeepsTheSave() throws Exception {
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		byte[] replacement = "the replacement".getBytes(StandardCharsets.UTF_8);
+		File file = Files.createTempFile("replace", ".docx").toFile();
+		jdbc().execute("alter table hd_preview_job rename to hd_preview_job_away");
+		try (LogCapture log = LogCapture.of(PreviewDocumentListener.class)) {
+			Files.write(file.toPath(), replacement);
+			DocumentManager.get().replaceFile(a.getId(), "1.0", file, fx.documentHistory(fx.admin()));
+
+			assertTrue(log.lines().toString(), log.lines().stream()
+					.anyMatch(l -> l.startsWith("WARN Cannot queue the preview of a replaced file: ")));
+		} finally {
+			jdbc().execute("alter table hd_preview_job_away rename to hd_preview_job");
+			file.delete();
+		}
+
+		// The save committed: the record is the new file's, and the replace is in the history
+		assertEquals(Long.valueOf(replacement.length), jdbc()
+				.queryForObject("select ld_filesize from ld_document where ld_id = ?", Long.class, a.getId()));
+		assertEquals(Integer.valueOf(1),
+				jdbc().queryForObject("select count(*) from ld_history where ld_docid = ? and ld_event = ?",
+						Integer.class, a.getId(), DocumentEvent.VERSION_REPLACED.toKey()));
 	}
 
 	@Test

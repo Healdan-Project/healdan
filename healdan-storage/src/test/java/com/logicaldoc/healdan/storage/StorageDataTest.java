@@ -28,6 +28,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.healdan.util.Savepoints;
 import com.logicaldoc.util.spring.Context;
 
 public class StorageDataTest extends AbstractStorageTestCase {
