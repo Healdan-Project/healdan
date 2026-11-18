@@ -97,6 +97,7 @@ jobs:
           # The upstream tests that cover Healdan's edits to upstream code, one per line: a class, or Class#method.
           UPSTREAM_TESTS: |
             HealdanHooksTest
+            HealdanTypedReadsTest
             DocumentAclEqualityTest
             HibernateFolderDAOTest#testMerge
             HibernateFolderDAOTest#testDeleteTreeTakesOnlyLiveRows
