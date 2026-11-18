@@ -126,6 +126,15 @@ export function childKey(item: Hit): string {
 }
 
 /**
+ * Whether a list's row selects: documents and folders do, so they move or delete together (folders and Trash spec 7.5). A
+ * matter doesn't, nor does a matter's own folder where a list shows it as a folder (Recent › Folders): it neither moves
+ * nor is deleted here, so it isn't selected or dragged either, and a click opens it as a matter's row.
+ */
+export function selectable(item: { type: string; kind?: string }): boolean {
+  return item.type === 'document' || (item.type === 'folder' && item.kind !== 'matter')
+}
+
+/**
  * The rows, each once. Offset pages shift when the folder changes between them (a document filed meanwhile that sorts
  * before the loaded rows), so a page can repeat the last one's end: the first copy stays. One that a deletion skips
  * comes back when the list is next asked for, as when the window regains focus.

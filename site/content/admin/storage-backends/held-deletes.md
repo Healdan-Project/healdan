@@ -7,7 +7,7 @@ Healdan never deletes a file from a backend at once. Every removal waits out the
 with, so that a backup restored later still finds every file it names:
 
 - a version that's deleted;
-- a document destroyed, by the Classic Interface's Destroy Documents, or by the Trash's nightly job once it has been
+- a document destroyed, by **Permanently Delete** on the Classic Interface's **Deleted documents** report, or by the Trash's nightly job once it has been
   removed for [Removed Items Kept](../../healdan-settings/) days (see [The Trash and Removed
   Items](../../the-trash-and-removed-items/));
 - a preview or thumbnail that's made again;

@@ -6,6 +6,10 @@ import { expect, type APIRequest, type APIRequestContext, type Locator, type Pag
 // webuser is made by healdan-core's SmokeWebUserSeed on the smoke stack; docker/tests/test-web.sh passes its password.
 export const USERNAME = 'webuser'
 export const PASSWORD = process.env.WEBUSER_PASSWORD ?? ''
+// The smoke stack's own administrator, whose password is the stack's published one (docker/tests/test-web.sh passes it):
+// for what only an administrator sees, such as the Trash's Removed view. Never a real account's.
+export const ADMIN_USERNAME = 'admin'
+export const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD ?? ''
 
 /** The text with the characters a regular expression takes for its own escaped */
 export const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -47,10 +51,15 @@ export async function call<T>(response: Promise<{ ok(): boolean; status(): numbe
   return (answer.status() === 204 ? undefined : await answer.json()) as T
 }
 
-/** A device token for webuser, which the caller signs out with DELETE /auth/tokens/current when it is done */
-export async function deviceToken(api: APIRequestContext, run: string): Promise<string> {
+/**
+ * A device token for webuser, or for `who`, which the caller signs out with DELETE /auth/tokens/current when it is done. A
+ * second person's token for the same run is a device of its own.
+ */
+export async function deviceToken(api: APIRequestContext, run: string, who?: { username: string; password: string }): Promise<string> {
+  const person = who ?? { username: USERNAME, password: PASSWORD }
+  const device = who ? `${run}-${who.username}` : run
   const signedIn = await call<{ token: string }>(
-    api.post('/api/v1/auth/tokens', { data: { username: USERNAME, password: PASSWORD, name: `e2e ${run}`, device: { id: `e2e-${run}` } } }),
+    api.post('/api/v1/auth/tokens', { data: { username: person.username, password: person.password, name: `e2e ${device}`, device: { id: `e2e-${device}` } } }),
     'a device token',
   )
   return signedIn.token
@@ -85,6 +94,21 @@ export async function matterFolders(api: APIRequestContext, token: string): Prom
   const inside = await get<{ items: { id: number; name: string; type: string }[] }>(`/folders/${matter!.folderId}/children?type=folder`)
   const documents = inside.items.find((item) => item.type === 'folder' && item.name === 'Documents')
   expect(documents, 'matter 1.1 has a Documents folder').toBeTruthy()
+  return { matter: matter!.folderId, documents: documents!.id }
+}
+
+/**
+ * Matter 1.4 of client 1, the smoke fixture's `Second Matter` (the `smoke-second-matter` step), which nothing else on the stack
+ * moves or reads, and its Documents folder: a place for a folder to move to from matter 1.1, out of its matter
+ */
+export async function secondMatterFolders(api: APIRequestContext, token: string): Promise<{ matter: number; documents: number }> {
+  const get = <T>(path: string) => call<T>(api.get(`/api/v1${path}`, authorized(token)), `GET ${path}`)
+  const matters = await get<{ items: { number: number; client: { number: number }; folderId: number }[] }>('/search?scope=matters&q=1.4')
+  const matter = matters.items.find((one) => one.client.number === 1 && one.number === 4)
+  expect(matter, 'the smoke fixture has matter 1.4, Second Matter').toBeTruthy()
+  const inside = await get<{ items: { id: number; name: string; type: string }[] }>(`/folders/${matter!.folderId}/children?type=folder`)
+  const documents = inside.items.find((item) => item.type === 'folder' && item.name === 'Documents')
+  expect(documents, 'matter 1.4 has a Documents folder').toBeTruthy()
   return { matter: matter!.folderId, documents: documents!.id }
 }
 

@@ -5,9 +5,9 @@ import type { Query, QueryClient } from '@tanstack/react-query'
 import type { components } from '@healdan/api'
 
 // Everything that shows a document's state: the document and its properties and versions, a folder's list, search results
-// and Recent; My Favorites, which names documents; and Recent Matters and Recent Clients, which a change to a document of
-// another matter can add to
-const DOCUMENT_LISTS = ['documents', 'folders', 'search', 'favorites', 'matters', 'clients']
+// and Recent; My Favorites, which names documents; Recent Matters and Recent Clients, which a change to a document of
+// another matter can add to; and the Trash, which a delete adds to and a restore takes from
+const DOCUMENT_LISTS = ['documents', 'folders', 'search', 'favorites', 'matters', 'clients', 'trash']
 
 /**
  * Asks again for everything that shows a document's state. Whatever changes a document (a check-out, a save of its

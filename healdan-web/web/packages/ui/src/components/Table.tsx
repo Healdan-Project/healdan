@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import {
   Cell,
   Collection,
@@ -28,8 +28,13 @@ export interface TableRow {
   id: string
   /** The plain text a screen reader and type-ahead use */
   textValue: string
-  /** False for a row that opens but can't be selected, such as a folder among documents */
+  /** False for a row that opens but can't be selected, such as a matter among a search's results */
   selectable?: boolean
+  /**
+   * A plain click opens the row, as it opens one that can't be selected, though the row can be selected: Shift- or
+   * Cmd-click, the arrows, Space and a right-click select it as any row. A folder among documents.
+   */
+  opensOnClick?: boolean
   /** A row that was just made: it shows one short highlight (none for a person who asks for less motion) */
   flash?: boolean
   /** Something that can be dropped on the row is over it */
@@ -72,7 +77,7 @@ export interface TableProps<T extends TableRow> {
   selectionMode?: 'single' | 'multiple'
   selection: Set<string>
   onSelectionChange: (keys: Set<string>) => void
-  /** Enter or a double-click; a click on a row that can't be selected */
+  /** Enter or a double-click; a click on a row that can't be selected, or that opens on a click */
   onOpen?: (key: string) => void
   /** Space */
   onPreview?: (key: string) => void
@@ -205,6 +210,53 @@ export function Table<T extends TableRow>({
     event.dataTransfer.effectAllowed = 'move'
   }
 
+  // A plain click on a row that opens on a click opens it, and React Aria, which would select it, never hears of the press:
+  // the pointer's press is stopped on its way down to the row, with the browser's own focus and drag left as they are.
+  // Shift, Cmd, Ctrl and Option, any other button, and a touch or a pen (which React Aria opens with a tap) go on to it.
+  // The row the press went down on, which only that press's click opens
+  const opening = useRef<string | undefined>(undefined)
+  // What made the latest press: a touch's or a pen's mouse events that follow it are React Aria's, as its tap is
+  const pressedBy = useRef<string | undefined>(undefined)
+
+  /** The row that opens on a click, when this is a plain press of the main button on it, outside any control in it */
+  function openingRow(event: MouseEvent<HTMLDivElement>): string | undefined {
+    if (!onOpen || event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return undefined
+    const target = event.target instanceof Element ? event.target : null
+    if (!target || target.closest('input, textarea, button, a')) return undefined
+    const key = target.closest('[data-row-key]')?.getAttribute('data-row-key')
+    return key && rows.some((row) => row.id === key && row.opensOnClick === true) ? key : undefined
+  }
+
+  function press(event: MouseEvent<HTMLDivElement>) {
+    const key = openingRow(event)
+    opening.current = key
+    if (key) event.stopPropagation()
+  }
+
+  function onPointerDownCapture(event: PointerEvent<HTMLDivElement>) {
+    pressedBy.current = event.pointerType
+    if (event.pointerType === 'mouse') press(event)
+    else opening.current = undefined
+  }
+
+  function onMouseDownCapture(event: MouseEvent<HTMLDivElement>) {
+    // Where there are pointer events, the press's pointerdown came first and said what made it
+    if (pressedBy.current === undefined || pressedBy.current === 'mouse') press(event)
+  }
+
+  function onClickCapture(event: MouseEvent<HTMLDivElement>) {
+    const key = openingRow(event)
+    if (!key || opening.current !== key) return
+    event.stopPropagation()
+    opening.current = undefined
+    // A double-click's second click opens nothing more
+    if (event.detail <= 1) onOpen?.(key)
+  }
+
+  function onDoubleClickCapture(event: MouseEvent<HTMLDivElement>) {
+    if (openingRow(event)) event.stopPropagation()
+  }
+
   // React Aria keeps the anchor of a Shift-click range on the selection it hands out, so that one is handed back while
   // the caller's selection still holds the same rows.
   const [given, setGiven] = useState<Selection | null>(null)
@@ -221,7 +273,17 @@ export function Table<T extends TableRow>({
   return (
     <ItemContextMenu attribute="data-row-key" menu={contextMenu}>
       {/* The handler only reads keys the rows inside already take; the wrapper isn't a control of its own. */}
-      <div ref={frame} className={styles.frame} onKeyDownCapture={onKeyDownCapture} onDragStart={drag ? onDragStart : undefined} aria-busy={busy || undefined}>
+      <div
+        ref={frame}
+        className={styles.frame}
+        onKeyDownCapture={onKeyDownCapture}
+        onPointerDownCapture={onPointerDownCapture}
+        onMouseDownCapture={onMouseDownCapture}
+        onClickCapture={onClickCapture}
+        onDoubleClickCapture={onDoubleClickCapture}
+        onDragStart={drag ? onDragStart : undefined}
+        aria-busy={busy || undefined}
+      >
         <Virtualizer layout={TableLayout} layoutOptions={{ rowHeight: ROW_HEIGHT, headingHeight: ROW_HEIGHT, loaderHeight: ROW_HEIGHT }}>
           <AriaTable
             {...labels}

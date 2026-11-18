@@ -375,6 +375,7 @@ public final class DemoTimeline {
 			DocumentDAO.get().delete(doc.getId(), history(actor, when, DocumentEvent.DELETED));
 			// The Recycle Bin lists a deleted document by its last change
 			backdater.touch(doc.getId(), when, false);
+			backdater.touchTrash("document", doc.getId(), when);
 		}
 		case "deleteFolder" -> deleteFolder(step, actor, when);
 		case "bookmark" -> bookmark(step, actor);
@@ -424,6 +425,7 @@ public final class DemoTimeline {
 					"%d folders under %s weren't deleted".formatted(left.size(), step.folder()));
 		// As a deleted document's: the Recycle Bin lists the folder by its last change
 		backdater.touchFolder(folder.getId(), when);
+		backdater.touchTrash("folder", folder.getId(), when);
 	}
 
 	/** @param path a folder in the matter's workspace; null or blank for the workspace itself */

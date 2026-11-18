@@ -4,27 +4,47 @@
 import { describe, expect, it, vi } from 'vitest'
 import { focusLater, pageToken, readRows, rowsPayload } from './rows'
 
+const none = { documents: [], folders: [] }
+
 describe('The rows a drag carries', () => {
   it('are the documents\' numbers, names and folders, and read back as they were written', () => {
     const documents = [
       { docNumber: 10431, name: 'Lease.docx', folder: { id: 7 } },
       { docNumber: 10432, name: 'Plan "A".pdf' },
     ]
-    expect(readRows(rowsPayload(documents))).toEqual(documents)
+    expect(readRows(rowsPayload(documents))).toEqual({ documents, folders: [] })
+  })
+
+  it("carry the folders dragged with them, with what says whether and why one can't be moved", () => {
+    const folders = [
+      { id: 8, name: 'Drafts', parentId: 7, matterId: 11, canMove: true, canDelete: true, kind: 'folder' as const, topLevel: false },
+      { id: 9, name: 'Pleadings', parentId: 110, matterId: 11, canMove: false, canDelete: false, kind: 'folder' as const, topLevel: true },
+    ]
+    expect(readRows(rowsPayload([{ docNumber: 10431, name: 'Lease.docx' }], folders))).toEqual({ documents: [{ docNumber: 10431, name: 'Lease.docx' }], folders })
+    // A folder outside any matter, and one whose kind and level weren't known, read back as they were written
+    const plain = { id: 5, name: 'Loose', parentId: 2, matterId: null, canMove: true, canDelete: true }
+    expect(readRows(rowsPayload([], [plain])).folders).toEqual([plain])
   })
 
   it('are only this page\'s: a drag with another page\'s token, or none, moves nothing', () => {
-    expect(readRows(JSON.stringify({ token: `${pageToken}x`, documents: [{ docNumber: 1, name: 'A.pdf' }] }))).toEqual([])
-    expect(readRows(JSON.stringify({ documents: [{ docNumber: 1, name: 'A.pdf' }] }))).toEqual([])
-    expect(readRows(JSON.stringify([{ docNumber: 1, name: 'A.pdf' }]))).toEqual([])
+    const folders = [{ id: 8, name: 'Drafts', parentId: 7, matterId: 11, canMove: true, canDelete: true }]
+    expect(readRows(JSON.stringify({ token: `${pageToken}x`, documents: [{ docNumber: 1, name: 'A.pdf' }], folders }))).toEqual(none)
+    expect(readRows(JSON.stringify({ documents: [{ docNumber: 1, name: 'A.pdf' }], folders }))).toEqual(none)
+    expect(readRows(JSON.stringify([{ docNumber: 1, name: 'A.pdf' }]))).toEqual(none)
   })
 
   it('leave out anything but a number with a name, and read nothing from what is not JSON', () => {
     const documents = [{ docNumber: 1, name: 'A.pdf' }, { docNumber: '2', name: 'B.pdf' }, { docNumber: 3 }, null, 7]
-    expect(readRows(JSON.stringify({ token: pageToken, documents }))).toEqual([{ docNumber: 1, name: 'A.pdf' }])
-    expect(readRows(JSON.stringify({ token: pageToken, documents: 'x' }))).toEqual([])
-    expect(readRows('not json')).toEqual([])
-    expect(readRows('')).toEqual([])
+    expect(readRows(JSON.stringify({ token: pageToken, documents }))).toEqual({ documents: [{ docNumber: 1, name: 'A.pdf' }], folders: [] })
+    expect(readRows(JSON.stringify({ token: pageToken, documents: 'x', folders: 'y' }))).toEqual(none)
+    expect(readRows('not json')).toEqual(none)
+    expect(readRows('')).toEqual(none)
+  })
+
+  it('leave out a folder without a whole id, a name, its parent, its matter and what it allows', () => {
+    const good = { id: 8, name: 'Drafts', parentId: 7, matterId: 11, canMove: true, canDelete: true }
+    const folders = [good, { ...good, id: '9' }, { ...good, id: 1.5 }, { ...good, name: 3 }, { ...good, parentId: undefined }, { ...good, matterId: '11' }, { ...good, canMove: 'yes' }, { ...good, canDelete: undefined }, { ...good, kind: 'cabinet' }, { ...good, topLevel: 1 }, null, 7]
+    expect(readRows(JSON.stringify({ token: pageToken, documents: [], folders })).folders).toEqual([good])
   })
 })
 

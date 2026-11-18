@@ -9,7 +9,7 @@ import type { SearchScope } from '../search/scopes'
 import { itemIcon } from '../kindIcons'
 import { matterParts } from '../matterDisplay'
 import { DocumentTitle, FolderName } from '../organising/RenameField'
-import { childKey, type Hit } from './useListing'
+import { childKey, selectable, type Hit } from './useListing'
 import styles from './views.module.css'
 
 type S = components['schemas']
@@ -18,8 +18,10 @@ export interface ListRow extends TableRow {
   item: Hit
 }
 
+/** A row of a list. A plain click opens a folder, as it always has: Shift- or Cmd-click, the arrows and Space select it. */
 export function rowOf(item: Hit): ListRow {
-  return { id: childKey(item), textValue: item.type === 'matter' ? item.display : item.name, selectable: item.type === 'document', item }
+  const selects = selectable(item)
+  return { id: childKey(item), textValue: item.type === 'matter' ? item.display : item.name, selectable: selects, opensOnClick: selects && item.type === 'folder', item }
 }
 
 // Title shows the file name: CE has no title of its own, and the server sorts Title by it (plan correction 7). A held

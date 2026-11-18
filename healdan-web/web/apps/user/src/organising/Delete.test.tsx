@@ -8,23 +8,24 @@ import { ApiError } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
 import { renderApp } from '../test/renderApp'
 import { heldByJamie } from '../filing/testing'
-import { children, document as doc } from '../test/fakeApi'
+import { children, document as doc, trashItem } from '../test/fakeApi'
 import { inFolder } from '../filing/testing'
 import { cacheMessage, routes, row, select, toolbar } from './testing'
 
 const only = doc({ docNumber: 10450, name: 'Only.docx', folder: inFolder })
 
 describe('Deleting', () => {
-  it('asks "Move 2 documents to the Trash?" naming each, and says the Trash is in the Classic Interface', async () => {
+  it('asks "Move 2 items to the Trash?" naming each, and says where they can be restored from', async () => {
     const { all, written } = routes()
     await renderApp('/folders/7', all)
     // Plan first, then Lease: the question lists them in the list's order
     await select(/Plan/, /Lease/)
     await userEvent.keyboard('{Delete}')
 
-    const dialog = await screen.findByRole('dialog', { name: 'Move 2 documents to the Trash?' })
+    const dialog = await screen.findByRole('dialog', { name: 'Move 2 items to the Trash?' })
     expect(within(dialog).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Lease.docx', 'Plan.pdf'])
-    expect(within(dialog).getByText('The Trash is in the Classic Interface, where they can be restored.')).toBeTruthy()
+    expect(within(dialog).getByText('You can restore them from the Trash, at the foot of the left pane.')).toBeTruthy()
+    expect(within(dialog).queryByText(/Classic Interface/)).toBeNull()
     await expectNoAxeViolations(dialog)
     expect(written.deleted).toEqual([])
 
@@ -41,7 +42,8 @@ describe('Deleting', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Move to Trash' }))
 
     await waitFor(() => expect(written.deleted).toEqual([10432, 10433]))
-    expect(await screen.findByText('Moved 2 documents to the Trash')).toBeTruthy()
+    const toast = (await screen.findByText('Moved 2 items to the Trash')).closest('[role="alertdialog"]') as HTMLElement
+    expect(within(toast).getByRole('button', { name: 'Undo' })).toBeTruthy()
     const grid = await within(screen.getByRole('main')).findByRole('grid')
     await waitFor(() => expect(within(grid).queryByRole('row', { name: /Lease/ })).toBeNull())
     expect(api.callsTo('DELETE /v1/documents/*')).toHaveLength(2)
@@ -74,14 +76,18 @@ describe('Deleting', () => {
     await waitFor(() => expect(written.renamed).toEqual([{ docNumber: 10433, name: 'Plan Two.pdf' }]))
   })
 
-  it('Enter confirms, as the Trash can be restored from', async () => {
+  it('names the one document it asks about, and Enter confirms, as the Trash can be restored from', async () => {
     const { all, written } = routes()
     await renderApp('/folders/7', all)
     await select(/Plan/)
     await userEvent.keyboard('{Delete}')
-    expect(await screen.findByRole('dialog', { name: 'Move 1 document to the Trash?' })).toBeTruthy()
+    const dialog = await screen.findByRole('dialog', { name: 'Move "Plan.pdf" to the Trash?' })
+    // The name is the question's: no list repeats it
+    expect(within(dialog).queryByRole('listitem')).toBeNull()
+    expect(within(dialog).getByText('You can restore it from the Trash, at the foot of the left pane.')).toBeTruthy()
     await userEvent.keyboard('{Enter}')
     await waitFor(() => expect(written.deleted).toEqual([10433]))
+    expect(await screen.findByText('Moved "Plan.pdf" to the Trash')).toBeTruthy()
   })
 
   it('More › Delete does the same, and drops the document from the address, whose details would answer 404', async () => {
@@ -107,14 +113,14 @@ describe('Deleting', () => {
     await userEvent.keyboard('{Delete}')
     await userEvent.click(await screen.findByRole('button', { name: 'Move to Trash' }))
 
-    const dialog = await screen.findByRole('dialog', { name: "Some Documents Weren't Moved to the Trash" })
+    const dialog = await screen.findByRole('dialog', { name: "Some Items Weren't Moved to the Trash" })
     const [line] = within(dialog).getAllByRole('listitem')
     expect(line!.textContent).toMatch(/^Lease\.docx: It's checked out\. Checked out by Jamie Clarke since .*\.$/)
     expect(line!.textContent).not.toMatch(/released|Classic Interface/)
     expect(screen.queryByText(/server sentence/)).toBeNull()
     // The other was deleted all the same
     expect(written.deleted).toEqual([10433])
-    expect(await screen.findByText('Moved 1 document to the Trash')).toBeTruthy()
+    expect(await screen.findByText('Moved "Plan.pdf" to the Trash')).toBeTruthy()
     await expectNoAxeViolations(dialog)
   })
 
@@ -151,7 +157,7 @@ describe('Deleting', () => {
 
     it('on the list when nothing is left in it', async () => {
       let left = [only]
-      const { all } = routes({ 'GET /v1/folders/7/children': () => children(left), 'DELETE /v1/documents/*': () => void (left = []) })
+      const { all } = routes({ 'GET /v1/folders/7/children': () => children(left), 'DELETE /v1/documents/*': () => ((left = []), trashItem({ docNumber: 10450, name: 'Only.docx' })) })
       await renderApp('/folders/7', all)
       await select(/Only/)
       await userEvent.keyboard('{Delete}')

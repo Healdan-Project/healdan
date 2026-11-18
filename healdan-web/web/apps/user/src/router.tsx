@@ -14,6 +14,8 @@ import { NotFound } from './views/NotFound'
 import { CheckedOutView } from './views/CheckedOutView'
 import { RecentView } from './views/RecentView'
 import { SearchView } from './views/SearchView'
+import { TrashView } from './views/TrashView'
+import { isTrashSort, isTrashView, type TrashSort, type TrashViewName } from './actions/trash'
 import { isSearchScope } from './search/scopes'
 import { isSortColumn, type ListingOrder, type SortColumn } from './views/useListing'
 
@@ -110,7 +112,24 @@ const docRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, recentRoute, checkedOutRoute, foldersRoute, searchRoute, docRoute])
+// /trash: the person's own Trash, and for an administrator, with ?view=, everyone's or what was removed. A view the address
+// doesn't name, or names wrongly, is Mine; the view itself shows Mine to anyone who isn't an administrator.
+const trashRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'trash',
+  validateSearch: (search: Record<string, unknown>): { view?: TrashViewName; sort?: TrashSort; order?: ListingOrder } => ({
+    view: isTrashView(search.view) ? search.view : undefined,
+    sort: isTrashSort(search.sort) ? search.sort : undefined,
+    order: search.order === 'asc' || search.order === 'desc' ? search.order : undefined,
+  }),
+  component: function TrashRoute() {
+    const { view = 'mine', sort, order } = trashRoute.useSearch()
+    // A view of its own for each of Mine, Everyone's and Removed, so a selection made in one isn't carried to the next
+    return <TrashView key={view} view={view} sort={sort} order={order} />
+  },
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, recentRoute, checkedOutRoute, foldersRoute, searchRoute, docRoute, trashRoute])
 
 /**
  * A view that failed as it drew (spec 10.7): the catalogue's short message and Try Again, which asks the server again

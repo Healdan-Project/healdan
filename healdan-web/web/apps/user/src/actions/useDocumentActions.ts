@@ -10,6 +10,7 @@ import { useMe } from '../queries'
 import { checkInAccept, holdState } from './checkout'
 import { copyLink } from './copyLink'
 import type { Favorite } from './FavoriteStar'
+import { anyDeletable, anyMovable, type MovingFolder } from './folders'
 import { useOpenInApp } from './OpenInAppState'
 import { pickFile } from './pickFile'
 import { useReleasing } from './ReleaseProvider'
@@ -64,6 +65,8 @@ export interface DocumentActionsOf {
   document: DocumentView | undefined
   /** The documents Release, Move To… and Delete act on (the selection); Rename and Copy Link need exactly one */
   documents: DocumentView[]
+  /** The folders selected with them, which Move To… and Delete take too (folders and Trash spec 7.5) */
+  folders?: readonly MovingFolder[]
   /** The document Preview opens, when it isn't `document`'s: the toolbar's is the address's, whose row may not be drawn yet */
   preview?: number
 }
@@ -76,7 +79,7 @@ export interface DocumentActionsOf {
  * are only in the menus, which make them with favoriteAction and newTabAction, so a toolbar doesn't watch My Favorites
  * for an action it never shows.
  */
-export function useDocumentActions({ document, documents, preview = document?.docNumber }: DocumentActionsOf): DocumentActions {
+export function useDocumentActions({ document, documents, folders = [], preview = document?.docNumber }: DocumentActionsOf): DocumentActions {
   const app = useOpenInApp()
   const quickLook = useQuickLook()
   const organising = useOrganising()
@@ -84,11 +87,13 @@ export function useDocumentActions({ document, documents, preview = document?.do
   const me = useMe()
   const checkout = useCheckout(document)
   const releaseBusy = useHoldsBusy(documents.map((one) => one.docNumber))
-  const one = documents.length === 1 ? documents[0] : undefined
+  const one = documents.length === 1 && folders.length === 0 ? documents[0] : undefined
+  const none = documents.length + folders.length === 0
   const may = document?.canOpen === true
   const yours = checkout.state.kind === 'yours'
   const holds = documents.map((each) => holdState(each.hold, me.data?.id).kind)
-  const releasable = holds.length > 0 && holds.every((kind) => kind === 'yours' || kind === 'yourDevice')
+  // Everything selected is the person's own check-out: a folder selected with them isn't one
+  const releasable = folders.length === 0 && holds.length > 0 && holds.every((kind) => kind === 'yours' || kind === 'yourDevice')
 
   return {
     open: { id: 'open', label: t('details.open'), icon: 'external', isDisabled: !may, perform: () => document && app.open(document) },
@@ -124,8 +129,10 @@ export function useDocumentActions({ document, documents, preview = document?.do
         }
       : undefined,
     rename: { id: 'rename', label: t('rename.menu'), isDisabled: !one, perform: () => one && organising.startRename(`d${one.docNumber}`) },
-    move: { id: 'move', label: t('move.menu'), isDisabled: documents.length === 0, perform: () => organising.askMove(documents) },
-    delete: { id: 'delete', label: t('delete.menu'), isDisabled: documents.length === 0, perform: () => organising.askDelete(documents) },
+    // Move To… and Delete are there while anything selected can be moved or deleted: a folder of several that can't is said
+    // in Refusals while the rest is moved or deleted (folders and Trash spec 7.5)
+    move: { id: 'move', label: t('move.menu'), isDisabled: none || !anyMovable({ documents, folders }), perform: () => organising.askMove({ documents, folders }) },
+    delete: { id: 'delete', label: t('delete.menu'), isDisabled: !anyDeletable({ documents, folders }), perform: () => organising.askDelete({ documents, folders }) },
     copyLink: { id: 'copyLink', label: t('details.copyLink'), isDisabled: !one, perform: () => one && void copyLink(one.docNumber) },
   }
 }

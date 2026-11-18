@@ -125,8 +125,8 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
               onSelectionChange={changeSelection}
               onOpen={open}
               onPreview={documents ? preview : undefined}
-              // The folders, matters and clients scopes take F2 alone: a folder renames, and a matter says why it doesn't
-              {...(documents ? organising.tableProps : { onRename: organising.tableProps.onRename })}
+              // The folders, matters and clients scopes take F2 and Delete: a folder renames or is deleted, and a matter says why it isn't
+              {...(documents ? organising.tableProps : { onRename: organising.tableProps.onRename, onDelete: organising.tableProps.onDelete })}
               contextMenu={organising.contextMenu}
               loadMore={results.loadMore}
               isLoadingMore={results.isLoadingMore}

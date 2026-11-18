@@ -4,6 +4,7 @@
 import { useMemo, useState } from 'react'
 import { useRightRegion } from '../frame/RightRegion'
 import { useSelection } from '../selection'
+import { selectable } from './useListing'
 
 export interface RowSelection {
   /** The one selected document's number, from the address */
@@ -15,28 +16,37 @@ export interface RowSelection {
 }
 
 /**
- * The selection of a list of documents (rows keyed `d<number>`): one document is in the address as ?sel=, which also
- * shows its details; several can't all be in an address, so the view keeps them while it has none. Of those, only the
- * ones still listed count: once they are deleted or moved away, nothing is selected, and F2 and Delete take the row the
- * focus is on.
+ * The selection of a list of documents and folders (rows keyed `d<number>` and `f<id>`): one document alone is in the
+ * address as ?sel=, which also shows its details; several can't all be in an address, and a folder never is (folders and
+ * Trash spec 7.5), so the view keeps them while it has none. A folder has no details: the region's stay a document's (the
+ * plan's correction 16). Of those kept, only the ones still listed count: once they are deleted or moved away, nothing is
+ * selected, and F2 and Delete take the row the focus is on.
  *
  * @param rows what the list holds, as far as it's loaded
  */
-export function useRowSelection(rows?: readonly { type: string; docNumber?: number }[]): RowSelection {
+export function useRowSelection(rows?: readonly { type: string; docNumber?: number; id?: number; kind?: string }[]): RowSelection {
   const region = useRightRegion()
   const { selected, select } = useSelection()
-  const [several, setSeveral] = useState<Set<string> | null>(null)
-  const listed = useMemo(() => (rows ? new Set(rows.flatMap((row) => (row.type === 'document' ? [`d${row.docNumber}`] : []))) : undefined), [rows])
-  const kept = useMemo(() => (several && listed ? new Set([...several].filter((key) => listed.has(key))) : several), [several, listed])
+  // What the address can't hold: several rows, or any with a folder
+  const [inView, setInView] = useState<Set<string> | null>(null)
+  const listed = useMemo(
+    () => (rows ? new Set(rows.flatMap((row) => (!selectable(row) ? [] : row.type === 'document' ? [`d${row.docNumber}`] : [`f${row.id}`]))) : undefined),
+    [rows],
+  )
+  const kept = useMemo(() => (inView && listed ? new Set([...inView].filter((key) => listed.has(key))) : inView), [inView, listed])
   const selection = kept && selected === undefined ? kept : new Set(selected === undefined ? [] : [`d${selected}`])
 
   function change(next: Set<string>, { showDetails = true }: { showDetails?: boolean } = {}) {
-    const documents = [...next].filter((key) => key.startsWith('d'))
-    setSeveral(documents.length > 1 ? new Set(documents) : null)
+    // Only rows that select: Space on a matter's own folder selects nothing, and leaves the selection as it was
+    const keys = [...next].filter((key) => (key.startsWith('d') || key.startsWith('f')) && (!listed || listed.has(key)))
+    if (keys.length === 0 && next.size > 0) return
+    const [only] = keys
+    const document = keys.length === 1 && only?.startsWith('d') ? Number(only.slice(1)) : undefined
+    setInView(document === undefined && keys.length > 0 ? new Set(keys) : null)
     // Clicking a document while Filters are open shows its details, as the owner asked; the funnel brings Filters back. A
     // right-click, which selects the row for its menu, leaves Filters as they are.
-    if (showDetails && documents.length === 1 && region.show === 'filters') region.open('details', { reveal: false })
-    select(documents.length === 1 ? Number(documents[0]!.slice(1)) : undefined)
+    if (showDetails && document !== undefined && region.show === 'filters') region.open('details', { reveal: false })
+    select(document)
   }
 
   return { selected, selection, change }

@@ -3,11 +3,13 @@ title: Copying, Moving and Deleting
 weight: 6
 ---
 
-In the app you can rename, move and delete documents, and make and rename folders. Copying a document, and moving or
-deleting a folder, are in the [Classic Interface](../../the-classic-interface/). What you can't do to a document, because of
-its permissions or because it's locked or checked out, is refused with a message in the app, and greyed out in the Classic Interface.
-All of it works in any list of documents in the app: a folder, search results, the Recent lists and a document's own
-page (`/app/doc/` and its doc #).
+In the app you can rename, move and delete documents and folders, and make folders. A matter's own folder and a Store
+are moved and deleted by an administrator in the [Classic Interface](../../the-classic-interface/), which is also where
+you copy a document or a folder. What you can't do, because of permissions or because a document is locked or checked
+out, is refused with a message in the app, and greyed out in the Classic Interface.
+Documents work in any list in the app: a folder, search results, the Recent lists and a document's own page
+(`/app/doc/` and its doc #). Folders work in a folder's list, **Recent › Folders**, a **Folders** search and the
+**My Matters** tree.
 
 ## Renaming a Document in the App
 
@@ -32,7 +34,7 @@ The rename is in the document's [history](../document-history/) and makes its ne
 ## Moving Documents in the App
 
 Select the documents, then choose the **⋯** (More) button, then **Move To…**, or right-click one of them and choose
-**Move To…**. A window opens that lists your **Recent Matters**, then your
+**Move To…**. The same goes for folders (see [Moving a Folder in the App](#moving-a-folder-in-the-app)). A window opens that lists your **Recent Matters**, then your
 **My Matters** other than those, so a matter in both is listed once, under Recent. Type in **Find a Matter** to search for another by its number or name.
 
 1. Choose the matter. The window lists its folders.
@@ -62,16 +64,66 @@ there, the others move and only they are counted.
 Dropping documents on a matter's top level, or on a search folder, says "Choose a folder inside the matter" and moves
 nothing. See [Where Documents Can Go](#where-documents-can-go).
 
-## Deleting Documents in the App
+## Deleting in the App
 
-Select them and press **Delete** (on a Mac, the delete key), or choose the **⋯** (More) button, then **Delete**, or
-right-click one of them and choose **Delete**. Healdan asks "Move 2 documents to the Trash?" and lists each one's name.
-Choose **Move to Trash**, or **Cancel**, or press **Esc**.
+Select documents or folders, or both, and press **Delete** (on a Mac, the delete key), or choose the **⋯** (More)
+button, then **Delete**, or right-click one of them and choose **Delete**. On a folder in a list, on a folder in the
+**My Matters** tree and on the open folder's **⋯** beside its name, the same choices are there. Healdan asks "Move
+"Lease.pdf" to the Trash?", or "Move 4 items to the Trash?", and lists them. For a folder it says what it holds: "It
+holds 3 folders and 11 documents." Choose **Move to Trash**, or **Cancel**, or press **Esc**.
 
-- **The Trash is in the Classic Interface,** where you can restore what you deleted: "The Trash is in the Classic
-  Interface, where they can be restored." See [The Trash](../the-trash/).
-- **You need the Delete permission.** A document that's locked, or checked out by anyone, you included, is refused with the
-  reason: release it first. The others are deleted all the same.
+Healdan then says "Moved "Lease.pdf" to the Trash", or "Moved 4 items to the Trash", with **Undo**, which puts it back
+where it was. See [The Trash](../the-trash/), which also restores what you deleted, for as long as it stays there.
+
+- **You need the Delete permission.** For a folder you need it on the folder and on everything inside it, including
+  what you can't see. If you don't have it everywhere, Healdan says "It holds items you don't have permission to
+  delete."
+- **Locked or checked-out documents are refused with the reason:** release them first. A folder with a document checked
+  out inside it, by anyone, you included, isn't deleted: Healdan says "Documents in it are checked out:", lists the
+  ones you can read and says "They can be deleted once they're checked in or released."
+- **A folder with an immutable document inside** can't be deleted: "It holds an immutable document, which can't be
+  deleted."
+- **Only administrators delete the folders at the top of a matter's workspace,** such as Correspondence and Drafts:
+  **Delete** is greyed out there for anyone else, and the **Delete** key says "Only administrators can delete a
+  matter's top-level folders." A matter's own folder isn't deleted in the app at all: "A matter's own folder is deleted
+  by an administrator in the Classic Interface."
+- **Several at once,** documents and folders together, each is deleted on its own. A window, "Some Items Weren't Moved
+  to the Trash", says which weren't and why, and the others are deleted all the same.
+- **Deleting the folder that's open** takes you to its parent.
+
+## Moving a Folder in the App
+
+A folder moves the ways documents do, and a selection can hold folders and documents together: each is moved on its
+own, with what's refused said per item.
+
+- **Move To…** on the folder's right-click menu, in the **⋯** (More) menu, in the **My Matters** tree's **⋯**, on the
+  open folder's **⋯** beside its name. The window is the one for documents, titled "Move "Old Drafts"" for one folder,
+  or "Move 4 Items".
+- **Dragging** the folder's row, or a folder in the **My Matters** tree, onto a folder in the tree. The folder you're
+  over lights up.
+
+In the window, a choice Healdan won't allow is greyed out with its reason:
+
+- **"The folder itself,"** the folder you're moving, and what's in it.
+- **"Already there,"** where it is already.
+- **"Administrators only,"** the top of a matter, for anyone but an administrator.
+
+A search folder is never listed. Healdan won't move a folder into a Store, a search folder or its own tree.
+
+- **You need the Move permission** on the folder and on everything inside it, including what you can't see, and the
+  Add permission on the folder you move it to. Without it Healdan says "It holds items you don't have permission to
+  move." or "You don't have permission to move this folder."
+- **A folder can't move while a document in it is checked out.** Healdan names the ones you can read.
+- **Only administrators move the folders at the top of a matter's workspace,** or move a folder to the top of one:
+  **Move To…** is greyed out there for anyone else. A matter's own folder is moved by an administrator in the Classic
+  Interface.
+- **A folder can't go where another folder has its name.**
+- **Healdan asks before a folder leaves its matter.** "Move "Old Drafts" into 1003.2 – Licence Review?", it says, with
+  "Its 11 documents will take 1003.2's client and matter, and the properties its template sets." Choose **Move**, or
+  **Cancel** to keep it where it is. A move within a matter goes at once.
+
+Healdan says "Moved "Old Drafts" to Drafts", naming the folder it went to, when it's done. There's no **Undo** for a move: move it back. The
+folder keeps its documents and their doc #s.
 
 ## Making a Folder in the App
 

@@ -43,17 +43,31 @@ export function carriesRows(types: readonly string[]): boolean {
   return types.includes(ROWS_TYPE)
 }
 
-/** A folder something may be dropped on: the open one, or one in the tree, whose permission isn't known there */
+/** A folder something may be dropped on or moved into: the open one, one in the tree, whose permission isn't known there, or the picker's */
 export interface Place {
   id: number
   kind: S['FolderView']['kind']
   canFile?: boolean
   /** What the tray calls it */
   name?: string
+  /** Its matter, which a folder leaving its own is asked about (folders and Trash spec 7.5); null outside one, as a Store is */
+  matterId: number | null
+  /** That matter as people read it, `1003.2 – Licence Review`, which the question names */
+  matter?: string
+  /** The folders from the Store down to it, itself included, by id, where they're known: a folder isn't moved into its own tree */
+  path?: readonly number[]
 }
 
 export function placeOf(folder: S['FolderView']): Place {
-  return { id: folder.id, kind: folder.kind, canFile: folder.canFile, name: folder.name }
+  return {
+    id: folder.id,
+    kind: folder.kind,
+    canFile: folder.canFile,
+    name: folder.name,
+    matterId: folder.matter?.id ?? null,
+    matter: folder.matter?.display,
+    path: folder.path.map((step) => step.id),
+  }
 }
 
 const extensionOf = (name: string) => {
@@ -71,7 +85,7 @@ export function sameExtension(fileName: string, documentName: string): boolean {
  * Why nothing is filed on a place, as the catalogue's key: a matter's top level, a search folder and a Store hold no
  * documents (M1's filing rule), and a folder the person may not write to takes none. The server checks all of it again.
  */
-export function refusalOf(place: Place): StringKey | undefined {
+export function refusalOf(place: Pick<Place, 'id' | 'kind' | 'canFile'>): StringKey | undefined {
   if (place.kind !== 'folder') return 'filing.chooseFolder'
   if (place.canFile === false) return 'filing.noWrite'
   return undefined
