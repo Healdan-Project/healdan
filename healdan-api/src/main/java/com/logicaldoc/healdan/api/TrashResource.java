@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.User;
@@ -67,6 +68,10 @@ import jakarta.ws.rs.core.Response;
  * restores from Removed. Any other item is {@code 404}, as one that doesn't
  * exist.</li>
  * <li>Restoring needs Delete on the item, as on every route (spec 4.4).</li>
+ * <li>A Store, which only an administrator deletes, in the Classic Interface,
+ * is restored there: CE puts it back under the root whatever place is asked,
+ * so it's {@code 409 refused}, not {@code place-gone}, before anything is
+ * written.</li>
  * <li>A restore back where it was that the place refuses, because it isn't
  * live, the caller can't read it, or the rules or the caller's permissions no
  * longer allow it there, is {@code 409 place-gone}, which a client answers by
@@ -151,7 +156,8 @@ public class TrashResource {
 	 * Restores an item back where it was deleted from, or into the folder the
 	 * body asks for. Checks, in order: a body that isn't the JSON expected
 	 * ({@code 400}, {@code 415}); an item the caller may not restore
-	 * ({@code 404}); no Delete on it ({@code 403 forbidden}); then, back where
+	 * ({@code 404}); no Delete on it ({@code 403 forbidden}); a Store, which is
+	 * restored in the Classic Interface ({@code 409 refused}); then, back where
 	 * it was, a place that isn't there for it ({@code 409 place-gone}); or,
 	 * into a folder asked for, as a move there: a folder the caller can't read
 	 * ({@code 404}), one that can't hold it ({@code 409 filing-rule}), no Add
@@ -183,6 +189,10 @@ public class TrashResource {
 			if (!admin && !(folder ? rows.mayDelete(row.objectId(), user.getId())
 					: rows.mayDeleteDocument(row.objectId(), user.getId())))
 				throw ApiProblem.forbidden("You need the Delete permission on Trash item %d to restore it.".formatted(id));
+			// A Store deleted in the Classic Interface: CE puts one back under the root whatever is asked, which no
+			// place a client could choose would change, so it's refused before anything is written
+			if (folder && isStore(row, rows))
+				throw ApiProblem.conflict("refused", "A Store is restored in the Classic Interface.");
 
 			long target = folderId != null ? folderAskedFor(row, folder, folderId, user, admin)
 					: placeOf(row, folder, user, admin);
@@ -343,6 +353,15 @@ public class TrashResource {
 		if ("matter".equals(into.kind()) && !admin)
 			throw new ApiProblem(403, "admins-only",
 					"Only administrators can restore folders into a matter's top level.");
+	}
+
+	/**
+	 * @return true if the folder item's folder is a Store: a workspace, in
+	 *         CE's words
+	 */
+	private static boolean isStore(TrashItemRow row, StoredRows rows) {
+		FolderRow self = rows.folder(row.objectId());
+		return self != null && self.type() == Folder.TYPE_WORKSPACE;
 	}
 
 	private static ApiProblem placeGone() {

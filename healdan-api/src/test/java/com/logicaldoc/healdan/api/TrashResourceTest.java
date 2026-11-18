@@ -380,6 +380,25 @@ public class TrashResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testAStoreIsRefusedBeforeAnythingIsWritten() throws Exception {
+		// A Store deleted in the Classic Interface, which CE puts back under the root whatever is asked
+		Folder old = fx.store("Old Store");
+		FolderDAO.get().deleteTree(old.getId(), fx.folderHistory(boss));
+		long item = TrashStore.get().itemHolding(new TrashMember('F', old.getId()), TrashState.DELETED).orElseThrow();
+		assertEquals(List.of(item), ids(list("", bossToken)));
+		awaitAsyncWork();
+		DbSnapshot before = fx.snapshot();
+
+		// Refused, not place-gone, so a client doesn't ask where: no place it could choose would do
+		assertProblem(restore(item, bossToken), 409, "refused");
+		assertProblem(restore(item, documents.getId(), bossToken), 409, "refused");
+		before.assertUnchanged();
+		assertEquals(TrashState.DELETED, TrashStore.get().state(item));
+		// It can still be removed
+		assertEquals(204, remove(item, bossToken).status());
+	}
+
+	@Test
 	public void testRestoreIntoAMatterThatHoldsTheMessage() throws Exception {
 		Document first = fx.upload(letters, "message.eml", EMAIL.getBytes(StandardCharsets.UTF_8), boss);
 		awaitAsyncWork();

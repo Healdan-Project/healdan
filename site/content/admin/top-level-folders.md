@@ -7,8 +7,11 @@ The folders directly inside a matter's workspace are its skeleton, copied from i
 rename, move or delete them, search folders included. Below the top level, everyone works under the usual
 permissions.
 
-In the app, **Rename** is greyed out on them for anyone who isn't an administrator, and on the workspace folder for
-everyone.
+In the app, **Rename**, **Move To…** and **Delete** are greyed out on them for anyone who isn't an administrator, and
+the Delete and Move To… keys and drags refuse them with the reason. On the workspace folder itself **Rename** is greyed
+out for everyone and **Move To…** and **Delete** aren't offered: an administrator moves and deletes it in the Classic
+Interface. Nobody who isn't an administrator can move a folder to the top level of a workspace either: the picker's
+choice says "Administrators only".
 
 ## The Workspace Folder Itself
 

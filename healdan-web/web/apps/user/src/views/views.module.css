@@ -218,3 +218,61 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* The Trash (folders and Trash spec 7.2, 7.3). Removed's lede, under the heading. */
+.lede {
+  margin: 0 0 var(--hd-space-4);
+  color: var(--hd-text-secondary);
+}
+
+/* A Trash with nothing in it: what it is, then where deleted items go */
+.trashEmpty p {
+  margin: 0 0 var(--hd-space-2);
+}
+
+.trashEmptyTitle {
+  color: var(--hd-text);
+  font-weight: var(--hd-weight-medium);
+}
+
+/* A deleted folder's name, which gives way first, and how many items it holds, right after it, muted (the selected row's
+   own colour, as .muted takes) */
+.trashName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trashCount {
+  flex: none;
+  color: var(--hd-text-secondary);
+}
+
+:global([aria-selected='true']) .trashCount {
+  color: inherit;
+}
+
+/* A removed item that is destroyed within a week. A selected row keeps its own colour, as the caution colour fails AA
+   on its fill (tokens.test.ts). */
+.caution {
+  color: var(--hd-caution-text);
+  font-weight: var(--hd-weight-medium);
+}
+
+:global([aria-selected='true']) .caution {
+  color: inherit;
+}
+
+/* The item's icon in its details, where a document's thumbnail is */
+.trashIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 96px;
+  margin-bottom: var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-field);
+  color: var(--hd-text-secondary);
+}

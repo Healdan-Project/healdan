@@ -303,6 +303,17 @@ public class DemoFixtureSeedTest extends AbstractHealdanTestCase {
 		assertEquals(1, deleted.size());
 		assertEquals(clock.at(-5, null).getTime(), deleted.get(0).getTime());
 		assertEquals(1, count("select count(*) from ld_folder where ld_deleted <> 0 and ld_name = 'Superseded'"));
+		// Each delete is in the Trash as the item its person's delete would have made, dated to the step
+		assertEquals(2, count("select count(*) from hd_trash"));
+		List<Map<String, Object>> items = jdbc().queryForList(
+				"select hd_kind, hd_name, hd_deletedby, hd_deletedat from hd_trash order by hd_kind");
+		assertEquals("document", items.get(0).get("hd_kind"));
+		assertEquals(pnair.getId(), ((Number) items.get(0).get("hd_deletedby")).longValue());
+		assertEquals(clock.at(-5, null).getTime(), ((Timestamp) items.get(0).get("hd_deletedat")).getTime());
+		assertEquals("folder", items.get(1).get("hd_kind"));
+		assertEquals("Superseded", items.get(1).get("hd_name"));
+		assertEquals(pnair.getId(), ((Number) items.get(1).get("hd_deletedby")).longValue());
+		assertEquals(clock.at(-5, "09:30").getTime(), ((Timestamp) items.get(1).get("hd_deletedat")).getTime());
 		assertEquals(1, count("select count(*) from ld_link"));
 		assertEquals(1, count("select count(*) from ld_ticket"));
 		// The link is live: it expires about 30 days after the real today, not after the timeline's day

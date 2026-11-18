@@ -14,8 +14,15 @@ open it in the main area.
 
 - **The tree opens to where you are.** When the folder open in the main area is inside one of your matters, the tree
   opens the folders above it and marks its row.
-- **Rename a folder** with its **⋯** button, shown while you point at it or move to it with the arrow keys, or with
-  **F2**. See [Renaming a Folder in the App](../../documents/copying-moving-and-deleting/#renaming-a-folder-in-the-app).
+- **Rename, move or delete a folder** with its **⋯** button, shown while you point at it or move to it with the arrow
+  keys: **Rename**, **Move To…** and **Delete**. **F2** renames it and the **Delete** key moves it to the Trash, after
+  asking. See [Renaming a Folder in the App](../../documents/copying-moving-and-deleting/#renaming-a-folder-in-the-app),
+  [Moving a Folder in the App](../../documents/copying-moving-and-deleting/#moving-a-folder-in-the-app) and
+  [Deleting in the App](../../documents/copying-moving-and-deleting/#deleting-in-the-app). A matter's own folder has
+  neither **Move To…** nor **Delete**: an administrator moves or deletes it in the Classic Interface.
+- **Drag a folder onto another** in the tree, or drag rows from a list onto a folder, to move them there. The folder
+  you're over lights up. Dragging a folder into another matter asks first. A drag can't be done from the keyboard: use
+  **Move To…**.
 - **To add a matter,** open it, or any folder in it, and click **+** beside the **My Matters** heading. The **+**
   shows only while you're in a matter that isn't in the list yet. Or right-click the matter in **Recent Matters**, or in
   a search for matters, and choose **Add to My Matters**.

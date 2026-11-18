@@ -559,8 +559,10 @@ The calls:
   `admins-only`, then `409 already-filed` and `refused`). A caller restores the items they deleted, while they are in the
   Trash, and needs Delete on them; an administrator restores anyone's, from the Trash or from Removed. An item that
   doesn't exist, is restored or destroyed already, is someone else's, or is removed (for anyone but an administrator) is
-  `404`. A restore brings back only what that delete took, queues the documents for indexing, and never brings back
-  what was removed since.
+  `404`. A Store, which only an administrator deletes, in the Classic Interface, is restored there: it's `409 refused`,
+  with or without `folderId`, before anything is written, as no folder a client could send would change where it goes.
+  A restore brings back only what that delete took, queues the documents for indexing, and never brings back what was
+  removed since.
 - **`DELETE /trash/{id}`** removes an item, moving it and what it holds from the Trash to Removed, and answers `204`.
   The caller's own, or anyone's for an administrator. After `removedDays`, the nightly job destroys it.
 - **`DELETE /trash`** empties the caller's Trash, moving every item they deleted that is still in it to Removed, and

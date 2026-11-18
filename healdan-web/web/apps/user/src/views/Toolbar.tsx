@@ -5,11 +5,15 @@ import type { ReactNode } from 'react'
 import { plural } from '@healdan/ui'
 import styles from './views.module.css'
 
-/** What a list's count says: all its documents, some of them once filters leave some out, or "more than" a floor. */
-export type ListCount = { documents: number; of?: number } | { atLeast: number }
+/**
+ * What a list's count says: all its documents, some of them once filters leave some out, "more than" a floor, or the
+ * Trash's items, which are folders and documents.
+ */
+export type ListCount = { documents: number; of?: number } | { atLeast: number } | { items: number }
 
 export function countText(count: ListCount): string {
   if ('atLeast' in count) return plural('documentsMoreThan', count.atLeast)
+  if ('items' in count) return plural('trash.items', count.items)
   if (count.of !== undefined) return plural('documentsOf', count.of, { shown: count.documents })
   return plural('documents', count.documents)
 }

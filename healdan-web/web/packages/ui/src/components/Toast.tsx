@@ -9,6 +9,7 @@ import {
   UNSTABLE_ToastRegion as AriaToastRegion,
   type QueuedToast,
 } from 'react-aria-components'
+import { useSyncExternalStore } from 'react'
 import { Icon } from '../icons'
 import { t } from '../strings'
 import { Button } from './Button'
@@ -18,6 +19,13 @@ interface ToastMessage {
   message: string
   /** Where the part of the message in [square brackets] goes */
   href?: string
+  /** One button after the message, such as Undo; pressing it closes the toast */
+  action?: ToastAction
+}
+
+export interface ToastAction {
+  label: string
+  onAction: () => void
 }
 
 const queue = new ToastQueue<ToastMessage>({ maxVisibleToasts: 3 })
@@ -34,6 +42,14 @@ export function toast(message: string): void {
  */
 export function toastWithLink(message: string, href: string): void {
   queue.add({ message, href }, { timeout: 15000 })
+}
+
+/**
+ * Shows a message with one action, such as Undo, which stays for 10 seconds. React Aria's region pauses the timer while
+ * the pointer or focus is on it. Pressing the action calls `onAction` once and closes the toast.
+ */
+export function toastWithAction(message: string, action: ToastAction): void {
+  queue.add({ message, action }, { timeout: 10000 })
 }
 
 function Message({ message, href }: ToastMessage) {
@@ -64,6 +80,17 @@ export function Toast({ toast: item }: { toast: QueuedToast<ToastMessage> }) {
           <Message {...item.content} />
         </Text>
       </ToastContent>
+      {item.content.action && (
+        <Button
+          variant="quiet"
+          onPress={() => {
+            queue.close(item.key)
+            item.content.action?.onAction()
+          }}
+        >
+          {item.content.action.label}
+        </Button>
+      )}
       <Button slot="close" aria-label={t('toast.dismiss')}>
         <Icon name="close" />
       </Button>
@@ -71,10 +98,23 @@ export function Toast({ toast: item }: { toast: QueuedToast<ToastMessage> }) {
   )
 }
 
-/** Put one ToastRegion near the root of the app. */
+function subscribe(onChange: () => void): () => void {
+  return queue.subscribe(onChange)
+}
+
+function hasToasts(): boolean {
+  return queue.visibleToasts.length > 0
+}
+
+/**
+ * Put one ToastRegion near the root of the app. React Aria draws nothing while there is no toast, and registers the
+ * region as a landmark (F6) only if it has an element when it mounts, so the region is mounted afresh each time the
+ * first toast appears: without that, F6 would never reach a toast made after the page loaded.
+ */
 export function ToastRegion() {
+  const showing = useSyncExternalStore(subscribe, hasToasts, hasToasts)
   return (
-    <AriaToastRegion queue={queue} className={styles.region} aria-label={t('toast.region')}>
+    <AriaToastRegion key={showing ? 'showing' : 'empty'} queue={queue} className={styles.region} aria-label={t('toast.region')}>
       {({ toast: item }) => <Toast toast={item} />}
     </AriaToastRegion>
   )

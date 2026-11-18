@@ -1,0 +1,42 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The helper's segmented control, as Tabs draws it: segments on a Pill track, the pressed one raised on the secondary
+   button's face with its edge. Pill and that face hold --hd-text only (tokens.test.ts), which every label is. The pressed
+   label is bolder as well, so the state doesn't rest on the faces' small difference in lightness. */
+.group {
+  display: inline-flex;
+  gap: var(--hd-space-1);
+  padding: var(--hd-space-1);
+  border-radius: var(--hd-radius);
+  background: var(--hd-pill);
+}
+
+.button {
+  min-height: 22px;
+  padding: 0 var(--hd-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--hd-radius-small);
+  background: transparent;
+  color: var(--hd-text);
+  font: inherit;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.button[data-selected] {
+  border-color: var(--hd-button-secondary-line);
+  background: var(--hd-button-secondary);
+  box-shadow: 0 1px 2px var(--hd-scrim);
+  font-weight: var(--hd-weight-bold);
+}
+
+.button[data-hovered]:not([data-selected]) {
+  background: var(--hd-selection-inactive);
+}
+
+.button[data-focus-visible] {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}

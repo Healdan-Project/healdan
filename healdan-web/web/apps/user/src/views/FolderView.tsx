@@ -18,6 +18,7 @@ import { FavoriteStar } from '../actions/FavoriteStar'
 import { SelectionActions } from '../actions/SelectionActions'
 import { useOpenKey } from '../actions/useOpenKey'
 import { placeOf } from '../filing/dropTargets'
+import { FolderChangeItems } from '../menus/ContextMenus'
 import { NewFolderButton } from '../organising/NewFolder'
 import { useOrganising } from '../organising/OrganisingProvider'
 import { FolderName } from '../organising/RenameField'
@@ -67,7 +68,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const organising = useOrganisingTable(listing.rows, selection, changeSelection)
   // What was just filed flashes in the list, and the row the files are over is lit
   const { fresh } = useFiling()
-  const place = useMemo(() => (view ? placeOf(view) : { id: folderId, kind: 'store' as const }), [view, folderId])
+  const place = useMemo(() => (view ? placeOf(view) : { id: folderId, kind: 'store' as const, matterId: null }), [view, folderId])
   // By key, as a drag asks at every dragover which row it is over
   const byKey = useMemo(() => new Map(listing.rows.map((item) => [childKey(item), item])), [listing.rows])
   const zone = useDropZone(place, (key) => {
@@ -148,13 +149,14 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
           </h1>
           {/* A matter goes in My Matters (the + in the left pane), not in Favorites */}
           {view.kind !== 'matter' && !store && <FavoriteStar what={{ folderId }} add={t('favorites.add')} remove={t('favorites.remove')} />}
-          {/* Rename is greyed out where the server says it can't be done: a matter's own folder, a top-level folder for someone who isn't an admin */}
+          {/* Rename is greyed out where the server says it can't be done: a matter's own folder, a top-level folder for someone who isn't an admin. Move To… and Delete aren't offered for a matter's own folder at all */}
           {!store && (
             <span data-rename-menu={`f${view.id}`}>
               <Menu variant="quiet" label={<Icon name="dots" />} aria-label={t('folder.more', { name: view.name })}>
                 <MenuItem id="rename" isDisabled={!view.canRename} onAction={() => startRename(`f${view.id}`, 'heading')}>
                   {t('rename.menu')}
                 </MenuItem>
+                {view.kind !== 'matter' && <FolderChangeItems folder={view} />}
               </Menu>
             </span>
           )}
@@ -172,7 +174,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
             >
               <UploadButton place={place} />
               <NewFolderButton place={place} />
-              <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} selected={organising.selected} />
+              <SelectionActions document={selectedRow?.type === 'document' ? selectedRow : undefined} selected={organising.selected} folders={organising.folders} />
             </Toolbar>
             <FilterChips filters={filters} authors={authors} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />
             <Table
