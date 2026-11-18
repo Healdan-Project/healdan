@@ -1,0 +1,114 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Admin app mockup: Reindex, by search</title>
+<style>:root{--border:#d1d1d6;--text-secondary:#6e6e73;--bg-secondary:#fff;--bg-tertiary:#e5e5e7}body{margin:24px auto;max-width:1340px;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#1d1d1f;background:#f5f5f7}.subtitle{color:var(--text-secondary)}.options{display:flex;flex-direction:column;gap:.75rem}.option{display:flex;gap:1rem;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem}.option .letter{flex:none;width:28px;height:28px;border-radius:6px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-weight:600}.option h3{margin:0 0 .25rem;font-size:1rem}.option p{margin:0;color:var(--text-secondary);font-size:.9rem}</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+.hd-wrap{width:100%;overflow:hidden;border-radius:10px;border:1px solid var(--border);margin:.5rem 0 1.75rem;background:#fff}
+.hd-app{position:relative;width:1280px;transform-origin:0 0;font:13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;background:#fff;
+--a:#0C69C0;--a-soft:#E6F0FA;--side:#F5F5F7;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--ok:#1E7B34;--ok-bg:#E8F5EC;--warn:#9A5B00;--warn-bg:#FFF6E5;--bad:#9B1C11;--bad-bg:#FDF0EE;--matter:#8A5A00;--client:#5B5FC7}
+.hd-app *{box-sizing:border-box}
+.hd-app i.ti{font-size:16px;line-height:1}
+.hd-app h1,.hd-app h2,.hd-app h3,.hd-app h4,.hd-app p{margin:0;padding:0;color:inherit;font:inherit}
+.top{display:flex;align-items:center;gap:16px;height:52px;padding:0 16px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:8px;width:216px;font-weight:600;font-size:15px}
+.brand small{font-size:12px;font-weight:500;color:var(--a);background:var(--a-soft);border-radius:4px;padding:1px 6px}
+.mark{width:20px;height:22px}
+.find{flex:1;max-width:520px;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border:1px solid #C7C7CC;border-radius:8px;color:var(--third)}
+.right{margin-left:auto;display:flex;align-items:center;gap:16px;color:var(--second);font-size:12.5px}
+.right span{display:flex;align-items:center;gap:5px}
+.avatar{width:28px;height:28px;border-radius:50%;background:#D9E7F7;color:var(--a);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px}
+.body{display:grid;grid-template-columns:232px 1fr}
+.nav{background:var(--side);border-right:1px solid var(--line);padding:10px 8px}
+.sec{font-size:11px;font-weight:600;color:var(--second);text-transform:uppercase;letter-spacing:.04em;margin:14px 8px 4px}
+.ni{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px}
+.ni i{color:var(--second)}
+.ni.on{background:var(--a-soft);color:var(--a);font-weight:500}.ni.on i{color:var(--a)}
+.ni b{margin-left:auto;font-size:11px;font-weight:600;color:var(--warn);background:var(--warn-bg);border-radius:9px;padding:0 6px}
+.page{padding:16px 24px 24px;min-width:0}
+.crumb{color:var(--second);font-size:12px;margin-bottom:2px}.crumb b{color:var(--a);font-weight:400}
+.head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.head h1{font-size:20px;font-weight:600}
+.head>span{color:var(--second)}
+.push{margin-left:auto}
+.btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid #C7C7CC;font-size:12.5px;background:#fff;white-space:nowrap}
+.btn.pri{background:var(--a);border-color:var(--a);color:#fff}.btn.pri i{color:#fff}
+.btn.dan{color:var(--bad)}.btn.dan i{color:var(--bad)}
+.bar2{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.fld{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 9px;border:1px solid #C7C7CC;border-radius:6px;font-size:12.5px;color:var(--second);background:#fff;white-space:nowrap}
+.fld.w{width:240px}
+.hd-app table{width:100%;border-collapse:collapse;table-layout:auto}
+.hd-app th{font-size:11.5px;font-weight:500;color:var(--second);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.hd-app td{padding:0 8px;height:32px;border-bottom:1px solid #F2F2F4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px}
+.hd-app td.n,.hd-app th.n{text-align:right;font-variant-numeric:tabular-nums}
+.hd-app td.m{color:var(--second)}
+.hd-app tr.sel td{background:#DCEAF8}
+.num{display:inline-flex;align-items:center;gap:6px;font-weight:500}.num i{color:var(--matter)}
+.tabsl{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.tl{padding:7px 12px;color:var(--second);font-weight:500;border-bottom:2px solid transparent}
+.tl.on{color:var(--a);border-color:var(--a)}
+.lab{font-size:11px;font-weight:600;color:var(--second);text-transform:uppercase;letter-spacing:.04em;margin:0 0 6px}
+.c{border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0}
+.kv{display:grid;grid-template-columns:96px 1fr;gap:5px 10px}.kv span:nth-child(odd){color:var(--second)}
+.note{display:flex;gap:7px;align-items:flex-start;padding:8px 10px;border-radius:7px;background:var(--side);color:var(--second);font-size:12px}
+.note.w{background:var(--warn-bg);color:var(--warn)}.note i{margin-top:1px}
+.tn{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px}
+.tn i{color:var(--a)}.tn.s i{color:var(--second)}.tn.mat i{color:var(--matter)}
+.tn.sel{background:#DCEAF8}
+.tn em{margin-left:auto;font-style:normal;font-size:11px;color:var(--second)}
+.tn .ti-lock{color:var(--warn);font-size:13px}
+.pick{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;min-width:122px;height:26px;padding:0 8px;border:1px solid #C7C7CC;border-radius:6px;background:#fff}
+.chip{font-size:11px;padding:1px 7px;border-radius:9px;background:var(--side);color:var(--second)}
+.scrim{position:absolute;inset:0;background:rgb(0 0 0 / 30%)}
+.dlg{position:absolute;left:50%;top:70px;transform:translateX(-50%);width:760px;background:#fff;border-radius:10px;box-shadow:0 6px 24px rgb(0 0 0 / 25%);padding:18px 20px}
+.dlg h2{font-size:17px;font-weight:600;margin-bottom:12px}
+.form{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.f label{display:block;font-size:12px;color:var(--second);margin-bottom:3px}
+.f div{display:flex;align-items:center;justify-content:space-between;height:30px;padding:0 9px;border:1px solid #C7C7CC;border-radius:6px}
+.f.t div{height:52px;align-items:flex-start;padding-top:6px}
+.span{grid-column:1 / -1}
+.foot{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:0 0 1.5rem}
+.cols h3{margin:0 0 .35rem}.cols ul{margin:0;padding-left:1.1rem}.cols li{margin:.2rem 0}
+</style><style>
+.stage{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:22px;background:#E9E9EC}
+.d{background:#fff;border-radius:10px;box-shadow:0 3px 14px rgb(0 0 0 / 16%);padding:16px;display:flex;flex-direction:column;min-height:486px}
+.d h2{font-size:17px;font-weight:600;margin-bottom:10px}
+.segs{display:flex;border:1px solid #C7C7CC;border-radius:6px;overflow:hidden;margin-bottom:12px}
+.segs span{flex:1;text-align:center;padding:5px 0;font-size:12px;border-right:1px solid #C7C7CC}.segs span:last-child{border:0}.segs .on{background:var(--a-soft);color:var(--a);font-weight:500}
+.q{display:flex;align-items:center;gap:7px;height:32px;padding:0 9px;border:2px solid var(--a);border-radius:6px}.q i{color:var(--second)}
+.q.p{border:1px solid #C7C7CC}
+.caret{width:1px;height:15px;background:#1D1D1F;margin-left:-5px}
+.hint{color:var(--second);font-size:12px;margin:5px 0 8px}
+.res{border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.rh{font-size:11px;font-weight:600;color:var(--second);text-transform:uppercase;letter-spacing:.04em;padding:6px 9px 3px}
+.ri{display:grid;grid-template-columns:18px 1fr auto;gap:6px;padding:5px 9px;align-items:center}
+.ri i{color:var(--matter)}.ri small{display:block;color:var(--second);font-size:11.5px}.ri em{font-style:normal;color:var(--second);font-size:11.5px}
+.ri.on{background:#DCEAF8}.ri mark{background:#FFE9A8;color:inherit;border-radius:2px}
+.sel{display:flex;align-items:center;gap:7px;padding:6px 9px;background:var(--side);border-radius:6px;margin-bottom:8px}.sel i{color:var(--matter)}.sel .x{margin-left:auto;color:var(--second)}
+.tn.pick2{background:#DCEAF8}
+.ta{height:62px;border:2px solid var(--a);border-radius:6px;padding:6px 8px;font-variant-numeric:tabular-nums}
+.dr{display:flex;align-items:center;gap:7px;padding:4px 2px;border-bottom:1px solid #F2F2F4}.dr i{color:var(--ok)}.dr i.no{color:var(--bad)}.dr em{margin-left:auto;font-style:normal;color:var(--second);font-size:11.5px}
+.grow{flex:1}
+.d .foot{margin-top:12px}
+.info{color:var(--second);font-size:12px;margin-top:10px}
+</style>
+<h2>Reindex, with search in place of the drop-down</h2>
+<p class="subtitle">You read it correctly: the first drawing was a drop-down, which fails with many matters. Here is each choice in the dialog.</p>
+<div class="hd-wrap"><div class="hd-app"><div class="stage"><div class="d"><h2>Reindex</h2><div class="segs"><span class="">Documents</span><span class="">Folder</span><span class="on">Matter</span><span class="">Store</span><span class="">Everything</span></div><div class="q"><i class="ti ti-search"></i><span class="caret" style="margin-left:0"></span><span style="color:var(--third)">Find a matter</span></div><div class="hint">Search by matter number, name or client.</div><div class="res"><div class="rh">Recent Matters</div><div class="ri"><i class="ti ti-briefcase"></i><span>1003.1 Series A Investment<small>Kestrel Software Ltd</small></span><em>204</em></div><div class="ri"><i class="ti ti-briefcase"></i><span>1001.1 Charter Dispute – MV Northern Star<small>Saltmarsh Shipping Ltd</small></span><em>412</em></div><div class="ri"><i class="ti ti-briefcase"></i><span>1002.2 Employment Tribunal<small>Brightwell Bakeries Ltd</small></span><em>148</em></div></div><div class="grow"></div><div class="info">You start from what you touched lately, or from a search.</div><div class="foot"><span class="btn">Cancel</span><span class="btn pri" style="opacity:.45">Reindex</span></div></div><div class="d"><h2>Reindex</h2><div class="segs"><span class="">Documents</span><span class="">Folder</span><span class="on">Matter</span><span class="">Store</span><span class="">Everything</span></div><div class="q"><i class="ti ti-search"></i>char<span class="caret"></span></div><div class="hint">Search by matter number, name or client.</div><div class="res"><div class="rh">3 Matters</div><div class="ri on"><i class="ti ti-briefcase"></i><span>1001.1 <mark>Char</mark>ter Dispute – MV Northern Star<small>Saltmarsh Shipping Ltd</small></span><em>412</em></div><div class="ri"><i class="ti ti-briefcase"></i><span>1004.3 <mark>Char</mark>ity Registration<small>Marsh Lane Community Trust</small></span><em>36</em></div><div class="ri"><i class="ti ti-briefcase"></i><span>1012.1 Lease of Unit 4<small><mark>Char</mark>nwood Holdings Ltd</small></span><em>58</em></div></div><div class="grow"></div><div class="info">About 12 minutes for 412 documents. Search keeps working meanwhile.</div><div class="foot"><span class="btn">Cancel</span><span class="btn pri">Reindex 412 Documents</span></div></div><div class="d"><h2>Reindex</h2><div class="segs"><span class="">Documents</span><span class="on">Folder</span><span class="">Matter</span><span class="">Store</span><span class="">Everything</span></div><div class="sel"><i class="ti ti-briefcase"></i>1001.1 Charter Dispute<span class="x"><i class="ti ti-x" style="color:inherit"></i></span></div><div class="q p"><i class="ti ti-filter"></i><span style="color:var(--third)">Filter this matter’s folders</span></div><div style="margin-top:8px"><div class="tn"><i class="ti ti-folder"></i>Correspondence<em>96</em></div><div class="tn pick2"><i class="ti ti-folder"></i>Pleadings<em>38</em></div><div class="tn"><i class="ti ti-folder"></i>Evidence<em>171</em></div><div class="tn"><i class="ti ti-folder"></i>Drafts<em>44</em></div><div class="tn"><i class="ti ti-folder"></i>Emails<em>52</em></div><div class="tn"><i class="ti ti-folder"></i>Privileged<em>11</em></div></div><div class="grow"></div><div class="info">Includes every folder inside the one you pick.</div><div class="foot"><span class="btn">Cancel</span><span class="btn pri">Reindex 38 Documents</span></div></div><div class="d"><h2>Reindex</h2><div class="segs"><span class="on">Documents</span><span class="">Folder</span><span class="">Matter</span><span class="">Store</span><span class="">Everything</span></div><div class="ta">10412, 10398, 10388, 99999</div><div class="hint">Type or paste doc #s.</div><div class="dr"><i class="ti ti-check"></i># 10412 Witness Statement.pdf<em>1001.1</em></div><div class="dr"><i class="ti ti-check"></i># 10398 Heads of Terms.pdf<em>1003.1</em></div><div class="dr"><i class="ti ti-check"></i># 10388 Skeleton Argument.docx<em>1001.1</em></div><div class="dr"><i class="ti ti-x no"></i># 99999<em>No such document</em></div><div class="grow"></div><div class="foot"><span class="btn">Cancel</span><span class="btn pri">Reindex 3 Documents</span></div></div><div class="d"><h2>Reindex</h2><div class="segs"><span class="">Documents</span><span class="">Folder</span><span class="">Matter</span><span class="on">Store</span><span class="">Everything</span></div><div class="radio on" style="display:flex;gap:8px;padding:7px 8px;background:var(--a-soft);border-radius:6px"><i class="ti ti-circle-dot" style="color:var(--a)"></i>Client Work<em style="margin-left:auto;font-style:normal;color:var(--second)">1,119 documents</em></div><div style="display:flex;gap:8px;padding:7px 8px"><i class="ti ti-circle" style="color:var(--second)"></i>Firm<em style="margin-left:auto;font-style:normal;color:var(--second)">165 documents</em></div><div class="grow"></div><div class="info">A firm has few Stores, so this one stays a plain list.</div><div class="foot"><span class="btn">Cancel</span><span class="btn pri">Reindex 1,119 Documents</span></div></div><div class="d"><h2>Reindex</h2><div class="segs"><span class="">Documents</span><span class="">Folder</span><span class="">Matter</span><span class="">Store</span><span class="on">Everything</span></div><div>All <b style="font-weight:600">1,284 documents</b>, in about 40 minutes. Search keeps finding them while they’re replaced.</div><div class="note w" style="margin-top:12px"><i class="ti ti-alert-triangle"></i><span><b style="font-weight:600">Empty the index first</b> is for a damaged index. Search then misses documents until the run ends.<br><span style="display:inline-flex;gap:6px;align-items:center;margin-top:6px;color:#1D1D1F"><i class="ti ti-square" style="margin:0"></i>Empty the index first</span></span></div><div class="grow"></div><div class="foot"><span class="btn">Cancel</span><span class="btn pri">Reindex Everything</span></div></div></div></div></div><script>
+(function(){
+  function fit(){document.querySelectorAll('.hd-wrap').forEach(function(w){var a=w.firstElementChild,s=Math.min(1,w.clientWidth/1280);a.style.transform='scale('+s+')';w.style.height=(a.offsetHeight*s)+'px';});}
+  addEventListener('resize',fit);fit();
+})();
+</script>
+<div class="cols">
+  <div><h3>The rule for the whole app</h3><ul>
+    <li><b>Anything that can grow long is a search:</b> matters, clients and people, in forms and in the filters above lists.</li>
+    <li>So New Matter's Client and Owner become searches too, and so do the Client and Owner filters on the Matters list.</li>
+    <li><b>Short lists stay plain menus:</b> Stores and workspace templates.</li>
+  </ul></div>
+  <div><h3>Shortcuts</h3><ul>
+    <li>Reindex on a matter's page or a folder opens this with that item already chosen.</li>
+    <li>The search matches a client's name too, so typing a client finds all its matters.</li>
+  </ul></div>
+</div>
