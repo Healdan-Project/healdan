@@ -31,7 +31,6 @@ import com.logicaldoc.healdan.api.model.TrashContents;
 import com.logicaldoc.healdan.api.model.TrashItem;
 import com.logicaldoc.healdan.api.model.UserRef;
 import com.logicaldoc.healdan.listing.FileKinds;
-import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.security.AccessChecks;
@@ -138,10 +137,11 @@ final class TrashViews {
 		}
 
 		// The place's present path goes with its present matter, so the two never mix (a place moved into another matter
-		// since the delete); without the place, both are as recorded at the delete
+		// since the delete); without the place, both are as recorded at the delete. A place in no matter is a Store, which
+		// a matter's own folder was deleted from: its matter is the one recorded, the folder's own (TrashRecorder.matterOf)
 		Optional<FolderView> place = livePlace(row, caller);
 		DeletedFrom deletedFrom;
-		MatterRef matter;
+		MatterRef matter = null;
 		if (place.isPresent()) {
 			FolderView view = place.get();
 			deletedFrom = new DeletedFrom(new FolderRef(view.id(), view.name(), view.kind()),
@@ -149,9 +149,9 @@ final class TrashViews {
 			matter = view.matter();
 		} else {
 			deletedFrom = new DeletedFrom(null, row.fromPath());
-			Matter recorded = row.matterId() != null ? MatterDAO.get().findById(row.matterId()) : null;
-			matter = ApiViews.matterRef(recorded);
 		}
+		if (matter == null && row.matterId() != null)
+			matter = ApiViews.matterRef(MatterDAO.get().findById(row.matterId()));
 		return new TrashItem(row.id(), row.kind(), row.name(),
 				row.docNumber() != null ? Long.valueOf(row.docNumber()) : null,
 				folder ? FOLDER : FileKinds.of(FilenameUtils.getExtension(row.name())),

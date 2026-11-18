@@ -351,7 +351,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await check('the Trash with an item selected')
       await main().getByRole('toolbar', { name: 'Trash Actions' }).getByRole('button', { name: 'Remove…' }).click()
       const remove = page.getByRole('alertdialog', { name: `Remove "${first}" from the Trash?` })
-      await expect(remove.getByText(/An administrator can, for \d+ days\./)).toBeVisible()
+      await expect(remove.getByText(/An administrator can, for \d+ days?\./)).toBeVisible()
       await check('the Remove question')
       await remove.getByRole('button', { name: 'Cancel' }).click()
       await main().getByRole('toolbar', { name: 'Trash Actions' }).getByRole('button', { name: 'Empty Trash…' }).click()

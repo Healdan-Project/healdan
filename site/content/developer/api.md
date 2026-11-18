@@ -503,8 +503,8 @@ Their checks run in this order, and none names or counts anything you can't read
 | 2 | `404 not-found` | A folder you can't read, one outside the Stores (the Templates Store too), an alias, one already deleted, and for a move a destination you can't read |
 | 3 | `409 not-deletable` or `not-movable` | A Store, or a matter's own folder, administrators included |
 | 4 | `409 filing-rule` | A move into a Store, a search folder, the folder itself or a folder inside it |
-| 5 | `403 forbidden` | No Delete, or no Move on the folder, or no Add on the destination |
-| 6 | `403 admins-only` | A folder directly in a matter's workspace, search folders included, unless you're an administrator; a move into a matter's top level likewise |
+| 5 | `403 forbidden` | No Delete, or no Move on the folder, or no Add on the destination. A move's `cause` says which: `no-move` or `no-add` |
+| 6 | `403 admins-only` | A folder directly in a matter's workspace, search folders included, unless you're an administrator; a move into a matter's top level likewise. A move's `cause` says which: `top-level` or `into-top-level` |
 | 7 | `403 items-not-allowed` | You lack Delete (or Move) on something inside. The same words whether the item is hidden or not |
 | 8 | `409 checked-out` | A document inside is checked out, by anyone, you too. `holds` lists the ones you can read |
 | 9 | `409 immutable` | A delete found an immutable document inside, administrators too |

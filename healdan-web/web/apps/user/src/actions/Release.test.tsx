@@ -159,6 +159,8 @@ describe('Release', () => {
     let mine = doc({ ...plan, hold: inBrowser })
     const { all } = folderRoutes({
       'GET /v1/folders/7/children': () => children([folderLetter, lease, mine]),
+      // Asked again once it's released: a document that answered 404 then would be gone, and leave the selection
+      'GET /v1/documents/10433': () => mine,
       'DELETE /v1/documents/10433/checkout': () => new Promise((resolve) => (answer = resolve)),
     })
     await renderApp('/folders/7?sel=10433', all)

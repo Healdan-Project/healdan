@@ -147,18 +147,26 @@ function heldNames(error: ApiError, meId: number | undefined): string[] {
   })
 }
 
+/** The words for each check a folder move's `forbidden` or `admins-only` names in its `cause` (`FolderChanges.refuseMove`) */
+const MOVE_CAUSES: Record<NonNullable<S['Problem']['cause']>, StringKey> = {
+  'no-move': 'move.noPermission',
+  'no-add': 'move.noAddThere',
+  'top-level': 'move.adminsOnlyFolder',
+  'into-top-level': 'move.adminsOnlyInto',
+}
+
 /**
  * Why a folder wasn't moved, from the catalogue (spec 4.3, 7.5), as folderDeleteRefusal: what it holds that the person
- * may not move is named by nothing, and of its check-outs only those the problem's `holds` names. The folder says which
- * cause the server's answer is (`FolderChanges.refuseMove`): `admins-only` is its own top level, or else the matter's top
- * level it was going into; `forbidden` is no Move on it when its `canMove` says so, or else no Add where it was going. A
- * name already taken, and an email already in the matter it went to, have the words a document's move has.
+ * may not move is named by nothing, and of its check-outs only those the problem's `holds` names. A `forbidden` or an
+ * `admins-only` says by its `cause` which check refused it: no Move on the folder or no Add where it was going, its own
+ * top level or the matter's top level it was going into. A name already taken, and an email already in the matter it
+ * went to, have the words a document's move has.
  */
-export function folderMoveRefusal(error: unknown, folder: Pick<MovingFolder, 'canMove' | 'topLevel'>, meId: number | undefined): FolderRefusal {
+export function folderMoveRefusal(error: unknown, meId: number | undefined): FolderRefusal {
   if (error instanceof ApiError) {
     if (error.code === 'items-not-allowed') return { reason: t('move.notAllowed') }
-    if (error.code === 'admins-only') return { reason: t(adminsOnlyMove(folder)) }
-    if (error.code === 'forbidden') return { reason: t(folder.canMove ? 'move.noAddThere' : 'move.noPermission') }
+    const cause = (error.body as Partial<S['Problem']> | null)?.cause
+    if ((error.code === 'forbidden' || error.code === 'admins-only') && cause !== undefined && Object.hasOwn(MOVE_CAUSES, cause)) return { reason: t(MOVE_CAUSES[cause]) }
     if (error.code === 'checked-out') return { reason: t('delete.checkedOut'), details: heldNames(error, meId), after: t('move.checkedOutAfter') }
   }
   return { reason: refusalText(error, meId) }

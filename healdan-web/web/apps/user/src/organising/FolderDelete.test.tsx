@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { ApiError } from '@healdan/api'
 import { heldByJamie } from '../filing/testing'
 import { expectNoAxeViolations } from '../test/axe'
-import { children, folder, page, problem } from '../test/fakeApi'
+import { children, document as doc, folder, page, problem } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { closeMenu, drafts, lease, matterTop, routes, row, select, store, workspace } from './testing'
 
@@ -75,6 +75,22 @@ describe('The ways in to deleting a folder', () => {
     expect(await names()).toEqual(['Open', 'Open in New Tab', 'New Folder', 'Rename', 'Move To…', 'Delete', 'Add to Favorites'])
     await userEvent.click(await item('Delete'))
     expect(await question()).toBeTruthy()
+  })
+
+  it('forgets the selection of a document the folder took, once its details are asked again and answer 404', async () => {
+    // Memo is in the tree's Correspondence (111), and selected from the matter's top level, from where that folder is deleted
+    const memo = doc({ docNumber: 10500, name: 'Memo.docx', folder: { id: 111, name: 'Correspondence', kind: 'folder' } })
+    const fixture = routes({ 'GET /v1/documents/10500': () => (fixture.written.deletedFolders.includes(111) ? problem(404, 'not-found') : memo) })
+    const { api, router } = await renderApp('/folders/110?sel=10500', fixture.all)
+    await within(await screen.findByRole('region', { name: 'Details' })).findByRole('heading', { level: 2, name: 'Memo.docx' })
+    const box = await expandTree()
+    fireEvent.click(within(box).getByRole('button', { name: 'More for Correspondence' }))
+    await userEvent.click(await item('Delete'))
+    await userEvent.click(within(await question('Move "Correspondence" to the Trash?')).getByRole('button', { name: 'Move to Trash' }))
+
+    expect(await screen.findByText('Moved "Correspondence" to the Trash')).toBeTruthy()
+    await waitFor(() => expect(router.history.location.search).toBe(''))
+    expect(api.callsTo('GET /v1/documents/10500')).toHaveLength(2)
   })
 
   it("has Move To… and Delete in the open folder's ⋯, and an open folder that's deleted gives way to its parent", async () => {

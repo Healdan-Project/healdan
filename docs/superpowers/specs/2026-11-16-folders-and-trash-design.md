@@ -446,7 +446,8 @@ Body `{ "folderId": n }`. Answers `200` with the folder's `FolderView` in its ne
 changes nothing (`200`). It refuses `400`; `404` (the Templates Store's folders too, as for a delete: correction 13);
 `409 not-movable` (a Store or a matter's own folder); `409 filing-rule`
 (M1's placement: into a Store, a search folder, the Templates Store, or into the folder itself or its own tree);
-`403 forbidden` (no Move on the folder, or no Add on the destination); `403 admins-only`; `403 items-not-allowed`;
+`403 forbidden` (no Move on the folder, or no Add on the destination); `403 admins-only`, each with `cause` saying which
+check (`no-move`, `no-add`, `top-level`, `into-top-level`; changed in the build: PR #265's review); `403 items-not-allowed`;
 `409 checked-out` (§4.3); `409 name-taken`; `409 already-filed` (once per matter, with `document`); `409 refused`. It
 holds `FolderRenames`' per-parent locks for both parents, in id order, so a rename and a move can't both take a name.
 
@@ -559,8 +560,8 @@ days, "after 1 day" for one (changed in the build (final review)).
   document is named as a folder is, "Moved "Lease.pdf" to the Trash", and several are counted, "Moved 4 items to the
   Trash" (changed in the build: correction 14). What Undo can't restore is said in Refusals, "Some Items Weren't
   Restored", while the rest is restored: one already restored or no longer in the Trash (`404`) with "It's already been
-  restored, or it's no longer in the Trash.", and one whose place is gone with "The folder it was deleted from is gone.
-  Restore it from the Trash to choose another place.", as the dialog only closes (changed in the build (final review)).
+  restored, or it's no longer in the Trash.", and one whose place is gone or refuses it with "The folder it was deleted from is
+  gone, or you can't restore into it. Restore it from the Trash to choose another place.", as the dialog only closes (changed in the build (final review)).
 - `packages/ui`'s `Toast` gains an action: a button with its label and callback, reachable by keyboard (F6 to the region,
   as React Aria's toast region allows), announced, and still the region's at most three.
 
@@ -602,11 +603,12 @@ days, "after 1 day" for one (changed in the build (final review)).
   Moved" once a folder is refused, as the documents' title no longer fits (changed in the build: Ruling 37). Changed in
   the build (final review), so that each says the cause the API tells apart:
   - a move's check-outs end "It can be moved once they're checked in or released.";
-  - `admins-only` says "Only administrators can move a matter's top-level folders." for a folder at a matter's top level,
-    and "Only administrators can move folders into a matter's top level." for any other, as a drop of one on a matter in
-    the tree says before any call;
-  - `forbidden` says "You don't have permission to move this folder." when the folder's `canMove` is false, and "You
-    don't have permission to add folders there." when it's true, as the Add on the destination is then what's missing;
+  - `admins-only` says "Only administrators can move a matter's top-level folders." for its `cause` `top-level`, and
+    "Only administrators can move folders into a matter's top level." for `into-top-level`, as a drop of one on a matter
+    in the tree says before any call;
+  - `forbidden` says "You don't have permission to move this folder." for its `cause` `no-move`, and "You don't have
+    permission to add folders there." for `no-add` (changed again in PR #265's review: the server says which, where the
+    app had guessed from a `canMove` that could be out of date);
   - a folder dropped into itself or its own tree says "A folder can't be moved into itself or a folder inside it.", a
     sentence, where the picker's label is "The folder itself".
 

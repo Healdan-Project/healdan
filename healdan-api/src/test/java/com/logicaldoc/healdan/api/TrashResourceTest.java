@@ -283,6 +283,18 @@ public class TrashResourceTest extends ApiTestCase {
 		assertTrue(gone.toString(), gone.path("matter").path("display").textValue().startsWith("998.1"));
 	}
 
+	@Test
+	public void testAMattersOwnFolderKeepsItsMatter() throws Exception {
+		// Deleted in the Classic Interface: its place is the Store, which is in no matter
+		FolderDAO.get().deleteTree(workspace.getId(), fx.folderHistory(boss));
+		long item = TrashStore.get().itemHolding(new TrashMember('F', workspace.getId()), TrashState.DELETED)
+				.orElseThrow();
+
+		JsonNode listed = item(list("", bossToken), item);
+		assertEquals(store.getId(), listed.path("deletedFrom").path("folder").path("id").asLong());
+		assertTrue(listed.toString(), listed.path("matter").path("display").textValue().startsWith("998.1"));
+	}
+
 	// Restore
 
 	@Test

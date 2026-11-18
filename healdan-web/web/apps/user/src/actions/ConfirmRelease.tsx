@@ -102,10 +102,9 @@ export function ConfirmRelease({ documents, onConfirm, onCancel, onShowDevices }
 
   return (
     <Dialog
-      role="alertdialog"
+      warning
       size="wide"
       title={title}
-      icon={<Icon name="alertTriangle" size={24} className={styles.warningSign} />}
       aria-describedby={lossId}
       isOpen
       onOpenChange={(open) => !open && onCancel()}

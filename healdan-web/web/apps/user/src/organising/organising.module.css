@@ -25,11 +25,6 @@
   gap: var(--hd-space-3);
 }
 
-/* The question before a remove from the Trash (ConfirmRemove): the warning sign beside its title, as the release's is */
-.warningSign {
-  color: var(--hd-danger-fill);
-}
-
 .picker {
   display: flex;
   flex-direction: column;

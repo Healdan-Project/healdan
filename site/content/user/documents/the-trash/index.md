@@ -34,8 +34,9 @@ back, and why, and the rest come back all the same:
 
 - **"It's already been restored, or it's no longer in the Trash."** Someone restored it first, perhaps you from the
   Trash or an administrator, or it was removed from the Trash.
-- **"The folder it was deleted from is gone. Restore it from the Trash to choose another place."** The item is still in
-  your Trash: **Restore** there asks where to put it.
+- **"The folder it was deleted from is gone, or you can't restore into it. Restore it from the Trash to choose another
+  place."** The folder was deleted, or it can't take the item back: you can no longer add to it, say, or the matter
+  already holds the same email. The item is still in your Trash: **Restore** there asks where to put it.
 
 A delete takes a folder with everything in it that was in it, and its trash entry is that folder as one item. It
 doesn't take what was already in the Trash, yours or a colleague's, or already removed.

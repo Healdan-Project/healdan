@@ -335,10 +335,9 @@ and `drag` props and the selected documents and folders for the toolbar's More m
   out, documents go nowhere that holds none, and a folder goes neither into its own tree nor anywhere its `canMove` or M1's
   placement rules refuse. What it refuses, and what the server refuses (`folderMoveRefusal`: `items-not-allowed` names
   nothing, and `checked-out` lists only the problem's `holds`), are lines of `Refusals`, while the rest is moved, the
-  documents first and then the folders, each with its own call. A refusal names the cause the server told apart: the
-  folder's `topLevel` makes `admins-only` its own top level, or else the matter's top level it was going into (as a drop
-  on a matter in the tree is refused before any call), and its `canMove` makes `forbidden` no Move on it, or else no Add
-  where it was going. **Move To…** is there while anything selected can be moved (`anyMovable`). Before a folder moves into another matter (its `matterId` and the place's differ), `CrossMatter` asks, once
+  documents first and then the folders, each with its own call. A refusal names the check the server's `cause` says:
+  for `admins-only` the folder's own top level, or the matter's top level it was going into (as a drop on a matter in the
+  tree is refused before any call), and for `forbidden` no Move on the folder, or no Add where it was going. **Move To…** is there while anything selected can be moved (`anyMovable`). Before a folder moves into another matter (its `matterId` and the place's differ), `CrossMatter` asks, once
   for each such folder, in turn, counting its documents with `GET /folders/{id}/contents`; **Cancel** keeps only that folder
   where it is. The toast names a folder by the name the server answered, which CE changes on its way in when a folder the
   person can't see already has its name.

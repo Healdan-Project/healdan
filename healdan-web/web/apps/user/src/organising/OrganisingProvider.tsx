@@ -4,7 +4,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import { createContext, useContext, useState, type DragEvent, type ReactNode } from 'react'
-import { ApiError, apiPath, type components } from '@healdan/api'
+import type { components } from '@healdan/api'
 import { plural, t, toast, toastWithAction } from '@healdan/ui'
 import { eachItem, nameOf, type ItemDone, type ItemRefusal, type Movable, type OneItem, type OrganisingItems, type RefusalLine } from '../actions/batch'
 import {
@@ -173,7 +173,7 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     const lines = new Map<string, RefusalLine>()
     for (const one of early) lines.set(lineKey(one), { key: lineKey(one), name: nameOf(one), reason: t(one.reason) })
     for (const one of failed) {
-      const said = 'document' in one ? { reason: refusalText(one.error, me.data?.id) } : folderMoveRefusal(one.error, one.folder, me.data?.id)
+      const said = 'document' in one ? { reason: refusalText(one.error, me.data?.id) } : folderMoveRefusal(one.error, me.data?.id)
       lines.set(lineKey(one), { key: lineKey(one), name: nameOf(one), ...said })
     }
     return rowKeys(items).flatMap((key) => lines.get(key) ?? [])
@@ -243,16 +243,6 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     return invalidateDocumentLists(queryClient, documents)
   }
 
-  /** Whether the document is gone (404), as one a deleted folder took is: only the server knows what the folder held */
-  async function isGone(docNumber: number): Promise<boolean> {
-    try {
-      await api.get(apiPath`/v1/documents/${docNumber}`)
-      return false
-    } catch (error) {
-      return error instanceof ApiError && error.status === 404
-    }
-  }
-
   async function remove(items: OrganisingItems) {
     const next = rowAfterKeys(rowKeys(items))
     const outcome = await eachItem<S['TrashItem']>(items, {
@@ -263,9 +253,9 @@ export function OrganisingProvider({ children }: { children: ReactNode }) {
     })
     const done = outcome.done.flatMap((one) => ('document' in one ? [one.document.docNumber] : []))
     const tookFolder = outcome.done.some((one) => 'folder' in one)
-    // What was deleted can't stay selected: its details would answer 404. That's a document deleted on its own, or one a
-    // deleted folder took, which the server is asked about
-    if (selected !== undefined && (done.includes(selected) || (tookFolder && (await isGone(selected))))) select(undefined)
+    // What was deleted can't stay selected: its details would answer 404. One a deleted folder took, which only the server
+    // knows of, is forgotten by its details once the refresh asks for it again and it answers 404 (DetailsPanel's onGone)
+    if (selected !== undefined && done.includes(selected)) select(undefined)
     // The open folder, deleted or in a deleted folder, would answer 404: its deleted folder's parent opens in its place
     const open = idFrom(openId)
     const path = open === undefined ? undefined : queryClient.getQueryData<S['FolderView']>(keys.folder(open))?.path

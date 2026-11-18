@@ -251,6 +251,11 @@ describe('A folder leaving its matter', () => {
   })
 })
 
+/** A folder move's refusal by the server, with the check that made it */
+function refusedFor(code: 'forbidden' | 'admins-only', cause: string): ApiError {
+  return new ApiError(403, code, 'A server sentence that must not be shown raw.', { status: 403, code, cause })
+}
+
 describe('What a folder move refused', () => {
   it('is said per item, in the catalogue\'s words, naming nothing hidden, while the rest is moved', async () => {
     const named = (id: number, name: string) => folder({ id, name, path: [...correspondence.path, step({ id, name })] })
@@ -265,11 +270,11 @@ describe('What a folder move refused', () => {
       'POST /v1/folders/9/move': new ApiError(409, 'checked-out', 'A server sentence that must not be shown raw.', { code: 'checked-out', holds }),
       'POST /v1/folders/10/move': problem(409, 'name-taken'),
       // Not top-level itself: the top level it was going into is what's refused
-      'POST /v1/folders/12/move': problem(403, 'admins-only'),
+      'POST /v1/folders/12/move': refusedFor('admins-only', 'into-top-level'),
       'POST /v1/folders/14/move': new ApiError(409, 'already-filed', 'A server sentence that must not be shown raw.', { code: 'already-filed', document: copy }),
-      'POST /v1/folders/16/move': problem(403, 'admins-only'),
-      // Its canMove says it may move, so what's missing is Add where it was going
-      'POST /v1/folders/18/move': problem(403, 'forbidden'),
+      'POST /v1/folders/16/move': refusedFor('admins-only', 'top-level'),
+      // Its canMove says it may move, and the server says what's missing is Add where it was going
+      'POST /v1/folders/18/move': refusedFor('forbidden', 'no-add'),
     })
     await renderApp('/folders/7', all)
     await select(/Lease/, /Plan/)
@@ -298,10 +303,13 @@ describe('What a folder move refused', () => {
     expect(await screen.findByText('Moved 2 documents to Pleadings')).toBeTruthy()
   })
 
-  it("says the server's forbidden is no Move on the folder when its canMove says so, and else no Add where it was going", () => {
-    const refused = problem(403, 'forbidden')
-    expect(folderMoveRefusal(refused, { canMove: false }, undefined).reason).toBe("You don't have permission to move this folder.")
-    expect(folderMoveRefusal(refused, { canMove: true }, undefined).reason).toBe("You don't have permission to add folders there.")
+  it("says which check the server's forbidden and admins-only were by their cause, whatever the list said of the folder", () => {
+    expect(folderMoveRefusal(refusedFor('forbidden', 'no-move'), undefined).reason).toBe("You don't have permission to move this folder.")
+    expect(folderMoveRefusal(refusedFor('forbidden', 'no-add'), undefined).reason).toBe("You don't have permission to add folders there.")
+    expect(folderMoveRefusal(refusedFor('admins-only', 'top-level'), undefined).reason).toBe("Only administrators can move a matter's top-level folders.")
+    expect(folderMoveRefusal(refusedFor('admins-only', 'into-top-level'), undefined).reason).toBe("Only administrators can move folders into a matter's top level.")
+    // Without a cause it knows, the catalogue's words for the code
+    expect(folderMoveRefusal(problem(403, 'forbidden'), undefined).reason).toBe("You don't have permission to do that.")
   })
 })
 

@@ -407,7 +407,7 @@ export const enUS = {
   'undo.refusedTitle': "Some Items Weren't Restored",
   // Why Undo didn't restore an item: the world moved on since the delete (the plan's Review Focus 5)
   'undo.alreadyRestored': "It's already been restored, or it's no longer in the Trash.",
-  'undo.placeGone': 'The folder it was deleted from is gone. Restore it from the Trash to choose another place.',
+  'undo.placeGone': "The folder it was deleted from is gone, or you can't restore into it. Restore it from the Trash to choose another place.",
   // The Trash (folders and Trash spec 7.2 to 7.4)
   'trash.title': 'Trash',
   'trash.actions': 'Trash Actions',

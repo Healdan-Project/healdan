@@ -131,7 +131,7 @@ test("removes a folder from the Trash after the question, and an administrator's
   await item.getByRole('rowheader').click()
   await main(page).getByRole('toolbar', { name: 'Trash Actions' }).getByRole('button', { name: 'Remove…' }).click()
   const question = page.getByRole('alertdialog', { name: `Remove "${REMOVED}" from the Trash?` })
-  await expect(question.getByText(/You won't be able to restore it\. An administrator can, for \d+ days\./)).toBeVisible()
+  await expect(question.getByText(/You won't be able to restore it\. An administrator can, for \d+ days?\./)).toBeVisible()
   await question.getByRole('button', { name: 'Remove', exact: true }).click()
   await expect(item).toHaveCount(0)
 

@@ -8,7 +8,7 @@ import { ApiError } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
 import { children, document as doc, folder, matter, me } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
-import { addRow, cacheMessage, correspondence, row, pleadings, routes, select, toolbar } from './testing'
+import { addRow, cacheMessage, correspondence, drafts, lease, row, pleadings, routes, select, toolbar } from './testing'
 
 async function openPicker() {
   await userEvent.click(within(await toolbar()).getByRole('button', { name: 'More' }))
@@ -245,6 +245,19 @@ describe('The Move To… picker, for a folder', () => {
     await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
     expect(await within(dialog).findByText('Open a folder inside the matter to move the documents into it.')).toBeTruthy()
     expect((await here(dialog)).hasAttribute('disabled')).toBe(true)
+  })
+
+  it("greys a matter's top level out for an administrator when the folders selected are there already and the documents can't go", async () => {
+    // Pleadings is a top-level folder of 1001.1, shown here among Correspondence's so that it can be selected with Lease
+    const { all, written } = pickerRoutes({ ...admin, 'GET /v1/folders/7/children': children([drafts, pleadings, lease]) })
+    await renderApp('/folders/7', all)
+    await select(/Lease/)
+    await addRow(/Pleadings/)
+    const dialog = await pickFor(/Lease/, 'Move 2 Items')
+    await userEvent.click(await within(dialog).findByRole('button', { name: /1001\.1 – Charter Dispute/ }))
+    expect(await within(dialog).findByText('Open a folder inside the matter to move the documents into it.')).toBeTruthy()
+    expect((await here(dialog)).hasAttribute('disabled')).toBe(true)
+    expect(written.movedFolders).toEqual([])
   })
 
   it("moves an administrator's folders to a matter's top level with documents selected too, and says the documents stayed, as a drop does", async () => {

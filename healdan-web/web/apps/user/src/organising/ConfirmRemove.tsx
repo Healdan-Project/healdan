@@ -3,7 +3,7 @@
 
 import { useId } from 'react'
 import type { components } from '@healdan/api'
-import { Button, Dialog, Icon, plural, t } from '@healdan/ui'
+import { Button, Dialog, plural, t } from '@healdan/ui'
 import styles from './organising.module.css'
 
 type S = components['schemas']
@@ -42,9 +42,8 @@ export function ConfirmRemove({ question, removedDays, onConfirm, onCancel }: Co
   const warningId = useId()
   return (
     <Dialog
-      role="alertdialog"
+      warning
       title={title}
-      icon={<Icon name="alertTriangle" size={24} className={styles.warningSign} />}
       aria-describedby={warningId}
       isOpen
       onOpenChange={(open) => !open && onCancel()}
