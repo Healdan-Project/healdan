@@ -17,8 +17,10 @@ COPY docker/maven-settings.xml /root/.m2/settings.xml
 # builder that has this stage cached. CI's layer cache keeps only the final image's layers, so CI runs it again.
 COPY --exclude=docker --exclude=Dockerfile --exclude=.dockerignore --exclude=.gitignore --exclude=*.md . .
 # The cache mount keeps only third-party dependencies: the reactor's own artifacts (com/logicaldoc, about half its
-# size) are rebuilt every time. Docker CI saves the mount between runs (.github/workflows/docker-image.yml).
-RUN --mount=type=cache,target=/root/.m2/repository \
+# size) are rebuilt every time. Docker CI saves the mount between runs (.github/workflows/docker-image.yml). It's
+# locked, so two builds on one machine, such as two smoke tests', take turns: each deletes com/logicaldoc as it ends,
+# which would take it from under the other's install.
+RUN --mount=type=cache,target=/root/.m2/repository,sharing=locked \
     --mount=type=cache,target=/root/.npm \
     mvn -B -ntp -DskipTests install \
  && rm -rf /root/.m2/repository/com/logicaldoc

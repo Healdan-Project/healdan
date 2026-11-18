@@ -186,7 +186,7 @@ uploads in parts (create, upload a part, complete, abort).
 | `docker/tests/test-web.sh` | the User app in a browser, against a stack with the smoke overlay (see [The User App's Tests](#the-user-apps-tests)): Playwright's specs in Chromium and WebKit, then `curl` checks of the web session's forgery refusals. Needs Docker, curl and Python 3: `BASE=http://127.0.0.1:18080 docker/tests/test-web.sh`, which `docker/smoke-test.sh` runs as step 9, the last. It needs the Indexer set to every few seconds (see [The User App's Tests](#the-user-apps-tests)) |
 | `docker/tests/test-signin.sh` | provider sign-in through the stand-in Keycloak (see below), with `curl` and a cookie jar: the web page's sign-in ending at the User app, signed in, a local account linked by email losing its password and its device token, the gate refusing someone in none of the mapped groups, the helper's sign-in handing a code to a pretend loopback address and the code exchanged for a device token, and a person disabled at Keycloak losing that token at its next re-check. Run it against a fresh stack with the sign-in overlay: `BASE=http://127.0.0.1:8080 KEYCLOAK=127.0.0.1:18180 docker/tests/test-signin.sh` |
 | `docker/tests/test-storage.sh` | storage backends against the stand-in Garage (see below): a file filed in Smoke Cloud reaching Garage encrypted, files moved in from Smoke moving up and not cached, reads through Garage and from the read cache, then with Garage stopped a save waiting in staging, an uncached file answering `503` through the API, `/download` and a shared link, and `/convertpdf` of an uncached PDF serving LogicalDOC's placeholder, and a matter moved to Smoke bringing its files home while Garage keeps them held. With `after-restart` it checks the same rows after a restart, a first read through Garage, and a read from the cache rebuilt from its folder with Garage stopped. It stops and starts Garage itself, and needs curl 8.0.0 or later, jq, sha256sum and docker: `docker/smoke-test.sh` runs it, passing it the stack's containers, as step 5f and again in step 8 |
-| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache` and a Content-Security-Policy with `object-src 'none'` (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the stack running on Healdan's storage (its setup steps recorded and Original's marker written, step 5), M2's client flow through the API (`test-api.sh`, step 5c), the User app in Chromium and WebKit (`test-web.sh`, step 9, the last), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), storage backends against a stand-in S3 server, Garage (`test-storage.sh`, step 5f, and again after step 8's restart), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which checks LogicalDOC's tables, replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one |
+| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache` and a Content-Security-Policy with `object-src 'none'` (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the stack running on Healdan's storage (its setup steps recorded and Original's marker written, step 5), M2's client flow through the API (`test-api.sh`, step 5c), the User app in Chromium and WebKit (`test-web.sh`, step 9, the last), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), storage backends against a stand-in S3 server, Garage (`test-storage.sh`, step 5f, and again after step 8's restart), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which checks LogicalDOC's tables, replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one. Two can run on one machine at once (see [Two Smoke Tests at Once](#two-smoke-tests-at-once)) |
 
 `docker/tests/bulk-documents.sh` isn't a test: it fills a folder on a throwaway stack with generated `.docx`, `.pdf`,
 `.xlsx`, `.eml` and `.odt` files, five uploads at a time, to measure big folders and searches. Give it the stack's
@@ -252,6 +252,43 @@ Step 5f runs `test-storage.sh`, which stops and starts Garage itself, and step 8
 It needs curl 8.0.0 or later: only from 8.0.0 does `--aws-sigv4` send the `x-amz-content-sha256` header, without which
 Garage refuses a request. Step 5f prints how long it took. The first read to meet the outage waits about 20 seconds
 for the S3 client to give up, and later reads fail at once, as they would on a server.
+
+### Two Smoke Tests at Once
+
+`docker/smoke-test.sh` runs its stack as a Compose project of its own, `logicaldoc-smoke`, which names the stack's
+containers, volumes and network, and publishes the app, Keycloak and Garage on `127.0.0.1` ports `18080`, `18180` and
+`13900`. CI uses those. A second run on the same machine, such as another Claude session's, gives itself another
+project name and three other ports:
+
+```bash
+SMOKE_PROJECT=smoke-b SMOKE_PORT=28080 SMOKE_KEYCLOAK_PORT=28180 SMOKE_GARAGE_PORT=23900 docker/smoke-test.sh
+```
+
+- **The project's name is lowercase letters and digits joined by `-` or `_`.** It also names the image the run
+  builds, `<project>:local`, unless `LOGICALDOC_IMAGE` names one, so a second run's build doesn't retag the image
+  that the first run's step 8 starts its app from again. The image stays after the run, so
+  `SMOKE_PROJECT=<project> SMOKE_BUILD=0 docker/smoke-test.sh` runs the tests again without building it, and says
+  when it was built, and `docker image rm <project>:local` removes it. With `SMOKE_BUILD=0` and no such image, it
+  refuses: `docker compose build` tags `logicaldoc-community:local`, which `LOGICALDOC_IMAGE` has to name.
+- **It claims the project and its ports before it builds anything,** with a container, `<project>-claim`, which
+  Docker makes only once, so of two runs started together one gets it. The claim holds the three ports through the
+  build and stops just before the stack takes them, and it keeps the project claimed until the run removes its stack.
+  The run sets its exit trap only once it has the claim, so a run only ever removes the stack it made.
+- **It refuses a claimed project,** which is another run's, possibly still building, or was left by a run stopped
+  before it could remove its stack. Once no run is using it,
+  `docker rm -f <project>-claim && (cd / && docker compose -p <project> down -v --remove-orphans)` removes it: from a
+  folder with no `compose.yaml`, Compose needs only the name. It also refuses a project that has containers or volumes
+  and no claim, which is another stack, such as a development stack, and offers no command to remove it.
+- **It refuses a port setting that isn't a number from 1 to 65535, and a port something already answers on,** such as
+  another run's stack or claim. It names every setting to change at once.
+- **The builds take turns at Maven.** The `Dockerfile`'s Maven cache mount is locked, as each build deletes the
+  reactor's own artifacts from it when it ends. A second build waits there for the first, unless it builds the same
+  files, which BuildKit builds once for both.
+- **Step 5d builds the helper's tests in the checkout,** so two runs from one checkout can't both set
+  `SMOKE_HELPER_TEST=1`. Runs from separate worktrees can.
+
+In two runs side by side on a Mac, each stack used up to about 2 GB of Docker's memory, besides step 9's browser
+container.
 
 ### When a Smoke Check Fails
 
