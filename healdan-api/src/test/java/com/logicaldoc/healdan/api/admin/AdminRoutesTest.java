@@ -23,6 +23,7 @@ import com.logicaldoc.healdan.admin.AdminArea;
 import com.logicaldoc.healdan.api.ApiServer;
 import com.logicaldoc.healdan.api.Public;
 import com.logicaldoc.healdan.api.RouteCoverageTest;
+import com.logicaldoc.healdan.api.RoutePaths;
 
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -80,7 +81,7 @@ public class AdminRoutesTest {
 		Set<String> problems = new TreeSet<>();
 		Path classPath = type.getAnnotation(Path.class);
 		boolean marked = type.isAnnotationPresent(AdminRoute.class);
-		if (marked && (classPath == null || !RouteCoverageTest.admin(RouteCoverageTest.normalize(classPath.value()))))
+		if (marked && (classPath == null || !RoutePaths.admin(RoutePaths.normalize(classPath.value()))))
 			problems.add(type.getName() + " carries @AdminRoute outside /v1/admin");
 		if (classPath == null)
 			return problems;
@@ -89,9 +90,9 @@ public class AdminRoutesTest {
 			Path methodPath = method.getAnnotation(Path.class);
 			if (verb == null && methodPath == null)
 				continue;
-			String path = RouteCoverageTest
+			String path = RoutePaths
 					.normalize(classPath.value() + "/" + (methodPath != null ? methodPath.value() : ""));
-			if (!RouteCoverageTest.admin(path))
+			if (!RoutePaths.admin(path))
 				continue;
 			String route = type.getName() + " " + (verb != null ? verb + " " : "") + path;
 			if (!marked)

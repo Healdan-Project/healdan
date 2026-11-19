@@ -83,7 +83,7 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 				if (verb == null)
 					continue;
 				Path methodPath = method.getAnnotation(Path.class);
-				String path = normalize(classPath + "/" + (methodPath != null ? methodPath.value() : ""));
+				String path = RoutePaths.normalize(classPath + "/" + (methodPath != null ? methodPath.value() : ""));
 				// The docs page, the Office add-in's files (AddinResource) and the sign-in pages (SignInResource) are
 				// web pages, not JSON API
 				if (!path.equals("/docs") && !path.equals("/docs/{file}") && !path.startsWith("/addin/")
@@ -113,19 +113,12 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 	private static List<String> misplaced(OpenAPI first, OpenAPI admin) {
 		List<String> misplaced = new ArrayList<>();
 		if (first.getPaths() != null)
-			first.getPaths().keySet().stream().filter(RouteCoverageTest::admin)
+			first.getPaths().keySet().stream().filter(RoutePaths::admin)
 					.forEach(path -> misplaced.add(path + " is in openapi.yaml"));
 		if (admin.getPaths() != null)
-			admin.getPaths().keySet().stream().filter(path -> !admin(path))
+			admin.getPaths().keySet().stream().filter(path -> !RoutePaths.admin(path))
 					.forEach(path -> misplaced.add(path + " is in openapi-admin.yaml"));
 		return misplaced;
-	}
-
-	/**
-	 * @return true if the path is the admin API's, under {@code /v1/admin}
-	 */
-	public static boolean admin(String path) {
-		return path.equals("/v1/admin") || path.startsWith("/v1/admin/");
 	}
 
 	/**
@@ -138,41 +131,5 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 				return verb.value();
 		}
 		return null;
-	}
-
-	/**
-	 * Joins slashes, drops a final slash and writes each template as
-	 * {@code {name}}, without its regular expression.
-	 */
-	public static String normalize(String path) {
-		StringBuilder normalized = new StringBuilder();
-		int i = 0;
-		while (i < path.length()) {
-			char c = path.charAt(i);
-			if (c == '{') {
-				int depth = 1;
-				int end = i + 1;
-				while (end < path.length() && depth > 0) {
-					if (path.charAt(end) == '{')
-						depth++;
-					else if (path.charAt(end) == '}')
-						depth--;
-					end++;
-				}
-				String template = path.substring(i + 1, end - 1);
-				int colon = template.indexOf(':');
-				normalized.append('{').append((colon < 0 ? template : template.substring(0, colon)).trim()).append('}');
-				i = end;
-			} else {
-				if (c != '/' || normalized.isEmpty() || normalized.charAt(normalized.length() - 1) != '/')
-					normalized.append(c);
-				i++;
-			}
-		}
-		if (normalized.length() > 1 && normalized.charAt(normalized.length() - 1) == '/')
-			normalized.setLength(normalized.length() - 1);
-		if (normalized.isEmpty() || normalized.charAt(0) != '/')
-			normalized.insert(0, '/');
-		return normalized.toString();
 	}
 }

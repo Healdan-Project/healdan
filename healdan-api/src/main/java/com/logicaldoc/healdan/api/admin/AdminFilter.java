@@ -3,6 +3,10 @@
 
 package com.logicaldoc.healdan.api.admin;
 
+import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.ClassUtils;
@@ -13,6 +17,7 @@ import com.logicaldoc.healdan.admin.AdminContext;
 import com.logicaldoc.healdan.api.ApiProblem;
 import com.logicaldoc.healdan.api.Caller;
 import com.logicaldoc.healdan.api.ProblemMapper;
+import com.logicaldoc.healdan.api.RoutePaths;
 
 import jakarta.annotation.Priority;
 import jakarta.servlet.http.HttpServletRequest;
@@ -35,9 +40,11 @@ import jakarta.ws.rs.ext.Provider;
  * {@code 403 admins-only}, asked at every request, so someone taken out of
  * {@code admin} is refused at their next one.</li>
  * </ul>
- * It fails closed: a request to {@code /v1/admin}, or under it, whose resource
- * doesn't carry {@link AdminRoute} is a programming fault, logged, and
- * {@code 403 admins-only} to everyone.
+ * It fails closed: a route declared at {@code /v1/admin}, or under it, whose
+ * class doesn't carry {@link AdminRoute} is a programming fault, logged, and
+ * {@code 403 admins-only} to everyone. The route's declared path decides, never
+ * the request's, which can carry what JAX-RS matches without, such as matrix
+ * parameters ({@code /v1/admin;x=1/...}).
  * <p>
  * A request that may go on has its address in {@link AdminContext}, for the
  * administration record, until {@link com.logicaldoc.healdan.api.ApiServlet}
@@ -50,8 +57,8 @@ public class AdminFilter implements ContainerRequestFilter {
 
 	private static final Logger log = LoggerFactory.getLogger(AdminFilter.class);
 
-	/** The admin API's path, relative to the API's base, as JAX-RS gives it */
-	private static final String ADMIN = "v1/admin";
+	/** Whether each class and resource method is declared under {@code /v1/admin}, found once */
+	private static final Map<Route, Boolean> ADMIN_ROUTES = new ConcurrentHashMap<>();
 
 	private static final String NOT_WEB = "The Admin app's routes take the browser's session only, not a device token.";
 
@@ -66,12 +73,14 @@ public class AdminFilter implements ContainerRequestFilter {
 	@Override
 	public void filter(ContainerRequestContext requestContext) {
 		Class<?> resource = resourceClass();
-		AdminRoute route = resource != null ? resource.getAnnotation(AdminRoute.class) : null;
+		if (resource == null)
+			return;
+		AdminRoute route = resource.getAnnotation(AdminRoute.class);
 		if (route == null) {
-			String path = requestContext.getUriInfo().getPath();
-			if (admin(path)) {
-				log.error("{} answers {} under /v1/admin but carries no @AdminRoute, so it is refused to everyone",
-						resource != null ? resource.getName() : "A resource", path);
+			Method method = resourceInfo.getResourceMethod();
+			if (declaredAdmin(resource, method)) {
+				log.error("{}.{} is declared under /v1/admin but its class carries no @AdminRoute, so it is refused "
+						+ "to everyone", resource.getName(), method != null ? method.getName() : "?");
 				refuse(requestContext, "admins-only", NOT_ADMIN);
 			}
 			return;
@@ -101,14 +110,18 @@ public class AdminFilter implements ContainerRequestFilter {
 	}
 
 	/**
-	 * @param path the request's path relative to the API's base, with or
-	 *        without its leading slash
-	 * @return true for {@code v1/admin} and under it, however many slashes
-	 *         separate its segments
+	 * @param resource the matched resource's class
+	 * @param method the matched resource method, or null
+	 * @return true if the route is declared at {@code /v1/admin} or under it,
+	 *         its class's {@link jakarta.ws.rs.Path} and its method's
 	 */
-	static boolean admin(String path) {
-		String plain = path.replaceAll("/{2,}", "/").replaceFirst("^/", "");
-		return plain.equals(ADMIN) || plain.startsWith(ADMIN + "/");
+	static boolean declaredAdmin(Class<?> resource, Method method) {
+		return ADMIN_ROUTES.computeIfAbsent(new Route(resource, method),
+				route -> RoutePaths.admin(RoutePaths.declared(resource, method)));
+	}
+
+	/** A resource class and one of its methods, which may be null */
+	private record Route(Class<?> resource, Method method) {
 	}
 
 	private static void refuse(ContainerRequestContext requestContext, String code, String detail) {

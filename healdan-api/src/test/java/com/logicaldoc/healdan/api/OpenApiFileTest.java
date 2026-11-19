@@ -37,8 +37,9 @@ import io.swagger.v3.parser.core.models.SwaggerParseResult;
 /**
  * The description files must parse cleanly (spec section 4.6): the API's, and
  * the admin API's (Admin app spec section 9.2), which describes only the web
- * session and repeats, unchanged, what it needs of the first file's
- * components.
+ * session and repeats a few of the first file's components: {@code Page},
+ * {@code FieldError} and the {@code Problem} response as they are, but for
+ * their words, and {@code Problem} with fewer members.
  */
 public class OpenApiFileTest {
 
@@ -170,10 +171,14 @@ public class OpenApiFileTest {
 		((ObjectNode) extra.at("/schemas/Problem/properties")).putObject("colour").put("type", "string");
 		assertEquals(List.of("schemas/Problem"), differences(first, extra));
 
-		// The admin Problem's type and required members are the first file's
+		// The admin Problem's keywords, type and required among them, are the first file's
 		ObjectNode loosened = admin.deepCopy();
 		((ObjectNode) loosened.at("/schemas/Problem")).putArray("required").add("code");
 		assertEquals(List.of("schemas/Problem"), differences(first, loosened));
+		// And so is any other keyword
+		ObjectNode closed = admin.deepCopy();
+		((ObjectNode) closed.at("/schemas/Problem")).put("additionalProperties", false);
+		assertEquals(List.of("schemas/Problem"), differences(first, closed));
 
 		// Fewer properties are allowed: the first file's Problem has more than the admin one
 		assertTrue(names(first.at("/schemas/Problem/properties"))
@@ -188,9 +193,9 @@ public class OpenApiFileTest {
 	 * @return each component both have, but the security schemes, which
 	 *         describe each file's own sign-in, that differs, once
 	 *         {@code description} and {@code examples} are left out: equal,
-	 *         but for {@code schemas/Problem}, whose {@code type} and
-	 *         {@code required} must be the same, and every property it
-	 *         declares one of the first file's, the same
+	 *         but for {@code schemas/Problem}, whose other keywords, such as
+	 *         {@code type} and {@code required}, must be the same, and every
+	 *         property it declares one of the first file's, the same
 	 */
 	static List<String> differences(JsonNode first, JsonNode admin) {
 		List<String> different = new ArrayList<>();
@@ -199,8 +204,8 @@ public class OpenApiFileTest {
 			JsonNode ours = withoutWords(admin.at("/" + component), null);
 			boolean same;
 			if (component.equals("schemas/Problem")) {
-				same = theirs.path("type").equals(ours.path("type"))
-						&& theirs.path("required").equals(ours.path("required"));
+				// Every keyword but its members the same, type and required among them; each member it has the same
+				same = without(theirs, "properties").equals(without(ours, "properties"));
 				for (String name : names(ours.path("properties")))
 					same &= theirs.path("properties").path(name).equals(ours.path("properties").path(name));
 			} else {
@@ -247,6 +252,12 @@ public class OpenApiFileTest {
 			return copy;
 		}
 		return node;
+	}
+
+	private static JsonNode without(JsonNode node, String keyword) {
+		ObjectNode copy = node.deepCopy();
+		copy.remove(keyword);
+		return copy;
 	}
 
 	private static List<String> names(JsonNode node) {
