@@ -550,6 +550,10 @@ export const enUSPlurals = {
   'trash.days': { one: '{n} day', other: '{n} days' },
   'holds.folders': { one: '{n} folder', other: '{n} folders' },
   'holds.documents': { one: '{n} document', other: '{n} documents' },
+  // A progress bar's count, "212 of 412": a plural for the numbers' grouping (1,234)
+  'progress.count': { one: '{value} of {n}', other: '{value} of {n}' },
+  // Above what a search picker found
+  'searchPicker.results': { one: '{n} Result', other: '{n} Results' },
 } as const
 
 export type PluralKey = keyof typeof enUSPlurals

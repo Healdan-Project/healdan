@@ -455,3 +455,52 @@ describe('Table right-click menu', () => {
     }
   })
 })
+
+// A list that leads to a page (the Admin app's): nothing is selected, and a click or Enter opens the row
+describe('Table with selectionMode="none"', () => {
+  function Plain(props: Partial<Omit<TableProps<Item>, 'selectionMode' | 'selection' | 'onSelectionChange'>>) {
+    return <Table aria-label="Matters" columns={columns} rows={items(3)} selectionMode="none" {...props} />
+  }
+
+  it('selects no row and draws no checkbox or selected state, by click or by keys', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<Plain />)
+    const grid = screen.getByRole('grid', { name: 'Matters' })
+    expect(grid.hasAttribute('aria-multiselectable')).toBe(false)
+    await user.click(within(row(/Letter 2/)).getByRole('rowheader'))
+    const second = row(/Letter 2/)
+    act(() => second.focus())
+    press(second, 'ArrowDown')
+    press(row(/Letter 3/), ' ')
+    for (const one of screen.getAllByRole('row')) {
+      expect(one.hasAttribute('aria-selected')).toBe(false)
+      expect(one.hasAttribute('data-selected')).toBe(false)
+    }
+    expect(screen.queryAllByRole('checkbox')).toEqual([])
+    expect(container.querySelector('[data-selected]')).toBeNull()
+    await expectNoAxeViolations(container)
+  })
+
+  it('needs the selection and its handler in every other mode, at type-check time', () => {
+    // @ts-expect-error a list that selects is given the selection it keeps
+    const multiple = <Table aria-label="Matters" columns={columns} rows={items(1)} selectionMode="multiple" />
+    // @ts-expect-error single, the default, too
+    const single = <Table aria-label="Matters" columns={columns} rows={items(1)} />
+    expect([multiple, single]).toHaveLength(2)
+  })
+
+  it('opens a row on a click and on Enter, and deletes the focused row', async () => {
+    const user = userEvent.setup()
+    const onOpen = vi.fn()
+    const onDelete = vi.fn()
+    render(<Plain onOpen={onOpen} onDelete={onDelete} />)
+    await user.click(within(row(/Letter 2/)).getByRole('rowheader'))
+    expect(onOpen).toHaveBeenLastCalledWith('d2')
+    const first = row(/Letter 1/)
+    act(() => first.focus())
+    press(first, 'Enter')
+    expect(onOpen).toHaveBeenLastCalledWith('d1')
+    press(first, 'Delete')
+    expect(onDelete).toHaveBeenCalledExactlyOnceWith(new Set(['d1']))
+  })
+})

@@ -27,6 +27,12 @@
   font: inherit;
 }
 
+/* A multi-line field: room above and below its lines, and made taller, not wider, by a drag */
+.multiline {
+  padding-block: var(--hd-space-2);
+  resize: vertical;
+}
+
 .input[data-focus-visible],
 .input:focus-visible {
   outline: var(--hd-focus-outline);

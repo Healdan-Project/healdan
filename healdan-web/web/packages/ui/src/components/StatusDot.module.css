@@ -1,0 +1,42 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* Each status's dot shows at 3:1 and its words reach AA on every plain surface, in both themes (tokens.test.ts). */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  min-width: 0;
+}
+
+.dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.status[data-status='ok'] .dot {
+  background: var(--hd-yours);
+}
+
+.status[data-status='attention'] {
+  color: var(--hd-caution-text);
+}
+
+.status[data-status='attention'] .dot {
+  background: var(--hd-caution);
+}
+
+.status[data-status='off'] {
+  color: var(--hd-text-secondary);
+}
+
+.status[data-status='off'] .dot {
+  background: var(--hd-text-secondary);
+}
+
+/* A selected row's fills hold its own text colour only (tokens.css), so the words take it there */
+[data-selected] .status {
+  color: inherit;
+}
