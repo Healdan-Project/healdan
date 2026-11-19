@@ -10,14 +10,14 @@ encryption keys and the storage backends stay as they are, and need nothing doin
 ## Who Needs This
 
 An install set up before Healdan moved to PostgreSQL, in November 2026. To check, run this from the folder with
-Healdan's `compose.yaml`:
+Healdan's `compose.yaml`, on the version you run now:
 
 ```bash
 docker compose ps db
 ```
 
-If the `IMAGE` column says `mariadb:11.4`, your install needs this page. If it says `postgres:18`, it doesn't, and
-neither does a new install.
+If the `IMAGE` column says `mariadb:11.4`, your install needs this page. If it says `postgres:18` and Healdan runs,
+it doesn't, and neither does a new install.
 
 **If you upgraded without moving,** the app stopped as it started, and its log says
 `this install's conf volume names MariaDB as its database, …`. Nothing was changed, and MariaDB's data is as it was.

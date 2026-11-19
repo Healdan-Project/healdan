@@ -29,7 +29,8 @@ it, and carry on once it's started again.
 
 `pg_dump` is PostgreSQL's own backup tool. It runs inside the database's container, as PostgreSQL's administrator,
 `postgres`, which needs no password there, and `-Fc` writes PostgreSQL's compressed format, which `pg_restore` reads
-back. A backup made before the install [moved from MariaDB](../moving-from-mariadb/), `logicaldoc-db.sql`, restores
+back. If `DB_HOST` points at a PostgreSQL of your own, back its database up there instead: the stack's `db` holds
+none of Healdan's data. A backup made before the install [moved from MariaDB](../moving-from-mariadb/), `logicaldoc-db.sql`, restores
 only onto a version that runs on MariaDB.
 
 ## What the Backup Holds
