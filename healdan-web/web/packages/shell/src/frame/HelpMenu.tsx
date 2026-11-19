@@ -3,10 +3,11 @@
 
 import { Icon, Menu, MenuItem, t } from '@healdan/ui'
 
-export function HelpMenu() {
+/** Help: the app's own guide, at `guide`, and the open-source notices, which cover every app of the workspace. */
+export function HelpMenu({ guide }: { guide: string }) {
   return (
     <Menu label={<Icon name="help" size={18} />} aria-label={t('help.menu')}>
-      <MenuItem id="guide" href="https://docs.healdan.com/user/" target="_blank" rel="noopener noreferrer">
+      <MenuItem id="guide" href={guide} target="_blank" rel="noopener noreferrer">
         {t('help.guide')}
       </MenuItem>
       <MenuItem id="notices" href="/app/notices.txt" target="_blank" rel="noopener noreferrer">

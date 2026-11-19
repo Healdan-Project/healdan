@@ -3,12 +3,13 @@
 
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { goTo } from '@healdan/shell'
 import { expectNoAxeViolations } from '../test/axe'
 import { problem } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
-import { goTo } from './navigate'
 
-vi.mock('./navigate', () => ({ goTo: vi.fn() }))
+// The shell's person menu leaves the page through the shell's own module, so that's the one a stand-in replaces
+vi.mock('@healdan/shell/src/frame/navigate', () => ({ goTo: vi.fn() }))
 
 async function openMenu(name: string) {
   const trigger = await screen.findByRole('button', { name })

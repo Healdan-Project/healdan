@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { Link } from '@tanstack/react-router'
+import { HelpMenu, Mark } from '@healdan/shell'
 import { Button, Icon, t } from '@healdan/ui'
 import { SearchBox } from '../search/SearchBox'
-import { HelpMenu } from './HelpMenu'
-import { Mark } from './Mark'
 import { PersonMenu } from './PersonMenu'
 import { REGION_BUTTON, useRightRegion } from './RightRegion'
 import styles from './TopBar.module.css'
@@ -37,7 +36,7 @@ export function TopBar({ navigation }: { navigation?: NavigationButton }) {
       </Link>
       <SearchBox />
       <div className={styles.right}>
-        <HelpMenu />
+        <HelpMenu guide="https://docs.healdan.com/user/" />
         {region.narrow && (
           <Button variant="quiet" aria-label={t('frame.side')} aria-expanded={region.narrowOpen} onPress={() => region.setNarrowOpen(!region.narrowOpen)} {...{ [REGION_BUTTON]: true }}>
             <Icon name="dock" size={18} />
