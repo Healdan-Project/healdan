@@ -59,6 +59,9 @@ public class MoveValuesTest {
         namesThePlace(refused, "a NUL, refused");
         lacks(refused, "a NUL, refused", "a\u0000b", "\u0000", "a b");
         Check.eq(List.of(), replaced, "a refused NUL isn't recorded as replaced");
+        Check.eq(refused == null ? null : WHERE + ": " + refused.why(), refused == null ? null : refused.getMessage(),
+                "the reason alone is the message without the place");
+        Check.isTrue(refused == null || !refused.why().contains("ld_user"), "the reason alone names no place");
 
         // The brief's value is two letters that any sentence holds, so the message is checked for these words too.
         MoveValues.Unstorable words = refused(() -> MoveValues.carry("Quarterly\u0000Report", VARCHAR_4000, WHERE,

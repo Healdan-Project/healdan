@@ -14,6 +14,7 @@ public class MovePlanTest {
         aTableOnlyOneSideHas();
         neverCopiesTheTargetsOwnTables();
         namesThatMatchTwice();
+        sourceOnlyTablesThatMatchTwice();
         Check.done("MovePlanTest");
     }
 
@@ -26,15 +27,16 @@ public class MovePlanTest {
         Check.eq(List.of(), plan.problems(), "no problem when every target column is in the source");
         Check.eq(List.of(), plan.sourceOnlyTables(), "both tables are on both sides");
         Check.eq(2, plan.copied().size(), "both tables are copied");
-        Check.eq(new MovePlan.TablePlan("ld_user", List.of("ld_id", "ld_name"), List.of()), plan.copied().get(0),
-                "ld_user, every column");
-        Check.eq(new MovePlan.TablePlan("ld_uniquetag", List.of("ld_tag"), List.of("ld_int1")), plan.copied().get(1),
-                "ld_uniquetag in the target's spelling, with ld_int1 listed as only the source's");
+        Check.eq(new MovePlan.TablePlan("ld_user", "ld_user", List.of("ld_id", "ld_name"), List.of()),
+                plan.copied().get(0), "ld_user, every column");
+        Check.eq(new MovePlan.TablePlan("ld_uniquetag", "LD_UNIQUETAG", List.of("ld_tag"), List.of("ld_int1")),
+                plan.copied().get(1), "ld_uniquetag in the target's spelling, read by the source's, with ld_int1"
+                        + " listed as only the source's");
 
         MovePlan.Plan mixed = MovePlan.plan(tables("ld_tag", List.of("LD_TAG", "Ld_DocId")),
                 tables("LD_TAG", List.of("ld_docid", "ld_tag")));
-        Check.eq(List.of(new MovePlan.TablePlan("LD_TAG", List.of("ld_docid", "ld_tag"), List.of())), mixed.copied(),
-                "columns matched whatever their case, in the target's order and spelling");
+        Check.eq(List.of(new MovePlan.TablePlan("LD_TAG", "ld_tag", List.of("ld_docid", "ld_tag"), List.of())),
+                mixed.copied(), "columns matched whatever their case, in the target's order and spelling");
         Check.eq(List.of(), mixed.problems(), "no problem from case alone");
     }
 
@@ -95,6 +97,23 @@ public class MovePlanTest {
         Check.isTrue(sameSpelling.problems().size() == 1 && sameSpelling.problems().get(0).contains("ld_id"),
                 "a column listed twice, as a read of every schema's columns would give, is a problem: "
                         + sameSpelling.problems());
+    }
+
+    private static void sourceOnlyTablesThatMatchTwice() {
+        MovePlan.Plan plan = MovePlan.plan(
+                tables("ld_user", List.of("ld_id"), "ld_old", List.of("ld_id"), "LD_OLD", List.of("ld_id")),
+                tables("ld_user", List.of("ld_id")));
+        Check.eq(List.of(), plan.problems(), "two source tables only the source has, whose names differ only by case,"
+                + " aren't a problem: neither is copied");
+        Check.eq(List.of("ld_old", "LD_OLD"), plan.sourceOnlyTables(), "both are listed, in the source's spelling");
+        Check.eq(List.of("ld_user"), plan.copied().stream().map(MovePlan.TablePlan::table).toList(),
+                "the table both sides have is copied");
+
+        MovePlan.Plan targetTwice = MovePlan.plan(tables("ld_user", List.of("ld_id")),
+                tables("ld_user", List.of("ld_id"), "LD_USER", List.of("ld_id")));
+        Check.isTrue(targetTwice.problems().size() == 1 && targetTwice.problems().get(0).contains("target"),
+                "a name the target gives twice is still a problem: " + targetTwice.problems());
+        Check.eq(List.of(), targetTwice.copied(), "and neither is copied");
     }
 
     /** Table names to their columns, in the order given */

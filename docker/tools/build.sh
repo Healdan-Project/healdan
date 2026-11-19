@@ -33,6 +33,7 @@ run_test MovePlanTest
 run_test MoveValuesTest
 run_test MoveChecksumTest
 run_test MoveCountersTest
+run_test MoveFromMariaDbTest
 run_test WarParsersTest "$here/test/fixtures"
 run_test WarStorageTest
 # WarHibernateTest's class path also has the WAR's WEB-INF/classes, ahead of WEB-INF/lib as Tomcat searches them:

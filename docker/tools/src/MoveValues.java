@@ -36,14 +36,22 @@ final class MoveValues {
 
         private final Where where;
 
+        private final String why;
+
         /** @param why the reason, which never holds anything of the value */
         Unstorable(Where where, String why) {
             super(where + ": " + why);
             this.where = where;
+            this.why = why;
         }
 
         Where where() {
             return where;
+        }
+
+        /** The reason alone, without the place */
+        String why() {
+            return why;
         }
     }
 

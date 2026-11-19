@@ -25,6 +25,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import org.java.plugin.registry.PluginDescriptor;
 import org.xml.sax.SAXException;
@@ -442,6 +443,12 @@ public final class DockerInit {
      * @param dbms the variant to prefer: DBMS for the app's database, "mariadb" for a move's source
      */
     static List<String> plannedScripts(ClassLoader cl, boolean fresh, String dbms) throws Exception {
+        return plannedScripts(cl, fresh, dbms, DockerInit::log);
+    }
+
+    /** As plannedScripts above, with the plan's lines for a fresh database given to planLog */
+    static List<String> plannedScripts(ClassLoader cl, boolean fresh, String dbms, Consumer<String> planLog)
+            throws Exception {
         List<DbInitPlan.Entry> entries = new ArrayList<>();
         for (URL manifest : Collections.list(cl.getResources("plugin.xml"))) {
             try (InputStream in = manifest.openStream()) {
@@ -470,7 +477,7 @@ public final class DockerInit {
                 continue;
             }
             if (fresh)
-                log("plan: " + entry.position() + " " + entry.pluginId() + " -> " + script);
+                planLog.accept("plan: " + entry.position() + " " + entry.pluginId() + " -> " + script);
             scripts.add(script);
         }
         return scripts;
@@ -499,12 +506,7 @@ public final class DockerInit {
         Map<String, List<String>> expected = createdColumns(cl, scripts);
 
         log("creating schema");
-        DBInit init = new DBInit(scripts);
-        init.setDriver(DRIVER);
-        init.setUrl(db.url);
-        init.setUsername(db.user);
-        init.setPassword(db.password);
-        init.execute();
+        runScripts(scripts, db.url, db.user, db.password);
 
         // DBInit goes on past a statement that fails, so what it made is checked as a later start checks it.
         DbInitPlan.Missing missing = DbInitPlan.missing(expected, db.columns());
@@ -513,6 +515,28 @@ public final class DockerInit {
                     + "; remove the database volume and start again");
         db.recordCompletion();
         log("schema created (" + expected.size() + " tables)");
+    }
+
+    /**
+     * Runs the DbInit scripts on PostgreSQL with the setup wizard's own DBInit, for a fresh install's first start and
+     * for the move from MariaDB. DBInit logs a statement that fails and goes on, so each caller checks what it made.
+     */
+    static void runScripts(List<String> scripts, String url, String user, String password) {
+        DBInit init = new DBInit(scripts);
+        init.setDriver(DRIVER);
+        init.setUrl(url);
+        init.setUsername(user);
+        init.setPassword(password);
+        init.execute();
+    }
+
+    /**
+     * Makes the start-up tool's marker, which says the schema is initialised, in the statement's transaction: a start
+     * that finds it skips the schema's creation.
+     */
+    static void recordCompletion(Statement s) throws SQLException {
+        s.execute("create table " + MARKER + " (completed timestamp not null)");
+        s.execute("insert into " + MARKER + " values (current_timestamp)");
     }
 
     private static void warnConfigLoss() {
@@ -610,8 +634,7 @@ public final class DockerInit {
 
         void recordCompletion() throws SQLException {
             try (Connection c = connect(); Statement s = c.createStatement()) {
-                s.execute("create table " + MARKER + " (completed timestamp not null)");
-                s.execute("insert into " + MARKER + " values (current_timestamp)");
+                DockerInit.recordCompletion(s);
             }
         }
 
@@ -716,7 +739,8 @@ public final class DockerInit {
         }
     }
 
-    private static final class InitException extends Exception {
+    /** A refusal or failure whose message the start-up tool, or the move, prints as it is */
+    static final class InitException extends Exception {
 
         private static final long serialVersionUID = 1L;
 
