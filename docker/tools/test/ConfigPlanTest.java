@@ -9,7 +9,7 @@ public class ConfigPlanTest {
 
     public static void main(String[] args) {
         seedKeysUseAbsoluteRepositoryPaths();
-        seedKeysConfigureMariaDb();
+        seedKeysLeaveTheDatabaseToHealdanKeys();
         envKeysUseDefaults();
         envKeysHonourOverrides();
         blankValuesFallBackToDefaults();
@@ -20,7 +20,7 @@ public class ConfigPlanTest {
         portMustBeNumeric();
         publicUrlOptionalAndNormalised();
         dbWaitSecondsValidated();
-        healdanKeysAreStoreOnly();
+        healdanKeysAreTheStoreAndTheDatabase();
         Check.done("ConfigPlanTest");
     }
 
@@ -44,35 +44,40 @@ public class ConfigPlanTest {
         Check.eq("/opt/logicaldoc", seed.get("LDOCHOME"), "LDOCHOME");
         Check.eq("abc", seed.get("id"), "id");
         Check.eq("true", seed.get("initialized"), "initialized");
-        Check.eq(15, seed.size(), "number of seed keys");
+        Check.eq(12, seed.size(), "number of seed keys");
     }
 
-    private static void seedKeysConfigureMariaDb() {
+    private static void seedKeysLeaveTheDatabaseToHealdanKeys() {
         Map<String, String> seed = ConfigPlan.seedKeys("x");
-        Check.eq("org.mariadb.jdbc.Driver", seed.get("jdbc.driver"), "driver");
-        Check.eq("mariadb", seed.get("jdbc.dbms"), "dbms");
-        Check.eq("org.hibernate.dialect.MariaDBDialect", seed.get("hibernate.dialect"), "dialect");
+        for (String key : List.of("jdbc.driver", "jdbc.dbms", "hibernate.dialect"))
+            Check.isTrue(!seed.containsKey(key), key + " is set on every start, not seeded once");
         Check.eq("SELECT 1", seed.get("jdbc.validationQuery"), "validation query");
     }
 
     private static void envKeysUseDefaults() {
         Map<String, String> keys = ConfigPlan.envKeys(env("DB_PASSWORD", "pw"));
-        Check.eq("jdbc:mariadb://db:3306/logicaldoc", keys.get("jdbc.url"), "default url");
+        Check.eq("jdbc:postgresql://db:5432/logicaldoc?logServerErrorDetail=false", keys.get("jdbc.url"),
+                "default url");
+        // pgjdbc puts the server's detail into every PSQLException's message by default ("Failing row contains (...)",
+        // "Key (...)=(...) already exists"), with the row's values in it, and Healdan never logs a row's values.
+        Check.isTrue(keys.get("jdbc.url").endsWith("?logServerErrorDetail=false"), "the server's detail stays out");
         Check.eq("logicaldoc", keys.get("jdbc.username"), "default user");
         Check.eq("pw", keys.get("jdbc.password"), "password");
         Check.isTrue(!keys.containsKey("server.url"), "server.url untouched when LOGICALDOC_PUBLIC_URL is unset");
     }
 
     private static void envKeysHonourOverrides() {
-        Map<String, String> keys = ConfigPlan.envKeys(env("DB_PASSWORD", "pw", "DB_HOST", "mariadb.lan", "DB_PORT",
-                "3307", "DB_NAME", "docs", "DB_USER", "ldoc"));
-        Check.eq("jdbc:mariadb://mariadb.lan:3307/docs", keys.get("jdbc.url"), "overridden url");
+        Map<String, String> keys = ConfigPlan.envKeys(env("DB_PASSWORD", "pw", "DB_HOST", "pg.example", "DB_PORT",
+                "6543", "DB_NAME", "healdan", "DB_USER", "ldoc"));
+        Check.eq("jdbc:postgresql://pg.example:6543/healdan?logServerErrorDetail=false", keys.get("jdbc.url"),
+                "overridden url");
         Check.eq("ldoc", keys.get("jdbc.username"), "overridden user");
     }
 
     private static void blankValuesFallBackToDefaults() {
         Map<String, String> keys = ConfigPlan.envKeys(env("DB_PASSWORD", "pw", "DB_HOST", " ", "DB_USER", ""));
-        Check.eq("jdbc:mariadb://db:3306/logicaldoc", keys.get("jdbc.url"), "blank host uses the default");
+        Check.eq("jdbc:postgresql://db:5432/logicaldoc?logServerErrorDetail=false", keys.get("jdbc.url"),
+                "blank host uses the default");
         Check.eq("logicaldoc", keys.get("jdbc.username"), "blank user uses the default");
     }
 
@@ -114,9 +119,12 @@ public class ConfigPlanTest {
                 "trailing slash kept");
     }
 
-    private static void healdanKeysAreStoreOnly() {
-        Check.eq(Map.of("store", "com.logicaldoc.healdan.storage.HealdanStorage"), ConfigPlan.HEALDAN_KEYS,
-                "Healdan's own keys: store, as HealdanStorage, and nothing else");
+    private static void healdanKeysAreTheStoreAndTheDatabase() {
+        Check.eq(Map.of("store", "com.logicaldoc.healdan.storage.HealdanStorage",
+                "jdbc.driver", "org.postgresql.Driver",
+                "jdbc.dbms", "postgresql",
+                "hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect"), ConfigPlan.HEALDAN_KEYS,
+                "Healdan's own keys: store as HealdanStorage, and PostgreSQL's driver, dbms and dialect");
         // Each key has one owner, or two steps of a start would each set it.
         Map<String, String> envKeys = ConfigPlan.envKeys(env("DB_PASSWORD", "pw", "LOGICALDOC_PUBLIC_URL",
                 "https://docs.example.org"));

@@ -11,6 +11,7 @@ import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -35,9 +36,9 @@ import com.logicaldoc.util.plugin.PluginRegistry;
 
 /**
  * Container init, run by entrypoint.sh before Tomcat starts: works out the trusted proxies, applies the
- * container-managed context.properties keys, waits for the database, creates the schema on first boot with the
- * setup wizard's own DBInit, or on a later one checks that LogicalDOC's tables have what this version's scripts
- * create, and installs LogicalDOC's plugins.
+ * container-managed context.properties keys, waits for the database, checks the PostgreSQL server and database and
+ * sets the app's role's lock timeout, creates the schema on first boot with the setup wizard's own DBInit, or on a
+ * later one checks that LogicalDOC's tables have what this version's scripts create, and installs LogicalDOC's plugins.
  */
 public final class DockerInit {
 
@@ -46,15 +47,13 @@ public final class DockerInit {
     /** The image's pristine context.properties, the source of keys an older conf file lacks. */
     static final File DEFAULTS = new File(ConfigPlan.HOME + "/defaults/context.properties");
 
-    private static final String DRIVER = "org.mariadb.jdbc.Driver";
+    static final String DRIVER = "org.postgresql.Driver";
 
-    private static final String DBMS = "mariadb";
+    /** The DbInit variant the app's database takes: PostgreSQL has none, so every plugin gets its generic script. */
+    static final String DBMS = "postgresql";
 
     /** Created only after the schema is verified, so a first start that failed part-way is recognisable. */
     private static final String MARKER = "docker_init";
-
-    /** SQLSTATE MariaDB reports for a table that does not exist. */
-    private static final String NO_SUCH_TABLE = "42S02";
 
     /** The Install manual's list of the changes to LogicalDOC's tables an existing database needs, with their SQL. */
     private static final String TABLE_CHANGES = "https://docs.healdan.com/install/upgrading/#changes-to-logicaldocs-tables";
@@ -88,6 +87,7 @@ public final class DockerInit {
 
         Db db = new Db(envKeys.get("jdbc.url"), envKeys.get("jdbc.username"), envKeys.get("jdbc.password"));
         db.await(waitSeconds);
+        checkServerAndDatabase(db);
         List<String> missing = db.missingTables(List.of("ld_user", MARKER));
         if (missing.isEmpty()) {
             log("schema present, skipping database initialization");
@@ -114,6 +114,51 @@ public final class DockerInit {
             System.err.println("[docker-init] WARNING: LogicalDOC's plugins " + String.join(", ", plugins.failed())
                     + " did not start here (the error is above). Tomcat starts them again, and asks for a restart if"
                     + " one of them installs then.");
+    }
+
+    /**
+     * Checks the server and the database, on every start, before anything is created in them (spec sections 6.1 to
+     * 6.3; DbChecks decides): stops on a server older than PostgreSQL 18, a database that isn't UTF-8 or a role that
+     * can't create tables in its schema, and warns of a newer major than the one tested and of a collation that doesn't
+     * sort by code point. Then it gives the app's role a lock_timeout in this database (spec section 7.4), which every
+     * later connection of the role takes, Tomcat's pool and Flyway included, and reads it back on a new connection.
+     * Only that setting writes anything.
+     */
+    private static void checkServerAndDatabase(Db db) throws Exception {
+        int version = db.versionNum();
+        String encoding = db.encoding();
+        refuse(DbChecks.tooOld(version));
+        refuse(DbChecks.wrongEncoding(encoding));
+        refuse(DbChecks.cannotCreate(db.canCreate(), db.user, db.schema()));
+        warn(DbChecks.untested(version));
+        String[] locale = db.locale();
+        warn(DbChecks.otherLocale(locale[0], locale[1], locale[2]));
+
+        try {
+            db.setLockTimeout();
+        } catch (SQLException e) {
+            throw new InitException("can't give the role '" + db.user + "' a lock_timeout in its database: "
+                    + e.getMessage());
+        }
+        String timeout = db.lockTimeout();
+        if (!DbChecks.LOCK_TIMEOUT.equals(timeout))
+            throw new InitException("lock_timeout reads back as '" + timeout + "' on a new connection, not the '"
+                    + DbChecks.LOCK_TIMEOUT + "' this start gave the role '" + db.user + "' in its database: something"
+                    + " sets it for the connection, which Healdan's settings can't override");
+        log("PostgreSQL " + version / 10000 + " (" + version + "), a " + encoding + " database, lock_timeout " + timeout
+                + " for the role '" + db.user + "' in it");
+    }
+
+    /** Stops the start with the refusal, if there is one. */
+    private static void refuse(String refusal) throws InitException {
+        if (refusal != null)
+            throw new InitException(refusal);
+    }
+
+    /** Logs the warning, if there is one. */
+    private static void warn(String warning) {
+        if (warning != null)
+            System.err.println("[docker-init] WARNING: " + warning);
     }
 
     /**
@@ -328,7 +373,7 @@ public final class DockerInit {
      */
     private static void checkLogicalDocTables(Db db) throws Exception {
         ClassLoader cl = DockerInit.class.getClassLoader();
-        Map<String, List<String>> expected = createdColumns(cl, plannedScripts(cl, false));
+        Map<String, List<String>> expected = createdColumns(cl, plannedScripts(cl, false, DBMS));
         DbInitPlan.Missing missing = DbInitPlan.missing(expected, db.columns());
         if (!missing.isEmpty())
             throw new InitException("LogicalDOC's tables lack what this version needs: " + missing.describe()
@@ -345,8 +390,10 @@ public final class DockerInit {
      * whose start runs the scripts, it logs the plan, and an extension it can't plan (no position or sqlFile, or a
      * script that isn't on the classpath) stops the start. A later start runs none of them, so there such an
      * extension only leaves its tables out of the check, with a warning.
+     *
+     * @param dbms the variant to prefer: DBMS for the app's database, "mariadb" for a move's source
      */
-    static List<String> plannedScripts(ClassLoader cl, boolean fresh) throws Exception {
+    static List<String> plannedScripts(ClassLoader cl, boolean fresh, String dbms) throws Exception {
         List<DbInitPlan.Entry> entries = new ArrayList<>();
         for (URL manifest : Collections.list(cl.getResources("plugin.xml"))) {
             try (InputStream in = manifest.openStream()) {
@@ -367,7 +414,7 @@ public final class DockerInit {
         for (DbInitPlan.Entry entry : ordered) {
             String script;
             try {
-                script = DbInitPlan.resolve(entry, DBMS, name -> cl.getResource(name) != null);
+                script = DbInitPlan.resolve(entry, dbms, name -> cl.getResource(name) != null);
             } catch (IllegalStateException e) {
                 if (fresh)
                     throw e;
@@ -400,7 +447,7 @@ public final class DockerInit {
 
     private static void createSchema(Db db) throws Exception {
         ClassLoader cl = DockerInit.class.getClassLoader();
-        List<String> scripts = plannedScripts(cl, true);
+        List<String> scripts = plannedScripts(cl, true, DBMS);
         Map<String, List<String>> expected = createdColumns(cl, scripts);
 
         log("creating schema");
@@ -435,7 +482,7 @@ public final class DockerInit {
     }
 
     /** Thin JDBC helper; every call opens its own short-lived connection. */
-    private static final class Db {
+    static final class Db {
 
         final String url;
 
@@ -480,32 +527,104 @@ public final class DockerInit {
             }
         }
 
-        /** The columns of each table in the connection's database, by the names the database gives them. */
+        /**
+         * The columns of each table in the schema the connection creates tables in, by the names the database gives
+         * them.
+         */
         Map<String, Set<String>> columns() throws SQLException {
             Map<String, Set<String>> columns = new HashMap<>();
             try (Connection c = connect(); Statement s = c.createStatement();
                     ResultSet r = s.executeQuery("select table_name, column_name from information_schema.columns"
-                            + " where table_schema = database()")) {
+                            + " where table_schema = current_schema()")) {
                 while (r.next())
                     columns.computeIfAbsent(r.getString(1), t -> new HashSet<>()).add(r.getString(2));
             }
             return columns;
         }
 
+        /**
+         * The tables of the list the connection's names don't find. It asks without a statement that fails, as each
+         * failed one is an ERROR in PostgreSQL's own log.
+         */
         List<String> missingTables(List<String> tables) throws SQLException {
             List<String> missing = new ArrayList<>();
-            try (Connection c = connect(); Statement s = c.createStatement()) {
+            try (Connection c = connect();
+                    PreparedStatement s = c.prepareStatement("select to_regclass(?) is not null")) {
                 for (String table : tables) {
-                    try {
-                        s.executeQuery("select 1 from " + table + " where 1=0").close();
-                    } catch (SQLException e) {
-                        if (!NO_SUCH_TABLE.equals(e.getSQLState()))
-                            throw e;
-                        missing.add(table);
+                    s.setString(1, table);
+                    try (ResultSet r = s.executeQuery()) {
+                        r.next();
+                        if (!r.getBoolean(1))
+                            missing.add(table);
                     }
                 }
             }
             return missing;
+        }
+
+        /** PostgreSQL's server_version_num, such as 180004 for 18.4 */
+        int versionNum() throws SQLException {
+            return Integer.parseInt(text("show server_version_num"));
+        }
+
+        /** The database's encoding, by PostgreSQL's name for it, such as UTF8 */
+        String encoding() throws SQLException {
+            return text("select pg_encoding_to_char(encoding) from pg_database where datname = current_database()");
+        }
+
+        /** The database's locale provider ('b', 'c' or 'i'), its collation and its locale (null for libc's) */
+        String[] locale() throws SQLException {
+            try (Connection c = connect(); Statement s = c.createStatement();
+                    ResultSet r = s.executeQuery("select datlocprovider, datcollate, datlocale from pg_database"
+                            + " where datname = current_database()")) {
+                r.next();
+                return new String[] { r.getString(1), r.getString(2), r.getString(3) };
+            }
+        }
+
+        /** The schema the connection creates tables in, or null when its search_path names none that exists */
+        String schema() throws SQLException {
+            return text("select current_schema()");
+        }
+
+        /** Whether the role may create tables in that schema: not when there's none */
+        boolean canCreate() throws SQLException {
+            try (Connection c = connect(); Statement s = c.createStatement();
+                    ResultSet r = s.executeQuery(
+                            "select has_schema_privilege(current_user, current_schema(), 'CREATE')")) {
+                r.next();
+                // A schema that is null makes the answer null, which reads as false
+                return r.getBoolean(1);
+            }
+        }
+
+        /**
+         * Gives the connection's role DbChecks.LOCK_TIMEOUT in this database, which each of its later connections
+         * takes. A role may set its own defaults, so this needs no other right.
+         */
+        void setLockTimeout() throws SQLException {
+            try (Connection c = connect(); Statement s = c.createStatement()) {
+                String database;
+                try (ResultSet r = s.executeQuery("select current_database()")) {
+                    r.next();
+                    database = r.getString(1);
+                }
+                s.execute("alter role current_user in database \"" + database.replace("\"", "\"\"")
+                        + "\" set lock_timeout = '" + DbChecks.LOCK_TIMEOUT + "'");
+            }
+        }
+
+        /** The lock_timeout a new connection of the role has */
+        String lockTimeout() throws SQLException {
+            return text("show lock_timeout");
+        }
+
+        /** The first column of the one row the query returns, as text */
+        private String text(String query) throws SQLException {
+            try (Connection c = connect(); Statement s = c.createStatement(); ResultSet r = s.executeQuery(query)) {
+                r.next();
+                return r.getString(1);
+            }
         }
     }
 
