@@ -35,10 +35,11 @@ import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.plugin.PluginRegistry;
 
 /**
- * Container init, run by entrypoint.sh before Tomcat starts: works out the trusted proxies, applies the
- * container-managed context.properties keys, waits for the database, checks the PostgreSQL server and database and
- * sets the app's role's lock timeout, creates the schema on first boot with the setup wizard's own DBInit, or on a
- * later one checks that LogicalDOC's tables have what this version's scripts create, and installs LogicalDOC's plugins.
+ * Container init, run by entrypoint.sh before Tomcat starts: works out the trusted proxies, waits for the database and
+ * stops, before it writes anything, an install that would start empty (StartGuard), applies the container-managed
+ * context.properties keys, checks the PostgreSQL server and database and sets the app's role's lock timeout, creates
+ * the schema on first boot with the setup wizard's own DBInit, or on a later one checks that LogicalDOC's tables have
+ * what this version's scripts create, and installs LogicalDOC's plugins.
  */
 public final class DockerInit {
 
@@ -46,6 +47,9 @@ public final class DockerInit {
 
     /** The image's pristine context.properties, the source of keys an older conf file lacks. */
     static final File DEFAULTS = new File(ConfigPlan.HOME + "/defaults/context.properties");
+
+    /** Original's folder, store.1.dir as the conf volume is seeded with it, which the entrypoint makes */
+    static final File ORIGINAL = new File(ConfigPlan.HOME + "/repository/docs");
 
     static final String DRIVER = "org.postgresql.Driver";
 
@@ -83,16 +87,18 @@ public final class DockerInit {
 
         Map<String, String> envKeys = ConfigPlan.envKeys(env);
         int waitSeconds = ConfigPlan.dbWaitSeconds(env);
-        boolean seeded = applyConfig(CONFIG, DEFAULTS, envKeys);
-
+        refuseUnstorable(envKeys);
         Db db = new Db(envKeys.get("jdbc.url"), envKeys.get("jdbc.username"), envKeys.get("jdbc.password"));
-        db.await(waitSeconds);
+        // Nothing is written before the guard: not the conf volume, and not the database.
+        List<String> missing = guard(db, waitSeconds);
+
+        boolean seeded = applyConfig(CONFIG, DEFAULTS, envKeys);
+        // Straight after the seeding, before the checks that can refuse: the next start doesn't seed, so wouldn't warn.
+        if (seeded && missing.isEmpty())
+            warnConfigLoss();
         checkServerAndDatabase(db);
-        List<String> missing = db.missingTables(List.of("ld_user", MARKER));
         if (missing.isEmpty()) {
             log("schema present, skipping database initialization");
-            if (seeded)
-                warnConfigLoss();
             checkLogicalDocTables(db);
         } else if (missing.size() == 2) {
             createSchema(db);
@@ -114,6 +120,39 @@ public final class DockerInit {
             System.err.println("[docker-init] WARNING: LogicalDOC's plugins " + String.join(", ", plugins.failed())
                     + " did not start here (the error is above). Tomcat starts them again, and asks for a restart if"
                     + " one of them installs then.");
+    }
+
+    /**
+     * The guard against starting an install empty (spec section 8.3; StartGuard decides), before this start writes
+     * anything, to the conf volume or to the database. It reads the conf volume's database keys as they are, waits for
+     * the database, and asks it whether it holds a move and a schema. When the conf names MariaDB, a database that
+     * doesn't answer within StartGuard.ANSWER_SECONDS isn't waited for: the install's DB_HOST may still name its
+     * MariaDB server, which never answers as PostgreSQL. A sign-in the database refuses stops the start at once, with
+     * its own message, whatever the conf names.
+     *
+     * @return the tables of ld_user and the start-up tool's marker that the database lacks
+     */
+    private static List<String> guard(Db db, int waitSeconds) throws Exception {
+        boolean mariaDb = false;
+        if (CONFIG.isFile()) {
+            ContextProperties conf = new ContextProperties(CONFIG);
+            mariaDb = StartGuard.namesMariaDb(conf.getProperty("jdbc.url"), conf.getProperty("jdbc.dbms"));
+        }
+        boolean reachable = true;
+        if (mariaDb) {
+            log(CONFIG + " names MariaDB: PostgreSQL has " + StartGuard.ANSWER_SECONDS + "s to answer");
+            reachable = db.answers(StartGuard.ANSWER_SECONDS);
+        } else {
+            db.await(waitSeconds);
+        }
+        List<String> schema = List.of("ld_user", MARKER);
+        Boolean move = reachable ? db.move() : null;
+        List<String> missing = reachable ? db.missingTables(schema) : schema;
+        StartGuard.Verdict verdict = StartGuard.decide(mariaDb, reachable, move, missing.size() == schema.size(),
+                StartGuard.holdsFiles(ORIGINAL));
+        if (verdict != StartGuard.Verdict.START)
+            throw new InitException(StartGuard.message(verdict));
+        return missing;
     }
 
     /**
@@ -336,18 +375,31 @@ public final class DockerInit {
 
     /**
      * LogicalDOC writes context.properties one byte per character, so values outside Latin-1 come back changed.
-     * Refuse them here rather than let Tomcat fail later with a corrupted password or URL. A line break now comes
-     * back as written, but in a password or an address it's a slip, such as a secret file's last newline, so it's
-     * refused too.
+     * Refuse them rather than let Tomcat fail later with a corrupted password or URL. A line break now comes back as
+     * written, but in a password or an address it's a slip, such as a secret file's last newline, so it's refused too.
+     * run refuses them before anything uses them: the guard signs in with the password before applyConfig stores it,
+     * and a sign-in would only say it's wrong.
      */
-    private static void verifyStored(File file, Map<String, String> envKeys) throws IOException {
-        ContextProperties stored = new ContextProperties(file);
+    private static void refuseUnstorable(Map<String, String> envKeys) {
         for (Map.Entry<String, String> key : envKeys.entrySet())
             if (key.getValue().contains("\r") || key.getValue().contains("\n")
-                    || !key.getValue().equals(stored.getProperty(key.getKey()))
+                    || key.getValue().chars().anyMatch(c -> c > 0xFF))
+                throw unstorable(key.getKey());
+    }
+
+    /** Refuses what refuseUnstorable does, then reads the env-owned keys back from the file, as LogicalDOC will. */
+    private static void verifyStored(File file, Map<String, String> envKeys) throws IOException {
+        refuseUnstorable(envKeys);
+        ContextProperties stored = new ContextProperties(file);
+        for (Map.Entry<String, String> key : envKeys.entrySet())
+            if (!key.getValue().equals(stored.getProperty(key.getKey()))
                     || !key.getValue().equals(stored.getString(key.getKey())))
-                throw new IllegalArgumentException(ConfigPlan.source(key.getKey())
-                        + " cannot be stored in context.properties as given: use only Latin-1 characters and no line breaks");
+                throw unstorable(key.getKey());
+    }
+
+    private static IllegalArgumentException unstorable(String key) {
+        return new IllegalArgumentException(ConfigPlan.source(key)
+                + " cannot be stored in context.properties as given: use only Latin-1 characters and no line breaks");
     }
 
     /**
@@ -500,23 +552,63 @@ public final class DockerInit {
             return DriverManager.getConnection(url, user, password);
         }
 
+        /** Waits for the database to answer, and stops the start when it hasn't within the seconds given. */
         void await(int seconds) throws InitException, InterruptedException {
+            SQLException e = attempt(seconds);
+            if (e != null)
+                throw new InitException("database not reachable at " + url + " after " + seconds + "s: "
+                        + e.getMessage());
+        }
+
+        /** Waits for the database to answer: false when it hasn't within the seconds given. */
+        boolean answers(int seconds) throws InitException, InterruptedException {
+            return attempt(seconds) == null;
+        }
+
+        /**
+         * Connects until the database answers, then returns null, or until the seconds have passed, then returns the
+         * last connection's error. Each connection has only the time left (pgjdbc's loginTimeout, a second at least),
+         * so a host that never answers, or answers as something other than PostgreSQL and then says nothing, can't
+         * hold the start past it. A sign-in the database refuses stops the start at once.
+         */
+        private SQLException attempt(int seconds) throws InitException, InterruptedException {
             long deadline = System.nanoTime() + seconds * 1_000_000_000L;
             while (true) {
-                try (Connection c = connect(); Statement s = c.createStatement()) {
+                Properties login = new Properties();
+                login.setProperty("user", user);
+                login.setProperty("password", password);
+                login.setProperty("loginTimeout",
+                        String.valueOf(Math.max(1, (deadline - System.nanoTime()) / 1_000_000_000L)));
+                try (Connection c = DriverManager.getConnection(url, login); Statement s = c.createStatement()) {
                     s.execute("select 1");
-                    return;
+                    return null;
                 } catch (SQLException e) {
                     // SQLSTATE class 28 = invalid authorization: retrying will not help.
                     if (e.getSQLState() != null && e.getSQLState().startsWith("28"))
                         throw new InitException("database authentication failed for user '" + user + "' at " + url
                                 + ": " + e.getMessage());
                     if (System.nanoTime() > deadline)
-                        throw new InitException("database not reachable at " + url + " after " + seconds + "s: "
-                                + e.getMessage());
+                        return e;
                     log("waiting for database at " + url + " (" + e.getMessage() + ")");
                 }
                 Thread.sleep(2000);
+            }
+        }
+
+        /**
+         * Whether the database holds a move from MariaDB: null when it has no StartGuard.MOVE_MARKER table, true when
+         * the move finished, and false when it didn't, a table with no row included, as a move stopped before it
+         * wrote one leaves. It asks whether the table exists first, as missingTables does, so nothing fails in
+         * PostgreSQL's log.
+         */
+        Boolean move() throws SQLException {
+            if (!missingTables(List.of(StartGuard.MOVE_MARKER)).isEmpty())
+                return null;
+            try (Connection c = connect(); Statement s = c.createStatement();
+                    ResultSet r = s.executeQuery("select count(*) > 0 and count(finished) = count(*) from "
+                            + StartGuard.MOVE_MARKER)) {
+                r.next();
+                return r.getBoolean(1);
             }
         }
 
