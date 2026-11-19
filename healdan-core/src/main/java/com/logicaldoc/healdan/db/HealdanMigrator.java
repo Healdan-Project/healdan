@@ -25,9 +25,10 @@ import com.logicaldoc.healdan.HealdanStartupException;
 
 /**
  * Creates and upgrades Healdan's own tables (prefix {@code hd_}) with Flyway.
- * LogicalDOC's tables are never touched. Only MariaDB (production) and
- * PostgreSQL are supported; any other database, MySQL and HSQLDB included, is
- * refused before Flyway runs.
+ * LogicalDOC's tables are never touched, but for the widening of eight text
+ * columns (V12). Only PostgreSQL is supported; any other database, MySQL and
+ * HSQLDB included, is refused before Flyway runs, and a MariaDB install is
+ * pointed to the page that moves it across.
  */
 @Component
 public class HealdanMigrator {
@@ -37,6 +38,9 @@ public class HealdanMigrator {
 		MIGRATED, SKIPPED_NO_CE_SCHEMA
 	}
 
+	/** The page of the Install manual that moves a MariaDB install to PostgreSQL */
+	public static final String MOVE_PAGE = "https://docs.healdan.com/install/moving-from-mariadb/";
+
 	private static final String DEFAULT_LOCATION = "classpath:healdan/db/migration/{vendor}";
 
 	private static final String VENDOR_PLACEHOLDER = "{vendor}";
@@ -45,13 +49,8 @@ public class HealdanMigrator {
 
 	private static final String HISTORY_TABLE = "hd_schema_history";
 
-	/** How an admin recovers from a failed migration on MariaDB, whose DDL isn't transactional */
-	static final String RECOVERY = ". To recover, fix the cause, drop the hd_ tables the failed script created, "
-			+ "delete its failed row from hd_schema_history (delete from hd_schema_history where success = 0), "
-			+ "and restart";
-
-	/** How an admin recovers from a failed migration on PostgreSQL, which rolls a failed script back */
-	static final String RECOVERY_POSTGRESQL = ". PostgreSQL rolled the failed script back, so fix the cause and "
+	/** How an admin recovers from a failed migration, on PostgreSQL, which rolls a failed script back */
+	static final String RECOVERY = ". PostgreSQL rolled the failed script back, so fix the cause and "
 			+ "restart. If the script ran outside a transaction, also drop what it created and delete its failed row "
 			+ "(delete from hd_schema_history where success = false)";
 
@@ -84,7 +83,6 @@ public class HealdanMigrator {
 	 *         migration fails
 	 */
 	public Status migrate(String... locations) {
-		String vendor = null;
 		try {
 			DatabaseMetaData meta;
 			boolean ceSchema;
@@ -93,7 +91,7 @@ public class HealdanMigrator {
 				meta = con.getMetaData();
 				ceSchema = tableExists(meta, con.getCatalog(), con.getSchema(), "ld_user");
 				if (ceSchema) {
-					vendor = vendorFolder(meta);
+					String vendor = vendorFolder(meta);
 					effective = (locations.length == 0 ? new String[] { DEFAULT_LOCATION } : locations).clone();
 					for (int i = 0; i < effective.length; i++)
 						effective[i] = effective[i].replace(VENDOR_PLACEHOLDER, vendor);
@@ -109,8 +107,7 @@ public class HealdanMigrator {
 			throw e;
 		} catch (Exception e) {
 			log.error("Healdan's database migration failed: {}", e.getMessage(), e);
-			String recovery = "postgresql".equals(vendor) ? RECOVERY_POSTGRESQL : RECOVERY;
-			throw new HealdanStartupException("Healdan's database migration failed: " + e.getMessage() + recovery, e);
+			throw new HealdanStartupException("Healdan's database migration failed: " + e.getMessage() + RECOVERY, e);
 		}
 	}
 
@@ -155,11 +152,11 @@ public class HealdanMigrator {
 
 	/**
 	 * Flyway's OSS edition doesn't resolve a vendor placeholder in locations, so
-	 * we do. MariaDB is recognised by its product name or, through the MySQL
-	 * driver (which reports product "MySQL"), by a version naming MariaDB. MySQL
-	 * itself is refused: V1 uses {@code create sequence}, which MySQL lacks, and
-	 * MySQL's DDL isn't transactional, so a half-run V1 would leave every later
-	 * start failing.
+	 * we do. Only PostgreSQL has scripts. MariaDB, which Healdan ran on before,
+	 * is recognised by its product name or, through the MySQL driver (which
+	 * reports product "MySQL"), by a version naming MariaDB, and is told how to
+	 * move across. MySQL itself, which Healdan never ran on, is refused like any
+	 * other database.
 	 */
 	private static String vendorFolder(DatabaseMetaData meta) {
 		String product;
@@ -172,12 +169,12 @@ public class HealdanMigrator {
 		}
 		String lowerProduct = product == null ? "" : product.toLowerCase(Locale.ROOT);
 		String lowerVersion = version == null ? "" : version.toLowerCase(Locale.ROOT);
-		if (lowerProduct.contains("mariadb") || lowerVersion.contains("mariadb"))
-			return "mariadb";
 		if (lowerProduct.contains("postgresql"))
 			return "postgresql";
-		throw new HealdanStartupException(
-				"Healdan's tables support MariaDB and PostgreSQL only; found " + product + " " + version);
+		if (lowerProduct.contains("mariadb") || lowerVersion.contains("mariadb"))
+			throw new HealdanStartupException(
+					"Healdan runs on PostgreSQL, and this database is MariaDB. Move it across first: " + MOVE_PAGE);
+		throw new HealdanStartupException("Healdan's tables support PostgreSQL only; found " + product + " " + version);
 	}
 
 	static FluentConfiguration configure(DataSource dataSource, String... locations) {
@@ -192,7 +189,7 @@ public class HealdanMigrator {
 	private static boolean tableExists(DatabaseMetaData meta, String catalog, String schema, String table)
 			throws SQLException {
 		/*
-		 * MariaDB and PostgreSQL keep the lower case the scripts create. The upper-case try only lets a database that
+		 * PostgreSQL keeps the lower case the scripts create. The upper-case try only lets a database that
 		 * stores names in upper case, such as HSQLDB, reach vendorFolder's refusal rather than be skipped as having
 		 * no CE schema
 		 */
