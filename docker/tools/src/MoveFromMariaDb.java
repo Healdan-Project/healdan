@@ -99,11 +99,34 @@ final class MoveFromMariaDb {
 
     /** Exit statuses: 0 moved, 1 refused or failed (the target is left marked unfinished, or untouched) */
     public static void main(String[] args) {
-        int status = run(args, System.getenv());
+        int status = guarded(() -> run(args, System.getenv()));
         System.out.flush();
         System.err.flush();
         // DBInit leaves its connection open, and a driver can leave a thread behind: neither may keep the JVM up
         System.exit(status);
+    }
+
+    /** The command's body: its exit status, which is 0 only once it has printed Move complete. */
+    interface Body {
+        int status() throws Throwable;
+    }
+
+    /**
+     * The body's exit status, or 1 for anything it throws, an Error included (run handles every Exception itself):
+     * every way out of main reaches System.exit, so no open connection or driver thread can keep the JVM up without
+     * one. An Error's line names its class only, as its message could hold anything.
+     */
+    static int guarded(Body body) {
+        try {
+            return body.status();
+        } catch (Throwable t) {
+            try {
+                error(t.getClass().getName(), List.of());
+            } catch (Throwable ignored) {
+                // nothing more can be said: the exit status still says it failed
+            }
+            return 1;
+        }
     }
 
     static int run(String[] args, Map<String, String> env) {
@@ -136,11 +159,12 @@ final class MoveFromMariaDb {
         try (Connection src = connectSource(source)) {
             // 1. The source
             String mariaDb = checkSource(src, source, cl);
-            say("Source: MariaDB " + mariaDb + ", Healdan schema version " + SOURCE_VERSION + " ... ok");
+            say("Source: MariaDB " + mariaDb + ", Healdan schema version " + SOURCE_VERSION + ", " + sourceZone(src)
+                    + " ... ok");
 
             // 2. The target, and 3. its marker
             db.await(waitSeconds);
-            String postgres = checkTarget(db);
+            String postgres = postgresVersion(DockerInit.checkDatabase(db, MoveFromMariaDb::warn).versionNum());
             try (Connection tgt = connectTarget(db)) {
                 lock(tgt);
                 TargetState state = prepare(tgt, db);
@@ -162,27 +186,28 @@ final class MoveFromMariaDb {
                 Copied copied = copy(src, tgt, copies, nul);
 
                 // 7. The counters, still in the source's snapshot
-                Counters counters = carryCounters(src, tgt, schema, plan);
+                Counters counters = carryCounters(src, tgt, plan);
                 endSnapshot(src);
                 say("Sequences " + counters.sequences() + " of " + counters.sequences() + ", identity counters "
                         + counters.identities() + " of " + counters.identities() + " ... ok");
 
                 // 8. The foreign keys back
-                addForeignKeys(tgt, foreignKeys);
+                addForeignKeys(tgt, foreignKeys, schema);
                 say("Foreign keys rebuilt: " + foreignKeys.size() + " of " + foreignKeys.size());
 
                 // 9. The comparison
                 compare(tgt, copies, copied);
                 say("Comparing: rows and checksums match in " + copies.size() + " of " + copies.size() + " tables");
-                checkCounters(tgt, schema);
+                checkCounters(tgt, schema, counters.target());
                 say("Counters: none can hand out an id its table already holds ... ok");
 
-                // 10. The markers
-                finish(tgt);
+                // 10. The lists, before the markers: the places --replace-nul changed are recorded nowhere else, and
+                // a move stopped after its finish can't be run again to print them
                 for (String line : sourceOnly(plan, counters.sourceOnlySequences()))
                     say(line);
                 for (String line : replacedReport(copied.replaced()))
                     say(line);
+                finish(tgt);
                 say("Move complete.");
             }
         }
@@ -385,6 +410,38 @@ final class MoveFromMariaDb {
                 + " down and run the move again. Nothing was changed.";
     }
 
+    /**
+     * The time zone the source's session renders its timestamp columns in (ld_patch.ld_date today), for the Source
+     * line: they come across as that wall-clock time, so it has to be the one the install ran with
+     */
+    private static String sourceZone(Connection c) throws MoveException {
+        try (Statement s = c.createStatement();
+                ResultSet r = s.executeQuery("select @@session.time_zone, @@system_time_zone,"
+                        + " cast(timediff(now(), utc_timestamp()) as char)")) {
+            r.next();
+            return zone(r.getString(1), r.getString(2), r.getString(3));
+        } catch (SQLException e) {
+            throw new MoveException("can't read the source's time zone: " + e.getMessage());
+        }
+    }
+
+    /**
+     * @param timeZone the session's time_zone, SYSTEM for the server's
+     * @param systemZone the server's system_time_zone
+     * @param offset the session's offset from UTC now, as MariaDB's timediff gives it: 00:00:00, -05:00:00
+     * @return as the Source line gives it: time zone UTC (the server's, +00:00), or time zone Europe/Rome (+01:00)
+     */
+    static String zone(String timeZone, String systemZone, String offset) {
+        String hours = offset == null ? "" : offset.trim();
+        if (!hours.startsWith("-"))
+            hours = "+" + hours;
+        // timediff gives hours, minutes and seconds: the seconds are always 00 for a zone's offset
+        if (hours.matches("[+-]\\d{2}:\\d{2}:\\d{2}"))
+            hours = hours.substring(0, hours.length() - 3);
+        boolean system = timeZone == null || "SYSTEM".equalsIgnoreCase(timeZone);
+        return "time zone " + (system ? systemZone + " (the server's, " : timeZone + " (") + hours + ")";
+    }
+
     /** MariaDB's version without its build suffix: 11.4.13 from 11.4.13-MariaDB-ubu2404 */
     static String mariaDbVersion(String version) {
         int dash = version.indexOf('-');
@@ -425,19 +482,6 @@ final class MoveFromMariaDb {
     }
 
     // ---- 2. The target, and 3. its marker
-
-    /** The start-up tool's checks of the server and the database (DbChecks), before anything is written */
-    private static String checkTarget(DockerInit.Db db) throws Exception {
-        int version = db.versionNum();
-        String encoding = db.encoding();
-        refuse(DbChecks.tooOld(version));
-        refuse(DbChecks.wrongEncoding(encoding));
-        refuse(DbChecks.cannotCreate(db.canCreate(), db.user, db.schema()));
-        warn(DbChecks.untested(version));
-        String[] locale = db.locale();
-        warn(DbChecks.otherLocale(locale[0], locale[1], locale[2]));
-        return postgresVersion(version);
-    }
 
     /** PostgreSQL's version from its server_version_num: 18.1 from 180001 */
     static String postgresVersion(int versionNum) {
@@ -610,8 +654,12 @@ final class MoveFromMariaDb {
     // ---- 5. The foreign keys and the scripts' rows
 
     /** A foreign key: its table, its name and its definition, as pg_get_constraintdef gives it */
-    record ForeignKey(String table, String name, String definition) {
+    record ForeignKey(String table, String name, String definition, List<String> columns, String referenced,
+            List<String> referencedColumns) {
     }
+
+    /** Foreign keys whose rows that refer to nothing are listed, at most so many each */
+    static final int ORPHANS = 20;
 
     /**
      * Reads every foreign key's table, name and definition and drops them, then empties every table but the target's
@@ -621,12 +669,17 @@ final class MoveFromMariaDb {
         List<ForeignKey> keys = new ArrayList<>();
         c.setAutoCommit(false);
         try (Statement s = c.createStatement()) {
-            try (ResultSet r = s.executeQuery("select t.relname, k.conname, pg_get_constraintdef(k.oid)"
-                    + " from pg_constraint k join pg_class t on t.oid = k.conrelid"
+            String attributes = " with ordinality u(attnum, i) join pg_attribute a on a.attrelid = %s"
+                    + " and a.attnum = u.attnum order by u.i)";
+            try (ResultSet r = s.executeQuery("select t.relname, k.conname, pg_get_constraintdef(k.oid), f.relname,"
+                    + " array(select a.attname from unnest(k.conkey)" + attributes.formatted("k.conrelid") + ","
+                    + " array(select a.attname from unnest(k.confkey)" + attributes.formatted("k.confrelid")
+                    + " from pg_constraint k join pg_class t on t.oid = k.conrelid join pg_class f on f.oid = k.confrelid"
                     + " join pg_namespace n on n.oid = t.relnamespace"
                     + " where k.contype = 'f' and n.nspname = current_schema() order by t.relname, k.conname")) {
                 while (r.next())
-                    keys.add(new ForeignKey(r.getString(1), r.getString(2), r.getString(3)));
+                    keys.add(new ForeignKey(r.getString(1), r.getString(2), r.getString(3), List.of((String[]) r
+                            .getArray(5).getArray()), r.getString(4), List.of((String[]) r.getArray(6).getArray())));
             }
             for (ForeignKey key : keys)
                 s.execute("alter table " + quotePg(key.table()) + " drop constraint " + quotePg(key.name()));
@@ -647,26 +700,77 @@ final class MoveFromMariaDb {
         return keys;
     }
 
-    /** Adds the foreign keys back, each on its own, which checks every reference, and names each one that fails */
-    private static void addForeignKeys(Connection c, List<ForeignKey> keys) throws MoveException {
+    /**
+     * Adds the foreign keys back, each on its own, which checks every reference, and names each one that fails, with
+     * the rows that refer to nothing, by their key and the foreign key's columns, at most ORPHANS of them
+     */
+    private static void addForeignKeys(Connection c, List<ForeignKey> keys, TargetSchema schema)
+            throws MoveException {
         List<String> failed = new ArrayList<>();
+        int failures = 0;
         try (Statement s = c.createStatement()) {
             for (ForeignKey key : keys)
                 try {
                     s.execute("alter table " + quotePg(key.table()) + " add constraint " + quotePg(key.name()) + " "
                             + key.definition());
                 } catch (SQLException e) {
+                    failures++;
                     failed.add("foreign key " + key.name() + " on " + key.table() + ", " + key.definition() + ": "
                             + described(e));
+                    failed.addAll(orphanLines(s, key, schema.tables().get(key.table())));
                 }
         } catch (SQLException e) {
             throw new MoveException("can't add the foreign keys back: " + described(e));
         }
         if (!failed.isEmpty())
-            throw new MoveException(failed.size() + " of the " + keys.size() + " foreign keys don't hold on the copied"
-                    + " rows, so the move stopped: a row refers to one its table lacks. Find those rows in MariaDB"
-                    + " (each key's definition gives the columns), mend them, and run the move again, which starts"
-                    + " over", failed);
+            throw new MoveException(failures + " of the " + keys.size() + " foreign keys " + (failures == 1 ? "doesn't"
+                    : "don't") + " hold on the copied rows, so the move stopped: each row listed refers to one its"
+                    + " table lacks. Mend those rows in MariaDB, and run the move again, which starts over", failed);
+    }
+
+    /** The rows of a foreign key's table whose columns all have values and refer to no row: the query after select */
+    static String orphans(ForeignKey key) {
+        StringJoiner where = new StringJoiner(" and ", " from " + quotePg(key.table()) + " r where ", "");
+        StringJoiner match = new StringJoiner(" and ");
+        for (int i = 0; i < key.columns().size(); i++) {
+            where.add("r." + quotePg(key.columns().get(i)) + " is not null");
+            match.add("x." + quotePg(key.referencedColumns().get(i)) + " = r." + quotePg(key.columns().get(i)));
+        }
+        return where.add("not exists (select 1 from " + quotePg(key.referenced()) + " x where " + match + ")")
+                .toString();
+    }
+
+    /** The orphans' lines: each row by its table's primary key and the foreign key's columns, as key gives them */
+    private static List<String> orphanLines(Statement s, ForeignKey key, TargetTable table) {
+        List<String> primaryKey = table == null ? List.of() : table.primaryKey();
+        List<String> lines = new ArrayList<>();
+        StringJoiner shown = new StringJoiner(", ");
+        for (String column : primaryKey)
+            shown.add("r." + quotePg(column));
+        for (String column : key.columns())
+            shown.add("r." + quotePg(column));
+        try {
+            long count;
+            try (ResultSet r = s.executeQuery("select count(*)" + orphans(key))) {
+                r.next();
+                count = r.getLong(1);
+            }
+            try (ResultSet rows = s.executeQuery("select " + shown + orphans(key) + " limit " + ORPHANS)) {
+                while (rows.next()) {
+                    List<Object> values = new ArrayList<>();
+                    for (int i = 1; i <= primaryKey.size() + key.columns().size(); i++)
+                        values.add(rows.getObject(i));
+                    lines.add("  table " + key.table() + (primaryKey.isEmpty() ? "" : ", row " + key(primaryKey,
+                            values.subList(0, primaryKey.size()))) + ": " + key(key.columns(), values.subList(
+                                    primaryKey.size(), values.size())) + " isn't in " + key.referenced());
+                }
+            }
+            if (count > ORPHANS)
+                lines.add("  and " + (count - ORPHANS) + " more");
+        } catch (SQLException e) {
+            lines.add("  (its rows couldn't be listed: " + described(e) + ")");
+        }
+        return lines;
     }
 
     // ---- 6. The copy
@@ -862,7 +966,7 @@ final class MoveFromMariaDb {
      * <p>
      * The checksum compares what was carried with what PostgreSQL gives back, so it can't see a value the source's
      * driver changed as it read it. So what was read is also tallied against MariaDB's own tally in the same
-     * snapshot: its row count, and for each column but floating-point ones, the count of its values and the sum of
+     * snapshot: its row count, each column's count of values, and for each column but floating-point ones the sum of
      * their CRC-32s, worked out by MariaDB from its own text of each value (sourceTally).
      *
      * @param write false once an earlier table had a value refused: then the table is only read and checked
@@ -876,11 +980,11 @@ final class MoveFromMariaDb {
         StringJoiner read = new StringJoiner(", ", "select ", " from " + quoteMaria(plan.sourceTable()));
         StringJoiner names = new StringJoiner(", ", "insert into " + quotePg(table) + " (", ")"
                 + (copy.identity() ? " overriding system value" : "") + " values (");
-        boolean[] tallied = new boolean[n];
+        boolean[] hashed = new boolean[n];
         for (int i = 0; i < n; i++) {
             read.add(sourceColumn(columns.get(i), copy.asText()[i]));
             names.add(quotePg(columns.get(i)));
-            tallied[i] = tallied(copy.targets().get(i));
+            hashed[i] = hashed(copy.targets().get(i));
         }
         String insert = names + "?" + ", ?".repeat(n - 1) + ")";
 
@@ -893,7 +997,7 @@ final class MoveFromMariaDb {
         boolean writing = write;
         String doing = "reading " + table + " from MariaDB";
         try {
-            theirs = sourceTally(src, plan.sourceTable(), columns, copy.asText(), tallied);
+            theirs = sourceTally(src, plan.sourceTable(), columns, copy.asText(), hashed);
             tgt.setAutoCommit(false);
             try (PreparedStatement s = src.prepareStatement(read.toString(), ResultSet.TYPE_FORWARD_ONLY,
                     ResultSet.CONCUR_READ_ONLY); PreparedStatement ins = tgt.prepareStatement(insert)) {
@@ -906,8 +1010,7 @@ final class MoveFromMariaDb {
                         rows++;
                         for (int i = 0; i < n; i++) {
                             raw[i] = copy.asText()[i] ? r.getString(i + 1) : r.getObject(i + 1);
-                            if (tallied[i])
-                                tally.add(i, raw[i]);
+                            tally.add(i, raw[i], hashed[i]);
                         }
                         String key = rowKey(copy, raw, rows);
                         carried.clear();
@@ -948,7 +1051,7 @@ final class MoveFromMariaDb {
                 tally.rows = rows;
                 // A value refused stops the move anyway, so the tally is checked only on a table read whole
                 if (refused == 0) {
-                    List<String> differ = tally.differences(theirs, columns, tallied);
+                    List<String> differ = tally.differences(theirs, columns, hashed);
                     if (!differ.isEmpty())
                         throw new MoveException("what the move read from MariaDB's table " + plan.sourceTable()
                                 + " isn't what MariaDB holds, by MariaDB's own count of its rows and values and"
@@ -986,49 +1089,52 @@ final class MoveFromMariaDb {
     }
 
     /**
-     * Whether a column is tallied against MariaDB's own tally: every kind but floating point, whose text MariaDB gives
-     * in a form of its own (1e300), and which the binary protocol carries exactly
+     * Whether a column's values are hashed in the tally, besides being counted: every kind but floating point, whose
+     * text MariaDB gives in a form of its own (1e300), and which the binary protocol carries exactly
      */
-    static boolean tallied(MoveValues.Target target) {
+    static boolean hashed(MoveValues.Target target) {
         String type = target.type() == null ? "" : target.type().toLowerCase(Locale.ROOT);
         return !type.equals("double precision") && !type.equals("real");
     }
 
     /**
-     * MariaDB's tally of a table in the snapshot: count(*), then for each tallied column count(c) and
-     * sum(crc32(c)), each value in MariaDB's own text of it (a date and time as sourceColumn reads it)
+     * MariaDB's tally of a table in the snapshot: count(*), then for each column count(c), and for each hashed one
+     * sum(crc32(c)) too, each value in MariaDB's own text of it (a date and time as sourceColumn reads it)
      */
-    static String tallyQuery(String sourceTable, List<String> columns, boolean[] asText, boolean[] tallied) {
+    static String tallyQuery(String sourceTable, List<String> columns, boolean[] asText, boolean[] hashed) {
         StringBuilder b = new StringBuilder("select count(*)");
-        for (int i = 0; i < columns.size(); i++)
-            if (tallied[i]) {
-                String column = sourceColumn(columns.get(i), asText[i]);
-                b.append(", count(").append(column).append("), sum(crc32(").append(column).append("))");
-            }
+        for (int i = 0; i < columns.size(); i++) {
+            String column = sourceColumn(columns.get(i), asText[i]);
+            b.append(", count(").append(column).append(")");
+            if (hashed[i])
+                b.append(", sum(crc32(").append(column).append("))");
+        }
         return b.append(" from ").append(quoteMaria(sourceTable)).toString();
     }
 
     private static Tally sourceTally(Connection src, String sourceTable, List<String> columns, boolean[] asText,
-            boolean[] tallied) throws SQLException {
+            boolean[] hashed) throws SQLException {
         Tally tally = new Tally(columns.size());
         try (Statement s = src.createStatement();
-                ResultSet r = s.executeQuery(tallyQuery(sourceTable, columns, asText, tallied))) {
+                ResultSet r = s.executeQuery(tallyQuery(sourceTable, columns, asText, hashed))) {
             r.next();
             tally.rows = r.getLong(1);
             int at = 2;
-            for (int i = 0; i < columns.size(); i++)
-                if (tallied[i]) {
-                    tally.counts[i] = r.getLong(at++);
+            for (int i = 0; i < columns.size(); i++) {
+                tally.counts[i] = r.getLong(at++);
+                if (hashed[i]) {
                     BigDecimal crcs = r.getBigDecimal(at++);
                     tally.crcs[i] = crcs == null ? 0 : crcs.longValueExact();
                 }
+            }
         }
         return tally;
     }
 
     /**
-     * A table's rows, and for each column the count of its values and the sum of their CRC-32s, each value taken as
-     * MariaDB's text of it in UTF-8: the text itself, a whole number's decimal digits, a decimal's plain digits
+     * A table's rows, and for each column the count of its values, and the sum of their CRC-32s for a hashed one,
+     * each value taken as MariaDB's text of it in UTF-8: the text itself, a whole number's decimal digits, a decimal's
+     * plain digits
      */
     static final class Tally {
 
@@ -1043,9 +1149,16 @@ final class MoveFromMariaDb {
             crcs = new long[columns];
         }
 
-        /** Adds a value read from MariaDB to its column's tally: a null counts for nothing, as count(c) has it */
-        void add(int column, Object raw) {
+        /**
+         * Adds a value read from MariaDB to its column's tally: a null counts for nothing, as count(c) has it
+         *
+         * @param hash whether to add its CRC-32 too
+         */
+        void add(int column, Object raw, boolean hash) {
             if (raw == null)
+                return;
+            counts[column]++;
+            if (!hash)
                 return;
             String text;
             if (raw instanceof String string)
@@ -1056,17 +1169,16 @@ final class MoveFromMariaDb {
                 text = raw.toString();
             CRC32 crc = new CRC32();
             crc.update(text.getBytes(StandardCharsets.UTF_8));
-            counts[column]++;
             crcs[column] = Math.addExact(crcs[column], crc.getValue());
         }
 
-        /** Where this tally and MariaDB's differ: the rows, and each tallied column by name */
-        List<String> differences(Tally theirs, List<String> columns, boolean[] tallied) {
+        /** Where this tally and MariaDB's differ: the rows, and each column by name, its CRC-32s if it's hashed */
+        List<String> differences(Tally theirs, List<String> columns, boolean[] hashed) {
             List<String> differ = new ArrayList<>();
             if (rows != theirs.rows)
                 differ.add("the move read " + rows + " rows, and MariaDB counts " + theirs.rows);
             for (int i = 0; i < columns.size(); i++)
-                if (tallied[i] && (counts[i] != theirs.counts[i] || crcs[i] != theirs.crcs[i]))
+                if (counts[i] != theirs.counts[i] || hashed[i] && crcs[i] != theirs.crcs[i])
                     differ.add("column " + columns.get(i) + ": the move read " + counts[i] + " values, MariaDB counts "
                             + theirs.counts[i] + (counts[i] == theirs.counts[i] ? ", and their CRC-32s differ" : ""));
             return differ;
@@ -1157,7 +1269,48 @@ final class MoveFromMariaDb {
     // ---- 7. The counters
 
     /** How many sequences and identity counters were carried, and the source's sequences the target has none of */
-    record Counters(int sequences, int identities, List<String> sourceOnlySequences) {
+    record Counters(int sequences, int identities, List<String> sourceOnlySequences, TargetSequences target) {
+    }
+
+    /** An identity column, by its sequence and the table and column it gives values to */
+    record Identity(String sequence, String table, String column) {
+    }
+
+    /**
+     * The target's sequences, read once for carrying the counters and checking them: each one's increment, by name,
+     * and the identity columns', whose sequences are the others' complement
+     */
+    record TargetSequences(Map<String, Long> increments, List<Identity> identities) {
+
+        /** The sequences that aren't an identity column's, in order */
+        List<String> plain() {
+            List<String> plain = new ArrayList<>(increments.keySet());
+            for (Identity identity : identities)
+                plain.remove(identity.sequence());
+            return plain;
+        }
+    }
+
+    private static TargetSequences targetSequences(Connection tgt) throws SQLException {
+        Map<String, Long> increments = new LinkedHashMap<>();
+        List<Identity> identities = new ArrayList<>();
+        try (Statement s = tgt.createStatement()) {
+            try (ResultSet r = s.executeQuery("select sequencename, increment_by from pg_sequences"
+                    + " where schemaname = current_schema() order by sequencename")) {
+                while (r.next())
+                    increments.put(r.getString(1), r.getLong(2));
+            }
+            try (ResultSet r = s.executeQuery("select s.relname, t.relname, a.attname from pg_class s"
+                    + " join pg_namespace n on n.oid = s.relnamespace join pg_depend d on d.objid = s.oid"
+                    + " and d.classid = 'pg_class'::regclass and d.refclassid = 'pg_class'::regclass"
+                    + " and d.deptype = 'i' join pg_class t on t.oid = d.refobjid"
+                    + " join pg_attribute a on a.attrelid = t.oid and a.attnum = d.refobjsubid"
+                    + " where s.relkind = 'S' and n.nspname = current_schema() order by t.relname, a.attname")) {
+                while (r.next())
+                    identities.add(new Identity(r.getString(1), r.getString(2), r.getString(3)));
+            }
+        }
+        return new TargetSequences(increments, identities);
     }
 
     /** The source's sequences matched to the target's by name, whatever the case */
@@ -1214,28 +1367,13 @@ final class MoveFromMariaDb {
      * out a value twice, and each identity column's from the highest of its ids and MariaDB's own counter for the
      * table. A target sequence with no source sequence, or one that steps by another increment, stops the move.
      */
-    private static Counters carryCounters(Connection src, Connection tgt, TargetSchema schema, MovePlan.Plan plan)
+    private static Counters carryCounters(Connection src, Connection tgt, MovePlan.Plan plan)
             throws MoveException {
         String doing = "reading the target's sequences";
         try {
-            Map<String, Long> increments = new LinkedHashMap<>();
-            Set<String> identitySequences = new HashSet<>();
-            try (Statement s = tgt.createStatement()) {
-                try (ResultSet r = s.executeQuery("select sequencename, increment_by from pg_sequences"
-                        + " where schemaname = current_schema() order by sequencename")) {
-                    while (r.next())
-                        increments.put(r.getString(1), r.getLong(2));
-                }
-                try (ResultSet r = s.executeQuery("select s.relname from pg_class s"
-                        + " join pg_namespace n on n.oid = s.relnamespace join pg_depend d on d.objid = s.oid"
-                        + " and d.classid = 'pg_class'::regclass and d.refclassid = 'pg_class'::regclass"
-                        + " where s.relkind = 'S' and d.deptype = 'i' and n.nspname = current_schema()")) {
-                    while (r.next())
-                        identitySequences.add(r.getString(1));
-                }
-            }
-            List<String> plain = new ArrayList<>(increments.keySet());
-            plain.removeAll(identitySequences);
+            TargetSequences sequences = targetSequences(tgt);
+            Map<String, Long> increments = sequences.increments();
+            List<String> plain = sequences.plain();
 
             doing = "reading the source's sequences";
             List<String> sourceSequences = new ArrayList<>();
@@ -1286,26 +1424,20 @@ final class MoveFromMariaDb {
                 }
             }
 
-            int identities = 0;
-            for (TargetTable table : schema.tables().values())
-                for (Column column : table.columns())
-                    if (column.identity()) {
-                        doing = "setting the target's identity counter of " + table.name() + "." + column.name();
-                        long highest = highest(tgt, table.name(), column.name());
-                        String sourceTable = sourceTableOf(plan, table.name());
-                        Long sourceNext = sourceTable == null ? null : autoIncrements.get(sourceTable);
-                        long last = Math.max(highest, sourceNext == null ? 0 : sourceNext - 1);
-                        if (last >= 1)
-                            try (PreparedStatement s = tgt.prepareStatement(
-                                    "select setval(pg_get_serial_sequence(?, ?), ?)")) {
-                                s.setString(1, quotePg(table.name()));
-                                s.setString(2, column.name());
-                                s.setLong(3, last);
-                                s.executeQuery().close();
-                            }
-                        identities++;
+            for (Identity identity : sequences.identities()) {
+                doing = "setting the target's identity counter of " + identity.table() + "." + identity.column();
+                long highest = highest(tgt, identity.table(), identity.column());
+                String sourceTable = sourceTableOf(plan, identity.table());
+                Long sourceNext = sourceTable == null ? null : autoIncrements.get(sourceTable);
+                long last = Math.max(highest, sourceNext == null ? 0 : sourceNext - 1);
+                if (last >= 1)
+                    try (PreparedStatement s = tgt.prepareStatement("select setval(cast(? as regclass), ?)")) {
+                        s.setString(1, quotePg(identity.sequence()));
+                        s.setLong(2, last);
+                        s.executeQuery().close();
                     }
-            return new Counters(match.pairs().size(), identities, match.sourceOnly());
+            }
+            return new Counters(match.pairs().size(), sequences.identities().size(), match.sourceOnly(), sequences);
         } catch (SQLException e) {
             throw new MoveException(doing + " failed: " + described(e) + ". Run the move again, which starts over.");
         }
@@ -1399,65 +1531,42 @@ final class MoveFromMariaDb {
      * hilo id generator (MoveCounters), against its table, the sequence's name without _seq, whose primary key is one
      * whole-number column; for an identity column, by the value itself.
      */
-    private static void checkCounters(Connection tgt, TargetSchema schema) throws MoveException {
+    private static void checkCounters(Connection tgt, TargetSchema schema, TargetSequences sequences)
+            throws MoveException {
         List<String> problems = new ArrayList<>();
         String doing = "checking the target's counters";
         try (Statement s = tgt.createStatement()) {
-            Map<String, Long> increments = new LinkedHashMap<>();
-            try (ResultSet r = s.executeQuery("select sequencename, increment_by from pg_sequences"
-                    + " where schemaname = current_schema() order by sequencename")) {
-                while (r.next())
-                    increments.put(r.getString(1), r.getLong(2));
-            }
-            Map<String, String> identities = new HashMap<>();
-            for (TargetTable table : schema.tables().values())
-                for (Column column : table.columns())
-                    if (column.identity())
-                        try (PreparedStatement p = tgt.prepareStatement("select pg_get_serial_sequence(?, ?)")) {
-                            p.setString(1, quotePg(table.name()));
-                            p.setString(2, column.name());
-                            try (ResultSet r = p.executeQuery()) {
-                                r.next();
-                                identities.put(r.getString(1), table.name() + "." + column.name());
-                            }
-                        }
-            for (Map.Entry<String, String> identity : identities.entrySet()) {
-                doing = "checking the identity counter of " + identity.getValue();
-                String[] place = identity.getValue().split("\\.", 2);
-                long highest = highest(tgt, place[0], place[1]);
-                long next = next(s, identity.getKey(), 1);
+            for (Identity identity : sequences.identities()) {
+                doing = "checking the identity counter of " + identity.table() + "." + identity.column();
+                long highest = highest(tgt, identity.table(), identity.column());
+                long next = next(s, quotePg(identity.sequence()), sequences.increments().get(identity.sequence()));
                 if (next <= highest)
-                    problems.add("the identity column " + identity.getValue() + " would hand out " + next
-                            + " next, and its table already holds ids up to " + highest);
+                    problems.add("the identity column " + identity.table() + "." + identity.column()
+                            + " would hand out " + next + " next, and its table already holds ids up to " + highest);
             }
-            Set<String> identitySequences = new HashSet<>();
-            for (String qualified : identities.keySet())
-                identitySequences.add(unqualified(qualified));
-            for (Map.Entry<String, Long> sequence : increments.entrySet()) {
-                if (identitySequences.contains(sequence.getKey()))
-                    continue;
-                doing = "checking the sequence " + sequence.getKey();
-                String tableName = sequenceTable(sequence.getKey());
+            for (String sequence : sequences.plain()) {
+                doing = "checking the sequence " + sequence;
+                String tableName = sequenceTable(sequence);
                 TargetTable table = tableName == null ? null : schema.tables().get(tableName);
                 Column id = table == null || table.primaryKey().size() != 1 ? null
                         : table.column(table.primaryKey().get(0));
                 if (id == null || !Set.of("bigint", "integer", "smallint").contains(id.target().type())) {
-                    problems.add("the sequence " + sequence.getKey() + " has no table " + tableName + " whose key is"
-                            + " one whole-number column, so the move can't check the ids it hands out");
+                    problems.add("the sequence " + sequence + " has no table " + tableName + " whose key is one"
+                            + " whole-number column, so the move can't check the ids it hands out");
                     continue;
                 }
-                long increment = sequence.getValue();
-                long next = next(s, quotePg(sequence.getKey()), increment);
+                long increment = sequences.increments().get(sequence);
+                long next = next(s, quotePg(sequence), increment);
                 long highest = highest(tgt, table.name(), id.name());
                 boolean safe;
                 try {
                     safe = MoveCounters.safe(next, Math.toIntExact(increment), highest);
                 } catch (IllegalArgumentException | ArithmeticException e) {
-                    problems.add("the sequence " + sequence.getKey() + ": " + e.getMessage());
+                    problems.add("the sequence " + sequence + ": " + e.getMessage());
                     continue;
                 }
                 if (!safe)
-                    problems.add("the sequence " + sequence.getKey() + " would hand out ids from "
+                    problems.add("the sequence " + sequence + " would hand out ids from "
                             + MoveCounters.lowestNextId(next, Math.toIntExact(increment)) + ", and " + table.name()
                             + " already holds ids up to " + highest);
             }
@@ -1475,12 +1584,6 @@ final class MoveFromMariaDb {
             r.next();
             return r.getBoolean(2) ? r.getLong(1) + increment : r.getLong(1);
         }
-    }
-
-    /** A relation's name without its schema, and without the quotes pg_get_serial_sequence may give it */
-    private static String unqualified(String qualified) {
-        String name = qualified.substring(qualified.lastIndexOf('.') + 1);
-        return name.startsWith("\"") ? name.substring(1, name.length() - 1).replace("\"\"", "\"") : name;
     }
 
     // ---- 10. The markers
@@ -1621,11 +1724,6 @@ final class MoveFromMariaDb {
             r.next();
             return r.getString(1);
         }
-    }
-
-    private static void refuse(String refusal) throws MoveException {
-        if (refusal != null)
-            throw new MoveException(refusal);
     }
 
     private static void warn(String warning) {

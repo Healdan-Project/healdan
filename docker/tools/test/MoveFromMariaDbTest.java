@@ -36,6 +36,10 @@ public class MoveFromMariaDbTest {
         versions();
         readsDatesAsMariaDbsOwnText();
         talliesWhatWasRead();
+        showsTheSourcesTimeZone();
+        alwaysReachesAnExitStatus();
+        listsOrphansByPlace();
+        readsTheTargetsSequencesOnce();
         Check.done("MoveFromMariaDbTest");
     }
 
@@ -47,37 +51,41 @@ public class MoveFromMariaDbTest {
     }
 
     private static void talliesWhatWasRead() {
-        Check.isTrue(MoveFromMariaDb.tallied(new MoveValues.Target("character varying", 255)), "text is tallied");
-        Check.isTrue(MoveFromMariaDb.tallied(new MoveValues.Target("bigint", 0)), "whole numbers are");
-        Check.isTrue(MoveFromMariaDb.tallied(new MoveValues.Target("timestamp without time zone", 0)), "dates are");
-        Check.isTrue(!MoveFromMariaDb.tallied(new MoveValues.Target("double precision", 0)),
+        Check.isTrue(MoveFromMariaDb.hashed(new MoveValues.Target("character varying", 255)), "text is hashed");
+        Check.isTrue(MoveFromMariaDb.hashed(new MoveValues.Target("bigint", 0)), "whole numbers are");
+        Check.isTrue(MoveFromMariaDb.hashed(new MoveValues.Target("timestamp without time zone", 0)), "dates are");
+        Check.isTrue(!MoveFromMariaDb.hashed(new MoveValues.Target("double precision", 0)),
                 "floating point isn't: MariaDB's text of it is its own");
-        Check.isTrue(!MoveFromMariaDb.tallied(new MoveValues.Target("real", 0)), "nor real");
+        Check.isTrue(!MoveFromMariaDb.hashed(new MoveValues.Target("real", 0)), "nor real");
 
         Check.eq("select count(*), count(`ld_id`), sum(crc32(`ld_id`)), count(cast(`ld_date` as char)),"
-                + " sum(crc32(cast(`ld_date` as char))) from `ld_history`",
+                + " sum(crc32(cast(`ld_date` as char))), count(`ld_x`) from `ld_history`",
                 MoveFromMariaDb.tallyQuery("ld_history", List.of("ld_id", "ld_date", "ld_x"),
                         new boolean[] { false, true, false }, new boolean[] { true, true, false }),
-                "MariaDB's tally: its rows, and each tallied column's values and CRC-32s");
-        Check.eq("select count(*) from `ld_note`", MoveFromMariaDb.tallyQuery("ld_note", List.of("ld_left"),
-                new boolean[] { false }, new boolean[] { false }), "a table with nothing tallied: its rows");
+                "MariaDB's tally: its rows, every column's values, and each hashed column's CRC-32s");
+        Check.eq("select count(*), count(`ld_left`) from `ld_note`", MoveFromMariaDb.tallyQuery("ld_note",
+                List.of("ld_left"), new boolean[] { false }, new boolean[] { false }),
+                "a floating-point column is counted, though not hashed");
 
-        MoveFromMariaDb.Tally ours = new MoveFromMariaDb.Tally(4);
-        ours.add(0, "abc");
-        ours.add(1, 42L);
-        ours.add(2, new java.math.BigDecimal("12.50"));
-        ours.add(3, null);
+        MoveFromMariaDb.Tally ours = new MoveFromMariaDb.Tally(5);
+        ours.add(0, "abc", true);
+        ours.add(1, 42L, true);
+        ours.add(2, new java.math.BigDecimal("12.50"), true);
+        ours.add(3, null, true);
+        ours.add(4, 1.5d, false);
         // MariaDB: select crc32('abc'), crc32('42'), crc32('12.50')
         Check.eq(891568578L, ours.crcs[0], "CRC-32 of the text, as MariaDB's crc32 gives it");
         Check.eq(841265288L, ours.crcs[1], "of a whole number's digits, as crc32(42) gives it");
         Check.eq(3061501937L, ours.crcs[2], "of a decimal's plain digits, as crc32 of 12.50 gives it");
         Check.eq(1, (int) ours.counts[2], "a decimal counts");
         Check.eq(0, (int) ours.counts[3], "a null counts for nothing, as count(c) has it");
-        ours.add(0, "\u00e9t\u00e9 \uD83C\uDF89");
+        Check.eq(1, (int) ours.counts[4], "a floating-point value counts");
+        Check.eq(0L, ours.crcs[4], "and isn't hashed");
+        ours.add(0, "\u00e9t\u00e9 \uD83C\uDF89", true);
         Check.eq(2, (int) ours.counts[0], "values add up");
         ours.rows = 2;
 
-        MoveFromMariaDb.Tally theirs = new MoveFromMariaDb.Tally(4);
+        MoveFromMariaDb.Tally theirs = new MoveFromMariaDb.Tally(5);
         theirs.rows = 2;
         theirs.counts[0] = ours.counts[0];
         theirs.crcs[0] = ours.crcs[0];
@@ -85,15 +93,81 @@ public class MoveFromMariaDbTest {
         theirs.crcs[1] = ours.crcs[1] + 1;
         theirs.counts[2] = 2;
         theirs.crcs[2] = ours.crcs[2];
-        List<String> columns = List.of("ld_name", "ld_id", "ld_amount", "ld_x");
-        boolean[] tallied = { true, true, true, true };
+        theirs.counts[4] = 1;
+        theirs.crcs[4] = 12345;
+        List<String> columns = List.of("ld_name", "ld_id", "ld_amount", "ld_x", "ld_left");
+        boolean[] hashed = { true, true, true, true, false };
         Check.eq(List.of("column ld_id: the move read 1 values, MariaDB counts 1, and their CRC-32s differ",
                 "column ld_amount: the move read 1 values, MariaDB counts 2"),
-                ours.differences(theirs, columns, tallied), "where they differ, by column, without values");
+                ours.differences(theirs, columns, hashed), "where they differ, by column, without values; a column"
+                        + " that isn't hashed is compared by its count alone");
+        theirs.counts[4] = 0;
+        Check.isTrue(ours.differences(theirs, columns, hashed).contains("column ld_left: the move read 1 values,"
+                + " MariaDB counts 0"), "a value read where MariaDB holds a null, in a floating-point column");
         theirs.rows = 3;
-        Check.eq("the move read 2 rows, and MariaDB counts 3", ours.differences(theirs, columns, tallied).get(0),
+        Check.eq("the move read 2 rows, and MariaDB counts 3", ours.differences(theirs, columns, hashed).get(0),
                 "the rows first");
-        Check.eq(List.of(), ours.differences(ours, columns, tallied), "the same tally");
+        Check.eq(List.of(), ours.differences(ours, columns, hashed), "the same tally");
+    }
+
+    private static void showsTheSourcesTimeZone() {
+        Check.eq("time zone UTC (the server's, +00:00)", MoveFromMariaDb.zone("SYSTEM", "UTC", "00:00:00"),
+                "the server's zone, as the old stack's MariaDB had it");
+        Check.eq("time zone EST (the server's, -05:00)", MoveFromMariaDb.zone("SYSTEM", "EST", "-05:00:00"),
+                "west of UTC");
+        Check.eq("time zone Europe/Rome (+01:00)", MoveFromMariaDb.zone("Europe/Rome", "UTC", "01:00:00"),
+                "a zone the session was given");
+        Check.eq("time zone +05:30 (+05:30)", MoveFromMariaDb.zone("+05:30", "UTC", "05:30:00"), "an offset");
+    }
+
+    private static void alwaysReachesAnExitStatus() {
+        Check.eq(0, MoveFromMariaDb.guarded(() -> 0), "a body that moved");
+        Check.eq(1, MoveFromMariaDb.guarded(() -> 1), "a body that refused");
+        java.io.PrintStream err = System.err;
+        java.io.ByteArrayOutputStream printed = new java.io.ByteArrayOutputStream();
+        System.setErr(new java.io.PrintStream(printed, true, java.nio.charset.StandardCharsets.UTF_8));
+        int status;
+        try {
+            status = MoveFromMariaDb.guarded(() -> {
+                throw new OutOfMemoryError("Java heap space, while holding Quarterly Report");
+            });
+        } finally {
+            System.setErr(err);
+        }
+        String line = printed.toString(java.nio.charset.StandardCharsets.UTF_8);
+        Check.eq(1, status, "an Error still gives the exit status 1");
+        Check.eq("[move] ERROR: java.lang.OutOfMemoryError" + System.lineSeparator(), line,
+                "and its line names its class only");
+        java.io.ByteArrayOutputStream refusal = new java.io.ByteArrayOutputStream();
+        System.setErr(new java.io.PrintStream(refusal, true, java.nio.charset.StandardCharsets.UTF_8));
+        try {
+            Check.eq(1, MoveFromMariaDb.run(new String[] { "--nothing" }, Map.of()), "run refuses an unknown"
+                    + " argument before it reads anything");
+        } finally {
+            System.setErr(err);
+        }
+        Check.isTrue(refusal.toString(java.nio.charset.StandardCharsets.UTF_8).startsWith("[move] ERROR: unknown"
+                + " argument '--nothing'"), "with its line: " + refusal);
+    }
+
+    private static void listsOrphansByPlace() {
+        MoveFromMariaDb.ForeignKey key = new MoveFromMariaDb.ForeignKey("ld_document_acl", "fk_acl_doc",
+                "FOREIGN KEY (ld_docid, ld_tenantid) REFERENCES ld_document(ld_id, ld_tenantid)",
+                List.of("ld_docid", "ld_tenantid"), "ld_document", List.of("ld_id", "ld_tenantid"));
+        Check.eq(" from \"ld_document_acl\" r where r.\"ld_docid\" is not null and r.\"ld_tenantid\" is not null"
+                + " and not exists (select 1 from \"ld_document\" x where x.\"ld_id\" = r.\"ld_docid\""
+                + " and x.\"ld_tenantid\" = r.\"ld_tenantid\")", MoveFromMariaDb.orphans(key),
+                "the rows whose columns all have values and refer to no row, as PostgreSQL checks the key");
+        Check.eq(20, MoveFromMariaDb.ORPHANS, "at most 20 rows a key");
+    }
+
+    private static void readsTheTargetsSequencesOnce() {
+        Map<String, Long> increments = new java.util.LinkedHashMap<>();
+        increments.put("hd_trash_hd_id_seq", 1L);
+        increments.put("ld_user_seq", 50L);
+        MoveFromMariaDb.TargetSequences sequences = new MoveFromMariaDb.TargetSequences(increments,
+                List.of(new MoveFromMariaDb.Identity("hd_trash_hd_id_seq", "hd_trash", "hd_id")));
+        Check.eq(List.of("ld_user_seq"), sequences.plain(), "the sequences that aren't an identity column's");
     }
 
     private static void options() throws Exception {

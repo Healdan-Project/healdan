@@ -161,14 +161,9 @@ public final class DockerInit {
      * Only that setting writes anything.
      */
     private static void checkServerAndDatabase(Db db) throws Exception {
-        int version = db.versionNum();
-        String encoding = db.encoding();
-        refuse(DbChecks.tooOld(version));
-        refuse(DbChecks.wrongEncoding(encoding));
-        refuse(DbChecks.cannotCreate(db.canCreate(), db.user, db.schema()));
-        warn(DbChecks.untested(version));
-        String[] locale = db.locale();
-        warn(DbChecks.otherLocale(locale[0], locale[1], locale[2]));
+        Database database = checkDatabase(db, DockerInit::warn);
+        int version = database.versionNum();
+        String encoding = database.encoding();
 
         try {
             db.setLockTimeout();
@@ -183,6 +178,31 @@ public final class DockerInit {
                     + " sets it for the connection, which Healdan's settings can't override");
         log("PostgreSQL " + version / 10000 + " (" + version + "), a " + encoding + " database, lock_timeout " + timeout
                 + " for the role '" + db.user + "' in it");
+    }
+
+    /** What checkDatabase found: PostgreSQL's server_version_num, such as 180004, and the database's encoding */
+    record Database(int versionNum, String encoding) {
+    }
+
+    /**
+     * The checks of the server and the database that the start-up tool and the move from MariaDB share, before either
+     * writes anything (spec sections 6.1 to 6.3; DbChecks decides): stops, with an InitException, on a server older
+     * than PostgreSQL 18, a database that isn't UTF-8 or a role that can't create tables in its schema, and gives
+     * warnings each warning, of a newer major than the one tested and of a collation that doesn't sort by code point.
+     * Nothing is written.
+     */
+    static Database checkDatabase(Db db, Consumer<String> warnings) throws Exception {
+        int version = db.versionNum();
+        String encoding = db.encoding();
+        refuse(DbChecks.tooOld(version));
+        refuse(DbChecks.wrongEncoding(encoding));
+        refuse(DbChecks.cannotCreate(db.canCreate(), db.user, db.schema()));
+        String[] locale = db.locale();
+        for (String warning : new String[] { DbChecks.untested(version),
+                DbChecks.otherLocale(locale[0], locale[1], locale[2]) })
+            if (warning != null)
+                warnings.accept(warning);
+        return new Database(version, encoding);
     }
 
     /** Stops the start with the refusal, if there is one. */
@@ -616,19 +636,30 @@ public final class DockerInit {
         }
 
         /**
-         * Whether the database holds a move from MariaDB: null when it has no StartGuard.MOVE_MARKER table, true when
-         * the move finished, and false when it didn't, a table with no row included, as a move stopped before it
-         * wrote one leaves. It asks whether the table exists first, as missingTables does, so nothing fails in
-         * PostgreSQL's log.
+         * Whether the database holds a move from MariaDB: null when the schema the connection creates tables in
+         * (current_schema(), where the move makes it, and whose tables the move empties) has no
+         * StartGuard.MOVE_MARKER table, true when the move finished, and false when it didn't, a table with no row
+         * included, as a move stopped before it wrote one leaves. The marker is looked up in that schema by name,
+         * never through the search path, which could find one in a later schema. It asks whether the table exists
+         * first, so nothing fails in PostgreSQL's log.
          */
         Boolean move() throws SQLException {
-            if (!missingTables(List.of(StartGuard.MOVE_MARKER)).isEmpty())
-                return null;
-            try (Connection c = connect(); Statement s = c.createStatement();
-                    ResultSet r = s.executeQuery("select count(*) > 0 and count(finished) = count(*) from "
-                            + StartGuard.MOVE_MARKER)) {
-                r.next();
-                return r.getBoolean(1);
+            try (Connection c = connect(); Statement s = c.createStatement()) {
+                String marker;
+                try (ResultSet r = s.executeQuery("select quote_ident(current_schema()) || '.' || quote_ident('"
+                        + StartGuard.MOVE_MARKER + "'), to_regclass(quote_ident(current_schema()) || '.'"
+                        + " || quote_ident('" + StartGuard.MOVE_MARKER + "')) is not null")) {
+                    r.next();
+                    // With no current schema the answer is null, which reads as false: there's no marker
+                    if (!r.getBoolean(2))
+                        return null;
+                    marker = r.getString(1);
+                }
+                try (ResultSet r = s.executeQuery("select count(*) > 0 and count(finished) = count(*) from "
+                        + marker)) {
+                    r.next();
+                    return r.getBoolean(1);
+                }
             }
         }
 
