@@ -1,0 +1,99 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>List columns mockup: the list beside the reading pane</title>
+<style>:root{--border:#d1d1d6;--text-secondary:#6e6e73;--bg-secondary:#fff;--bg-tertiary:#e5e5e7}body{margin:24px auto;max-width:1340px;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#1d1d1f;background:#f5f5f7}.subtitle{color:var(--text-secondary)}.options{display:flex;flex-direction:column;gap:.75rem}.option{display:flex;gap:1rem;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem}.option .letter{flex:none;width:28px;height:28px;border-radius:6px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-weight:600}.option .content{flex:1;min-width:0}.option h3{margin:0 0 .25rem;font-size:1rem}.option p{margin:0;color:var(--text-secondary);font-size:.9rem}.pros-cons{display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:.85rem}.pros-cons h4{margin:.25rem 0}.pros h4{color:#248a3d}.cons h4{color:#c42b1c}.pros-cons ul{margin:0;padding-left:1.1rem}</style>
+<style>
+  .rp { font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1d1d1f; background: #fff; border: 1px solid #d1d1d6; border-radius: 8px; display: grid; grid-template-columns: minmax(0, 1fr) 42%; overflow: hidden; margin-top: 8px; text-align: left; }
+  .rp-list { padding: 6px 10px 10px; min-width: 0; }
+  .rp-title { font-size: 15px; font-weight: 600; margin: 6px 0 8px; }
+  .rp-grid { display: grid; }
+  .rp-h { color: #6e6e73; font-size: 12px; font-weight: 500; padding: 7px 8px; border-bottom: 1px solid #e5e5ea; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rp-c { padding: 8px 8px; border-bottom: 1px solid #f0f0f2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rp-end { text-align: right; font-variant-numeric: tabular-nums; }
+  .rp-sel { background: #0c69c0; color: #fff; }
+  .rp-c svg { vertical-align: -2px; margin-right: 5px; }
+  .rp-pane { border-left: 1px solid #e5e5ea; background: #f5f5f7; padding: 12px; }
+  .rp-page { background: #fff; border: 1px solid #e5e5ea; border-radius: 4px; height: 170px; padding: 14px; }
+  .rp-line { height: 6px; background: #e5e5ea; border-radius: 3px; margin: 8px 0; }
+  .rp-pane .cap { font-size: 12px; color: #6e6e73; margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .rp-tag { display: inline-block; font-size: 11px; background: #eef4fb; color: #0c69c0; border: 1px solid #b8d4ef; border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
+</style>
+
+<h2>Beside the reading pane, what does the list show?</h2>
+<p class="subtitle">With Quick Look docked as a reading pane, the list gets narrow. Today every list cuts to Title, Doc # and Edit Date there. Click the one that feels right.</p>
+
+<div class="options">
+
+  <div class="option" data-choice="a">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Fixed, as today</h3>
+      <p>Title, Doc # and Edit Date, always. Your column choices only change the full-width list; beside the pane the headings sort but have no column menu.</p>
+      <div class="rp">
+        <div class="rp-list">
+          <div class="rp-title">Recent Documents</div>
+          <div class="rp-grid" style="grid-template-columns: minmax(0,1fr) 52px 96px;">
+            <div class="rp-h">Title</div><div class="rp-h rp-end">Doc #</div><div class="rp-h">Edit Date</div>
+            <div class="rp-c rp-sel"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Untitled 1.odt</div><div class="rp-c rp-sel rp-end">57</div><div class="rp-c rp-sel">Nov 16, 2026</div>
+            <div class="rp-c"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c43e1c" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Linux Presentation.odp</div><div class="rp-c rp-end">56</div><div class="rp-c">Nov 16, 2026</div>
+            <div class="rp-c"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2b579a" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Some Important Demo Document.docx</div><div class="rp-c rp-end">39</div><div class="rp-c">Nov 9, 2026</div>
+          </div>
+        </div>
+        <div class="rp-pane"><div class="cap"><span>Untitled 1.odt</span><span>✕</span></div><div class="rp-page"><div class="rp-line" style="width:60%"></div><div class="rp-line"></div><div class="rp-line"></div><div class="rp-line" style="width:80%"></div><div class="rp-line"></div></div></div>
+      </div>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Nothing new to learn or set; always the same</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Can't swap Doc # for Matter while reading through Recent or a search</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>A layout of its own (my pick)</h3>
+      <p>Beside the pane the list has its own set, chosen with the same heading menu and Columns panel, and shared by every list. It starts as Title, Doc # and Edit Date. Here someone has swapped Doc # for Matter.</p>
+      <div class="rp">
+        <div class="rp-list">
+          <div class="rp-title">Recent Documents <span class="rp-tag">beside the reading pane</span></div>
+          <div class="rp-grid" style="grid-template-columns: minmax(0,1fr) 150px 96px;">
+            <div class="rp-h">Title</div><div class="rp-h">Matter</div><div class="rp-h">Edit Date</div>
+            <div class="rp-c rp-sel"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Untitled 1.odt</div><div class="rp-c rp-sel">998.1 – Healdan General Demo</div><div class="rp-c rp-sel">Nov 16, 2026</div>
+            <div class="rp-c"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c43e1c" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Linux Presentation.odp</div><div class="rp-c">998.1 – Healdan General Demo</div><div class="rp-c">Nov 16, 2026</div>
+            <div class="rp-c"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2b579a" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Some Important Demo Document.docx</div><div class="rp-c">998.3 – Healdan Client Data</div><div class="rp-c">Nov 9, 2026</div>
+          </div>
+        </div>
+        <div class="rp-pane"><div class="cap"><span>Untitled 1.odt</span><span>✕</span></div><div class="rp-page"><div class="rp-line" style="width:60%"></div><div class="rp-line"></div><div class="rp-line"></div><div class="rp-line" style="width:80%"></div><div class="rp-line"></div></div></div>
+      </div>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>You decide what's worth the narrow room</li><li>Predictable: it never changes on its own</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>One more layout to set; a folder and a search share it</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Your full layout, cut to fit</h3>
+      <p>Title, then your columns in your order for as many as fit; the rest drop off the end. Here Recent Documents' layout (Title, Doc #, Version, Matter, Author, Edit Date) is cut after Version.</p>
+      <div class="rp">
+        <div class="rp-list">
+          <div class="rp-title">Recent Documents</div>
+          <div class="rp-grid" style="grid-template-columns: minmax(0,1fr) 52px 58px;">
+            <div class="rp-h">Title</div><div class="rp-h rp-end">Doc #</div><div class="rp-h rp-end">Version</div>
+            <div class="rp-c rp-sel"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Untitled 1.odt</div><div class="rp-c rp-sel rp-end">57</div><div class="rp-c rp-sel rp-end">1.2</div>
+            <div class="rp-c"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c43e1c" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Linux Presentation.odp</div><div class="rp-c rp-end">56</div><div class="rp-c rp-end">1</div>
+            <div class="rp-c"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2b579a" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Some Important Demo Document.docx</div><div class="rp-c rp-end">39</div><div class="rp-c rp-end">1</div>
+          </div>
+        </div>
+        <div class="rp-pane"><div class="cap"><span>Untitled 1.odt</span><span>✕</span></div><div class="rp-page"><div class="rp-line" style="width:60%"></div><div class="rp-line"></div><div class="rp-line"></div><div class="rp-line" style="width:80%"></div><div class="rp-line"></div></div></div>
+      </div>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Nothing extra to set</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>What shows changes as you drag the pane's divider</li><li>Edit Date is usually the first to go, as it's last</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>
