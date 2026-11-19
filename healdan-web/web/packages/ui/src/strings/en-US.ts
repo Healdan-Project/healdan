@@ -279,6 +279,8 @@ export const enUS = {
   'help.notices': 'Open-Source Notices',
   'person.menu': 'Account',
   'person.devices': 'Signed-in Devices',
+  // Healdan Admin, in the User app's person menu for administrators (admin spec 6.4)
+  'person.admin': 'Admin',
   'person.classic': 'Classic Interface',
   'person.signOut': 'Sign Out',
   'devices.intro': "Each Mac where the Healdan Helper is signed in is listed here, and any other program you've signed in to Healdan's API with a password. This web page's own sign-in isn't listed: Sign Out ends it.",
