@@ -196,8 +196,9 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		previews.add(document.getId(), "1.0", now);
 		jdbc.update("update hd_preview_job set hd_attempts = ? where hd_docid = ?", PreviewJobs.MAX_ATTEMPTS,
 				document.getId());
-		// job-failed and job-overdue, as the jobs report them
-		JobStatus.get().failed(PreviewWorker.JOB, new IllegalStateException("LibreOffice is gone"), null);
+		// job-failed and job-overdue, as the jobs report them; the previews are overdue too, and counted once, as failed
+		JobStatus.get().failed(PreviewWorker.JOB, new IllegalStateException("LibreOffice is gone"),
+				now.minus(2, ChronoUnit.HOURS));
 		JobStatus.get().scheduled(TrashStartup.JOB, now.minus(2, ChronoUnit.HOURS));
 		// disk-low: the repository's disk more than 85% full; the index's and logs' disk isn't
 		spaces.put("store.1.dir", new Space("repository disk", 1000, 140));
@@ -552,6 +553,8 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		assertEquals("None waiting, none failed", tile(kept, HealthTile.SEARCH_INDEX).detail());
 		assertEquals("1 of 1 reachable, no files stuck", tile(kept, HealthTile.STORAGE_BACKENDS).detail());
 		assertEquals(1, asked.get());
+		// As of when what's kept was read
+		assertEquals(start, kept.readAt());
 
 		// A minute on, the next read gets what's kept and asks again on its own thread; a later one has the news,
 		// the storage port's own among it, so its one more ask is done
@@ -560,5 +563,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 				d -> codes(d).equals(List.of(AttentionItem.FILES_STUCK, AttentionItem.INDEX_FAILED)));
 		assertEquals(List.of(AttentionItem.FILES_STUCK, AttentionItem.INDEX_FAILED), codes(fresh));
 		assertEquals(2, asked.get());
+		// The database's, kept for five minutes, is the oldest answer
+		assertEquals(start, fresh.readAt());
 	}
 }

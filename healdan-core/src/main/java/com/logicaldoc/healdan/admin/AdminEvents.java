@@ -3,18 +3,15 @@
 
 package com.logicaldoc.healdan.admin;
 
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +24,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.admin.AdminEvent.Change;
 import com.logicaldoc.healdan.util.Savepoints;
+import com.logicaldoc.healdan.util.Texts;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -126,7 +124,7 @@ public class AdminEvents {
 					: "%s of %s%s".formatted(event.action(), event.targetKind(),
 							event.targetId() != null ? " " + event.targetId() : "");
 			// A database's message can quote the row: the error line names the causes' classes and codes only
-			log.error("The administration record of {} failed, and the change stands: {}", what, causes(e));
+			log.error("The administration record of {} failed, and the change stands: {}", what, Texts.causes(e));
 			log.debug("The administration record of {} failed", what, e);
 		}
 	}
@@ -157,28 +155,10 @@ public class AdminEvents {
 	}
 
 	/**
-	 * @return the text, cut to {@link #TEXT_LIMIT} characters if it is longer,
-	 *         never between the two halves of a character beyond the Basic
-	 *         Multilingual Plane; null for null
+	 * @return the text, cut to {@link #TEXT_LIMIT} characters if it is longer
+	 *         ({@link Texts#cut}); null for null
 	 */
 	static String fit(String text) {
-		if (text == null || text.length() <= TEXT_LIMIT)
-			return text;
-		int end = Character.isHighSurrogate(text.charAt(TEXT_LIMIT - 1)) ? TEXT_LIMIT - 1 : TEXT_LIMIT;
-		return text.substring(0, end);
-	}
-
-	/**
-	 * @return the failure and its causes, each one's class joined by
-	 *         {@code " <- "}, with a database failure's SQL state and vendor
-	 *         code; never a message, which can quote the row's values
-	 */
-	private static String causes(Throwable failure) {
-		return ExceptionUtils.getThrowableList(failure).stream()
-				.map(t -> t instanceof SQLException sql && (sql.getSQLState() != null || sql.getErrorCode() != 0)
-						? "%s [SQL state %s, code %d]".formatted(t.getClass().getName(), sql.getSQLState(),
-								sql.getErrorCode())
-						: t.getClass().getName())
-				.collect(Collectors.joining(" <- "));
+		return Texts.cut(text, TEXT_LIMIT);
 	}
 }

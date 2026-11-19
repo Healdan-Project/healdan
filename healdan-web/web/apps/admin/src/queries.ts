@@ -73,7 +73,7 @@ export function useDashboard(enabled = true) {
   return useAdminQuery('/v1/admin/dashboard', { poll: true, enabled })
 }
 
-/** The Dashboard's Usage, asked again as the rest of it is */
+/** The Dashboard's Usage, asked again as the rest of it is, its days cut in the browser's time zone, as the User app's are */
 export function useUsage() {
-  return useAdminQuery('/v1/admin/dashboard/usage', { poll: true })
+  return useAdminQuery('/v1/admin/dashboard/usage', { poll: true, query: { zone: Intl.DateTimeFormat().resolvedOptions().timeZone } })
 }

@@ -737,11 +737,12 @@ public class ProviderClient {
 	 * (Admin app spec section 8.1): it fetches the provider's discovery
 	 * document afresh, as a sign-in's first use does, within the same
 	 * timeout, and the document must be one a sign-in would use (naming the
-	 * issuer set here, every endpoint secure). The document and keys a
-	 * sign-in keeps don't change. A fetch that fails is remembered as a
-	 * sign-in's is, and one that failed less than
+	 * issuer set here, every endpoint secure). Nothing a sign-in reads
+	 * changes: neither the document and keys it keeps, nor the failed fetch
+	 * it remembers, so the Dashboard can't make a sign-in fail, nor stop one
+	 * failing at once. A sign-in's fetch that failed less than
 	 * {@value #FAILED_DISCOVERY_MILLIS} milliseconds ago answers false
-	 * without asking the provider; one that works forgets it.
+	 * without asking the provider.
 	 *
 	 * @param p the provider
 	 * @return true if it answered with a discovery document a sign-in could
@@ -753,7 +754,8 @@ public class ProviderClient {
 			String issuer = issuer(p);
 			if (recentFailure(p.id(), issuer) != null)
 				return false;
-			requireUsable(issuer, fetch(p.id(), issuer));
+			// The fetch that remembers nothing: a sign-in's failure memory is a sign-in's
+			requireUsable(issuer, fetch(issuer));
 			return true;
 		} catch (ProviderException e) {
 			return false;

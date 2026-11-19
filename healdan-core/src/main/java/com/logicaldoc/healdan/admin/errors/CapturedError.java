@@ -7,6 +7,8 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+import com.logicaldoc.healdan.util.Texts;
+
 /**
  * A copy of one error the server logged, as {@link ErrorCapture} takes it off
  * the logging thread (Admin app spec section 9.4). Every text is capped and
@@ -76,10 +78,7 @@ public record CapturedError(Instant when, String level, String logger, String lo
 			return null;
 		if (text.indexOf('\0') >= 0)
 			text = text.replace("\0", "");
-		if (text.length() <= limit)
-			return text;
-		int end = Character.isHighSurrogate(text.charAt(limit - 1)) ? limit - 1 : limit;
-		return text.substring(0, end);
+		return Texts.cut(text, limit);
 	}
 
 	/** @return the class at the start of a stack trace, as Java writes one, or null */

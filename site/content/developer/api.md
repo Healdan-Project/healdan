@@ -1005,11 +1005,13 @@ The server answers three routes there:
   administrator should act on, each with its `code`, a `count`, a `detail` line and a `link`; `unchecked`, the codes
   whose source couldn't be read this time; and `health`, the ten tiles, each `ok`, `attention` or `off`, with a
   `detail` line, `used` and `total` bytes for the disk and the memory (`used` alone, the size, for the database),
-  its `link`, and `problem` in place of the detail when its source couldn't be read. Each link is the Admin app's
+  its `link`, and `problem` in place of the detail when its source couldn't be read; and `readAt`, when the oldest
+  answer it gives was read. Each link is the Admin app's
   screen once it has shipped, and `/frontend.jsp` until then. The server keeps each source's answer for a minute
   (the database's for five), so asking again within that costs almost nothing, and a source with no recent answer
   makes the request wait for it, 5 seconds at most, after which its codes are `unchecked` and its tiles say it's
-  still being worked out (see
+  still being worked out. A read of a source still running after its minute isn't waited for: its tiles say it
+  couldn't be read (see
   [How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/#healdans-code)).
 - **`GET /v1/admin/dashboard/usage`** is the Dashboard's Usage, from one summary the server keeps in memory and works
   out on a thread of its own, at the start and then 15 minutes after the last one ended, never for a request (see
@@ -1017,7 +1019,10 @@ The server answers three routes there:
   storage, the matters, the clients and the people, each as a total with how much of it came in the last 7 and 30
   days, how many people are signed in now, the documents filed on each of the last 30 days, each Store but Default
   and Templates with its documents, bytes and backend, and up to five matters most documents were filed in in the last
-  7 days. `computedAt` says when it was worked out, and is null, with the totals, until the first summary after a
+  7 days. Its days start at midnight in `zone`, the browser's IANA time zone, as the User app's do (the server's
+  without it; one it doesn't know is `400 bad-request`). The server keeps a summary for its own zone and the four
+  asked for most recently, and a zone asked for the first time gets the empty one while its own is worked out.
+  `computedAt` says when it was worked out, and is null, with the totals, until the first summary after a
   start. `failedAt` says when the last try failed, until a try works again: beside the last summary that worked, or,
   with `computedAt` null, when no try has worked since the start. The error itself is only in the server's log.
 - **`GET /v1/admin/find?q=`** is the top bar's find: at most five each of clients (by name or number), live matters

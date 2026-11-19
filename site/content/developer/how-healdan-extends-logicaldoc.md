@@ -368,7 +368,8 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
     has a row for each fingerprint: the level, the area, the logger, the latest message, its stack and the documents
     it names (the ids a message names as `doc 10412` or `document id 10412`), how many times it was seen, when first
     and last, and whether and by whom it was resolved. `hd_error_hour` counts each fault's errors in each hour, in
-    UTC, for the time windows. `ErrorStore` reads and writes them.
+    UTC, for the time windows, each hour written as UTC's own date and time, so the server's clocks going back can't
+    make two hours one. `ErrorStore` reads and writes them.
   - **Errors are caught as they're logged** (`com.logicaldoc.healdan.admin.errors`). At a real start `ErrorWriter`, a
     `HealdanStartListener`, attaches `ErrorCapture`'s Log4j appender in code, so `log.xml` isn't edited, for `ERROR`
     and above: to the root logger, and to every logger whose additivity is false, such as the Indexer's, whose events
@@ -408,7 +409,9 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
     refresh that fails keeps the last summary and says when it failed, and stopping the server during one logs no
     error, so it never shows as a fault. It counts a matter's documents through the client and matter numbers stamped
     on them, in `ld_document_ext`, so no folder is walked, and a Store's documents are its matters'. Its days are the
-    server's, in its time zone. The storage port names each Store's backend, and one that fails leaves the backends
+    reader's, the browser's `zone`, as the User app's are: it keeps a summary for the server's time zone and for the
+    four zones asked for most recently, and a zone asked for the first time gets the empty one and has its own made at
+    once. The storage port names each Store's backend, and one that fails leaves the backends
     out and the rest whole. Tests call `refreshNow()` themselves, as no test makes a real start.
   - **The Search Index's counts** (`IndexCounts`, `com.logicaldoc.healdan.admin.index`) tell a document that failed
     from one that waits (Admin app spec §9.6), among the documents not in the Trash, shortcuts left out. A document
@@ -454,20 +457,23 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
     |---|---|
     | `files-stuck`, `backend-unreachable`, Storage Backends | the storage port's overview: each Store's stuck files and those with no Store; a backend `unreachable` or `failing`. With no port there's nothing to check, unless LogicalDOC's `store` is `HealdanStorage`, when the source fails; with the port saying storage backends are off, nothing, and the tile is `off` |
     | `index-failed`, Search Index | `IndexCounts.counts()` |
-    | `errors` | `ErrorStore.unresolvedSince`: the faults not resolved that were seen in the last 24 hours, each counted once |
+    | `errors` | `ErrorStore.unresolved`: the faults not resolved that were seen in the last 24 hours, each counted once, and when the latest was, in one query |
     | `previews-given-up`, Previews | `PreviewJobs.countWaiting()` and `countGivenUp()` |
-    | `job-failed`, `job-overdue`, Background Jobs | `Jobs.all()`: a job switched on whose last run failed, and one overdue |
+    | `job-failed`, `job-overdue`, Background Jobs | `Jobs.all()`: a job switched on whose last run failed, and one overdue that didn't, so none is counted twice |
     | `disk-low`, Disk | the volumes of `store.1.dir`, `index.dir` and `conf.logdir`, each once; one more than 85% used (`DISK_LOW_PERCENT`, a constant), used being its total less what the server can still write. The tile's bar is the fullest's |
     | Server | the JVM's time up, and `product.release` |
     | Database | JDBC's product and version, and its size: PostgreSQL's `pg_database_size(current_database())`, or the sum of MariaDB's `information_schema.tables` for the connection's catalog, never `database()` |
     | Memory | `Runtime`'s heap used of its maximum |
-    | Sign-In | each provider people can sign in through (`SignInProviders.enabled()`), asked whether it answers (`ProviderClient.answers`, a fresh fetch of its discovery document, a failure remembered for 30 seconds), at most every 5 minutes per provider |
+    | Sign-In | each provider people can sign in through (`SignInProviders.enabled()`), asked whether it answers (`ProviderClient.answers`, a fresh fetch of its discovery document whose failure isn't remembered, so it never makes a sign-in fail; a sign-in's failure in the last 30 seconds answers no without asking), at most every 5 minutes per provider |
     | Outgoing Email | `OutgoingEmail.isSetUp()`, and an error LogicalDOC's mail sender (`EMailSender`) logged in the last 24 hours that nobody has resolved |
 
     Each source is kept for a minute, the database's for five (`Cached`): then the next read works it out again, once
     however many ask, on a thread of its own, `healdan-admin-dashboard`, never a request's, and reads meanwhile get
     the last answer while it's younger than twice that. A request waits for a source only when it has no answer that
-    young, at most 5 seconds for all of them, after which the source is still being worked out. A source that fails,
+    young, at most 5 seconds for all of them, after which the source is still being worked out. A read still running
+    after its minute is stuck: it's logged once, and a request with no answer young enough gets a failure at once
+    rather than wait for it; one still running after ten is given up on, logged, and read again. `readAt` is when the
+    oldest answer a request is given was read. A source that fails, is stuck,
     or is still being worked out, puts its codes in `unchecked` and gives its tiles `problem`, a fixed line, with
     `attention` for status, and the rest are whole; the failure is logged at warn with its class only, its stack at
     debug. Each item's and tile's link is the screen that fixes it, from `DashboardService.Screen`, a table of the

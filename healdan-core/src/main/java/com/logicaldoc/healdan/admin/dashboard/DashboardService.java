@@ -51,7 +51,6 @@ import org.springframework.stereotype.Component;
 import com.logicaldoc.core.communication.EMailSender;
 import com.logicaldoc.healdan.admin.dashboard.Cached.Outcome;
 import com.logicaldoc.healdan.admin.errors.ErrorGroup;
-import com.logicaldoc.healdan.admin.errors.ErrorQuery;
 import com.logicaldoc.healdan.admin.errors.ErrorStore;
 import com.logicaldoc.healdan.admin.index.IndexCounts;
 import com.logicaldoc.healdan.admin.jobs.JobView;
@@ -78,10 +77,11 @@ import com.logicaldoc.util.spring.Context;
  * {@code healdan-core}'s tests, there's nothing to check unless CE's {@code store} is {@code HealdanStorage}; with the
  * port, nothing while it says storage backends are off.</li>
  * <li><b>The Search Index</b> ({@code index-failed}, the Search Index tile): {@link IndexCounts#counts()}.</li>
- * <li><b>Errors</b> ({@code errors}): {@link ErrorStore#unresolvedSince} the last {@link #ERRORS_WINDOW}.</li>
+ * <li><b>Errors</b> ({@code errors}): {@link ErrorStore#unresolved} the last {@link #ERRORS_WINDOW}.</li>
  * <li><b>Previews</b> ({@code previews-given-up}, the Previews tile): {@link PreviewJobs}' counts.</li>
  * <li><b>Background jobs</b> ({@code job-failed}, {@code job-overdue}, the Background Jobs tile): {@link Jobs#all()},
- * a job switched on whose last run failed, and one {@link JobView#overdue overdue}. A job switched off is neither.</li>
+ * a job switched on whose last run failed, and one {@link JobView#overdue overdue} that didn't, so none is counted
+ * twice. A job switched off is neither.</li>
  * <li><b>Disks</b> ({@code disk-low}, the Disk tile): the volumes of the repository ({@code store.1.dir}), the index
  * ({@code index.dir}) and the logs ({@code conf.logdir}), each once, and one more than {@value #DISK_LOW_PERCENT}%
  * used, of its total, is low. Used is the total less what the server can still write.</li>
@@ -167,8 +167,11 @@ public class DashboardService {
 	 * @param attention what needs acting on, each code at most once, in {@link AttentionItem#CODES}' order
 	 * @param unchecked the codes whose source couldn't be read, in that order
 	 * @param health the ten tiles, in {@link HealthTile#NAMES}' order
+	 * @param readAt when the oldest answer it gives was read: a source is kept for a while, so what the page shows is
+	 *        as of then, not as of the request
 	 */
-	public record Dashboard(List<AttentionItem> attention, List<String> unchecked, List<HealthTile> health) {
+	public record Dashboard(List<AttentionItem> attention, List<String> unchecked, List<HealthTile> health,
+			Instant readAt) {
 
 		public Dashboard {
 			attention = List.copyOf(attention);
@@ -257,8 +260,7 @@ public class DashboardService {
 	volatile Clock clock = Clock.systemUTC();
 
 	/** The storage ports, of which there's one with healdan-storage, else none; tests give their own */
-	volatile Supplier<List<StorageAdministration>> ports = () -> Context.get()
-			.getBeansOfType(StorageAdministration.class);
+	volatile Supplier<List<StorageAdministration>> ports = StorageAdministration::ports;
 
 	/** How folders are measured; tests give their own */
 	volatile Disks disks = DashboardService::measure;
@@ -403,7 +405,20 @@ public class DashboardService {
 		health.add(tile(HealthTile.BACKGROUND_JOBS, Screen.BACKGROUND_JOBS, jobsNow,
 				() -> jobsTile(jobsNow.value(), now)));
 		health.add(tile(HealthTile.OUTGOING_EMAIL, Screen.SETTINGS, mailNow, () -> mailTile(mailNow.value(), now)));
-		return new Dashboard(attention, unchecked, health);
+		return new Dashboard(attention, unchecked, health, oldest(now, storageNow, indexNow, previewsNow, errorsNow,
+				jobsNow, volumesNow, databaseNow, signInNow, mailNow));
+	}
+
+	/**
+	 * @return when the oldest of the answers was read, a failure's left out as its part shows none; now if none was,
+	 *         as the Server and Memory tiles are read at each request
+	 */
+	private static Instant oldest(Instant now, Outcome<?>... outcomes) {
+		Instant oldest = now;
+		for (Outcome<?> outcome : outcomes)
+			if (outcome.ok() && outcome.at().isBefore(oldest))
+				oldest = outcome.at();
+		return oldest;
 	}
 
 	/**
@@ -511,12 +526,8 @@ public class DashboardService {
 	}
 
 	private Errors readErrors() {
-		long count = errors.unresolvedSince(clock.instant().minus(ERRORS_WINDOW));
-		if (count == 0)
-			return new Errors(0, null);
-		// The newest unresolved fault of the same window, for when it was last seen
-		List<ErrorGroup> latest = errors.list(new ErrorQuery(ErrorQuery.Window.DAY, null, null, true, 0, 1)).items();
-		return new Errors(count, latest.isEmpty() ? null : latest.get(0).lastSeen());
+		ErrorStore.Unresolved unresolved = errors.unresolved(clock.instant().minus(ERRORS_WINDOW));
+		return new Errors(unresolved.count(), unresolved.latest());
 	}
 
 	/** @return the repository's, the index's and the logs' volumes, each once, in that order */
@@ -692,12 +703,19 @@ public class DashboardService {
 
 	/** @return the jobs switched on whose last run failed */
 	private static List<JobView> failed(List<JobView> all) {
-		return all.stream().filter(job -> job.enabled() && JobView.FAILED.equals(job.result())).toList();
+		return all.stream().filter(DashboardService::isFailed).toList();
 	}
 
-	/** @return the jobs overdue now, a job switched off never */
+	/**
+	 * @return the jobs overdue now, a job switched off never, and one that failed neither: it is counted once, as
+	 *         failed
+	 */
 	private static List<JobView> overdue(List<JobView> all, Instant now) {
-		return all.stream().filter(job -> job.overdue(now)).toList();
+		return all.stream().filter(job -> job.overdue(now) && !isFailed(job)).toList();
+	}
+
+	private static boolean isFailed(JobView job) {
+		return job.enabled() && JobView.FAILED.equals(job.result());
 	}
 
 	/** @return how many jobs, and their names */
@@ -808,7 +826,7 @@ public class DashboardService {
 
 	private static HealthTile jobsTile(List<JobView> all, Instant now) {
 		List<JobView> failed = failed(all);
-		List<JobView> overdue = overdue(all, now).stream().filter(job -> !failed.contains(job)).toList();
+		List<JobView> overdue = overdue(all, now);
 		long on = all.stream().filter(JobView::enabled).count();
 		long off = all.size() - on;
 		long onSchedule = on - failed.size() - overdue.size();

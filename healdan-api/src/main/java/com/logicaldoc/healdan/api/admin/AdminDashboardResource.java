@@ -7,12 +7,13 @@ import org.springframework.stereotype.Component;
 
 import com.logicaldoc.healdan.admin.AdminArea;
 import com.logicaldoc.healdan.admin.dashboard.DashboardService;
-import com.logicaldoc.healdan.admin.dashboard.DashboardService.Dashboard;
 import com.logicaldoc.healdan.admin.dashboard.UsageSummary;
+import com.logicaldoc.healdan.api.Zones;
 
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 
 /**
@@ -27,19 +28,21 @@ import jakarta.ws.rs.core.MediaType;
 public class AdminDashboardResource {
 
 	/**
-	 * @return what needs attention, the codes that couldn't be checked, and the ten tiles
+	 * @return what needs attention, the codes that couldn't be checked, the ten tiles, and when the oldest of them
+	 *         was read
 	 */
 	@GET
-	public Dashboard dashboard() {
-		return DashboardService.get().read();
+	public DashboardView dashboard() {
+		return DashboardView.of(DashboardService.get().read());
 	}
 
 	/**
-	 * @return the last usage summary, or the empty one until the first is worked out
+	 * @param zone the browser's time zone, whose days the summary's are (R90); the server's without it
+	 * @return the zone's last usage summary, or the empty one until its first is worked out
 	 */
 	@GET
 	@Path("usage")
-	public UsageView usage() {
-		return UsageView.of(UsageSummary.get().current());
+	public UsageView usage(@QueryParam("zone") String zone) {
+		return UsageView.of(UsageSummary.get().current(Zones.parse(zone)));
 	}
 }

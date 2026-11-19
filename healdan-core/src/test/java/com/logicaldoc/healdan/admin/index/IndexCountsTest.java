@@ -78,9 +78,7 @@ public class IndexCountsTest extends AbstractHealdanTestCase {
 	@Test
 	public void testFailedWaitingAndIndexed() throws Exception {
 		IndexCounts counts = IndexCounts.get();
-		assertEquals(0, counts.failed());
-		assertEquals(0, counts.waiting());
-		assertEquals(0, counts.indexed());
+		assertEquals(new IndexCounts.Counts(0, 0, 0), counts.counts());
 
 		// Indexed once, then its latest try failed
 		Document failed = document("failed.txt", IndexingStatus.TO_INDEX);
@@ -116,10 +114,7 @@ public class IndexCountsTest extends AbstractHealdanTestCase {
 		jdbc.update("update ld_document set ld_status = ? where ld_id in (?, ?)", DocumentStatus.ARCHIVED.ordinal(),
 				archived.getId(), archivedNew.getId());
 
-		assertEquals(1, counts.failed());
-		assertEquals(3, counts.waiting());
-		assertEquals(2, counts.indexed());
-		// All three in one pass, for the Dashboard
+		// Indexed, waiting and failed, all three in one pass, for the Dashboard
 		assertEquals(new IndexCounts.Counts(2, 3, 1), counts.counts());
 		assertEquals(List.of(failed.getId()), counts.failed(0, 10).stream().map(FailedDocument::id).toList());
 	}
@@ -192,6 +187,6 @@ public class IndexCountsTest extends AbstractHealdanTestCase {
 		assertEquals(List.of(unstamped.getId()),
 				IndexCounts.get().failed(1, 1).stream().map(FailedDocument::id).toList());
 		assertEquals(List.of(), IndexCounts.get().failed(3, 10));
-		assertEquals(3, IndexCounts.get().failed());
+		assertEquals(3, IndexCounts.get().counts().failed());
 	}
 }

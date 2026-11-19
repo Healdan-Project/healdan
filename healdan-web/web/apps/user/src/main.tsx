@@ -14,8 +14,8 @@ import { createSignedOut } from './signedOut'
 /** How long the first draw waits for the server's word for a matter */
 const SERVER_INFO_WAIT_MS = 5_000
 
-/** Healdan Admin's addresses: /admin and everything under it, not /administrator */
-const ADMIN = /^\/admin(\/|$)/
+/** Healdan Admin's addresses: /admin and everything under it, a path parameter (/admin;x) too, not /administrator */
+const ADMIN = /^\/admin([/;]|$)/
 
 /**
  * Draws the app in `root`, and gives back what takes it away again. At an address that isn't secure (plain http://, not

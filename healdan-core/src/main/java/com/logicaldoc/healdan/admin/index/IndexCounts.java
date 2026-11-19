@@ -123,27 +123,6 @@ public class IndexCounts {
 	}
 
 	/**
-	 * @return how many documents are in the index
-	 */
-	public long indexed() {
-		return counts().indexed();
-	}
-
-	/**
-	 * @return how many documents wait for CE's Indexer, those that failed left out
-	 */
-	public long waiting() {
-		return counts().waiting();
-	}
-
-	/**
-	 * @return how many documents couldn't be indexed
-	 */
-	public long failed() {
-		return counts().failed();
-	}
-
-	/**
 	 * @param offset how many to skip
 	 * @param limit the most to return
 	 * @return the documents that couldn't be indexed, latest error first, each with the matter stamped on it

@@ -120,6 +120,37 @@ public class CachedTest {
 		assertEquals(Integer.valueOf(2), get(waiting).value());
 	}
 
+	// A read that doesn't end: after a period nobody waits for it, and after ten another is started
+	@Test
+	public void testAStuckReadIsntWaitedFor() throws Exception {
+		CountDownLatch hanging = new CountDownLatch(1);
+		AtomicInteger started = new AtomicInteger();
+		Cached<Integer> cached = new Cached<>("a count", MAX_AGE, () -> {
+			if (started.incrementAndGet() == 1)
+				hanging.await(30, TimeUnit.SECONDS);
+			return asked.incrementAndGet();
+		}, now::get);
+
+		CompletableFuture<Outcome<Integer>> first = cached.outcome();
+		assertFalse(first.isDone());
+
+		later(MAX_AGE);
+		CompletableFuture<Outcome<Integer>> stuck = cached.outcome();
+		assertTrue("not waited for", stuck.isDone());
+		assertTrue(String.valueOf(stuck.get().failure()), stuck.get().failure() instanceof Cached.Stuck);
+		assertEquals(1, started.get());
+
+		later(MAX_AGE.multipliedBy(Cached.ABANDON_AFTER - 1L));
+		Outcome<Integer> again = get(cached.outcome());
+		assertEquals(Integer.valueOf(1), again.value());
+		assertEquals(2, started.get());
+
+		// The read given up on, when it ends at last, is kept by nobody
+		hanging.countDown();
+		assertEquals(Integer.valueOf(2), get(first).value());
+		assertSame(again, get(cached.outcome()));
+	}
+
 	@Test
 	public void testAFailureIsKeptLikeAnAnswer() throws Exception {
 		Cached<Integer> cached = new Cached<>("a count", MAX_AGE, () -> {

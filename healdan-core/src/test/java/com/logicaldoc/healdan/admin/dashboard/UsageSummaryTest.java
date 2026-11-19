@@ -18,6 +18,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -371,6 +372,34 @@ public class UsageSummaryTest extends AbstractHealdanTestCase {
 	}
 
 	// A request reads the summary in memory: the database is asked only when it's worked out
+	// A reader's days are their time zone's (R90): 10:00 here is 23:00 the day before for a reader 11 hours behind
+	@Test
+	public void testTheReadersZoneCutsTheDays() throws Exception {
+		new Firm();
+		Instant noon = summary.clock.instant();
+		ZoneId behind = ZoneOffset.ofTotalSeconds(zone.getRules().getOffset(noon).getTotalSeconds() - 11 * 3600);
+
+		// Asked for the first time: the empty summary, and the zone's own comes with the next
+		assertNull(summary.current(behind).computedAt());
+		summary.refreshNow();
+		Usage usage = summary.current(behind);
+
+		List<Day> days = usage.filedPerDay();
+		assertEquals(today, days.get(29).date());
+		long[] expected = new long[30];
+		expected[28] = 2;
+		expected[27] = 1;
+		expected[22] = 1;
+		expected[21] = 1;
+		assertEquals(Arrays.toString(expected), Arrays.toString(days.stream().mapToLong(Day::count).toArray()));
+		assertEquals(3, usage.documents().last7Days());
+		assertEquals(5, usage.documents().last30Days());
+
+		// The server's own stays its own
+		assertEquals(4, summary.current().documents().last7Days());
+		assertEquals(6, summary.current().documents().last30Days());
+	}
+
 	@Test
 	public void testASecondCurrentRunsNoQuery() throws Exception {
 		new Firm();

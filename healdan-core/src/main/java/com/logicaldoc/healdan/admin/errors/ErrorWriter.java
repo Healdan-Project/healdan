@@ -3,15 +3,12 @@
 
 package com.logicaldoc.healdan.admin.errors;
 
-import java.sql.SQLException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
-import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,6 +18,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.TransactionException;
 
 import com.logicaldoc.healdan.HealdanStartListener;
+import com.logicaldoc.healdan.util.Texts;
 
 import jakarta.annotation.PreDestroy;
 
@@ -169,7 +167,7 @@ public class ErrorWriter implements HealdanStartListener {
 			return false;
 		skipped.incrementAndGet();
 		log.warn("An error was left out of the Errors screen, as it was refused {} times: {}", TRIES,
-				causes(failure));
+				Texts.causes(failure));
 		return true;
 	}
 
@@ -253,25 +251,11 @@ public class ErrorWriter implements HealdanStartListener {
 	/** Logs a warning that names the failure's causes, never a message, which can quote an error's text */
 	private static void warn(String format, String wait, Throwable failure) {
 		try {
-			log.warn(format, wait, causes(failure));
+			log.warn(format, wait, Texts.causes(failure));
 			log.debug("The error writer's failure", failure);
 		} catch (Throwable e) {
 			// Out of memory, say: the thread goes on
 		}
-	}
-
-	/**
-	 * @return the failure and its causes, each one's class joined by
-	 *         {@code " <- "}, with a database failure's SQL state and vendor
-	 *         code
-	 */
-	private static String causes(Throwable failure) {
-		return ExceptionUtils.getThrowableList(failure).stream()
-				.map(t -> t instanceof SQLException sql && (sql.getSQLState() != null || sql.getErrorCode() != 0)
-						? "%s [SQL state %s, code %d]".formatted(t.getClass().getName(), sql.getSQLState(),
-								sql.getErrorCode())
-						: t.getClass().getName())
-				.collect(Collectors.joining(" <- "));
 	}
 
 	/** @return a wait as the log says it: {@code 2 s}, {@code 60 min} or, in tests, {@code 10 ms} */

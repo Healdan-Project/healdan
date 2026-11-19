@@ -13,12 +13,15 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 import javax.sql.DataSource;
@@ -61,6 +64,11 @@ import jakarta.annotation.PreDestroy;
  * one, with {@code failedAt}, until one works again. Tests call {@link #refreshNow()} themselves, as no test makes a
  * real start.
  * <p>
+ * The last 7 and 30 days, and each day filed, start at midnight in the reader's time zone, as the User app's Today
+ * and date ranges do (R90): a summary is kept for the server's zone and for the {@value #ZONES} zones asked for most
+ * recently ({@link #current(ZoneId)}). A zone asked for the first time gets the empty summary, and has its own made at
+ * once on the summary's thread, then with every other.
+ * <p>
  * A matter's documents are counted through the client and matter numbers stamped on them, in {@code ld_document_ext}
  * (plan, correction 5), so no folder is walked; a Store's are its matters'. It reads with plain SQL that MariaDB and
  * PostgreSQL both take, through the {@code DataSource} it's given. The storage port, when there is one, names each
@@ -86,6 +94,9 @@ public class UsageSummary implements HealdanStartListener {
 	/** The days of "the last 7 days", today included */
 	static final int WEEK = 7;
 
+	/** The most time zones, besides the server's, a summary is kept for: those asked for most recently */
+	static final int ZONES = 4;
+
 	/** A live document: not deleted, not a shortcut */
 	private static final String LIVE_DOCUMENT = "d.ld_deleted = 0 and d.ld_docref is null and d.ld_tenantid = :tenant";
 
@@ -99,11 +110,11 @@ public class UsageSummary implements HealdanStartListener {
 			  from ld_document d
 			 where %s""".formatted(LIVE_DOCUMENT);
 
-	private static final String PER_DAY = """
-			select cast(d.ld_creation as date) as filedon, count(*) as filed
-			  from ld_document d
-			 where %s and d.ld_creation >= :month
-			 group by cast(d.ld_creation as date)""".formatted(LIVE_DOCUMENT);
+	/**
+	 * The documents filed on each of the {@link #DAYS} days, {@code day0} to {@code day29}: each day from its
+	 * {@code :dayN} to the next, as the reader's zone cuts them, which the date a time is stored with can't
+	 */
+	private static final String PER_DAY = perDay();
 
 	/** By the client and matter stamped on each document, as M6's Matter filter reads them */
 	private static final String PER_MATTER = """
@@ -151,8 +162,14 @@ public class UsageSummary implements HealdanStartListener {
 
 	private final HealdanSettings settings;
 
-	/** The last summary, and each matter's figures by its id */
-	private volatile Snapshot snapshot = Snapshot.NONE;
+	/** Each time zone's last summary, the server's among them, and each matter's figures by its id; replaced whole */
+	private volatile Map<ZoneId, Snapshot> snapshots = Map.of();
+
+	/** The zones asked for besides the server's, the one asked for least recently first; guarded by itself */
+	private final Map<ZoneId, Boolean> wanted = new LinkedHashMap<>(16, 0.75f, true);
+
+	/** Whether a refresh for a zone asked for the first time waits on the summary's thread */
+	private final AtomicBoolean queued = new AtomicBoolean();
 
 	private ScheduledExecutorService scheduler;
 
@@ -166,8 +183,7 @@ public class UsageSummary implements HealdanStartListener {
 	volatile Clock clock = Clock.systemDefaultZone();
 
 	/** The storage ports, of which there's one with healdan-storage, else none; tests give their own */
-	volatile Supplier<List<StorageAdministration>> ports = () -> Context.get()
-			.getBeansOfType(StorageAdministration.class);
+	volatile Supplier<List<StorageAdministration>> ports = StorageAdministration::ports;
 
 	@Autowired
 	public UsageSummary(DataSource dataSource, HealdanSettings settings) {
@@ -183,13 +199,27 @@ public class UsageSummary implements HealdanStartListener {
 	}
 
 	/**
-	 * Reads the summary in memory, with no query: what a request calls.
+	 * Reads the server's time zone's summary in memory, with no query.
 	 *
-	 * @return the last summary, or one with no {@code computedAt}, null totals and empty lists if none has been worked
-	 *         out yet; {@code signedIn} is counted now, from the server's sessions in memory
+	 * @return as {@link #current(ZoneId)} gives it for the server's zone
 	 */
 	public Usage current() {
-		return snapshot.usage().signedIn(signedIn());
+		return current(null);
+	}
+
+	/**
+	 * Reads the summary in memory, with no query: what a request calls.
+	 *
+	 * @param zone the time zone whose days the summary is cut in, the reader's; null for the server's
+	 * @return the zone's last summary, or one with no {@code computedAt}, null totals and empty lists if none has been
+	 *         worked out yet, as for a zone asked for the first time, whose own this starts; {@code signedIn} is counted
+	 *         now, from the server's sessions in memory
+	 */
+	public Usage current(ZoneId zone) {
+		ZoneId key = zone != null ? zone.normalized() : serverZone();
+		Snapshot last = snapshots.get(key);
+		want(key, last == null);
+		return (last != null ? last : Snapshot.NONE).usage().signedIn(signedIn());
 	}
 
 	/**
@@ -200,37 +230,97 @@ public class UsageSummary implements HealdanStartListener {
 	 *         summary doesn't know; null if no summary has been worked out yet
 	 */
 	public MatterStats forMatter(long matterId) {
-		Snapshot last = snapshot;
-		if (last.usage().computedAt() == null)
+		// A matter's figures have no days, so the server's zone's summary has them
+		Snapshot last = snapshots.get(serverZone());
+		if (last == null || last.usage().computedAt() == null)
 			return null;
 		return last.matters().getOrDefault(matterId, MatterStats.NONE);
 	}
 
 	/**
-	 * Works the summary out now, on the calling thread, which is never a request's: the summary's own thread and tests
-	 * call it. If that fails, the last summary stays, with {@code failedAt} the time it failed.
+	 * Works the summary out now, for the server's time zone and each asked for, on the calling thread, which is never a
+	 * request's: the summary's own thread and tests call it. If that fails, each zone's last summary stays, with
+	 * {@code failedAt} the time it failed.
 	 *
 	 * @throws RuntimeException what failed, a {@code DataAccessException} say
 	 */
 	public void refreshNow() {
 		synchronized (refreshing) {
+			List<ZoneId> zones = zones();
 			try {
-				refresh();
+				Instant now = clock.instant();
+				Map<Long, Backend> backends = backends();
+				Map<ZoneId, Snapshot> made = new HashMap<>();
+				for (ZoneId zone : zones)
+					made.put(zone, refresh(now, zone, backends));
+				snapshots = Map.copyOf(made);
 			} catch (RuntimeException | Error e) {
-				// The last good summary stays, saying when this one failed
-				Snapshot last = snapshot;
-				snapshot = new Snapshot(last.usage().failedAt(clock.instant()), last.matters());
+				// Each last good summary stays, saying when this one failed
+				Instant failed = clock.instant();
+				Map<ZoneId, Snapshot> kept = new HashMap<>();
+				for (ZoneId zone : zones) {
+					Snapshot last = snapshots.getOrDefault(zone, Snapshot.NONE);
+					kept.put(zone, new Snapshot(last.usage().failedAt(failed), last.matters()));
+				}
+				snapshots = Map.copyOf(kept);
 				throw e;
 			}
 		}
 	}
 
-	private void refresh() {
-		Instant now = clock.instant();
-		ZoneId zone = clock.getZone();
+	/** @return the server's time zone, the key of its summary */
+	private ZoneId serverZone() {
+		return clock.getZone().normalized();
+	}
+
+	/** @return the server's time zone, then those asked for */
+	private List<ZoneId> zones() {
+		List<ZoneId> zones = new ArrayList<>();
+		zones.add(serverZone());
+		synchronized (wanted) {
+			for (ZoneId zone : wanted.keySet())
+				if (!zones.contains(zone))
+					zones.add(zone);
+		}
+		return zones;
+	}
+
+	/**
+	 * Keeps a zone among those a summary is made for, the {@link #ZONES} asked for most recently, and makes its first at
+	 * once on the summary's thread when it has none
+	 */
+	private void want(ZoneId zone, boolean missing) {
+		if (zone.equals(serverZone()))
+			return;
+		synchronized (wanted) {
+			wanted.put(zone, Boolean.TRUE);
+			while (wanted.size() > ZONES)
+				wanted.remove(wanted.keySet().iterator().next());
+		}
+		if (missing)
+			refreshSoon();
+	}
+
+	/** Works the summary out on its own thread as soon as it's free, once however many zones ask meanwhile */
+	private synchronized void refreshSoon() {
+		if (scheduler == null || !queued.compareAndSet(false, true))
+			return;
+		try {
+			scheduler.execute(() -> {
+				queued.set(false);
+				refreshSafely();
+			});
+		} catch (RejectedExecutionException e) {
+			// Stopping
+			queued.set(false);
+		}
+	}
+
+	/** @return the zone's summary at a time, its days the zone's, with each Store's backend as given */
+	private Snapshot refresh(Instant now, ZoneId zone, Map<Long, Backend> backends) {
 		LocalDate today = now.atZone(zone).toLocalDate();
 		LocalDate firstDay = today.minusDays(DAYS - 1L);
-		// The windows start at the start of their first day, the server's
+		// The windows start at the start of their first day, the zone's
 		Instant week = today.minusDays(WEEK - 1L).atStartOfDay(zone).toInstant();
 		Instant month = firstDay.atStartOfDay(zone).toInstant();
 		MapSqlParameterSource params = new MapSqlParameterSource().addValue("week", Timestamp.from(week))
@@ -238,6 +328,8 @@ public class UsageSummary implements HealdanStartListener {
 				.addValue("clientname", HealdanConstants.ATTR_CLIENT)
 				.addValue("mattername", HealdanConstants.ATTR_MATTER).addValue("system", User.Type.SYSTEM.ordinal())
 				.addValue("root", Folder.ROOTID).addValue("workspace", Folder.TYPE_WORKSPACE);
+		for (int i = 0; i <= DAYS; i++)
+			params.addValue("day" + i, Timestamp.from(firstDay.plusDays(i).atStartOfDay(zone).toInstant()));
 
 		// The documents, and their storage
 		Total[] documents = new Total[2];
@@ -246,13 +338,14 @@ public class UsageSummary implements HealdanStartListener {
 			documents[1] = new Total(rs.getLong("bytes"), rs.getLong("weekbytes"), rs.getLong("monthbytes"));
 		});
 
-		Map<LocalDate, Long> filed = new HashMap<>();
+		long[] filed = new long[DAYS];
 		jdbc.query(PER_DAY, params, rs -> {
-			filed.merge(rs.getObject("filedon", LocalDate.class), rs.getLong("filed"), Long::sum);
+			for (int i = 0; i < DAYS; i++)
+				filed[i] = rs.getLong("day" + i);
 		});
 		List<Day> days = new ArrayList<>();
-		for (LocalDate day = firstDay; !day.isAfter(today); day = day.plusDays(1))
-			days.add(new Day(day, filed.getOrDefault(day, 0L)));
+		for (int i = 0; i < DAYS; i++)
+			days.add(new Day(firstDay.plusDays(i), filed[i]));
 
 		// Each matter's figures, by the numbers stamped on its documents
 		Map<Stamp, Figures> stamped = new HashMap<>();
@@ -303,11 +396,21 @@ public class UsageSummary implements HealdanStartListener {
 
 		Total clients = total(CLIENTS, params);
 		Total people = total(PEOPLE, params);
-		List<StoreUsage> stores = stores(params, byStore);
+		List<StoreUsage> stores = stores(params, byStore, backends);
 
 		Usage usage = new Usage(now, null, documents[0], documents[1],
 				new Total(liveMatters, mattersThisWeek, mattersThisMonth), clients, people, 0, days, stores, busiest);
-		snapshot = new Snapshot(usage, Map.copyOf(matterStats));
+		return new Snapshot(usage, Map.copyOf(matterStats));
+	}
+
+	/** @return the query of {@link #PER_DAY} */
+	private static String perDay() {
+		StringBuilder columns = new StringBuilder();
+		for (int i = 0; i < DAYS; i++)
+			columns.append(i == 0 ? "" : ", ").append(
+					"sum(case when d.ld_creation >= :day%d and d.ld_creation < :day%d then 1 else 0 end) as day%d"
+							.formatted(i, i + 1, i));
+		return "select " + columns + " from ld_document d where " + LIVE_DOCUMENT + " and d.ld_creation >= :day0";
 	}
 
 	private Total total(String sql, MapSqlParameterSource params) {
@@ -319,9 +422,9 @@ public class UsageSummary implements HealdanStartListener {
 	 * @return the Stores, but Default and Templates, most bytes first, then by name, each with what its matters hold
 	 *         and the backend the storage port says it's on
 	 */
-	private List<StoreUsage> stores(MapSqlParameterSource params, Map<Long, Figures> byStore) {
+	private List<StoreUsage> stores(MapSqlParameterSource params, Map<Long, Figures> byStore,
+			Map<Long, Backend> backends) {
 		Long templates = settings.templatesStoreId();
-		Map<Long, Backend> backends = backends();
 		List<StoreUsage> stores = new ArrayList<>();
 		jdbc.query(STORES, params, rs -> {
 			long id = rs.getLong("id");

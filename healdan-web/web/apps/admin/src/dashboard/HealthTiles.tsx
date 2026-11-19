@@ -19,6 +19,12 @@ function nameOf(tile: HealthTile): string {
   return Object.hasOwn(adminEnUS, key) ? t(key as AdminStringKey) : tile.name
 }
 
+/** The tile's status in words; a status this app doesn't know yet (a newer server's) as the server names it */
+function statusOf(tile: HealthTile): string {
+  const key = `admin.status.${tile.status}`
+  return Object.hasOwn(adminEnUS, key) ? t(key as AdminStringKey) : tile.status
+}
+
 /** How full, from 0 to 100, for a tile with a used and a total (the Disk and the Memory) */
 function shareOf(tile: HealthTile): number | undefined {
   if (tile.problem != null || tile.used == null || tile.total == null || tile.total <= 0) return undefined
@@ -38,7 +44,7 @@ function Tile({ tile }: { tile: HealthTile }) {
           </a>
         </h3>
         <span data-status>
-          <StatusDot status={tile.status}>{unreadable ? t('admin.status.unavailable') : t(`admin.status.${tile.status}`)}</StatusDot>
+          <StatusDot status={tile.status}>{unreadable ? t('admin.status.unavailable') : statusOf(tile)}</StatusDot>
         </span>
       </div>
       <p className={unreadable || tile.status === 'attention' ? styles.tileCaution : styles.tileDetail} data-detail>

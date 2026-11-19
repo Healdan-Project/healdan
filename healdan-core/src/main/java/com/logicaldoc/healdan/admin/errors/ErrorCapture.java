@@ -247,7 +247,11 @@ public class ErrorCapture {
 	/** @return the exception's stack trace, causes included, up to {@link CapturedError#STACK_LIMIT} characters */
 	private static String stack(Throwable thrown) {
 		Capped out = new Capped(CapturedError.STACK_LIMIT);
-		thrown.printStackTrace(new PrintWriter(out));
+		try {
+			thrown.printStackTrace(new PrintWriter(out));
+		} catch (Capped.Full full) {
+			// The rest of the trace isn't written out only to be dropped
+		}
 		return out.toString();
 	}
 
@@ -287,8 +291,24 @@ public class ErrorCapture {
 		}
 	}
 
-	/** Keeps the first characters written to it, and drops the rest */
+	/**
+	 * Keeps the first characters written to it, and once it holds as many as it
+	 * keeps throws {@link Full}, which {@link PrintWriter} lets through, so the
+	 * rest of a trace isn't written
+	 */
 	private static final class Capped extends Writer {
+
+		/** It holds all it keeps; no stack of its own, as it's thrown on every long trace */
+		static final class Full extends RuntimeException {
+
+			private static final long serialVersionUID = 1L;
+
+			Full() {
+				super(null, null, false, false);
+			}
+		}
+
+		private static final Full FULL = new Full();
 
 		private final StringBuilder text = new StringBuilder();
 
@@ -303,6 +323,8 @@ public class ErrorCapture {
 			int room = limit - text.length();
 			if (room > 0)
 				text.append(chars, offset, Math.min(room, length));
+			if (text.length() >= limit)
+				throw FULL;
 		}
 
 		@Override
@@ -310,6 +332,8 @@ public class ErrorCapture {
 			int room = limit - text.length();
 			if (room > 0)
 				text.append(chars, offset, offset + Math.min(room, length));
+			if (text.length() >= limit)
+				throw FULL;
 		}
 
 		@Override
@@ -322,9 +346,13 @@ public class ErrorCapture {
 			// Nothing to release
 		}
 
+		/** @return what it kept, without half of a character beyond the Basic Multilingual Plane cut off at the end */
 		@Override
 		public String toString() {
-			return text.toString();
+			int end = text.length();
+			if (end > 0 && Character.isHighSurrogate(text.charAt(end - 1)))
+				end--;
+			return text.substring(0, end);
 		}
 	}
 }

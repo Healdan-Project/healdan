@@ -48,7 +48,7 @@ export const attention: A['AttentionItem'][] = [
 ]
 
 /** GET /v1/admin/dashboard: three things to act on, and the ten tiles; every source checked */
-export const dashboard: A['Dashboard'] = { attention, health, unchecked: [] }
+export const dashboard: A['Dashboard'] = { attention, health, unchecked: [], readAt: '2026-11-19T10:41:00Z' }
 
 // The last 30 days' filings, oldest first, today (2026-11-19) last: the weekends quieter. The last 7 add up to 91, and all
 // 30 to 388, as the documents' totals say

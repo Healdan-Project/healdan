@@ -9,6 +9,8 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -42,9 +44,11 @@ import com.logicaldoc.util.spring.Context;
  * Only {@link ErrorWriter}'s thread adds, so no two adds of one fault run at
  * once: an add updates first and inserts when no row changed, and no
  * statement is expected to fail (the PostgreSQL spec's section 7.3). The SQL
- * is the same on MariaDB and PostgreSQL. Times keep their milliseconds, and an
- * hour is the error's time cut to the hour in UTC, written as every time is,
- * through {@link Timestamp}.
+ * is the same on MariaDB and PostgreSQL. Times keep their milliseconds and are
+ * written as every time is, through {@link Timestamp}. An hour is the error's
+ * time cut to the hour in UTC, and written as UTC's own date and time (a
+ * {@link LocalDateTime}), not the server's: when the server's clocks go back,
+ * two hours of the server's would be one, and the hours' key would join them.
  */
 @Component
 public class ErrorStore {
@@ -120,7 +124,7 @@ public class ErrorStore {
 		String fingerprint = ErrorFingerprint.of(error);
 		String documents = documents(ErrorFingerprint.documents(error.message()));
 		Timestamp when = Timestamp.from(error.when().truncatedTo(ChronoUnit.MILLIS));
-		Timestamp hour = Timestamp.from(error.when().truncatedTo(ChronoUnit.HOURS));
+		LocalDateTime hour = hour(error.when());
 		transaction.executeWithoutResult(status -> {
 			int seen = jdbc.update(SEEN_AGAIN, ps -> {
 				int i = 1;
@@ -178,7 +182,7 @@ public class ErrorStore {
 	Page<ErrorGroup> list(ErrorQuery query, Instant now) {
 		Instant since = now.minus(query.window().length());
 		MapSqlParameterSource params = new MapSqlParameterSource().addValue("since", Timestamp.from(since))
-				.addValue("hour", Timestamp.from(since.truncatedTo(ChronoUnit.HOURS)))
+				.addValue("hour", hour(since))
 				.addValue("limit", query.limit()).addValue("offset", query.offset());
 		StringBuilder where = new StringBuilder(" from hd_error e where e.hd_lastseen >= :since");
 		if (query.unresolvedOnly())
@@ -265,9 +269,27 @@ public class ErrorStore {
 	 * @return how many faults not resolved were seen at it or since
 	 */
 	public long unresolvedSince(Instant from) {
-		Long count = jdbc.queryForObject("select count(*) from hd_error where hd_resolved = 0 and hd_lastseen >= ?",
-				Long.class, Timestamp.from(from));
-		return count != null ? count : 0;
+		return unresolved(from).count();
+	}
+
+	/**
+	 * The faults not resolved that were seen at a time or since
+	 *
+	 * @param count how many
+	 * @param latest when the latest of them was last seen; null if there's none
+	 */
+	public record Unresolved(long count, Instant latest) {
+	}
+
+	/**
+	 * @param from a time
+	 * @return how many faults not resolved were seen at it or since, and when
+	 *         the latest was, in one query
+	 */
+	public Unresolved unresolved(Instant from) {
+		return jdbc.queryForObject(
+				"select count(*), max(hd_lastseen) from hd_error where hd_resolved = 0 and hd_lastseen >= ?",
+				(rs, n) -> new Unresolved(rs.getLong(1), instant(rs, 2)), Timestamp.from(from));
 	}
 
 	/**
@@ -279,7 +301,7 @@ public class ErrorStore {
 	 * @return how many rows it deleted, of both tables
 	 */
 	public int prune(Instant now) {
-		Timestamp hours = Timestamp.from(now.minus(HOURS_KEPT));
+		LocalDateTime hours = LocalDateTime.ofInstant(now.minus(HOURS_KEPT), ZoneOffset.UTC);
 		Timestamp resolved = Timestamp.from(now.minus(RESOLVED_KEPT));
 		Integer deleted = transaction.execute(status -> {
 			int rows = jdbc.update("delete from hd_error_hour where hd_hour < ?", hours);
@@ -288,6 +310,11 @@ public class ErrorStore {
 			return rows + jdbc.update("delete from hd_error where hd_resolved = 1 and hd_lastseen < ?", resolved);
 		});
 		return deleted != null ? deleted : 0;
+	}
+
+	/** @return the hour a time is in, in UTC, as UTC's own date and time: {@code hd_error_hour}'s hours */
+	static LocalDateTime hour(Instant time) {
+		return LocalDateTime.ofInstant(time, ZoneOffset.UTC).truncatedTo(ChronoUnit.HOURS);
 	}
 
 	/** Reads a fault from {@link #COLUMNS}, at their places */

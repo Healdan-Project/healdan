@@ -40,8 +40,8 @@ describe('The User app under /admin', () => {
     await expectNoAxeViolations(drawn)
   })
 
-  it('draws it at the Admin app\'s front page, with its query, and at /admin itself', async () => {
-    for (const address of ['/admin/', '/admin/matters/1001.1?tab=workspace', '/admin']) {
+  it('draws it at the Admin app\'s front page, with its query, at /admin itself, and with a path parameter', async () => {
+    for (const address of ['/admin/', '/admin/matters/1001.1?tab=workspace', '/admin', '/admin;x']) {
       const fetch = vi.spyOn(globalThis, 'fetch')
       await startAt(address, true)
       expect(screen.getByRole('heading', { level: 1, name: "You don't have access to Healdan Admin." })).toBeTruthy()

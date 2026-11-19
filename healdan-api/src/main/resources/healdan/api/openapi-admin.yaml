@@ -51,6 +51,9 @@ paths:
         - `health`, the ten Server Health tiles: always all ten, in the order
           `HealthTile.name` lists them. A tile whose part couldn't be read
           has `problem`, and the other tiles are whole.
+        - `readAt`, when the oldest answer given was read. Each source is
+          kept for a while, so the figures are as of then, not as of the
+          request, and asking again sooner gives the same ones.
 
         A part that couldn't be read never carries the error's own text.
 
@@ -85,10 +88,27 @@ paths:
         last try failed, `failedAt` says when, beside the last summary that
         didn't (or the empty one), until a try works again.
 
-        No web session is `401 unauthenticated`, a device token
-        `403 web-session-only`, and anyone not in `admin`
-        `403 admins-only`.
+        The last 7 and 30 days, and each day of `filedPerDay`, start at
+        midnight in `zone`, as the User app's days do. The server keeps a
+        summary for its own zone and for the four asked for most recently: a
+        zone asked for the first time gets the empty one, `computedAt` null,
+        and its own is worked out at once, for a later request.
+
+        A `zone` the server doesn't know is `400 bad-request`. No web session
+        is `401 unauthenticated`, a device token `403 web-session-only`, and
+        anyone not in `admin` `403 admins-only`.
       tags: [Dashboard]
+      parameters:
+        - name: zone
+          in: query
+          required: false
+          description: |
+            The time zone the days are in, as an IANA id such as
+            `Europe/London`: the browser's own, so the days are the ones its
+            person sees; the server's time zone without it.
+          schema:
+            type: string
+            examples: [Europe/London]
       responses:
         '200':
           description: The usage
@@ -96,6 +116,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Usage'
+        '400':
+          $ref: '#/components/responses/Problem'
         '401':
           $ref: '#/components/responses/Problem'
         '403':
@@ -236,7 +258,7 @@ components:
       type: object
       description: The Dashboard's Needs Attention and Server Health
       additionalProperties: false
-      required: [attention, unchecked, health]
+      required: [attention, unchecked, health, readAt]
       properties:
         attention:
           type: array
@@ -261,6 +283,13 @@ components:
           maxItems: 10
           items:
             $ref: '#/components/schemas/HealthTile'
+        readAt:
+          type: string
+          format: date-time
+          description: |
+            When the oldest answer given was read (a part that couldn't be
+            read gives none); the time of the request when every part was
+            read for it
     AttentionCode:
       type: string
       description: |
@@ -369,8 +398,9 @@ components:
         The Dashboard's Usage, worked out at most every 15 minutes, never by
         a request.
 
-        Days are the server's, in its time zone. "The last 7 days" and "the
-        last 30 days" are whole days, today included: the last 7 and the 30
+        Days are those of the request's `zone`, the server's without it.
+        "The last 7 days" and "the last 30 days" are whole days, today
+        included: the last 7 and the 30
         of `filedPerDay` add up to `documents.last7Days` and
         `documents.last30Days`. Documents are the live ones: not shortcuts,
         and not in the Trash. A matter's documents are those stamped with its
@@ -471,7 +501,7 @@ components:
         date:
           type: string
           format: date
-          description: The day, in the server's time zone
+          description: The day, in the request's `zone`
         count:
           type: integer
           format: int64

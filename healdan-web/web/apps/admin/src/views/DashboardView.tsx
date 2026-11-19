@@ -13,7 +13,8 @@ import styles from '../dashboard/Dashboard.module.css'
 /**
  * The Dashboard, at /admin/ (spec 8.1): Needs Attention first, then Server Health and Usage. Needs Attention and Server
  * Health are one request and Usage another, each asked again every 30 seconds while the page is visible and when the
- * person comes back to it, and each part shows its own error, so one failing never blanks the others.
+ * person comes back to it, and each part shows its own error, so one failing never blanks the others. Updated is when
+ * the server read the oldest figure shown (`readAt`), which it keeps for a while, not when the page last asked.
  */
 export function DashboardView() {
   const queryClient = useQueryClient()
@@ -23,7 +24,7 @@ export function DashboardView() {
     <div className={styles.view}>
       <div className={styles.head}>
         <h1 className={styles.title}>{t('admin.dashboard.title')}</h1>
-        {dashboard.isSuccess && <span className={styles.updated}>{t('admin.dashboard.updated', { when: formatDate(new Date(dashboard.dataUpdatedAt).toISOString()) })}</span>}
+        {dashboard.data && <span className={styles.updated}>{t('admin.dashboard.updated', { when: formatDate(dashboard.data.readAt) })}</span>}
         <span className={styles.refresh}>
           <Button onPress={() => void queryClient.invalidateQueries({ queryKey: adminKeys.dashboard })}>
             <Icon name="refresh" />

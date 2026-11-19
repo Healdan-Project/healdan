@@ -51,11 +51,11 @@ public class AdminFindResource {
 	private static final String MATCHES = "like :q escape '!'";
 
 	/**
-	 * The live matters (not deleted, their folders not in the Trash) that match, with their clients, by client number
-	 * then matter number
+	 * The live matters (not deleted, their folders not in the Trash) that match, each with its client, by client
+	 * number then matter number
 	 */
 	private static final String MATTERS = """
-			select m from %s m, %s c
+			select m, c from %s m, %s c
 			 where c.id = m.clientId and m.deleted = 0 and c.deleted = 0
 			   and m.folderId in (select f.id from Folder f where f.deleted = 0)
 			   and (%%s)
@@ -114,13 +114,10 @@ public class AdminFindResource {
 				params.put("matter", ref.get().matter());
 			}
 		}
-		List<Matter> matters = MatterDAO.get().findByQuery(MATTERS.formatted(match), params, Matter.class, MAX_EACH);
-		Map<Long, Client> clients = new HashMap<>();
-		for (Matter matter : matters)
-			if (!clients.containsKey(matter.getClientId()))
-				clients.put(matter.getClientId(), ClientDAO.get().findById(matter.getClientId()));
-		return matters.stream().map(matter -> {
-			Client client = clients.get(matter.getClientId());
+		// Each matter with its client, in the one query
+		return MatterDAO.get().findByQuery(MATTERS.formatted(match), params, MAX_EACH).stream().map(row -> {
+			Matter matter = (Matter) row[0];
+			Client client = (Client) row[1];
 			return new FoundMatter(matter.getId(), MatterDisplay.number(client.getNumber(), matter.getNumber()),
 					matter.getName(), client(client));
 		}).toList();

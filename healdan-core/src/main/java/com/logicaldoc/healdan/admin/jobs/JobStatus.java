@@ -10,6 +10,7 @@ import java.util.function.UnaryOperator;
 
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.healdan.util.Texts;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -146,15 +147,11 @@ public class JobStatus {
 	}
 
 	/**
-	 * @return the text cut to {@link #ERROR_LIMIT} characters, never between
-	 *         the two halves of a character beyond the Basic Multilingual Plane;
+	 * @return the text cut to {@link #ERROR_LIMIT} characters ({@link Texts#cut});
 	 *         null for null
 	 */
 	static String capped(String text) {
-		if (text == null || text.length() <= ERROR_LIMIT)
-			return text;
-		int end = Character.isHighSurrogate(text.charAt(ERROR_LIMIT - 1)) ? ERROR_LIMIT - 1 : ERROR_LIMIT;
-		return text.substring(0, end);
+		return Texts.cut(text, ERROR_LIMIT);
 	}
 
 	/**

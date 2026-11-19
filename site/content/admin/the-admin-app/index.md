@@ -66,11 +66,13 @@ pixels wide or more, and works at a tablet's 768.
 
 ## The Dashboard
 
-The Dashboard is the Admin app's first page, at `/admin/`. Beside its title, "Updated" and a time say when it was last
-brought up to date, and **Refresh** asks again at once. It also asks again every 30 seconds while it's showing, and
-each time you come back to its window, but not while its tab is hidden. Healdan keeps what it last read for Needs
-Attention and Server Health for a minute, and the database's for five, then shows that while it reads again, so a
-figure can be a minute or two old, and the database's up to ten.
+The Dashboard is the Admin app's first page, at `/admin/`. Beside its title, "Updated" and a time say when Healdan read
+the oldest figure it shows, and **Refresh** asks again at once. It also asks again every 30 seconds while it's
+showing, and each time you come back to its window, but not while its tab is hidden. Healdan keeps what it last read
+for Needs Attention and Server Health for a minute, and the database's for five, then shows that while it reads
+again, so a figure can be a minute or two old, and the database's up to ten, as "Updated" then says. A part that
+Healdan has been reading for longer than that, as a folder on a share that stopped answering can make it, says it
+couldn't be read, and the server's log names it.
 
 Each of its three parts loads on its own. One that can't be loaded says so, with **Try Again**, and the others still
 work.
@@ -138,7 +140,9 @@ How Healdan is used:
 
 Healdan works these out in the background, when it starts and then 15 minutes after the last time, and "As of" and a
 time say when. So they can be some minutes behind, and **Refresh** shows the latest Healdan has, not new figures. Only
-the count of people signed in now is made each time the page asks. Days are the server's, in its time zone.
+the count of people signed in now is made each time the page asks. Days are yours: each starts at midnight in your
+browser's time zone, as in the User app. The first time Healdan is asked for a time zone since it started, Usage
+says it hasn't been worked out yet, and has it within the next refresh of the page.
 
 Just after the server starts, Usage says "Usage hasn't been worked out since the server started. It shows here within
 a few minutes." If Healdan couldn't work them out, it says so, and keeps the last figures it had, saying when they're

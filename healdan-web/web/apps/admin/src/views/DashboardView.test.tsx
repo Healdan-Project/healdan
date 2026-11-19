@@ -4,7 +4,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { setLabels } from '@healdan/ui'
+import { formatDate, setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
 import { attention, dashboard, health, problem, tile, usage, usageNotYet } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
@@ -26,10 +26,11 @@ describe('The Dashboard', () => {
     await expectNoAxeViolations(view.container)
   })
 
-  it('says when its health was last asked for, and Refresh asks for every part again', async () => {
+  it('says when the server read its oldest figure, and Refresh asks for every part again', async () => {
     const { api } = await renderApp('/')
     await region('Needs Attention')
-    await waitFor(() => expect(screen.getByText(/^Updated /)).toBeTruthy())
+    // The server's readAt, not when the page asked
+    await waitFor(() => expect(screen.getByText(`Updated ${formatDate(dashboard.readAt)}`)).toBeTruthy())
     expect(api.callsTo('GET /v1/admin/dashboard')).toHaveLength(1)
     expect(api.callsTo('GET /v1/admin/dashboard/usage')).toHaveLength(1)
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }))
@@ -132,6 +133,13 @@ describe('Server Health', () => {
     // The tile's name is its link, which covers the tile
     expect(within(tiles[0]!).getByRole('link', { name: 'Server' })).toBeTruthy()
     await expectNoAxeViolations(view.container)
+  })
+
+  it("says a status this app doesn't know yet, a newer server's, as the server names it", async () => {
+    const newer = { ...tile('server'), status: 'degraded' } as unknown as (typeof health)[number]
+    await renderApp('/', { 'GET /v1/admin/dashboard': { ...dashboard, health: [newer, ...health.slice(1)] } })
+    const tiles = await within(await region('Server Health')).findAllByRole('listitem')
+    expect(marked(tiles[0]!, 'status').textContent).toBe('degraded')
   })
 
   it('shows how full the disk and the memory are, as a bar beside the words that say it', async () => {

@@ -67,6 +67,8 @@ public class AdminDashboardResourceTest extends ApiTestCase {
 			codes.add(item.path("code").textValue());
 		assertTrue(codes.toString(), AttentionItem.CODES.containsAll(codes));
 		assertEquals(codes.size(), Set.copyOf(codes).size());
+		// When the oldest answer was read, which a page shows as its Updated
+		assertTrue(dashboard.toString(), Instant.parse(dashboard.path("readAt").textValue()).isBefore(Instant.now()));
 	}
 
 	@Test
@@ -137,6 +139,30 @@ public class AdminDashboardResourceTest extends ApiTestCase {
 	}
 
 	// Until the summary is worked out once, an empty one with no time, which the contract allows too
+	// Its days are the reader's: a zone asked for the first time has the empty one, and its own with the next
+	@Test
+	public void testUsageInTheReadersZone() throws Exception {
+		MockHttpSession boss = signInWeb(fx.user("boss", "admin"));
+		UsageSummary.get().refreshNow();
+		String kiritimati = USAGE + "?zone=Pacific/Kiritimati";
+
+		ApiResponse first = get(kiritimati).webSession(boss).send();
+		assertEquals(first.toString(), 200, first.status());
+		assertTrue(first.json().path("computedAt").isNull());
+
+		UsageSummary.get().refreshNow();
+		ApiResponse later = get(kiritimati).webSession(boss).send();
+		assertEquals(later.toString(), 200, later.status());
+		assertTrue(later.json().path("computedAt").isTextual());
+		JsonNode days = later.json().path("filedPerDay");
+		assertEquals(LocalDate.now(java.time.ZoneId.of("Pacific/Kiritimati")).toString(),
+				days.path(days.size() - 1).path("date").textValue());
+
+		ApiResponse unknown = get(USAGE + "?zone=Mars/Olympus").webSession(boss).send();
+		assertEquals(unknown.toString(), 400, unknown.status());
+		assertEquals("bad-request", unknown.code());
+	}
+
 	@Test
 	public void testUsageBeforeTheFirstSummary() throws Exception {
 		ApiResponse response = get(USAGE).webSession(signInWeb(fx.user("boss", "admin"))).send();

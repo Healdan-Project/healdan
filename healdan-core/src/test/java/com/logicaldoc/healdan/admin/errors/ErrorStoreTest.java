@@ -12,6 +12,8 @@ import static org.junit.Assert.assertTrue;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -89,9 +91,29 @@ public class ErrorStoreTest extends AbstractHealdanTestCase {
 		assertEquals(second.plusSeconds(60), group.lastSeen());
 		assertFalse(group.resolved());
 
-		assertEquals(List.of("2026-11-19T10:00:00Z 1", "2026-11-19T11:00:00Z 2"),
-				jdbc.query("select hd_hour, hd_count from hd_error_hour where hd_errorid = ? order by hd_hour",
-						(rs, n) -> rs.getTimestamp(1).toInstant() + " " + rs.getInt(2), group.id()));
+		assertEquals(List.of("2026-11-19T10:00:00Z 1", "2026-11-19T11:00:00Z 2"), hours(group.id()));
+	}
+
+	@Test
+	public void testTheHoursAreUtcsWhenTheServersClocksGoBack() {
+		// In London, 00:30Z and 01:30Z on 25 October 2026 are both 01:30: the clocks go back at 01:00Z
+		java.util.TimeZone server = java.util.TimeZone.getDefault();
+		java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Europe/London"));
+		try {
+			store.add(error(Instant.parse("2026-10-25T00:30:00Z"), PREVIEWS, "It failed", null));
+			store.add(error(Instant.parse("2026-10-25T01:30:00Z"), PREVIEWS, "It failed", null));
+		} finally {
+			java.util.TimeZone.setDefault(server);
+		}
+
+		assertEquals(List.of("2026-10-25T00:00:00Z 1", "2026-10-25T01:00:00Z 1"),
+				hours(idOf(PREVIEWS, "It failed")));
+	}
+
+	/** @return a fault's hours, read as UTC's date and time, each with its count */
+	private List<String> hours(long id) {
+		return jdbc.query("select hd_hour, hd_count from hd_error_hour where hd_errorid = ? order by hd_hour",
+				(rs, n) -> rs.getObject(1, LocalDateTime.class).toInstant(ZoneOffset.UTC) + " " + rs.getInt(2), id);
 	}
 
 	@Test
@@ -209,7 +231,8 @@ public class ErrorStoreTest extends AbstractHealdanTestCase {
 		assertEquals(List.of("A", "C", "D"),
 				jdbc.queryForList("select hd_message from hd_error order by hd_message", String.class));
 		assertEquals(List.of(now.minus(Duration.ofDays(1)).toString()),
-				jdbc.query("select hd_hour from hd_error_hour", (rs, n) -> rs.getTimestamp(1).toInstant().toString()));
+				jdbc.query("select hd_hour from hd_error_hour",
+						(rs, n) -> rs.getObject(1, LocalDateTime.class).toInstant(ZoneOffset.UTC).toString()));
 		assertEquals(0, store.prune(now));
 	}
 
@@ -280,6 +303,11 @@ public class ErrorStoreTest extends AbstractHealdanTestCase {
 		assertEquals(1, store.unresolvedSince(now.minus(Duration.ofDays(1))));
 		assertEquals(2, store.unresolvedSince(now.minus(Duration.ofDays(7))));
 		assertEquals(0, store.unresolvedSince(now));
+
+		// With when the latest was, in one query; none has no latest
+		assertEquals(new ErrorStore.Unresolved(2, now.minus(Duration.ofHours(1)).truncatedTo(ChronoUnit.MILLIS)),
+				store.unresolved(now.minus(Duration.ofDays(7))));
+		assertEquals(new ErrorStore.Unresolved(0, null), store.unresolved(now));
 	}
 
 	@Test
