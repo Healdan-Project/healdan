@@ -20,8 +20,8 @@ weight: 4
 
 | Check | Workflow | What it does |
 |---|---|---|
-| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts and on upstream's retired ones (`check-maven-repositories.py`), for Oracle's and SQL Server's drivers (`check-database-drivers.py`) and for the licences of the User app's npm packages (`check-web-licences.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
-| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, `WarParsersTest` and `WarStorageTest`, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`), the helper's open-save-close cycle (its stack test), provider sign-in through a stand-in Keycloak (`test-signin.sh`) and storage backends against a stand-in Garage (`test-storage.sh`) included |
+| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts and on upstream's retired ones (`check-maven-repositories.py`), for Oracle's and SQL Server's drivers (`check-database-drivers.py`) and for the licences of the User app's npm packages (`check-web-licences.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards, each with a PostgreSQL of its own (see below) |
+| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, `WarParsersTest`, `WarStorageTest` and `WarHibernateTest`, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`), the helper's open-save-close cycle (its stack test), provider sign-in through a stand-in Keycloak (`test-signin.sh`) and storage backends against a stand-in Garage (`test-storage.sh`) included |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
 | `Web` | `web.yml` | Builds and tests the User app in `healdan-web/web`: generates the API's types, typechecks, lints, runs the tests and builds (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
@@ -35,6 +35,13 @@ weight: 4
 2. **`Tests (1 of N)` … `Tests (N of N)`** each compile every module except the WAR, without the GWT compile, the
    javadoc or the plugin zips (the Docker build makes all of those), then run their share of the tests. They skip
    the User app's Node build too (`-Dhealdan.web.skip=true`), which the `Web` check and the Docker build run.
+   Each has a `postgres:18` service container, which its tests share, each test making a database of its own on it
+   (see [The Test Database](../tests/#the-test-database)). It's set up as `docker/tests/test-db.sh` sets up the
+   local one: the same user and password, UTF-8 with the built-in `C.UTF-8` locale, its data on a tmpfs, and
+   `fsync`, `synchronous_commit` and `full_page_writes` off, with 300 connections, through `POSTGRES_INITDB_ARGS`'
+   `-c` flags and `--tmpfs` in the service's `options`. Every test makes a database and loads LogicalDOC's schema
+   statement by statement, so the server is set up for speed, as nothing on it has to last. The tests' defaults
+   reach it at `localhost:5432`.
 3. **`build`** passes when `checks` and every shard passed. It's the check `master` requires.
 4. **`test-times`** saves how long each test class took, for the next run's plan. It isn't part of `build`.
 

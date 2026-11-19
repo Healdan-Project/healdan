@@ -18,6 +18,9 @@ builds it for you. This page is for working on the code.
   Central, so a build never contacts them. CI and the Docker build copy it to `~/.m2/settings.xml`; copy it there for
   local builds.
 - **`~/logicaldoc-dev.properties`.** Spring-based tests fail in `setUp` without it. An empty file works.
+- **Docker, for the test database.** The tests in Healdan's modules run on a PostgreSQL server, which
+  `docker/tests/test-db.sh start` runs in a container (see [The Test Database](../tests/#the-test-database)).
+  LogicalDOC's own modules' tests don't need it.
 - **On x86-64, a processor with AVX2** (the x86-64-v3 level). `healdan-web`'s build runs Vite, whose bundler,
   Rolldown, ships a native program that stops with `Illegal instruction` (exit code 132) without it.
   `-Dhealdan.web.skip=true` skips that build, and a 64-bit Arm machine needs nothing more.
@@ -27,12 +30,14 @@ builds it for you. This page is for working on the code.
 ```bash
 mvn -B -ntp -DskipTests install                            # the whole build, as the Docker image runs it
 mvn -B -ntp -pl logicaldoc-webapp -am -DskipTests package  # the deployable WAR, in logicaldoc-webapp/target/
+docker/tests/test-db.sh start                              # the PostgreSQL Healdan's tests run on (see Tests)
 mvn -pl healdan-core test                                  # healdan-core's tests
 mvn -pl healdan-core test -Dtest=FilingRulesTest           # one test class
 mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder'  # one test method
 mvn -pl healdan-core -DskipTests install                   # healdan-core, with the test-jar healdan-api's tests use
 mvn -pl healdan-api test                                   # the API's tests
 mvn -pl healdan-storage test                               # the storage module's tests
+docker/tests/test-db.sh stop                               # removes it, with what a killed run left
 ```
 
 A module's tests run against the installed jars of the modules it uses, so install those first.

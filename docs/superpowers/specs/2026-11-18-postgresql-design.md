@@ -311,19 +311,27 @@ script as a `varchar` PostgreSQL enforces:
 `healdan-core` ships a `hibernate.properties` at its classpath root with
 `hibernate.type.preferred_boolean_jdbc_type=INTEGER`. Hibernate reads it when it starts, with no upstream edit, and
 binds every Java `boolean` as an integer. The trial proved this route in the WAR and in the tests: without the file,
-no test gets past its first seed. A test of its own asserts the setting is in force in the session factory, so that
-a second `hibernate.properties` on the classpath, or Hibernate dropping its incubating setting, is named by the test
-that fails.
+no test gets past its first seed. A test of its own asserts the setting is in force in the session factory, and every
+Healdan test's set-up checks it before the seeds run, so that a second `hibernate.properties` on the classpath, or
+Hibernate dropping its incubating setting, is named by the test that fails (changed in the build: this left the naming
+to the test of its own, `BooleanBindingTest`; on PostgreSQL a lost setting fails every test in its seeds first, with
+an error that doesn't name it, so `AbstractHealdanTestCase.setUp` checks it first and fails naming it; plan, Decision
+Log 6).
 
 ### 7.2 Typed Reads (call)
 
 CE's `queryForObject` asks the driver for a `Long` from whatever the query returns, and pgjdbc gives one only from a
 `bigint`. The failure marks the transaction for rollback before CE's retry reads the value another way (recon §2.6).
 
-- **The fix is an upstream edit** in `HibernatePersistentObjectDAO`: where it reads one value by type (`queryForObject`,
-  and `queryForList`'s single-column form), it hands the value the driver returned to a fork-owned helper in
-  `logicaldoc-core`, beside `HealdanHooks`, which converts between number types in Java and asks the driver only for
-  what it can't convert. A NULL is null without a typed read. `queryForLong`'s retry then never runs.
+- **The fix is an upstream edit** in `HibernatePersistentObjectDAO`: where it reads one value by type
+  (`queryForObject`, and `queryForList`'s single-column form), it hands the value the driver returned to a fork-owned
+  helper in `logicaldoc-core`, beside `HealdanHooks`, which converts in Java a number held exactly (an integer type,
+  `BigInteger` or `BigDecimal`), to a `Long` or an `Integer` only when that type holds it exactly, and to a `Double`,
+  a `Float`, a `BigDecimal` or text, and asks the driver for the rest, as before (changed in the build: this said it
+  asks the driver only for what it can't convert; a fraction asked for as a whole number, a value out of range, a
+  value that is a `Double` or `Float` and anything that isn't a number still go to the driver, so MariaDB and HSQLDB
+  answer as they did, and every typed read today's callers make is still answered without the driver on PostgreSQL;
+  plan, Decision Log 7). A NULL is null without a typed read. `queryForLong`'s retry then never runs.
 - **Its test** is a unit test of the helper with result sets that refuse what pgjdbc refuses, named in CI's
   `UPSTREAM_TESTS`. Healdan's tests on PostgreSQL watch the fault itself: 13 of them fail without the fix (§4.2), and
   one edits a user and reads the edit back (§10.3). The smoke test watches it too (§4.1).
@@ -347,14 +355,24 @@ transaction, and one that may fail without failing its caller runs inside a save
 - **`Savepoints` moves from `healdan-storage` to `healdan-core`,** and becomes public, for what's left: work that
   isn't expected to fail, but mustn't fail its caller if it does.
 - **Listeners that log and swallow a failure inside CE's save** run their statements inside a savepoint, so that the
-  swallow keeps the save, as it does on MariaDB: `EmailDocumentListener.afterStore`, `PreviewDocumentListener`'s
-  `beforeStore` and `afterStore`, and the two favourite-names listeners (recon §4.2's list). An index failure never
-  refuses an email again, and `EmailIndexTest` says so on PostgreSQL.
+  swallow keeps the save, as it does on MariaDB: `EmailDocumentListener`'s `afterStore`, `beforeCheckin` and
+  `afterCheckin`, `PreviewDocumentListener`'s `afterFileStore`, `beforeStore` and `afterStore`, and the two
+  favourite-names listeners (recon §4.2's list). Only their statements: a guard that is Java alone, such as the
+  preview listener's check of the event and the file name, stays outside, as a savepoint is two round trips on every
+  save. A savepoint is rolled back on anything the work throws, an `Error` included, as these listeners swallow any
+  `Throwable` (changed in the build: this named only `EmailDocumentListener.afterStore` and two of
+  `PreviewDocumentListener`'s methods, which the plan widened, and said neither what stays outside the savepoint nor
+  that an `Error` rolls it back, which would otherwise leave the work's partial writes in a save that then commits;
+  plan, Decision Log 13 and 14). An index failure never refuses an email again, and `EmailIndexTest` says so on
+  PostgreSQL.
 - **A save or a filing that fails part-way still says what's left.** `VersionResource.confirmStored` reads the
   document back and words the answer, but only when CE swallowed its own failure. On PostgreSQL CE's failed version
   write fails CE's next statement too, and the failure escapes as a plain `500`. So a save, a filing and an email's
   filing run the read-back after such a failure as well, once CE's transaction has ended, and answer with what the
-  document then is. `SaveTest` and `FilingTest` assert the state PostgreSQL leaves.
+  document then is, whether the failure comes out of CE's `checkin` or, as an `ExecutionException`, out of the
+  version future CE hands back (changed in the build: a save whose version isn't recorded fails in the future's
+  `get()`, not in `checkin`, so `VersionResource.checkIn`'s catch takes that exception too; plan, Decision Log 17).
+  `SaveTest` and `FilingTest` assert the state PostgreSQL leaves.
 - **A duplicate that fails a store** is promised only to fail it and store nothing, not to arrive as one exception
   type. `SignInIdentityDAO`'s documentation and the three tests say that.
 - **A boolean column is still an `int`,** in Healdan's tables too: the setting of §7.1 binds every Java `boolean` as
@@ -369,10 +387,17 @@ PostgreSQL's behaviour stands. Where Healdan's code assumed MariaDB's, the code 
   setting (§8.2). On PostgreSQL the timeout fails the statement's whole transaction, which its callers already retry
   or mend. `FileLocks`' comment says PostgreSQL's timeout, not InnoDB's.
 - **NULLs in a sort.** Each `order by` on a key that can be NULL says where NULLs go, keeping today's order (recon
-  §4.3's sites: `UserResource`, `DeviceHolds`, `ApiViews`, `DocumentResource`, `VersionResource`).
+  §4.3's sites: `UserResource`, `DeviceHolds`, `ApiViews`, `DocumentResource`, `VersionResource`), unless its rows
+  are all NULL or none (changed in the build: `TrashStore`'s sort on `removed` is on a column that can be NULL, but
+  each of the Trash's views holds all NULLs or none, so it sorts the same on both databases without a clause; plan,
+  Decision Log 20).
 - **Trailing spaces.** PostgreSQL compares them, and that stands. Where a person types the value that's compared
-  (a legacy doc #, a sign-in identity's name or email, a listing's filter), it's trimmed in Java first (recon §4.3's
-  sites).
+  (a legacy doc #, a listing's filter), it's trimmed in Java first (recon §4.3's sites). (changed in the build: this
+  also named a sign-in identity's name or email, which isn't trimmed, as it has to match its provider's claim
+  exactly, the plan's call 9; and a listing's filter was trimmed already, by the API's `Filters.of`, which also
+  refuses a matter that isn't digits, a dot and digits with `400 bad-request` before the listing is reached, so
+  nothing changed there; plan, Decision Log 18. The legacy doc # is stripped of whitespace at both ends, which
+  changes two edge answers on MariaDB too, §13.1; Decision Log 21.)
 - **Finer times.** `VersionResource`'s tie on a version's date no longer has whole seconds to rely on, and is
   ordered so that it doesn't need them.
 - **Isolation** stays PostgreSQL's default, `READ COMMITTED`, which is what Healdan's conditional updates already
@@ -616,7 +641,10 @@ Every test in a `healdan-*` module runs on PostgreSQL, and none on HSQLDB.
   of §7.3's cases, the lock timeout ending a wait (§7.4), and the text check with an emoji, a NUL and a lone surrogate
   (§7.5).
 - **In CI,** each `Tests (n of N)` job runs a `postgres:18` service container, which its tests share: every test has
-  a database of its own. `test-shards.py` and the timing cache are unchanged.
+  a database of its own. It runs with the settings the local server has, `fsync`, `synchronous_commit` and
+  `full_page_writes` off, 300 connections and its data on a tmpfs (changed in the build: this didn't say, and the
+  plan's service had PostgreSQL's defaults; every test makes a database and loads CE's schema statement by statement,
+  and CI's time doesn't grow, §2.4; plan, Decision Log 4). `test-shards.py` and the timing cache are unchanged.
 - **Locally,** a PostgreSQL in Docker, started by one command that `CLAUDE.md` and the Developer Guide's Tests page
   give.
 - **Upstream's tests stay on HSQLDB:** the classes in CI's `UPSTREAM_TESTS` extend upstream's base classes and never
@@ -685,7 +713,10 @@ later edits `logicaldoc-webapp/pom.xml`.
 1. **Healdan runs on PostgreSQL, and its tests run there,** with MariaDB still the stack's database: the `postgresql/`
    migrations, Flyway's module, `HealdanMigrator`, the Hibernate setting, the typed reads, §7.3's and §7.4's changes
    written so that they work on MariaDB too (a savepoint where `on conflict` would go), the test base class, the
-   mended tests, CI's service container, and the removal of `hsqldb/`. A running server behaves as before.
+   mended tests, CI's service container, and the removal of `hsqldb/`. A running server behaves as before, but for
+   two edge answers of the legacy doc # lookup (changed in the build: the lookup strips whitespace at both ends, §7.4,
+   so on MariaDB one typed with a leading space or a trailing tab now finds its document, and a legacy number stored
+   with a leading space is no longer found by it; plan, Decision Log 21).
 2. **The switch,** in one pull request, as it can't be half done: the container, the start-up tool and its guard, the
    widening, the text check, `on conflict` in §7.3's two inserts, the move command with its test and fixture, the
    smoke test and the Docker tests, the wizard, the removal of `mariadb/`, and the docs. `mariadb-final` is tagged on
