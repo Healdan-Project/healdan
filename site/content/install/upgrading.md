@@ -174,12 +174,22 @@ docker compose up -d
 ### Remove the Old Version's Data
 
 When Healdan has run well on the new version for a while, and a backup of it works, remove the old version's folder.
-The first command lists a folder for each version in the volume, such as `18` and `19`, and the second removes 18's:
+First see which folders there are, and which version the database runs:
 
 ```bash
 docker compose exec db ls /var/lib/postgresql
+docker compose exec db psql -U postgres -Atc 'show server_version'
+```
+
+The first lists a folder for each major version the volume has held, such as `18  19`, and the second prints the
+version that runs, such as `19.1`, whose folder is the live database. Only when the list shows two, remove the other
+one, here 18's:
+
+```bash
 docker compose exec db rm -rf /var/lib/postgresql/18
 ```
+
+Never remove the folder of the version that runs: that deletes the database.
 
 {{% /steps %}}
 
