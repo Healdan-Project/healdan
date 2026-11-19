@@ -31,9 +31,9 @@ import com.logicaldoc.util.spring.Context;
  * in that moment (CI, 2026-10-28), or the old web page when it takes the
  * document. The save is committed before CE's write goes on, so CE's copy is
  * a record version behind. It happens once, at the first of those writes
- * unless it's told which ({@link #overtaking}); the test database must read
- * what's committed while a transaction is open, as MariaDB does
- * ({@code SET DATABASE TRANSACTION CONTROL MVCC}).
+ * unless it's told which ({@link #overtaking}); the test database,
+ * PostgreSQL, reads what's committed while a transaction is open, as MariaDB
+ * does.
  * <p>
  * {@link #atFlush} commits it later, in the flush of CE's write, after CE's
  * DAO read the document again and merged its copy, just before the

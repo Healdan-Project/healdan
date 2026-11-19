@@ -38,6 +38,8 @@ create index hd_storage_file_waiting on hd_storage_file (hd_waiting);
 -- hd_location: the object key, or the path under the backend's .held/ folder. Holding a location again moves its
 -- purge date on, so a location is held once at a time. 700 characters keep the key under InnoDB's 3,072 bytes in
 -- utf8mb4, and hold the longest location: a 255-character prefix, CE's folders for a doc id and a resource.
+-- On PostgreSQL the limit is a B-tree entry's 2,704 bytes, which 700 characters stay under unless nearly all of them
+-- lie beyond the Basic Multilingual Plane.
 create table hd_storage_held (
 	hd_backendid bigint not null, hd_location varchar(700) not null,
 	hd_docid bigint not null, hd_resource varchar(255) not null,

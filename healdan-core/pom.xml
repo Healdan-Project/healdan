@@ -31,7 +31,7 @@
 		</dependency>
 		<dependency>
 			<groupId>org.flywaydb</groupId>
-			<artifactId>flyway-database-hsqldb</artifactId>
+			<artifactId>flyway-database-postgresql</artifactId>
 			<version>${flyway.version}</version>
 		</dependency>
 		<!-- The OpenID Connect client (M4's provider sign-in); ships inside the plugin zip (see assemblyplugin.xml).
@@ -171,6 +171,13 @@
 		<dependency>
 			<groupId>com.zaxxer</groupId>
 			<artifactId>HikariCP</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- The PostgreSQL the tests run on (TestDatabase); the version the WAR ships (logicaldoc-parent's postgresql.version) -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<version>${postgresql.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

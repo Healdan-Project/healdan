@@ -4,15 +4,19 @@
 package com.logicaldoc.healdan.api;
 
 import java.io.File;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.slf4j.Logger;
@@ -33,6 +37,8 @@ import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.store.Store;
+import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.HoldView;
@@ -114,10 +120,10 @@ public class VersionResource {
 		Paging paging = Paging.of(offset, limit);
 		try {
 			Document document = DocumentResource.readable(docNumber, Caller.current().user());
-			// CE's findByDocId orders by date alone, and a date has one-second precision
+			// CE's findByDocId orders by date alone, and a version's date may tie with another's
 			List<VersionView> all = VersionDAO.get()
 					.findByWhere("_entity.docId = :docId", Map.of("docId", document.getId()),
-							"_entity.versionDate desc, _entity.id desc", null)
+							"_entity.versionDate desc nulls last, _entity.id desc", null)
 					.stream().map(VersionResource::view).toList();
 			return paging.slice(all);
 		} catch (PersistenceException e) {
@@ -171,7 +177,8 @@ public class VersionResource {
 	 * document as it was, but checked out to the caller: CE writes nothing
 	 * when a rule refuses it. A check-in another write overtook is asked for
 	 * again ({@link #checkIn}). A
-	 * save CE didn't store is a {@code 500} ({@link #confirmStored}) that says
+	 * save CE didn't store, whether CE returned or failed, is a {@code 500}
+	 * ({@link #confirmStored}) that says
 	 * what's left: the document as it was, or its content the file sent as a
 	 * version missing from its timeline; either way the previous version and
 	 * its file can still be read. Any other failure ({@code 500}) may come
@@ -312,12 +319,17 @@ public class VersionResource {
 	 * record, isn't. CE's check-in never looks at the hold, so once someone
 	 * else holds the document, as when an administrator broke the caller's
 	 * check-out in the web page, it isn't asked again either: the answer says
-	 * what's left ({@link #confirmStored}).
+	 * what's left ({@link #confirmStored}). So it does when CE's check-in
+	 * fails otherwise, as on PostgreSQL once a failed write has ended CE's
+	 * transaction ({@link #confirmStoredAfter}).
 	 *
 	 * @return CE's check-in, once its version record is written
 	 * @throws ApiProblem {@code 500 server-error} ({@link #confirmStored})
 	 *         when the save still wasn't stored
 	 * @throws PersistenceException CE's refusal, or its last failure
+	 * @throws ExecutionException CE's refusal, or its last failure, when it
+	 *         comes out of the future CE's check-in returns, which writes the
+	 *         version record
 	 */
 	private static DocumentFuture checkIn(long docId, long docNumber, File upload, String name, boolean major,
 			String comment, Session session) throws Exception {
@@ -333,9 +345,12 @@ public class VersionResource {
 				// Waits for CE's version record, so the timeline shows the save at once
 				checkedIn = DocumentManager.get().checkin(docId, upload, name, major, null, checkin);
 				checkedIn.get();
-			} catch (PersistenceException | RuntimeException e) {
-				if (!CheckoutResource.overtaken(e))
+			} catch (PersistenceException | RuntimeException | ExecutionException e) {
+				if (!CheckoutResource.overtaken(e)) {
+					// Such as CE's next statement, once a failed write ended its transaction on PostgreSQL
+					confirmStoredAfter(e, docId, docNumber, before, user);
 					throw e;
+				}
 				if (tries < CheckoutResource.TRIES && asRead(docId, before, hold)) {
 					log.info("Checking in document {} again, as another write came first: {}", docId, e.getMessage());
 					continue;
@@ -466,13 +481,24 @@ public class VersionResource {
 			return;
 
 		boolean filed = before == null;
+		// CE stores the new version before its file, and puts the document back only when the store throws an
+		// IOException: so the file is looked for before the answer says the content is the file sent
+		boolean fileMissing = moved && !Store.get()
+				.exists(StoreResource.builder().docId(docId).fileVersion(after.getFileVersion()).build());
 		log.error("The {} of document #{} (id {}) wasn't stored: the document is at version {}, which {}",
 				filed ? "filing" : "save", docNumber, docId, after != null ? after.getVersion() : null,
-				moved ? "has no version record" : "is the version before the save");
+				fileMissing ? "has neither its file nor a version record"
+						: moved ? "has no version record" : "is the version before the save");
 		String stored;
-		if (filed)
+		if (filed && fileMissing)
+			stored = "Document #%d was filed, but neither its file nor its version %s was stored."
+					.formatted(docNumber, after.getVersion());
+		else if (filed)
 			stored = "Document #%d was filed, but its version %s isn't in its timeline. Its content is the file sent."
 					.formatted(docNumber, after != null ? after.getVersion() : null);
+		else if (fileMissing)
+			stored = ("Document #%d's save wasn't stored: the document is at version %s, but that version's file "
+					+ "wasn't stored, and it isn't in its timeline.").formatted(docNumber, after.getVersion());
 		else if (moved)
 			stored = ("Document #%d's save wasn't stored completely: its content is the file sent, as version %s, but "
 					+ "that version isn't in its timeline.").formatted(docNumber, after.getVersion());
@@ -481,8 +507,77 @@ public class VersionResource {
 		// Filing checks the document out only after this
 		String hold = after != null && ApiViews.checkedOutBy(after, user) ? " It's still checked out to you."
 				: " It isn't checked out to you.";
-		throw new ApiProblem(500, "server-error",
-				stored + hold + (filed ? " Don't file it again." : " Send the save again."));
+		String next = !filed ? " Send the save again."
+				: fileMissing ? " Delete it, then file the document again." : " Don't file it again.";
+		throw new ApiProblem(500, "server-error", stored + hold + next);
+	}
+
+	/**
+	 * Says what's left of a save or a filing that CE failed part-way, as
+	 * {@link #confirmStored} does when CE returns, for a failure the API would
+	 * answer as unexpected ({@link ProblemMapper#unexpected}). On PostgreSQL a
+	 * write that fails ends its transaction, so CE's next statement fails too,
+	 * and the failure CE swallows on MariaDB escapes (spec section 7.3). A
+	 * refusal, such as a veto or a storage outage, is left as it is, and so
+	 * is an error ({@link #readsBack}).
+	 *
+	 * @param failure what CE threw
+	 * @param docId the document's id
+	 * @param docNumber its doc #
+	 * @param before its version before the save, or null for a document just
+	 *        filed
+	 * @param user the caller
+	 * @throws ApiProblem {@code 500 server-error} that says what's left. It
+	 *         returns when the save is whole after all, and when the document
+	 *         can't be read back, whose failure is added to the failure: the
+	 *         caller then throws the failure, as before.
+	 */
+	static void confirmStoredAfter(Throwable failure, long docId, long docNumber, String before, User user) {
+		if (!readsBack(failure))
+			return;
+		try {
+			confirmStored(docId, docNumber, before, user);
+		} catch (ApiProblem whatsLeft) {
+			/*
+			 * It answers in the failure's place, which nothing else then logs. PostgreSQL's message can quote the
+			 * row, with the file's name, which may be an email's subject or an attachment's name, so the error line
+			 * names only the causes' classes and codes, and the stack, with the messages, is at debug
+			 */
+			String what = before == null ? "filing" : "save";
+			log.error("The {} of document #{} failed: {}", what, docNumber, causes(failure));
+			log.debug("The {} of document #{} failed", what, docNumber, failure);
+			throw whatsLeft;
+		} catch (PersistenceException | RuntimeException readBack) {
+			failure.addSuppressed(readBack);
+		}
+	}
+
+	/**
+	 * @return the failure and its causes for the log, each one's class joined
+	 *         by {@code " <- "}, with a database failure's SQL state and vendor
+	 *         code, such as {@code [SQL state 22001, code 1406]}; never a
+	 *         message, which can quote the row's values. CE's
+	 *         {@code PersistenceException} is an {@code SQLException} with
+	 *         neither, which is left out.
+	 */
+	static String causes(Throwable failure) {
+		// Safe from a loop of causes
+		return ExceptionUtils.getThrowableList(failure).stream()
+				.map(t -> t instanceof SQLException sql && (sql.getSQLState() != null || sql.getErrorCode() != 0)
+						? "%s [SQL state %s, code %d]".formatted(t.getClass().getName(), sql.getSQLState(),
+								sql.getErrorCode())
+						: t.getClass().getName())
+				.collect(Collectors.joining(" <- "));
+	}
+
+	/**
+	 * @return whether {@link #confirmStoredAfter} reads the document back
+	 *         after this failure: an exception the API would answer as
+	 *         unexpected, never an error, such as running out of memory,
+	 *         which goes on as it is
+	 */
+	static boolean readsBack(Throwable failure) {
+		return failure instanceof Exception && ProblemMapper.unexpected(failure);
 	}
 
 	/**

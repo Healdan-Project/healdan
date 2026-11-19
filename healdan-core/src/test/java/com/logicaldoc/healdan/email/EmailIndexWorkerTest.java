@@ -63,7 +63,7 @@ public class EmailIndexWorkerTest extends AbstractHealdanTestCase {
 	private JdbcTemplate jdbc;
 
 	@Override
-	protected List<String> getDatabaseScripts() {
+	protected List<String> databaseScripts() {
 		return List.of("sql/logicaldoc-core.sql", "sql/logicaldoc-webservice.sql", "data.sql");
 	}
 
@@ -255,8 +255,9 @@ public class EmailIndexWorkerTest extends AbstractHealdanTestCase {
 		List<Long> ids = new ArrayList<>();
 		for (int n = 0; n < count; n++) {
 			long id = next + n;
-			row.put("LD_ID", id);
-			row.put("LD_CUSTOMID", "copy-" + id);
+			// The keys as the map has them: in another case the value would move to the end, out of step with columns
+			row.put("ld_id", id);
+			row.put("ld_customid", "copy-" + id);
 			jdbc.update("insert into ld_document (" + columns + ") values (" + marks + ")", row.values().toArray());
 			File eml = eml(n);
 			try {

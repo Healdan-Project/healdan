@@ -12,10 +12,10 @@ import java.util.Optional;
 import javax.sql.DataSource;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.healdan.util.Savepoints;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -61,20 +61,17 @@ public class PreviewJobs {
 	}
 
 	/**
-	 * Queues a file version, due at once. A job already queued stays as it is.
+	 * Queues a file version, due at once. A job already queued stays as it is:
+	 * its insert fails inside a savepoint, so a transaction it joins goes on.
 	 *
 	 * @param docId the document
 	 * @param fileVersion the file version
 	 * @param now the current time
 	 */
 	public void add(long docId, String fileVersion, Instant now) {
-		try {
-			jdbc.update(
-					"insert into hd_preview_job (hd_docid, hd_fileversion, hd_attempts, hd_nexttry, hd_created) values (?, ?, 0, ?, ?)",
-					docId, fileVersion, Timestamp.from(now), Timestamp.from(now));
-		} catch (DuplicateKeyException e) {
-			// Already queued
-		}
+		Savepoints.insertIfAbsent(jdbc,
+				"insert into hd_preview_job (hd_docid, hd_fileversion, hd_attempts, hd_nexttry, hd_created) values (?, ?, 0, ?, ?)",
+				docId, fileVersion, Timestamp.from(now), Timestamp.from(now));
 	}
 
 	/**

@@ -492,7 +492,8 @@ public abstract class HibernatePersistentObjectDAO<T extends PersistentObject> i
                 if (obj instanceof Timestamp ts && requiredType.equals(Date.class)) {
                     results.add(requiredType.getConstructor(Long.TYPE).newInstance(ts.getTime()));
                 } else {
-                    results.add(resultSet.getObject(1, requiredType));
+                    // Healdan: numbers convert in Java, as a read PostgreSQL refuses rolls back the transaction
+                    results.add(HealdanTypedReads.read(resultSet, obj, requiredType));
                 }
             } else {
                 results.add(resultSet.getObject(1, requiredType));
@@ -607,7 +608,8 @@ public abstract class HibernatePersistentObjectDAO<T extends PersistentObject> i
                     if (obj instanceof Timestamp ts && requiredType.equals(Date.class)) {
                         return requiredType.getConstructor(Long.TYPE).newInstance(ts.getTime());
                     } else {
-                        return rs.getObject(1, requiredType);
+                        // Healdan: numbers convert in Java, as a read PostgreSQL refuses rolls back the transaction
+                        return HealdanTypedReads.read(rs, obj, requiredType);
                     }
                 } else
                     return null;

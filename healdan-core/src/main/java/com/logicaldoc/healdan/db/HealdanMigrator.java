@@ -25,9 +25,9 @@ import com.logicaldoc.healdan.HealdanStartupException;
 
 /**
  * Creates and upgrades Healdan's own tables (prefix {@code hd_}) with Flyway.
- * LogicalDOC's tables are never touched. Only MariaDB (production) and HSQLDB
- * (tests) are supported; any other database, MySQL included, is refused before
- * Flyway runs.
+ * LogicalDOC's tables are never touched. Only MariaDB (production) and
+ * PostgreSQL are supported; any other database, MySQL and HSQLDB included, is
+ * refused before Flyway runs.
  */
 @Component
 public class HealdanMigrator {
@@ -37,8 +37,6 @@ public class HealdanMigrator {
 		MIGRATED, SKIPPED_NO_CE_SCHEMA
 	}
 
-	static final String HSQLDB_LOCATION = "classpath:healdan/db/migration/hsqldb";
-
 	private static final String DEFAULT_LOCATION = "classpath:healdan/db/migration/{vendor}";
 
 	private static final String VENDOR_PLACEHOLDER = "{vendor}";
@@ -47,10 +45,15 @@ public class HealdanMigrator {
 
 	private static final String HISTORY_TABLE = "hd_schema_history";
 
-	/** How an admin recovers from a failed migration; MariaDB's DDL isn't transactional */
+	/** How an admin recovers from a failed migration on MariaDB, whose DDL isn't transactional */
 	static final String RECOVERY = ". To recover, fix the cause, drop the hd_ tables the failed script created, "
 			+ "delete its failed row from hd_schema_history (delete from hd_schema_history where success = 0), "
 			+ "and restart";
+
+	/** How an admin recovers from a failed migration on PostgreSQL, which rolls a failed script back */
+	static final String RECOVERY_POSTGRESQL = ". PostgreSQL rolled the failed script back, so fix the cause and "
+			+ "restart. If the script ran outside a transaction, also drop what it created and delete its failed row "
+			+ "(delete from hd_schema_history where success = false)";
 
 	private final DataSource dataSource;
 
@@ -81,6 +84,7 @@ public class HealdanMigrator {
 	 *         migration fails
 	 */
 	public Status migrate(String... locations) {
+		String vendor = null;
 		try {
 			DatabaseMetaData meta;
 			boolean ceSchema;
@@ -89,7 +93,7 @@ public class HealdanMigrator {
 				meta = con.getMetaData();
 				ceSchema = tableExists(meta, con.getCatalog(), con.getSchema(), "ld_user");
 				if (ceSchema) {
-					String vendor = vendorFolder(meta);
+					vendor = vendorFolder(meta);
 					effective = (locations.length == 0 ? new String[] { DEFAULT_LOCATION } : locations).clone();
 					for (int i = 0; i < effective.length; i++)
 						effective[i] = effective[i].replace(VENDOR_PLACEHOLDER, vendor);
@@ -105,7 +109,8 @@ public class HealdanMigrator {
 			throw e;
 		} catch (Exception e) {
 			log.error("Healdan's database migration failed: {}", e.getMessage(), e);
-			throw new HealdanStartupException("Healdan's database migration failed: " + e.getMessage() + RECOVERY, e);
+			String recovery = "postgresql".equals(vendor) ? RECOVERY_POSTGRESQL : RECOVERY;
+			throw new HealdanStartupException("Healdan's database migration failed: " + e.getMessage() + recovery, e);
 		}
 	}
 
@@ -169,10 +174,10 @@ public class HealdanMigrator {
 		String lowerVersion = version == null ? "" : version.toLowerCase(Locale.ROOT);
 		if (lowerProduct.contains("mariadb") || lowerVersion.contains("mariadb"))
 			return "mariadb";
-		if (lowerProduct.contains("hsql"))
-			return "hsqldb";
+		if (lowerProduct.contains("postgresql"))
+			return "postgresql";
 		throw new HealdanStartupException(
-				"Healdan's tables support MariaDB and HSQLDB only; found " + product + " " + version);
+				"Healdan's tables support MariaDB and PostgreSQL only; found " + product + " " + version);
 	}
 
 	static FluentConfiguration configure(DataSource dataSource, String... locations) {
@@ -186,7 +191,11 @@ public class HealdanMigrator {
 	 */
 	private static boolean tableExists(DatabaseMetaData meta, String catalog, String schema, String table)
 			throws SQLException {
-		// HSQLDB stores names in upper case, MariaDB keeps what was created
+		/*
+		 * MariaDB and PostgreSQL keep the lower case the scripts create. The upper-case try only lets a database that
+		 * stores names in upper case, such as HSQLDB, reach vendorFolder's refusal rather than be skipped as having
+		 * no CE schema
+		 */
 		for (String name : new String[] { table.toLowerCase(Locale.ROOT), table.toUpperCase(Locale.ROOT) })
 			try (ResultSet rs = meta.getTables(catalog, schema, name, new String[] { "TABLE" })) {
 				if (rs.next())

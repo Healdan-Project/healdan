@@ -17,6 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.healdan.util.Savepoints;
 import com.logicaldoc.util.spring.Context;
 
 /**

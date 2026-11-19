@@ -42,6 +42,9 @@ public class FavoriteNamesFolderListener implements FolderListener {
 	@Override
 	public void afterStore(Folder folder, FolderHistory transaction, Map<String, Object> dictionary) {
 		try {
+			// No savepoint: inside a transaction the row before is in the dictionary or the session's map (the rules'
+			// listener records it), so nothing here reaches the database, and the favorites follow in a transaction
+			// of their own
 			FolderRow stored = StoredRows.get().folder(folder.getId(), dictionary);
 			String before = stored != null ? stored.name() : null;
 			String after = folder.getName();

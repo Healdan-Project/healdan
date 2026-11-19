@@ -165,8 +165,14 @@ public class Filer {
 				created = create(upload, vo, transaction);
 			} catch (Throwable failure) {
 				// CE commits the record before it makes the first version, which can fail
-				if (stored != null)
-					reportStored(docNumber, user.getTenantId(), stored);
+				Document left = stored != null || VersionResource.readsBack(failure)
+						? storedAs(docNumber, user.getTenantId())
+						: null;
+				if (left != null && stored != null)
+					stored.accept(left);
+				// Such as CE's next statement, once a failed write ended its transaction on PostgreSQL
+				if (left != null)
+					VersionResource.confirmStoredAfter(failure, left.getId(), docNumber, null, user);
 				throw failure;
 			}
 			if (stored != null)
@@ -235,17 +241,18 @@ public class Filer {
 	}
 
 	/**
-	 * Tells the caller of a document CE stored before its create failed: the
-	 * live document with the doc # reserved for it, if there is one
+	 * @return the document CE stored before its create failed: the live
+	 *         document with the doc # reserved for it; null if there is none,
+	 *         or if that can't be told
 	 */
-	private static void reportStored(long docNumber, long tenantId, Consumer<Document> stored) {
+	private static Document storedAs(long docNumber, long tenantId) {
 		try {
 			Document document = DocumentDAO.get().findByCustomId(Long.toString(docNumber), tenantId);
-			if (document != null && document.getDeleted() == 0)
-				stored.accept(document);
+			return document != null && document.getDeleted() == 0 ? document : null;
 		} catch (PersistenceException | RuntimeException e) {
 			log.warn("Can't tell whether document #{} was stored: {}", docNumber, e.getClass().getName());
 			log.debug("Can't tell whether document #{} was stored", docNumber, e);
+			return null;
 		}
 	}
 

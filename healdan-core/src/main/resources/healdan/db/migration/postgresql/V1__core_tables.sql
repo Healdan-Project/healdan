@@ -60,7 +60,7 @@ create table hd_local_value (
 	primary key (hd_objecttype, hd_objectid, hd_attribute)
 );
 
-create sequence hd_client_SEQ start with 100 increment by 50;
-create sequence hd_matter_SEQ start with 100 increment by 50;
+create sequence hd_client_SEQ increment by 50 start with 100;
+create sequence hd_matter_SEQ increment by 50 start with 100;
 
 insert into hd_counter (name, next_value) values ('docnumber', 1);

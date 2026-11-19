@@ -704,6 +704,34 @@ public class FolderResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testAMatterFilterTypedWithSpaces() throws Exception {
+		fx.upload(documents, "one.pdf", "1", boss);
+		fx.upload(documents, "two.pdf", "2", boss);
+		awaitAsyncWork();
+		String token = signIn(clerk);
+		String base = "/api/v1/folders/" + documents.getId() + "/children?matter=";
+
+		List<Long> plain = docNumbers(get(base + "998.1").token(token).send());
+		assertEquals(2, plain.size());
+		assertEquals(List.of(), docNumbers(get(base + "998.2").token(token).send()));
+
+		// The API strips a value's spaces before anything compares it, on both databases
+		assertEquals(plain, docNumbers(get(base + "%20998.1%20").token(token).send()));
+		// and its pattern check refuses a matter with one inside, on either database
+		ApiResponse inside = get(base + "998%20.1").token(token).send();
+		assertEquals(inside.toString(), 400, inside.status());
+		assertEquals("bad-request", inside.code());
+	}
+
+	private static List<Long> docNumbers(ApiResponse response) {
+		assertEquals(response.toString(), 200, response.status());
+		List<Long> numbers = new ArrayList<>();
+		for (JsonNode item : response.json().path("items"))
+			numbers.add(item.path("docNumber").asLong());
+		return numbers;
+	}
+
+	@Test
 	public void testChildrenRefusals() throws Exception {
 		String token = signIn(clerk);
 		String base = "/api/v1/folders/" + documents.getId() + "/children";

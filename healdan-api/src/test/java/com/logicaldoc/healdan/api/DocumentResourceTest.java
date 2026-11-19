@@ -36,6 +36,7 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
+import com.logicaldoc.healdan.HealdanConstants;
 
 /**
  * {@code GET /v1/documents/{docNumber}} and its content (spec section 6.4).
@@ -501,6 +502,33 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertEquals(200, get("/api/v1/documents/" + number(d) + "/content").token(signIn(clerk)).send().status());
 		assertThrows(IllegalStateException.class, Caller::current);
 		assertNull(SecurityContextHolder.getContext().getAuthentication());
+	}
+
+	@Test
+	public void testALegacyNumberTypedWithASpace() throws Exception {
+		Document d = file("a.docx", "Lease draft");
+		Document current = DocumentDAO.get().findById(d.getId(), true);
+		current.setValue(HealdanConstants.ATTR_LEGACYDOCNUM, "ABC-1");
+		DocumentDAO.get().store(current, fx.documentHistory(boss));
+		String token = signIn(clerk);
+
+		// A space at either end, as a person may type or paste it, isn't part of the number
+		for (String typed : new String[] { "ABC-1%20", "%20ABC-1%20" }) {
+			ApiResponse response = get("/api/v1/documents?legacyDocNumber=" + typed).token(token).send();
+			assertEquals(typed + ": " + response, 200, response.status());
+			assertEquals(typed, 1, response.json().path("items").size());
+			assertEquals(typed, number(d), response.json().path("items").get(0).path("docNumber").asLong());
+		}
+
+		// Nor is a space stored at either end
+		Document padded = file("b.docx", "Lease");
+		current = DocumentDAO.get().findById(padded.getId(), true);
+		current.setValue(HealdanConstants.ATTR_LEGACYDOCNUM, " ABC-2 ");
+		DocumentDAO.get().store(current, fx.documentHistory(boss));
+		ApiResponse response = get("/api/v1/documents?legacyDocNumber=ABC-2").token(token).send();
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(1, response.json().path("items").size());
+		assertEquals(number(padded), response.json().path("items").get(0).path("docNumber").asLong());
 	}
 
 	@Test

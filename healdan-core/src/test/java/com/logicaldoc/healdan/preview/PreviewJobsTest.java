@@ -14,6 +14,8 @@ import javax.sql.DataSource;
 
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.util.spring.Context;
@@ -29,6 +31,28 @@ public class PreviewJobsTest extends AbstractHealdanTestCase {
 		jobs.add(7, "1.0", T.plusSeconds(5));
 		assertEquals(1, jobs.due(T.plusSeconds(10), 10).size());
 		assertEquals(0, jobs.find(7, "1.0").orElseThrow().attempts());
+	}
+
+	/**
+	 * Inside a transaction, as the listener's insert is when a file is replaced: the duplicate fails in a savepoint,
+	 * and the transaction goes on (spec section 7.3)
+	 */
+	@Test
+	public void testAddTwiceInsideATransactionKeepsIt() {
+		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
+		jdbc.update("insert into hd_setting (name, value) values ('preview.test', 'before')");
+		PreviewJobs jobs = PreviewJobs.get();
+
+		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+			jobs.add(7, "1.0", T);
+			jobs.add(7, "1.0", T.plusSeconds(5));
+			jdbc.update("update hd_setting set value = 'after' where name = 'preview.test'");
+		});
+
+		assertEquals(1, jobs.due(T.plusSeconds(10), 10).size());
+		assertEquals(0, jobs.find(7, "1.0").orElseThrow().attempts());
+		assertEquals("after",
+				jdbc.queryForObject("select value from hd_setting where name = 'preview.test'", String.class));
 	}
 
 	@Test

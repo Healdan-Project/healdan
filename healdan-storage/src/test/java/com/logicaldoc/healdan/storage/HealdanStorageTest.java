@@ -430,11 +430,12 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 	@Test
 	public void testInitReadsNothing() throws Exception {
 		List<String> tables = StorageFixtures.jdbc().queryForList(
-				"select table_name from information_schema.tables where table_schema = 'PUBLIC' and table_name like 'HD\\_%' escape '\\'",
+				"select table_name from information_schema.tables where table_schema = current_schema() "
+						+ "and table_name like 'hd\\_%' escape '\\'",
 				String.class);
-		assertTrue(tables.toString(), tables.contains("HD_STORAGE_FILE") && tables.contains("HD_SETTING"));
+		assertTrue(tables.toString(), tables.contains("hd_storage_file") && tables.contains("hd_setting"));
 		for (String table : tables)
-			StorageFixtures.jdbc().execute("alter table " + table + " rename to AWAY_" + table);
+			StorageFixtures.jdbc().execute("alter table " + table + " rename to away_" + table);
 		try (LogCapture log = LogCapture.of(HealdanStorage.class)) {
 			HealdanStorage fresh = new HealdanStorage();
 			fresh.init();
@@ -445,7 +446,7 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 					log.lines().stream().noneMatch(l -> l.startsWith("WARN ") || l.startsWith("ERROR ")));
 		} finally {
 			for (String table : tables)
-				StorageFixtures.jdbc().execute("alter table AWAY_" + table + " rename to " + table);
+				StorageFixtures.jdbc().execute("alter table away_" + table + " rename to " + table);
 		}
 		assertNotEquals(0, StorageFixtures.jdbc().queryForObject("select count(*) from hd_storage_backend",
 				Long.class).longValue());

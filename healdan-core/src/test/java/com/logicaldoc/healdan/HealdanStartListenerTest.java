@@ -10,12 +10,9 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.Test;
 import org.springframework.stereotype.Component;
 
@@ -148,21 +145,16 @@ public class HealdanStartListenerTest extends AbstractHealdanTestCase {
 		// The context's own start found no CE schema, as the test database is loaded after it
 		assertEquals(List.of(), recorder().calls());
 
-		JDBCDataSource empty = new JDBCDataSource();
-		empty.setUrl("jdbc:hsqldb:mem:healdan-no-ce-schema");
-		empty.setUser("sa");
-		empty.setPassword("");
+		String empty = TestDatabase.create();
 		try {
-			HealdanStartup startup = new HealdanStartup(new HealdanMigrator(empty), Context.get(SeedRunner.class),
-					Context.get(PreviewWorker.class), Context.get(EmailIndexWorker.class),
-					Context.get(AdminSignInAlert.class));
+			HealdanStartup startup = new HealdanStartup(new HealdanMigrator(TestDatabase.dataSource(empty)),
+					Context.get(SeedRunner.class), Context.get(PreviewWorker.class),
+					Context.get(EmailIndexWorker.class), Context.get(AdminSignInAlert.class));
 			startup.start();
 
 			assertEquals(List.of(), recorder().calls());
 		} finally {
-			try (Connection con = empty.getConnection(); Statement statement = con.createStatement()) {
-				statement.execute("shutdown");
-			}
+			TestDatabase.drop(empty);
 		}
 	}
 }

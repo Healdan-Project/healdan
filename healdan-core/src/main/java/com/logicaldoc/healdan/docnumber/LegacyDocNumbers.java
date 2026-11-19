@@ -15,17 +15,20 @@ import com.logicaldoc.util.spring.Context;
 
 /**
  * Finds documents by the legacy doc # they carry from the system they came
- * from (the {@code legacydocnum} attribute, spec 6.3). The match is exact and
- * the number is never read as a doc #.
+ * from (the {@code legacydocnum} attribute, spec 6.3). The match is exact,
+ * once the number asked for is stripped of the whitespace a person may type
+ * or paste around it, and the number stored of the spaces around it, and the
+ * number is never read as a doc #.
  */
 public final class LegacyDocNumbers {
 
+	// trim() on both databases, so a number stored with spaces around it is found as on MariaDB before
 	private static final String QUERY = """
 			select d.ld_id
 			  from ld_document d
 			  join ld_document_ext e on e.ld_docid = d.ld_id
 			 where e.ld_name = ?
-			   and e.ld_stringvalue = ?
+			   and trim(e.ld_stringvalue) = ?
 			   and d.ld_deleted = 0
 			   and d.ld_tenantid = ?
 			 order by d.ld_id
@@ -35,7 +38,9 @@ public final class LegacyDocNumbers {
 	}
 
 	/**
-	 * @param legacyNumber the legacy doc #, matched exactly
+	 * @param legacyNumber the legacy doc #, matched exactly once stripped of
+	 *        whitespace at either end, against the stored number without the
+	 *        spaces at either end
 	 * @param tenantId the tenant whose documents are searched
 	 * @return the ids of the live documents with that legacy doc #, lowest
 	 *         first; none for a null or blank number
@@ -45,8 +50,9 @@ public final class LegacyDocNumbers {
 		if (legacyNumber == null || legacyNumber.isBlank())
 			return List.of();
 		try {
+			// Both sides stripped, as MariaDB's comparison ignores trailing spaces and PostgreSQL's doesn't
 			return new JdbcTemplate(Context.get(DataSource.class)).queryForList(QUERY, Long.class,
-					HealdanConstants.ATTR_LEGACYDOCNUM, legacyNumber, tenantId);
+					HealdanConstants.ATTR_LEGACYDOCNUM, legacyNumber.strip(), tenantId);
 		} catch (RuntimeException e) {
 			throw new PersistenceException(e);
 		}

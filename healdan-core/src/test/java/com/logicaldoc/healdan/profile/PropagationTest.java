@@ -583,8 +583,6 @@ public class PropagationTest extends AbstractRulesTestCase {
 		Folder tree = fx.folder(loose, "Tree");
 		Folder inner = fx.folder(tree, "Inner");
 		assertNull(reload(inner).getTemplate());
-		// Readers see what is committed while the move's transaction is open, as on MariaDB
-		jdbc.execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ExecutorService other = Executors.newSingleThreadExecutor();
 		try {
 			new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {

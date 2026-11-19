@@ -46,6 +46,9 @@ public class FavoriteNamesDocumentListener implements DocumentListener {
 	@Override
 	public void afterStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
 		try {
+			// No savepoint: inside a transaction the row before is in the dictionary or the session's map (the rules'
+			// listener records it), so nothing here reaches the database, and the favorites follow in a transaction
+			// of their own
 			DocumentRow stored = StoredRows.get().document(document.getId(), dictionary);
 			String before = stored != null ? stored.fileName() : null;
 			String after = document.getFileName();

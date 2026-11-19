@@ -19,7 +19,6 @@ import java.util.Set;
 
 import javax.sql.DataSource;
 
-import org.hibernate.exception.ConstraintViolationException;
 import org.junit.Test;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,6 +26,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.healdan.util.Savepoints;
 import com.logicaldoc.util.spring.Context;
 
 public class StorageDataTest extends AbstractStorageTestCase {
@@ -70,10 +70,12 @@ public class StorageDataTest extends AbstractStorageTestCase {
 
 	@Test
 	public void testMigrationMadeTheTables() throws Exception {
-		for (String table : List.of("HD_STORAGE_BACKEND", "HD_STORAGE_STORE", "HD_STORAGE_FILE", "HD_STORAGE_HELD",
-				"HD_STORAGE_EVENT"))
+		for (String table : List.of("hd_storage_backend", "hd_storage_store", "hd_storage_file", "hd_storage_held",
+				"hd_storage_event"))
 			assertEquals(table, Integer.valueOf(1), jdbc().queryForObject(
-					"select count(*) from INFORMATION_SCHEMA.TABLES where TABLE_NAME = ?", Integer.class, table));
+					"select count(*) from information_schema.tables where table_schema = current_schema() "
+							+ "and table_name = ?",
+					Integer.class, table));
 		assertEquals(Integer.valueOf(1), jdbc().queryForObject(
 				"select count(*) from \"hd_schema_history\" where \"version\" = '9' and \"success\" = true",
 				Integer.class));
@@ -172,7 +174,15 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		useBackend(10, other);
 		assertEquals(other, StoreBackendDAO.get().findByStore(10).orElseThrow().getBackendId());
 		assertTrue(StoreBackendDAO.get().findByStore(11).isEmpty());
-		assertThrows(ConstraintViolationException.class, () -> useBackend(10, 1));
+		List<Map<String, Object>> before = jdbc().queryForList("select * from hd_storage_store order by ld_id");
+
+		// A second backend for the Store fails the store and stores nothing, whatever the exception: on PostgreSQL
+		// the commit meets the transaction the refused insert ended, and Hibernate throws a GenericJDBCException
+		assertThrows(RuntimeException.class, () -> useBackend(10, 1));
+
+		assertEquals(before, jdbc().queryForList("select * from hd_storage_store order by ld_id"));
+		assertEquals(List.of(other),
+				jdbc().queryForList("select hd_backendid from hd_storage_store where hd_storeid = 10", Long.class));
 	}
 
 	@Test

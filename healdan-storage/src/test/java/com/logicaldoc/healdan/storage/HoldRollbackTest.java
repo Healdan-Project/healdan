@@ -62,7 +62,6 @@ public class HoldRollbackTest extends AbstractStorageTestCase {
 	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
-		StorageFixtures.jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		try {
 			StorageFixtures sf = new StorageFixtures();
 			fx = sf.fx;

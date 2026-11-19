@@ -89,7 +89,7 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 	private Folder secured;
 
 	@Override
-	protected List<String> getDatabaseScripts() {
+	protected List<String> databaseScripts() {
 		return List.of("sql/logicaldoc-core.sql", "sql/logicaldoc-webservice.sql", "data.sql");
 	}
 

@@ -24,6 +24,7 @@ public final class MigrationTestSupport {
 	 * @param version the last version to apply, e.g. {@code "1"}
 	 */
 	public static void migrateTo(DataSource dataSource, String version) {
-		HealdanMigrator.configure(dataSource, HealdanMigrator.HSQLDB_LOCATION).target(version).load().migrate();
+		HealdanMigrator.configure(dataSource, "classpath:healdan/db/migration/postgresql").target(version).load()
+				.migrate();
 	}
 }

@@ -196,12 +196,11 @@ public class OncePerMatterConcurrencyTest extends AbstractRulesTestCase {
 	/**
 	 * A filing inside a longer transaction, such as a folder copy's, whose
 	 * snapshot is older than another's commit: on MariaDB (REPEATABLE READ) its
-	 * own reads can't see that copy, so the rule looks again. HSQLDB's MVCC
-	 * mode with REPEATABLE READ reads the same way.
+	 * own reads can't see that copy, so the rule looks again. PostgreSQL's
+	 * REPEATABLE READ reads the same way.
 	 */
 	@Test
 	public void testASnapshotLooksAgain() throws Exception {
-		jdbc.execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		CountDownLatch checked = new CountDownLatch(1);
 		CountDownLatch committed = new CountDownLatch(1);
 		List<List<Long>> seen = new CopyOnWriteArrayList<>();

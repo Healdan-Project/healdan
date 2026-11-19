@@ -17,12 +17,12 @@ import java.util.stream.Collectors;
 import javax.sql.DataSource;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.healdan.util.Savepoints;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -99,16 +99,15 @@ public class EmailIndex {
 		/*
 		 * Insert first: nearly every call adds a new document's row. On MariaDB an
 		 * update that matches nothing takes a gap lock, which two wide transactions
-		 * can deadlock on
+		 * can deadlock on. The insert that finds a row fails inside a savepoint, so
+		 * a transaction it joins goes on to the update
 		 */
-		try {
-			jdbc.update("insert into hd_email (hd_docid, hd_messageid, hd_messageidhash) values (?, ?, ?)", docId,
-					messageId, hash);
-		} catch (DuplicateKeyException e) {
+		if (!Savepoints.insertIfAbsent(jdbc,
+				"insert into hd_email (hd_docid, hd_messageid, hd_messageidhash) values (?, ?, ?)", docId, messageId,
+				hash))
 			// The document has a row already: the index worker's, or an earlier one
 			jdbc.update("update hd_email set hd_messageid = ?, hd_messageidhash = ? where hd_docid = ?", messageId,
 					hash, docId);
-		}
 	}
 
 	/**

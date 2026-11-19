@@ -7,6 +7,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -50,6 +51,7 @@ import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.email.EmailIndex;
 import com.logicaldoc.healdan.support.DbSnapshot;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
 
@@ -176,7 +178,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId())
 				.overtaking(DocumentEvent.CHECKEDOUT).start()) {
@@ -200,7 +201,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).overtaking(DocumentEvent.CHECKEDOUT)
 				.start()) {
@@ -226,7 +226,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite webPage = BackgroundWrite.of(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
 				.overtaking(DocumentEvent.CHECKEDOUT).start()) {
@@ -250,7 +249,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite webPage = BackgroundWrite.atFlush(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
 				.overtaking(DocumentEvent.CHECKEDOUT).start()) {
@@ -273,7 +271,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId()).overtaking(DocumentEvent.CHECKEDIN)
 				.start()) {
@@ -292,7 +289,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).overtaking(DocumentEvent.CHECKEDIN)
 				.start()) {
@@ -310,7 +306,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite webPage = BackgroundWrite.of(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
 				.overtaking(DocumentEvent.CHECKEDIN).start()) {
@@ -332,7 +327,6 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		checkout(d, clerk);
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite webPage = BackgroundWrite.atFlush(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
 				.overtaking(DocumentEvent.CHECKEDIN).start()) {
@@ -489,22 +483,12 @@ public class SaveTest extends ApiTestCase {
 
 		ApiResponse failed = saveFailing(token, d, List.of("ld_version"), version("snapshot", "Sent to the client", true));
 
-		assertEquals(failed.toString(), 500, failed.status());
-		assertEquals("server-error", failed.code());
-		assertEquals(("Document #%d's save wasn't stored completely: its content is the file sent, as version 1.1, but "
-				+ "that version isn't in its timeline. It isn't checked out to you. Send the save again.")
-				.formatted(number(d)), failed.json().path("detail").textValue());
-		// What the client sees: the document at 1.1 with the file sent, free; no 1.1 in the timeline; 1.0 as it was
-		JsonNode doc = get("/api/v1/documents/" + number(d)).token(token).send().json();
-		assertEquals("1.1", doc.path("fileVersion").textValue());
-		assertTrue(doc.path("hold").isNull());
-		assertEquals(List.of("1.0 version"), versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
-		assertArrayEquals(bytes("two"), content(token, d, null));
-		assertArrayEquals(bytes("one"), content(token, d, "1.0"));
-		assertEquals(404,
-				get("/api/v1/documents/" + number(d) + "/content?version=1.1").token(token).send().status());
+		// The document is at 1.1 with the file sent, and has no hold (Decision Log 16 of the PostgreSQL plan)
+		JsonNode doc = assertSaysWhatsLeft(failed, token, d);
+		assertEquals(doc.toString(), "1.1", doc.path("fileVersion").textValue());
+		assertTrue(doc.toString(), doc.path("hold").isNull());
 
-		// Sent again, the save is recorded
+		// Sent again, the save is recorded, as the version after the one the document is at
 		ApiResponse again = save(token, d, version("snapshot", "Sent to the client", true), "a.docx", "two");
 		assertEquals(again.toString(), 201, again.status());
 		assertEquals("1.2", again.json().path("fileVersion").textValue());
@@ -513,35 +497,64 @@ public class SaveTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testAVersionWhoseFileWasntStoredIsSaidSo() throws Exception {
+		// As when CE stored the document at its new version, then failed to store the file with anything but an
+		// IOException, the only failure its check-in puts the document back after
+		Document d = file("a.docx");
+		Document moved = DocumentDAO.get().findById(d.getId(), true);
+		moved.setVersion("1.1");
+		moved.setFileVersion("1.1");
+		DocumentDAO.get().store(moved, fx.documentHistory(boss));
+
+		ApiProblem problem = assertThrows(ApiProblem.class,
+				() -> VersionResource.confirmStored(d.getId(), number(d), "1.0", clerk));
+
+		assertEquals(500, problem.status());
+		assertEquals(("Document #%d's save wasn't stored: the document is at version 1.1, but that version's file "
+				+ "wasn't stored, and it isn't in its timeline. It isn't checked out to you. Send the save again.")
+				.formatted(number(d)), problem.detail());
+	}
+
+	@Test
 	public void testUnstoredSaveIsAnError() throws Exception {
-		// Concern 4: here the document's own record can't be written either, so nothing changes
+		// Concern 4: here the document's own record can't be written either
 		Document d = file("a.docx");
 		String token = signIn(clerk);
 
 		CheckinCount checkins = new CheckinCount(d.getId());
 		DocumentListenerManager.get().getListeners().add(checkins);
 		ApiResponse failed;
-		try {
+		List<String> logged;
+		try (LogCapture log = LogCapture.of(VersionResource.class)) {
 			failed = saveFailing(token, d, List.of("ld_version", "ld_document"),
 					version("snapshot", "Sent to the client", null));
+			logged = log.lines();
 		} finally {
 			DocumentListenerManager.get().getListeners().remove(checkins);
 		}
 
-		assertEquals(failed.toString(), 500, failed.status());
-		assertEquals("server-error", failed.code());
-		assertEquals("Document #%d's save wasn't stored: its content is as it was. It's still checked out to you. "
-				.formatted(number(d)) + "Send the save again.", failed.json().path("detail").textValue());
+		// The document is at 1.0 as it was, still checked out to the clerk (Decision Log 16 of the PostgreSQL plan)
+		JsonNode doc = assertSaysWhatsLeft(failed, token, d);
+		assertEquals(doc.toString(), "1.0", doc.path("fileVersion").textValue());
+		JsonNode hold = doc.path("hold");
+		assertEquals(hold.toString(), "checkout", hold.path("kind").textValue());
+		assertEquals(hold.toString(), clerk.getId(), hold.path("by").path("id").asLong());
 		// No other write overtook CE's check-in, which kept no version of the save, so it isn't asked for again
 		assertEquals(1, checkins.count);
-		JsonNode doc = get("/api/v1/documents/" + number(d)).token(token).send().json();
-		assertEquals("1.0", doc.path("fileVersion").textValue());
-		assertEquals("checkout", doc.path("hold").path("kind").textValue());
-		assertEquals(clerk.getId(), doc.path("hold").path("by").path("id").asLong());
-		assertEquals(List.of("1.0 version"), versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
-		assertArrayEquals(bytes("one"), content(token, d, null));
 
-		// Sent again, the save is stored
+		// The failure the answer stands for is logged as its chain of causes, with the database's SQL state and
+		// code, and never a message, which could quote the row: the file's name and the comment
+		String prefix = "ERROR The save of document #%d failed: ".formatted(number(d));
+		List<String> failures = logged.stream().filter(line -> line.startsWith(prefix)).toList();
+		assertEquals(logged.toString(), 1, failures.size());
+		String causes = failures.get(0).substring(prefix.length());
+		String cause = "[\\w.$]+( \\[SQL state \\w+, code -?\\d+\\])?";
+		assertTrue(causes, causes.matches(cause + "( <- " + cause + ")+"));
+		assertTrue(causes, causes.contains(" [SQL state "));
+		assertFalse(causes, causes.contains("a.docx"));
+		assertFalse(causes, causes.contains("Sent to"));
+
+		// Sent again, the save is stored, as the version after the one the document is at
 		ApiResponse again = save(token, d, version("snapshot", "Sent to the client", null), "a.docx", "two");
 		assertEquals(again.toString(), 201, again.status());
 		assertEquals("1.1", again.json().path("fileVersion").textValue());
@@ -549,6 +562,49 @@ public class SaveTest extends ApiTestCase {
 		assertEquals(List.of("1.1 snapshot", "1.0 version"),
 				versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
 		assertArrayEquals(bytes("two"), content(token, d, null));
+	}
+
+	/**
+	 * Asserts that a save of "two" over "one" that CE didn't store whole is a
+	 * {@code 500} that agrees with the document read back: at the version
+	 * after 1.0 with the file sent, or as it was, which each test pins. Either
+	 * way the save isn't in its timeline, and version 1.0 is as it was.
+	 *
+	 * @return the document read back
+	 */
+	private JsonNode assertSaysWhatsLeft(ApiResponse failed, String token, Document d) {
+		assertEquals(failed.toString(), 500, failed.status());
+		assertEquals("server-error", failed.code());
+		String detail = failed.json().path("detail").textValue();
+
+		JsonNode doc = get("/api/v1/documents/" + number(d)).token(token).send().json();
+		String at = doc.path("fileVersion").textValue();
+		boolean moved = !"1.0".equals(at);
+		JsonNode hold = doc.path("hold");
+		String stored = moved
+				? ("Document #%d's save wasn't stored completely: its content is the file sent, as version 1.1, but "
+						+ "that version isn't in its timeline.").formatted(number(d))
+				: "Document #%d's save wasn't stored: its content is as it was.".formatted(number(d));
+		String held = hold.isNull() ? " It isn't checked out to you." : " It's still checked out to you.";
+		assertEquals(doc.toString(), stored + held + " Send the save again.", detail);
+
+		assertEquals(doc.toString(), at, doc.path("version").textValue());
+		if (moved) {
+			assertEquals(doc.toString(), "1.1", at);
+			assertArrayEquals(bytes("two"), content(token, d, null));
+			assertEquals(404,
+					get("/api/v1/documents/" + number(d) + "/content?version=1.1").token(token).send().status());
+		} else {
+			assertArrayEquals(bytes("one"), content(token, d, null));
+		}
+		// The check-out it then has: the caller's, or none
+		if (!hold.isNull()) {
+			assertEquals(hold.toString(), "checkout", hold.path("kind").textValue());
+			assertEquals(hold.toString(), clerk.getId(), hold.path("by").path("id").asLong());
+		}
+		assertEquals(List.of("1.0 version"), versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
+		assertArrayEquals(bytes("one"), content(token, d, "1.0"));
+		return doc;
 	}
 
 	/**

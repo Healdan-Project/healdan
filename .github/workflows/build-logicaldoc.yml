@@ -97,6 +97,7 @@ jobs:
           # The upstream tests that cover Healdan's edits to upstream code, one per line: a class, or Class#method.
           UPSTREAM_TESTS: |
             HealdanHooksTest
+            HealdanTypedReadsTest
             DocumentAclEqualityTest
             HibernateFolderDAOTest#testMerge
             HibernateFolderDAOTest#testDeleteTreeTakesOnlyLiveRows
@@ -167,6 +168,24 @@ jobs:
     needs: checks
     if: needs.checks.outputs.code == 'true'
     runs-on: ubuntu-latest
+    # The PostgreSQL Healdan's tests run on, as docker/tests/test-db.sh runs one locally: each test makes a database of
+    # its own on it (TestDatabase), whose defaults reach it at localhost:5432. Every test makes a database and loads CE's
+    # schema, so it runs as the local one does: on a tmpfs, without fsync, with 300 connections (initdb writes each -c
+    # into postgresql.conf).
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: healdan
+          POSTGRES_PASSWORD: healdan-test
+          POSTGRES_INITDB_ARGS: >-
+            --encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C
+            -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=300
+        ports:
+          - 5432:5432
+        options: >-
+          --tmpfs /var/lib/postgresql
+          --health-cmd "pg_isready -h 127.0.0.1 -U healdan" --health-interval 5s --health-timeout 5s --health-retries 20
     strategy:
       # A failing shard leaves the others running, so one run shows every failing test.
       fail-fast: false
@@ -204,6 +223,7 @@ jobs:
             setup-java-Linux-x64-maven-
 
       - name: Maven repository cache (restore only)
+        id: m2-restore
         if: env.SAVE_M2 != 'true'
         uses: actions/cache/restore@v6
         with:
@@ -212,6 +232,19 @@ jobs:
           restore-keys: |
             m2-
             setup-java-Linux-x64-maven-
+
+      # -nsu has Maven take a version range's versions, and an unversioned plugin's, from the cached copy's metadata,
+      # and ask a repository only for what the copy lacks. Without it Maven asks every repository again on each new day
+      # (UTC). A failed connection then falls back to the copy, but an answer of "not found" doesn't: the range is left
+      # with no versions, and the build stops with no warning at "No versions available for
+      # org.bouncycastle:bcutil-jdk18on:jar:[1.81,1.82) within specified range" (a range in Bouncy Castle's own POM).
+      # Two shards did on 19 November 2026, both on runners in another cloud than the rest. Only an exact hit gets -nsu:
+      # its POMs are those the copy was saved for, so the copy's lists hold every version they need, where a POM that
+      # moves to a release newer than the copy would find none (and its pull request could never pass, so master would
+      # never save a newer copy). The shard that saves the copy still asks, so each copy it saves has that day's lists.
+      - name: Take version lists from the cached Maven copy
+        if: steps.m2-restore.outputs.cache-hit == 'true'
+        run: echo "MAVEN_METADATA=-nsu" >> "$GITHUB_ENV"
 
       # Maven uses a cached file only when its _remote.repositories names one of this build's repositories, in the form
       # the running Maven writes: 3.9 the repository's id, 3.10 its id and a hash of its URL. ubuntu-latest's images
@@ -235,7 +268,7 @@ jobs:
       # image CI also builds.
       - name: Maven install (all modules but the WAR, without the GWT compile)
         run: >-
-          mvn -B -ntp -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dmaven.javadoc.skip=true
+          mvn -B -ntp $MAVEN_METADATA -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dmaven.javadoc.skip=true
           -Dhealdan.web.skip=true -Dassembly.skipAssembly=true -Dmaven.source.skip=true -pl '!logicaldoc-webapp' install
 
       # Each module gets the whole -Dtest list and runs the classes it has. -fae runs every module's tests even when
@@ -246,7 +279,7 @@ jobs:
           TESTS: ${{ matrix.tests }}
         run: |
           touch ~/logicaldoc-dev.properties
-          mvn -B -ntp -fae -pl "$MODULES" test -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dhealdan.web.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest="$TESTS"
+          mvn -B -ntp $MAVEN_METADATA -fae -pl "$MODULES" test -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dhealdan.web.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest="$TESTS"
 
       - name: Record test times
         run: python3 .github/scripts/test-shards.py times ./*/target/surefire-reports > test-times-${{ matrix.shard }}.txt

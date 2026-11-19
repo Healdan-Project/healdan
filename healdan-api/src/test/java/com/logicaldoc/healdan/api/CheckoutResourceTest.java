@@ -98,7 +98,6 @@ public class CheckoutResourceTest extends ApiTestCase {
 		// The Office preview saves the document when its conversion ends, between CE's read and write of the check-out
 		Document d = file();
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId()).start()) {
 			response = post(path(d)).token(token).send();
@@ -116,7 +115,6 @@ public class CheckoutResourceTest extends ApiTestCase {
 		// The preview's save commits just before CE's UPDATE of the check-out, whose failure CE's DAO swallows
 		Document d = file();
 		String token = signIn(clerk);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).start()) {
 			response = post(path(d)).token(token).send();
@@ -313,7 +311,6 @@ public class CheckoutResourceTest extends ApiTestCase {
 		Document d = file();
 		String token = signIn(clerk);
 		assertEquals(200, post(path(d)).token(token).send().status());
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId()).start()) {
 			response = delete(path(d)).token(token).send();
@@ -333,7 +330,6 @@ public class CheckoutResourceTest extends ApiTestCase {
 		Document d = file();
 		String token = signIn(clerk);
 		assertEquals(200, post(path(d)).token(token).send().status());
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).start()) {
 			response = delete(path(d)).token(token).send();
@@ -355,7 +351,6 @@ public class CheckoutResourceTest extends ApiTestCase {
 		DocumentManager.get().makeImmutable(d.getId(), fx.documentHistory(boss));
 		checkout(d, clerk);
 		String token = signIn(boss);
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).start()) {
 			response = delete(path(d)).token(token).send();
@@ -379,7 +374,6 @@ public class CheckoutResourceTest extends ApiTestCase {
 		Document d = file();
 		String token = signIn(clerk);
 		assertEquals(200, post(path(d)).token(token).send().status());
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite webPage = BackgroundWrite.atFlush(d.getId(), DocumentEvent.CHECKEDOUT, document -> {
 			document.setLockUserId(boss.getId());

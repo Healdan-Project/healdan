@@ -344,10 +344,11 @@ public class DeviceHolds {
 	 */
 	private static Date latestCheckout(long docId) {
 		try {
+			// A missing date last, where MariaDB puts it; PostgreSQL would put it first
 			List<DocumentHistory> latest = DocumentHistoryDAO.get().findByWhere(
 					"_entity.docId = :docId and _entity.event = :event",
 					Map.of("docId", docId, "event", DocumentEvent.CHECKEDOUT.toKey()),
-					"_entity.date desc, _entity.id desc", 1);
+					"_entity.date desc nulls last, _entity.id desc", 1);
 			return latest.isEmpty() ? null : latest.get(0).getDate();
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read the history of document " + docId, e);

@@ -4,7 +4,6 @@
 package com.logicaldoc.healdan.storage;
 
 import static com.logicaldoc.healdan.storage.StorageFixtures.file;
-import static com.logicaldoc.healdan.storage.StorageFixtures.jdbc;
 import static com.logicaldoc.healdan.storage.StorageFixtures.resource;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -44,7 +43,6 @@ public class FileLocksTest extends AbstractStorageTestCase {
 	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		try {
 			StorageFixtures sf = new StorageFixtures();
 			Side local = sf.localSide("Local", false);

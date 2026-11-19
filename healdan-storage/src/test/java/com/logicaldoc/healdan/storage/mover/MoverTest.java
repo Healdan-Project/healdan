@@ -110,7 +110,6 @@ public class MoverTest extends AbstractStorageTestCase {
 	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		try {
 			sf = new StorageFixtures();
 			fx = sf.fx;

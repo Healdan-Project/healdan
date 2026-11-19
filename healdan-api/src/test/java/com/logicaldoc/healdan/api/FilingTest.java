@@ -195,7 +195,6 @@ public class FilingTest extends ApiTestCase {
 	@Test
 	public void testCheckOutPastABackgroundWrite() throws Exception {
 		// The Office preview saves a new document when its conversion ends, which can fall in CE's check-out
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.conversion(0).start()) {
 			response = file(signIn(clerk), document(documents, null, null, true), "a.docx", CONTENT);
@@ -212,7 +211,6 @@ public class FilingTest extends ApiTestCase {
 	@Test
 	public void testCheckOutPastABackgroundWriteAtTheFlush() throws Exception {
 		// The preview's save commits just before CE's UPDATE of the check-out, whose failure CE's DAO swallows
-		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
 		try (BackgroundWrite conversion = BackgroundWrite.atFlush(0).start()) {
 			response = file(signIn(clerk), document(documents, null, null, true), "a.docx", CONTENT);
@@ -243,15 +241,27 @@ public class FilingTest extends ApiTestCase {
 
 		assertEquals(failed.toString(), 500, failed.status());
 		assertEquals("server-error", failed.code());
-		assertEquals(("Document #%d was filed, but its version 1.0 isn't in its timeline. Its content is the file "
-				+ "sent. It isn't checked out to you. Don't file it again.").formatted(next),
-				failed.json().path("detail").textValue());
-		// What the client sees: the document with the file sent, free, and nothing in its timeline
-		JsonNode doc = get("/api/v1/documents/" + next).token(token).send().json();
+		String detail = failed.json().path("detail").textValue();
+		// The document is filed with the file sent, nothing in its timeline and no hold (Decision Log 16 of the
+		// PostgreSQL plan), and the answer agrees with what the client then sees
+		ApiResponse read = get("/api/v1/documents/" + next).token(token).send();
+		assertEquals(read.toString(), 200, read.status());
+		JsonNode doc = read.json();
+		assertTrue(doc.toString(), doc.path("hold").isNull());
+		assertEquals(doc.toString(), ("Document #%d was filed, but its version 1.0 isn't in its timeline. Its content "
+				+ "is the file sent. It isn't checked out to you. Don't file it again.").formatted(next), detail);
+		assertEquals("1.0", doc.path("version").textValue());
 		assertEquals("1.0", doc.path("fileVersion").textValue());
-		assertTrue(doc.path("hold").isNull());
 		assertEquals(0, get("/api/v1/documents/" + next + "/versions").token(token).send().json().path("items").size());
 		assertArrayEquals(CONTENT, get("/api/v1/documents/" + next + "/content").token(token).send().body());
+
+		// A save of it is stored, as the version after 1.0
+		ApiResponse saved = post("/api/v1/documents/" + next + "/versions").token(token)
+				.part("version", "{\"kind\": \"snapshot\"}").file("file", "a.docx", CONTENT).send();
+		assertEquals(saved.toString(), 201, saved.status());
+		assertEquals("1.1", saved.json().path("fileVersion").textValue());
+		assertEquals(List.of("1.1"), versionNumbers(
+				get("/api/v1/documents/" + next + "/versions").token(token).send().json().path("items")));
 	}
 
 	@Test
@@ -625,6 +635,14 @@ public class FilingTest extends ApiTestCase {
 	private static void assertBadRequest(ApiResponse response) {
 		assertEquals(response.toString(), 400, response.status());
 		assertEquals("bad-request", response.code());
+	}
+
+	/** @return the versions of a timeline, newest first */
+	private static List<String> versionNumbers(JsonNode items) {
+		List<String> versions = new ArrayList<>();
+		for (JsonNode v : items)
+			versions.add(v.path("version").textValue());
+		return versions;
 	}
 
 	private static JsonNode field(JsonNode items, String name) {

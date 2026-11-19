@@ -15,8 +15,10 @@ create table hd_trash (
 	hd_documents int not null,
 	hd_deletedby bigint,
 	hd_deletedbyname varchar(255),
-	hd_deletedat timestamp not null
+	hd_deletedat timestamp(3) not null
 );
+
+create index hd_trash_deleter on hd_trash (hd_tenantid, hd_deletedby);
 
 create table hd_trash_member (
 	hd_trashid bigint not null,
@@ -25,14 +27,14 @@ create table hd_trash_member (
 	hd_state varchar(10) not null,
 	hd_removedby bigint,
 	hd_removedbyname varchar(255),
-	hd_removedat timestamp,
+	hd_removedat timestamp(3),
 	hd_restoredby bigint,
 	hd_restoredbyname varchar(255),
-	hd_restoredat timestamp,
-	hd_destroyedat timestamp,
+	hd_restoredat timestamp(3),
+	hd_destroyedat timestamp(3),
 	primary key (hd_trashid, hd_objecttype, hd_objectid)
 );
 
-create index hd_trash_deleter on hd_trash (hd_tenantid, hd_deletedby);
 create index hd_trash_member_object on hd_trash_member (hd_objecttype, hd_objectid, hd_state);
+
 create index hd_trash_member_removed on hd_trash_member (hd_state, hd_removedat);

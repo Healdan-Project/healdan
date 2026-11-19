@@ -8,13 +8,28 @@ weight: 3
 The tests use JUnit 4. [Building from Source](../building-from-source/) has the commands.
 
 - **The base class** is `com.logicaldoc.util.junit.AbstractTestCase`. It builds a Spring context from the module's
-  test `context.xml` and `context.properties`, with an in-memory HSQLDB loaded from `getDatabaseScripts()`. For
-  `logicaldoc-core` that's `sql/logicaldoc-core.sql` plus the test `data.sql`.
+  test `context.xml` and `context.properties`. For LogicalDOC's own modules that context has an in-memory HSQLDB,
+  loaded from `getDatabaseScripts()`: for `logicaldoc-core` that's `sql/logicaldoc-core.sql` plus the test
+  `data.sql`.
 - **Each module has its own base class,** such as `AbstractCoreTestCase`, `AbstractWebappTestCase` or
-  `AbstractWebserviceTestCase`. Extend the closest one. `healdan-core`'s `AbstractHealdanTestCase` also runs
-  Healdan's migrations and setup steps on the test database, and first empties the store (`store.1.dir`): ids
-  restart with each test's database, while the store under `target/` stays, so a file an earlier test left would be
-  taken for one of this test's documents.
+  `AbstractWebserviceTestCase`. Extend the closest one.
+- **Healdan's tests run on PostgreSQL,** a database for each test (see [The Test Database](#the-test-database)).
+  `healdan-core`'s `AbstractHealdanTestCase` makes the test's database before the Spring context starts, and drops it
+  when the test ends. It hands `AbstractTestCase` no scripts, so its HSQLDB steps do nothing, and loads LogicalDOC's
+  schema and test data itself, from `databaseScripts()`, which a subclass overrides in place of
+  `getDatabaseScripts()`. Then it empties the store (`store.1.dir`) and runs Healdan's migrations and setup steps.
+  Ids restart with each test's database, while the store under `target/` stays, so a file an earlier test left would
+  be taken for one of this test's documents.
+- **The test's configuration** is its `context.properties`, which the base class writes again as
+  `pg-context.properties`, with the test's database in `jdbc.url` and the server's user and password. A subclass
+  names another file to start from with `baseConfigResource()`. LogicalDOC writes a changed setting back to its
+  file, and a later test in the run reads it, so the next test starts from the `pg-` copy, unless the build has
+  copied an edited `context.properties` in since.
+- **Booleans first.** Once the context has started, and before it loads the schema, the base class checks that
+  Hibernate binds Java booleans as integers (see
+  [MariaDB and PostgreSQL](../how-healdan-extends-logicaldoc/#mariadb-and-postgresql)), and fails naming
+  `healdan-core`'s `hibernate.properties` if it doesn't. Without the setting, every test would fail in its first
+  setup step, with an error that doesn't name the cause.
 - **Plugin manifests.** Some tests load them from fixture jars in `src/test/resources` through
   `getPluginArchives()`. Those jars are kept by hand; they aren't built from source.
 - Tests write their stores, indexes and temporary files under `target/`.
@@ -24,6 +39,56 @@ The tests use JUnit 4. [Building from Source](../building-from-source/) has the 
 - **The demo firm's test.** `DemoFixtureSeedTest` also runs the real manifest and files in `docker/demo/` on the
   test database, which takes about two and a half minutes. A step its user can't do, or a file the manifest names
   that's missing, fails the build. See [A Demo Firm for Screenshots](../development-stack/#a-demo-firm-for-screenshots).
+
+### The Test Database
+
+The tests in Healdan's modules need a PostgreSQL 18 server. `docker/tests/test-db.sh` runs one in Docker:
+
+```bash
+docker/tests/test-db.sh start   # postgres:18 as the container healdan-test-db, on 127.0.0.1:5432
+docker/tests/test-db.sh stop    # removes the container
+```
+
+- **`start`** runs the container on the Docker network `healdan-test`, which it makes if it's missing, and publishes
+  the server on `127.0.0.1` only, at port 5432, or the port `HEALDAN_TEST_DB_PORT` names. It waits until the server
+  answers, then prints how to reach it from this machine and from a container. Run again while the server is up, it
+  says so and leaves it running.
+- **Its data is on a tmpfs,** and the server runs without `fsync`, `synchronous_commit` and `full_page_writes`, with
+  300 connections, as nothing on it has to outlast the container. A run that was killed leaves its databases behind;
+  `stop` clears them with the rest. It removes the server for every run using it, so don't stop it while another
+  run's tests may still be going.
+- **Each test makes a database of its own** (`TestDatabase`, in `healdan-core`'s test-jar), from `template0`, in
+  UTF-8 with PostgreSQL's built-in `C.UTF-8` locale, the encoding and locale Healdan uses on PostgreSQL, whatever
+  the server's own default. So the tests sort and compare text as Healdan does there. Each name carries a number
+  unique to the JVM that made it, so `healdan-core`'s, `healdan-api`'s and `healdan-storage`'s tests can run at once
+  against one server.
+- **Three environment variables** say where the server is, and their defaults reach the one `start` runs:
+
+  | Variable | Default | What it is |
+  |---|---|---|
+  | `HEALDAN_TEST_DB_URL` | `jdbc:postgresql://localhost:5432/` | the server's JDBC address, without a database |
+  | `HEALDAN_TEST_DB_USER` | `healdan` | a user who can create databases |
+  | `HEALDAN_TEST_DB_PASSWORD` | `healdan-test` | its password |
+
+  With `HEALDAN_TEST_DB_PORT` set, set `HEALDAN_TEST_DB_URL` to the address `start` prints. The user of the server
+  `start` runs is a superuser, which `VetoAtomicityTest` needs: it keeps one context and one database for its whole
+  class, and its restores turn foreign keys off with `session_replication_role`.
+- **Maven in a container** reaches the server on the `healdan-test` network: start the container with
+  `--network healdan-test` and set `HEALDAN_TEST_DB_URL=jdbc:postgresql://healdan-test-db:5432/`, as `start`
+  prints.
+- **Without a server,** each test fails as it starts, with `Healdan's tests need a PostgreSQL. Start one with:
+  docker/tests/test-db.sh start`.
+- **The driver.** PostgreSQL's JDBC driver, pgjdbc, is a test dependency of `healdan-core`, `healdan-api` and
+  `healdan-storage`, at the version the WAR ships (`postgresql.version` in `logicaldoc-parent/pom.xml`). `healdan-core`'s test `context.properties` names it in
+  `jdbc.driver`, which the test `context.xml` reads as `${jdbc.driver}`, with `jdbc.dbms=postgresql`, PostgreSQL's
+  Hibernate dialect, and a `jdbc.url` the base class always replaces.
+- **LogicalDOC's own tests run on HSQLDB,** in memory, as its base classes make it, and need no server. So do the
+  upstream tests CI runs among Healdan's (`UPSTREAM_TESTS`, see [Continuous Integration](../continuous-integration/)).
+  HSQLDB's jars are on Healdan's test class path too: LogicalDOC's base class names its classes, and `TestDatabase`
+  loads LogicalDOC's scripts with HSQLDB's `SqlFile`, as LogicalDOC's tests do.
+
+In CI, each test job has a PostgreSQL of its own, set up as `start` sets up the local one (see
+[How `build` Runs](../continuous-integration/#how-build-runs)).
 
 ### The Fake Sign-In Provider
 
@@ -51,7 +116,8 @@ in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests 
 ### The API's Tests
 
 `healdan-api`'s tests extend `ApiTestCase`, which builds on `healdan-core`'s `AbstractHealdanTestCase`, taken from
-`healdan-core`'s test-jar. They run against the same test database, with Healdan's migrations and setup steps.
+`healdan-core`'s test-jar. So they run on the same PostgreSQL server, each test with a database of its own and
+Healdan's migrations and setup steps on it.
 
 - **They drive the real `ApiServlet`** through Spring's servlet mocks, with its filters and providers, so a test
   goes through the token check, CORS and the error mapping as a client's request does.
@@ -120,12 +186,15 @@ and `ResourceServiceImplTest#testMoveFolder` (WebDAV's move). `RpcPermissionGaps
 ### The Storage Tests
 
 `healdan-storage`'s tests extend `AbstractStorageTestCase`, which builds on `healdan-core`'s `AbstractHealdanTestCase`,
-taken from `healdan-core`'s test-jar, as the API's tests do.
+taken from `healdan-core`'s test-jar, as the API's tests do, so they run on the same PostgreSQL server, a database for
+each test.
 
 - **They run LogicalDOC through Healdan's storage.** The base class takes `healdan-core`'s test `context.properties`,
-  which the build copies in, writes it again as `context-storage.properties` with `store` set to `HealdanStorage`, and
-  registers the module's `plugin.xml` with `PluginFixtures.archive("healdan-storage")`. So `CeFlowsTest` creates,
-  checks in, replaces, deletes, purges and copies documents through LogicalDOC's own code, as a server does.
+  which the build copies in, and writes it again as `context-storage.properties` with `store` set to
+  `HealdanStorage`. That's its `baseConfigResource()`, which `AbstractHealdanTestCase` then writes again with the
+  test's database. It registers the module's `plugin.xml` with `PluginFixtures.archive("healdan-storage")`. So
+  `CeFlowsTest` creates, checks in, replaces, deletes, purges and copies documents through LogicalDOC's own code, as
+  a server does.
   `healdan-core`'s and `healdan-api`'s tests keep LogicalDOC's own store, as neither module can depend on
   `healdan-storage`.
 - **Their folders are under `target/`.** The build sets `healdan.storageStaging`, `healdan.storageCache` and
@@ -180,7 +249,7 @@ uploads in parts (create, upload a part, complete, abort).
 
 | Command | What it checks |
 |---|---|
-| `docker build --target tools .` | the init tool's unit tests, among them `DbInitPlanTest`, which reads the tables and columns of the WAR's own DbInit scripts, `ld_tenant`'s 14 quota thresholds among them, and `PluginInstallTest`, which installs LogicalDOC's plugins as the init tool does, checks that each one started and that the installs edited a copy of `web.xml`, which the image then ships, then starts them again as Tomcat does after it, which must find them all installed and ask for no restart. Then two checks on the WAR's own libraries, which Maven's tests can't do: they have every library's dependencies, and the WAR has only what the plugin zips ship. `WarParsersTest` parses a `.pptx`, an `.xlsx` in Excel's Accounting format and an `.xls` with the server's parsers. `WarStorageTest` sends one request to a closed loopback port with the S3 client, and puts 3 MiB through Tink's streaming AEAD |
+| `docker build --target tools .` | the init tool's unit tests, among them `DbInitPlanTest`, which reads the tables and columns of the WAR's own DbInit scripts, `ld_tenant`'s 14 quota thresholds among them, and `PluginInstallTest`, which installs LogicalDOC's plugins as the init tool does, checks that each one started and that the installs edited a copy of `web.xml`, which the image then ships, then starts them again as Tomcat does after it, which must find them all installed and ask for no restart. Then three checks on the WAR's own libraries, which Maven's tests can't do: a module's tests have every library's dependencies but only that module's libraries, and the WAR has only what the plugin zips ship, from every plugin. `WarParsersTest` parses a `.pptx`, an `.xlsx` in Excel's Accounting format and an `.xls` with the server's parsers. `WarStorageTest` sends one request to a closed loopback port with the S3 client, and puts 3 MiB through Tink's streaming AEAD. `WarHibernateTest` checks that the libraries hold one `hibernate.properties`, `healdan-core`'s, with `hibernate.type.preferred_boolean_jdbc_type=INTEGER`: Hibernate reads the first it finds, so a jar that brought its own would drop the setting |
 | `docker/tests/test-init.sh` | the init tool against a throwaway MariaDB, LogicalDOC's plugins installed on the first run and not again, and a start refused while LogicalDOC's tables lack what the scripts create: `ld_tenant` without the 14 quota thresholds upstream sync #215 brought, then with them added by Upgrading's own SQL, read from its page, and `ld_webservicecall` renamed away |
 | `docker/tests/test-image.sh` | the image: a prompt stop during init, file ownership, the `/setup` block, Admin > Restart, settings that persist |
 | `docker/tests/test-overlays.sh` | the dev and proxy overlays |
@@ -198,6 +267,9 @@ uploads in parts (create, upload a part, complete, abort).
 address, a device token of someone who may file there, the folder's id and how many:
 `docker/tests/bulk-documents.sh http://127.0.0.1:8080 hd_… 1234 2000`. A fifth argument, a word, goes into every
 file, for a search that finds them all.
+
+`docker/tests/test-db.sh` isn't a test either: it runs the PostgreSQL that Healdan's Java tests use (see
+[The Test Database](#the-test-database)).
 
 ### The Stand-In Sign-In Provider
 
