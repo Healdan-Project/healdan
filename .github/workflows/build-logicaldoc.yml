@@ -194,6 +194,14 @@ jobs:
     env:
       # Whether this job saves the Maven repository cache (see "Maven repository cache"): one shard, and only on master.
       SAVE_M2: ${{ github.ref == 'refs/heads/master' && matrix.saves_m2 }}
+      # -nsu has Maven take a version range's versions, and an unversioned plugin's, from the cached copy's metadata,
+      # and ask a repository only for what the copy lacks. Without it Maven asks every repository again on each new day
+      # (UTC). A failed connection then falls back to the copy, but an answer of "not found" doesn't: the range is left
+      # with no versions, and the build stops with no warning at "No versions available for
+      # org.bouncycastle:bcutil-jdk18on:jar:[1.81,1.82) within specified range" (a range in Bouncy Castle's own POM).
+      # Two shards did on 19 November 2026, both on runners in another cloud than the rest. The shard that saves the copy
+      # still asks, so each copy it saves has that day's metadata.
+      MAVEN_METADATA: ${{ !(github.ref == 'refs/heads/master' && matrix.saves_m2) && '-nsu' || '' }}
 
     steps:
       - name: Checkout source
@@ -254,7 +262,7 @@ jobs:
       # image CI also builds.
       - name: Maven install (all modules but the WAR, without the GWT compile)
         run: >-
-          mvn -B -ntp -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dmaven.javadoc.skip=true
+          mvn -B -ntp $MAVEN_METADATA -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dmaven.javadoc.skip=true
           -Dhealdan.web.skip=true -Dassembly.skipAssembly=true -Dmaven.source.skip=true -pl '!logicaldoc-webapp' install
 
       # Each module gets the whole -Dtest list and runs the classes it has. -fae runs every module's tests even when
@@ -265,7 +273,7 @@ jobs:
           TESTS: ${{ matrix.tests }}
         run: |
           touch ~/logicaldoc-dev.properties
-          mvn -B -ntp -fae -pl "$MODULES" test -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dhealdan.web.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest="$TESTS"
+          mvn -B -ntp $MAVEN_METADATA -fae -pl "$MODULES" test -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dhealdan.web.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest="$TESTS"
 
       - name: Record test times
         run: python3 .github/scripts/test-shards.py times ./*/target/surefire-reports > test-times-${{ matrix.shard }}.txt

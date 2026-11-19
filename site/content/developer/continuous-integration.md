@@ -76,6 +76,15 @@ The Docker build keeps its own copy, which the `maven:3.9` image both writes and
 It keeps npm's cache for the User app's packages beside it, keyed on `healdan-web/web/package-lock.json`, and only
 `master`'s amd64 job saves either.
 
+Maven also keeps each repository's list of an artifact's versions, which it needs for a version range, such as the
+one in Bouncy Castle's own POMs, and for a plugin with no version. On each new day, by UTC, it asks every repository
+for those lists again. When a connection fails it falls back to the list it has, but when a repository answers "not
+found" it doesn't, and the build stops at `No versions available for org.bouncycastle:bcutil-jdk18on:jar:[1.81,1.82)
+within specified range`, with no warning before it. Two shards failed that way on 19 November 2026, both on runners in
+another cloud than the rest. So every shard but the one that saves the copy runs Maven with `-nsu`, which takes the
+lists from the cached copy and asks a repository only for what the copy lacks. The saving shard still asks, so each
+copy it saves has that day's lists. The Docker build asks too, since what it resolves is what the image ships.
+
 ### Room for the Caches
 
 The repository has 10 GB of Actions caches. Past that, GitHub deletes the caches used least recently, whatever
