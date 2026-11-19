@@ -53,9 +53,10 @@ learn from.
 ## MariaDB and PostgreSQL
 
 The stack runs on MariaDB, and Healdan's Java tests on PostgreSQL 18 (see
-[The Test Database](../tests/#the-test-database)), so Healdan's code, and LogicalDOC's under it, works on both.
-Healdan's SQL is written once, in a form both databases take, but for its Flyway migrations, which have a folder for
-each (see [Healdan's Code](#healdans-code)). These make LogicalDOC's code, and Healdan's, work on PostgreSQL too:
+[The Test Database](../tests/#the-test-database)). So until the stack moves to PostgreSQL, Healdan's code, and
+LogicalDOC's under it, works on both, and Healdan's SQL is written once, in a form both databases take, but for its
+Flyway migrations, which have a folder for each until then (see [Healdan's Code](#healdans-code)). These make
+LogicalDOC's code, and Healdan's, work on PostgreSQL:
 
 - **Booleans are bound as integers.** LogicalDOC maps Java `boolean` fields onto `int` columns, and PostgreSQL
   refuses a boolean for an `int` column. `healdan-core`'s `hibernate.properties`, at its class path's root, sets
@@ -73,8 +74,8 @@ each (see [Healdan's Code](#healdans-code)). These make LogicalDOC's code, and H
   already of the type comes back as it is. A number held exactly, an integer, a `BigInteger` or a `BigDecimal`, it
   converts in Java: to a `Long` or an `Integer` when that holds it exactly, and to a `Double`, a `Float`, a
   `BigDecimal` or text in plain notation. Anything else, such as a fraction asked for as a `Long`, a value that is a
-  `Double`, or text, goes to the driver as before, so MariaDB answers as it did. `HealdanTypedReadsTest` checks it,
-  in `UPSTREAM_TESTS`, and `TypedReadsOnPostgresTest` that an edit of a user is kept.
+  `Double`, or text, goes to the driver, and on MariaDB a read gives what its driver would. `HealdanTypedReadsTest`
+  checks it, in `UPSTREAM_TESTS`, and `TypedReadsOnPostgresTest` that an edit of a user is kept.
 - **A statement that may fail runs inside a savepoint.** On PostgreSQL a statement that fails ends its transaction,
   whatever the Java around it catches, where MariaDB fails only the statement. So no statement of Healdan's is
   expected to fail inside a transaction, and one that may fail without failing its caller runs inside a savepoint,
@@ -85,8 +86,9 @@ each (see [Healdan's Code](#healdans-code)). These make LogicalDOC's code, and H
     `StoredFiles.recordWrite` and `HeldCopies.hold`.
   - The listeners that log and swallow a failure inside LogicalDOC's save run their statements inside one, so the
     save is kept, as it is on MariaDB: `EmailDocumentListener`, `PreviewDocumentListener` and the two favourite-names
-    listeners. A check that's Java alone, such as whether a file is an Office file, stays outside, as a savepoint
-    costs two round trips to the database on every save.
+    listeners. `PreviewDocumentListener` keeps its check of the event and the file name, which is Java alone,
+    outside, as a savepoint costs two round trips to the database and its methods run on every save. The others put
+    the whole of their `try` inside.
 - **SQL given to LogicalDOC's DAO helpers never uses `::`,** which its `NamedParameterStatement` reads as a
   parameter. Write `cast(x as text)`.
 
@@ -200,12 +202,12 @@ each (see [Healdan's Code](#healdans-code)). These make LogicalDOC's code, and H
 - **Its own tables.** Flyway owns the tables whose names start `hd_`, and only those. A change ships as a new
   script under `healdan-core/src/main/resources/healdan/db/migration/`, never as an edit to one that has shipped.
   Healdan never changes the structure of LogicalDOC's `ld_` tables.
-  - **A folder of scripts for each database.** `HealdanMigrator` reads which database it's on from the connection
-    and runs the scripts in `mariadb/`, the stack's, or in `postgresql/`, the tests'. It refuses any other database,
-    MySQL included, with `Healdan's tables support MariaDB and PostgreSQL only; found …`. The `postgresql/` scripts
-    are `mariadb/`'s translated one for one, with the same versions and names, so a version means the same on both,
-    and a new migration goes into both folders. The history table, `hd_schema_history`, starts with Flyway's
-    version `0` baseline, as LogicalDOC's tables are there first.
+  - **A folder of scripts for each database.** `HealdanMigrator` reads which database it's on from the connection and
+    runs the scripts in `mariadb/`, the stack's, or in `postgresql/`, the tests'. It refuses any other database, MySQL
+    included, with `Healdan's tables support MariaDB and PostgreSQL only; found …`. The `postgresql/` scripts are
+    `mariadb/`'s translated one for one, with the same versions and names, so a version means the same on both. Until
+    the stack moves to PostgreSQL, when `mariadb/` goes, a new migration goes into both folders. The history table,
+    `hd_schema_history`, starts with Flyway's version `0` baseline, as LogicalDOC's tables are there first.
   - `hd_email` indexes email: a row for each email document, with its Message-ID and the SHA-256 of it that
     lookups search by. `EmailDocumentListener` adds the row when an email is filed, from the Message-ID it read
     from the file, or from the Message-ID property the document came with when the file gives none (an `.eml` or

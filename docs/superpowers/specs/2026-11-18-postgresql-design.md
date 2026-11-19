@@ -330,7 +330,7 @@ CE's `queryForObject` asks the driver for a `Long` from whatever the query retur
   a `Float`, a `BigDecimal` or text, and asks the driver for the rest, as before (changed in the build: this said it
   asks the driver only for what it can't convert; a fraction asked for as a whole number, a value out of range, a
   value that is a `Double` or `Float` and anything that isn't a number still go to the driver, so MariaDB and HSQLDB
-  answer as they did, and every typed read today's callers make is still answered without the driver on PostgreSQL;
+  answer as they did, and every typed read today's callers make is answered without the driver on PostgreSQL;
   plan, Decision Log 7). A NULL is null without a typed read. `queryForLong`'s retry then never runs.
 - **Its test** is a unit test of the helper with result sets that refuse what pgjdbc refuses, named in CI's
   `UPSTREAM_TESTS`. Healdan's tests on PostgreSQL watch the fault itself: 13 of them fail without the fix (§4.2), and
@@ -355,16 +355,16 @@ transaction, and one that may fail without failing its caller runs inside a save
 - **`Savepoints` moves from `healdan-storage` to `healdan-core`,** and becomes public, for what's left: work that
   isn't expected to fail, but mustn't fail its caller if it does.
 - **Listeners that log and swallow a failure inside CE's save** run their statements inside a savepoint, so that the
-  swallow keeps the save, as it does on MariaDB: `EmailDocumentListener`'s `afterStore`, `beforeCheckin` and
-  `afterCheckin`, `PreviewDocumentListener`'s `afterFileStore`, `beforeStore` and `afterStore`, and the two
-  favourite-names listeners (recon §4.2's list). Only their statements: a guard that is Java alone, such as the
-  preview listener's check of the event and the file name, stays outside, as a savepoint is two round trips on every
-  save. A savepoint is rolled back on anything the work throws, an `Error` included, as these listeners swallow any
-  `Throwable` (changed in the build: this named only `EmailDocumentListener.afterStore` and two of
-  `PreviewDocumentListener`'s methods, which the plan widened, and said neither what stays outside the savepoint nor
-  that an `Error` rolls it back, which would otherwise leave the work's partial writes in a save that then commits;
-  plan, Decision Log 13 and 14). An index failure never refuses an email again, and `EmailIndexTest` says so on
-  PostgreSQL.
+  swallow keeps the save, as it does on MariaDB: recon §4.2's list, `EmailDocumentListener.afterStore`,
+  `PreviewDocumentListener`'s `beforeStore` and `afterStore`, and the two favourite-names listeners, and beside them
+  `EmailDocumentListener`'s `beforeCheckin` and `afterCheckin` and `PreviewDocumentListener.afterFileStore`. The
+  preview listener keeps its guard, which is Java alone (the event, an Office file name), outside the savepoint, as a
+  savepoint is two round trips on every save; the others put the whole of their `try` inside. A savepoint is rolled
+  back on anything the work throws, an `Error` included, as the email and preview listeners swallow any `Throwable`
+  (changed in the build: this named only recon §4.2's list, which the plan widened by three methods, and said neither
+  what stays outside the savepoint nor that an `Error` rolls it back, which would otherwise leave the work's partial
+  writes in a save that then commits; plan, Decision Log 13 and 14). An index failure never refuses an email again,
+  and `EmailIndexTest` says so on PostgreSQL.
 - **A save or a filing that fails part-way still says what's left.** `VersionResource.confirmStored` reads the
   document back and words the answer, but only when CE swallowed its own failure. On PostgreSQL CE's failed version
   write fails CE's next statement too, and the failure escapes as a plain `500`. So a save, a filing and an email's
@@ -640,11 +640,12 @@ Every test in a `healdan-*` module runs on PostgreSQL, and none on HSQLDB.
 - **New tests for what only PostgreSQL shows:** the boolean setting in force (§7.1), a user's edit kept (§7.2), each
   of §7.3's cases, the lock timeout ending a wait (§7.4), and the text check with an emoji, a NUL and a lone surrogate
   (§7.5).
-- **In CI,** each `Tests (n of N)` job runs a `postgres:18` service container, which its tests share: every test has
-  a database of its own. It runs with the settings the local server has, `fsync`, `synchronous_commit` and
+- **In CI,** each `Tests (n of N)` job runs a `postgres:18` service container, which its tests share: every test has a
+  database of its own. It runs with the settings the local server has, `fsync`, `synchronous_commit` and
   `full_page_writes` off, 300 connections and its data on a tmpfs (changed in the build: this didn't say, and the
   plan's service had PostgreSQL's defaults; every test makes a database and loads CE's schema statement by statement,
-  and CI's time doesn't grow, §2.4; plan, Decision Log 4). `test-shards.py` and the timing cache are unchanged.
+  and the settings are there so that CI's time to green doesn't grow, as §2.4 requires; plan, Decision Log 4).
+  `test-shards.py` and the timing cache are unchanged.
 - **Locally,** a PostgreSQL in Docker, started by one command that `CLAUDE.md` and the Developer Guide's Tests page
   give.
 - **Upstream's tests stay on HSQLDB:** the classes in CI's `UPSTREAM_TESTS` extend upstream's base classes and never

@@ -70,18 +70,21 @@ docker/tests/test-db.sh stop    # removes the container
   | `HEALDAN_TEST_DB_PASSWORD` | `healdan-test` | its password |
 
   With `HEALDAN_TEST_DB_PORT` set, set `HEALDAN_TEST_DB_URL` to the address `start` prints. The user of the server
-  `start` runs is a superuser, which `VetoAtomicityTest` needs: its restores turn foreign keys off with
-  `session_replication_role`.
+  `start` runs is a superuser, which `VetoAtomicityTest` needs: it keeps one context and one database for its whole
+  class, and its restores turn foreign keys off with `session_replication_role`.
 - **Maven in a container** reaches the server on the `healdan-test` network: start the container with
   `--network healdan-test` and set `HEALDAN_TEST_DB_URL=jdbc:postgresql://healdan-test-db:5432/`, as `start`
   prints.
 - **Without a server,** each test fails as it starts, with `Healdan's tests need a PostgreSQL. Start one with:
   docker/tests/test-db.sh start`.
-- **LogicalDOC's own tests still run on HSQLDB,** in memory, as its base classes make it, and need no server. So do
-  the upstream tests CI runs among Healdan's (`UPSTREAM_TESTS`, see
-  [Continuous Integration](../continuous-integration/)). HSQLDB's jars stay on Healdan's test class path too:
-  LogicalDOC's base class names its classes, and `TestDatabase` loads LogicalDOC's scripts with HSQLDB's `SqlFile`,
-  as LogicalDOC's tests do.
+- **The driver.** PostgreSQL's JDBC driver, pgjdbc, is a test dependency of `healdan-core`, `healdan-api` and
+  `healdan-storage`, at the version the WAR ships. `healdan-core`'s test `context.properties` names it in
+  `jdbc.driver`, which the test `context.xml` reads as `${jdbc.driver}`, with `jdbc.dbms=postgresql`, PostgreSQL's
+  Hibernate dialect, and a `jdbc.url` the base class always replaces.
+- **LogicalDOC's own tests run on HSQLDB,** in memory, as its base classes make it, and need no server. So do the
+  upstream tests CI runs among Healdan's (`UPSTREAM_TESTS`, see [Continuous Integration](../continuous-integration/)).
+  HSQLDB's jars are on Healdan's test class path too: LogicalDOC's base class names its classes, and `TestDatabase`
+  loads LogicalDOC's scripts with HSQLDB's `SqlFile`, as LogicalDOC's tests do.
 
 In CI, each test job has a PostgreSQL of its own, set up as `start` sets up the local one (see
 [How `build` Runs](../continuous-integration/#how-build-runs)).
