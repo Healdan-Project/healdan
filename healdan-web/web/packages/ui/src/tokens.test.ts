@@ -47,6 +47,8 @@ const PAIRS: [string, string][] = [
   ['--hd-danger-on-fill', '--hd-danger-fill'],
   ['--hd-danger-text', '--hd-danger-tint'],
   ['--hd-text', '--hd-danger-tint'],
+  // The left panes' hovered entries, which hold --hd-text only
+  ['--hd-text', '--hd-line'],
 ]
 
 // The focus edge shows against every surface the outline can touch (it is set off from the control, so the accent

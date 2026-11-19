@@ -25,19 +25,20 @@ describe('Starting the Admin app', () => {
     })
     expect(screen.getByRole('heading', { level: 1, name: 'Healdan needs a secure address.' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Classic Interface' }).getAttribute('href')).toBe('/frontend.jsp')
-    expect(screen.queryByRole('heading', { name: 'Healdan Admin' })).toBeNull()
+    expect(screen.queryByRole('banner')).toBeNull()
     expect(fetch).not.toHaveBeenCalled()
     await expectNoAxeViolations(root)
   })
 
   it('at a secure address draws the app', async () => {
-    // Nothing the skeleton draws asks the server; a request would never end, as with a server that doesn't answer
+    // A server that doesn't answer: the frame and the Dashboard's heading draw all the same, and each part waits
     vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => {}))
     root = document.body.appendChild(document.createElement('div'))
     await act(async () => {
       unmount = await start(root!, true)
     })
-    expect(await screen.findByRole('heading', { level: 1, name: 'Healdan Admin' })).toBeTruthy()
+    expect(await screen.findByRole('link', { name: 'Healdan Admin' })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Healdan needs a secure address.' })).toBeNull()
   })
 })

@@ -1,0 +1,28 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* As the User app's views (its views.module.css): the main area's gutter, and a page's title */
+.view {
+  padding: var(--hd-space-5) var(--hd-space-6) var(--hd-space-6);
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--hd-weight-bold);
+}
+
+.line {
+  margin: var(--hd-space-4) 0;
+  color: var(--hd-text);
+}
+
+.link {
+  color: var(--hd-accent-text);
+}
+
+.link:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  border-radius: var(--hd-radius-small);
+}

@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { goTo } from '@healdan/shell'
 import { expectNoAxeViolations } from '../test/axe'
-import { problem } from '../test/fakeApi'
+import { me, problem } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
 // The shell's person menu leaves the page through the shell's own module, so that's the one a stand-in replaces
@@ -30,6 +30,28 @@ describe('the person menu', () => {
     expect(screen.getByRole('menuitem', { name: 'Classic Interface' }).getAttribute('href')).toBe('/frontend.jsp')
     expect(screen.getByRole('menuitem', { name: 'Sign Out' })).toBeTruthy()
     await expectNoAxeViolations(document.body)
+  })
+
+  // Admin spec 6.4: the way to Healdan Admin, for administrators only. The server decides who gets in; this only offers it.
+  it('offers an administrator Admin, a link to Healdan Admin, just before Classic Interface', async () => {
+    await renderApp('/', { 'GET /v1/me': { ...me, admin: true } })
+    const menu = await openMenu('Priya Nair')
+    const items = await within(menu).findAllByRole('menuitem')
+    const names = items.map((item) => item.textContent)
+    expect(names).toEqual(['Priya Nair', 'Signed-in Devices', 'Admin', 'Classic Interface', 'Sign Out'])
+    const admin = screen.getByRole('menuitem', { name: 'Admin' })
+    expect(admin.getAttribute('href')).toBe('/admin/')
+    // In the same window, as Classic Interface is
+    expect(admin.getAttribute('target')).toBeNull()
+    await expectNoAxeViolations(document.body)
+  })
+
+  it('offers no Admin to anyone else', async () => {
+    await renderApp()
+    const menu = await openMenu('Priya Nair')
+    await within(menu).findByRole('menuitem', { name: 'Classic Interface' })
+    expect(within(menu).queryByRole('menuitem', { name: 'Admin' })).toBeNull()
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Priya Nair', 'Signed-in Devices', 'Classic Interface', 'Sign Out'])
   })
 
   it('signs out: deletes the session, then goes to the sign-in page', async () => {

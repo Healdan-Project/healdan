@@ -5,21 +5,15 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, type ErrorComponentProps, type RouterHistory } from '@tanstack/react-router'
 import { ErrorPanel, parseSearch, stringifySearch } from '@healdan/shell'
 import { ADMIN_BASE, routes } from './addresses'
-import { t } from './strings'
+import { Frame } from './frame/Frame'
+import { DashboardView } from './views/DashboardView'
+import { NotFoundView } from './views/NotFoundView'
 
-// A page reads only the parameters its route's validateSearch takes, so whatever else an address carries is ignored.
-const rootRoute = createRootRoute()
+// The frame holds every page, and an address no page has is said in the frame, in the app's own words. A page reads only
+// the parameters its route's validateSearch takes, so whatever else an address carries is ignored.
+const rootRoute = createRootRoute({ component: Frame, notFoundComponent: NotFoundView })
 
-// The app's name where the Dashboard will be, until the frame and the Dashboard come (Task 11)
-function Placeholder() {
-  return (
-    <main>
-      <h1>{t('admin.app.name')}</h1>
-    </main>
-  )
-}
-
-const dashboardRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.dashboard, component: Placeholder })
+const dashboardRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.dashboard, component: DashboardView })
 
 const routeTree = rootRoute.addChildren([dashboardRoute])
 

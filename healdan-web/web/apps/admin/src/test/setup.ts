@@ -3,7 +3,9 @@
 
 import { cleanup } from '@testing-library/react'
 import { clearToasts, setLabels } from '@healdan/ui'
-import { afterEach } from 'vitest'
+import { afterEach, vi } from 'vitest'
+import { showPage } from './visibility'
+import { resetViewport } from './viewport'
 
 // The router scrolls to the top on each address, which jsdom doesn't do and says so on every test.
 window.scrollTo = () => {}
@@ -11,7 +13,10 @@ window.scrollTo = () => {}
 // Vitest has no globals here, so Testing Library can't register its own cleanup.
 afterEach(() => {
   cleanup()
+  vi.useRealTimers()
   clearToasts()
+  resetViewport()
+  showPage()
   // What a test kept as a preference isn't the next one's
   window.localStorage.clear()
   setLabels({ matter: 'Matter', matters: 'Matters' })

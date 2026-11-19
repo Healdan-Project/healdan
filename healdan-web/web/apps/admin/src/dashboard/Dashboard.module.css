@@ -1,0 +1,343 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The Dashboard, as frame A of 01-frame-and-dashboard.html draws it, in the User app's colours and type. Every colour is
+   a token that reaches AA (text) or 3:1 (a bar) on the surface it's on, in both themes (test/colours.test.ts). */
+
+.view {
+  padding: var(--hd-space-5) var(--hd-space-6) var(--hd-space-6);
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--hd-space-4);
+  margin-bottom: var(--hd-space-4);
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--hd-weight-bold);
+}
+
+.updated,
+.secondary {
+  color: var(--hd-text-secondary);
+}
+
+.refresh {
+  align-self: center;
+  margin-inline-start: auto;
+}
+
+.refresh svg {
+  margin-inline-end: var(--hd-space-2);
+}
+
+.waiting {
+  margin: 0;
+  color: var(--hd-text-secondary);
+}
+
+.caution {
+  margin: 0;
+  color: var(--hd-caution-text);
+}
+
+.secondary {
+  font-size: var(--hd-font-size-small);
+}
+
+/* Needs Attention: the bar's surface, edged in the caution colour, as the User app's storage banner is */
+.attention {
+  margin-bottom: var(--hd-space-5);
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-caution);
+  border-radius: var(--hd-radius-large);
+  background: var(--hd-bar);
+}
+
+.attentionTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  margin: 0 0 var(--hd-space-2);
+  color: var(--hd-caution-text);
+  font-size: var(--hd-font-size);
+  font-weight: var(--hd-weight-bold);
+}
+
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--hd-space-3);
+  padding: var(--hd-space-2) 0;
+}
+
+.itemIcon {
+  align-self: center;
+  color: var(--hd-caution-text);
+}
+
+.itemText {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0 var(--hd-space-3);
+  min-width: 0;
+}
+
+.go {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--hd-space-1);
+  margin-inline-start: auto;
+  color: var(--hd-accent-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.go:hover {
+  text-decoration: underline;
+}
+
+.go:focus-visible,
+.tileLink:focus-visible::after {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}
+
+.go:focus-visible {
+  border-radius: var(--hd-radius-small);
+}
+
+.attentionLine {
+  margin: 0;
+  padding: var(--hd-space-1) 0;
+  color: var(--hd-text);
+}
+
+.part {
+  margin-bottom: var(--hd-space-5);
+}
+
+.partHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--hd-space-3);
+  margin-bottom: var(--hd-space-3);
+}
+
+/* As the left pane's headings */
+.partTitle {
+  margin: 0;
+  color: var(--hd-text-secondary);
+  font-size: 11px;
+  font-weight: var(--hd-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.partHead .partTitle {
+  margin: 0;
+}
+
+.part > .partTitle {
+  margin-bottom: var(--hd-space-3);
+}
+
+.tiles,
+.totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--hd-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.totals {
+  margin-bottom: var(--hd-space-3);
+}
+
+.tile,
+.total,
+.card {
+  min-width: 0;
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius-large);
+  background: var(--hd-window);
+}
+
+/* The tile's link covers the tile, so the whole of it opens the screen behind it */
+.tile {
+  position: relative;
+}
+
+.tile:hover {
+  border-color: var(--hd-field-line);
+}
+
+/* The status goes below the name when the two don't fit side by side, so the name is whole */
+.tileTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hd-space-1) var(--hd-space-3);
+}
+
+.tileName {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--hd-font-size);
+  font-weight: var(--hd-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tileLink {
+  color: var(--hd-text);
+  text-decoration: none;
+}
+
+.tileLink::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--hd-radius-large);
+}
+
+.tileTop [data-status] {
+  flex: none;
+  font-size: var(--hd-font-size-small);
+}
+
+.tileDetail,
+.tileCaution {
+  margin: var(--hd-space-1) 0 0;
+  overflow: hidden;
+  font-size: var(--hd-font-size-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tileDetail {
+  color: var(--hd-text-secondary);
+}
+
+.tileCaution {
+  color: var(--hd-caution-text);
+}
+
+/* A bar of how full, as @healdan/ui's ProgressBar draws its track and fill: the fill at 3:1 on the track and around it */
+.track {
+  display: block;
+  height: 5px;
+  margin-top: var(--hd-space-3);
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--hd-line);
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  background: var(--hd-accent-text);
+}
+
+.total {
+  display: flex;
+  flex-direction: column;
+}
+
+.totalValue {
+  font-size: 21px;
+  font-weight: var(--hd-weight-bold);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.totalLabel {
+  color: var(--hd-text);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--hd-space-3);
+}
+
+.cardTitle {
+  margin: 0 0 var(--hd-space-3);
+  font-size: var(--hd-font-size);
+  font-weight: var(--hd-weight-bold);
+}
+
+.stores,
+.busiest {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.store {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--hd-space-3);
+}
+
+.store:last-child {
+  margin-bottom: 0;
+}
+
+.store .track {
+  margin-top: var(--hd-space-2);
+}
+
+.storeName,
+.busyName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storeLine {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.busy {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--hd-space-3);
+  padding: var(--hd-space-1) 0;
+}
+
+.busy .secondary {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Below the width the three cards fit side by side, one above another */
+@media (max-width: 1199px) {
+  .cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
