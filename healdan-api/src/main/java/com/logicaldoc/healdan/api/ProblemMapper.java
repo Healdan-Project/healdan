@@ -115,11 +115,12 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 	 * change the two together ({@code ProblemMapperTest#testUnexpected}).
 	 *
 	 * @return whether {@link #toResponse} would answer this as an unexpected
-	 *         failure, {@code 500 server-error}: it holds no
-	 *         {@link ApiProblem}, {@link AlreadyFiledException},
-	 *         {@link StorageUnreachableException}, {@link HealdanVetoException},
-	 *         {@link JsonProcessingException} or
-	 *         {@link WebApplicationException}, and the client hasn't gone away
+	 *         failure, {@code 500 server-error}: it isn't itself an
+	 *         {@link ApiProblem}, a {@link JsonProcessingException} or a
+	 *         {@link WebApplicationException}, neither it nor any of its
+	 *         causes is an {@link AlreadyFiledException}, a
+	 *         {@link StorageUnreachableException} or a
+	 *         {@link HealdanVetoException}, and the client hasn't gone away
 	 */
 	static boolean unexpected(Throwable exception) {
 		return !clientGone(exception)

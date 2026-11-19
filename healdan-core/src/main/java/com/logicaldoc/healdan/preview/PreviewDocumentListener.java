@@ -80,6 +80,14 @@ public class PreviewDocumentListener implements DocumentListener {
 	/**
 	 * Starts over the job of the file version that the replace replaced, if it
 	 * holds an Office file, inside a savepoint
+	 * <p>
+	 * The savepoint holds one Hibernate read, {@code
+	 * VersionDAO.findByFileVersion}. Inside an outer transaction with
+	 * {@code Version} changes not yet flushed, that read could flush them into
+	 * the savepoint, and a requeue that failed would then roll the flush back.
+	 * No route does so today: {@code DocumentManager.replaceFile} and its
+	 * callers open no outer transaction (Decision Log 15 of the PostgreSQL
+	 * plan).
 	 *
 	 * @throws PersistenceException if the version can't be read, as the read
 	 *         threw it, once the savepoint is rolled back

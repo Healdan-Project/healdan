@@ -55,7 +55,8 @@ docker/tests/test-db.sh stop    # removes the container
   says so and leaves it running.
 - **Its data is on a tmpfs,** and the server runs without `fsync`, `synchronous_commit` and `full_page_writes`, with
   300 connections, as nothing on it has to outlast the container. A run that was killed leaves its databases behind;
-  `stop` clears them with the rest.
+  `stop` clears them with the rest. It removes the server for every run using it, so don't stop it while another
+  run's tests may still be going.
 - **Each test makes a database of its own** (`TestDatabase`, in `healdan-core`'s test-jar), from `template0`, in
   UTF-8 with PostgreSQL's built-in `C.UTF-8` locale, the encoding and locale Healdan uses on PostgreSQL, whatever
   the server's own default. So the tests sort and compare text as Healdan does there. Each name carries a number

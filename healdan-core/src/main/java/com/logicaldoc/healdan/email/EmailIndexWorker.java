@@ -69,7 +69,7 @@ public class EmailIndexWorker {
 
 	private static final String FINISHED = "done";
 
-	/** The types of the insert's parameters, which HSQLDB can't tell from the select list */
+	/** The types of the insert's parameters, which a database can't tell from a select list */
 	private static final int[] INSERT_TYPES = { Types.BIGINT, Types.VARCHAR, Types.BIGINT, Types.VARCHAR };
 
 	/** How long the thread waits after starting, so that the webapp finishes starting first */

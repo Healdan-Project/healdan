@@ -7,7 +7,8 @@
 - **Status:** designed with the owner on 2026-11-18, choice by choice and then through two playbacks, with a trial
   running beside the session (§4). The owner approved this written spec the same day. Implementation plan:
   [`docs/superpowers/plans/2026-11-18-postgresql.md`](../plans/2026-11-18-postgresql.md); its "Spec Corrections and
-  Calls This Plan Makes" lists where it decides what this spec left open. Not built.
+  Calls This Plan Makes" lists where it decides what this spec left open. PR A (the plan's Tasks 1 to 9) was built
+  on 2026-11-18; the switch (PR B) isn't built yet.
 - **Inputs:**
   - the [PostgreSQL recon](../../reference/postgresql-recon.md) of 2026-11-03, re-checked on 2026-11-18, whose
     sections this spec cites as "recon §n" and whose questions Q1 to Q15 it answers (§15);
@@ -715,9 +716,17 @@ later edits `logicaldoc-webapp/pom.xml`.
    migrations, Flyway's module, `HealdanMigrator`, the Hibernate setting, the typed reads, §7.3's and §7.4's changes
    written so that they work on MariaDB too (a savepoint where `on conflict` would go), the test base class, the
    mended tests, CI's service container, and the removal of `hsqldb/`. A running server behaves as before, but for
-   two edge answers of the legacy doc # lookup (changed in the build: the lookup strips whitespace at both ends, §7.4,
-   so on MariaDB one typed with a leading space or a trailing tab now finds its document, and a legacy number stored
-   with a leading space is no longer found by it; plan, Decision Log 21).
+   these (changed in the build: this said a running server behaves as before, and the build found three things that
+   change before the switch):
+   - two edge answers of the legacy doc # lookup, which strips whitespace at both ends (§7.4): on MariaDB one typed
+     with a leading space or a trailing tab now finds its document, and a legacy number stored with a leading space
+     is no longer found by it (plan, Decision Log 21);
+   - on MariaDB too, a save or a filing that CE fails part-way by throwing answers with what's left of the document (§7.3), still
+     `500 server-error`, where it said "Something went wrong on the server.", and its cause is logged at error as the
+     chain of its exceptions' classes, with a database failure's SQL state and code and never a message (plan,
+     Decision Log 22);
+   - `HealdanMigrator` no longer takes HSQLDB, so an install set up outside Docker on the setup wizard's embedded
+     database, which Healdan never supported, stops at start (§6.5).
 2. **The switch,** in one pull request, as it can't be half done: the container, the start-up tool and its guard, the
    widening, the text check, `on conflict` in §7.3's two inserts, the move command with its test and fixture, the
    smoke test and the Docker tests, the wizard, the removal of `mariadb/`, and the docs. `mariadb-final` is tagged on

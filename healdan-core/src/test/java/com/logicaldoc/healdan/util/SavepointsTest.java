@@ -15,6 +15,7 @@ import javax.sql.DataSource;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -100,6 +101,28 @@ public class SavepointsTest extends AbstractHealdanTestCase {
 		});
 
 		assertEquals("1", value("savepoints.kept"));
+		assertNull(value("savepoints.undone"));
+	}
+
+	@Test
+	public void testAFailureTheWorkSwallowedStillRollsBack() {
+		transaction.executeWithoutResult(status -> {
+			jdbc.update(INSERT, "savepoints.kept", "1");
+			// The work catches its own failed statement, after which PostgreSQL refuses the savepoint's release
+			assertThrows(DataAccessException.class, () -> Savepoints.run(jdbc, () -> {
+				jdbc.update(INSERT, "savepoints.undone", "1");
+				try {
+					jdbc.update(INSERT, "savepoints.kept", "again");
+				} catch (DuplicateKeyException e) {
+					// swallowed, as a listener that logs a failure does
+				}
+			}));
+			// Rolled back to the savepoint, so the transaction goes on
+			jdbc.update(INSERT, "savepoints.after", "2");
+		});
+
+		assertEquals("1", value("savepoints.kept"));
+		assertEquals("2", value("savepoints.after"));
 		assertNull(value("savepoints.undone"));
 	}
 }

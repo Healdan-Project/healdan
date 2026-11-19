@@ -242,30 +242,14 @@ public class FilingTest extends ApiTestCase {
 		assertEquals(failed.toString(), 500, failed.status());
 		assertEquals("server-error", failed.code());
 		String detail = failed.json().path("detail").textValue();
-		// The answer agrees with what the client then sees, which on PostgreSQL, where a statement that fails ends
-		// its transaction, may differ from what MariaDB leaves
+		// The document is filed with the file sent, nothing in its timeline and no hold (Decision Log 16 of the
+		// PostgreSQL plan), and the answer agrees with what the client then sees
 		ApiResponse read = get("/api/v1/documents/" + next).token(token).send();
-		if (read.status() == 404) {
-			// Nothing was filed: the failure is the server's, and filing again files the document
-			assertEquals(read.toString(), "not-found", read.code());
-			assertEquals("Something went wrong on the server.", detail);
-			ApiResponse again = file(token, document(documents, null, null, null), "a.docx", CONTENT);
-			assertEquals(again.toString(), 201, again.status());
-			assertEquals("1.0", again.json().path("fileVersion").textValue());
-			return;
-		}
-
-		// The document with the file sent, and nothing in its timeline
 		assertEquals(read.toString(), 200, read.status());
 		JsonNode doc = read.json();
-		JsonNode hold = doc.path("hold");
-		String held = hold.isNull() ? " It isn't checked out to you." : " It's still checked out to you.";
+		assertTrue(doc.toString(), doc.path("hold").isNull());
 		assertEquals(doc.toString(), ("Document #%d was filed, but its version 1.0 isn't in its timeline. Its content "
-				+ "is the file sent.").formatted(next) + held + " Don't file it again.", detail);
-		if (!hold.isNull()) {
-			assertEquals(hold.toString(), "checkout", hold.path("kind").textValue());
-			assertEquals(hold.toString(), clerk.getId(), hold.path("by").path("id").asLong());
-		}
+				+ "is the file sent. It isn't checked out to you. Don't file it again.").formatted(next), detail);
 		assertEquals("1.0", doc.path("version").textValue());
 		assertEquals("1.0", doc.path("fileVersion").textValue());
 		assertEquals(0, get("/api/v1/documents/" + next + "/versions").token(token).send().json().path("items").size());

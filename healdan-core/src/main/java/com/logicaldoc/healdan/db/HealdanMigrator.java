@@ -184,7 +184,11 @@ public class HealdanMigrator {
 	 */
 	private static boolean tableExists(DatabaseMetaData meta, String catalog, String schema, String table)
 			throws SQLException {
-		// HSQLDB stores names in upper case, MariaDB keeps what was created
+		/*
+		 * MariaDB and PostgreSQL keep the lower case the scripts create. The upper-case try only lets a database that
+		 * stores names in upper case, such as HSQLDB, reach vendorFolder's refusal rather than be skipped as having
+		 * no CE schema
+		 */
 		for (String name : new String[] { table.toLowerCase(Locale.ROOT), table.toUpperCase(Locale.ROOT) })
 			try (ResultSet rs = meta.getTables(catalog, schema, name, new String[] { "TABLE" })) {
 				if (rs.next())

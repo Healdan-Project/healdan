@@ -300,6 +300,7 @@ public final class ApiViews {
 		// The holder's own latest check-out or lock, never an earlier holder's
 		Date since = null;
 		if (d.getLockUserId() != null) {
+			// A missing date last, where MariaDB puts it; PostgreSQL would put it first
 			List<DocumentHistory> latest = DocumentHistoryDAO.get().findByWhere(
 					"_entity.docId = :docId and _entity.event = :event and _entity.userId = :userId",
 					Map.of("docId", d.getId(), "event", event.toKey(), "userId", d.getLockUserId()),

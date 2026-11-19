@@ -37,7 +37,9 @@ public final class Savepoints {
 	 * @param jdbc the template the work uses
 	 * @param work the statements
 	 * @return what the work returns
-	 * @throws RuntimeException what the work throws, an error too, once the savepoint is rolled back
+	 * @throws RuntimeException whatever the work throws, a {@code RuntimeException} or an {@code Error}, once the
+	 *         savepoint is rolled back; a {@link DataAccessException} when the savepoint can't be released, as on
+	 *         PostgreSQL after the work caught a failed statement of its own, once it is rolled back too
 	 */
 	public static <T> T run(JdbcTemplate jdbc, Supplier<T> work) {
 		DataSource dataSource = jdbc.getDataSource();
@@ -60,7 +62,21 @@ public final class Savepoints {
 				}
 				throw e;
 			}
-			connection.releaseSavepoint(savepoint);
+			try {
+				connection.releaseSavepoint(savepoint);
+			} catch (SQLException release) {
+				/*
+				 * On PostgreSQL, as when the work caught a failed statement of its own, which left the transaction
+				 * aborted: rolled back to the savepoint, the transaction goes on. On MariaDB a release fails only
+				 * when the savepoint is gone, and so does this rollback.
+				 */
+				try {
+					connection.rollback(savepoint);
+				} catch (SQLException rollback) {
+					release.addSuppressed(rollback);
+				}
+				throw release;
+			}
 			return result;
 		} catch (SQLException e) {
 			DataAccessException translated = jdbc.getExceptionTranslator().translate("savepoint", null, e);
@@ -75,7 +91,9 @@ public final class Savepoints {
 	 *
 	 * @param jdbc the template the work uses
 	 * @param work the statements
-	 * @throws RuntimeException what the work throws, an error too, once the savepoint is rolled back
+	 * @throws RuntimeException whatever the work throws, a {@code RuntimeException} or an {@code Error}, once the
+	 *         savepoint is rolled back; a {@link DataAccessException} when the savepoint can't be released, as
+	 *         {@link #run(JdbcTemplate, Supplier)} says
 	 */
 	public static void run(JdbcTemplate jdbc, Runnable work) {
 		run(jdbc, () -> {

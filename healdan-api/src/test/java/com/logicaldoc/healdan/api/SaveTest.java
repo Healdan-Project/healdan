@@ -50,6 +50,7 @@ import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.email.EmailIndex;
 import com.logicaldoc.healdan.support.DbSnapshot;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
 
@@ -481,14 +482,16 @@ public class SaveTest extends ApiTestCase {
 
 		ApiResponse failed = saveFailing(token, d, List.of("ld_version"), version("snapshot", "Sent to the client", true));
 
-		String at = assertSaysWhatsLeft(failed, token, d);
+		// The document is at 1.1 with the file sent, and has no hold (Decision Log 16 of the PostgreSQL plan)
+		JsonNode doc = assertSaysWhatsLeft(failed, token, d);
+		assertEquals(doc.toString(), "1.1", doc.path("fileVersion").textValue());
+		assertTrue(doc.toString(), doc.path("hold").isNull());
 
 		// Sent again, the save is recorded, as the version after the one the document is at
 		ApiResponse again = save(token, d, version("snapshot", "Sent to the client", true), "a.docx", "two");
 		assertEquals(again.toString(), 201, again.status());
-		String next = after(at);
-		assertEquals(next, again.json().path("fileVersion").textValue());
-		assertEquals(List.of(next + " snapshot", "1.0 version"),
+		assertEquals("1.2", again.json().path("fileVersion").textValue());
+		assertEquals(List.of("1.2 snapshot", "1.0 version"),
 				versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
 	}
 
@@ -501,39 +504,55 @@ public class SaveTest extends ApiTestCase {
 		CheckinCount checkins = new CheckinCount(d.getId());
 		DocumentListenerManager.get().getListeners().add(checkins);
 		ApiResponse failed;
-		try {
+		List<String> logged;
+		try (LogCapture log = LogCapture.of(VersionResource.class)) {
 			failed = saveFailing(token, d, List.of("ld_version", "ld_document"),
 					version("snapshot", "Sent to the client", null));
+			logged = log.lines();
 		} finally {
 			DocumentListenerManager.get().getListeners().remove(checkins);
 		}
 
-		String at = assertSaysWhatsLeft(failed, token, d);
+		// The document is at 1.0 as it was, still checked out to the clerk (Decision Log 16 of the PostgreSQL plan)
+		JsonNode doc = assertSaysWhatsLeft(failed, token, d);
+		assertEquals(doc.toString(), "1.0", doc.path("fileVersion").textValue());
+		JsonNode hold = doc.path("hold");
+		assertEquals(hold.toString(), "checkout", hold.path("kind").textValue());
+		assertEquals(hold.toString(), clerk.getId(), hold.path("by").path("id").asLong());
 		// No other write overtook CE's check-in, which kept no version of the save, so it isn't asked for again
 		assertEquals(1, checkins.count);
+
+		// The failure the answer stands for is logged as its chain of causes, with the database's SQL state and
+		// code, and never a message, which could quote the row: the file's name and the comment
+		String prefix = "ERROR The save of document #%d failed: ".formatted(number(d));
+		List<String> failures = logged.stream().filter(line -> line.startsWith(prefix)).toList();
+		assertEquals(logged.toString(), 1, failures.size());
+		String causes = failures.get(0).substring(prefix.length());
+		String cause = "[\\w.$]+( \\[SQL state \\w+, code -?\\d+\\])?";
+		assertTrue(causes, causes.matches(cause + "( <- " + cause + ")+"));
+		assertTrue(causes, causes.contains(" [SQL state "));
+		assertFalse(causes, causes.contains("a.docx"));
+		assertFalse(causes, causes.contains("Sent to"));
 
 		// Sent again, the save is stored, as the version after the one the document is at
 		ApiResponse again = save(token, d, version("snapshot", "Sent to the client", null), "a.docx", "two");
 		assertEquals(again.toString(), 201, again.status());
-		String next = after(at);
-		assertEquals(next, again.json().path("fileVersion").textValue());
+		assertEquals("1.1", again.json().path("fileVersion").textValue());
 		assertTrue(again.json().path("hold").isNull());
-		assertEquals(List.of(next + " snapshot", "1.0 version"),
+		assertEquals(List.of("1.1 snapshot", "1.0 version"),
 				versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
 		assertArrayEquals(bytes("two"), content(token, d, null));
 	}
 
 	/**
 	 * Asserts that a save of "two" over "one" that CE didn't store whole is a
-	 * {@code 500} that agrees with the document read back. On PostgreSQL a
-	 * statement that fails ends its transaction, so what CE leaves may differ
-	 * from what MariaDB leaves: the document at the version after 1.0 with the
-	 * file sent, or as it was. Either way the save isn't in its timeline, and
-	 * version 1.0 is as it was.
+	 * {@code 500} that agrees with the document read back: at the version
+	 * after 1.0 with the file sent, or as it was, which each test pins. Either
+	 * way the save isn't in its timeline, and version 1.0 is as it was.
 	 *
-	 * @return the version the document is at
+	 * @return the document read back
 	 */
-	private String assertSaysWhatsLeft(ApiResponse failed, String token, Document d) {
+	private JsonNode assertSaysWhatsLeft(ApiResponse failed, String token, Document d) {
 		assertEquals(failed.toString(), 500, failed.status());
 		assertEquals("server-error", failed.code());
 		String detail = failed.json().path("detail").textValue();
@@ -565,12 +584,7 @@ public class SaveTest extends ApiTestCase {
 		}
 		assertEquals(List.of("1.0 version"), versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
 		assertArrayEquals(bytes("one"), content(token, d, "1.0"));
-		return at;
-	}
-
-	/** @return the snapshot after the version, which is 1.0 or 1.1 */
-	private static String after(String version) {
-		return "1.0".equals(version) ? "1.1" : "1.2";
+		return doc;
 	}
 
 	/**

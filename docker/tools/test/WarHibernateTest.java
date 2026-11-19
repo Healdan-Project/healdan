@@ -8,17 +8,18 @@ import java.util.List;
 import java.util.Properties;
 
 /**
- * The WAR's libraries hold one hibernate.properties, healdan-core's, which binds every Java boolean as an integer, as
- * LogicalDOC's int columns need on PostgreSQL (spec section 7.1). Hibernate reads only the first one on the classpath,
- * so a jar that one day brings its own would silently drop the setting, depending on the order the server lists its
- * jars in; this fails the image build instead.
+ * The WAR's classes and libraries hold one hibernate.properties, healdan-core's, which binds every Java boolean as an
+ * integer, as LogicalDOC's int columns need on PostgreSQL (spec section 7.1). Hibernate reads only the first one on the
+ * classpath, so a jar that one day brings its own would silently drop the setting, depending on the order the server
+ * lists its jars in, and one in WEB-INF/classes, which the server searches first, always would; this fails the image
+ * build instead. The class path build.sh runs it on has WEB-INF/classes ahead of WEB-INF/lib.
  * Usage: WarHibernateTest
  */
 public class WarHibernateTest {
 
     public static void main(String[] args) throws Exception {
         List<URL> found = Collections.list(WarHibernateTest.class.getClassLoader().getResources("hibernate.properties"));
-        Check.eq(1, found.size(), "hibernate.properties on WEB-INF/lib " + found);
+        Check.eq(1, found.size(), "hibernate.properties in the WAR " + found);
         if (found.size() == 1) {
             Properties properties = new Properties();
             try (InputStream in = found.get(0).openStream()) {

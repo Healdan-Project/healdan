@@ -389,7 +389,8 @@ paths:
       summary: Documents by legacy doc #
       description: |
         The documents whose Legacy doc # equals `legacyDocNumber` exactly
-        (same case, no wildcards), that the caller can read and that are
+        (same case, no wildcards) once the whitespace at either end of
+        `legacyDocNumber` is stripped, that the caller can read and that are
         published to the caller, lowest doc # first. In one page. The number
         is never read as a doc #. A missing or blank `legacyDocNumber` is
         `400`.

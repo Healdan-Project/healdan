@@ -717,7 +717,7 @@ public class FolderResourceTest extends ApiTestCase {
 
 		// The API strips a value's spaces before anything compares it, on both databases
 		assertEquals(plain, docNumbers(get(base + "%20998.1%20").token(token).send()));
-		// and refuses a matter with one inside, as MariaDB always has
+		// and its pattern check refuses a matter with one inside, on either database
 		ApiResponse inside = get(base + "998%20.1").token(token).send();
 		assertEquals(inside.toString(), 400, inside.status());
 		assertEquals("bad-request", inside.code());

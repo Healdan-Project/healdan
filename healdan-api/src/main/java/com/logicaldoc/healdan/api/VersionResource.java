@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.api;
 
 import java.io.File;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -11,9 +12,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.slf4j.Logger;
@@ -322,6 +325,9 @@ public class VersionResource {
 	 * @throws ApiProblem {@code 500 server-error} ({@link #confirmStored})
 	 *         when the save still wasn't stored
 	 * @throws PersistenceException CE's refusal, or its last failure
+	 * @throws ExecutionException CE's refusal, or its last failure, when it
+	 *         comes out of the future CE's check-in returns, which writes the
+	 *         version record
 	 */
 	private static DocumentFuture checkIn(long docId, long docNumber, File upload, String name, boolean major,
 			String comment, Session session) throws Exception {
@@ -520,15 +526,34 @@ public class VersionResource {
 		} catch (ApiProblem whatsLeft) {
 			/*
 			 * It answers in the failure's place, which nothing else then logs. PostgreSQL's message can quote the
-			 * row, with the file's name, which may be an email's subject or an attachment's name: only at debug
+			 * row, with the file's name, which may be an email's subject or an attachment's name, so the error line
+			 * names only the causes' classes and codes, and the stack, with the messages, is at debug
 			 */
 			String what = before == null ? "filing" : "save";
-			log.error("The {} of document #{} failed: {}", what, docNumber, failure.getClass().getName());
+			log.error("The {} of document #{} failed: {}", what, docNumber, causes(failure));
 			log.debug("The {} of document #{} failed", what, docNumber, failure);
 			throw whatsLeft;
 		} catch (PersistenceException | RuntimeException readBack) {
 			failure.addSuppressed(readBack);
 		}
+	}
+
+	/**
+	 * @return the failure and its causes for the log, each one's class joined
+	 *         by {@code " <- "}, with a database failure's SQL state and vendor
+	 *         code, such as {@code [SQL state 22001, code 1406]}; never a
+	 *         message, which can quote the row's values. CE's
+	 *         {@code PersistenceException} is an {@code SQLException} with
+	 *         neither, which is left out.
+	 */
+	static String causes(Throwable failure) {
+		// Safe from a loop of causes
+		return ExceptionUtils.getThrowableList(failure).stream()
+				.map(t -> t instanceof SQLException sql && (sql.getSQLState() != null || sql.getErrorCode() != 0)
+						? "%s [SQL state %s, code %d]".formatted(t.getClass().getName(), sql.getSQLState(),
+								sql.getErrorCode())
+						: t.getClass().getName())
+				.collect(Collectors.joining(" <- "));
 	}
 
 	/**

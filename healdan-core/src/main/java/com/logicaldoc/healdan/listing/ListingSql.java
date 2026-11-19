@@ -4,8 +4,8 @@
 package com.logicaldoc.healdan.listing;
 
 /**
- * The pieces of listing SQL that MariaDB, HSQLDB and PostgreSQL each write
- * their own way, written once in a form all three take (the S3 plan's Global
+ * The pieces of listing SQL that MariaDB and PostgreSQL each write their own
+ * way, written once in a form both take (the S3 plan's Global
  * Constraints): no {@code ::} casts, no {@code IFNULL} or {@code LIMIT a, b},
  * and no cast to {@code bigint}, which MariaDB refuses (11.4, 2026-11-10).
  * <p>
