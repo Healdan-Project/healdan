@@ -16,6 +16,7 @@ export { NARROW, focusInto, isInnermost, openLayer, useNarrow } from './frame/na
 export { Mark } from './frame/Mark'
 export { SignedOut } from './frame/SignedOut'
 export { InsecureAddress } from './frame/InsecureAddress'
+export { NoAdminAccess } from './frame/NoAdminAccess'
 export { ErrorPanel } from './frame/ErrorPanel'
 export { goTo } from './frame/navigate'
 export { PersonMenu } from './frame/PersonMenu'

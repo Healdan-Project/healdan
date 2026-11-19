@@ -4,35 +4,22 @@
 package com.logicaldoc.healdan.app;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Base64;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
 
 import com.logicaldoc.healdan.api.WebSessionRoute;
-import com.logicaldoc.healdan.web.ReturnPath;
 
-import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpSession;
 
 /**
  * Serves the built User app, which sits in this jar under {@link #ROOT}, at <code>/app/</code>. A path with a file
  * extension that the build holds is a file, and so is any under {@link #ASSETS}, served or <code>404</code>; any other
  * path, such as <code>/doc/10388.2</code>, is an address of the app, answered with <code>index.html</code>, which
- * routes it in the browser.
+ * routes it in the browser. The files are public code and need no session; an address of the app needs one.
  */
 @WebServlet(urlPatterns = "/app/*", loadOnStartup = 3)
-public class AppServlet extends HttpServlet {
+public class AppServlet extends BuiltAppServlet {
 
 	private static final long serialVersionUID = 1L;
 
@@ -42,46 +29,12 @@ public class AppServlet extends HttpServlet {
 			+ "img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self'; connect-src 'self'; "
 			+ "frame-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 
-	private static final String INDEX = "index.html";
-
-	/** Where Vite writes the build's hashed files, the only ones cached for good */
-	private static final String ASSETS = "assets/";
-
-	private static final Pattern SAFE = Pattern.compile("[A-Za-z0-9._/-]+");
-
-	/** Vite's own output under {@link #ASSETS}, which carries a content hash in its name, so it is cached for good */
-	private static final Pattern HASHED = Pattern.compile("assets/.*-[A-Za-z0-9_-]{8,}\\..*");
-
-	/**
-	 * Where the build puts PDF.js's data (CMaps, standard fonts, its JavaScript image decoders), named as PDF.js names
-	 * them, so not versioned by name: the browser keeps them and asks each time whether they changed, which only an
-	 * upgrade of PDF.js does
-	 */
-	private static final String PDFJS = "pdfjs/";
-
-	/** The ETag of each of PDF.js's data files, by resource, made once: the jar's files don't change while it runs */
-	private static final Map<String, String> TAGS = new ConcurrentHashMap<>();
-
-	private static final Map<String, String> TYPES = Map.ofEntries(Map.entry("html", "text/html;charset=UTF-8"),
-			Map.entry("js", "text/javascript;charset=UTF-8"), Map.entry("mjs", "text/javascript;charset=UTF-8"),
-			Map.entry("css", "text/css;charset=UTF-8"), Map.entry("svg", "image/svg+xml"),
-			Map.entry("png", "image/png"), Map.entry("woff2", "font/woff2"),
-			Map.entry("json", "application/json;charset=UTF-8"), Map.entry("txt", "text/plain;charset=UTF-8"),
-			Map.entry("map", "application/json;charset=UTF-8"));
-
 	/**
 	 * The classpath resource for a path under <code>/app/</code>, or empty for <code>index.html</code>'s fallback;
 	 * never escapes {@link #ROOT}.
 	 */
 	static Optional<String> resource(String pathInfo) {
-		if (pathInfo == null || pathInfo.isEmpty() || "/".equals(pathInfo))
-			return Optional.empty();
-		String path = pathInfo.substring(1);
-		if (path.contains("..") || path.contains("\\") || path.indexOf('\0') >= 0 || path.startsWith("/"))
-			return Optional.empty();
-		if (!SAFE.matcher(path).matches())
-			return Optional.empty();
-		return Optional.of(ROOT + path);
+		return relative(pathInfo).map(path -> ROOT + path);
 	}
 
 	/**
@@ -99,133 +52,47 @@ public class AppServlet extends HttpServlet {
 	}
 
 	/** The folder of the classpath the built app is read from (tests point it elsewhere). */
+	@Override
 	String root() {
 		return ROOT;
 	}
 
 	@Override
-	protected void service(HttpServletRequest request, HttpServletResponse response)
-			throws ServletException, IOException {
-		String method = request.getMethod();
-		if (!"GET".equals(method) && !"HEAD".equals(method)) {
-			response.setHeader("Allow", "GET, HEAD");
-			response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
-			return;
-		}
-		super.service(request, response);
+	String policy() {
+		return POLICY;
 	}
 
 	@Override
-	protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
-		response.setHeader("Content-Security-Policy", POLICY);
-		response.setHeader("X-Content-Type-Options", "nosniff");
-		response.setHeader("Referrer-Policy", "same-origin");
-
-		String pathInfo = request.getPathInfo();
-		String last = pathInfo == null ? "" : pathInfo.substring(pathInfo.lastIndexOf('/') + 1);
-		// A file the build holds, or a missing one where the build writes its files; an address such as /doc/10388.2
-		// has a dot too, and is the app's
-		String asked = last.contains(".") ? resource(pathInfo).map(r -> r.substring(ROOT.length())).orElse(null) : null;
-		boolean file = asked != null && (asked.startsWith(ASSETS) || exists(root() + asked));
-
-		if (!file && !signedIn(request)) {
-			// login.jsp brings the browser back to this address after signing in
-			String path = request.getRequestURI().substring(request.getContextPath().length());
-			if (request.getQueryString() != null)
-				path += "?" + request.getQueryString();
-			ReturnPath.remember(request, path);
-			response.setHeader("Cache-Control", "no-store");
-			// the deployed context path, never the request's spelling: login.jsp writes the stored value into a script
-			response.sendRedirect(request.getServletContext().getContextPath() + "/login.jsp");
-			return;
-		}
-
-		// Signed in: a return path has been followed, or wasn't needed, so a later sign-in lands where ui.start says
-		if (!file)
-			forgetReturnPath(request);
-
-		String name = file ? asked : INDEX;
-		try (InputStream in = open(root() + name)) {
-			if (in == null) {
-				if (file) {
-					response.sendError(HttpServletResponse.SC_NOT_FOUND);
-				} else {
-					response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
-					response.setContentType("text/plain;charset=UTF-8");
-					response.setHeader("Cache-Control", "no-store");
-					response.getWriter().write("The User app wasn't built into this server.");
-				}
-				return;
-			}
-
-			String extension = name.substring(name.lastIndexOf('.') + 1);
-			response.setContentType(TYPES.getOrDefault(extension, "application/octet-stream"));
-			if (file && HASHED.matcher(name).matches()) {
-				response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-			} else if (file && name.startsWith(PDFJS)) {
-				String tag = tag(root() + name);
-				response.setHeader("Cache-Control", "no-cache");
-				response.setHeader("ETag", tag);
-				if (matches(request.getHeader("If-None-Match"), tag)) {
-					response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
-					return;
-				}
-			} else {
-				response.setHeader("Cache-Control", "no-store");
-			}
-			if ("GET".equals(request.getMethod())) {
-				try (OutputStream out = response.getOutputStream()) {
-					in.transferTo(out);
-				}
-			}
-		}
+	String assetCacheControl() {
+		return "public, max-age=31536000, immutable";
 	}
 
-	private InputStream open(String name) {
-		return AppServlet.class.getClassLoader().getResourceAsStream(name);
+	@Override
+	String notBuilt() {
+		return "The User app wasn't built into this server.";
 	}
 
-	/** @return a strong ETag of the resource's bytes, which the caller knows it has */
-	private String tag(String resource) throws IOException {
-		String known = TAGS.get(resource);
-		if (known != null)
-			return known;
-		try (InputStream in = open(resource)) {
-			byte[] hash = MessageDigest.getInstance("SHA-256").digest(in.readAllBytes());
-			String tag = "\"" + Base64.getUrlEncoder().withoutPadding().encodeToString(hash) + "\"";
-			TAGS.put(resource, tag);
-			return tag;
-		} catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException("No SHA-256", e);
-		}
+	/** The app's files are open to anyone; only an address of the app needs a session, and never refuses */
+	@Override
+	Access access(HttpServletRequest request) {
+		return file(request.getPathInfo()) != null || signedIn(request) ? Access.OPEN : Access.SIGN_IN;
 	}
 
-	/** @return whether an {@code If-None-Match} header names the tag, weakly or not, or is {@code *} */
-	static boolean matches(String ifNoneMatch, String tag) {
-		if (ifNoneMatch == null)
-			return false;
-		for (String one : ifNoneMatch.split(",")) {
-			String given = one.strip();
-			if (given.startsWith("W/"))
-				given = given.substring(2);
-			if ("*".equals(given) || tag.equals(given))
-				return true;
-		}
-		return false;
+	/**
+	 * A file the build holds, or a missing one where the build writes its files; an address such as /doc/10388.2 has
+	 * a dot too, and is the app's
+	 */
+	@Override
+	String file(String pathInfo) {
+		if (!lastSegment(pathInfo).contains("."))
+			return null;
+		String asked = relative(pathInfo).orElse(null);
+		return asked != null && (asked.startsWith(ASSETS) || exists(root() + asked)) ? asked : null;
 	}
 
-	private static boolean exists(String name) {
-		return AppServlet.class.getClassLoader().getResource(name) != null;
-	}
-
-	private static void forgetReturnPath(HttpServletRequest request) {
-		HttpSession http = request.getSession(false);
-		if (http == null)
-			return;
-		try {
-			http.removeAttribute(ReturnPath.ATTRIBUTE);
-		} catch (IllegalStateException e) {
-			// Invalidated meanwhile, as by signing out on another tab
-		}
+	/** The User app's <code>404</code> and <code>405</code> are Tomcat's error pages, as they have been since M6 */
+	@Override
+	void sendStatus(HttpServletResponse response, int status) throws IOException {
+		response.sendError(status);
 	}
 }

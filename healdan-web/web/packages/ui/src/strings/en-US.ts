@@ -299,6 +299,8 @@ export const enUS = {
   'insecure.detail': 'Open it at an address that starts with https://, or use the Classic Interface, which works at this one.',
   'signedOut.message': "You've been signed out.",
   'signedOut.signIn': 'Sign In',
+  'noAdminAccess.message': "You don't have access to Healdan Admin.",
+  'noAdminAccess.open': 'Open Healdan',
   'notFound.message': "Not found, or you can't see it.",
   'storage.unreachable': 'Files are unavailable for now. Try again in a few minutes.',
   'filing.chooseFolder': 'Choose a folder inside the {matterLower}',
