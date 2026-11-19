@@ -127,6 +127,12 @@ class CodeChangedTest(unittest.TestCase):
         self.change("healdan-api/src/main/resources/healdan/api/openapi.yaml")
         self.assertEqual("web=true", self.web())
 
+    def test_the_admin_contract_runs_the_web_app_only(self):
+        # The Admin app's types are generated from openapi-admin.yaml; the helper's contract tests don't read it
+        self.change("healdan-api/src/main/resources/healdan/api/openapi-admin.yaml")
+        self.assertEqual(["code=true", "clients=false"], self.outputs())
+        self.assertEqual("web=true", self.web())
+
     def test_the_web_workflow_runs_the_web_app(self):
         self.change(".github/workflows/web.yml")
         self.assertEqual("web=true", self.web())

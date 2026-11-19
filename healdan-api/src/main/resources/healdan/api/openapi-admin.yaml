@@ -1,0 +1,404 @@
+openapi: 3.1.0
+info:
+  title: Healdan Admin API
+  version: v1
+  summary: The JSON API of Healdan's Admin app, for administrators only.
+  description: |
+    The routes under `/api/v1/admin`, which the Admin app calls. This file is
+    their source of truth, as `openapi.yaml` is for the rest of the API, which
+    doesn't list them: the server implements it, and the tests check every
+    response under `/api/v1/admin/` against it.
+
+    - Only the browser's web session signs in here (`cookieAuth`). A device
+      token is `403 web-session-only`, so a stolen token can't administer
+      anything. No session is `401 unauthenticated`.
+    - Only members of the `admin` group get in. Anyone else is
+      `403 admins-only`, asked again at every request, so someone taken out of
+      `admin` is refused at their next one.
+    - Field names, timestamps, problems and lists are as `openapi.yaml`
+      describes them. `$ref` doesn't reach across the two files, so this one
+      repeats the components it needs from the other, unchanged.
+servers:
+  - url: /api
+security:
+  - cookieAuth: []
+paths: {}
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+      description: |
+        The browser's web session, for the Admin app, served from the same
+        origin, on the rules `openapi.yaml`'s `cookieAuth` describes. A device
+        token, sent as a Bearer `Authorization` header, is
+        `403 web-session-only` here.
+  responses:
+    Problem:
+      description: A refusal or an error
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      description: |
+        An RFC 9457 problem. Some codes add members: `validation` adds
+        `fields`, `checked-out` and `locked` add `hold` (a folder's
+        `checked-out` adds `holds` instead), `held-elsewhere` adds `hold` and
+        `lastSaved`, `version-moved` and `already-filed` add `document`, and
+        `moveFolder`'s `forbidden` and `admins-only` add `cause`.
+      required: [type, title, status, detail, code]
+      properties:
+        type:
+          type: string
+          description: '`https://healdan.com/problems/<code>`; it needn''t resolve.'
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+          description: An English sentence a client can show as it is.
+        code:
+          type: string
+          description: What clients switch on.
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, token-only, web-session-only, web-session-refused, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, not-renamable, not-deletable, not-movable, admins-only, items-not-allowed, name-taken, place-gone, already-filed, filing-in-progress, immutable, refused, too-large, validation, too-many-attempts, storage-unreachable, no-preview, not-an-email, server-error]
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+        hold:
+          $ref: '#/components/schemas/HoldView'
+        holds:
+          type: array
+          description: |
+            For a folder's `checked-out` (`deleteFolder`, `moveFolder`): the
+            checked-out documents in it that the caller can read, with who
+            holds each and since when. Documents the caller can't read are
+            left out, and nothing says there are any, so the list can be
+            empty.
+          items:
+            $ref: '#/components/schemas/HeldDocument'
+        lastSaved:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            For `held-elsewhere`: when the document's content was last stored
+            (its latest save, or its filing), so a client can warn that what
+            the other device hasn't sent since isn't in Healdan. Null when
+            the server's data doesn't say.
+        cause:
+          type: string
+          enum: [no-move, no-add, top-level, into-top-level]
+          description: |
+            For `moveFolder`'s `forbidden` and `admins-only`, which check
+            refused it, as each code has two: no Move on the folder (`no-move`)
+            or no Add on the folder it goes into (`no-add`); a folder directly
+            in a matter's workspace (`top-level`) or a move into a matter's top
+            level (`into-top-level`), which only an administrator makes.
+        document:
+          $ref: '#/components/schemas/DocumentView'
+          description: |
+            For `version-moved`: the document as it is now, so a client can
+            tell from its `fileVersion` whether anyone stored newer content.
+            For `already-filed`: the copy the matter holds, when the caller
+            can read it; left out when the caller can't, and for a copy from
+            before Healdan, which has no doc #.
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code, detail]
+      properties:
+        field:
+          type: string
+          description: |
+            The field that is wrong: a property's name, or a request's member.
+            One element of a list is named with its position or index, as
+            `fileEmail` names a ticked attachment `attachments[2]`.
+          examples: [docclass, 'attachments[2]']
+        code:
+          type: string
+          examples: [required, not-an-email, not-an-attachment]
+        detail:
+          type: string
+          examples: [Class is required.]
+    Page:
+      type: object
+      description: |
+        The shape of every list. A list of things is
+        `allOf: [{$ref: Page}, {properties: {items: {type: array, items: {$ref: Thing}}}}]`
+        with `unevaluatedProperties: false`, as `TokenPage` is.
+      required: [items, offset, limit, total]
+      properties:
+        items:
+          type: array
+        offset:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 0
+        total:
+          type: [integer, 'null']
+          minimum: 0
+          description: Null where counting would be expensive, such as a full-text search.
+    UserRef:
+      type: object
+      description: A user named in another object, such as a document's creator
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: [string, 'null']
+    FolderRef:
+      type: object
+      description: A folder named in another object
+      additionalProperties: false
+      required: [id, name, kind]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [store, matter, folder, searchFolder]
+          description: '`matter` is a matter''s own top folder.'
+    MatterRef:
+      type: object
+      description: A matter named in another object, with its client
+      additionalProperties: false
+      required: [id, display, client]
+      properties:
+        id:
+          type: integer
+          format: int64
+        display:
+          type: string
+          description: The matter as people read it, such as `998.1 - Healdan Demo`, with an en dash
+        client:
+          $ref: '#/components/schemas/ClientRef'
+    AuthorRef:
+      type: object
+      description: A document's Author
+      additionalProperties: false
+      required: [username, displayName]
+      properties:
+        username:
+          type: string
+          description: The username, which the `author` filter takes
+        displayName:
+          type: string
+          description: The Author's name, to show; the username when the Author is no longer a user
+    HoldView:
+      type: object
+      description: Who has a document checked out or locked
+      additionalProperties: false
+      required: [kind, by, since, device, heldOn]
+      properties:
+        kind:
+          type: string
+          enum: [checkout, lock]
+        by:
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+          description: Who holds it; null when the server's data doesn't say
+        since:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            The latest check-out or lock event. A save with
+            `keepCheckedOut: true` checks the document in and out again, so
+            it moves `since` to that save, and moving the check-out to
+            another device moves it too. Null when the server's data doesn't
+            say.
+        device:
+          oneOf:
+            - $ref: '#/components/schemas/DeviceView'
+            - type: 'null'
+          description: |
+            The computer that holds the check-out, shown only to the user who
+            holds it. Null for anyone else, for a lock, and when no device
+            holds it: a check-out from the web page, or from a token with no
+            device. A client takes a check-out whose `device` is its own for
+            its own, so only the holder gets it: `heldOn` is for showing.
+        heldOn:
+          oneOf:
+            - $ref: '#/components/schemas/HeldOnView'
+            - type: 'null'
+          description: |
+            The computer and app the check-out is held on, for showing, given
+            to the user who holds it and to administrators, so an
+            administrator can say which computer to check it in on. Null for
+            anyone else, for a lock, and when no device holds it, as
+            `device` is. Problems that carry the `hold` give it on the same
+            terms.
+    HeldOnView:
+      type: object
+      description: |
+        The computer and app a check-out is held on, for showing. It has no
+        device id: it isn't for telling a client's own check-outs apart.
+      additionalProperties: false
+      required: [name, app]
+      properties:
+        name:
+          type: [string, 'null']
+          description: |
+            What the computer is called: the name of the token it last wrote
+            through, such as `Healdan Helper on MacBook`. Null when the
+            server's data doesn't say.
+        app:
+          type: [string, 'null']
+          description: The app its check-out named, or null
+          examples: [LibreOffice]
+    DeviceView:
+      type: object
+      description: The computer that holds a check-out
+      additionalProperties: false
+      required: [id, name, app]
+      properties:
+        id:
+          type: string
+          description: Its device id
+        name:
+          type: string
+          description: |
+            What it's called: the name of the token it last wrote through,
+            such as `Healdan Helper on MacBook`.
+        app:
+          type: [string, 'null']
+          description: The app its check-out named, or null
+          examples: [LibreOffice]
+    DocumentView:
+      type: object
+      additionalProperties: false
+      required: [type, docNumber, name, kind, size, version, fileVersion, reference, folder, matter, author, dateFiled, lastModified, hold, canEdit, canOpen]
+      properties:
+        type:
+          type: string
+          const: document
+        docNumber:
+          type: integer
+          format: int64
+        name:
+          type: string
+          description: The file name
+        kind:
+          type: string
+          enum: [word, excel, powerpoint, pdf, email, opendocument, picture, other]
+          description: |
+            The kind of file its extension makes, the one list the File Type
+            filter also uses. It says how a client previews it: a `picture`
+            as its own bytes from `getDocumentPreview`, an `email` as a
+            message, and every other kind as the PDF `getDocumentPreview`
+            gives, which answers `404 no-preview` for a type that has none.
+        size:
+          type: integer
+          format: int64
+          description: The current file's size in bytes
+        version:
+          type: string
+          description: |
+            The document's place on its timeline. Every save moves it, and so
+            does a change of properties, a move or a rename, so it can be
+            ahead of `fileVersion`. A save's new number counts from it (see
+            `saveVersion`).
+          examples: ['2.1']
+        fileVersion:
+          type: string
+          description: |
+            The version the file's content was last saved as, which the doc
+            ID footer and the web page's Versions column show. A save makes
+            it equal to `version`.
+          examples: ['2.1']
+        reference:
+          type: string
+          description: The doc # and the file version, such as `1234.2.1`
+        folder:
+          $ref: '#/components/schemas/FolderRef'
+        matter:
+          oneOf:
+            - $ref: '#/components/schemas/MatterRef'
+            - type: 'null'
+        author:
+          oneOf:
+            - $ref: '#/components/schemas/AuthorRef'
+            - type: 'null'
+          description: The document's Author property; null when it has none
+        dateFiled:
+          type: string
+          format: date-time
+        lastModified:
+          type: string
+          format: date-time
+          description: |
+            The document's Edit Date: when its file last changed, which is
+            when it was filed or a new version was saved. A change to its
+            properties, a rename or a move doesn't move it, and nor does the
+            Indexer, though CE's own last-modified time moves with all of them.
+        hold:
+          oneOf:
+            - $ref: '#/components/schemas/HoldView'
+            - type: 'null'
+          description: Null when the document is free
+        canEdit:
+          type: boolean
+          description: |
+            Whether the caller may check the document out and save to it: the
+            Write permission, not immutable, not archived, not protected by a
+            password (unless the web session unlocked it in the Classic
+            Interface; never with a device token), and no hold but the
+            caller's own check-out (a lock is a hold even for the user who
+            took it), and that not held on another of the caller's devices.
+            It isn't the test for changing the properties, which an
+            administrator may do to an immutable document: see
+            `ProfileField.editable`.
+        canOpen:
+          type: boolean
+          description: |
+            Whether the caller may download the document's file, as
+            `getDocumentContent` and `getDocumentThumbnail` decide: the
+            Download permission, and not protected by a password (unless the
+            web session unlocked it in the Classic Interface; never with a
+            device token). A document the caller can read but not
+            open still has its properties and versions, and a client can say
+            so before asking for the file rather than finding out from a
+            `403`.
+    ClientRef:
+      type: object
+      description: A client named in another object
+      additionalProperties: false
+      required: [id, number, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+        name:
+          type: string
+    HeldDocument:
+      type: object
+      description: A checked-out document a folder holds, named in a folder's `checked-out` problem
+      additionalProperties: false
+      required: [docNumber, name, hold]
+      properties:
+        docNumber:
+          type: integer
+          format: int64
+        name:
+          type: string
+          description: The file name
+        hold:
+          $ref: '#/components/schemas/HoldView'

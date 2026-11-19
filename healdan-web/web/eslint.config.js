@@ -50,7 +50,7 @@ const noAppImportsAnother = {
 }
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', 'packages/api/src/schema.d.ts'] },
+  { ignores: ['**/dist/**', '**/node_modules/**', 'packages/api/src/schema.d.ts', 'packages/api/src/admin-schema.d.ts'] },
   ...tseslint.configs.recommended,
   reactHooks.configs.flat.recommended,
   {
