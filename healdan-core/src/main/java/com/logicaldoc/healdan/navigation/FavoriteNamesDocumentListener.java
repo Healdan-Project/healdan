@@ -5,11 +5,8 @@ package com.logicaldoc.healdan.navigation;
 
 import java.util.Map;
 
-import javax.sql.DataSource;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.document.Bookmark;
 import com.logicaldoc.core.document.Document;
@@ -17,8 +14,6 @@ import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentListener;
 import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.rules.StoredRows.DocumentRow;
-import com.logicaldoc.healdan.util.Savepoints;
-import com.logicaldoc.util.spring.Context;
 
 /**
  * A renamed document's favorites that still have its old name take the new
@@ -51,16 +46,16 @@ public class FavoriteNamesDocumentListener implements DocumentListener {
 	@Override
 	public void afterStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
 		try {
-			// In a savepoint, so that on PostgreSQL too a failure leaves the store's transaction usable
-			Savepoints.run(new JdbcTemplate(Context.get(DataSource.class)), () -> {
-				DocumentRow stored = StoredRows.get().document(document.getId(), dictionary);
-				String before = stored != null ? stored.fileName() : null;
-				String after = document.getFileName();
-				if (before == null || after == null || before.equals(after))
-					return;
-				Favorites.get().followRenameAfterCommit(Bookmark.Type.DOCUMENT, document.getId(), before, after,
-						document.getType());
-			});
+			// No savepoint: inside a transaction the row before is in the dictionary or the session's map (the rules'
+			// listener records it), so nothing here reaches the database, and the favorites follow in a transaction
+			// of their own
+			DocumentRow stored = StoredRows.get().document(document.getId(), dictionary);
+			String before = stored != null ? stored.fileName() : null;
+			String after = document.getFileName();
+			if (before == null || after == null || before.equals(after))
+				return;
+			Favorites.get().followRenameAfterCommit(Bookmark.Type.DOCUMENT, document.getId(), before, after,
+					document.getType());
 		} catch (RuntimeException e) {
 			log.warn("Cannot give the favorites of document {} its new name", document.getId(), e);
 		}

@@ -79,7 +79,7 @@ docker/tests/test-db.sh stop    # removes the container
 - **Without a server,** each test fails as it starts, with `Healdan's tests need a PostgreSQL. Start one with:
   docker/tests/test-db.sh start`.
 - **The driver.** PostgreSQL's JDBC driver, pgjdbc, is a test dependency of `healdan-core`, `healdan-api` and
-  `healdan-storage`, at the version the WAR ships. `healdan-core`'s test `context.properties` names it in
+  `healdan-storage`, at the version the WAR ships (`postgresql.version` in `logicaldoc-parent/pom.xml`). `healdan-core`'s test `context.properties` names it in
   `jdbc.driver`, which the test `context.xml` reads as `${jdbc.driver}`, with `jdbc.dbms=postgresql`, PostgreSQL's
   Hibernate dialect, and a `jdbc.url` the base class always replaces.
 - **LogicalDOC's own tests run on HSQLDB,** in memory, as its base classes make it, and need no server. So do the

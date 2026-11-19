@@ -85,10 +85,11 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
     `PreviewJobs.add`, `EmailIndex.put` (which then updates the row), and `healdan-storage`'s
     `StoredFiles.recordWrite` and `HeldCopies.hold`.
   - The listeners that log and swallow a failure inside LogicalDOC's save run their statements inside one, so the
-    save is kept, as it is on MariaDB: `EmailDocumentListener`, `PreviewDocumentListener` and the two favourite-names
-    listeners. `PreviewDocumentListener` keeps its check of the event and the file name, which is Java alone,
-    outside, as a savepoint costs two round trips to the database and its methods run on every save. The others put
-    the whole of their `try` inside.
+    save is kept, as it is on MariaDB: `EmailDocumentListener` and `PreviewDocumentListener`. `PreviewDocumentListener`
+    keeps its check of the event and the file name, which is Java alone, outside, as a savepoint costs two round trips
+    to the database and its methods run on every save. `EmailDocumentListener` puts the whole of its `try` inside.
+    The two favourite-names listeners need none: by their `afterStore` the row before the store is in the store's
+    dictionary or the session's map, so they don't reach the database there.
 - **SQL given to LogicalDOC's DAO helpers never uses `::`,** which its `NamedParameterStatement` reads as a
   parameter. Write `cast(x as text)`.
 

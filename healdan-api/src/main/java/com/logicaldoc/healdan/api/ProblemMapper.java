@@ -75,61 +75,68 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 
 	private static final Logger log = LoggerFactory.getLogger(ProblemMapper.class);
 
+	/** How {@link #toResponse} answers an exception, in the order it checks: {@link #kind} decides */
+	private enum Kind {
+		CLIENT_GONE, PROBLEM, ALREADY_FILED, STORAGE_UNREACHABLE, VETO, BAD_JSON, WEB_APPLICATION, UNEXPECTED
+	}
+
 	@Override
 	public Response toResponse(Throwable exception) {
-		if (clientGone(exception)) {
+		return switch (kind(exception)) {
+		case CLIENT_GONE -> {
 			// One line: the request may have done its work, such as a save, before its answer was lost
 			List<Throwable> causes = ExceptionUtils.getThrowableList(exception);
 			log.info("API client went away or stalled during {}: {}", request(), causes.getLast().toString());
 			log.debug("API client went away before its answer was sent", exception);
-			return Response.serverError().build();
+			yield Response.serverError().build();
 		}
-
-		if (exception instanceof ApiProblem problem)
-			return problem(problem);
-
-		AlreadyFiledException filed = find(exception, AlreadyFiledException.class);
-		if (filed != null)
-			return problem(alreadyFiled(filed));
-
-		StorageUnreachableException unreachable = StorageUnreachableException.in(exception);
-		if (unreachable != null)
-			return problem(new ApiProblem(503, "storage-unreachable", unreachable.getMessage()));
-
-		HealdanVetoException veto = find(exception, HealdanVetoException.class);
-		if (veto != null)
-			return problem(new ApiProblem(409, "refused", veto.getMessage()));
-
-		if (exception instanceof JsonProcessingException json)
-			return problem(ApiProblem.badRequest(describe(json)));
-
-		if (exception instanceof WebApplicationException wae)
-			return webApplicationProblem(wae);
-
-		log.error("API request failed", exception);
-		return problem(new ApiProblem(500, "server-error", SERVER_ERROR));
+		case PROBLEM -> problem((ApiProblem) exception);
+		case ALREADY_FILED -> problem(alreadyFiled(find(exception, AlreadyFiledException.class)));
+		case STORAGE_UNREACHABLE -> problem(new ApiProblem(503, "storage-unreachable",
+				StorageUnreachableException.in(exception).getMessage()));
+		case VETO -> problem(new ApiProblem(409, "refused", find(exception, HealdanVetoException.class).getMessage()));
+		case BAD_JSON -> problem(ApiProblem.badRequest(describe((JsonProcessingException) exception)));
+		case WEB_APPLICATION -> webApplicationProblem((WebApplicationException) exception);
+		case UNEXPECTED -> {
+			log.error("API request failed", exception);
+			yield problem(new ApiProblem(500, "server-error", SERVER_ERROR));
+		}
+		};
 	}
 
 	/**
-	 * Reads the exception as {@link #toResponse} does, check by check, so
-	 * change the two together ({@code ProblemMapperTest#testUnexpected}).
-	 *
-	 * @return whether {@link #toResponse} would answer this as an unexpected
-	 *         failure, {@code 500 server-error}: it isn't itself an
-	 *         {@link ApiProblem}, a {@link JsonProcessingException} or a
-	 *         {@link WebApplicationException}, neither it nor any of its
-	 *         causes is an {@link AlreadyFiledException}, a
-	 *         {@link StorageUnreachableException} or a
-	 *         {@link HealdanVetoException}, and the client hasn't gone away
+	 * @return how {@link #toResponse} answers the exception, with no side
+	 *         effect: the client went away; it's an {@link ApiProblem}; it or
+	 *         one of its causes is an {@link AlreadyFiledException}, a
+	 *         {@link StorageUnreachableException} or another
+	 *         {@link HealdanVetoException}; it's a
+	 *         {@link JsonProcessingException} or a
+	 *         {@link WebApplicationException}; otherwise an unexpected failure
+	 */
+	private static Kind kind(Throwable exception) {
+		if (clientGone(exception))
+			return Kind.CLIENT_GONE;
+		if (exception instanceof ApiProblem)
+			return Kind.PROBLEM;
+		if (find(exception, AlreadyFiledException.class) != null)
+			return Kind.ALREADY_FILED;
+		if (StorageUnreachableException.in(exception) != null)
+			return Kind.STORAGE_UNREACHABLE;
+		if (find(exception, HealdanVetoException.class) != null)
+			return Kind.VETO;
+		if (exception instanceof JsonProcessingException)
+			return Kind.BAD_JSON;
+		if (exception instanceof WebApplicationException)
+			return Kind.WEB_APPLICATION;
+		return Kind.UNEXPECTED;
+	}
+
+	/**
+	 * @return whether {@link #toResponse} answers this as an unexpected
+	 *         failure, {@code 500 server-error} ({@link #kind})
 	 */
 	static boolean unexpected(Throwable exception) {
-		return !clientGone(exception)
-				&& !(exception instanceof ApiProblem)
-				&& find(exception, AlreadyFiledException.class) == null
-				&& StorageUnreachableException.in(exception) == null
-				&& find(exception, HealdanVetoException.class) == null
-				&& !(exception instanceof JsonProcessingException)
-				&& !(exception instanceof WebApplicationException);
+		return kind(exception) == Kind.UNEXPECTED;
 	}
 
 	private static Response webApplicationProblem(WebApplicationException wae) {

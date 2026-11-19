@@ -390,7 +390,8 @@ paths:
       description: |
         The documents whose Legacy doc # equals `legacyDocNumber` exactly
         (same case, no wildcards) once the whitespace at either end of
-        `legacyDocNumber` is stripped, that the caller can read and that are
+        `legacyDocNumber` and the spaces at either end of the stored number
+        are stripped, that the caller can read and that are
         published to the caller, lowest doc # first. In one page. The number
         is never read as a doc #. A missing or blank `legacyDocNumber` is
         `400`.
@@ -487,7 +488,8 @@ paths:
         the answer is `500 server-error`, and its `detail` gives the new
         doc #: the document's content is the file sent, its timeline is
         empty, and it isn't checked out, even with `checkOut: true`. Don't
-        file it again.
+        file it again. In the rare case that its file wasn't stored either,
+        the `detail` says so: delete the document, then file it again.
       tags: [Documents]
       requestBody:
         required: true
@@ -1782,7 +1784,8 @@ paths:
         whether the document is still checked out to the caller. Either the
         document is as it was, or its content is the file sent, as a version
         that isn't in its timeline (`listVersions`), which `?version=` can't
-        fetch. Either way the previous versions and their files can still be
+        fetch, or, rarely, it's at a version whose file wasn't stored either.
+        Either way the previous versions and their files can still be
         read, and sending the save again stores it as the next version. Any
         other `500` may also come after the document's content became the
         file sent: read the document and its versions before sending the

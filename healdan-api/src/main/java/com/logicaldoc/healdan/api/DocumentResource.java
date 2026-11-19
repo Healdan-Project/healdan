@@ -122,7 +122,7 @@ public class DocumentResource {
 		User caller = Caller.current().user();
 		try {
 			List<Document> found = new ArrayList<>();
-			for (long id : LegacyDocNumbers.find(legacy.strip(), caller.getTenantId())) {
+			for (long id : LegacyDocNumbers.find(legacy, caller.getTenantId())) {
 				Optional<Document> document = AccessChecks.readableDocument(DocumentDAO.get().findById(id), caller);
 				if (document.isPresent() && ApiViews.shows(document.get()))
 					found.add(document.get());

@@ -237,11 +237,11 @@ public class Setup implements EntryPoint {
 		dbType.setWrapTitle(false);
 		dbType.setRequired(true);
 		dbType.setVertical(false);
-		dbType.setValueMap(I18N.message(EMBEDDED), I18N.message("external"));
+		// Healdan: no embedded database, as Healdan's tables refuse HSQLDB (HealdanMigrator)
+		dbType.setValueMap(I18N.message("external"));
 		dbType.setRedrawOnChange(true);
 		dbType.setTitle(I18N.message("dbtype"));
-		dbType.setValue(
-				"hsqldb".equals(info.getConfig("jdbc.dbms")) ? I18N.message(EMBEDDED) : I18N.message("external"));
+		dbType.setValue(I18N.message("external"));
 
 		// The database engine, if the External db was chosen
 		SelectItem dbEngine = new SelectItem();

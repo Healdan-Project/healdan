@@ -5,11 +5,8 @@ package com.logicaldoc.healdan.navigation;
 
 import java.util.Map;
 
-import javax.sql.DataSource;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.document.Bookmark;
 import com.logicaldoc.core.folder.Folder;
@@ -17,8 +14,6 @@ import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.folder.FolderListener;
 import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
-import com.logicaldoc.healdan.util.Savepoints;
-import com.logicaldoc.util.spring.Context;
 
 /**
  * A renamed folder's favorites that still have its old name take the new one
@@ -47,15 +42,15 @@ public class FavoriteNamesFolderListener implements FolderListener {
 	@Override
 	public void afterStore(Folder folder, FolderHistory transaction, Map<String, Object> dictionary) {
 		try {
-			// In a savepoint, so that on PostgreSQL too a failure leaves the store's transaction usable
-			Savepoints.run(new JdbcTemplate(Context.get(DataSource.class)), () -> {
-				FolderRow stored = StoredRows.get().folder(folder.getId(), dictionary);
-				String before = stored != null ? stored.name() : null;
-				String after = folder.getName();
-				if (before == null || after == null || before.equals(after))
-					return;
-				Favorites.get().followRenameAfterCommit(Bookmark.Type.FOLDER, folder.getId(), before, after, null);
-			});
+			// No savepoint: inside a transaction the row before is in the dictionary or the session's map (the rules'
+			// listener records it), so nothing here reaches the database, and the favorites follow in a transaction
+			// of their own
+			FolderRow stored = StoredRows.get().folder(folder.getId(), dictionary);
+			String before = stored != null ? stored.name() : null;
+			String after = folder.getName();
+			if (before == null || after == null || before.equals(after))
+				return;
+			Favorites.get().followRenameAfterCommit(Bookmark.Type.FOLDER, folder.getId(), before, after, null);
 		} catch (RuntimeException e) {
 			log.warn("Cannot give the favorites of folder {} its new name", folder.getId(), e);
 		}

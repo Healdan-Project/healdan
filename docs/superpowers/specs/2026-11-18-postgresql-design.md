@@ -365,7 +365,9 @@ transaction, and one that may fail without failing its caller runs inside a save
   (changed in the build: this named only recon §4.2's list, which the plan widened by three methods, and said neither
   what stays outside the savepoint nor that an `Error` rolls it back, which would otherwise leave the work's partial
   writes in a save that then commits; plan, Decision Log 13 and 14). An index failure never refuses an email again,
-  and `EmailIndexTest` says so on PostgreSQL.
+  and `EmailIndexTest` says so on PostgreSQL. (Changed in the review: the two favourite-names listeners have no
+  savepoint after all. Their `afterStore` finds the row before the store in the dictionary or the session's map, so
+  it reaches no database, and its savepoint was two round trips on every store for nothing; plan, Decision Log 25.)
 - **A save or a filing that fails part-way still says what's left.** `VersionResource.confirmStored` reads the
   document back and words the answer, but only when CE swallowed its own failure. On PostgreSQL CE's failed version
   write fails CE's next statement too, and the failure escapes as a plain `500`. So a save, a filing and an email's
@@ -398,7 +400,9 @@ PostgreSQL's behaviour stands. Where Healdan's code assumed MariaDB's, the code 
   exactly, the plan's call 9; and a listing's filter was trimmed already, by the API's `Filters.of`, which also
   refuses a matter that isn't digits, a dot and digits with `400 bad-request` before the listing is reached, so
   nothing changed there; plan, Decision Log 18. The legacy doc # is stripped of whitespace at both ends, which
-  changes two edge answers on MariaDB too, §13.1; Decision Log 21.)
+  changes two edge answers on MariaDB too, §13.1; Decision Log 21. Changed in the review: the stored number is
+  compared without the spaces at either end, `trim()` on both databases, so a number stored with them is still
+  found; Decision Log 25.)
 - **Finer times.** `VersionResource`'s tie on a version's date no longer has whole seconds to rely on, and is
   ordered so that it doesn't need them.
 - **Isolation** stays PostgreSQL's default, `READ COMMITTED`, which is what Healdan's conditional updates already
@@ -665,9 +669,11 @@ Every test in a `healdan-*` module runs on PostgreSQL, and none on HSQLDB.
 |---|---|---|
 | `logicaldoc-core/.../core/HibernatePersistentObjectDAO.java` | Its single-value typed reads hand the driver's value to a fork-owned helper (§7.2) | On PostgreSQL the typed read fails and rolls back the caller's transaction |
 | `logicaldoc-gui/.../setup/client/Setup.java` | The wizard starts on PostgreSQL, in the lines Healdan already edits (§8.4) | PostgreSQL is the database Healdan runs on |
+| `logicaldoc-gui/.../setup/client/Setup.java` (PR A) | The database type offers no embedded database, and starts on External | `HealdanMigrator` refuses HSQLDB, so the wizard's default made an install that couldn't start |
+| `logicaldoc-parent/pom.xml`, `logicaldoc-webapp/pom.xml` (PR A) | `postgresql.version`, a property the WAR's pgjdbc dependency uses | The `healdan-*` modules' tests use it too, so they run on the driver the WAR ships |
 
 Nothing else upstream changes: not `context.xml`, not `context.properties`, not CE's SQL scripts. The removal of §9.7
-later edits `logicaldoc-webapp/pom.xml`.
+later edits `logicaldoc-webapp/pom.xml`. (Changed in the review: the two PR A rows, plan, Decision Log 25.)
 
 ### 11.2 Fork-Owned Files
 
@@ -719,14 +725,16 @@ later edits `logicaldoc-webapp/pom.xml`.
    these (changed in the build: this said a running server behaves as before, and the build found three things that
    change before the switch):
    - two edge answers of the legacy doc # lookup, which strips whitespace at both ends (§7.4): on MariaDB one typed
-     with a leading space or a trailing tab now finds its document, and a legacy number stored with a leading space
-     is no longer found by it (plan, Decision Log 21);
+     with a leading space or a trailing tab now finds its document (plan, Decision Log 21), and one stored with
+     spaces at either end is found without them (changed in the review, Decision Log 25: this said a legacy number
+     stored with a leading space was no longer found);
    - on MariaDB too, a save or a filing that CE fails part-way by throwing answers with what's left of the document (§7.3), still
      `500 server-error`, where it said "Something went wrong on the server.", and its cause is logged at error as the
      chain of its exceptions' classes, with a database failure's SQL state and code and never a message (plan,
      Decision Log 22);
    - `HealdanMigrator` no longer takes HSQLDB, so an install set up outside Docker on the setup wizard's embedded
-     database, which Healdan never supported, stops at start (§6.5).
+     database, which Healdan never supported, stops at start (§6.5), and the wizard no longer offers that database
+     (changed in the review: it was the wizard's default; Decision Log 25).
 2. **The switch,** in one pull request, as it can't be half done: the container, the start-up tool and its guard, the
    widening, the text check, `on conflict` in §7.3's two inserts, the move command with its test and fixture, the
    smoke test and the Docker tests, the wizard, the removal of `mariadb/`, and the docs. `mariadb-final` is tagged on

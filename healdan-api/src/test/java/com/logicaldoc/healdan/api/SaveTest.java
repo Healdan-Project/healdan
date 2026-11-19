@@ -7,6 +7,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -493,6 +494,25 @@ public class SaveTest extends ApiTestCase {
 		assertEquals("1.2", again.json().path("fileVersion").textValue());
 		assertEquals(List.of("1.2 snapshot", "1.0 version"),
 				versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
+	}
+
+	@Test
+	public void testAVersionWhoseFileWasntStoredIsSaidSo() throws Exception {
+		// As when CE stored the document at its new version, then failed to store the file with anything but an
+		// IOException, the only failure its check-in puts the document back after
+		Document d = file("a.docx");
+		Document moved = DocumentDAO.get().findById(d.getId(), true);
+		moved.setVersion("1.1");
+		moved.setFileVersion("1.1");
+		DocumentDAO.get().store(moved, fx.documentHistory(boss));
+
+		ApiProblem problem = assertThrows(ApiProblem.class,
+				() -> VersionResource.confirmStored(d.getId(), number(d), "1.0", clerk));
+
+		assertEquals(500, problem.status());
+		assertEquals(("Document #%d's save wasn't stored: the document is at version 1.1, but that version's file "
+				+ "wasn't stored, and it isn't in its timeline. It isn't checked out to you. Send the save again.")
+				.formatted(number(d)), problem.detail());
 	}
 
 	@Test

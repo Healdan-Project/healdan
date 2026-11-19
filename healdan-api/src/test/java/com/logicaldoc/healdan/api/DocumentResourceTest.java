@@ -519,6 +519,16 @@ public class DocumentResourceTest extends ApiTestCase {
 			assertEquals(typed, 1, response.json().path("items").size());
 			assertEquals(typed, number(d), response.json().path("items").get(0).path("docNumber").asLong());
 		}
+
+		// Nor is a space stored at either end
+		Document padded = file("b.docx", "Lease");
+		current = DocumentDAO.get().findById(padded.getId(), true);
+		current.setValue(HealdanConstants.ATTR_LEGACYDOCNUM, " ABC-2 ");
+		DocumentDAO.get().store(current, fx.documentHistory(boss));
+		ApiResponse response = get("/api/v1/documents?legacyDocNumber=ABC-2").token(token).send();
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(1, response.json().path("items").size());
+		assertEquals(number(padded), response.json().path("items").get(0).path("docNumber").asLong());
 	}
 
 	@Test

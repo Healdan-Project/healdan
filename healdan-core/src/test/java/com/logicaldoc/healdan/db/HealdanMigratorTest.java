@@ -85,8 +85,9 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 				.migrate("classpath:healdan/db/migration/{vendor}", "classpath:healdan/db/failing/{vendor}"));
 
 		// The message says how to recover
-		assertTrue(e.getMessage(), e.getMessage().contains("drop the hd_ tables"));
-		assertTrue(e.getMessage(), e.getMessage().contains("from hd_schema_history"));
+		// PostgreSQL's: it rolled the script back, and its success column is a boolean
+		assertTrue(e.getMessage(), e.getMessage().endsWith(HealdanMigrator.RECOVERY_POSTGRESQL));
+		assertFalse(e.getMessage(), e.getMessage().contains("success = 0"));
 		// The script ran, past its create table, rather than Flyway refusing it before it began
 		assertEquals(e.getMessage(), "42601", sqlState(e));
 		// PostgreSQL rolled the script back whole: no table and no history row is left behind

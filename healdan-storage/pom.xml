@@ -194,11 +194,11 @@
 			<artifactId>sqltool</artifactId>
 			<scope>test</scope>
 		</dependency>
-		<!-- The PostgreSQL the tests run on (healdan-core's TestDatabase); the version logicaldoc-webapp/pom.xml ships -->
+		<!-- The PostgreSQL the tests run on (healdan-core's TestDatabase); the version the WAR ships (logicaldoc-parent's postgresql.version) -->
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
-			<version>42.7.7</version>
+			<version>${postgresql.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

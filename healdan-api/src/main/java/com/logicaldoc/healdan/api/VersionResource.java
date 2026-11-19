@@ -37,6 +37,8 @@ import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.store.Store;
+import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.HoldView;
@@ -479,13 +481,24 @@ public class VersionResource {
 			return;
 
 		boolean filed = before == null;
+		// CE stores the new version before its file, and puts the document back only when the store throws an
+		// IOException: so the file is looked for before the answer says the content is the file sent
+		boolean fileMissing = moved && !Store.get()
+				.exists(StoreResource.builder().docId(docId).fileVersion(after.getFileVersion()).build());
 		log.error("The {} of document #{} (id {}) wasn't stored: the document is at version {}, which {}",
 				filed ? "filing" : "save", docNumber, docId, after != null ? after.getVersion() : null,
-				moved ? "has no version record" : "is the version before the save");
+				fileMissing ? "has neither its file nor a version record"
+						: moved ? "has no version record" : "is the version before the save");
 		String stored;
-		if (filed)
+		if (filed && fileMissing)
+			stored = "Document #%d was filed, but neither its file nor its version %s was stored."
+					.formatted(docNumber, after.getVersion());
+		else if (filed)
 			stored = "Document #%d was filed, but its version %s isn't in its timeline. Its content is the file sent."
 					.formatted(docNumber, after != null ? after.getVersion() : null);
+		else if (fileMissing)
+			stored = ("Document #%d's save wasn't stored: the document is at version %s, but that version's file "
+					+ "wasn't stored, and it isn't in its timeline.").formatted(docNumber, after.getVersion());
 		else if (moved)
 			stored = ("Document #%d's save wasn't stored completely: its content is the file sent, as version %s, but "
 					+ "that version isn't in its timeline.").formatted(docNumber, after.getVersion());
@@ -494,8 +507,9 @@ public class VersionResource {
 		// Filing checks the document out only after this
 		String hold = after != null && ApiViews.checkedOutBy(after, user) ? " It's still checked out to you."
 				: " It isn't checked out to you.";
-		throw new ApiProblem(500, "server-error",
-				stored + hold + (filed ? " Don't file it again." : " Send the save again."));
+		String next = !filed ? " Send the save again."
+				: fileMissing ? " Delete it, then file the document again." : " Don't file it again.";
+		throw new ApiProblem(500, "server-error", stored + hold + next);
 	}
 
 	/**

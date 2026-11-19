@@ -40,6 +40,9 @@ start() {
   case $(state) in
     running)
       echo "$NAME is already running."
+      # The host port it publishes, which may not be the one HEALDAN_TEST_DB_PORT names now
+      PORT=$(docker port "$NAME" 5432/tcp | head -n 1)
+      PORT=${PORT##*:}
       how_to_reach
       return 0
       ;;

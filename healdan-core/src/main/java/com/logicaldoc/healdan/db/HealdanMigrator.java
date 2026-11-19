@@ -45,10 +45,15 @@ public class HealdanMigrator {
 
 	private static final String HISTORY_TABLE = "hd_schema_history";
 
-	/** How an admin recovers from a failed migration; MariaDB's DDL isn't transactional */
+	/** How an admin recovers from a failed migration on MariaDB, whose DDL isn't transactional */
 	static final String RECOVERY = ". To recover, fix the cause, drop the hd_ tables the failed script created, "
 			+ "delete its failed row from hd_schema_history (delete from hd_schema_history where success = 0), "
 			+ "and restart";
+
+	/** How an admin recovers from a failed migration on PostgreSQL, which rolls a failed script back */
+	static final String RECOVERY_POSTGRESQL = ". PostgreSQL rolled the failed script back, so fix the cause and "
+			+ "restart. If the script ran outside a transaction, also drop what it created and delete its failed row "
+			+ "(delete from hd_schema_history where success = false)";
 
 	private final DataSource dataSource;
 
@@ -79,6 +84,7 @@ public class HealdanMigrator {
 	 *         migration fails
 	 */
 	public Status migrate(String... locations) {
+		String vendor = null;
 		try {
 			DatabaseMetaData meta;
 			boolean ceSchema;
@@ -87,7 +93,7 @@ public class HealdanMigrator {
 				meta = con.getMetaData();
 				ceSchema = tableExists(meta, con.getCatalog(), con.getSchema(), "ld_user");
 				if (ceSchema) {
-					String vendor = vendorFolder(meta);
+					vendor = vendorFolder(meta);
 					effective = (locations.length == 0 ? new String[] { DEFAULT_LOCATION } : locations).clone();
 					for (int i = 0; i < effective.length; i++)
 						effective[i] = effective[i].replace(VENDOR_PLACEHOLDER, vendor);
@@ -103,7 +109,8 @@ public class HealdanMigrator {
 			throw e;
 		} catch (Exception e) {
 			log.error("Healdan's database migration failed: {}", e.getMessage(), e);
-			throw new HealdanStartupException("Healdan's database migration failed: " + e.getMessage() + RECOVERY, e);
+			String recovery = "postgresql".equals(vendor) ? RECOVERY_POSTGRESQL : RECOVERY;
+			throw new HealdanStartupException("Healdan's database migration failed: " + e.getMessage() + recovery, e);
 		}
 	}
 
