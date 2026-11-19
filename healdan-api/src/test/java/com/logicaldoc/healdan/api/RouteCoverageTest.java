@@ -4,13 +4,17 @@
 package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 import org.junit.Test;
 import org.springframework.util.ClassUtils;
@@ -30,13 +34,34 @@ import jakarta.ws.rs.Path;
  * 4.6, Admin app spec section 9.2), the admin API's in its own file only, and
  * the files say which of them need no token. Only the docs page, {@code /docs} and {@code /docs/{file}}, the Office add-in's
  * files, {@code /addin/...}, and the sign-in pages, {@code /signin/...}, aren't described: a resource anywhere
- * else, such as {@code /v2} or a mistyped {@code /vl}, fails.
+ * else, such as {@code /v2} or a mistyped {@code /vl}, fails. The other way round, only {@link #DESCRIBED_AHEAD}
+ * is described and not implemented.
  */
 public class RouteCoverageTest extends AbstractHealdanTestCase {
 
+	/**
+	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them: the
+	 * Dashboard's attention and health, which the plan's Task 10b implements and takes out of here. Each must be
+	 * described and not implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}).
+	 */
+	static final Set<String> DESCRIBED_AHEAD = Set.of("GET /v1/admin/dashboard");
+
 	@Test
 	public void testEveryRouteIsDescribed() {
-		assertEquals(described().keySet(), implemented().keySet());
+		Set<String> described = new TreeSet<>(described().keySet());
+		described.removeAll(DESCRIBED_AHEAD);
+		assertEquals(described, implemented().keySet());
+	}
+
+	// Once one is implemented, it leaves the list, so the list never hides a route that's missing
+	@Test
+	public void testRoutesDescribedAheadAreNotImplementedYet() {
+		Map<String, Boolean> described = described();
+		Map<String, Boolean> implemented = implemented();
+		for (String route : DESCRIBED_AHEAD) {
+			assertTrue(route + " isn't described", described.containsKey(route));
+			assertFalse(route + " is implemented now: take it out of DESCRIBED_AHEAD", implemented.containsKey(route));
+		}
 	}
 
 	// The public file doesn't list the admin routes, nor the admin file the others (Admin app spec section 9.2)

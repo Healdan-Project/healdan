@@ -172,6 +172,23 @@ public class PreviewJobs {
 	}
 
 	/**
+	 * @return how many jobs wait for a try, those backing off after a failure included
+	 */
+	public long countWaiting() {
+		return jdbc.queryForObject("select count(*) from hd_preview_job where hd_attempts < ?", Long.class,
+				MAX_ATTEMPTS);
+	}
+
+	/**
+	 * @return how many jobs were given up on after their last try, until their file is replaced or, for a timeout,
+	 *         the timeout is raised
+	 */
+	public long countGivenUp() {
+		return jdbc.queryForObject("select count(*) from hd_preview_job where hd_attempts >= ?", Long.class,
+				MAX_ATTEMPTS);
+	}
+
+	/**
 	 * @param docId the document
 	 * @param fileVersion the file version
 	 * @return the job, if queued

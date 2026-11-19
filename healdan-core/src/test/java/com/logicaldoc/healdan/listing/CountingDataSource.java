@@ -17,18 +17,20 @@ import javax.sql.DataSource;
 
 /**
  * A data source that records each query run through it and how many rows the
- * caller read from it, so a test can tell what a page cost.
+ * caller read from it, so a test can tell what a page cost, or that a call ran
+ * none. It sees prepared statements only, which is what every JdbcTemplate
+ * call with parameters, and every NamedParameterJdbcTemplate call, runs.
  */
-final class CountingDataSource {
+public final class CountingDataSource {
 
 	/**
 	 * A query and the rows read from its result
 	 */
-	static final class Query {
+	public static final class Query {
 
-		final String sql;
+		public final String sql;
 
-		int rows;
+		public int rows;
 
 		Query(String sql) {
 			this.sql = sql;
@@ -44,7 +46,7 @@ final class CountingDataSource {
 
 	private final DataSource proxy;
 
-	CountingDataSource(DataSource target) {
+	public CountingDataSource(DataSource target) {
 		proxy = wrap(DataSource.class, target, (method, args, result) -> method.getName().equals("getConnection")
 				? connection((Connection) result)
 				: result);
@@ -53,18 +55,18 @@ final class CountingDataSource {
 	/**
 	 * @return the data source to hand to the code under test
 	 */
-	DataSource dataSource() {
+	public DataSource dataSource() {
 		return proxy;
 	}
 
 	/**
 	 * @return the queries run since the last {@link #reset()}
 	 */
-	synchronized List<Query> queries() {
+	public synchronized List<Query> queries() {
 		return List.copyOf(queries);
 	}
 
-	synchronized void reset() {
+	public synchronized void reset() {
 		queries.clear();
 	}
 

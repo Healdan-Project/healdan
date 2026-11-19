@@ -23,7 +23,114 @@ servers:
   - url: /api
 security:
   - cookieAuth: []
-paths: {}
+paths:
+  /v1/admin/dashboard:
+    get:
+      operationId: adminDashboard
+      summary: What needs attention, and the server's health
+      description: |
+        The Dashboard's first two parts (Admin app spec section 8.1), worked
+        out at each request:
+
+        - `attention`, what an administrator should act on, each with a link
+          to where it's fixed: each `code` at most once, in the order
+          `AttentionItem.code` lists them. Empty when all is well.
+        - `health`, the ten Server Health tiles: always all ten, in the order
+          `HealthTile.name` lists them. A tile whose part couldn't be read
+          has `problem`, and the other tiles are whole.
+
+        No web session is `401 unauthenticated`, a device token
+        `403 web-session-only`, and anyone not in `admin`
+        `403 admins-only`.
+      tags: [Dashboard]
+      responses:
+        '200':
+          description: The attention list and the tiles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/dashboard/usage:
+    get:
+      operationId: adminDashboardUsage
+      summary: The Dashboard's Usage
+      description: |
+        The Dashboard's third part (Admin app spec section 8.1), from one
+        summary the server keeps in memory and works out on a thread of its
+        own: at the start, then 15 minutes after the last one ended. A
+        request never works it out: it gets the last one, with
+        `computedAt`. Until the first has been worked out after a start,
+        `computedAt` and the totals are null and the lists empty.
+
+        No web session is `401 unauthenticated`, a device token
+        `403 web-session-only`, and anyone not in `admin`
+        `403 admins-only`.
+      tags: [Dashboard]
+      responses:
+        '200':
+          description: The usage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Usage'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/find:
+    get:
+      operationId: adminFind
+      summary: Find a client, matter or person
+      description: |
+        The top bar's find (Admin app spec section 7.1): at most five each of
+        clients, matters and people, `q` read with the whitespace at either
+        end taken off, in any case, its `%` and `_` taken as they are.
+
+        - Clients whose name contains `q`, or whose number is `q`. By
+          number.
+        - Matters whose name contains `q`; the matter `q` names as
+          `1001.1`; and, for a bare number such as `1001`, that client's
+          matters. Live ones only: not deleted, and not in the Trash. By
+          client number, then matter number.
+        - People whose username, first name, last name or "first last"
+          contains `q`, disabled ones too. Not system accounts such as
+          `_system`. By first name, then last name.
+
+        A missing or blank `q` is `422 validation`. No web session is
+        `401 unauthenticated`, a device token `403 web-session-only`, and
+        anyone not in `admin` `403 admins-only`.
+      tags: [Dashboard]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: What to look for
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: What was found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Found'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   securitySchemes:
     cookieAuth:
@@ -108,3 +215,353 @@ components:
           type: [integer, 'null']
           minimum: 0
           description: Null where counting would be expensive, such as a full-text search.
+    Dashboard:
+      type: object
+      description: The Dashboard's Needs Attention and Server Health
+      additionalProperties: false
+      required: [attention, health]
+      properties:
+        attention:
+          type: array
+          description: What needs acting on, each code at most once, in the order `AttentionItem.code` lists them
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/AttentionItem'
+        health:
+          type: array
+          description: The ten tiles, in the order `HealthTile.name` lists them
+          minItems: 10
+          maxItems: 10
+          items:
+            $ref: '#/components/schemas/HealthTile'
+    AttentionItem:
+      type: object
+      description: Something an administrator should act on
+      additionalProperties: false
+      required: [code, count, detail, link]
+      properties:
+        code:
+          type: string
+          description: |
+            What it is:
+
+            - `files-stuck`: files the storage mover gave up moving to their
+              Store's backend;
+            - `backend-unreachable`: a storage backend that can't be reached;
+            - `index-failed`: documents that couldn't be indexed, so search
+              doesn't find their text;
+            - `errors`: errors the server logged in the last 24 hours that
+              nobody has resolved;
+            - `previews-given-up`: previews that were given up on after their
+              last try;
+            - `job-failed`: a background job whose last run failed;
+            - `job-overdue`: a background job that hasn't run when it should
+              have;
+            - `disk-low`: a disk the server writes to that is more than 85%
+              full.
+          enum: [files-stuck, backend-unreachable, index-failed, errors, previews-given-up, job-failed, job-overdue,
+            disk-low]
+        count:
+          type: integer
+          description: How many files, backends, documents, errors, previews, jobs or disks
+          minimum: 1
+        detail:
+          type: string
+          description: A line in English that says more, such as which Store or since when
+          examples: ['Client Work, retrying since 09:12']
+        link:
+          type: string
+          description: |
+            Where it's fixed: the Admin app's address of that screen once it
+            has shipped, such as `/admin/search-index`, and the Classic
+            Interface, `/frontend.jsp`, until then.
+          examples: [/admin/search-index, /frontend.jsp]
+    HealthTile:
+      type: object
+      description: One of the Server Health tiles
+      additionalProperties: false
+      required: [name, status, detail, used, total, link, problem]
+      properties:
+        name:
+          type: string
+          description: |
+            Which tile: Server (time up, Healdan's version), Database
+            (product, version and size), Disk (used of total for the
+            repository's volume, and the index's and logs' where they
+            differ), Memory (heap used of its maximum), Sign-In (each enabled
+            provider answering), Storage Backends (reachable, stuck files),
+            Search Index (waiting and failed), Previews (waiting and given
+            up), Background Jobs (on schedule, or which aren't) and Outgoing
+            Email (set up, and the last send's result).
+          enum: [server, database, disk, memory, sign-in, storage-backends, search-index, previews, background-jobs,
+            outgoing-email]
+        status:
+          type: string
+          description: |
+            `ok`; `attention` when something needs acting on, or the tile's
+            part couldn't be read; `off` when what it shows isn't set up or
+            is switched off, such as Outgoing Email with no mail server or
+            Storage Backends on a server that doesn't use them.
+          enum: [ok, attention, off]
+        detail:
+          type: [string, 'null']
+          description: The tile's line in English, such as `Up 6 days, Healdan 9.3.2`; null when `problem` is set
+        used:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: |
+            Bytes: the Disk's and the Memory's used, and the Database's
+            size; null for the other tiles, and when `problem` is set
+        total:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: Bytes, the Disk's and the Memory's total; null for the other tiles, and when `problem` is set
+        link:
+          type: string
+          description: |
+            The screen behind the tile: the Admin app's address once it has
+            shipped, and the Classic Interface, `/frontend.jsp`, until then
+          examples: [/admin/search-index, /frontend.jsp]
+        problem:
+          type: [string, 'null']
+          description: |
+            Why the tile's part couldn't be read, in English; then `status` is
+            `attention`. Null when it was read.
+    Usage:
+      type: object
+      description: |
+        The Dashboard's Usage, worked out at most every 15 minutes, never by
+        a request.
+
+        Days are the server's, in its time zone. "The last 7 days" and "the
+        last 30 days" are whole days, today included: the last 7 and the 30
+        of `filedPerDay` add up to `documents.last7Days` and
+        `documents.last30Days`. Documents are the live ones: not shortcuts,
+        and not in the Trash. A matter's documents are those stamped with its
+        client and matter numbers, and a Store's are its matters'.
+      additionalProperties: false
+      required: [computedAt, documents, storage, matters, clients, people, signedIn, filedPerDay, stores,
+        busiestMatters]
+      properties:
+        computedAt:
+          type: [string, 'null']
+          format: date-time
+          description: When it was worked out; null until it has been once since the server started
+        documents:
+          description: The documents, and how many were filed in the last 7 and 30 days
+          oneOf:
+            - $ref: '#/components/schemas/UsageTotal'
+            - type: 'null'
+        storage:
+          description: |
+            The bytes of the documents' files, the current version of each,
+            and of those filed in the last 7 and 30 days. Older versions,
+            previews and the Trash aren't counted.
+          oneOf:
+            - $ref: '#/components/schemas/UsageTotal'
+            - type: 'null'
+        matters:
+          description: The live matters, not deleted or in the Trash, and how many were created in the last 7 and 30 days
+          oneOf:
+            - $ref: '#/components/schemas/UsageTotal'
+            - type: 'null'
+        clients:
+          description: The clients, and how many were created in the last 7 and 30 days
+          oneOf:
+            - $ref: '#/components/schemas/UsageTotal'
+            - type: 'null'
+        people:
+          description: |
+            The enabled user accounts, not system accounts such as `_system`,
+            and how many were created in the last 7 and 30 days
+          oneOf:
+            - $ref: '#/components/schemas/UsageTotal'
+            - type: 'null'
+        signedIn:
+          type: integer
+          minimum: 0
+          description: |
+            How many people have a session open on this server, each once,
+            counted at each request rather than with the rest
+        filedPerDay:
+          type: array
+          description: The documents filed on each of the last 30 days, oldest first, today last; empty until worked out
+          maxItems: 30
+          items:
+            $ref: '#/components/schemas/DayCount'
+        stores:
+          type: array
+          description: Every Store, but Default and Templates, most bytes first, then by name
+          items:
+            $ref: '#/components/schemas/StoreUsage'
+        busiestMatters:
+          type: array
+          description: The matters most documents were filed in in the last 7 days, most first, at most five
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/BusyMatter'
+    UsageTotal:
+      type: object
+      description: A total, and how much of it came lately
+      additionalProperties: false
+      required: [total, last7Days, last30Days]
+      properties:
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        last7Days:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How much of the total came in the last 7 days
+        last30Days:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How much of the total came in the last 30 days
+    DayCount:
+      type: object
+      additionalProperties: false
+      required: [date, count]
+      properties:
+        date:
+          type: string
+          format: date
+          description: The day, in the server's time zone
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many documents were filed on it
+    StoreUsage:
+      type: object
+      description: A Store, and what its matters hold
+      additionalProperties: false
+      required: [id, name, documents, bytes, backend]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        documents:
+          type: integer
+          format: int64
+          minimum: 0
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The size of its documents' files, the current version of each
+        backend:
+          description: The storage backend it keeps its files on; null when the server doesn't use storage backends
+          oneOf:
+            - $ref: '#/components/schemas/StoreBackend'
+            - type: 'null'
+    StoreBackend:
+      type: object
+      description: A storage backend, as a Store names it
+      additionalProperties: false
+      required: [id, name, kind, encrypted]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Its id; Original, the server's own folder, is 1
+        name:
+          type: string
+        kind:
+          type: string
+          description: '`local`, a folder, or `s3`, a bucket'
+          enum: [local, s3]
+        encrypted:
+          type: boolean
+    BusyMatter:
+      type: object
+      description: A matter documents were filed in in the last 7 days
+      additionalProperties: false
+      required: [id, number, name, filed]
+      properties:
+        id:
+          type: integer
+          format: int64
+        number:
+          type: string
+          description: Its number with its client's
+          examples: ['1001.1']
+        name:
+          type: string
+        filed:
+          type: integer
+          format: int64
+          minimum: 1
+          description: How many documents were filed in it in the last 7 days
+    Found:
+      type: object
+      description: What the find found, at most five of each
+      additionalProperties: false
+      required: [clients, matters, people]
+      properties:
+        clients:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/FoundClient'
+        matters:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/FoundMatter'
+        people:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/FoundPerson'
+    FoundClient:
+      type: object
+      additionalProperties: false
+      required: [id, number, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+        name:
+          type: string
+    FoundMatter:
+      type: object
+      additionalProperties: false
+      required: [id, number, name, client]
+      properties:
+        id:
+          type: integer
+          format: int64
+        number:
+          type: string
+          description: Its number with its client's
+          examples: ['1001.1']
+        name:
+          type: string
+        client:
+          $ref: '#/components/schemas/FoundClient'
+    FoundPerson:
+      type: object
+      additionalProperties: false
+      required: [id, username, name, enabled]
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        name:
+          type: string
+          description: The first and last name
+        enabled:
+          type: boolean
+          description: False for a disabled account, which can't sign in
