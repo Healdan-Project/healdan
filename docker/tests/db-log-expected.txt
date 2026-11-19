@@ -1,0 +1,15 @@
+# The ERROR lines PostgreSQL's own log may hold in a smoke run (docker/smoke-test.sh's check_db_log; PostgreSQL spec
+# section 10.1). Each line below that isn't a comment or blank is an extended regular expression, matched against each
+# line of the db container's log that holds ERROR:, with the first line of the statement PostgreSQL logged after it
+# appended as " STATEMENT:  <statement>". Each has its reason above it: the step that provokes it on purpose, or the
+# code of LogicalDOC's that raises it and why that's expected. Nothing Healdan does in the ordinary way may be here
+# (spec section 7.3), and a line no pattern matches is a finding, not a pattern to add.
+
+# LogicalDOC's StatsCollector (logicaldoc-core's com.logicaldoc.core.stats.StatsCollector, the scheduled task
+# StatsCollector: 30 minutes after a start, then every 12 hours) counts the rows of twelve tables this edition doesn't
+# have (spec section 4.1). Each count fails with 42P01, and is a call of its own, so the statistics are still saved.
+# Whether a run reaches it depends on how long the app has been up.
+ERROR:  relation "ld_(aimodel|emailaccount|embeddingscheme|event|form|importfolder|report|robot|sampler|stamp|workflowhistory|workflowtemplate)" does not exist at character [0-9]+ STATEMENT:  (SELECT COUNT\(ld_id\) FROM|select count\(ld_id\) from|select count\(distinct\(ld_name\)\) from) ld_(aimodel|emailaccount|embeddingscheme|event|form|importfolder|report|robot|sampler|stamp|workflowhistory|workflowtemplate) where ld_deleted = 0( and ld_tenantid = [0-9]+)?$
+# ... and CE's queryForLong asks for each count twice more, as an Integer and as a BigDecimal, in the transaction the
+# failure ended (25P02), as its retries do for any typed read that fails
+ERROR:  current transaction is aborted, commands ignored until end of transaction block STATEMENT:  (SELECT COUNT\(ld_id\) FROM|select count\(ld_id\) from|select count\(distinct\(ld_name\)\) from) ld_(aimodel|emailaccount|embeddingscheme|event|form|importfolder|report|robot|sampler|stamp|workflowhistory|workflowtemplate) where ld_deleted = 0( and ld_tenantid = [0-9]+)?$

@@ -167,12 +167,14 @@ sums() {
 }
 # move <name> [option]: runs the command as the Install manual gives it, keeps its own lines ([move] ...) in
 # $WORK/<name>.out and its exit status in $WORK/<name>.status, and prints both. MariaDB's checksums before and after
-# it go in $WORK/<name>.maria-before and -after.
+# it go in $WORK/<name>.maria-before and -after. Compose's own progress (its containers made and started, an image
+# pulled), which it prints in another form off a terminal and from one version to another, is left out of what's
+# captured, so the capture holds the command's output alone.
 move() {
   local name=$1 status=0
   shift
   sums "$WORK/$name.maria-before"
-  compose_move run --rm -T app move-from-mariadb "$@" > "$WORK/$name.raw" 2>&1 || status=$?
+  compose_move --progress quiet run --rm -T app move-from-mariadb "$@" > "$WORK/$name.raw" 2>&1 || status=$?
   sums "$WORK/$name.maria-after"
   grep '^\[move\]' "$WORK/$name.raw" > "$WORK/$name.out" || true
   echo "$status" > "$WORK/$name.status"
@@ -190,11 +192,10 @@ is() {
 }
 exited() { is "$2" "$(cat "$WORK/$1.status")"; }
 # alone <name>: the run printed its own lines and nothing else, no stack trace or logger's line beside them, but for
-# Compose's lines about its containers and the empty line it ends a container's error output with
+# the empty line Compose ends a container's error output with
 alone() {
   local rest traces
-  rest=$(grep -vE '^\[move\]|^$|^ (Container|Network|Volume) [^ ]+ (Creating|Created|Starting|Started|Running|Waiting|Healthy) ?$' \
-    "$WORK/$1.raw" || true)
+  rest=$(grep -vE '^\[move\]|^$' "$WORK/$1.raw" || true)
   traces=$(grep -E 'Exception|^[[:space:]]+at ' "$WORK/$1.out" || true)
   [ -z "$rest$traces" ] && return 0
   [ -z "$rest" ] || head -20 <<<"$rest"
