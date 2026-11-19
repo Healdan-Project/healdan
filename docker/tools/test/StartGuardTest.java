@@ -2,13 +2,17 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.Path;
 
 /** When the start-up tool refuses to start an install, before it changes anything (spec section 8.3). */
 public class StartGuardTest {
 
     public static void main(String[] args) throws Exception {
         recognisesAConfThatNamesMariaDb();
+        readsTheConfWithoutWritingIt();
         decides();
         saysWhatToDoAndWhere();
         seesFilesInOriginalsFolder();
@@ -25,6 +29,34 @@ public class StartGuardTest {
         Check.isTrue(!StartGuard.namesMariaDb("jdbc:postgresql://db:5432/logicaldoc", "postgresql"),
                 "a conf volume the start-up tool has written since the move");
         Check.isTrue(!StartGuard.namesMariaDb(null, null), "neither key");
+        Check.isTrue(StartGuard.namesMariaDb(null, "mysql"), "a MySQL dbms alone");
+        Check.isTrue(StartGuard.namesMariaDb("  JDBC:MariaDB://db:3306/logicaldoc ", null),
+                "an upper-case URL with spaces around it");
+        Check.isTrue(StartGuard.namesMariaDb("", " MARIADB "), "an upper-case dbms with spaces around it");
+        Check.isTrue(StartGuard.namesMariaDb("JDBC:MYSQL://db/x", ""), "an upper-case MySQL URL");
+    }
+
+    private static void readsTheConfWithoutWritingIt() throws Exception {
+        File folder = Files.createTempDirectory("startguard-conf").toFile();
+        File conf = new File(folder, "context.properties");
+        Check.isTrue(!StartGuard.confNamesMariaDb(conf), "a missing conf file names nothing");
+
+        String mariaDb = "#\n#Thu Nov 19 12:46:31 UTC 2026\njdbc.dbms=mariadb\njdbc.driver=org.mariadb.jdbc.Driver\n"
+                + "jdbc.url=jdbc:mariadb://db:3306/logicaldoc\n";
+        Files.writeString(conf.toPath(), mariaDb, StandardCharsets.ISO_8859_1);
+        long modified = 1_700_000_000_000L;
+        Check.isTrue(conf.setLastModified(modified), "set the conf file's modification time");
+        Check.isTrue(StartGuard.confNamesMariaDb(conf), "a MariaDB install's conf file");
+        Check.eq(modified, conf.lastModified(), "reading leaves the conf file's modification time");
+        Check.eq(mariaDb, Files.readString(conf.toPath(), StandardCharsets.ISO_8859_1),
+                "reading leaves the conf file's bytes");
+
+        File override = new File(folder, "context-override.properties");
+        Files.writeString(override.toPath(), "jdbc.url=jdbc:postgresql://db:5432/logicaldoc\njdbc.dbms=postgresql\n",
+                StandardCharsets.ISO_8859_1);
+        Check.isTrue(!StartGuard.confNamesMariaDb(conf), "the override file's keys win, as LogicalDOC reads them");
+        Files.writeString(override.toPath(), "webservice.enabled=false\n", StandardCharsets.ISO_8859_1);
+        Check.isTrue(StartGuard.confNamesMariaDb(conf), "an override file without the keys leaves the conf's");
     }
 
     private static void decides() {
@@ -59,6 +91,12 @@ public class StartGuardTest {
         String restoreFirst = StartGuard.message(StartGuard.Verdict.RESTORE_FIRST);
         Check.isTrue(restoreFirst.contains("restore") && restoreFirst.contains(StartGuard.RESTORE_PAGE),
                 "RESTORE_FIRST says to restore the database first, and where: " + restoreFirst);
+        Check.isTrue(!moveFirst.contains("empty"),
+                "MOVE_FIRST claims nothing is empty: the database may be populated and hold no finished move");
+        int restore = restoreFirst.indexOf("Restore the database first");
+        int page = restoreFirst.indexOf(StartGuard.RESTORE_PAGE);
+        Check.isTrue(restore >= 0 && restore < page && page < restoreFirst.indexOf("empty volumes"),
+                "RESTORE_FIRST's page goes with the restore, not with the new install: " + restoreFirst);
         for (String message : new String[] { moveFirst, moveAgain, restoreFirst })
             Check.isTrue(!message.contains("jdbc:") && !message.toLowerCase().contains("password"),
                     "no JDBC URL or password: " + message);
@@ -73,5 +111,26 @@ public class StartGuardTest {
         Check.isTrue(!StartGuard.holdsFiles(original), "an empty folder holds nothing, as a fresh install's");
         Check.isTrue(new File(original, ".healdan-backend").createNewFile(), "made a storage marker");
         Check.isTrue(StartGuard.holdsFiles(original), "a storage marker alone is an install's");
+
+        File locked = new File(parent, "locked");
+        Check.isTrue(new File(locked, "1").mkdirs(), "made a folder holding a document's folder");
+        Check.isTrue(locked.setReadable(false, false), "took away the folder's read permission");
+        if (canList(locked.toPath())) {
+            // Root lists any folder: the permission doesn't bind, so the case can't be made here.
+            System.out.println("StartGuardTest: skipped the unlistable folder (this user lists it anyway)");
+        } else {
+            Check.isTrue(StartGuard.holdsFiles(locked), "a folder that exists and can't be listed counts as holding"
+                    + " files");
+        }
+        locked.setReadable(true, false);
+    }
+
+    private static boolean canList(Path folder) {
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(folder)) {
+            entries.iterator().hasNext();
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

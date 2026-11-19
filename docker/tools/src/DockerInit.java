@@ -124,20 +124,16 @@ public final class DockerInit {
 
     /**
      * The guard against starting an install empty (spec section 8.3; StartGuard decides), before this start writes
-     * anything, to the conf volume or to the database. It reads the conf volume's database keys as they are, waits for
-     * the database, and asks it whether it holds a move and a schema. When the conf names MariaDB, a database that
-     * doesn't answer within StartGuard.ANSWER_SECONDS isn't waited for: the install's DB_HOST may still name its
-     * MariaDB server, which never answers as PostgreSQL. A sign-in the database refuses stops the start at once, with
-     * its own message, whatever the conf names.
+     * anything, to the conf volume or to the database. It reads the conf volume's database keys as they are, without
+     * writing the file, waits for the database, and asks it whether it holds a move and a schema. When the conf names
+     * MariaDB, a database that doesn't answer within StartGuard.ANSWER_SECONDS isn't waited for: the install's DB_HOST
+     * may still name its MariaDB server, which never answers as PostgreSQL. A sign-in the database refuses stops the
+     * start at once, with its own message, whatever the conf names.
      *
      * @return the tables of ld_user and the start-up tool's marker that the database lacks
      */
     private static List<String> guard(Db db, int waitSeconds) throws Exception {
-        boolean mariaDb = false;
-        if (CONFIG.isFile()) {
-            ContextProperties conf = new ContextProperties(CONFIG);
-            mariaDb = StartGuard.namesMariaDb(conf.getProperty("jdbc.url"), conf.getProperty("jdbc.dbms"));
-        }
+        boolean mariaDb = StartGuard.confNamesMariaDb(CONFIG);
         boolean reachable = true;
         if (mariaDb) {
             log(CONFIG + " names MariaDB: PostgreSQL has " + StartGuard.ANSWER_SECONDS + "s to answer");
