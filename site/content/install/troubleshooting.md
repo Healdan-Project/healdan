@@ -63,17 +63,21 @@ grep -q -w avx2 /proc/cpuinfo && echo "AVX2: yes" || echo "AVX2: no"
 
 ## The App Signs People Out, or Says It Refused Something
 
-The User app at `/app/` uses the Classic Interface's own sign-in. These are what people tell you they see, and where
-to look.
+The User app at `/app/`, and the Admin app at `/admin/`, use the Classic Interface's own sign-in. These are what
+people tell you they see, and where to look.
 
 - **"You've been signed out."** The session ended: it timed out, the person signed out in another tab, or an
   administrator ended it. **Sign In** brings them back to the page they were on. If it happens again straight after
   every sign-in, the proxy may be removing the browser's `Sec-Fetch-Site` header: see
   [Reverse Proxy](../reverse-proxy/).
-- **"Healdan needs a secure address."** The User app was opened at a plain `http://` address from another machine,
-  where browsers don't send the `Sec-Fetch-Site` header its sign-in needs. Use the `https://` address the proxy
-  serves (`LOGICALDOC_PUBLIC_URL`), or the Classic Interface, which the page links to: see
+- **"Healdan needs a secure address."** The User app or the Admin app was opened at a plain `http://` address from
+  another machine, where browsers don't send the `Sec-Fetch-Site` header its sign-in needs. Use the `https://` address
+  the proxy serves (`LOGICALDOC_PUBLIC_URL`), or the Classic Interface, which the page links to: see
   [Reverse Proxy](../reverse-proxy/).
+- **"You don't have access to Healdan Admin."** Someone who isn't in the `admin` group opened the Admin app: only its
+  members get in. Healdan asks at every page load and request, so someone taken out of the group sees it at their
+  next one. **Open Healdan** takes them to the User app. If they should be an administrator, add them to `admin`: see
+  [Users and Groups](../../admin/users-and-groups/).
 - **"Healdan refused that from this page."** The request didn't look like the page's own: its `Origin` header named
   another address than Healdan's, or a change was sent without the app's own header. Nobody is signed out by it.
   Check that `LOGICALDOC_PUBLIC_URL` is the address people type, that the proxy passes `Origin` on, and that people don't reach Healdan under two different host names, such as by IP address and by name.

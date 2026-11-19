@@ -64,7 +64,8 @@ prints. It sends `/app` to the stack too.
 
 The router's types are registered (`router.tsx`), so `Link`, `navigate()` and the search hooks check each address's
 parameters. Build an API path from data with `apiPath`, from `@healdan/api`, which encodes each value as one
-segment: `` apiPath`/v1/folders/${id}/children` ``.
+segment: `` apiPath`/v1/folders/${id}/children` ``. The Admin app's screens are added as
+[Adding a Screen](#adding-a-screen) says.
 
 ## A Secure Address Only
 
@@ -108,6 +109,82 @@ At an `/admin` address the server answers someone who isn't an administrator wit
 `index.html`. The User app's `main.tsx` checks the address before anything else and draws only `@healdan/shell`'s
 `NoAdminAccess` there, "You don't have access to Healdan Admin.", with **Open Healdan**, a link to `/app/`: it asks the
 server nothing, at a secure address or not.
+
+The way in is the User app's person menu (`apps/user/src/frame/PersonMenu.tsx`): **Admin**, a link to `/admin/` just
+before **Classic Interface**, offered when `useMe()` says `admin`. It's a link and no more, so none of the Admin app's
+code is in the User app's build, and only the server decides who gets in.
+
+### The Frame
+
+`frame/Frame.tsx` is the root route's component: the top bar (`TopBar.tsx`), the left pane (`LeftPane.tsx`) and
+`<main>` with the route's view. Below 1,024 pixels (`useNarrow()`) the pane folds away behind the top bar's
+**Navigation** button, as the User app's does: it opens over the main area, and following a link in it closes it, as
+does Esc, which puts the focus back on the button (the shell's `openLayer` and `isInnermost`, so a menu in the pane
+takes Esc first).
+
+- **The top bar** has the mark, **Healdan** and the **Admin** tag, which link to the Dashboard; the find; **Open
+  Healdan**, a link to `/app/`; the shell's `HelpMenu`, whose guide is `ADMIN_GUIDE`, the Admin Guide's
+  [The Admin App](../../admin/the-admin-app/) (moving that page breaks Help's link); and the shell's `PersonMenu`,
+  with no items of its own.
+- **The find** (`FindBox.tsx`) is `@healdan/ui`'s `ComboBox`, as the User app's search box is. It asks
+  `GET /v1/admin/find` once the typing has paused for 150 ms (`FIND_DELAY_MS`), from two characters, or a number of any
+  length, as a client's is, sending at most 100 (`FIND_MAX`), and keeps the last answer on screen while the next comes.
+  What's chosen opens where `DESTINATIONS` says for its kind, which is `/frontend.jsp` (`CLASSIC`) for clients, matters
+  and people until their screens ship. A found matter can't open in the User app, whose addresses take its folder's
+  id, which `FoundMatter` doesn't carry. A hidden `role="status"` says "Nothing found." or the error.
+- **An address no route has** is `views/NotFoundView.tsx`, in the frame, with **Go to the Dashboard**. A view that
+  fails as it draws is `RouteError` (`router.tsx`): the catalogue's message and Try Again, never the error's own text.
+
+### Adding a Screen
+
+`NAV`, in `frame/LeftPane.tsx`, is the left pane: the Dashboard, then the spec's groups in its order (Firm, People,
+Storage, Search and Monitoring), each a heading from the catalogue and its `NavItem`s. A group with no items isn't
+drawn, so the pane shows the Dashboard alone until a later phase adds a screen. **Classic Interface** is at the
+pane's foot, apart from `NAV`. A screen joins when its phase ships:
+
+1. Write the view in `views/`. Take its data through `useAdminQuery` (below), and its pieces from `@healdan/ui`.
+2. Give it a route in `router.tsx`, a child of the root, at its path in `addresses.ts`' `routes`.
+3. Add a `NavItem` to its group in `NAV`: `label`, an `admin.` key of the catalogue; `route`, typed `NavRoute`, the
+   registered router's route ids, so only a routed path type-checks; `icon`; and, where something there can need
+   attention, `count`, the attention codes whose counts its badge adds up from the Dashboard's answer. The pane asks
+   `GET /v1/admin/dashboard` only while an entry it shows has a `count`. `aria-current="page"` marks the open entry:
+   the Dashboard at `/` only, and any other at its address and the pages under it.
+4. Point what led to the Classic Interface at it: the Dashboard's links, which the server gives (`AttentionItem.link`
+   and `HealthTile.link`, `/frontend.jsp` until the screen ships), and the find's `DESTINATIONS`. An attention row's
+   link takes its label from `NAV` (`screenAt`: the screen's name, **Classic Interface** for `/frontend.jsp`, or
+   **Open**), so it follows by itself.
+5. Add its words to the app's catalogue, and test it with `renderApp`, the fake API and `expectNoAxeViolations`.
+
+### Asking the Server
+
+`useAdminQuery(path, options)`, in `queries.ts`, makes every GET a screen asks. Its `path` is an admin route with a
+JSON answer (`AdminGetPath`), and its query and answer are typed from `openapi-admin.yaml`. Its key is
+`adminKey(path, query)`, `['admin', ...the segments after /v1/admin, the query]`, so `adminKeys.dashboard`,
+`['admin', 'dashboard']`, covers the Dashboard and its Usage alike, and no key of the shell's is one of the app's.
+
+| Option | What it does |
+|---|---|
+| `query` | the route's query parameters |
+| `enabled` | `false` asks nothing, as for a find with nothing typed |
+| `poll` | asks again every `POLL_MS`, 30 seconds, while the page is visible, never while it's hidden (`refetchIntervalInBackground: false`), and at each return to it however fresh the answer is (`ASK_ON_RETURN`) |
+| `keepPrevious` | keeps the last answer on screen while a new question is asked, so a list doesn't blink while someone types |
+| `staleTime` | TanStack Query's |
+
+`useDashboard` and `useUsage` poll. The Dashboard's **Refresh** invalidates `adminKeys.dashboard`, which asks for both
+again. Each part (`dashboard/`) draws its query through `PartState`: Loading, its own `ErrorPanel` with Try Again, or
+what it shows, so a part that fails leaves the others whole. An attention code or a tile the app's catalogue doesn't
+know, a newer server's, shows the server's own detail or name rather than failing.
+
+### Refusals Are the App's
+
+A screen never handles a `401` or a `403 admins-only` itself. `App.tsx` gives `ServicesProvider` the client that
+`guardApi(api, access, signedOut)` (`access.tsx`) makes, so every `useApi()` gets it. Its `get`, `getResponse` and
+`send` mark `access` at a `403 admins-only` from any call, and once that or a `401` has come (the shell's signed-out
+state, which `createApi` marks), no call is sent again: each throws the refusal, made in the browser. `url()` makes an
+address, not a call, so it isn't guarded. `Frame` reads `useSignedOut()` and `useRefused()`, and draws `SignedOut` or
+`NoAdminAccess` in place of the frame and every screen in it, which stops their polls; the guard stops a call already
+on its way and one an effect makes as it goes. `access` never goes back: only a page load, which the server answers,
+lets someone in again. Any other refusal or failure is the screen's own. `access.test.ts` has the cases.
 
 ## Lists
 
