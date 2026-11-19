@@ -4,6 +4,8 @@
 package com.logicaldoc.healdan.api.admin;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.time.Instant;
@@ -91,14 +93,42 @@ public class AdminDashboardResourceTest extends ApiTestCase {
 		assertEquals(response.toString(), 200, response.status());
 		JsonNode usage = response.json();
 		List<String> nulls = new ArrayList<>();
-		for (String part : List.of("computedAt", "documents", "storage", "matters", "clients", "people"))
+		for (String part : List.of("computedAt", "failedAt", "documents", "storage", "matters", "clients", "people"))
 			if (usage.path(part).isNull())
 				nulls.add(part);
-		assertEquals(List.of("computedAt", "documents", "storage", "matters", "clients", "people"), nulls);
+		assertEquals(List.of("computedAt", "failedAt", "documents", "storage", "matters", "clients", "people"), nulls);
 		assertEquals(0, usage.path("filedPerDay").size());
 		assertEquals(0, usage.path("stores").size());
 		assertEquals(0, usage.path("busiestMatters").size());
 		assertEquals(1, usage.path("signedIn").asInt());
+	}
+
+	// A refresh that failed shows as failedAt beside the last summary, with no error's text
+	@Test
+	public void testUsageAfterAFailedRefresh() throws Exception {
+		MockHttpSession boss = signInWeb(fx.user("boss", "admin"));
+		fx.client(1001, "Ashcombe");
+		UsageSummary.get().refreshNow();
+		jdbc().update("alter table hd_client rename to hd_client_away");
+		try {
+			assertThrows(RuntimeException.class, () -> UsageSummary.get().refreshNow());
+		} finally {
+			jdbc().update("alter table hd_client_away rename to hd_client");
+		}
+
+		ApiResponse response = get(USAGE).webSession(boss).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		JsonNode usage = response.json();
+		assertTrue(usage.path("computedAt").isTextual());
+		Instant failedAt = Instant.parse(usage.path("failedAt").textValue());
+		assertFalse(failedAt.isBefore(Instant.parse(usage.path("computedAt").textValue())));
+		assertEquals(1, usage.path("clients").path("total").asLong());
+		assertFalse(response.text(), response.text().contains("hd_client"));
+
+		// Worked out again: no failure
+		UsageSummary.get().refreshNow();
+		assertTrue(get(USAGE).webSession(boss).send().json().path("failedAt").isNull());
 	}
 
 	@Test

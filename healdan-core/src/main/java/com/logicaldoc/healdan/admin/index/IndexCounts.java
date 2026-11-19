@@ -37,13 +37,16 @@ import com.logicaldoc.util.spring.Context;
  * Trash:
  * <ul>
  * <li><b>indexed</b>: in the index ({@code ld_indexed} {@code INDEXED});</li>
- * <li><b>failed</b>: waiting to be indexed ({@code TO_INDEX}) and its latest {@code event.indexed} or
+ * <li><b>failed</b>: waiting to be indexed ({@code TO_INDEX}), not archived, and its latest {@code event.indexed} or
  * {@code event.indexed.error} row is the error, whose comment says why. {@code DocumentManager.index} writes those
- * rows. CE's Indexer goes on trying such a document on its schedule;</li>
+ * rows. CE's Indexer goes on trying such a document on its schedule, an error row each time;</li>
  * <li><b>waiting</b>: what CE's Indexer will take ({@code TO_INDEX} or {@code TO_INDEX_METADATA}, not archived) but
  * those that failed.</li>
  * </ul>
- * Rows written at the same moment, as MariaDB's whole seconds give, go by the order they were written in, their ids.
+ * A document's latest index event is chosen once, by one look through its own rows (CE's {@code ld_history} index on
+ * the document): the latest time first, an event with no time before any with one, and rows written at the same
+ * moment, as MariaDB's whole seconds give, by the order they were written in, their ids. {@link #counts()} works the
+ * three out in one pass over the documents, and looks for the latest event only of those that wait to be indexed.
  */
 @Component
 public class IndexCounts {
@@ -51,28 +54,42 @@ public class IndexCounts {
 	/** A document of its own, not in the Trash */
 	private static final String LIVE = "d.ld_deleted = 0 and d.ld_docref is null";
 
-	/** Index event {@code l} came after index event {@code h}; an event with no time comes before any with one */
-	private static final String LATER = """
-			(l.ld_date > h.ld_date
-			 or (l.ld_date is not null and h.ld_date is null)
-			 or ((l.ld_date = h.ld_date or (l.ld_date is null and h.ld_date is null)) and l.ld_id > h.ld_id))""";
+	/** What CE's Indexer leaves alone: an archived document */
+	private static final String NOT_ARCHIVED = "d.ld_status <> :archived";
 
-	/** The error {@code h} is the latest index event of document {@code d} */
+	/** A column of document {@code d}'s latest index event: null if it has none */
 	private static final String LATEST = """
-			h.ld_docid = d.ld_id and h.ld_event = :error and h.ld_deleted = 0
-			and not exists (select 1 from ld_history l
-			                 where l.ld_docid = d.ld_id and l.ld_deleted = 0 and l.ld_event in (:events)
-			                   and %s)""".formatted(LATER);
+			(select l.%s from ld_history l
+			  where l.ld_docid = d.ld_id and l.ld_deleted = 0 and l.ld_event in (:events)
+			  order by %s, l.ld_date desc, l.ld_id desc
+			  limit 1)""";
 
-	/** Document {@code d} has failed */
-	private static final String FAILED = "d.ld_indexed = :toindex and exists (select 1 from ld_history h where %s)"
-			.formatted(LATEST);
+	/** Whether document {@code d} failed: 1 or 0, its latest event looked for only when it waits to be indexed */
+	private static final String FAILED = """
+			case when d.ld_indexed = :toindex and %s
+			     then case when %s = :error then 1 else 0 end
+			     else 0 end""".formatted(NOT_ARCHIVED, latest("ld_event"));
+
+	private static final String COUNTS = """
+			select sum(case when d.ld_indexed = :indexed then 1 else 0 end) as indexed,
+			       sum(case when d.ld_indexed in (:waiting) and %s then 1 else 0 end) as queued,
+			       sum(%s) as failed
+			  from ld_document d
+			 where %s""".formatted(NOT_ARCHIVED, FAILED, LIVE);
 
 	private final NamedParameterJdbcTemplate jdbc;
 
 	@Autowired
 	public IndexCounts(DataSource dataSource) {
 		this.jdbc = new NamedParameterJdbcTemplate(dataSource);
+	}
+
+	/**
+	 * @param column a column of {@code ld_history}
+	 * @return that column of document {@code d}'s latest index event, as a scalar subquery
+	 */
+	private static String latest(String column) {
+		return LATEST.formatted(column, ListingSql.nullsLast("l.ld_date"));
 	}
 
 	/**
@@ -83,25 +100,47 @@ public class IndexCounts {
 	}
 
 	/**
+	 * The three counts.
+	 *
+	 * @param indexed how many documents are in the index
+	 * @param waiting how many wait for CE's Indexer, those that failed left out
+	 * @param failed how many couldn't be indexed
+	 */
+	public record Counts(long indexed, long waiting, long failed) {
+	}
+
+	/**
+	 * Works the three counts out together, in one pass over the documents; what the Dashboard reads.
+	 *
+	 * @return the counts
+	 */
+	public Counts counts() {
+		return jdbc.queryForObject(COUNTS, params(), (rs, i) -> {
+			long failed = rs.getLong("failed");
+			// The failed are among those the Indexer takes
+			return new Counts(rs.getLong("indexed"), rs.getLong("queued") - failed, failed);
+		});
+	}
+
+	/**
 	 * @return how many documents are in the index
 	 */
 	public long indexed() {
-		return count("select count(*) from ld_document d where " + LIVE + " and d.ld_indexed = :indexed");
+		return counts().indexed();
 	}
 
 	/**
 	 * @return how many documents wait for CE's Indexer, those that failed left out
 	 */
 	public long waiting() {
-		return count("select count(*) from ld_document d where " + LIVE
-				+ " and d.ld_indexed in (:waiting) and d.ld_status <> :archived and not (" + FAILED + ")");
+		return counts().waiting();
 	}
 
 	/**
 	 * @return how many documents couldn't be indexed
 	 */
 	public long failed() {
-		return count("select count(*) from ld_document d where " + LIVE + " and " + FAILED);
+		return counts().failed();
 	}
 
 	/**
@@ -117,12 +156,12 @@ public class IndexCounts {
 				select d.ld_id, d.ld_customid, d.ld_filename, h.ld_comment, h.ld_date,
 				       c.ld_stringvalue as client, m.ld_stringvalue as matter
 				  from ld_document d
-				  join ld_history h on %s
+				  join ld_history h on h.ld_id = %s and h.ld_event = :error
 				  left join ld_document_ext c on c.ld_docid = d.ld_id and c.ld_name = :clientname
 				  left join ld_document_ext m on m.ld_docid = d.ld_id and m.ld_name = :mattername
-				 where %s and d.ld_indexed = :toindex
-				 order by %s, h.ld_date desc, d.ld_id desc""".formatted(LATEST, LIVE, ListingSql.nullsLast("h.ld_date"))
-				+ ListingSql.PAGE;
+				 where %s and d.ld_indexed = :toindex and %s
+				 order by %s, h.ld_date desc, d.ld_id desc""".formatted(latest("ld_id"), LIVE, NOT_ARCHIVED,
+				ListingSql.nullsLast("h.ld_date")) + ListingSql.PAGE;
 		MapSqlParameterSource params = params().addValue("clientname", HealdanConstants.ATTR_CLIENT)
 				.addValue("mattername", HealdanConstants.ATTR_MATTER).addValue("offset", Math.max(0, offset))
 				.addValue("limit", limit);
@@ -180,11 +219,6 @@ public class IndexCounts {
 		} catch (NumberFormatException e) {
 			return null;
 		}
-	}
-
-	private long count(String sql) {
-		Long count = jdbc.queryForObject(sql, params(), Long.class);
-		return count != null ? count : 0;
 	}
 
 	private static MapSqlParameterSource params() {

@@ -57,8 +57,9 @@ import jakarta.annotation.PreDestroy;
  * The Dashboard's Usage (Admin app spec section 8.1), and each matter's figures for the Clients and Matters lists: one
  * summary in memory, so a request costs almost nothing. It is worked out on a thread of its own,
  * {@value #THREAD}, at the start and then {@link #MAX_AGE} after the last one ended, never on a request's thread: a
- * request gets the last one, or {@link Usage}'s empty one until the first is made. Tests call {@link #refreshNow()}
- * themselves, as no test makes a real start.
+ * request gets the last one, or {@link Usage}'s empty one until the first is made. One that fails keeps the last
+ * one, with {@code failedAt}, until one works again. Tests call {@link #refreshNow()} themselves, as no test makes a
+ * real start.
  * <p>
  * A matter's documents are counted through the client and matter numbers stamped on them, in {@code ld_document_ext}
  * (plan, correction 5), so no folder is walked; a Store's are its matters'. It reads with plain SQL that MariaDB and
@@ -155,6 +156,9 @@ public class UsageSummary implements HealdanStartListener {
 
 	private ScheduledExecutorService scheduler;
 
+	/** Set while the thread is being stopped, which interrupts a refresh */
+	private volatile boolean stopping;
+
 	/** Held while a summary is worked out, so two never run at once */
 	private final Object refreshing = new Object();
 
@@ -204,11 +208,20 @@ public class UsageSummary implements HealdanStartListener {
 
 	/**
 	 * Works the summary out now, on the calling thread, which is never a request's: the summary's own thread and tests
-	 * call it.
+	 * call it. If that fails, the last summary stays, with {@code failedAt} the time it failed.
+	 *
+	 * @throws RuntimeException what failed, a {@code DataAccessException} say
 	 */
 	public void refreshNow() {
 		synchronized (refreshing) {
-			refresh();
+			try {
+				refresh();
+			} catch (RuntimeException | Error e) {
+				// The last good summary stays, saying when this one failed
+				Snapshot last = snapshot;
+				snapshot = new Snapshot(last.usage().failedAt(clock.instant()), last.matters());
+				throw e;
+			}
 		}
 	}
 
@@ -264,14 +277,13 @@ public class UsageSummary implements HealdanStartListener {
 		long mattersThisMonth = 0;
 		for (MatterRow matter : matterRows) {
 			Figures figures = stamped.get(new Stamp(matter.client(), matter.number()));
-			if (figures != null) {
+			if (figures != null)
 				matterStats.put(matter.id(),
 						new MatterStats(figures.documents(), figures.bytes(), figures.lastActivity()));
-				if (figures.week() > 0)
-					busy.add(new Busy(matter, figures.week()));
-			}
 			if (!matter.live())
 				continue;
+			if (figures != null && figures.week() > 0)
+				busy.add(new Busy(matter, figures.week()));
 			liveMatters++;
 			if (!matter.created().isBefore(week))
 				mattersThisWeek++;
@@ -293,8 +305,8 @@ public class UsageSummary implements HealdanStartListener {
 		Total people = total(PEOPLE, params);
 		List<StoreUsage> stores = stores(params, byStore);
 
-		Usage usage = new Usage(now, documents[0], documents[1], new Total(liveMatters, mattersThisWeek,
-				mattersThisMonth), clients, people, 0, days, stores, busiest);
+		Usage usage = new Usage(now, null, documents[0], documents[1],
+				new Total(liveMatters, mattersThisWeek, mattersThisMonth), clients, people, 0, days, stores, busiest);
 		snapshot = new Snapshot(usage, Map.copyOf(matterStats));
 	}
 
@@ -371,6 +383,7 @@ public class UsageSummary implements HealdanStartListener {
 	public synchronized void started() {
 		if (scheduler != null)
 			return;
+		stopping = false;
 		scheduler = Executors.newSingleThreadScheduledExecutor(work -> {
 			Thread thread = new Thread(work, THREAD);
 			thread.setDaemon(true);
@@ -388,8 +401,12 @@ public class UsageSummary implements HealdanStartListener {
 		} catch (VirtualMachineError e) {
 			throw e;
 		} catch (Throwable e) {
-			// An Error such as a class missing from a plugin's zip must not end the schedule either
-			log.error("The Dashboard's usage summary couldn't be worked out: {}", e.getMessage(), e);
+			// Stopping interrupts a refresh: no fault, so no error for the Errors screen to count
+			if (stopping || Thread.currentThread().isInterrupted())
+				log.debug("The usage summary stopped while it was being worked out: {}", e.getMessage());
+			else
+				// An Error such as a class missing from a plugin's zip must not end the schedule either
+				log.error("The Dashboard's usage summary couldn't be worked out: {}", e.getMessage(), e);
 		}
 	}
 
@@ -402,6 +419,7 @@ public class UsageSummary implements HealdanStartListener {
 		synchronized (this) {
 			running = scheduler;
 			scheduler = null;
+			stopping = running != null;
 		}
 		if (running == null)
 			return;

@@ -16,6 +16,8 @@ import java.util.List;
  *
  * @param computedAt when it was worked out; null until it has been once since the start, when the totals are null and
  *        the lists empty
+ * @param failedAt when the last try to work it out failed, the summary then being the last one that didn't; null
+ *        once one works again
  * @param documents the documents, and those filed in the last 7 and 30 days
  * @param storage the bytes of the documents' files, the current version of each, and of those filed in the last 7
  *        and 30 days
@@ -30,8 +32,9 @@ import java.util.List;
  * @param busiestMatters the matters most documents were filed in in the last 7 days, most first, at most
  *        {@link UsageSummary#BUSIEST}
  */
-public record Usage(Instant computedAt, Total documents, Total storage, Total matters, Total clients, Total people,
-		int signedIn, List<Day> filedPerDay, List<StoreUsage> stores, List<BusyMatter> busiestMatters) {
+public record Usage(Instant computedAt, Instant failedAt, Total documents, Total storage, Total matters,
+		Total clients, Total people, int signedIn, List<Day> filedPerDay, List<StoreUsage> stores,
+		List<BusyMatter> busiestMatters) {
 
 	public Usage {
 		filedPerDay = List.copyOf(filedPerDay);
@@ -40,15 +43,24 @@ public record Usage(Instant computedAt, Total documents, Total storage, Total ma
 	}
 
 	/** Nothing worked out yet */
-	static final Usage NONE = new Usage(null, null, null, null, null, null, 0, List.of(), List.of(), List.of());
+	static final Usage NONE = new Usage(null, null, null, null, null, null, null, 0, List.of(), List.of(), List.of());
 
 	/**
 	 * @param count how many people are signed in now
 	 * @return this, with that count
 	 */
 	Usage signedIn(int count) {
-		return new Usage(computedAt, documents, storage, matters, clients, people, count, filedPerDay, stores,
-				busiestMatters);
+		return new Usage(computedAt, failedAt, documents, storage, matters, clients, people, count, filedPerDay,
+				stores, busiestMatters);
+	}
+
+	/**
+	 * @param when when the last try to work it out failed
+	 * @return this, saying so
+	 */
+	Usage failedAt(Instant when) {
+		return new Usage(computedAt, when, documents, storage, matters, clients, people, signedIn, filedPerDay,
+				stores, busiestMatters);
 	}
 
 	/**
@@ -76,7 +88,7 @@ public record Usage(Instant computedAt, Total documents, Total storage, Total ma
 	 * @param documents how many documents its matters hold
 	 * @param bytes the size of their files, the current version of each
 	 * @param backend the storage backend it keeps its files on; null when the server doesn't use storage backends, or
-	 *        they couldn't be read
+	 *        the storage port couldn't be read
 	 */
 	public record StoreUsage(long id, String name, long documents, long bytes, Backend backend) {
 	}

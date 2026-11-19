@@ -21,6 +21,7 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentHistoryDAO;
+import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
@@ -108,10 +109,41 @@ public class IndexCountsTest extends AbstractHealdanTestCase {
 		jdbc.update("update ld_document set ld_deleted = 1 where ld_id = ?", deleted.getId());
 		// A shortcut is no document of its own
 		fx.legacyShortcut(failed, folder);
+		// Archived: the Indexer never takes it, so it's neither waiting nor failed
+		Document archived = document("archived.txt", IndexingStatus.TO_INDEX);
+		event(archived, DocumentEvent.INDEXED_ERROR, "Timed out", base);
+		Document archivedNew = document("archived-new.txt", IndexingStatus.TO_INDEX);
+		jdbc.update("update ld_document set ld_status = ? where ld_id in (?, ?)", DocumentStatus.ARCHIVED.ordinal(),
+				archived.getId(), archivedNew.getId());
 
 		assertEquals(1, counts.failed());
 		assertEquals(3, counts.waiting());
 		assertEquals(2, counts.indexed());
+		// All three in one pass, for the Dashboard
+		assertEquals(new IndexCounts.Counts(2, 3, 1), counts.counts());
+		assertEquals(List.of(failed.getId()), counts.failed(0, 10).stream().map(FailedDocument::id).toList());
+	}
+
+	// The latest of many tries decides, as a document failing for weeks has an error row for each of them
+	@Test
+	public void testTheLatestOfManyTries() throws Exception {
+		Document failing = document("failing.txt", IndexingStatus.TO_INDEX);
+		Document recovered = document("recovered.txt", IndexingStatus.TO_INDEX);
+		for (int i = 0; i < 200; i++) {
+			event(failing, DocumentEvent.INDEXED_ERROR, "Try " + i, base.plusSeconds(i));
+			event(recovered, DocumentEvent.INDEXED_ERROR, "Try " + i, base.plusSeconds(i));
+		}
+		event(recovered, DocumentEvent.INDEXED, null, base.plusSeconds(200));
+		// An index event with no time comes before any with one
+		event(failing, DocumentEvent.INDEXED, null, base.minusSeconds(1));
+		jdbc.update("update ld_history set ld_date = null where ld_docid = ? and ld_event = ?", failing.getId(),
+				DocumentEvent.INDEXED.toKey());
+
+		assertEquals(new IndexCounts.Counts(0, 1, 1), IndexCounts.get().counts());
+		List<FailedDocument> page = IndexCounts.get().failed(0, 10);
+		assertEquals(List.of(failing.getId()), page.stream().map(FailedDocument::id).toList());
+		assertEquals("Try 199", page.get(0).reason());
+		assertEquals(base.plusSeconds(199), page.get(0).when());
 	}
 
 	// Events at the same moment, as MariaDB's whole seconds give, go by the order they were written in
@@ -124,9 +156,9 @@ public class IndexCountsTest extends AbstractHealdanTestCase {
 		event(indexedLast, DocumentEvent.INDEXED_ERROR, "Timed out", base);
 		event(indexedLast, DocumentEvent.INDEXED, null, base);
 
-		assertEquals(1, IndexCounts.get().failed());
-		assertEquals(1, IndexCounts.get().waiting());
-		assertEquals(List.of(errorLast.getId()), IndexCounts.get().failed(0, 10).stream().map(FailedDocument::id).toList());
+		assertEquals(new IndexCounts.Counts(0, 1, 1), IndexCounts.get().counts());
+		assertEquals(List.of(errorLast.getId()),
+				IndexCounts.get().failed(0, 10).stream().map(FailedDocument::id).toList());
 	}
 
 	@Test

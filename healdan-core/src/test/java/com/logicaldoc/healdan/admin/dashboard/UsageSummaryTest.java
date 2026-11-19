@@ -7,8 +7,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
@@ -17,9 +21,12 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
+import org.apache.logging.log4j.Level;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -382,6 +389,102 @@ public class UsageSummaryTest extends AbstractHealdanTestCase {
 		assertEquals(List.of(), counting.queries().stream().map(q -> q.sql).toList());
 		assertEquals(first, second);
 		assertEquals(7, second.documents().total());
+	}
+
+	/** A data source that fails every connection while broken */
+	private static final class Breakable {
+
+		volatile boolean broken;
+
+		final DataSource dataSource;
+
+		Breakable(DataSource target) {
+			dataSource = (DataSource) Proxy.newProxyInstance(UsageSummaryTest.class.getClassLoader(),
+					new Class<?>[] { DataSource.class }, (proxy, method, args) -> {
+						if (broken && method.getName().equals("getConnection"))
+							throw new SQLException("The database can't be reached");
+						try {
+							return method.invoke(target, args);
+						} catch (InvocationTargetException e) {
+							throw e.getCause();
+						}
+					});
+		}
+	}
+
+	// A refresh that fails keeps the last summary, and says when it failed, until one works again
+	@Test
+	public void testAFailedRefreshKeepsTheLastSummary() throws Exception {
+		Firm firm = new Firm();
+		Breakable database = new Breakable(Context.get(DataSource.class));
+		UsageSummary own = new UsageSummary(database.dataSource, HealdanSettings.get());
+		Instant noon = summary.clock.instant();
+		own.clock = Clock.fixed(noon, zone);
+
+		// Before any summary: a failure, and still nothing worked out
+		database.broken = true;
+		assertThrows(RuntimeException.class, own::refreshNow);
+		assertNull(own.current().computedAt());
+		assertEquals(noon, own.current().failedAt());
+		assertNull(own.current().documents());
+
+		database.broken = false;
+		own.refreshNow();
+		Usage good = own.current();
+		assertEquals(noon, good.computedAt());
+		assertNull(good.failedAt());
+		MatterStats charter = own.forMatter(firm.charter.getId());
+
+		database.broken = true;
+		own.clock = Clock.fixed(noon.plusSeconds(900), zone);
+		assertThrows(RuntimeException.class, own::refreshNow);
+		Usage kept = own.current();
+		assertEquals(noon, kept.computedAt());
+		assertEquals(noon.plusSeconds(900), kept.failedAt());
+		assertEquals(good.documents(), kept.documents());
+		assertEquals(good.stores(), kept.stores());
+		assertEquals(charter, own.forMatter(firm.charter.getId()));
+
+		database.broken = false;
+		own.clock = Clock.fixed(noon.plusSeconds(1800), zone);
+		own.refreshNow();
+		assertEquals(noon.plusSeconds(1800), own.current().computedAt());
+		assertNull(own.current().failedAt());
+	}
+
+	// Stopping the server mid-refresh is no fault: nothing is logged as an error
+	@Test
+	public void testStoppingMidRefreshLogsNoError() throws Exception {
+		CountDownLatch connecting = new CountDownLatch(1);
+		DataSource target = Context.get(DataSource.class);
+		DataSource stalling = (DataSource) Proxy.newProxyInstance(UsageSummaryTest.class.getClassLoader(),
+				new Class<?>[] { DataSource.class }, (proxy, method, args) -> {
+					if (method.getName().equals("getConnection")) {
+						connecting.countDown();
+						try {
+							Thread.sleep(60000L);
+						} catch (InterruptedException e) {
+							Thread.currentThread().interrupt();
+							throw new SQLException("Interrupted while connecting", e);
+						}
+					}
+					try {
+						return method.invoke(target, args);
+					} catch (InvocationTargetException e) {
+						throw e.getCause();
+					}
+				});
+		UsageSummary own = new UsageSummary(stalling, HealdanSettings.get());
+
+		try (LogCapture log = LogCapture.of(UsageSummary.class, Level.DEBUG)) {
+			own.started();
+			assertTrue("The refresh didn't start", connecting.await(30, TimeUnit.SECONDS));
+			own.stop();
+
+			assertEquals(log.lines().toString(), List.of(),
+					log.lines().stream().filter(line -> !line.startsWith("DEBUG ")).toList());
+			assertTrue(log.lines().toString(), log.lines().stream().anyMatch(line -> line.startsWith("DEBUG ")));
+		}
 	}
 
 	// It works itself out on its own thread, healdan-admin-summary, never on the caller's
