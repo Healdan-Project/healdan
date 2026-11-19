@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonGenerator;
@@ -18,9 +19,12 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.deser.std.JsonNodeDeserializer;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.fasterxml.jackson.databind.deser.std.StdScalarDeserializer;
 import com.fasterxml.jackson.databind.deser.std.StringDeserializer;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -33,8 +37,8 @@ import com.logicaldoc.healdan.util.StorableText;
  * The API's JSON conventions (spec sections 4.3 to 4.5): camelCase names as
  * the Java ones, {@code null} written rather than left out, timestamps as ISO
  * 8601 in UTC ({@code 2026-10-23T14:05:00Z}), and unknown request fields
- * refused; and text with a character Healdan can't keep refused as it's read
- * (PostgreSQL spec section 7.5).
+ * refused; and text with a character Healdan can't keep refused as it's read,
+ * a tree's included (PostgreSQL spec section 7.5).
  */
 public final class ApiJson {
 
@@ -43,7 +47,8 @@ public final class ApiJson {
 			.enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
 			.addModule(new SimpleModule("healdan-dates").addSerializer(Date.class, new UtcDateSerializer())
 					.addDeserializer(Date.class, new UtcDateDeserializer()))
-			.addModule(new SimpleModule("healdan-text").addDeserializer(String.class, new StorableStringDeserializer()))
+			.addModule(new SimpleModule("healdan-text").addDeserializer(String.class, new StorableStringDeserializer())
+					.addDeserializer(JsonNode.class, new StorableTreeDeserializer()))
 			.build();
 
 	private ApiJson() {
@@ -109,7 +114,7 @@ public final class ApiJson {
 	 * Reads text as Jackson does, and refuses text with a NUL or a lone
 	 * surrogate ({@link StorableText}), which {@link ProblemMapper} answers as
 	 * {@code 400 bad-request}: PostgreSQL would fail the statement given a NUL.
-	 * A {@code JsonNode}'s text isn't read through it.
+	 * A {@code JsonNode}'s text is checked by {@link StorableTreeDeserializer}.
 	 */
 	private static class StorableStringDeserializer extends StdScalarDeserializer<String> {
 
@@ -135,6 +140,68 @@ public final class ApiJson {
 		@Override
 		public Object getEmptyValue(DeserializationContext context) {
 			return "";
+		}
+	}
+
+	/**
+	 * Reads a tree as Jackson does, such as a property's value, and refuses one
+	 * with a NUL or a lone surrogate in any of its text or field names, as
+	 * {@link StorableStringDeserializer} refuses text. A JSON {@code null} is a
+	 * null node and a missing tree nothing, as Jackson has them.
+	 */
+	private static class StorableTreeDeserializer extends StdDeserializer<JsonNode> {
+
+		private static final long serialVersionUID = 1L;
+
+		private static final JsonDeserializer<? extends JsonNode> TREES = JsonNodeDeserializer
+				.getDeserializer(JsonNode.class);
+
+		StorableTreeDeserializer() {
+			super(JsonNode.class);
+		}
+
+		@Override
+		public JsonNode deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+			JsonNode tree = TREES.deserialize(parser, context);
+			if (!holds(tree))
+				throw new UnkeptText(parser);
+			return tree;
+		}
+
+		@Override
+		public JsonNode getNullValue(DeserializationContext context) throws JsonMappingException {
+			return TREES.getNullValue(context);
+		}
+
+		@Override
+		public Object getAbsentValue(DeserializationContext context) throws JsonMappingException {
+			return TREES.getAbsentValue(context);
+		}
+
+		@Override
+		public boolean isCachable() {
+			return true;
+		}
+
+		@Override
+		public LogicalType logicalType() {
+			return LogicalType.Untyped;
+		}
+
+		private static boolean holds(JsonNode node) {
+			if (node.isTextual())
+				return StorableText.holds(node.textValue());
+			if (node.isObject()) {
+				for (Map.Entry<String, JsonNode> field : node.properties())
+					if (!StorableText.holds(field.getKey()) || !holds(field.getValue()))
+						return false;
+				return true;
+			}
+			// An array's elements; a number, a boolean or a null has none
+			for (JsonNode element : node)
+				if (!holds(element))
+					return false;
+			return true;
 		}
 	}
 

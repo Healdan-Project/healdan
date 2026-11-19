@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,7 @@ import org.apache.commons.io.FileUtils;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
@@ -97,6 +99,36 @@ public class TextFilterTest extends ApiTestCase {
 				"The field app has a character Healdan can't keep.");
 
 		before.assertUnchangedExcept("hd_api_token");
+	}
+
+	@Test
+	public void testAPropertyValueWithANulOrALoneSurrogate() throws Exception {
+		Document d = fx.upload(documents, "a.docx", "one", clerk);
+		awaitAsyncWork();
+		String token = signIn(clerk);
+		String properties = "/api/v1/documents/" + d.getCustomId() + "/properties";
+		DbSnapshot before = fx.snapshot();
+
+		// A value read as a tree, as every property's is, and one inside a value's object
+		for (Object value : List.of("LEG\u0000-9", "LEG-\uD83C", Map.of("id", 1, "na\u0000me", "x")))
+			assertRefused(value.toString(),
+					patch(properties).token(token).json(Map.of("values", Map.of("legacydocnum", value))).send(),
+					"The field legacydocnum has a character Healdan can't keep.");
+		before.assertUnchangedExcept("hd_api_token");
+
+		// An emoji is kept
+		ApiResponse kept = patch(properties).token(token)
+				.json(Map.of("values", Map.of("legacydocnum", "LEG-\uD83C\uDF89"))).send();
+		assertEquals(kept.toString(), 200, kept.status());
+		ApiResponse read = get(properties).token(token).send();
+		assertEquals(read.toString(), 200, read.status());
+		boolean found = false;
+		for (JsonNode field : read.json().path("items"))
+			if ("legacydocnum".equals(field.path("name").textValue())) {
+				assertEquals("LEG-\uD83C\uDF89", field.path("value").textValue());
+				found = true;
+			}
+		assertTrue(read.toString(), found);
 	}
 
 	private static void assertRefused(String what, ApiResponse response, String detail) {

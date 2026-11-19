@@ -16,6 +16,9 @@ info:
       out. Timestamps are ISO 8601 in UTC, such as `2026-10-23T14:05:00Z`.
     - Errors are RFC 9457 problems (`application/problem+json`). Clients
       switch on their `code`, and can show their `detail` as it is.
+    - Text may hold any character but NUL, and a lone surrogate isn't one:
+      a query parameter, or a text value anywhere in a JSON body, that holds
+      either is `400 bad-request`, as Healdan can't keep it.
     - Lists take `offset` (default 0) and `limit` (default 50, at most 200),
       and return a `Page`.
     - No compatibility promises yet: the API changes when Healdan's own
@@ -98,9 +101,8 @@ paths:
         `401 password-expired` means the password must be changed in the
         web page first. `429 too-many-attempts` means too many failed
         sign-ins; the detail says when to try again. `422 validation` with
-        the field `name` is a device name over 100 characters (`too-long`),
-        or one with a character Healdan can't keep, a NUL or a lone surrogate
-        (`invalid`); with the field `device.id`, a device id that's missing
+        the field `name` is a device name over 100 characters (`too-long`);
+        with the field `device.id`, a device id that's missing
         (`required`), over 64 characters (`too-long`), or has characters
         other than letters, digits and hyphens (`invalid`). Both are checked
         before the password or the code, so a wrong one doesn't use the code
@@ -293,8 +295,7 @@ paths:
         2. `404 not-found` if the caller has no such favorite, which
            includes another user's, or can no longer read its item.
         3. `422 validation` for the field `name`: `invalid` for a control
-           character or a lone surrogate, which Healdan can't keep, and
-           `too-long` over 255 characters.
+           character, and `too-long` over 255 characters.
       tags: [Users]
       parameters:
         - $ref: '#/components/parameters/FavoriteIdPath'
@@ -1037,8 +1038,8 @@ paths:
            administrator, and when one of Healdan's rules refuses.
         6. `422 validation` for the field `name`: `required`, `too-long`
            (over 255 characters, with the extension the document keeps),
-           `invalid` (a `/`, a `\`, a control character, or a lone
-           surrogate, which Healdan can't keep, checked first) and `extension`
+           `invalid` (a `/`, a `\` or a control character, checked first)
+           and `extension`
            (another extension than the document's, such as `Lease.pdf`).
       tags: [Documents]
       parameters:
@@ -1565,9 +1566,8 @@ paths:
 
         1. `400 bad-request` for a body that isn't the JSON expected (`415`
            for one that isn't sent as JSON), and `422 validation` with the
-           field `app` for an app's name over 100 characters (`too-long`) or
-           with a NUL or a lone surrogate, which Healdan can't keep
-           (`invalid`). The body is optional.
+           field `app` for an app's name over 100 characters (`too-long`).
+           The body is optional.
         2. `404 not-found` for a document the caller can't read.
         3. `403 forbidden` without the Write permission, and for a document
            protected by a password, which is always refused with a device
@@ -2036,8 +2036,8 @@ paths:
         6. `422 validation` for the field `name`: `required` (also for a
            name of characters that show nothing, such as U+200B),
            `too-long` (over 255 characters) and `invalid` (a `/`, a `\`, a
-           control character, a lone surrogate, which Healdan can't keep, one
-           that changes the text's direction, any HTML tag, or a
+           control character, one that changes the text's direction, any
+           HTML tag, or a
            character reference such as `&amp;`).
         7. `409 name-taken` when another folder in the same folder that the
            caller can see has the name, compared without regard to case: a
