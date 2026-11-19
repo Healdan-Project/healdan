@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import java.lang.reflect.Proxy;
 import java.math.BigInteger;
 import java.sql.BatchUpdateException;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.SQLNonTransientConnectionException;
 import java.util.ArrayList;
@@ -25,6 +27,8 @@ public class MoveFromMariaDbTest {
         sourceFromTheEnvironment();
         refusesASourceAtAnotherVersion();
         decidesOnTheTarget();
+        pairsWithOneSchemaVersion();
+        closingFailsNothing();
         quotesNames();
         matchesSequencesWhateverTheCase();
         namesASequencesTable();
@@ -252,26 +256,90 @@ public class MoveFromMariaDbTest {
     }
 
     private static void decidesOnTheTarget() {
-        Check.eq(MoveFromMariaDb.TargetState.EMPTY, MoveFromMariaDb.targetState(null, 0, 0), "an empty schema");
-        Check.eq(MoveFromMariaDb.TargetState.NOT_EMPTY, MoveFromMariaDb.targetState(null, 3, 0),
+        Check.eq(MoveFromMariaDb.TargetState.EMPTY, MoveFromMariaDb.targetState(null, false, 0, 0), "an empty schema");
+        Check.eq(MoveFromMariaDb.TargetState.NOT_EMPTY, MoveFromMariaDb.targetState(null, false, 3, 0),
                 "tables and no marker: an install's, or anything else");
-        Check.eq(MoveFromMariaDb.TargetState.UNFINISHED, MoveFromMariaDb.targetState(false, 120, 0),
+        Check.eq(MoveFromMariaDb.TargetState.NOT_EMPTY, MoveFromMariaDb.targetState(null, true, 120, 0),
+                "an install the start-up tool made");
+        Check.eq(MoveFromMariaDb.TargetState.UNFINISHED, MoveFromMariaDb.targetState(false, false, 120, 0),
                 "an unfinished move, whatever it made");
-        Check.eq(MoveFromMariaDb.TargetState.UNFINISHED, MoveFromMariaDb.targetState(false, 1, 0),
+        Check.eq(MoveFromMariaDb.TargetState.UNFINISHED, MoveFromMariaDb.targetState(false, false, 1, 0),
                 "a marker with no row is an unfinished move (Db.move reads it as false)");
-        Check.eq(MoveFromMariaDb.TargetState.FINISHED, MoveFromMariaDb.targetState(true, 120, 0), "a finished move");
-        Check.eq(MoveFromMariaDb.TargetState.NOT_EMPTY, MoveFromMariaDb.targetState(false, 120, 1),
+        Check.eq(MoveFromMariaDb.TargetState.FINISHED, MoveFromMariaDb.targetState(true, true, 120, 0),
+                "a finished move, which made the start-up tool's marker as it finished");
+        Check.eq(MoveFromMariaDb.TargetState.NOT_EMPTY, MoveFromMariaDb.targetState(false, false, 120, 1),
                 "an unfinished move beside a view a move never makes");
+        // A move makes docker_init only in the transaction that finishes it, so an unfinished marker beside it is
+        // something else's doing, on a database Healdan may have started on: never emptied
+        Check.eq(MoveFromMariaDb.TargetState.STARTED, MoveFromMariaDb.targetState(false, true, 120, 0),
+                "an unfinished move beside the start-up tool's marker");
+        Check.eq(MoveFromMariaDb.TargetState.STARTED, MoveFromMariaDb.targetState(false, true, 2, 0),
+                "a marker with no row beside the start-up tool's");
+        Check.eq(MoveFromMariaDb.TargetState.STARTED, MoveFromMariaDb.targetState(false, true, 120, 1),
+                "and beside a view too");
         String finished = MoveFromMariaDb.targetRefusal(MoveFromMariaDb.TargetState.FINISHED, 1, 0, 0);
         Check.isTrue(finished.contains("finished move") && finished.contains("changed nothing")
                 && finished.contains("docker compose up -d"), "a finished move's refusal: " + finished);
         String notEmpty = MoveFromMariaDb.targetRefusal(MoveFromMariaDb.TargetState.NOT_EMPTY, 56, 40, 0);
         Check.isTrue(notEmpty.contains("56 tables, 40 sequences,") && notEmpty.contains("Nothing was changed")
                 && notEmpty.contains("pg-data"), "a schema the move didn't make: " + notEmpty);
+        for (String refusal : List.of(finished, notEmpty))
+            Check.isTrue(refusal.contains("the db service's volume, pg-data, or on a stack with host folders empty"
+                    + " PostgreSQL's folder") && refusal.contains("#starting-the-move-over"),
+                    "emptying the target is told for a volume and for a host folder: " + refusal);
         Check.isTrue(MoveFromMariaDb.targetRefusal(MoveFromMariaDb.TargetState.NOT_EMPTY, 1, 1, 2)
                 .contains("1 table, 1 sequence and 2 other relations"), "counts in words");
+        String started = MoveFromMariaDb.targetRefusal(MoveFromMariaDb.TargetState.STARTED, 120, 40, 0);
+        Check.isTrue(started.contains("didn't finish") && started.contains("docker_init")
+                && started.contains("won't empty a database Healdan has been started on")
+                && started.contains("changed nothing"), "a started database's refusal: " + started);
         Check.throwsWith("isn't refused", () -> MoveFromMariaDb.targetRefusal(MoveFromMariaDb.TargetState.EMPTY, 0, 0,
                 0), "an empty target isn't refused");
+    }
+
+    /**
+     * The version the move makes its target's tables at (the review's item 7, option B): the one that pairs with a
+     * version-11 source, and no later one, which the app's first start applies to the moved rows
+     */
+    private static void pairsWithOneSchemaVersion() {
+        String why = "TARGET_VERSION is the version of Healdan's tables that pairs with a source at version "
+                + MoveFromMariaDb.SOURCE_VERSION + ": the eleven scripts it ran, translated, and V12, the widening of"
+                + " LogicalDOC's text columns. A later migration (V13 or after) changes nothing here: the move stops at"
+                + " 12, and the app's first start applies the later ones to the moved rows, as on any upgrade. So"
+                + " there's nothing to decide when one ships, and the constant stays 12";
+        Check.eq("12", MoveFromMariaDb.TARGET_VERSION, why);
+        Check.isTrue(MoveFromMariaDbTest.class.getClassLoader().getResource("healdan/db/migration/postgresql/V"
+                + MoveFromMariaDb.TARGET_VERSION + "__widen_logicaldoc_text.sql") != null,
+                "the widening is the WAR's script at TARGET_VERSION. " + why);
+        Check.eq(null, MoveFromMariaDb.versionRefusal("12"), "a target at 12 goes on");
+        String other = MoveFromMariaDb.versionRefusal("13");
+        Check.isTrue(other != null && other.contains("version 13") && other.contains("version 12")
+                && other.contains("version 11") && other.contains("Run the move again"),
+                "a target at another version stops the move: " + other);
+    }
+
+    /** Closing a connection after the finish never turns a finished move into a failed one */
+    private static void closingFailsNothing() {
+        Connection failing = (Connection) Proxy.newProxyInstance(MoveFromMariaDbTest.class.getClassLoader(),
+                new Class<?>[] { Connection.class }, (proxy, method, args) -> {
+                    if (method.getName().equals("close"))
+                        throw new SQLException("closing the session of Quarterly Report", "08006");
+                    throw new UnsupportedOperationException(method.getName());
+                });
+        java.io.PrintStream err = System.err;
+        java.io.ByteArrayOutputStream printed = new java.io.ByteArrayOutputStream();
+        System.setErr(new java.io.PrintStream(printed, true, java.nio.charset.StandardCharsets.UTF_8));
+        try {
+            MoveFromMariaDb.close(failing, "the target");
+        } catch (RuntimeException e) {
+            Check.fail("a failure to close throws nothing: " + e);
+        } finally {
+            System.setErr(err);
+        }
+        Check.eq("[move] WARNING: closing the connection to the target failed, which changes nothing the move did: the"
+                + " connection to the database failed (SQLSTATE 08006, java.sql.SQLException)" + System.lineSeparator(),
+                printed.toString(java.nio.charset.StandardCharsets.UTF_8), "it's a warning, without the driver's"
+                        + " message");
     }
 
     private static void quotesNames() {

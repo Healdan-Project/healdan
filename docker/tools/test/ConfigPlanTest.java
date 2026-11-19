@@ -18,6 +18,7 @@ public class ConfigPlanTest {
         passwordRejectsSyntaxLogicalDocInterprets();
         passwordRejectsLeadingWhitespace();
         portMustBeNumeric();
+        hostAndNameCantChangeTheUrl();
         publicUrlOptionalAndNormalised();
         dbWaitSecondsValidated();
         healdanKeysAreTheStoreAndTheDatabase();
@@ -106,6 +107,29 @@ public class ConfigPlanTest {
     private static void portMustBeNumeric() {
         Check.throwsWith("DB_PORT", () -> ConfigPlan.envKeys(env("DB_PASSWORD", "pw", "DB_PORT", "33o6")),
                 "non-numeric port");
+    }
+
+    /**
+     * DB_HOST and DB_NAME go into the URL as they are: a ?, #, %, / or space in either would drop or garble
+     * logServerErrorDetail=false, which keeps row values out of every log line. They're refused, by the rule the move
+     * checks its source's with.
+     */
+    private static void hostAndNameCantChangeTheUrl() {
+        for (String host : List.of("db?logServerErrorDetail=true", "db#", "db%2F", "db/other", "pg db", "db\t2"))
+            Check.throwsWith("DB_HOST", () -> ConfigPlan.envKeys(env("DB_PASSWORD", "pw", "DB_HOST", host)),
+                    "the host '" + host + "'");
+        for (String name : List.of("logicaldoc?logServerErrorDetail=true", "logicaldoc#", "logical%64oc",
+                "logicaldoc/x", "logical doc"))
+            Check.throwsWith("DB_NAME", () -> ConfigPlan.envKeys(env("DB_PASSWORD", "pw", "DB_NAME", name)),
+                    "the name '" + name + "'");
+        Check.eq("jdbc:postgresql://[fd00::1]:5432/healdan_prod-2$?logServerErrorDetail=false",
+                ConfigPlan.envKeys(env("DB_PASSWORD", "pw", "DB_HOST", "[fd00::1]", "DB_NAME", "healdan_prod-2$"))
+                        .get("jdbc.url"), "an IPv6 address in brackets, and a name with _, - and $");
+        Check.eq("jdbc:postgresql://pg-1.example.org:5432/logicaldoc?logServerErrorDetail=false",
+                ConfigPlan.envKeys(env("DB_PASSWORD", "pw", "DB_HOST", " pg-1.example.org ")).get("jdbc.url"),
+                "a host name, trimmed");
+        Check.isTrue(ConfigPlan.HOST.matcher("mariadb").matches() && ConfigPlan.DATABASE.matcher("logicaldoc")
+                .matches(), "the move's defaults match the rule it shares");
     }
 
     private static void publicUrlOptionalAndNormalised() {

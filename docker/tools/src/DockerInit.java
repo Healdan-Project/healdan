@@ -57,8 +57,11 @@ public final class DockerInit {
     /** The DbInit variant the app's database takes: PostgreSQL has none, so every plugin gets its generic script. */
     static final String DBMS = "postgresql";
 
-    /** Created only after the schema is verified, so a first start that failed part-way is recognisable. */
-    private static final String MARKER = "docker_init";
+    /**
+     * Created only after the schema is verified, so a first start that failed part-way is recognisable. A move from
+     * MariaDB makes it only in the transaction that marks the move finished.
+     */
+    static final String MARKER = "docker_init";
 
     /** The Install manual's list of the changes to LogicalDOC's tables an existing database needs, with their SQL. */
     private static final String TABLE_CHANGES = "https://docs.healdan.com/install/upgrading/#changes-to-logicaldocs-tables";

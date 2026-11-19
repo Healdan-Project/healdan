@@ -94,6 +94,30 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 		assertEquals(rows, historyRows());
 	}
 
+	/**
+	 * migrateTo stops at its version, as the move from MariaDB needs: a later
+	 * script is left for the next migrate, and isn't run or recorded
+	 */
+	@Test
+	public void testMigrateToRunsNothingAfterItsVersion() {
+		DataSource ds = freshCeDatabase();
+		JdbcTemplate fresh = new JdbcTemplate(ds);
+		HealdanMigrator target = new HealdanMigrator(ds);
+		String[] withLater = { "classpath:healdan/db/migration/{vendor}", "classpath:healdan/db/failing/{vendor}" };
+
+		// V9999__broken.sql comes after every real script and fails: migrating to 12 doesn't reach it
+		assertEquals(Status.MIGRATED, target.migrateTo("12", withLater));
+
+		assertEquals(MigrationVersion.fromVersion("12"), target.currentVersion());
+		assertEquals(Integer.valueOf(0), fresh.queryForObject(
+				"select count(*) from hd_schema_history where version = '9999'", Integer.class));
+		assertFalse(tableExists(fresh, "hd_broken"));
+
+		// Without a target the same locations run it, and fail on it as before
+		assertThrows(HealdanStartupException.class, () -> target.migrate(withLater));
+		assertEquals(MigrationVersion.fromVersion("12"), target.currentVersion());
+	}
+
 	@Test
 	public void testMisnamedScriptFailsStartup() {
 		// Flyway ignores a script whose name it can't parse unless naming is validated

@@ -75,7 +75,7 @@ public class HealdanMigrator {
 
 	/**
 	 * Applies the pending migrations found in the given Flyway locations.
-	 * 
+	 *
 	 * @param locations the Flyway locations; the default location of the
 	 *        connected database when empty
 	 * @return the outcome
@@ -83,6 +83,36 @@ public class HealdanMigrator {
 	 *         migration fails
 	 */
 	public Status migrate(String... locations) {
+		return run(null, locations);
+	}
+
+	/**
+	 * Applies the pending migrations up to, and including, a version, and none
+	 * after it (Flyway's target): the move from MariaDB makes its target's
+	 * tables at the one version that pairs with its source, and the app's
+	 * first start applies the later ones to the moved rows. Tests use it to
+	 * reach an earlier version before an upgrade.
+	 *
+	 * @param version the last version to apply, e.g. {@code "12"}; one that no
+	 *        script has fails the migration
+	 * @param locations the Flyway locations; the default location of the
+	 *        connected database when empty
+	 * @return the outcome
+	 * @throws HealdanStartupException if the database is unsupported or a
+	 *         migration fails
+	 */
+	public Status migrateTo(String version, String... locations) {
+		if (version == null || version.isBlank())
+			throw new IllegalArgumentException("a version to migrate to is required");
+		return run(version, locations);
+	}
+
+	/**
+	 * migrate's and migrateTo's body
+	 *
+	 * @param target the last version to apply, or null for every pending one
+	 */
+	private Status run(String target, String[] locations) {
 		try {
 			DatabaseMetaData meta;
 			boolean ceSchema;
@@ -100,7 +130,10 @@ public class HealdanMigrator {
 			if (!ceSchema)
 				return Status.SKIPPED_NO_CE_SCHEMA;
 
-			MigrateResult result = configure(dataSource, effective).load().migrate();
+			FluentConfiguration configuration = configure(dataSource, effective);
+			if (target != null)
+				configuration.target(target);
+			MigrateResult result = configuration.load().migrate();
 			logOutcome(result);
 			return Status.MIGRATED;
 		} catch (HealdanStartupException e) {
@@ -183,8 +216,9 @@ public class HealdanMigrator {
 	}
 
 	/*
-	 * Only in the connection's own database: with a null catalog, MariaDB's
-	 * driver searches every database on the server.
+	 * Only in the connection's own schema, current_schema(), where CE's tables
+	 * and Flyway's history are made: with a null schema, pgjdbc searches every
+	 * schema of the database, and would find an ld_user in another one.
 	 */
 	private static boolean tableExists(DatabaseMetaData meta, String catalog, String schema, String table)
 			throws SQLException {

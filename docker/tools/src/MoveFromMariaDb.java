@@ -45,10 +45,13 @@ import com.logicaldoc.healdan.db.HealdanMigrator;
  * schema isn't at SOURCE_VERSION, the last on MariaDB, or that lacks a table or column the .mariadb DbInit scripts
  * create.</li>
  * <li>The target: the start-up tool's checks of the server and the database, then the target's state. An empty schema
- * goes on, one an unfinished move left is emptied, and anything else, a finished move included, is refused.</li>
+ * goes on, one an unfinished move left is emptied, and anything else, a finished move included, is refused, as is an
+ * unfinished move beside the start-up tool's marker: a database Healdan may have started on is never emptied.</li>
  * <li>Marks the target with an unfinished move (StartGuard.MOVE_MARKER), which the start-up tool won't start on.</li>
- * <li>Makes the schema as a fresh install's: LogicalDOC's DbInit scripts, then Healdan's migrations. No seed runs, and
- * the app never starts, so the install id and every seed marker come from the source.</li>
+ * <li>Makes the schema as a fresh install's: LogicalDOC's DbInit scripts, then Healdan's migrations up to
+ * TARGET_VERSION, the one that pairs with the source, and none after it, which the app's first start applies to the
+ * moved rows. No seed runs, and the app never starts, so the install id and every seed marker come from the
+ * source.</li>
  * <li>Drops the foreign keys, keeping their definitions, and empties every table but the target's own.</li>
  * <li>Copies every table both sides have, each in one transaction, reading the source in one consistent snapshot, and
  * checks what it read against MariaDB's own count of the rows and values and their CRC-32s. A value PostgreSQL can't
@@ -68,6 +71,26 @@ final class MoveFromMariaDb {
     /** The last version of the mariadb/ folder: a source at any other is refused */
     static final String SOURCE_VERSION = "11";
 
+    /**
+     * The version of Healdan's tables that pairs with a source at SOURCE_VERSION, which the move makes its target's:
+     * the eleven scripts the source ran, translated, and V12, the widening of eight of LogicalDOC's text columns. The
+     * move runs no later migration, as one that writes rows would write them to tables the copy then empties, and be
+     * recorded as applied: the app's first start applies each later one to the moved rows, as on any upgrade. So it
+     * stays 12 when a later migration ships.
+     */
+    static final String TARGET_VERSION = "12";
+
+    /** Where an admin reports what the move can't sort out itself */
+    private static final String ISSUES = "https://github.com/Healdan-Project/healdan/issues";
+
+    /** How an admin empties the target, for the refusals that tell how: on volumes, or with host folders */
+    private static final String EMPTY_IT = "remove the db service's volume, pg-data, or on a stack with host folders"
+            + " empty PostgreSQL's folder";
+
+    /** The Moving page's section that empties the target, either way */
+    private static final String START_OVER = "Starting the Move Over says: " + StartGuard.MOVE_PAGE
+            + "#starting-the-move-over";
+
     static final String REPLACE_NUL = "--replace-nul";
 
     /** The git tag of the last release that runs on MariaDB, to which a source is upgraded before it moves */
@@ -84,10 +107,6 @@ final class MoveFromMariaDb {
 
     /** A text key value printed as it is: a name, as CE's text keys are, with no spaces, controls or at sign */
     private static final Pattern PRINTABLE_KEY = Pattern.compile("[A-Za-z0-9_.:-]{1,64}");
-
-    private static final Pattern HOST = Pattern.compile("[A-Za-z0-9._-]{1,253}|\\[[0-9A-Fa-f:.]{2,45}\\]");
-
-    private static final Pattern DATABASE = Pattern.compile("[A-Za-z0-9_$-]{1,64}");
 
     private static final String TIMESTAMP = "timestamp without time zone";
 
@@ -156,7 +175,10 @@ final class MoveFromMariaDb {
         int waitSeconds = ConfigPlan.dbWaitSeconds(env);
         ClassLoader cl = MoveFromMariaDb.class.getClassLoader();
 
-        try (Connection src = connectSource(source)) {
+        // Each connection is closed by close(), which only warns, never by a try-with-resources: its failure to close
+        // after the finish would make a finished move print ERROR and exit 1. The last line comes once both are closed
+        Connection src = connectSource(source);
+        try {
             // 1. The source
             String mariaDb = checkSource(src, source, cl);
             say("Source: MariaDB " + mariaDb + ", Healdan schema version " + SOURCE_VERSION + ", " + sourceZone(src)
@@ -165,7 +187,8 @@ final class MoveFromMariaDb {
             // 2. The target, and 3. its marker
             db.await(waitSeconds);
             String postgres = postgresVersion(DockerInit.checkDatabase(db, MoveFromMariaDb::warn).versionNum());
-            try (Connection tgt = connectTarget(db)) {
+            Connection tgt = connectTarget(db);
+            try {
                 lock(tgt);
                 TargetState state = prepare(tgt, db);
                 say("Target: PostgreSQL " + postgres + (state == TargetState.UNFINISHED
@@ -173,8 +196,8 @@ final class MoveFromMariaDb {
 
                 // 4. The schema
                 int tables = makeSchema(cl, db, tgt);
-                say("Schema: made as a fresh install's, by LogicalDOC's scripts and Healdan's migrations (" + tables
-                        + " tables) ... ok");
+                say("Schema: made as a fresh install's, by LogicalDOC's scripts and Healdan's migrations to version "
+                        + TARGET_VERSION + " (" + tables + " tables) ... ok");
 
                 // 5. The foreign keys and the scripts' rows
                 List<ForeignKey> foreignKeys = dropForeignKeysAndEmpty(tgt);
@@ -208,9 +231,13 @@ final class MoveFromMariaDb {
                 for (String line : replacedReport(copied.replaced()))
                     say(line);
                 finish(tgt);
-                say("Move complete.");
+            } finally {
+                close(tgt, "the target");
             }
+        } finally {
+            close(src, "the source");
         }
+        say("Move complete.");
     }
 
     // ---- the options and the environment
@@ -257,11 +284,11 @@ final class MoveFromMariaDb {
         String password = env.get("MOVE_SOURCE_PASSWORD");
         if (password == null || password.isEmpty())
             password = env.get("DB_PASSWORD");
-        if (!HOST.matcher(host).matches())
+        if (!ConfigPlan.HOST.matcher(host).matches())
             throw new MoveException("MOVE_SOURCE_HOST must be a host name or an address, got '" + host + "'");
         if (!port.matches("\\d{1,5}") || Integer.parseInt(port) < 1 || Integer.parseInt(port) > 65535)
             throw new MoveException("MOVE_SOURCE_PORT must be a port number, got '" + port + "'");
-        if (!DATABASE.matcher(name).matches())
+        if (!ConfigPlan.DATABASE.matcher(name).matches())
             throw new MoveException("MOVE_SOURCE_NAME (or DB_NAME) must be a database name of letters, digits, _, $"
                     + " and -, got '" + name + "'");
         if (password == null || password.isEmpty())
@@ -510,17 +537,22 @@ final class MoveFromMariaDb {
     }
 
     enum TargetState {
-        EMPTY, UNFINISHED, FINISHED, NOT_EMPTY
+        EMPTY, UNFINISHED, FINISHED, NOT_EMPTY, STARTED
     }
 
     /**
      * @param move as Db.move gives it: null without the marker, false for an unfinished move, true a finished one
+     * @param initialised the schema has the start-up tool's marker, DockerInit.MARKER
      * @param tablesAndSequences the schema's tables and sequences
      * @param others the schema's other relations (views, foreign tables and the like), which a move never makes
      */
-    static TargetState targetState(Boolean move, int tablesAndSequences, int others) {
+    static TargetState targetState(Boolean move, boolean initialised, int tablesAndSequences, int others) {
         if (Boolean.TRUE.equals(move))
             return TargetState.FINISHED;
+        // A move makes the start-up tool's marker only in the transaction that marks it finished, so an unfinished
+        // move beside that marker is something else's doing, on a database Healdan may have started on
+        if (Boolean.FALSE.equals(move) && initialised)
+            return TargetState.STARTED;
         if (others > 0)
             return TargetState.NOT_EMPTY;
         if (Boolean.FALSE.equals(move))
@@ -533,15 +565,20 @@ final class MoveFromMariaDb {
         return switch (state) {
         case FINISHED -> "the target database already holds a finished move from MariaDB, so this one stopped and"
                 + " changed nothing. Start Healdan on it with docker compose up -d. To move again from the start,"
-                + " the target has to be empty: point DB_NAME at a new database, or remove the db service's volume,"
-                + " pg-data, if nothing else is in it.";
+                + " the target has to be empty: point DB_NAME at a new database or, if nothing else is in it, "
+                + EMPTY_IT + ", as " + START_OVER;
         case NOT_EMPTY -> "the target database already holds " + tables + " table" + (tables == 1 ? "" : "s") + ", "
                 + sequences + " sequence" + (sequences == 1 ? "" : "s")
                 + (others == 0 ? "" : " and " + others + " other relation" + (others == 1 ? "" : "s"))
                 + ", which no move from MariaDB made, and the move writes only to an empty database or one an"
-                + " unfinished move left. Nothing was changed. If it's a new install started by mistake, and holds"
-                + " nothing you need, remove the db service's volume, pg-data, and run the move again; otherwise"
-                + " point DB_NAME at a new, empty database.";
+                + " unfinished move left. Nothing was changed. Point DB_NAME at a new, empty database or, if it's a"
+                + " new install started by mistake and holds nothing you need, " + EMPTY_IT + " and run the move"
+                + " again, as " + START_OVER;
+        case STARTED -> "the target database holds a move from MariaDB that didn't finish, and the start-up tool's"
+                + " marker, " + DockerInit.MARKER + ", which a move makes only as it finishes. Something other than a"
+                + " move changed the database, and Healdan may have been started on it. The move won't empty a"
+                + " database Healdan has been started on, so this one stopped and changed nothing. Keep the database as"
+                + " it is, back it up, and ask for help: " + ISSUES;
         default -> throw new IllegalArgumentException(state + " isn't refused");
         };
     }
@@ -558,8 +595,9 @@ final class MoveFromMariaDb {
         int sequences = kinds.getOrDefault("S", 0);
         int others = kinds.getOrDefault("v", 0) + kinds.getOrDefault("m", 0) + kinds.getOrDefault("f", 0)
                 + kinds.getOrDefault("c", 0);
-        TargetState state = targetState(move, tables + sequences, others);
-        if (state == TargetState.FINISHED || state == TargetState.NOT_EMPTY)
+        boolean initialised = names(c, "r", "p").contains(DockerInit.MARKER);
+        TargetState state = targetState(move, initialised, tables + sequences, others);
+        if (state != TargetState.EMPTY && state != TargetState.UNFINISHED)
             throw new MoveException(targetRefusal(state, tables, sequences, others));
         c.setAutoCommit(false);
         try (Statement s = c.createStatement()) {
@@ -623,8 +661,9 @@ final class MoveFromMariaDb {
 
     /**
      * Makes the schema as a fresh install's start does: LogicalDOC's DbInit scripts, checked as the start-up tool
-     * checks them, then Healdan's migrations through HealdanMigrator, the widening of LogicalDOC's columns included.
-     * No seed runs.
+     * checks them, then Healdan's migrations through HealdanMigrator up to TARGET_VERSION, the widening of
+     * LogicalDOC's columns included, and none after it, which the app's first start applies to the moved rows. The
+     * version they reach is checked. No seed runs.
      *
      * @return the number of tables the schema has
      */
@@ -638,9 +677,12 @@ final class MoveFromMariaDb {
         if (!missing.isEmpty())
             throw new MoveException("LogicalDOC's scripts didn't make the whole schema (the errors are above): "
                     + missing.describe() + ". Run the move again, which starts over.");
+        HealdanMigrator migrator = new HealdanMigrator(new DriverManagerDataSource(db.url, db.user, db.password));
         HealdanMigrator.Status status;
+        String reached;
         try {
-            status = new HealdanMigrator(new DriverManagerDataSource(db.url, db.user, db.password)).migrate();
+            status = migrator.migrateTo(TARGET_VERSION);
+            reached = migrator.currentVersion().getVersion();
         } catch (RuntimeException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             throw new MoveException("making Healdan's tables failed: " + cause.getMessage()
@@ -648,7 +690,22 @@ final class MoveFromMariaDb {
         }
         if (status != HealdanMigrator.Status.MIGRATED)
             throw new MoveException("Healdan's migrations didn't run (" + status + "), so the move stopped");
+        String refusal = versionRefusal(reached);
+        if (refusal != null)
+            throw new MoveException(refusal);
         return names(c, "r", "p").size();
+    }
+
+    /**
+     * @param reached the version of Healdan's tables the target's migrations reached
+     * @return the refusal for one other than TARGET_VERSION, or null
+     */
+    static String versionRefusal(String reached) {
+        if (TARGET_VERSION.equals(reached))
+            return null;
+        return "Healdan's tables reached version " + reached + ", not version " + TARGET_VERSION + ", the one that"
+                + " pairs with the source's version " + SOURCE_VERSION + ", so the move stopped. Run the move again,"
+                + " which starts over.";
     }
 
     // ---- 5. The foreign keys and the scripts' rows
@@ -1717,6 +1774,25 @@ final class MoveFromMariaDb {
             if (secret != null && !secret.isEmpty())
                 scrubbed = scrubbed.replace(secret, "********");
         return scrubbed;
+    }
+
+    /**
+     * Closes a connection the move is done with. A failure to close it is never the move's: once the finish is
+     * committed, the move is complete whatever closing does, and before that, the failure that ended the move is the
+     * one to report. So it's a warning, described without the driver's message.
+     *
+     * @param which the source or the target, for the warning
+     */
+    static void close(Connection c, String which) {
+        try {
+            c.close();
+        } catch (SQLException e) {
+            warn("closing the connection to " + which + " failed, which changes nothing the move did: "
+                    + described(e));
+        } catch (RuntimeException e) {
+            warn("closing the connection to " + which + " failed, which changes nothing the move did: "
+                    + e.getClass().getName());
+        }
     }
 
     private static String text(Statement s, String query) throws SQLException {

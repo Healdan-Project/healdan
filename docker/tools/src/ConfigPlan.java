@@ -4,6 +4,7 @@
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Decides which context.properties keys the container manages. Pure logic over an environment map; DockerInit
@@ -59,6 +60,16 @@ public final class ConfigPlan {
             "jdbc.driver", "org.postgresql.Driver",
             "jdbc.dbms", "postgresql",
             "hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
+
+    /**
+     * A database server's host as a JDBC URL may hold it: a name or an IPv4 address, or an IPv6 address in brackets.
+     * Nothing that ends the host part (a slash, ?, #) or that the driver decodes (%), and no spaces. The app's DB_HOST
+     * and the move's MOVE_SOURCE_HOST take this rule alike.
+     */
+    static final Pattern HOST = Pattern.compile("[A-Za-z0-9._-]{1,253}|\\[[0-9A-Fa-f:.]{2,45}\\]");
+
+    /** A database's name as a JDBC URL may hold it, by the same rule: the app's DB_NAME and MOVE_SOURCE_NAME */
+    static final Pattern DATABASE = Pattern.compile("[A-Za-z0-9_$-]{1,64}");
 
     private ConfigPlan() {
     }
@@ -116,14 +127,21 @@ public final class ConfigPlan {
     /**
      * PostgreSQL's URL. logServerErrorDetail=false keeps the server's detail out of each SQLException's message, which
      * pgjdbc otherwise puts there with the row's values ("Failing row contains (...)", "Key (...)=(...) already
-     * exists"), and no log line prints a row's values. The SQLSTATE and the constraint's name are kept.
+     * exists"), and no log line prints a row's values. The SQLSTATE and the constraint's name are kept. So the host
+     * and the name must be ones that can't end or change the URL before it (HOST, DATABASE).
      */
     private static String jdbcUrl(Map<String, String> env) {
+        String host = value(env, "DB_HOST", "db");
+        if (!HOST.matcher(host).matches())
+            throw new IllegalArgumentException("DB_HOST must be a host name or an address, got '" + host + "'");
         String port = value(env, "DB_PORT", "5432");
         if (!port.matches("\\d{1,5}"))
             throw new IllegalArgumentException("DB_PORT must be a port number, got '" + port + "'");
-        return "jdbc:postgresql://" + value(env, "DB_HOST", "db") + ":" + port + "/"
-                + value(env, "DB_NAME", "logicaldoc") + "?logServerErrorDetail=false";
+        String name = value(env, "DB_NAME", "logicaldoc");
+        if (!DATABASE.matcher(name).matches())
+            throw new IllegalArgumentException("DB_NAME must be a database name of letters, digits, _, $ and -, got '"
+                    + name + "'");
+        return "jdbc:postgresql://" + host + ":" + port + "/" + name + "?logServerErrorDetail=false";
     }
 
     private static String password(Map<String, String> env) {
