@@ -9,8 +9,9 @@
 # Compose project (healdan-move) and MOVE_PORT the app's port on 127.0.0.1 (18090).
 #
 # The fixture is loaded once, and the cases run in the order a move would meet them: refused (an older source), stopped
-# part-way (a zero date) with the app's start refused on what it left, stopped again (a NUL), and run again to the end
-# with --replace-nul. Then the report, the data, and the app on it.
+# part-way (a zero date) with the app's start refused on what it left, stopped again (a NUL), stopped by its own
+# comparison (a value changed on the target), and run again to the end with --replace-nul. Then the report, the data,
+# and the app on it.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 . docker/tests/lib.sh
@@ -135,7 +136,7 @@ fi
 trap cleanup EXIT
 
 # healthy <container> <timeout seconds>: as lib.sh's wait_healthy, looking every second, and giving up on a container
-# that stopped
+# that stopped, or that its restart policy is starting again
 healthy() {
   local deadline=$((SECONDS + $2)) state
   while :; do
@@ -143,7 +144,7 @@ healthy() {
       "$1" 2>/dev/null || echo missing)
     case $state in
       *' healthy') return 0 ;;
-      exited* | dead* | *' none' | missing) echo "container '$1' is $state"; return 1 ;;
+      exited* | dead* | restarting* | *' none' | missing) echo "container '$1' is $state"; return 1 ;;
     esac
     [ "$SECONDS" -lt "$deadline" ] || { echo "container $1 is '$state' after $2 s"; return 1; }
     sleep 1
@@ -156,9 +157,14 @@ maria() {
 }
 # pg <SQL>: the target, as PostgreSQL's superuser over the container's socket, columns separated by |
 pg() { compose_move exec -T db psql -U postgres -d logicaldoc -X -A -t -v ON_ERROR_STOP=1 -c "$1"; }
+# pg_script: the SQL on stdin, as pg runs its SQL
+pg_script() { compose_move exec -T db psql -U postgres -d logicaldoc -X -q -v ON_ERROR_STOP=1 -f -; }
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
-# sums <file>: every MariaDB table's checksum (CHECKSUM TABLE, over every row)
-sums() { maria "checksum table $(cat "$WORK/tables")" > "$1"; }
+# sums <file>: every MariaDB table's checksum (CHECKSUM TABLE, over every row), then every sequence's next value
+sums() {
+  maria "checksum table $(cat "$WORK/tables")" > "$1"
+  maria "$(cat "$WORK/sequences")" >> "$1"
+}
 # move <name> [option]: runs the command as the Install manual gives it, keeps its own lines ([move] ...) in
 # $WORK/<name>.out and its exit status in $WORK/<name>.status, and prints both. MariaDB's checksums before and after
 # it go in $WORK/<name>.maria-before and -after.
@@ -183,6 +189,18 @@ is() {
   return 1
 }
 exited() { is "$2" "$(cat "$WORK/$1.status")"; }
+# alone <name>: the run printed its own lines and nothing else, no stack trace or logger's line beside them, but for
+# Compose's lines about its containers and the empty line it ends a container's error output with
+alone() {
+  local rest traces
+  rest=$(grep -vE '^\[move\]|^$|^ (Container|Network|Volume) [^ ]+ (Creating|Created|Starting|Started|Running|Waiting|Healthy) ?$' \
+    "$WORK/$1.raw" || true)
+  traces=$(grep -E 'Exception|^[[:space:]]+at ' "$WORK/$1.out" || true)
+  [ -z "$rest$traces" ] && return 0
+  [ -z "$rest" ] || head -20 <<<"$rest"
+  [ -z "$traces" ] || head -20 <<<"$traces"
+  return 1
+}
 # says <name> <line>: the command printed exactly that line
 says() { grep -qxF -- "$2" "$WORK/$1.out"; }
 # unfinished: the target holds one move, unfinished (the count unfinished, then all)
@@ -225,6 +243,9 @@ check "the volumes unpack" unpack
 echo "loaded in $((SECONDS - loaded)) s"
 maria "select concat('\`', table_name, '\`') from information_schema.tables where table_schema = database()
   and table_type = 'BASE TABLE' order by table_name" | paste -sd, - > "$WORK/tables"
+maria "select concat('select ''', table_name, ''', next_not_cached_value from \`', table_name, '\`')
+  from information_schema.tables where table_schema = database() and table_type = 'SEQUENCE' order by table_name" \
+  | sed '1!s/^/union all /' > "$WORK/sequences"
 check "MariaDB holds the fixture's $COUNT_ld_document documents, and the documents' sequence as it was" \
   is "$COUNT_ld_document"$'\t'"$DOCUMENT_SEQ_NEXT" \
   "$(maria "select count(*), (select next_not_cached_value from ld_document_SEQ) from ld_document")"
@@ -233,6 +254,8 @@ snapshot volumes-0
 
 echo "== 2. refused: a source at an older Healdan schema version"
 rank=$(maria "select max(installed_rank) from hd_schema_history")
+older_version=$(maria "select version from hd_schema_history where installed_rank < $rank order by installed_rank desc
+  limit 1")
 # Its last row, kept to put back: the next cases need the source whole
 compose_move exec -T mariadb sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump -u"$MARIADB_USER" --no-create-info \
   --skip-triggers --compact --where="installed_rank = $1" "$MARIADB_DATABASE" hd_schema_history' sh "$rank" \
@@ -240,8 +263,10 @@ compose_move exec -T mariadb sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump -
 maria "delete from hd_schema_history where installed_rank = $rank"
 move older
 check "the move exits 1" exited older 1
-check "it names the release tagged mariadb-final, and changed nothing" \
-  grep -q "the release tagged mariadb-final.*Nothing was changed\.$" "$WORK/older.out"
+check "it says the source's schema is at version $older_version, names the release tagged mariadb-final, and changed nothing" \
+  grep -qE "^\[move\] ERROR: the source's Healdan schema is at version $older_version, and the move takes only version [0-9]+, the last on MariaDB\. .*the release tagged mariadb-final.*Nothing was changed\.$" \
+  "$WORK/older.out"
+check "it printed nothing else" alone older
 check "the target has no table" is 0 "$(pg "select count(*) from pg_class where relnamespace = 'public'::regnamespace")"
 compose_move exec -T mariadb sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE"' \
   < "$WORK/history-row.sql"
@@ -258,6 +283,9 @@ check "it says why it stopped" \
   grep -qF "[move] ERROR: 1 value in MariaDB can't go into PostgreSQL as it is, so the move stopped" "$WORK/zero.out"
 check "the target holds an unfinished move" unfinished
 check "nothing of the table it stopped at is in the target" is 0 "$(pg "select count(*) from ld_version")"
+check "a table copied before it holds its rows: the target holds what a rerun must clear" \
+  is "$COUNT_ld_document" "$(pg "select count(*) from ld_document")"
+check "it printed nothing else" alone zero
 snapshot volumes-1
 check "the moves so far changed nothing in the conf and repository volumes" same volumes-0 volumes-1
 
@@ -292,18 +320,70 @@ check "it says --replace-nul would replace it" grep -qF \
   "[move] ERROR: 1 value in MariaDB holds a NUL character, which PostgreSQL's text can't hold, so the move stopped" \
   "$WORK/nul.out"
 check "the target holds an unfinished move" unfinished
+check "it printed nothing else" alone nul
 
-echo "== 3b. run again with --replace-nul: it starts over, and finishes"
+echo "== 3b. stopped by its own comparison: a value changed on the target, which only the comparison can see"
+# As PostgreSQL's superuser, in a schema of the test's own, so that public stays empty: when the move creates hd_matter,
+# an event trigger gives it a row trigger that reverses each name inserted. The value is still storable, so the copy and
+# its inserts go through, and only the comparison of what was carried with what the target holds can object.
+pg_script <<'SQL'
+create schema movetest;
+grant usage on schema movetest to public;
+create function movetest.reversed() returns trigger language plpgsql as $$
+begin
+  new.hd_name := reverse(new.hd_name);
+  return new;
+end $$;
+create function movetest.attach() returns event_trigger language plpgsql as $$
+begin
+  if exists (select 1 from pg_event_trigger_ddl_commands() where object_identity = 'public.hd_matter') then
+    execute 'create trigger movetest_reversed before insert on public.hd_matter for each row'
+      ' execute function movetest.reversed()';
+  end if;
+end $$;
+create event trigger movetest_attach on ddl_command_end when tag in ('CREATE TABLE') execute function movetest.attach();
+SQL
+move compare --replace-nul
+pg_script <<'SQL'
+set client_min_messages = warning;
+drop event trigger movetest_attach;
+drop schema movetest cascade;
+SQL
+check "the move exits 1" exited compare 1
+rebuilt=$(sed -n 's/^\[move\] Foreign keys rebuilt: \([0-9]*\) of \([0-9]*\)$/\1 \2/p' "$WORK/compare.out")
+check "it got as far as the comparison: every table copied, every foreign key rebuilt ($rebuilt)" \
+  sh -c 'test $# = 2 && test "$1" = "$2" && test "$1" -gt 0' sh $rebuilt
+check "the comparison refuses" says compare "[move] ERROR: the target doesn't hold what the source holds, so the move isn't finished. Run it again, which starts over; if it fails the same way, keep both databases as they are and report it:"
+check "naming hd_matter alone, and none of its values" \
+  is "[move]   table hd_matter: both have $COUNT_hd_matter rows, but their values differ" \
+  "$(grep -E '^\[move\]   table .*(rows, but their values differ|rows, and the target [0-9]+)$' "$WORK/compare.out")"
+named_none() {
+  local name
+  for name in "Smoke Matter" "Second Matter" "$MATTER_NAME" "rettaM ekomS" "rettaM dnoceS" "rellüM tôpéD"; do
+    if grep -F -- "$name" "$WORK/compare.out" >/dev/null; then echo "  it printed '$name'"; return 1; fi
+  done
+}
+check "no matter's name, as it was or reversed, is in what it printed" named_none
+check "the target holds an unfinished move" unfinished
+check "it printed nothing else" alone compare
+
+echo "== 3c. run again, the trigger gone, with --replace-nul: it starts over, and finishes"
 move done --replace-nul
 check "the move exits 0" exited done 0
 check "it started over, removing what the unfinished move made" grep -qE \
   "^\[move\] Target: PostgreSQL [0-9.]+, an unfinished move's tables removed \.\.\. ok$" "$WORK/done.out"
+check "it printed nothing else" alone done
 check "the target holds one move, finished" \
   is "1|1" "$(pg "select count(*) filter (where finished is not null), count(*) from docker_move")"
-# The app's own start is the smoke test's to watch: up to here, PostgreSQL has seen the moves, and the start-up tool's
-# look at what the second left.
-pg_errors() { compose_move logs --no-log-prefix db 2>&1 | grep 'ERROR:' || true; }
-check "PostgreSQL's log has no ERROR line" is "" "$(pg_errors)"
+# The app's own start is the smoke test's to watch: up to here, PostgreSQL has seen the moves, the test's trigger, and
+# the start-up tool's look at what the zero date's move left.
+compose_move logs --no-log-prefix db > "$WORK/db.log" 2>&1
+pg_log() {
+  grep -F 'database system is ready to accept connections' "$WORK/db.log" >/dev/null \
+    || { echo "  it has no line saying the server is ready to accept connections: it wasn't read"; return 1; }
+  is "" "$(grep 'ERROR:' "$WORK/db.log" || true)"
+}
+check "PostgreSQL's log has no ERROR line" pg_log
 snapshot volumes-3
 check "the moves changed nothing in the conf and repository volumes" same volumes-2 volumes-3
 
@@ -345,8 +425,9 @@ check "the documents' sequence goes on from MariaDB's next value" \
   is "$DOCUMENT_SEQ_NEXT|f" "$(pg "select last_value, is_called from ld_document_seq")"
 
 echo "== 7a. MariaDB, untouched by the moves"
-for name in older zero nul done; do
-  check "every table's checksum is as the $name move found it" same "$name.maria-before" "$name.maria-after"
+for name in older zero nul compare done; do
+  check "every table's checksum and every sequence's next value are as the $name move found them" \
+    same "$name.maria-before" "$name.maria-after"
 done
 check "ld_document's row count is as it was" is "$COUNT_ld_document" "$(maria "select count(*) from ld_document")"
 

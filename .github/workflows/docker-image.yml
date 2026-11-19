@@ -219,6 +219,8 @@ jobs:
       # one architecture: the command is Java, and its fixture the same on both. It stays while the command does.
       - name: Move test (amd64)
         if: steps.changes.outputs.code == 'true' && matrix.arch == 'amd64'
+        # About a minute; a stack that never comes up stops it here, not at the job's limit
+        timeout-minutes: 15
         env:
           LOGICALDOC_IMAGE: logicaldoc-community:ci
         run: bash docker/tests/test-move.sh
