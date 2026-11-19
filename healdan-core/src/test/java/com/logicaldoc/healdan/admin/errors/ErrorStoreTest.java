@@ -282,6 +282,32 @@ public class ErrorStoreTest extends AbstractHealdanTestCase {
 		assertEquals(0, store.unresolvedSince(now));
 	}
 
+	@Test
+	public void testLatest() {
+		Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+		store.add(error(now.minus(Duration.ofHours(2)), PREVIEWS, "Too early", null));
+		store.add(error(now.minus(Duration.ofMinutes(30)), PREVIEWS, "The older", null));
+		store.add(error(now.minus(Duration.ofMinutes(10)), STORAGE, "The newer", "stack"));
+		store.add(error(now.minus(Duration.ofMinutes(5)), SERVER, "Another logger's", null));
+		// Seen in the window again, though first seen before it
+		store.add(error(now.minus(Duration.ofDays(2)), PREVIEWS, "Seen again", null));
+		store.add(error(now.minus(Duration.ofMinutes(20)), PREVIEWS, "Seen again", null));
+
+		Instant since = now.minus(Duration.ofHours(1));
+		List<ErrorGroup> latest = store.latest(List.of(PREVIEWS, STORAGE), since, 10);
+		assertEquals(List.of("The newer", "Seen again", "The older"), latest.stream().map(ErrorGroup::message).toList());
+		assertEquals(STORAGE, latest.get(0).logger());
+		assertNull("no stack", latest.get(0).stack());
+		assertEquals(2, latest.get(1).total());
+		assertEquals(List.of("The newer"),
+				store.latest(List.of(PREVIEWS, STORAGE), since, 1).stream().map(ErrorGroup::message).toList());
+		// At the time itself, to the millisecond
+		assertEquals(List.of("The newer"), store.latest(List.of(STORAGE), now.minus(Duration.ofMinutes(10)), 10)
+				.stream().map(ErrorGroup::message).toList());
+		assertEquals(List.of(), store.latest(List.of(STORAGE), now.minus(Duration.ofMinutes(10)).plusMillis(1), 10));
+		assertEquals(List.of(), store.latest(List.of(), since, 10));
+	}
+
 	private List<String> messages(ErrorQuery query, Instant now) {
 		return store.list(query, now).items().stream().map(ErrorGroup::message).toList();
 	}

@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -209,6 +210,29 @@ public class ErrorStore {
 	public Optional<ErrorGroup> find(long id) {
 		return jdbc.query("select " + COLUMNS + ", e.hd_stack from hd_error e where e.hd_id = ?",
 				(rs, n) -> group(rs, rs.getString(13), rs.getLong(7)), id).stream().findFirst();
+	}
+
+	/**
+	 * The faults last seen through any of some loggers at a time or since,
+	 * the latest first: a CE task's last errors (Admin app spec section 9.5), as CE keeps
+	 * a task's own last error with no getter. A fault is counted against the
+	 * logger it was first logged through, so one that two loggers log from the
+	 * same place, with the same exception and message, is the first one's.
+	 *
+	 * @param loggers the loggers' names
+	 * @param since the earliest time a fault was last seen, to the millisecond
+	 * @param limit the most faults
+	 * @return the faults, without their stacks, whose times are their totals
+	 */
+	public List<ErrorGroup> latest(Collection<String> loggers, Instant since, int limit) {
+		Objects.requireNonNull(since, "since");
+		if (loggers.isEmpty())
+			return List.of();
+		MapSqlParameterSource params = new MapSqlParameterSource("loggers", List.copyOf(loggers))
+				.addValue("since", Timestamp.from(since.truncatedTo(ChronoUnit.MILLIS))).addValue("limit", limit);
+		return named.query("select " + COLUMNS + " from hd_error e where e.hd_logger in (:loggers)"
+				+ " and e.hd_lastseen >= :since order by e.hd_lastseen desc, e.hd_id desc limit :limit", params,
+				(rs, n) -> group(rs, null, rs.getLong(7)));
 	}
 
 	/**

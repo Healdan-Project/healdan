@@ -26,6 +26,8 @@ import com.logicaldoc.core.document.thumbnail.ThumbnailManager;
 import com.logicaldoc.core.security.TenantDAO;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
+import com.logicaldoc.healdan.admin.jobs.HealdanJob;
+import com.logicaldoc.healdan.admin.jobs.JobStatus;
 import com.logicaldoc.healdan.util.StorageUnreachableException;
 import com.logicaldoc.util.spring.Context;
 
@@ -35,10 +37,14 @@ import jakarta.annotation.PreDestroy;
  * Converts the queued Office file versions to PDF in the background, one at a
  * time (spec section 7.2). A daemon thread works through the due jobs of
  * {@link PreviewJobs}; each conversion takes the runner's single background
- * permit, so interactive previews keep their slots.
+ * permit, so interactive previews keep their slots. Each round reports to
+ * {@link JobStatus} as the {@value #JOB} job (Admin app spec section 9.5).
  */
 @Component
-public class PreviewWorker {
+public class PreviewWorker implements HealdanJob {
+
+	/** Its name among the background jobs */
+	public static final String JOB = "preview";
 
 	private static final Logger log = LoggerFactory.getLogger(PreviewWorker.class);
 
@@ -93,6 +99,16 @@ public class PreviewWorker {
 		return store.size(resource) == PLACEHOLDER.length && isPlaceholder(store.getBytes(resource));
 	}
 
+	@Override
+	public String name() {
+		return JOB;
+	}
+
+	@Override
+	public String label() {
+		return "Previews";
+	}
+
 	/**
 	 * Starts the worker thread, if it isn't running.
 	 */
@@ -122,6 +138,7 @@ public class PreviewWorker {
 
 	private void loop() {
 		try {
+			JobStatus.get().scheduled(JOB, Instant.now().plusMillis(STARTUP_DELAY_MS));
 			Thread.sleep(STARTUP_DELAY_MS);
 			while (!Thread.currentThread().isInterrupted()) {
 				int worked = 0;
@@ -146,13 +163,31 @@ public class PreviewWorker {
 	}
 
 	/**
-	 * Processes the jobs that are due.
-	 * 
+	 * Processes the jobs that are due, and reports the round to
+	 * {@link JobStatus}: the loop goes on at once after a round that processed
+	 * jobs, and 5 seconds after one that processed none or failed.
+	 *
 	 * @param now the current time
 	 * @return how many jobs were processed, at most 10; 0 while the worker is paused
 	 *         because LibreOffice is unavailable
 	 */
 	int runOnce(Instant now) {
+		JobStatus status = JobStatus.get();
+		status.started(JOB);
+		int processed;
+		try {
+			processed = round(now);
+		} catch (RuntimeException | Error e) {
+			// The loop logs it
+			status.failed(JOB, e, Instant.now().plusMillis(IDLE_MS));
+			throw e;
+		}
+		status.finished(JOB, processed == 0 ? Instant.now().plusMillis(IDLE_MS) : Instant.now());
+		return processed;
+	}
+
+	/** {@link #runOnce}'s round, which reports nothing */
+	private int round(Instant now) {
 		if (now.isBefore(pausedUntil))
 			return 0;
 		retryTimedOut(now);

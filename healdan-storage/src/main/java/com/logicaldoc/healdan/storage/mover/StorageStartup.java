@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.storage.mover;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZonedDateTime;
 import java.util.concurrent.Executors;
@@ -13,6 +14,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +22,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.healdan.HealdanStartListener;
+import com.logicaldoc.healdan.admin.jobs.HealdanJob;
+import com.logicaldoc.healdan.admin.jobs.JobStatus;
 import com.logicaldoc.healdan.storage.BackendHealth;
 import com.logicaldoc.healdan.storage.NightlyCheck;
 import com.logicaldoc.healdan.storage.Purge;
@@ -43,9 +47,25 @@ import jakarta.annotation.PreDestroy;
  * such as a missing class too (but for a {@link VirtualMachineError}), so no one failure, a setting that can't be read
  * among them, stops the rest. Saves meanwhile check the backend they reach themselves
  * ({@link BackendHealth#beforeWrite}). Does nothing unless CE's Store is a {@code HealdanStorage}.
+ * <p>
+ * The retests, the purge, the alert and the nightly check are background jobs (Admin app spec section 9.5), each a
+ * {@link HealdanJob} bean of its own below: each scheduled run reports to {@link JobStatus} under its name, with its
+ * next run, and each first run is reported scheduled. An early retest isn't a run of the retests' job.
  */
 @Component
 public class StorageStartup implements HealdanStartListener {
+
+	/** The backends' retests' name among the background jobs */
+	public static final String RETEST_JOB = "storage-retest";
+
+	/** The purge's */
+	public static final String PURGE_JOB = "storage-purge";
+
+	/** The alert's */
+	public static final String ALERT_JOB = "storage-alert";
+
+	/** The nightly Store check's */
+	public static final String NIGHTLY_JOB = "storage-nightly-check";
 
 	private static final Logger log = LoggerFactory.getLogger(StorageStartup.class);
 
@@ -149,12 +169,19 @@ public class StorageStartup implements HealdanStartListener {
 		if (stopped(running))
 			return;
 		long purgeDelay = Math.max(0, Duration.between(ZonedDateTime.now(), start.plus(afterStart)).toMillis());
+		long alertMillis = alertEvery.toMillis();
+		// Before the first run can report its own next run
+		JobStatus status = JobStatus.get();
+		Instant first = Instant.now().plusMillis(purgeDelay);
+		status.scheduled(PURGE_JOB, first);
+		status.scheduled(ALERT_JOB, first);
 		try {
-			running.scheduleAtFixedRate(() -> safely("purge", purge::run), purgeDelay, DAY_MS, TimeUnit.MILLISECONDS);
+			running.scheduleAtFixedRate(() -> atFixedRate(PURGE_JOB, "purge", purge::run, DAY_MS), purgeDelay, DAY_MS,
+					TimeUnit.MILLISECONDS);
 			// Hourly, so a send that failed is tried again within the hour; storage.alert.sent keeps it to one email a
 			// day, and the first alert comes within 25 hours. Its failures are logged and never end its schedule
-			running.scheduleAtFixedRate(() -> safely("storage alert", alert::run), purgeDelay, alertEvery.toMillis(),
-					TimeUnit.MILLISECONDS);
+			running.scheduleAtFixedRate(() -> atFixedRate(ALERT_JOB, "storage alert", alert::run, alertMillis),
+					purgeDelay, alertMillis, TimeUnit.MILLISECONDS);
 		} catch (RejectedExecutionException e) {
 			return; // stopped meanwhile
 		}
@@ -172,18 +199,19 @@ public class StorageStartup implements HealdanStartListener {
 		return scheduledDaily;
 	}
 
-	/** Tests each backend that isn't OK, then again after the setting's seconds, read each time */
-	private void scheduleRetest() {
+	/**
+	 * Tests each backend that isn't OK, then again after the setting's seconds, read each time
+	 *
+	 * @return when the next retest is
+	 */
+	private Instant scheduleRetest() {
 		Duration delay = retestDelay();
 		// How long the findings of the round that just ended stay known to reads, which don't ask the database
 		health.retestsEvery(delay);
-		schedule(retests, () -> {
-			try {
-				safely("backend retest", health::retest);
-			} finally {
-				scheduleRetest();
-			}
-		}, delay);
+		Instant at = Instant.now().plus(delay);
+		JobStatus.get().scheduled(RETEST_JOB, at);
+		schedule(retests, () -> reported(RETEST_JOB, "backend retest", health::retest, this::scheduleRetest), delay);
+		return at;
 	}
 
 	/** @return {@code storage.retestSeconds}; the default if it can't be read, as in a database outage */
@@ -197,16 +225,17 @@ public class StorageStartup implements HealdanStartListener {
 		}
 	}
 
-	/** Runs the nightly check at a time, then schedules the next night's */
-	private void scheduleNightly(ZonedDateTime at) {
+	/**
+	 * Runs the nightly check at a time, then schedules the next night's
+	 *
+	 * @return the time
+	 */
+	private Instant scheduleNightly(ZonedDateTime at) {
 		nightlyScheduled.accept(at);
-		schedule(scheduler, () -> {
-			try {
-				safely("nightly Store check", nightly::run);
-			} finally {
-				scheduleNightly(nightlyAfter(at.plusSeconds(1)));
-			}
-		}, Duration.between(ZonedDateTime.now(), at));
+		JobStatus.get().scheduled(NIGHTLY_JOB, at.toInstant());
+		schedule(scheduler, () -> reported(NIGHTLY_JOB, "nightly Store check", nightly::run,
+				() -> scheduleNightly(nightlyAfter(at.plusSeconds(1)))), Duration.between(ZonedDateTime.now(), at));
+		return at.toInstant();
 	}
 
 	private static void schedule(ScheduledExecutorService running, Runnable work, Duration delay) {
@@ -238,6 +267,98 @@ public class StorageStartup implements HealdanStartListener {
 		} catch (Throwable e) {
 			// An Error such as a NoClassDefFoundError from the mail stack must not end a schedule either
 			log.error("The storage's {} failed: {}", what, e.getMessage(), e);
+		}
+	}
+
+	/** Runs a job of a fixed rate's as {@link #reported} does: its next run is its period after this one began */
+	private static void atFixedRate(String job, String what, Runnable work, long periodMillis) {
+		Instant begun = Instant.now();
+		reported(job, what, work, () -> begun.plusMillis(periodMillis));
+	}
+
+	/**
+	 * Runs one of the jobs as {@link #safely} does, then {@code then}, which may schedule its next run, whatever the
+	 * job did, and reports the run to {@link JobStatus} with the time {@code then} gives as its next run
+	 */
+	private static void reported(String job, String what, Runnable work, Supplier<Instant> then) {
+		JobStatus status = JobStatus.get();
+		status.started(job);
+		Throwable failure = null;
+		try {
+			work.run();
+		} catch (VirtualMachineError e) {
+			failure = e;
+			throw e;
+		} catch (Throwable e) {
+			// An Error such as a NoClassDefFoundError from the mail stack must not end a schedule either
+			failure = e;
+			log.error("The storage's {} failed: {}", what, e.getMessage(), e);
+		} finally {
+			Instant next = then.get();
+			if (failure == null)
+				status.finished(job, next);
+			else
+				status.failed(job, failure, next);
+		}
+	}
+
+	/** The backends' retests, as the background jobs list them */
+	@Component
+	static class RetestJob implements HealdanJob {
+
+		@Override
+		public String name() {
+			return RETEST_JOB;
+		}
+
+		@Override
+		public String label() {
+			return "Storage Retests";
+		}
+	}
+
+	/** The purge, as the background jobs list it */
+	@Component
+	static class PurgeJob implements HealdanJob {
+
+		@Override
+		public String name() {
+			return PURGE_JOB;
+		}
+
+		@Override
+		public String label() {
+			return "Storage Purge";
+		}
+	}
+
+	/** The alert, as the background jobs list it */
+	@Component
+	static class AlertJob implements HealdanJob {
+
+		@Override
+		public String name() {
+			return ALERT_JOB;
+		}
+
+		@Override
+		public String label() {
+			return "Storage Alert";
+		}
+	}
+
+	/** The nightly Store check, as the background jobs list it */
+	@Component
+	static class NightlyCheckJob implements HealdanJob {
+
+		@Override
+		public String name() {
+			return NIGHTLY_JOB;
+		}
+
+		@Override
+		public String label() {
+			return "Storage Nightly Check";
 		}
 	}
 

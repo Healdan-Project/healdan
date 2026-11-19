@@ -22,6 +22,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.healdan.HealdanStartListener;
+import com.logicaldoc.healdan.admin.jobs.HealdanJob;
+import com.logicaldoc.healdan.admin.jobs.JobStatus;
 
 import jakarta.annotation.PreDestroy;
 
@@ -31,10 +33,16 @@ import jakarta.annotation.PreDestroy;
  * minutes after a start (spec 5.4), on a daemon thread of its own. Each run
  * schedules the next night's whatever it failed with, but for a
  * {@link VirtualMachineError}, so a run that fails, a database outage say,
- * leaves its items for the next night.
+ * leaves its items for the next night. Each run reports to {@link JobStatus}
+ * as the {@value #JOB} job (Admin app spec section 9.5), with the next night as
+ * its next run; one that fails gives its exception's class alone, as it is
+ * logged.
  */
 @Component
-public class TrashStartup implements HealdanStartListener {
+public class TrashStartup implements HealdanStartListener, HealdanJob {
+
+	/** Its name among the background jobs */
+	public static final String JOB = "trash-destroyer";
 
 	private static final Logger log = LoggerFactory.getLogger(TrashStartup.class);
 
@@ -61,6 +69,16 @@ public class TrashStartup implements HealdanStartListener {
 	}
 
 	@Override
+	public String name() {
+		return JOB;
+	}
+
+	@Override
+	public String label() {
+		return "Trash Destroyer";
+	}
+
+	@Override
 	public synchronized void started() {
 		if (scheduler != null)
 			return;
@@ -77,17 +95,43 @@ public class TrashStartup implements HealdanStartListener {
 	/** Runs the job at a time, then schedules the next night's */
 	private void scheduleNightly(ScheduledExecutorService running, ZonedDateTime at) {
 		nightlyScheduled.accept(at);
+		JobStatus.get().scheduled(JOB, at.toInstant());
 		try {
 			running.schedule(() -> {
+				ZonedDateTime next = nightlyAfter(at.plusSeconds(1));
 				try {
-					safely(() -> destroyer.runOnce(Instant.now()));
+					runNightly(next);
 				} finally {
-					scheduleNightly(running, nightlyAfter(at.plusSeconds(1)));
+					scheduleNightly(running, next);
 				}
 			}, Math.max(0, Duration.between(ZonedDateTime.now(), at).toMillis()), TimeUnit.MILLISECONDS);
 		} catch (RejectedExecutionException e) {
 			// Stopping
 		}
+	}
+
+	/**
+	 * Runs the job once, whatever it fails with but a
+	 * {@link VirtualMachineError}, and reports the run to {@link JobStatus}
+	 *
+	 * @param next the night it runs next
+	 */
+	void runNightly(ZonedDateTime next) {
+		JobStatus status = JobStatus.get();
+		status.started(JOB);
+		try {
+			destroyer.runOnce(Instant.now());
+		} catch (VirtualMachineError e) {
+			status.failed(JOB, e.getClass().getSimpleName(), next.toInstant());
+			throw e;
+		} catch (Throwable e) {
+			// An Error such as a class missing from a plugin's zip must not end the schedule either
+			log.error("The Trash's nightly job failed: {}", e.getClass().getSimpleName(), e);
+			// Its class alone, as logged: a message can name a folder or a file
+			status.failed(JOB, e.getClass().getSimpleName(), next.toInstant());
+			return;
+		}
+		status.finished(JOB, next.toInstant());
 	}
 
 	/**
@@ -113,17 +157,6 @@ public class TrashStartup implements HealdanStartListener {
 	 */
 	public static ZonedDateTime destroyAfter(Instant removedAt, int days, ZoneId zone) {
 		return nightlyAfter(removedAt.plus(days, ChronoUnit.DAYS).plusNanos(1).atZone(zone));
-	}
-
-	private static void safely(Runnable work) {
-		try {
-			work.run();
-		} catch (VirtualMachineError e) {
-			throw e;
-		} catch (Throwable e) {
-			// An Error such as a class missing from a plugin's zip must not end the schedule either
-			log.error("The Trash's nightly job failed: {}", e.getClass().getSimpleName(), e);
-		}
 	}
 
 	/**
