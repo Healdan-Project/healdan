@@ -733,6 +733,37 @@ public class ProviderClient {
 	}
 
 	/**
+	 * Whether the provider answers now, for the Dashboard's Sign-In tile
+	 * (Admin app spec section 8.1): it fetches the provider's discovery
+	 * document afresh, as a sign-in's first use does, within the same
+	 * timeout, and the document must be one a sign-in would use (naming the
+	 * issuer set here, every endpoint secure). The document and keys a
+	 * sign-in keeps don't change. A fetch that fails is remembered as a
+	 * sign-in's is, and one that failed less than
+	 * {@value #FAILED_DISCOVERY_MILLIS} milliseconds ago answers false
+	 * without asking the provider; one that works forgets it.
+	 *
+	 * @param p the provider
+	 * @return true if it answered with a discovery document a sign-in could
+	 *         use; false if it didn't, or no issuer, or an issuer that isn't
+	 *         secure, is set
+	 */
+	public boolean answers(SignInProvider p) {
+		try {
+			String issuer = issuer(p);
+			if (recentFailure(p.id(), issuer) != null)
+				return false;
+			requireUsable(issuer, fetch(p.id(), issuer));
+			return true;
+		} catch (ProviderException e) {
+			return false;
+		} catch (RuntimeException e) {
+			log.warn("Asking sign-in provider {} whether it answers stopped on {}", p.id(), e.getClass().getName());
+			return false;
+		}
+	}
+
+	/**
 	 * Drops a provider's discovery document and keys, and a failed fetch of
 	 * them it remembers, so that the next use fetches them again. Whatever
 	 * saves or removes a provider calls it after. (A changed issuer is noticed

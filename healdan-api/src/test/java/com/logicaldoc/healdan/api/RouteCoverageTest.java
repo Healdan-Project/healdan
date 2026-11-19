@@ -40,11 +40,11 @@ import jakarta.ws.rs.Path;
 public class RouteCoverageTest extends AbstractHealdanTestCase {
 
 	/**
-	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them: the
-	 * Dashboard's attention and health, which the plan's Task 10b implements and takes out of here. Each must be
-	 * described and not implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}).
+	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them; none
+	 * now. Each must be described and not implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and
+	 * leaves the list once it's implemented.
 	 */
-	static final Set<String> DESCRIBED_AHEAD = Set.of("GET /v1/admin/dashboard");
+	static final Set<String> DESCRIBED_AHEAD = Set.of();
 
 	@Test
 	public void testEveryRouteIsDescribed() {

@@ -288,6 +288,39 @@ public class OpenApiFileTest {
 		assertEquals(Set.of(), missing);
 	}
 
+	/**
+	 * YAML reads a bare {@code off}, {@code on}, {@code yes} or {@code no} as a boolean, so an enum of strings that
+	 * lists one unquoted lists {@code false} instead, and refuses the string; every value of a string enum, in both
+	 * files, must be a string (or null, where the type allows it)
+	 */
+	@Test
+	public void testStringEnumsHoldOnlyStrings() {
+		Set<String> wrong = new TreeSet<>();
+		stringEnums(tree(Contract.openApi()), "openapi.yaml", wrong);
+		stringEnums(tree(Contract.openApiAdmin()), "openapi-admin.yaml", wrong);
+		assertEquals(Set.of(), wrong);
+
+		// The check finds a bare off
+		Set<String> found = new TreeSet<>();
+		stringEnums(tree("schema:\n  type: string\n  enum: [ok, off]\n"), "test", found);
+		assertEquals(Set.of("test schema: false"), found);
+	}
+
+	private static void stringEnums(JsonNode node, String where, Set<String> wrong) {
+		if (node.isObject()) {
+			JsonNode type = node.path("type");
+			boolean string = type.isTextual() ? type.textValue().equals("string") : texts(type).contains("string");
+			boolean nullable = type.isArray() && texts(type).contains("null");
+			if (string && node.path("enum").isArray())
+				for (JsonNode value : node.path("enum"))
+					if (!value.isTextual() && !(nullable && value.isNull()))
+						wrong.add(where + ": " + value);
+			node.fields().forEachRemaining(field -> stringEnums(field.getValue(), where + " " + field.getKey(), wrong));
+		} else if (node.isArray()) {
+			node.forEach(element -> stringEnums(element, where, wrong));
+		}
+	}
+
 	private static List<Set<String>> schemes(OpenAPI api, String path) {
 		return api.getPaths().get(path).getDelete().getSecurity().stream().map(r -> Set.copyOf(r.keySet())).toList();
 	}

@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import org.junit.Test;
 import org.springframework.mock.web.MockHttpSession;
@@ -21,6 +22,8 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.admin.dashboard.AttentionItem;
+import com.logicaldoc.healdan.admin.dashboard.HealthTile;
 import com.logicaldoc.healdan.admin.dashboard.UsageSummary;
 import com.logicaldoc.healdan.api.ApiResponse;
 import com.logicaldoc.healdan.api.ApiTestCase;
@@ -28,11 +31,59 @@ import com.logicaldoc.healdan.matter.Matter;
 
 /**
  * The Dashboard's routes (Admin app spec section 8.1), each answer checked against {@code openapi-admin.yaml}. Usage
- * comes from the summary in memory; no test makes a real start, so each works it out itself.
+ * comes from the summary in memory; no test makes a real start, so each works it out itself. {@code healdan-api}'s
+ * tests have no storage module, and CE keeps its files in its own store, so storage backends are off.
  */
 public class AdminDashboardResourceTest extends ApiTestCase {
 
+	private static final String DASHBOARD = "/api/v1/admin/dashboard";
+
 	private static final String USAGE = "/api/v1/admin/dashboard/usage";
+
+	@Test
+	public void testDashboard() throws Exception {
+		ApiResponse response = get(DASHBOARD).webSession(signInWeb(fx.user("boss", "admin"))).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		JsonNode dashboard = response.json();
+		List<String> names = new ArrayList<>();
+		for (JsonNode tile : dashboard.path("health"))
+			names.add(tile.path("name").textValue());
+		assertEquals(HealthTile.NAMES, names);
+		for (JsonNode tile : dashboard.path("health")) {
+			assertTrue(tile.toString(), tile.path("problem").isNull());
+			assertTrue(tile.toString(), tile.path("detail").isTextual());
+			assertEquals(tile.toString(), "/frontend.jsp", tile.path("link").textValue());
+		}
+		JsonNode storage = dashboard.path("health").path(HealthTile.NAMES.indexOf(HealthTile.STORAGE_BACKENDS));
+		assertEquals("off", storage.path("status").textValue());
+		JsonNode database = dashboard.path("health").path(HealthTile.NAMES.indexOf(HealthTile.DATABASE));
+		assertTrue(database.toString(), database.path("used").asLong() > 0);
+		assertTrue(dashboard.path("unchecked").isArray());
+		assertEquals(0, dashboard.path("unchecked").size());
+		// What the machine's disks hold isn't the test's: each item there is one of the codes, once
+		List<String> codes = new ArrayList<>();
+		for (JsonNode item : dashboard.path("attention"))
+			codes.add(item.path("code").textValue());
+		assertTrue(codes.toString(), AttentionItem.CODES.containsAll(codes));
+		assertEquals(codes.size(), Set.copyOf(codes).size());
+	}
+
+	@Test
+	public void testDashboardNonAdministrator403() throws Exception {
+		ApiResponse response = get(DASHBOARD).webSession(signInWeb(fx.user("clerk"))).send();
+
+		assertEquals(response.toString(), 403, response.status());
+		assertEquals("admins-only", response.code());
+	}
+
+	@Test
+	public void testDashboardDeviceToken403() throws Exception {
+		ApiResponse response = get(DASHBOARD).token(signInAdmin()).send();
+
+		assertEquals(response.toString(), 403, response.status());
+		assertEquals("web-session-only", response.code());
+	}
 
 	@Test
 	public void testUsage() throws Exception {
