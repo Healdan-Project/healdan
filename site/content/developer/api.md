@@ -15,9 +15,10 @@ server you're talking to.
 
 ## The Description File and the Docs Page
 
-- **`/api/v1/openapi.yaml`** describes every endpoint, in OpenAPI 3.1. It's the contract: Healdan's tests check
-  every answer an endpoint gives them against it, and fail on an endpoint it leaves out. Generate your client's
-  types from it. Its paths start at `/api`, so `/v1/server` in the file is `/api/v1/server`.
+- **`/api/v1/openapi.yaml`** describes every endpoint, in OpenAPI 3.1, but the Admin app's (see
+  [The Admin App's Routes](#the-admin-apps-routes)). It's the contract: Healdan's tests check every answer an
+  endpoint gives them against it, and fail on an endpoint it leaves out. Generate your client's types from it. Its
+  paths start at `/api`, so `/v1/server` in the file is `/api/v1/server`.
 - **`/api/docs/`** shows the file as a page you can browse, with **Try it out** on each endpoint. Healdan serves the
   page itself, so it loads nothing from the internet. To call an endpoint that needs a sign-in, sign in with
   `POST /v1/auth/tokens` first, then paste the token into **Authorize**.
@@ -231,8 +232,8 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 401 | `password-expired` | The password has to be changed in the web page first |
 | 403 | `forbidden` | You can see the object, but may not do this to it |
 | 403 | `token-only` | `DELETE /auth/tokens/current` on the web session, which has no token |
-| 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current` |
-| 403 | `admins-only` | Only an administrator may do this: a folder directly in a matter's workspace, search folders included, or anything in the Templates Store, to rename, move or delete, or into a matter's top level; `GET /trash` with `view=everyone` or `view=removed` |
+| 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current`; a token on an `/admin` route (see [The Admin App's Routes](#the-admin-apps-routes)) |
+| 403 | `admins-only` | Only an administrator may do this: a folder directly in a matter's workspace, search folders included, or anything in the Templates Store, to rename, move or delete, or into a matter's top level; `GET /trash` with `view=everyone` or `view=removed`; an `/admin` route |
 | 403 | `items-not-allowed` | A folder delete or move that needs a permission on something inside that you lack, hidden or not. The detail names nothing |
 | 403 | `web-session-refused` | A same-origin request on the web session that breaks one of its rules, such as a change without `X-Healdan-Client: web` (see [Two Ways In](#two-ways-in)). Signing in again doesn't mend it |
 | 404 | `not-found` | It doesn't exist, **or you can't read it**: the two get the same answer |
@@ -985,6 +986,18 @@ comes to another host name than `LOGICALDOC_PUBLIC_URL`'s, such as the server's 
 sent to the same path and query at the public address first, with nothing kept and no cookie set: the cookie
 belongs to the name the browser asked for, and the provider sends the browser back to the public address. Only
 the host name is compared, as a cookie ignores the scheme and port.
+
+## The Admin App's Routes
+
+The routes under `/api/v1/admin` are the [Admin app's](../the-web-app/#the-admin-app), and aren't for other clients.
+`openapi.yaml` doesn't list them: they're described in a file of their own, `openapi-admin.yaml`, beside it in
+`healdan-api`'s source, which the server doesn't serve. Healdan's tests check every answer under `/api/v1/admin`
+against it, as they check the others against `openapi.yaml`.
+
+- **Only the browser's web session signs in there.** A device token is `403 web-session-only`, so a stolen token
+  can't administer anything. No session is `401 unauthenticated`.
+- **Only members of the `admin` group get in.** Anyone else is `403 admins-only`, asked again at every request, so
+  someone taken out of `admin` is refused at their next one.
 
 ## Healdan's Own Client
 

@@ -114,11 +114,25 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
   - `ApiServlet` serves `/api/*`, and registers with `@WebServlet`. It runs CXF's JAX-RS on a CXF bus of its own,
     so LogicalDOC's services under `/services/` don't show up under `/api` too.
   - Spring Security leaves `/api/**` alone (`security="none"`). The API signs each request in from its device
-    token, and from nothing else.
+    token, or from the browser's web session on Healdan's own pages (see the API's
+    [Two Ways In](../api/#two-ways-in)), and from nothing else.
   - `openapi.yaml`, in `src/main/resources/healdan/api/`, is written by hand. It's the contract the tests check
     every answer against, so a new endpoint goes into it with the code.
   - The rules and data it uses, such as device tokens and where a property's value comes from, stay in
     `healdan-core`, so code outside the API can use them too.
+  - **The admin API** is the Admin app's, under `/api/v1/admin`, in `com.logicaldoc.healdan.api.admin`. Each of its
+    resource classes carries `@AdminRoute` with the area it belongs to (`AdminArea`: `DASHBOARD`, `MATTERS`,
+    `STORES`, `PEOPLE`, `STORAGE`, `MONITORING` or `SEARCH_INDEX`). `AdminFilter`, which runs after the token check,
+    answers a device token `403 web-session-only`, so a stolen token can't administer anything, and anyone
+    `healdan-core`'s `AdminAccess.allowed(user, area)` refuses `403 admins-only`. That's everyone outside the `admin`
+    group, in every area, for now, asked at every request. It fails closed: a route declared under `/v1/admin`
+    whose class lacks the annotation is logged as an error and refused to everyone, judged by the path the route
+    declares (`RoutePaths`), never the request's, which can carry matrix parameters. A request it lets through has its
+    address in `healdan-core`'s `AdminContext` until `ApiServlet` clears it, once the answer is written.
+  - **The admin API's contract** is a second file, `openapi-admin.yaml`, beside `openapi.yaml`, which the server
+    doesn't serve. `$ref` can't reach across two files, so it repeats `Page`, `FieldError` and the `Problem`
+    response, and `Problem` with fewer members, and `OpenApiFileTest` keeps the copies the same (see
+    [The API's Tests](../tests/#the-apis-tests)).
 - **`healdan-storage`** keeps documents' files on [storage backends](../../admin/storage-backends/), and is a plugin
   of its own that requires `healdan-core`. Its code is under `com.logicaldoc.healdan.storage`, where `healdan-core`'s
   Spring scan finds its beans.
@@ -168,15 +182,24 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
     held copy whose row reads it from `.held/`, rather than delete it: a rollback can bring back an older hold of the
     location. And a delete that finds a file missing from its place but under `.held/` holds that copy again, so the
     purge deletes it in its time.
+  - **The Admin app reads storage through a port.** `healdan-core` and `healdan-api` can't depend on
+    `healdan-storage`, so `healdan-core` has an interface, `StorageAdministration`
+    (`com.logicaldoc.healdan.admin.storage`), with plain records (`StorageRecords`), which `healdan-storage`'s
+    `StorageAdministrationImpl` bean implements over the Storage tab's own service, `StorageAdmin`, unchanged. It's
+    found by type (`Context.get().getBeansOfType`), as `HealdanStartListener`s are, so a server without the module has
+    none. Its answers hold nothing secret: no S3 access key or secret, no key and no recovery key, and an S3
+    backend's endpoint as its scheme, host and port alone.
   - **A delete may build a backend's S3 client inside LogicalDOC's transaction.** `Held.hold`, which holds a deleted
     file's copy while holding that file's lock, inside the transaction of LogicalDOC's delete, builds the backend's
     client if nothing has yet. For an `http://` endpoint that's a DNS lookup, as the endpoint rule checks the host's
     addresses. A build that failed is remembered for 30 seconds, so while DNS is down, deletes don't each wait on a
     lookup of their own.
-- **`healdan-web`** serves Healdan's User app at `/app/`, and is a plugin of its own that requires `logicaldoc-core`,
-  `healdan-core` and `healdan-api`. Its code is under `com.logicaldoc.healdan.app`.
-  - `AppServlet` registers with `@WebServlet("/app/*")`, so `web.xml` is not edited. The built app sits in the
-    module's jar under `healdan/app/user/`, and the servlet reads it from the class path.
+- **`healdan-web`** serves Healdan's User app at `/app/` and its Admin app at `/admin/`, and is a plugin of its own
+  that requires `logicaldoc-core`, `healdan-core` and `healdan-api`. Its code is under `com.logicaldoc.healdan.app`.
+  - `AppServlet` registers with `@WebServlet("/app/*")`, and `AdminAppServlet` with `@WebServlet("/admin/*")`, so
+    `web.xml` is not edited. The built apps sit in the module's jar under `healdan/app/user/` and
+    `healdan/app/admin/`, and the servlets read them from the class path. What they share is `BuiltAppServlet`: the
+    methods, the headers, reading a path, the media types, the hashed files and the `ETag`s.
   - **Its policy.** A path with a file extension that the jar holds is a file, and so is any under `assets/`, where
     Vite writes the build's files: served, or `404` when the jar has none, so a stale page fails loudly. Any other
     path, `/app/doc/10388.2` too, is an address inside the app, answered with `index.html`, which the app routes in
@@ -187,17 +210,35 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
     (`WebSessionRoute`), so a disabled account goes to the sign-in page rather than to an app that can't load
     anything. Without one, the servlet stores the return path and redirects to `login.jsp`; once a signed-in page
     loads, it forgets the return path, so a later sign-in lands where Start In says.
+  - **The Admin app's check.** `AdminAppServlet` serves the Admin app to members of the `admin` group only, asked
+    afresh at every request (`WebSessionRoute`'s session and user, then `AccessChecks.isAdmin`), so someone taken out
+    of the group loses the app at their next load. It asks before it looks at the path or the files, so someone who
+    isn't an administrator gets none of the app's bytes and learns nothing of what its build holds. Which paths are
+    files it decides by the path alone: anything under `assets/`, or a last segment with an extension the builds use.
+
+    | Request | Signed out | Signed in, not an administrator | Administrator |
+    |---|---|---|---|
+    | A page | The return path stored, and a redirect to `login.jsp` | `403` with the User app's own `index.html`, which draws its no-access panel there (or a line of text if the User app isn't built), and the return path forgotten | `200`, `index.html` |
+    | A file | `401`, empty | The same `403`, whether the file is there or not | `200`, or `404` |
+
+    A check that fails refuses. Hashed files are `private, max-age=31536000, immutable`, so no proxy keeps them for
+    someone else, and the page and every refusal are `no-store`, set explicitly, as LogicalDOC's `CacheControlFilter`
+    would otherwise keep a refused `.js` for ten minutes. Its policy is the User app's without PDF.js's worker and the
+    email's frame: `worker-src 'none'; frame-src 'none'`. Its answers set their status, never send an error, so
+    Tomcat's error page never replaces them.
   - **Where a sign-in lands.** LogicalDOC's `login.jsp` sends the password form, as `j_successurl`, to the HTTP
     session's `RequestedUrl`, which it writes unescaped into a script. Three pieces of `healdan-core`'s `web` package
-    fill it. `ReturnPath` is the return path `AppServlet` stores: a path under `/app/` of letters, digits and
-    `/ . _ ~ % - ? & = + *` only, with no `//` and at most 2,000 characters, or else `/app/`, so nothing that could end
-    the script's string gets in. `LoginLandingFilter` (`@WebFilter("/login.jsp")`) sets it, when no return path is
-    waiting, to where Start In (`ui.start`) says, `Landing.page()`: `/app/` or `/frontend.jsp`. With `?switch` it does
+    fill it. `ReturnPath` is the return path the two servlets store: a path under `/app/` or `/admin/` of letters,
+    digits and `/ . _ ~ % - ? & = + *` only, with no `//` and at most 2,000 characters, or else `/admin/` for one
+    under `/admin` and `/app/` for any other, so nothing that could end the script's string gets in.
+    `LoginLandingFilter` (`@WebFilter("/login.jsp")`) sets it, when no return path is waiting (one into either app),
+    to where Start In (`ui.start`) says, `Landing.page()`: `/app/` or `/frontend.jsp`. With `?switch` it does
     nothing, so `login.jsp`'s own clearing of the value still works. `SignInResource` sends a provider's sign-in to
     the same `RequestedUrl` under `login.jsp`'s conditions, or to `Landing.page()`.
   - **Its headers.** Every answer carries a Content-Security-Policy that allows only the server's own address, with
     no inline script or style, and `nosniff` and `Referrer-Policy: same-origin`.
-  - A server built without the app answers `503` at `/app/`, saying the User app wasn't built into it.
+  - A server built without the apps answers `503` at `/app/`, saying the User app wasn't built into it, and so does
+    `/admin/` an administrator, for the Admin app.
   - An `artifactItem` in `logicaldoc-webapp/pom.xml` puts its zip in the WAR. That and the root `pom.xml`'s
     `<module>` are the only upstream files it edits.
 - **Its own tables.** Flyway owns the tables whose names start `hd_`, and only those. A change ships as a new

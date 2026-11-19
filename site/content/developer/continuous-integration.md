@@ -23,7 +23,7 @@ weight: 4
 | `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts and on upstream's retired ones (`check-maven-repositories.py`), for Oracle's and SQL Server's drivers (`check-database-drivers.py`) and for the licences of the User app's npm packages (`check-web-licences.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards, each with a PostgreSQL of its own (see below) |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, `WarParsersTest`, `WarStorageTest` and `WarHibernateTest`, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`), the helper's open-save-close cycle (its stack test), provider sign-in through a stand-in Keycloak (`test-signin.sh`) and storage backends against a stand-in Garage (`test-storage.sh`) included |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
-| `Web` | `web.yml` | Builds and tests the User app in `healdan-web/web`: generates the API's types, typechecks, lints, runs the tests and builds (see below) |
+| `Web` | `web.yml` | Builds and tests the User app and the Admin app in `healdan-web/web`: generates the APIs' types, typechecks, lints, runs the tests and builds (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
 
 ## How `build` Runs
@@ -113,10 +113,11 @@ LibreOffice extension and the icons (`clients/helper/`, `clients/libreoffice/` a
 `clients/office/` counts as code as well as clients, because `healdan-api` packages the Office add-in's pages and
 manifest into its jar. A Markdown file there is still docs. `code` gates the Java build's test shards and the Docker
 build steps. `clients` is true when the pull request changes anything under `clients/`, `clients.yml` itself, or the
-API contract, `healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. It
-gates the client test jobs. `web` is true when the pull request changes anything under `healdan-web/`, `web.yml`
-itself, or the API contract, which the User app's types are generated from. It gates the `Web` check's app job. A
-push always gets all three true.
+API contract, `healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. The
+admin API's contract beside it, `openapi-admin.yaml`, doesn't count, as the helper's tests don't read it. `clients` gates the
+client test jobs. `web` is true when the pull request changes anything under `healdan-web/`, `web.yml` itself, or
+either contract, which the apps' types are generated from. It gates the `Web` check's app job. A push always gets
+all three true.
 
 Every workflow still reports its required checks when its steps are skipped, so `master`'s ruleset can require
 them all.
@@ -126,6 +127,7 @@ them all.
 | Only the helper, the extension or the icons in `clients/` | Skipped | Skipped | Run | Skipped |
 | `clients/office/`, other than Markdown | Run | Run | Run | Skipped |
 | The API contract, `openapi.yaml` | Run | Run | Run | Run |
+| The admin API's contract, `openapi-admin.yaml` | Run | Run | Skipped | Run |
 | `healdan-web/`, other than Markdown | Run | Run | Skipped | Run |
 | Only the server, or anything else outside `clients/` and the docs | Run | Run | Skipped | Skipped |
 | Only docs | Skipped | Skipped | Skipped | Skipped |
@@ -142,10 +144,11 @@ or the icons rebuilds it.
 
 1. **`changes`** runs `code-changed.sh`.
 2. **`User app (ubuntu-24.04)`** sets up the Node version in `healdan-web/web/.nvmrc` and, in `healdan-web/web`,
-   runs `npm ci --ignore-scripts`, `npm run generate` (the API's types, from `openapi.yaml`), `npm run typecheck`,
-   `npm run lint`, `npm test` and `npm run build`.
+   runs `npm ci --ignore-scripts`, `npm run generate` (the APIs' types, from `openapi.yaml` and
+   `openapi-admin.yaml`), `npm run typecheck` (each app on its own), `npm run lint`, `npm test` and `npm run build`.
+   Despite its name, it covers both apps.
 3. **`Web`** is the check to require. It passes when the app job passed, or when it was skipped because nothing under
-   `healdan-web/`, nor `web.yml`, nor the API contract changed. A cancelled run fails it.
+   `healdan-web/`, nor `web.yml`, nor either contract changed. A cancelled run fails it.
 
 `check-web-licences.py` runs in `build`'s `checks` job, not here, so a package with a licence Healdan can't pass on
 fails there. It reads `healdan-web/web/package-lock.json` and fails on a package the app ships (one the lockfile
