@@ -1,0 +1,195 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Admin app mockup: the frame and the Dashboard</title>
+<style>:root{--border:#d1d1d6;--text-secondary:#6e6e73;--bg-secondary:#fff;--bg-tertiary:#e5e5e7}body{margin:24px auto;max-width:1340px;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#1d1d1f;background:#f5f5f7}.subtitle{color:var(--text-secondary)}.options{display:flex;flex-direction:column;gap:.75rem}.option{display:flex;gap:1rem;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem}.option .letter{flex:none;width:28px;height:28px;border-radius:6px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-weight:600}.option h3{margin:0 0 .25rem;font-size:1rem}.option p{margin:0;color:var(--text-secondary);font-size:.9rem}</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<style>
+.hd-wrap{width:100%;overflow:hidden;border-radius:10px;border:1px solid var(--border);margin:.5rem 0 1.75rem;background:#fff}
+.hd-app{width:1280px;transform-origin:0 0;font:13px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1D1D1F;background:#fff;
+--a:#0C69C0;--a-soft:#E6F0FA;--side:#F5F5F7;--line:#E5E5EA;--second:#6E6E73;--third:#8E8E93;--ok:#1E7B34;--warn:#9A5B00;--warn-bg:#FFF6E5;--bad:#9B1C11;--bad-bg:#FDF0EE}
+.hd-app *{box-sizing:border-box}
+.hd-app i.ti{font-size:16px;line-height:1}
+.hd-app h1,.hd-app h2,.hd-app h3,.hd-app p{margin:0;padding:0;color:inherit;font:inherit}
+.top{display:flex;align-items:center;gap:16px;height:52px;padding:0 16px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:8px;width:216px;font-weight:600;font-size:15px}
+.brand small{font-size:12px;font-weight:500;color:var(--a);background:var(--a-soft);border-radius:4px;padding:1px 6px}
+.mark{width:20px;height:22px}
+.find{flex:1;max-width:520px;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border:1px solid #C7C7CC;border-radius:8px;color:var(--third)}
+.right{margin-left:auto;display:flex;align-items:center;gap:16px;color:var(--second);font-size:12.5px}
+.right span{display:flex;align-items:center;gap:5px}
+.avatar{width:28px;height:28px;border-radius:50%;background:#D9E7F7;color:var(--a);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:12px}
+.body{display:grid;grid-template-columns:232px 1fr}
+.nav{background:var(--side);border-right:1px solid var(--line);padding:10px 8px}
+.sec{font-size:11px;font-weight:600;color:var(--second);text-transform:uppercase;letter-spacing:.04em;margin:14px 8px 4px}
+.ni{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px}
+.ni i{color:var(--second)}
+.ni.on{background:var(--a-soft);color:var(--a);font-weight:500}.ni.on i{color:var(--a)}
+.ni b{margin-left:auto;font-size:11px;font-weight:600;color:var(--warn);background:var(--warn-bg);border-radius:9px;padding:0 6px}
+.tabs{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--line);background:var(--side)}
+.tab{display:flex;align-items:center;gap:6px;padding:9px 12px;color:var(--second);font-weight:500;border-bottom:2px solid transparent}
+.tab.on{color:var(--a);border-color:var(--a)}
+.tab b{font-size:11px;font-weight:600;color:var(--warn);background:var(--warn-bg);border-radius:9px;padding:0 6px}
+.page{padding:16px 24px 24px;min-width:0}
+.head{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.head h1{font-size:20px;font-weight:600}
+.head span{color:var(--second)}
+.btn{margin-left:auto;align-self:center;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;border:1px solid #C7C7CC;font-size:12.5px;background:#fff}
+.attn{border:1px solid #F0D9A8;background:var(--warn-bg);border-radius:8px;margin-bottom:16px}
+.attn h2{font-weight:600;padding:8px 12px 2px;color:var(--warn);display:flex;gap:6px;align-items:center}
+.ar{display:flex;align-items:center;gap:8px;padding:5px 12px}
+.ar:last-child{padding-bottom:9px}
+.ar i{color:var(--warn)}.ar i.bad{color:var(--bad)}
+.ar em{font-style:normal;color:var(--second)}
+.ar a{margin-left:auto;color:var(--a);white-space:nowrap}
+.lab{font-size:11px;font-weight:600;color:var(--second);text-transform:uppercase;letter-spacing:.04em;margin:0 0 6px}
+.grid{display:grid;gap:10px;margin-bottom:18px}
+.g5{grid-template-columns:repeat(5,1fr)}
+.g3{grid-template-columns:1.5fr 1fr 1fr}
+.c{border:1px solid var(--line);border-radius:8px;padding:9px 11px;min-width:0}
+.c h3{display:flex;align-items:center;gap:6px;font-weight:500}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.dot.w{background:#C77700}
+.c p{color:var(--second);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c p.w{color:var(--warn)}
+.bar{height:5px;border-radius:3px;background:#EDEDF0;margin-top:6px;overflow:hidden}
+.bar u{display:block;height:100%;background:var(--a)}
+.n{font-size:21px;font-weight:600;letter-spacing:-.01em}
+.c h4{margin:0 0 8px;font:inherit;font-weight:600}
+.chart{display:flex;align-items:flex-end;gap:3px;height:84px;border-bottom:1px solid var(--line)}
+.chart u{flex:1;background:var(--a);border-radius:2px 2px 0 0}
+.chart u.q{background:#BCD6EF}
+.ax{display:flex;justify-content:space-between;color:var(--second);font-size:11px;margin-top:3px}
+.row{display:flex;justify-content:space-between;gap:8px;padding:3px 0;white-space:nowrap}
+.row span:first-child{overflow:hidden;text-overflow:ellipsis}
+.row span:last-child{color:var(--second);font-variant-numeric:tabular-nums}
+.s{margin-bottom:9px}.s:last-child{margin-bottom:0}
+.s small{display:block;color:var(--second);font-size:11.5px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:0 0 1.5rem}
+.cols h3{margin:0 0 .35rem}.cols ul{margin:0;padding-left:1.1rem}.cols li{margin:.2rem 0}
+</style>
+
+<h2>The Admin app: its frame and its dashboard</h2>
+<p class="subtitle">Both drawings show the same dashboard, with your list as the menu. The numbers are invented, and the names are the demo firm's. Scroll down for B.</p>
+
+<template id="dash">
+  <div class="head"><h1>Dashboard</h1><span>Ashcombe Reeve LLP · updated 20 seconds ago</span><div class="btn"><i class="ti ti-refresh"></i>Refresh</div></div>
+
+  <div class="attn">
+    <h2><i class="ti ti-alert-triangle"></i>Needs Attention (3)</h2>
+    <div class="ar"><i class="ti ti-cloud-exclamation"></i>3 files are stuck moving to Wasabi EU <em>· Client Work · retrying since 09:12</em><a>Storage ›</a></div>
+    <div class="ar"><i class="ti ti-file-alert"></i>2 documents couldn't be indexed, so search won't find their text <em>· # 10412, # 10398</em><a>Search Index ›</a></div>
+    <div class="ar"><i class="ti ti-circle-x bad"></i>14 errors in the server log in the last 24 hours <em>· latest 10:41, a preview timed out</em><a>Errors ›</a></div>
+  </div>
+
+  <div class="lab">Server Health</div>
+  <div class="grid g5">
+    <div class="c"><h3><span class="dot"></span>Server</h3><p>Up 6 days · Healdan 9.3.2</p></div>
+    <div class="c"><h3><span class="dot"></span>Database</h3><p>PostgreSQL 18.4 · 1.1 GB</p></div>
+    <div class="c"><h3><span class="dot"></span>Disk</h3><p>195 of 500 GB used</p><div class="bar"><u style="width:39%"></u></div></div>
+    <div class="c"><h3><span class="dot"></span>Memory</h3><p>2.4 of 4 GB used</p><div class="bar"><u style="width:60%"></u></div></div>
+    <div class="c"><h3><span class="dot"></span>Sign-In</h3><p>Authentik answering</p></div>
+    <div class="c"><h3><span class="dot w"></span>Storage Backends</h3><p class="w">2 reachable · 3 files stuck</p></div>
+    <div class="c"><h3><span class="dot w"></span>Search Index</h3><p class="w">5 waiting · 2 failed</p></div>
+    <div class="c"><h3><span class="dot"></span>Previews</h3><p>3 waiting · none failed</p></div>
+    <div class="c"><h3><span class="dot"></span>Background Jobs</h3><p>11 on schedule</p></div>
+    <div class="c"><h3><span class="dot"></span>Outgoing Email</h3><p>Last sent 08:14</p></div>
+  </div>
+
+  <div class="lab">Usage</div>
+  <div class="grid g5">
+    <div class="c"><div class="n">1,284</div><p>Documents · 37 this week</p></div>
+    <div class="c"><div class="n">14.2 GB</div><p>Stored · 310 MB this week</p></div>
+    <div class="c"><div class="n">12</div><p>Matters · 1 this month</p></div>
+    <div class="c"><div class="n">7</div><p>Clients</p></div>
+    <div class="c"><div class="n">6</div><p>People · 4 signed in now</p></div>
+  </div>
+  <div class="grid g3" style="margin-bottom:0">
+    <div class="c"><h4>Documents Filed, Last 30 Days</h4>
+      <div class="chart">
+        <u style="height:30%"></u><u style="height:52%"></u><u style="height:44%"></u><u style="height:12%" class="q"></u><u style="height:6%" class="q"></u><u style="height:62%"></u><u style="height:48%"></u><u style="height:70%"></u><u style="height:38%"></u><u style="height:55%"></u><u style="height:8%" class="q"></u><u style="height:4%" class="q"></u><u style="height:66%"></u><u style="height:92%"></u><u style="height:58%"></u><u style="height:41%"></u><u style="height:50%"></u><u style="height:10%" class="q"></u><u style="height:5%" class="q"></u><u style="height:47%"></u><u style="height:64%"></u><u style="height:72%"></u><u style="height:35%"></u><u style="height:60%"></u><u style="height:7%" class="q"></u><u style="height:9%" class="q"></u><u style="height:78%"></u><u style="height:53%"></u><u style="height:68%"></u><u style="height:24%"></u>
+      </div><div class="ax"><span>19 Oct</span><span>Today</span></div></div>
+    <div class="c"><h4>Storage by Store</h4>
+      <div class="s">Client Work<small>11.8 GB on Wasabi EU, encrypted</small><div class="bar"><u style="width:83%"></u></div></div>
+      <div class="s">Firm<small>2.4 GB on Original, this server's disk</small><div class="bar"><u style="width:17%"></u></div></div></div>
+    <div class="c"><h4>Busiest Matters This Week</h4>
+      <div class="row"><span>1001.1 Charter Dispute</span><span>14 filed</span></div>
+      <div class="row"><span>1003.1 Series A Investment</span><span>9 filed</span></div>
+      <div class="row"><span>1002.2 Employment Tribunal</span><span>6 filed</span></div>
+      <div class="row"><span>1006.1 House Purchase</span><span>4 filed</span></div></div>
+  </div>
+</template>
+
+<h3>A · A left pane, as in the User app</h3>
+<div class="hd-wrap"><div class="hd-app">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan <small>Admin</small></div>
+    <div class="find"><i class="ti ti-search"></i>Find a client, matter or person</div>
+    <div class="right"><span><i class="ti ti-arrow-up-right"></i>Open Healdan</span><span><i class="ti ti-help"></i>Help</span><div class="avatar">SO</div></div>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="ni on"><i class="ti ti-layout-dashboard"></i>Dashboard</div>
+      <div class="sec">Firm</div>
+      <div class="ni"><i class="ti ti-building"></i>Clients</div>
+      <div class="ni"><i class="ti ti-briefcase"></i>Matters</div>
+      <div class="ni"><i class="ti ti-template"></i>Workspace Templates</div>
+      <div class="sec">People</div>
+      <div class="ni"><i class="ti ti-user"></i>Users</div>
+      <div class="ni"><i class="ti ti-users-group"></i>Groups</div>
+      <div class="ni"><i class="ti ti-login-2"></i>Sign-In Providers</div>
+      <div class="sec">Storage</div>
+      <div class="ni"><i class="ti ti-archive"></i>Stores</div>
+      <div class="ni"><i class="ti ti-database"></i>Backends<b>3</b></div>
+      <div class="sec">Search</div>
+      <div class="ni"><i class="ti ti-file-search"></i>Search Index<b>2</b></div>
+      <div class="sec">Monitoring</div>
+      <div class="ni"><i class="ti ti-file-text"></i>Server Log</div>
+      <div class="ni"><i class="ti ti-circle-x"></i>Errors<b>14</b></div>
+      <div class="ni"><i class="ti ti-history"></i>Audit Trail</div>
+      <div class="ni"><i class="ti ti-clock-play"></i>Background Jobs</div>
+      <div class="sec">Other</div>
+      <div class="ni"><i class="ti ti-settings"></i>Settings</div>
+      <div class="ni"><i class="ti ti-external-link"></i>Classic Interface</div>
+    </div>
+    <div class="page" data-dash></div>
+  </div>
+</div></div>
+
+<h3>B · Tabs across the top, with the whole width for the page</h3>
+<div class="hd-wrap"><div class="hd-app">
+  <div class="top">
+    <div class="brand"><svg class="mark" viewBox="0 0 216 250"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/><polygon points="64,52 153,82 153,186 64,152" fill="#fff" opacity=".85"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff" opacity=".7"/></svg>Healdan <small>Admin</small></div>
+    <div class="find"><i class="ti ti-search"></i>Find a client, matter or person</div>
+    <div class="right"><span><i class="ti ti-arrow-up-right"></i>Open Healdan</span><span><i class="ti ti-help"></i>Help</span><div class="avatar">SO</div></div>
+  </div>
+  <div class="tabs">
+    <div class="tab on">Dashboard</div><div class="tab">Firm</div><div class="tab">People</div><div class="tab">Storage <b>3</b></div><div class="tab">Search Index <b>2</b></div><div class="tab">Monitoring <b>14</b></div><div class="tab">Settings</div>
+  </div>
+  <div class="page" data-dash></div>
+</div></div>
+
+<script>
+(function(){
+  var t=document.getElementById('dash');
+  document.querySelectorAll('[data-dash]').forEach(function(p){p.appendChild(t.content.cloneNode(true));});
+  function fit(){document.querySelectorAll('.hd-wrap').forEach(function(w){var a=w.firstElementChild,s=Math.min(1,w.clientWidth/1280);a.style.transform='scale('+s+')';w.style.height=(a.offsetHeight*s)+'px';});}
+  addEventListener('resize',fit);fit();
+})();
+</script>
+
+<div class="cols">
+  <div><h3>Fixed in both</h3><ul>
+    <li>Problems come first, each with a link to where you fix it.</li>
+    <li>The menu carries the count of what needs you.</li>
+    <li>Every health tile opens the screen behind it.</li>
+  </ul></div>
+  <div><h3>What I'd like from you</h3><ul>
+    <li>Pick a frame below. I'd go with A: it matches the User app and has room for this many screens.</li>
+    <li>Tell me what's wrong or missing on the dashboard, in the terminal.</li>
+  </ul></div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="a"><div class="letter">A</div><div class="content"><h3>Left pane</h3><p>The same shape as the User app, with every screen one click away.</p></div></div>
+  <div class="option" data-choice="b"><div class="letter">B</div><div class="content"><h3>Tabs across the top</h3><p>More width for tables, but each area needs a second row of choices.</p></div></div>
+</div>

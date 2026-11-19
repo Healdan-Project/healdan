@@ -15,9 +15,10 @@ git pull
 ```
 
 If [Changes to LogicalDOC's Tables](#changes-to-logicaldocs-tables) lists one your database doesn't have yet, make
-it now. Then build and start the new version:
+it now. Then fetch Tomcat's newest image, which brings Java's security fixes, and build and start the new version:
 
 ```bash
+docker pull tomcat:11.0-jre25-temurin
 docker compose up -d --build
 ```
 
@@ -62,6 +63,48 @@ does, builds as before until then, and then stops while building `healdan-web` w
 that was running keeps running. [The Build Stops with "Illegal
 Instruction"](../troubleshooting/#the-build-stops-with-illegal-instruction) says how to check the processor, and
 what to change.
+
+## Getting a Newer Java
+
+Healdan's image is built on Tomcat's, which brings Java. `docker compose up -d --build` on its own reuses the copy of
+that image your server already has, so it doesn't bring a newer Java. That's why an upgrade pulls Tomcat's image
+first. To get the newest Java without changing your version of Healdan, run the same two commands without `git pull`.
+The build reuses what it already made for Healdan itself:
+
+```bash
+docker pull tomcat:11.0-jre25-temurin
+docker compose up -d --build
+```
+
+If `.env` sets `LOGICALDOC_IMAGE` to a published image, your server doesn't build Healdan. Run `docker compose pull`
+and `docker compose up -d` instead, as `--build` would store a build of your checkout under the published name.
+
+To see which Java the app runs:
+
+```bash
+docker compose exec app java -version
+```
+
+### CVE-2026-114938 ("Java4Shell")
+
+This flaw in Java's Base64 decoder, published in November 2026, lets a request corrupt the server's memory before
+signing in, on x86-64 processors with AVX-512 VBMI. Java 25.0.5.1 and later have the fix. On 18 November 2026 Tomcat's
+image didn't have it yet, so pulling that image may still leave you on an older Java.
+
+Healdan's image has turned the affected decoder off since 18 November 2026, so upgrading to a build from then or later
+protects your server whichever Java it has. To check the running app, run this, which prints `1` when the option is
+on and `0` when it isn't:
+
+```bash
+docker compose top app | grep -c -- -XX:-UseBASE64Intrinsics
+```
+
+Until you can upgrade, add the same option to the end of `CATALINA_OPTS` in `.env`, after whatever it already holds,
+and run `docker compose up -d`. If `.env` doesn't set it, its value is `-Xmx2g`, which makes the line:
+
+```bash
+CATALINA_OPTS="-Xmx2g -XX:-UseBASE64Intrinsics"
+```
 
 ## Changes to LogicalDOC's Tables
 

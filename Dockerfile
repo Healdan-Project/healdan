@@ -7,6 +7,7 @@
 # See docker/README.md for usage and docs/superpowers/specs/2026-10-15-docker-compose-stack-design.md for the design.
 
 ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-25
+# The Install manual's Upgrading page pulls this tag by name: change both together.
 ARG TOMCAT_IMAGE=tomcat:11.0-jre25-temurin
 
 # ---- build: the same Maven build CI runs, producing the exploded WAR in /build/ROOT ----
