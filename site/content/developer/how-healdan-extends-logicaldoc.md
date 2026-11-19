@@ -221,9 +221,11 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
     | A page | The return path stored, and a redirect to `login.jsp` | `403` with the User app's own `index.html`, which draws its no-access panel there (or a line of text if the User app isn't built), and the return path forgotten | `200`, `index.html` |
     | A file | `401`, empty | The same `403`, whether the file is there or not | `200`, or `404` |
 
-    A check that fails refuses. Hashed files are `private, max-age=31536000, immutable`, so no proxy keeps them for
-    someone else, and the page and every refusal are `no-store`, set explicitly, as LogicalDOC's `CacheControlFilter`
-    would otherwise keep a refused `.js` for ten minutes. Its policy is the User app's without PDF.js's worker and the
+    A check that fails, as when the database doesn't answer, lets nobody in and tells nobody they've lost access:
+    every path is the same `503`, `no-store`, with a line of plain text to try again, and the return path is kept.
+    Hashed files are `private, max-age=31536000, immutable`, so no proxy keeps them for someone else, and the page
+    and every refusal are `no-store`, set explicitly, as LogicalDOC's `CacheControlFilter` would otherwise keep a
+    refused `.js` for ten minutes. Its policy is the User app's without PDF.js's worker and the
     email's frame: `worker-src 'none'; frame-src 'none'`. Its answers set their status, never send an error, so
     Tomcat's error page never replaces them.
   - **Where a sign-in lands.** LogicalDOC's `login.jsp` sends the password form, as `j_successurl`, to the HTTP
@@ -342,7 +344,8 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
   and its routes are the admin API's (see `healdan-api` above).
   - **`hd_admin_event`** (`V12__admin.sql`) is the administration record: a row for each administrative change, with
     when (the JVM's clock, to the millisecond), who (their id and username), from where, the Admin app's area
-    (`AdminArea`), the action, such as `client.renamed`, what it acted on (its kind, id and name), and a JSON detail of
+    (`AdminArea`), the action, such as `client.renamed`, what it acted on (its kind, id and name, a client and a matter
+    named with their numbers, as `1001 – Saltmarsh Shipping Ltd` and `1001.1 – Charter Dispute`), and a JSON detail of
     the fields it changed, each as `{"before":…,"after":…}`, in the order of their names. A changed secret is
     `{"secret":true}`, with neither value (`AdminEvent.Change.secret()`), so no secret is ever in it. A username, an
     address or a name too long for its column is cut to fit, rather than fail the change; the detail is kept whole.
@@ -430,18 +433,20 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
     a test makes, reports nothing.
   - **`Jobs`** lists Healdan's eight jobs in a fixed order (`preview`, `email-index`, `trash-destroyer`,
     `storage-mover`, `storage-retest`, `storage-purge`, `storage-alert`, `storage-nightly-check`; the storage ones only
-    where `healdan-storage` is, on an `FSStore` server too), then LogicalDOC's six scheduled tasks from `TaskManager`:
-    the Indexer, Index Optimizer, Tags Processor, Digest Processor, Statistics Collector and Paths Calculator. A
-    task's last start is its schedule's previous fire time, its last end that plus its last duration once it isn't
-    running, and its next run the schedule's next fire time, so a task shows no last end while it runs. LogicalDOC
-    keeps a task's last error with no getter, so its error is the latest one the captured errors have from the task's
-    logger since its last start: any error a task logs while it runs fails it, not only one that ends the run, and
-    `Task.run`'s own "The task is stopped" and "The task gets interrupted" don't count. The email index is `done`
-    once its first pass has ended (`email.index` in `hd_setting`), unless its last run failed.
+    where `healdan-storage` is, and switched off on an `FSStore` server, where none runs: `HealdanJob.enabled()`, which
+    `healdan-storage`'s `StorageJob` answers from `StoreTracking.active()`), then LogicalDOC's six scheduled tasks from
+    `TaskManager`: the Indexer, Index Optimizer, Tags Processor, Digest Processor, Statistics Collector and Paths
+    Calculator. A task's last start is its schedule's previous fire time, its last end that plus its last duration once
+    it isn't running, and its next run the schedule's next fire time, so a task shows no last end while it runs.
+    LogicalDOC keeps a task's last error with no getter, so its error is the latest one the captured errors have from
+    the task's logger since its last start: any error a task logs while it runs fails it, not only one that ends the
+    run, and `Task.run`'s own "The task is stopped" and "The task gets interrupted" don't count. The email index is
+    `done` once its first pass has ended (`email.index` in `hd_setting`), unless its last run failed.
   - **A job is overdue** when it's switched on, isn't running, and its next run is more than twice its interval in
     the past, and an hour at least (`JobView.overdue`). Its interval is from the run that set the next run: for
     Healdan's jobs from their last end, for LogicalDOC's tasks from their last start. A job with no next run, or
-    switched off (only LogicalDOC's tasks can be), never is.
+    switched off (a LogicalDOC task an administrator disabled, or a storage job where storage backends aren't in use),
+    never is.
   - **The Dashboard's Needs Attention and Server Health** come from `DashboardService` (`admin.dashboard`), each
     from its own source:
 

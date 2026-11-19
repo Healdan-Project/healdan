@@ -78,6 +78,9 @@ people tell you they see, and where to look.
   members get in. Healdan asks at every page load and request, so someone taken out of the group sees it at their
   next one. **Open Healdan** takes them to the User app. If they should be an administrator, add them to `admin`: see
   [Users and Groups](../../admin/users-and-groups/).
+- **"Healdan couldn't check your access just now. Try again in a moment."** Opening the Admin app, Healdan couldn't
+  ask whether the person is in `admin`, usually because the database didn't answer, so it answered `503` and changed
+  nothing: reload once the database is back, and `dms.log` says why.
 - **"Healdan refused that from this page."** The request didn't look like the page's own: its `Origin` header named
   another address than Healdan's, or a change was sent without the app's own header. Nobody is signed out by it.
   Check that `LOGICALDOC_PUBLIC_URL` is the address people type, that the proxy passes `Origin` on, and that people don't reach Healdan under two different host names, such as by IP address and by name.

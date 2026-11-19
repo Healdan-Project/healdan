@@ -23,7 +23,9 @@ import java.time.Instant;
  *        run, and for one of CE's tasks running with no error yet
  * @param error what its last run failed with, null if it didn't
  * @param nextRun when it runs next, null if it doesn't or that isn't known
- * @param enabled whether it runs at all; only CE's tasks can be disabled
+ * @param enabled whether it runs at all: CE's tasks can be disabled, and one
+ *        of Healdan's that doesn't run on this server is off
+ *        ({@link HealdanJob#enabled()})
  * @param running whether a run has begun and not ended
  * @param canRun whether it can be made to run now
  * @param canStop whether a run of it can be stopped now

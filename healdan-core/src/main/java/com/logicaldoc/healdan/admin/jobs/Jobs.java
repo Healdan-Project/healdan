@@ -33,9 +33,12 @@ import com.logicaldoc.i18n.I18N;
  * CE's scheduled tasks, as {@link TaskManager} lists them.
  * <p>
  * Healdan's come in a fixed order ({@link #ORDER}), any other after them by
- * name. The email index is {@link JobView#DONE} once its first pass has ended,
- * which {@code email.index} in {@code hd_setting} records across restarts,
- * unless its latest run failed.
+ * name, each switched on unless it says it doesn't run on this server
+ * ({@link HealdanJob#enabled()}), as {@code healdan-storage}'s don't on one
+ * that keeps its files in LogicalDOC's own store. The email index is
+ * {@link JobView#DONE} once its first pass has ended, which
+ * {@code email.index} in {@code hd_setting} records across restarts, unless
+ * its latest run failed.
  * <p>
  * A CE task's state is CE's: its last start is its scheduling's previous fire
  * time, its last end that start plus its last duration once it isn't running,
@@ -135,7 +138,7 @@ public class Jobs {
 		if (job instanceof EmailIndexWorker emailIndex && !JobView.FAILED.equals(result) && emailIndex.firstPassDone())
 			result = JobView.DONE;
 		return new JobView(job.name(), job.label(), report.lastStart(), report.lastEnd(), result, report.error(),
-				report.nextRun(), true, report.running(), job.canRunNow(), false, false, false);
+				report.nextRun(), job.enabled(), report.running(), job.canRunNow(), false, false, false);
 	}
 
 	private JobView view(Task task) {

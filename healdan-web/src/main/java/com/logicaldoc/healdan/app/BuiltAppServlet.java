@@ -41,7 +41,9 @@ abstract class BuiltAppServlet extends HttpServlet {
 		/** No one is signed in: a page goes to the sign-in page, a file is <code>401</code> */
 		SIGN_IN,
 		/** Signed in, and not allowed: {@link BuiltAppServlet#answerRefused} answers, whatever the path */
-		REFUSED
+		REFUSED,
+		/** The check itself failed, as when the database doesn't answer: {@link BuiltAppServlet#answerUnchecked} */
+		UNCHECKED
 	}
 
 	static final String INDEX = "index.html";
@@ -51,6 +53,9 @@ abstract class BuiltAppServlet extends HttpServlet {
 
 	/** What the answer to someone refused says when the User app wasn't built in to draw its panel */
 	static final String REFUSED_TEXT = "You don't have access to Healdan Admin.";
+
+	/** What the answer says when who's asking couldn't be checked */
+	static final String UNCHECKED_TEXT = "Healdan couldn't check your access just now. Try again in a moment.";
 
 	private static final String NO_STORE = "no-store";
 
@@ -139,6 +144,25 @@ abstract class BuiltAppServlet extends HttpServlet {
 	}
 
 	/**
+	 * Answers a request whose access couldn't be checked, as when the database doesn't answer: <code>503</code>, never
+	 * kept, with a line of plain text to try again, and the same answer for every path, so it sends none of the app's
+	 * bytes and tells nothing of what its build holds. Nothing was decided about the person, so it tells them nothing
+	 * about their access, and the return path stays as it was.
+	 */
+	void answerUnchecked(HttpServletRequest request, HttpServletResponse response) throws IOException {
+		byte[] text = UNCHECKED_TEXT.getBytes(StandardCharsets.UTF_8);
+		response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+		response.setHeader("Cache-Control", NO_STORE);
+		response.setContentType(TYPES.get("txt"));
+		response.setContentLength(text.length);
+		if ("GET".equals(request.getMethod())) {
+			try (OutputStream out = response.getOutputStream()) {
+				out.write(text);
+			}
+		}
+	}
+
+	/**
 	 * Answers a status with no body: set, never sent as an error, so Tomcat's error page doesn't replace it (admin spec
 	 * 6.1), and never kept, as CE's <code>CacheControlFilter</code> would otherwise keep a <code>.js</code>'s for ten
 	 * minutes
@@ -197,6 +221,10 @@ abstract class BuiltAppServlet extends HttpServlet {
 		Access access = access(request);
 		if (access == Access.REFUSED) {
 			answerRefused(request, response);
+			return;
+		}
+		if (access == Access.UNCHECKED) {
+			answerUnchecked(request, response);
 			return;
 		}
 

@@ -135,11 +135,12 @@ public class ClientServiceTest extends AbstractHealdanTestCase {
 		// A refusal records nothing
 		assertThrows(HealdanRuleException.class, () -> service.create(998, "Again", admin));
 
-		// From the Classic Interface, with no address; then from the Admin app's
+		// From the Classic Interface, with no address; then from the Admin app's. The client is named as people see it,
+		// with its number, as a matter is, and the rename's record names it by its new name
 		assertEquals(List.of(
-				"%d admin null MATTERS client.created client %d Healdan {\"name\":{\"before\":null,\"after\":\"Healdan\"},\"number\":{\"before\":null,\"after\":\"998\"}}"
+				"%d admin null MATTERS client.created client %d 998 \u2013 Healdan {\"name\":{\"before\":null,\"after\":\"Healdan\"},\"number\":{\"before\":null,\"after\":\"998\"}}"
 						.formatted(admin.getId(), client.getId()),
-				"%d admin 192.0.2.20 MATTERS client.renamed client %d Healdan Ltd {\"name\":{\"before\":\"Healdan\",\"after\":\"Healdan Ltd\"}}"
+				"%d admin 192.0.2.20 MATTERS client.renamed client %d 998 \u2013 Healdan Ltd {\"name\":{\"before\":\"Healdan\",\"after\":\"Healdan Ltd\"}}"
 						.formatted(admin.getId(), client.getId())),
 				events());
 	}

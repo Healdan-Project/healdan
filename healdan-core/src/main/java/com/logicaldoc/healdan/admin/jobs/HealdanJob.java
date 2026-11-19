@@ -23,6 +23,16 @@ public interface HealdanJob {
 	String label();
 
 	/**
+	 * @return whether it runs on this server: true but for a job that never
+	 *         runs here, such as {@code healdan-storage}'s on a server that
+	 *         keeps its files in LogicalDOC's own store, which is listed
+	 *         switched off
+	 */
+	default boolean enabled() {
+		return true;
+	}
+
+	/**
 	 * @return whether {@link #runNow()} makes it run now
 	 */
 	default boolean canRunNow() {

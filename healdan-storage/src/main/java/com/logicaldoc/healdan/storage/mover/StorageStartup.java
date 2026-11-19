@@ -22,7 +22,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.healdan.HealdanStartListener;
-import com.logicaldoc.healdan.admin.jobs.HealdanJob;
 import com.logicaldoc.healdan.admin.jobs.JobStatus;
 import com.logicaldoc.healdan.storage.BackendHealth;
 import com.logicaldoc.healdan.storage.NightlyCheck;
@@ -49,8 +48,9 @@ import jakarta.annotation.PreDestroy;
  * ({@link BackendHealth#beforeWrite}). Does nothing unless CE's Store is a {@code HealdanStorage}.
  * <p>
  * The retests, the purge, the alert and the nightly check are background jobs (Admin app spec section 9.5), each a
- * {@link HealdanJob} bean of its own below: each scheduled run reports to {@link JobStatus} under its name, with its
- * next run, and each first run is reported scheduled. An early retest isn't a run of the retests' job.
+ * {@link StorageJob} bean of its own below, switched off where CE's Store isn't a {@code HealdanStorage}: each
+ * scheduled run reports to {@link JobStatus} under its name, with its next run, and each first run is reported
+ * scheduled. An early retest isn't a run of the retests' job.
  */
 @Component
 public class StorageStartup implements HealdanStartListener {
@@ -304,7 +304,7 @@ public class StorageStartup implements HealdanStartListener {
 
 	/** The backends' retests, as the background jobs list them */
 	@Component
-	static class RetestJob implements HealdanJob {
+	static class RetestJob extends StorageJob {
 
 		@Override
 		public String name() {
@@ -319,7 +319,7 @@ public class StorageStartup implements HealdanStartListener {
 
 	/** The purge, as the background jobs list it */
 	@Component
-	static class PurgeJob implements HealdanJob {
+	static class PurgeJob extends StorageJob {
 
 		@Override
 		public String name() {
@@ -334,7 +334,7 @@ public class StorageStartup implements HealdanStartListener {
 
 	/** The alert, as the background jobs list it */
 	@Component
-	static class AlertJob implements HealdanJob {
+	static class AlertJob extends StorageJob {
 
 		@Override
 		public String name() {
@@ -349,7 +349,7 @@ public class StorageStartup implements HealdanStartListener {
 
 	/** The nightly Store check, as the background jobs list it */
 	@Component
-	static class NightlyCheckJob implements HealdanJob {
+	static class NightlyCheckJob extends StorageJob {
 
 		@Override
 		public String name() {

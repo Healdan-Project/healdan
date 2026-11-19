@@ -23,7 +23,9 @@ import com.logicaldoc.util.spring.Context;
 /**
  * Creating and renaming clients. Admins only. Each change is recorded in the
  * administration record inside the change's transaction, so a failed record
- * undoes the change.
+ * undoes the change. The record names the client as people see it, by number
+ * and name ({@link MatterDisplay#client}), as a matter's record names the
+ * matter.
  */
 @Component
 public class ClientService {
@@ -71,7 +73,8 @@ public class ClientService {
 		client.setNumber(number);
 		client.setName(clean);
 		ClientDAO.get().store(client);
-		events.record(new AdminEvent(AdminArea.MATTERS, "client.created", CLIENT, client.getId(), clean,
+		events.record(new AdminEvent(AdminArea.MATTERS, "client.created", CLIENT, client.getId(),
+				MatterDisplay.client(number, clean),
 				Map.of("number", new Change(null, String.valueOf(number)), "name", new Change(null, clean))), actor);
 		return client;
 	}
@@ -101,8 +104,8 @@ public class ClientService {
 		client.setName(clean);
 		ClientDAO.get().store(client);
 		if (!clean.equals(before))
-			events.record(new AdminEvent(AdminArea.MATTERS, "client.renamed", CLIENT, client.getId(), clean,
-					Map.of("name", new Change(before, clean))), actor);
+			events.record(new AdminEvent(AdminArea.MATTERS, "client.renamed", CLIENT, client.getId(),
+					MatterDisplay.client(client.getNumber(), clean), Map.of("name", new Change(before, clean))), actor);
 		return client;
 	}
 

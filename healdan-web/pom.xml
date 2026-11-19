@@ -331,6 +331,7 @@
 				skips a missing folder and so nothing fails. -->
 			<plugin>
 				<artifactId>maven-resources-plugin</artifactId>
+				<version>3.5.0</version>
 				<executions>
 					<execution>
 						<id>copy-user-app</id>

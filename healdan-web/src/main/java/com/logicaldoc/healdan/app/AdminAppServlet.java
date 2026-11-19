@@ -27,7 +27,9 @@ import jakarta.servlet.http.HttpServletRequest;
  * <li>signed in and not an administrator, every path is the same <code>403</code>, the User app's own page, which
  * draws its no-access panel;</li>
  * <li>an administrator gets the page, <code>index.html</code>, for any address of the app, and a file or
- * <code>404</code>.</li>
+ * <code>404</code>;</li>
+ * <li>if the check itself fails, as when the database doesn't answer, every path is the same <code>503</code>, a line
+ * of plain text to try again, which tells nobody they've lost access and keeps the return path.</li>
  * </ul>
  * Which paths are files is decided by the path alone, never by what the build holds. Nothing is kept by a proxy:
  * hashed files are <code>private</code>, and the page and every refusal are <code>no-store</code>.
@@ -68,7 +70,8 @@ public class AdminAppServlet extends BuiltAppServlet {
 
 	/**
 	 * The person the web session belongs to, as the API's web-session route finds them, and whether they're an
-	 * administrator, asked afresh: nothing is kept between requests. A check that fails refuses.
+	 * administrator, asked afresh: nothing is kept between requests. A check that fails lets nobody in, and asks them
+	 * to try again.
 	 */
 	@Override
 	Access access(HttpServletRequest request) {
@@ -78,8 +81,9 @@ public class AdminAppServlet extends BuiltAppServlet {
 				return Access.SIGN_IN;
 			return isAdmin(user.get()) ? Access.OPEN : Access.REFUSED;
 		} catch (PersistenceException | RuntimeException e) {
-			log.warn("Can't tell whether a request to the Admin app is an administrator's, so it is refused", e);
-			return Access.REFUSED;
+			log.warn("Can't tell whether a request to the Admin app is an administrator's, so it is asked to try again",
+					e);
+			return Access.UNCHECKED;
 		}
 	}
 

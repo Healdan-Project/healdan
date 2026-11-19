@@ -40,7 +40,6 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.logicaldoc.healdan.admin.jobs.HealdanJob;
 import com.logicaldoc.healdan.admin.jobs.JobStatus;
 import com.logicaldoc.healdan.storage.BackendHealth;
 import com.logicaldoc.healdan.storage.Backends;
@@ -79,10 +78,11 @@ import jakarta.annotation.PreDestroy;
  * Each of the coordinator's passes that lists the rows, and each {@link #runOnce}, reports to {@link JobStatus} as
  * the {@value #JOB} job (Admin app spec section 9.5): the pass's listing and hand-out, not the transfers it starts,
  * whose failures each warn. A pass's next run is the next sweep's, at the latest. A running coordinator makes a pass
- * now when asked ({@link #runNow}, which {@link #wake}s it).
+ * now when asked ({@link #runNow}, which {@link #wake}s it). Where CE's Store isn't a {@code HealdanStorage}, the
+ * job is switched off ({@link StorageJob}).
  */
 @Component
-public class Mover implements HealdanJob {
+public class Mover extends StorageJob {
 
 	/** Its name among the background jobs */
 	public static final String JOB = "storage-mover";

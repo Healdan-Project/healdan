@@ -116,7 +116,7 @@ Classic Interface. The status is:
 | Storage Backends | how many [storage backends](../storage-backends/) can be reached, and any stuck files. **Off** on a server that doesn't use them |
 | Search Index | how many documents wait to be indexed, and how many couldn't be |
 | Previews | how many [previews](../office-previews/) wait to be made, and how many were given up on |
-| Background Jobs | how many background jobs are on schedule, which failed or are overdue, and how many are switched off |
+| Background Jobs | how many background jobs are on schedule, which failed or are overdue, and how many are switched off, such as the storage backends' jobs on a server that doesn't use them |
 | Outgoing Email | whether [outgoing email](../system/outgoing-email/) is set up, and whether a send failed in the last 24 hours: an error the server logged sending that nobody has resolved. **Off** when it isn't set up |
 
 ### Usage
@@ -156,6 +156,8 @@ the server's log. **Classic Interface**, in your menu or at the foot of the left
 - **"You don't have access to Healdan Admin."** Your account isn't in the `admin` group, or was taken out of it
   while the Admin app was open: the app shows this in place of every page at its next request. **Open Healdan** takes
   you to the User app.
+- **"Healdan couldn't check your access just now. Try again in a moment."** Healdan couldn't ask whether you're in
+  `admin`, usually because its database didn't answer. Your access hasn't changed: reload the page in a moment.
 - **"You've been signed out."** Your session ended. **Sign In** brings you back to the page you were on.
 - **"There's no such page in Healdan Admin."** The address isn't one of the Admin app's pages. **Go to the
   Dashboard** takes you back.

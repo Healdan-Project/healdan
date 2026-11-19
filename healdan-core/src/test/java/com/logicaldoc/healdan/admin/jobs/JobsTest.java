@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import javax.sql.DataSource;
@@ -24,6 +25,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.quartz.Trigger;
 import org.quartz.spi.OperableTrigger;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.searchengine.indexer.IndexerTask;
@@ -177,6 +179,54 @@ public class JobsTest extends AbstractHealdanTestCase {
 		assertEquals(6, taskNames().size());
 		assertTrue(all.subList(3, all.size()).stream().allMatch(JobView::logicalDocTask));
 		assertFalse(all.subList(0, 3).stream().anyMatch(JobView::logicalDocTask));
+		// Healdan's own run wherever healdan-core is
+		assertTrue(all.subList(0, 3).stream().allMatch(JobView::enabled));
+	}
+
+	@Test
+	public void testAHealdanJobThatDoesntRunHereIsSwitchedOff() {
+		// As healdan-storage's jobs on a server that keeps its files in LogicalDOC's own store
+		HealdanJob off = new HealdanJob() {
+			@Override
+			public String name() {
+				return "test-off";
+			}
+
+			@Override
+			public String label() {
+				return "Test Off";
+			}
+
+			@Override
+			public boolean enabled() {
+				return false;
+			}
+		};
+		HealdanJob on = new HealdanJob() {
+			@Override
+			public String name() {
+				return "test-on";
+			}
+
+			@Override
+			public String label() {
+				return "Test On";
+			}
+		};
+		Jobs listed = new Jobs(
+				new StaticListableBeanFactory(Map.<String, Object>of("off", off, "on", on))
+						.getBeanProvider(HealdanJob.class),
+				status, Context.get(ErrorStore.class), Context.get(TaskManager.class));
+
+		Instant now = Instant.now();
+		status.scheduled("test-off", now.minus(Duration.ofDays(2)));
+		status.scheduled("test-on", now.minus(Duration.ofDays(2)));
+		JobView switchedOff = listed.one("test-off");
+		assertFalse(switchedOff.enabled());
+		assertFalse("a job switched off is never overdue", switchedOff.overdue(now));
+		JobView switchedOn = listed.one("test-on");
+		assertTrue("a job is on unless it says it isn't", switchedOn.enabled());
+		assertTrue(switchedOn.overdue(now));
 	}
 
 	@Test

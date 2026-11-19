@@ -229,13 +229,14 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   the caps and text the database would refuse, resolving, reopening and a resolved fault seen again, the list's time
   windows, filters and paging, and the prune. `ErrorFingerprintTest` checks the fingerprint, the logger's name in it
   when the error was logged from another class, and the documents a message names, and `ErrorAreasTest` the areas.
-- **`JobsTest`** checks the job status: a worker's report, start, end, result and error, the error its exception's
-  class and message, capped; reporting that never throws; a first run known before it's made; Healdan's jobs first,
-  in their order, then LogicalDOC's six tasks; the email index `done` once its setting says so; a task's error, the
-  latest its logger logged since its start, `Task.run`'s stop not a failure, and two tasks failing alike each with
-  their own; and overdue, never while running or switched off. `PreviewWorkerTest`, `EmailIndexWorkerTest` and
-  `TrashStartupTest` check that their jobs report, and `StorageJobsTest`, in `healdan-storage`, that the storage
-  jobs are listed after `healdan-core`'s and that the mover, the purge and the retests report under their names, a
+- **`JobsTest`** checks the job status: a worker's report, start, end, result and error, the error its exception's class
+  and message, capped; reporting that never throws; a first run known before it's made; Healdan's jobs first, in their
+  order, then LogicalDOC's six tasks; a Healdan job that says it doesn't run here switched off; the email index `done`
+  once its setting says so; a task's error, the latest its logger logged since its start, `Task.run`'s stop not a
+  failure, and two tasks failing alike each with their own; and overdue, never while running or switched off.
+  `PreviewWorkerTest`, `EmailIndexWorkerTest` and `TrashStartupTest` check that their jobs report, and
+  `StorageJobsTest`, in `healdan-storage`, that the storage jobs are listed after `healdan-core`'s, switched off where
+  LogicalDOC's Store isn't `HealdanStorage`, and that the mover, the purge and the retests report under their names, a
   purge that fails saying why.
 - **`DashboardServiceTest`** checks Needs Attention and Server Health over fakes of each source: each attention code,
   several backends and Stores, the ten tiles in order and those that need attention, a part that fails leaving the
@@ -337,8 +338,8 @@ build out (see [Building from Source](../building-from-source/#commands)).
   database, with real people signed in to real web sessions: the check under test is the one the server makes. It
   checks the spec's table (signed out, signed in without `admin`, and an administrator, for a page and for a file),
   that a file that's there and one that isn't get the same refusal, the policy's text, the caching, `GET` and `HEAD`
-  only, an administrator taken out of `admin` refused at the next load, a check that fails refusing, and a server
-  built without the apps.
+  only, an administrator taken out of `admin` refused at the next load, a check that fails answering `503` to try
+  again with the return path kept, and a server built without the apps.
 - Like the API's tests, they take `healdan-core`'s test `context.properties`, which the build copies in, and
   `healdan-core`'s Spring scan finds the API's beans, so the module's test class path is `healdan-api`'s. The build
   sets `healdan.secretKey` under `target/`.

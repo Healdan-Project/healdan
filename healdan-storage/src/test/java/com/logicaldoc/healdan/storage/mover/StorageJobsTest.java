@@ -28,6 +28,7 @@ import com.logicaldoc.healdan.storage.NightlyCheck;
 import com.logicaldoc.healdan.storage.Purge;
 import com.logicaldoc.healdan.storage.StorageAlert;
 import com.logicaldoc.healdan.storage.StorageSettings;
+import com.logicaldoc.healdan.storage.StoreTracking;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -63,6 +64,29 @@ public class StorageJobsTest extends AbstractStorageTestCase {
 		assertEquals("IndexOptimizer", all.get(8).name());
 		assertTrue(all.subList(3, 8).stream().allMatch(JobView::enabled));
 		assertFalse(all.subList(3, 8).stream().anyMatch(JobView::logicalDocTask));
+	}
+
+	@Test
+	public void testSwitchedOffWhereStorageIsntInUse() {
+		// On a server that keeps its files in LogicalDOC's own store none of them runs, so none is on schedule
+		List<StorageJob> storage = List.of(Mover.get(), Context.get(StorageStartup.RetestJob.class),
+				Context.get(StorageStartup.PurgeJob.class), Context.get(StorageStartup.AlertJob.class),
+				Context.get(StorageStartup.NightlyCheckJob.class));
+		try {
+			for (StorageJob job : storage)
+				job.inUse = () -> false;
+			List<JobView> all = jobs.all();
+			assertEquals(List.of("storage-mover", "storage-retest", "storage-purge", "storage-alert",
+					"storage-nightly-check"), all.subList(3, 8).stream().map(JobView::name).toList());
+			assertFalse(all.subList(3, 8).stream().anyMatch(JobView::enabled));
+			// healdan-core's own still run, as do LogicalDOC's tasks
+			assertTrue(all.subList(0, 3).stream().allMatch(JobView::enabled));
+			assertTrue(jobs.one("IndexerTask").enabled());
+		} finally {
+			for (StorageJob job : storage)
+				job.inUse = StoreTracking::active;
+		}
+		assertTrue(jobs.all().subList(3, 8).stream().allMatch(JobView::enabled));
 	}
 
 	@Test

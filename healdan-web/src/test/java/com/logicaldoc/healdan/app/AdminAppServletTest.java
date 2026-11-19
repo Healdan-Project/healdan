@@ -409,8 +409,12 @@ public class AdminAppServletTest extends AbstractHealdanTestCase {
 		assertPlainStatus(get(ASSET, session), 401);
 	}
 
+	/**
+	 * A check that fails, as when the database doesn't answer, tells nobody they've lost access: a 503 to try again,
+	 * with none of the app's bytes, the same for every path, and the return path kept
+	 */
 	@Test
-	public void testFailedCheckRefuses() throws Exception {
+	public void testFailedCheckAsksToTryAgain() throws Exception {
 		AdminAppServlet failing = new AdminAppServlet() {
 			private static final long serialVersionUID = 1L;
 
@@ -420,10 +424,29 @@ public class AdminAppServletTest extends AbstractHealdanTestCase {
 			}
 		};
 		MockHttpSession admin = admin();
-		MockHttpServletResponse page = call(failing, request("GET", "/", admin));
-		assertPlainStatus(page, 403);
-		assertFalse(page.getContentAsString().contains(ADMIN_PAGE));
-		assertPlainStatus(call(failing, request("GET", ASSET, admin)), 403);
+		admin.setAttribute("RequestedUrl", "/admin/matters");
+		List<Object> page = everything(call(failing, request("GET", "/", admin)));
+		for (String path : new String[] { "/", "/matters", ASSET, MISSING_ASSET, "/pressable.css", "/index.html" }) {
+			MockHttpServletResponse response = call(failing, request("GET", path, admin));
+			assertPlainStatus(response, 503);
+			assertTrue(path, response.getContentType().startsWith("text/plain"));
+			assertEquals(path, "no-store", response.getHeader("Cache-Control"));
+			assertEquals(path, "Healdan couldn't check your access just now. Try again in a moment.",
+					response.getContentAsString());
+			assertFalse(path, response.getContentAsString().contains(ADMIN_PAGE));
+			assertFalse(path, response.getContentAsString().contains(USER_PAGE));
+			assertNull(path, response.getRedirectedUrl());
+			assertHeaders(response);
+			assertEquals(path, page, everything(response));
+		}
+		// Nothing was decided about the person, so a sign-in it was kept for still lands where it was going
+		assertEquals("/admin/matters", admin.getAttribute("RequestedUrl"));
+
+		// HEAD learns as much, with no body
+		MockHttpServletResponse head = call(failing, request("HEAD", ASSET, admin));
+		assertPlainStatus(head, 503);
+		assertEquals(0, head.getContentAsByteArray().length);
+		assertEquals("no-store", head.getHeader("Cache-Control"));
 
 		AdminAppServlet broken = new AdminAppServlet() {
 			private static final long serialVersionUID = 1L;
@@ -433,6 +456,7 @@ public class AdminAppServletTest extends AbstractHealdanTestCase {
 				throw new IllegalStateException("Something else");
 			}
 		};
-		assertPlainStatus(call(broken, request("GET", ASSET, admin)), 403);
+		assertEquals(page, everything(call(broken, request("GET", "/", admin))));
+		assertEquals(page, everything(call(broken, request("GET", ASSET, admin))));
 	}
 }

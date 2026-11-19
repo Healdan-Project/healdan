@@ -299,7 +299,7 @@ components:
         detail:
           type: string
           description: A line in English that says more, such as which Store or since when
-          examples: ['Client Work, retrying since 09:12']
+          examples: ['Client Work, moving to Wasabi EU']
         link:
           type: string
           description: |
@@ -323,7 +323,10 @@ components:
             provider answering), Storage Backends (reachable, stuck files),
             Search Index (waiting and failed), Previews (waiting and given
             up), Background Jobs (on schedule, or which aren't) and Outgoing
-            Email (set up, and the last send's result).
+            Email (whether it's set up, and whether a send failed in the last
+            24 hours, from the errors the server logged sending that nobody
+            has resolved: LogicalDOC logs no send that succeeds, so the last
+            send's result can't be known).
           enum: [server, database, disk, memory, sign-in, storage-backends, search-index, previews, background-jobs,
             outgoing-email]
         status:

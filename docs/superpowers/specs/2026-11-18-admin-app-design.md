@@ -163,7 +163,7 @@ Each screen is drawn in the mockups, which the owner reviewed. Where they differ
 | Search Index | Waiting and failed | §9.6 |
 | Previews | Waiting and given up | `hd_preview_job`, with a new count method |
 | Background Jobs | On schedule, or which aren't | §9.5 |
-| Outgoing Email | Set up, and the last send's result | `OutgoingEmail` and the captured errors |
+| Outgoing Email | Set up, and the last send's result (changed in the build: whether it's set up, and whether a send failed in the last 24 hours, as LogicalDOC logs no send that succeeds; the plan's decision log has why) | `OutgoingEmail` and the captured errors |
 
 - **Usage:** totals for documents, storage, matters, clients and people, each with its recent change; **Documents Filed, Last 30 Days**, as a plain SVG bar chart with a text alternative; **Storage by Store**; **Busiest Matters This Week**; who's signed in now, as a count. These come from one in-memory summary that a background task rebuilds at most every 15 minutes (call), so opening the Dashboard costs almost nothing. The page says when each was last worked out.
 - A part that fails to load shows its own error; the rest of the page still works.
