@@ -11,8 +11,8 @@ starts the app on the result (the PostgreSQL spec's §10.2). It's an install on 
 
 ## It's Frozen
 
-It was made once, on 2026-11-19, from commit `84c802acb`, the last on `master` that runs on MariaDB, with that commit's
-own image:
+It was made once, on 2026-11-19, from commit `84c802acb`, `master`'s tip that day, which runs on MariaDB, with that
+commit's own image:
 
 ```bash
 git worktree add ../mariadb-era 84c802acb

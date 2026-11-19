@@ -733,7 +733,7 @@ held. Healdan's own later migrations aren't part of it, §9.3.)
   a Trash item, and the storage backend's marker is accepted.
 - **In CI** it runs in the image workflow's amd64 job, after the smoke test, while the command exists.
 
-(Changed in the build: the fixture was made from `84c802acb`, the commit of `master` the switch merges onto, by
+(Changed in the build: the fixture was made from `84c802acb`, the tip of `master` when the switch was built, by
 `make.sh`, and is about 53 KB. It also holds a date under a tenth of a second, which MariaDB's driver misreads
 (§9.3), a sealed sign-in client secret that must still open, and an accented matter made through New Matter's
 service, so that its folder and row agree. A failed comparison is made with a test-only event trigger that changes a

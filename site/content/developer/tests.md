@@ -452,7 +452,7 @@ moves a frozen install, the fixture in `docker/tests/move-fixture/`.
 
 - **The fixture** is a MariaDB-era install: its database's dump (`mariadb.sql.gz`), its conf and repository volumes
   (`volumes.tgz`) and what the test expects of them (`expected.env`), about 53 KB in all. `make.sh` made it once, from
-  `84c802acb`, the last commit on `master` that runs on MariaDB, with that commit's own image, and added rows that
+  `84c802acb`, `master`'s tip that day, which runs on MariaDB, with that commit's own image, and added rows that
   try the move: an avatar of 6,000 characters, dates at fractions of a second, an accented matter in a Store on an
   encrypted local storage backend with a file on it, a sealed sign-in secret, a Trash item, and counters past their
   first values. Its `README.md` says what's in it and when it's made again. It holds only invented data and the smoke
