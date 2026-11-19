@@ -36,6 +36,7 @@ import com.logicaldoc.healdan.api.ApiTestCase;
 import com.logicaldoc.healdan.api.ProblemMapper;
 import com.logicaldoc.healdan.api.Public;
 import com.logicaldoc.healdan.api.RouteCoverageTest;
+import com.logicaldoc.healdan.api.RoutePaths;
 import com.logicaldoc.healdan.support.LogCapture;
 
 import jakarta.ws.rs.Consumes;
@@ -300,18 +301,31 @@ public class AdminFilterTest extends ApiTestCase {
 		// Nobody signed in is still TokenFilter's
 		assertProblem(get(UNMARKED).send(), 401, "unauthenticated");
 
+		// Matrix parameters, which the request's path keeps but JAX-RS matches without, change nothing
+		MockHttpSession web = signInWeb(boss);
+		for (String matrix : List.of("/api/v1/admin;x=1/test/unmarked", "/api/v1;x=1/admin/test/unmarked",
+				"/api/v1/admin/test/unmarked;x=1"))
+			assertProblem(matrix, get(matrix).webSession(web).send(), 403, "admins-only");
+
 		assertEquals(0, Unmarked.calls.get());
 		assertNull(AdminContext.address());
 	}
 
+	// The route's declared path decides, as RoutePaths reads it
 	@Test
-	public void testTheAdminPath() {
-		assertTrue(AdminFilter.admin("v1/admin"));
-		assertTrue(AdminFilter.admin("/v1/admin/dashboard"));
-		assertTrue(AdminFilter.admin("v1//admin///dashboard"));
-		assertFalse(AdminFilter.admin("v1/administrators"));
-		assertFalse(AdminFilter.admin("/v1/test/address"));
-		assertFalse(AdminFilter.admin("v2/admin"));
+	public void testTheAdminPath() throws Exception {
+		assertTrue(RoutePaths.admin("/v1/admin"));
+		assertTrue(RoutePaths.admin("/v1/admin/dashboard"));
+		assertTrue(RoutePaths.admin(RoutePaths.normalize("v1//admin/" + "/{id: [0-9]+}/")));
+		assertFalse(RoutePaths.admin("/v1/administrators"));
+		assertFalse(RoutePaths.admin("/v2/admin"));
+		assertFalse(RoutePaths.admin("/v1/test/address"));
+
+		assertEquals("/v1/admin/test/unmarked", RoutePaths.declared(Unmarked.class, Unmarked.class.getMethod("get")));
+		assertEquals("/v1/admin/test/items/{id}",
+				RoutePaths.declared(Ping.class, Ping.class.getMethod("item", long.class, Map.class)));
+		assertTrue(AdminFilter.declaredAdmin(Unmarked.class, Unmarked.class.getMethod("get")));
+		assertFalse(AdminFilter.declaredAdmin(AddressProbe.class, AddressProbe.class.getMethod("address")));
 	}
 
 	// Every admin route the server has, the test-only ones included, is refused by the filter (spec section 9.1)
@@ -331,9 +345,9 @@ public class AdminFilterTest extends ApiTestCase {
 				if (verb == null)
 					continue;
 				Path methodPath = method.getAnnotation(Path.class);
-				String path = RouteCoverageTest.normalize(type.getAnnotation(Path.class).value() + "/"
+				String path = RoutePaths.normalize(type.getAnnotation(Path.class).value() + "/"
 						+ (methodPath != null ? methodPath.value() : ""));
-				if (!RouteCoverageTest.admin(path))
+				if (!RoutePaths.admin(path))
 					continue;
 				String route = verb + " " + path;
 				swept.add(route);

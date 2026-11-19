@@ -3,10 +3,11 @@ title: The Web App
 weight: 10
 ---
 
-The User app is Healdan's browser app, served at `/app/`. This page is for working on it: how its source is laid
-out, how to run it against a local stack, how to add a view, and the rules its code keeps. To build it and run its
-tests, see [Building from Source](../building-from-source/#the-user-app) and [Tests](../tests/#the-user-apps-tests).
-How the server sends it and signs people in is in [How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/).
+The User app is Healdan's browser app, served at `/app/`, and the Admin app is the administrators' own, at `/admin/`.
+This page is for working on them: how their source is laid out, how to run them against a local stack, how to add a
+view, and the rules their code keeps. To build them and run their tests, see
+[Building from Source](../building-from-source/#the-web-apps) and [Tests](../tests/#the-web-apps-tests). How the
+server sends them and signs people in is in [How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/).
 
 ## The Workspace
 
@@ -15,11 +16,17 @@ Router and TanStack Query do the work, and every package version in `package.jso
 
 | Folder | What's in it |
 |---|---|
-| `packages/api` | `@healdan/api`: the client for `/api/v1`, with its types generated from `healdan-api`'s `openapi.yaml` by `npm run generate` (the generated file isn't committed). A change to the contract that breaks the app fails the type check |
+| `packages/api` | `@healdan/api`: the client for `/api/v1`, with its types generated from `healdan-api`'s `openapi.yaml` by `npm run generate`, and the admin API's from `openapi-admin.yaml`, exported as `adminPaths` and `adminComponents` (the generated files aren't committed). A change to a contract that breaks an app fails the type check |
 | `packages/ui` | `@healdan/ui`: Healdan's components on React Aria Components, the colour, type and spacing settings, the icons, and the string catalogue |
-| `apps/user` | the app itself: its frame (top bar, left pane), its router and its views |
+| `packages/shell` | `@healdan/shell`: what both apps need that asks the server or draws the frame's shared parts: `useApi`, the query client, the signed-out state, the error messages (`messageFor`), the person and Help menus, the mark, the pages for being signed out, an address that isn't secure and no access, and the queries for the person, a folder and Recent Matters. It registers no router |
+| `apps/user` | the User app: its frame (top bar, left pane), its router and its views |
+| `apps/admin` | `@healdan/admin`, the Admin app (see [The Admin App](#the-admin-app)) |
 | `scripts` | the build's checks, with their own tests, run by Node's test runner |
-| `e2e` | the browser tests ([Tests](../tests/#the-user-apps-tests)) |
+| `e2e` | the browser tests ([Tests](../tests/#the-web-apps-tests)) |
+
+Each app is a TypeScript program of its own: `npm run typecheck` runs `tsc -p .` over the packages, then
+`tsc -p apps/user` and `tsc -p apps/admin`, as each app registers its own router with TanStack Router, which one
+program can't hold twice. `npm run build` builds both apps, into `apps/user/dist/` and `apps/admin/dist/`.
 
 ## Running It Against a Local Stack
 
@@ -42,6 +49,9 @@ server's own, so the dev server rewrites `Origin` to the stack's address. The ap
 reloads the dev server's page, which only the stack's `AppServlet` would send to the sign-in page: sign in at the stack
 again. Pages the app links to that the proxy doesn't pass, such as the Classic Interface, are on the stack's address.
 
+The Admin app's dev server works the same way: run `npm run dev` in `apps/admin` and open `/admin/` at the address it
+prints. It sends `/app` to the stack too.
+
 ## Adding a View
 
 1. Write the view in `apps/user/src/views/`. Take its data from the API client through `useApi()` and the queries
@@ -60,10 +70,44 @@ segment: `` apiPath`/v1/folders/${id}/children` ``.
 
 Browsers send `Sec-Fetch-Site` only to a potentially trustworthy address (HTTPS, or the machine itself), and the
 web-session route needs it, so at a plain `http://` address off the machine every call would be `401`. `main.tsx`'s
-`start(root, secure)` checks `window.isSecureContext` first and, without it, draws only `frame/InsecureAddress.tsx`,
-in the catalogue's words, with a link to the Classic Interface, before anything asks the server. Nothing that runs as
-the app loads may need a secure context either: a drag's page token (`organising/rows.ts`) is made with
-`crypto.getRandomValues`, as `crypto.randomUUID` exists only at a secure address.
+`start(root, secure)` checks `window.isSecureContext` first and, without it, draws only `@healdan/shell`'s
+`InsecureAddress`, in the catalogue's words, with a link to the Classic Interface, before anything asks the server.
+The Admin app's `main.tsx` does the same. Nothing that runs as the app loads may need a secure context either: a
+drag's page token (`organising/rows.ts`) is made with `crypto.getRandomValues`, as `crypto.randomUUID` exists only at
+a secure address.
+
+## The Admin App
+
+`apps/admin` is the Admin app, for members of the `admin` group, at `/admin/` (the design is
+`docs/superpowers/specs/2026-11-18-admin-app-design.md`). The server sends its files to administrators only (see
+[How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/#healdans-code)), and it calls the admin API
+under `/api/v1/admin` (see the [API](../api/#the-admin-apps-routes)).
+
+- **Its router** has the base path `/admin` (`ADMIN_BASE` in `addresses.ts`), and reads and writes an address's
+  parameters with the shell's `parseSearch` and `stringifySearch`, as plain strings. A page reads only the parameters
+  its route takes, so others in an address are ignored.
+- **Its addresses** are listed in `addresses.ts` (the spec's section 6.3). LogicalDOC's `UrlRewriteFilter` isn't
+  anchored at the start of a path, and `login.jsp` drops some return paths, so `addresses.test.ts` fails on an
+  address, routed or listed, with a segment `login`, `setup`, `frontend`, `license`, `sessions`, `mobile`, `view`,
+  `webform`, `sc` or `ace`, or one starting `info`, or that ends in a slash, `/admin/` apart.
+- **Its words** are a catalogue of its own, over the shared one (see [The Catalogue](#the-catalogue)), so the User
+  app never downloads them.
+- **No PDF.js.** It previews no document, and its page's policy allows no worker (`worker-src 'none'`), so its build
+  has none (see [The Dependency Rules](#the-dependency-rules)).
+- **Its components** are `@healdan/ui`'s, which has some the User app doesn't use: `ProgressBar` (React Aria's, whose
+  count, such as "212 of 412", is what a screen reader hears), `StatusDot` (a status always said in words, the dot
+  only decoration), `GroupChip`, and `SearchPicker`, a field with rows under it: starting rows, then the server's
+  answer once the typing pauses, from two characters, with the words it matched marked as text and an older answer
+  dropped. `TextField` takes `multiline`, a `PickField` option an `icon` and `meta` (secondary text that is part of
+  its name), and `Table` `selectionMode="none"`, for a list whose rows lead to a page: a click or Enter opens a row,
+  and none draws as selected.
+- **To test it,** `test/renderApp.tsx` renders the whole app at an address under `/admin`, answering from a small
+  fake API in `test/fakeApi.ts`, and `test/axe.ts` gives `packages/ui`'s `expectNoAxeViolations`.
+
+At an `/admin` address the server answers someone who isn't an administrator with a `403` and the User app's own
+`index.html`. The User app's `main.tsx` checks the address before anything else and draws only `@healdan/shell`'s
+`NoAdminAccess` there, "You don't have access to Healdan Admin.", with **Open Healdan**, a link to `/app/`: it asks the
+server nothing, at a secure address or not.
 
 ## Lists
 
@@ -99,8 +143,8 @@ nothing until a test calls `bringObservedIntoView()` from `test/intersection.ts`
 ## Keeping the Page Up to Date
 
 The app has no push updates yet (M6's spec §16). Instead it asks again for what's on screen each time the person comes
-back to its window, as well as after their own changes. The rules are in `queryClient.ts`, where the one `QueryClient`
-is made:
+back to its window, as well as after their own changes. The rules are in `@healdan/shell`'s `queryClient.ts`, whose
+`createQueryClient` makes each app's one `QueryClient`:
 
 - **An answer stays fresh for 30 seconds** (`staleTime`), so moving between views doesn't ask again, and a return asks
   again for what's on screen and older than that (TanStack Query's `refetchOnWindowFocus: true`).
@@ -495,9 +539,9 @@ route), so it isn't in the list, and the dialog says **Sign Out** ends it. A nam
 
 ## A Narrow Window
 
-Below 1,024 pixels (`NARROW` in `frame/narrow.ts`, read with `useNarrow()`) the left pane and the right region fold
-away behind buttons in the top bar, **Navigation** and **Details and Filters**, each saying with `aria-expanded` whether
-it's open. The app is designed for 1,280 pixels and works at a tablet's 768; phones aren't a goal.
+Below 1,024 pixels (`NARROW` in `@healdan/shell`'s `frame/narrow.ts`, read with `useNarrow()`) the left pane and the
+right region fold away behind buttons in the top bar, **Navigation** and **Details and Filters**, each saying with
+`aria-expanded` whether it's open. The app is designed for 1,280 pixels and works at a tablet's 768; phones aren't a goal.
 
 - **The left pane** isn't drawn while it's folded, so it isn't in the tab order. Opened, it covers the list's left edge
   (`Frame.module.css`), and following a link in it, or Esc, closes it. Esc puts the focus back on the button.
@@ -545,9 +589,10 @@ the list takes the rest.
   border is inside its width (`box-sizing: border-box`), so the list has the rest to the pixel.
   Room for the region at its narrowest is always left, so the left pane doesn't move as the region opens and closes, and
   the region takes what the list leaves. A chosen width that doesn't fit is drawn at the limit and not kept again.
-- **What's kept** is `preferences.ts`: numbers in `localStorage` under `healdan.pane.left`, `healdan.pane.right` and
-  `healdan.pane.preview`, each call in `try`, so a browser that refuses storage (or whose `localStorage` getter
-  throws) gets the defaults. Enter forgets the pane's, so the reading pane follows the window again. Preferences are
+- **What's kept** is `preferences.ts`, the User app's `preferences('healdan.')` from `@healdan/shell`, which keeps
+  each app's preferences under a prefix of its own: numbers in `localStorage` under `healdan.pane.left`,
+  `healdan.pane.right` and `healdan.pane.preview`, each call in `try`, so a browser that refuses storage (or whose
+  `localStorage` getter throws) gets the defaults. Enter forgets the pane's, so the reading pane follows the window again. Preferences are
   the only thing the browser keeps (M6's spec §2.3).
 - **A PDF waits:** `PdfView` draws its page at the first width it's given, and again only once a new width has stayed
   put for 150 milliseconds, as a canvas drawn again at each step of a resize would be blank for most of it. That holds
@@ -563,8 +608,8 @@ the list takes the rest.
 ## The Look in the Dark
 
 Both themes are defined as custom properties in `tokens.css` and chosen by the browser's `prefers-color-scheme`.
-Anything that isn't a custom property is on purpose: the brand mark's blues (`frame/Mark.tsx`) and the white paper a PDF
-page or a sender's email is drawn on (`preview/preview.module.css`, `preview/email.module.css`), which keep their own
+Anything that isn't a custom property is on purpose: the brand mark's blues (`@healdan/shell`'s `frame/Mark.tsx`) and
+the white paper a PDF page or a sender's email is drawn on (`preview/preview.module.css`, `preview/email.module.css`), which keep their own
 colours so a document reads as it was made. `tokens.test.ts` checks every text colour on every background it may sit
 on, and every kind colour on every surface its icons sit on, in both themes. jsdom draws no colours, so `e2e/a11y.spec.ts` runs axe in a real browser in both, where contrast is
 checked on what is drawn.
@@ -585,6 +630,12 @@ Every word the app shows is in one typed catalogue, `packages/ui/src/strings/en-
 `{matters}` are the firm's own words for a matter, which the app reads from `GET /server`, and other `{name}`s are
 filled from the variables `t()` is given. Each of the API's problem `code`s has a message here too, so the wording
 is decided in one place, and a test fails when one has none.
+
+An app's own words are a catalogue of their own over the shared one, so neither app downloads the other's:
+`createCatalogue(strings, plurals)` in `@healdan/ui` gives a `t()` and a `plural()` that look in the app's strings
+first and then in the shared ones, with `{matter}` and `{matters}` still the firm's words. The Admin app's are in
+`apps/admin/src/strings/en-US.ts`, each key starting `admin.`. `messageFor(error, catalogue)`, in `@healdan/shell`,
+asks an app's catalogue for a problem's message before the shared one.
 
 ## The Colour, Type and Spacing Settings
 
@@ -633,18 +684,30 @@ ESLint enforces these, so `npm run lint` fails on a break:
 - **Only `packages/ui` imports React Aria** (`react-aria-components`, `react-aria`, `react-stately` and their
   `@react-aria` and `@react-stately` packages). A screen takes its components from `@healdan/ui`.
 - **No `dangerouslySetInnerHTML`.** The server's text is never HTML: names, messages and fields are shown as text.
+- **No app imports another's code,** by a relative path or by its package (an `@healdan/` name that isn't a folder of
+  `packages/`), in an `import`, an `export … from` or an `import()`: the workspace's own rule,
+  `healdan/no-app-imports-another` in `eslint.config.js`. What two apps need goes into a package, such as
+  `packages/shell`.
 
 And the build checks these:
 
 - **Versions are exact,** and `npm ci --ignore-scripts` installs them with no install script run. The workspace's
   `.npmrc` sets `ignore-scripts` and `save-exact` for a plain `npm install` too, and `scripts/workspace.test.mjs`
-  checks both, and that `.nvmrc` names the Node that `healdan-web/pom.xml` downloads.
+  checks both, and that `.nvmrc` names the Node that `healdan-web/pom.xml` downloads. It also checks that
+  `typecheck` has a `tsc -p apps/<app>` for every app and that the root program holds none, and that
+  `healdan/no-app-imports-another` refuses and allows what it should.
 - **Licences are checked** by `.github/scripts/check-web-licences.py`, and the build writes the notices for what the
-  app ships into `apps/user/dist/notices.txt`. It fails on a shipped package with no licence file, and on an entry
-  in `scripts/notices.mjs`' `DECLARED_ONLY` (a reviewed package that declares its licence without a file) that the
-  app no longer ships without one.
+  apps ship, which share the lockfile, into `apps/user/dist/notices.txt`. It fails on a shipped package with no
+  licence file, and on an entry in `scripts/notices.mjs`' `DECLARED_ONLY` (a reviewed package that declares its
+  licence without a file) that the apps no longer ship without one.
 - **The page's Content-Security-Policy** allows no inline style, so a library that injects one is a problem:
-  `scripts/check-dist.mjs` checks the one React Aria would inject, for pressed states, is a linked file.
+  `scripts/check-dist.mjs` checks the one React Aria would inject, for pressed states, is a linked file under the
+  app's base, `pressable.css`, which both apps take from `packages/ui/public/` (each app's Vite `publicDir`).
+- **Each app's build holds only its own code.** Each app's `build` runs `scripts/check-dist.mjs` (with `admin` for the
+  Admin app's), which fails when any file of the User app's build holds `admin.dashboard.title` (`ADMIN_MARKER`), a key
+  of the Admin app's catalogue, so no one downloads the Admin app's code with the User app's, and when the Admin
+  app's build has PDF.js, or lacks the marker, without which the first check would prove nothing.
 - **The libraries are chunks of their own** (`vite.config.ts`): React Aria in one, PDF.js in another (loaded only
   when a PDF is previewed) and the rest in a third, each named with its hash, which `AppServlet` serves as immutable,
-  so a browser keeps them across the app's updates.
+  so a browser keeps them across the app's updates. The Admin app's are the same, without PDF.js, and
+  `AdminAppServlet` serves them `private`, so no proxy keeps them.
