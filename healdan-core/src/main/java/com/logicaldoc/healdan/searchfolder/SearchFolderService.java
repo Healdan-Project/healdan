@@ -334,8 +334,11 @@ public class SearchFolderService {
 	/**
 	 * Restricts the query to the documents whose attribute has the value, if
 	 * there is a value. The stored value is compared without the spaces at its
-	 * ends, {@code trim()} on both databases: the rule's is stripped when it's
-	 * saved, and PostgreSQL compares trailing spaces, which MariaDB ignored.
+	 * ends, {@code trim()}, as the legacy doc # lookup compares (PostgreSQL
+	 * plan, Decision Log 27): the rule's is stripped when it's saved, and
+	 * PostgreSQL compares trailing spaces, which MariaDB, where the value may
+	 * have been stored, ignored. A folder's listing filters and counts the
+	 * stored value as it is.
 	 */
 	private static void appendValue(StringBuilder sql, MapSqlParameterSource params, String param,
 			String attribute, String value) {

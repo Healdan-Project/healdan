@@ -93,23 +93,28 @@ public final class DockerInit {
         int waitSeconds = ConfigPlan.dbWaitSeconds(env);
         refuseUnstorable(envKeys);
         Db db = new Db(envKeys.get("jdbc.url"), envKeys.get("jdbc.username"), envKeys.get("jdbc.password"));
-        // Nothing is written before the guard: not the conf volume, and not the database.
-        List<String> missing = guard(db, waitSeconds);
+        try {
+            // Nothing is written before the guard: not the conf volume, and not the database.
+            List<String> missing = guard(db, waitSeconds);
 
-        boolean seeded = applyConfig(CONFIG, DEFAULTS, envKeys);
-        // Straight after the seeding, before the checks that can refuse: the next start doesn't seed, so wouldn't warn.
-        if (seeded && missing.isEmpty())
-            warnConfigLoss();
-        checkServerAndDatabase(db);
-        if (missing.isEmpty()) {
-            log("schema present, skipping database initialization");
-            checkLogicalDocTables(db);
-        } else if (missing.size() == 2) {
-            createSchema(db);
-        } else {
-            throw new InitException("the database holds part of a LogicalDOC schema, but its initialization did not"
-                    + " finish (an earlier first start failed or was interrupted); remove the database volume and"
-                    + " start again");
+            boolean seeded = applyConfig(CONFIG, DEFAULTS, envKeys);
+            // Straight after the seeding, before the checks that can refuse: the next start doesn't seed, so wouldn't
+            // warn.
+            if (seeded && missing.isEmpty())
+                warnConfigLoss();
+            checkServerAndDatabase(db);
+            if (missing.isEmpty()) {
+                log("schema present, skipping database initialization");
+                checkLogicalDocTables(db);
+            } else if (missing.size() == 2) {
+                createSchema(db);
+            } else {
+                throw new InitException("the database holds part of a LogicalDOC schema, but its initialization did"
+                        + " not finish (an earlier first start failed or was interrupted); remove the database volume"
+                        + " and start again");
+            }
+        } finally {
+            db.close();
         }
 
         PluginStart plugins;
@@ -576,7 +581,11 @@ public final class DockerInit {
         System.out.println("[docker-init] " + message);
     }
 
-    /** Thin JDBC helper; every call opens its own short-lived connection. */
+    /**
+     * Thin JDBC helper. The waits connect afresh each time they try, connect() makes a connection for its caller, and
+     * lockTimeout() reads on one of its own, as a role's setting reaches only the connections made after it; every
+     * other call, a probe, shares one connection, made at the first probe, which close() closes.
+     */
     static final class Db {
 
         final String url;
@@ -584,6 +593,9 @@ public final class DockerInit {
         final String user;
 
         final String password;
+
+        /** The probes' connection: null until the first probe, and after close() */
+        private Connection probe;
 
         Db(String url, String user, String password) {
             this.url = url;
@@ -647,7 +659,7 @@ public final class DockerInit {
          * first, so nothing fails in PostgreSQL's log.
          */
         Boolean move() throws SQLException {
-            try (Connection c = connect(); Statement s = c.createStatement()) {
+            try (Statement s = probe().createStatement()) {
                 String marker;
                 try (ResultSet r = s.executeQuery("select quote_ident(current_schema()) || '.' || quote_ident('"
                         + StartGuard.MOVE_MARKER + "'), to_regclass(quote_ident(current_schema()) || '.'"
@@ -667,7 +679,7 @@ public final class DockerInit {
         }
 
         void recordCompletion() throws SQLException {
-            try (Connection c = connect(); Statement s = c.createStatement()) {
+            try (Statement s = probe().createStatement()) {
                 DockerInit.recordCompletion(s);
             }
         }
@@ -678,7 +690,7 @@ public final class DockerInit {
          */
         Map<String, Set<String>> columns() throws SQLException {
             Map<String, Set<String>> columns = new HashMap<>();
-            try (Connection c = connect(); Statement s = c.createStatement();
+            try (Statement s = probe().createStatement();
                     ResultSet r = s.executeQuery("select table_name, column_name from information_schema.columns"
                             + " where table_schema = current_schema()")) {
                 while (r.next())
@@ -688,13 +700,15 @@ public final class DockerInit {
         }
 
         /**
-         * The tables of the list the connection's names don't find. It asks without a statement that fails, as each
-         * failed one is an ERROR in PostgreSQL's own log.
+         * The tables of the list that the schema the connection creates tables in (current_schema(), as move() and
+         * columns() look) lacks: looked up there by name, never through the search path, which could find one in a
+         * later schema. It asks without a statement that fails, as each failed one is an ERROR in PostgreSQL's own
+         * log. With no current schema, every table is missing.
          */
         List<String> missingTables(List<String> tables) throws SQLException {
             List<String> missing = new ArrayList<>();
-            try (Connection c = connect();
-                    PreparedStatement s = c.prepareStatement("select to_regclass(?) is not null")) {
+            try (PreparedStatement s = probe().prepareStatement(
+                    "select to_regclass(quote_ident(current_schema()) || '.' || quote_ident(?)) is not null")) {
                 for (String table : tables) {
                     s.setString(1, table);
                     try (ResultSet r = s.executeQuery()) {
@@ -719,7 +733,7 @@ public final class DockerInit {
 
         /** The database's locale provider ('b', 'c' or 'i'), its collation and its locale (null for libc's) */
         String[] locale() throws SQLException {
-            try (Connection c = connect(); Statement s = c.createStatement();
+            try (Statement s = probe().createStatement();
                     ResultSet r = s.executeQuery("select datlocprovider, datcollate, datlocale from pg_database"
                             + " where datname = current_database()")) {
                 r.next();
@@ -734,7 +748,7 @@ public final class DockerInit {
 
         /** Whether the role may create tables in that schema: not when there's none */
         boolean canCreate() throws SQLException {
-            try (Connection c = connect(); Statement s = c.createStatement();
+            try (Statement s = probe().createStatement();
                     ResultSet r = s.executeQuery(
                             "select has_schema_privilege(current_user, current_schema(), 'CREATE')")) {
                 r.next();
@@ -748,7 +762,7 @@ public final class DockerInit {
          * takes. A role may set its own defaults, so this needs no other right.
          */
         void setLockTimeout() throws SQLException {
-            try (Connection c = connect(); Statement s = c.createStatement()) {
+            try (Statement s = probe().createStatement()) {
                 String database;
                 try (ResultSet r = s.executeQuery("select current_database()")) {
                     r.next();
@@ -759,17 +773,40 @@ public final class DockerInit {
             }
         }
 
-        /** The lock_timeout a new connection of the role has */
+        /** The lock_timeout a new connection of the role has: read on a connection of its own, made for it */
         String lockTimeout() throws SQLException {
-            return text("show lock_timeout");
+            try (Connection c = connect(); Statement s = c.createStatement();
+                    ResultSet r = s.executeQuery("show lock_timeout")) {
+                r.next();
+                return r.getString(1);
+            }
         }
 
         /** The first column of the one row the query returns, as text */
         private String text(String query) throws SQLException {
-            try (Connection c = connect(); Statement s = c.createStatement(); ResultSet r = s.executeQuery(query)) {
+            try (Statement s = probe().createStatement(); ResultSet r = s.executeQuery(query)) {
                 r.next();
                 return r.getString(1);
             }
+        }
+
+        /** The connection the probes share, made at the first of them, in autocommit, and kept until close() */
+        private Connection probe() throws SQLException {
+            if (probe == null || probe.isClosed())
+                probe = connect();
+            return probe;
+        }
+
+        /** Closes the probes' connection, if there is one. Closing is best effort: the probes have all answered. */
+        void close() {
+            if (probe == null)
+                return;
+            try {
+                probe.close();
+            } catch (SQLException e) {
+                // nothing the start or the move did depends on it
+            }
+            probe = null;
         }
     }
 

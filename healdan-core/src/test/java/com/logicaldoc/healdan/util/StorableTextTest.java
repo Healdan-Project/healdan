@@ -37,6 +37,21 @@ public class StorableTextTest {
 		assertFalse(StorableText.holds("\uDF89\uD83C"));
 	}
 
+	/** The move from MariaDB asks this apart from a NUL, which it may replace */
+	@Test
+	public void testHasLoneSurrogate() {
+		assertFalse(StorableText.hasLoneSurrogate("Fee note " + PARTY));
+		assertFalse(StorableText.hasLoneSurrogate("a\u0000b"));
+		assertFalse(StorableText.hasLoneSurrogate(""));
+		assertFalse(StorableText.hasLoneSurrogate(null));
+
+		assertTrue(StorableText.hasLoneSurrogate("a\uD83Cb"));
+		assertTrue(StorableText.hasLoneSurrogate("a\uD83C"));
+		assertTrue(StorableText.hasLoneSurrogate("a\uDF89b"));
+		assertTrue(StorableText.hasLoneSurrogate("\uD83C\uD83C"));
+		assertTrue(StorableText.hasLoneSurrogate("\uDF89\uD83C"));
+	}
+
 	@Test
 	public void testClean() {
 		assertEquals("a b", StorableText.clean("a\u0000b"));

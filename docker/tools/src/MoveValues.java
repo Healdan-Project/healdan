@@ -11,6 +11,8 @@ import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.logicaldoc.healdan.util.StorableText;
+
 /**
  * How the move carries one value from MariaDB to a PostgreSQL column (spec section 9.3, step 4): exactly, as a Java
  * value that comes back from the column unchanged, or not at all. A value PostgreSQL can't hold as it is (a NUL in
@@ -151,7 +153,7 @@ final class MoveValues {
             throws Unstorable {
         if (!(value instanceof String text))
             throw new Unstorable(where, wrongClass(value, type, "which takes text"));
-        if (hasUnpairedSurrogate(text))
+        if (StorableText.hasLoneSurrogate(text))
             throw new Unstorable(where, "the text holds an unpaired UTF-16 surrogate, which isn't a character, and"
                     + " which PostgreSQL can't hold");
         boolean hasNul = text.indexOf('\u0000') >= 0;
@@ -174,17 +176,6 @@ final class MoveValues {
         if (hasNul)
             replaced.add(where);
         return carried;
-    }
-
-    private static boolean hasUnpairedSurrogate(String text) {
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            if (Character.isHighSurrogate(c) && i + 1 < text.length() && Character.isLowSurrogate(text.charAt(i + 1)))
-                i++;
-            else if (Character.isSurrogate(c))
-                return true;
-        }
-        return false;
     }
 
     /** A Short, an Integer or a Long for smallint, integer or bigint, equal to the value */

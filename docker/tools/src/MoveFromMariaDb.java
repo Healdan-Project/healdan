@@ -235,6 +235,8 @@ final class MoveFromMariaDb {
                 close(tgt, "the target");
             }
         } finally {
+            // The start-up tool's probes of the target share a connection of their own
+            db.close();
             close(src, "the source");
         }
         say("Move complete.");
@@ -1062,6 +1064,9 @@ final class MoveFromMariaDb {
                 int pending = 0;
                 Object[] raw = new Object[n];
                 List<Object> carried = new ArrayList<>(n);
+                MoveValues.Where[] places = new MoveValues.Where[n];
+                for (int i = 0; i < n; i++)
+                    places[i] = new MoveValues.Where(table, "", columns.get(i));
                 try (ResultSet r = s.executeQuery()) {
                     while (r.next()) {
                         rows++;
@@ -1069,20 +1074,28 @@ final class MoveFromMariaDb {
                             raw[i] = copy.asText()[i] ? r.getString(i + 1) : r.getObject(i + 1);
                             tally.add(i, raw[i], hashed[i]);
                         }
-                        String key = rowKey(copy, raw, rows);
+                        // The row's key is worked out only for a value that needs its place: one refused, or a NUL
+                        // replaced. Until then each value is carried with its column's place, which has no key
+                        String key = null;
                         carried.clear();
                         boolean whole = true;
                         for (int i = 0; i < n; i++) {
-                            MoveValues.Where where = new MoveValues.Where(table, key, columns.get(i));
+                            int marked = replaced.size();
                             try {
-                                carried.add(MoveValues.carry(raw[i], copy.targets().get(i), where, nul, replaced));
+                                carried.add(MoveValues.carry(raw[i], copy.targets().get(i), places[i], nul, replaced));
+                                if (replaced.size() > marked) {
+                                    key = key != null ? key : rowKey(copy, raw, rows);
+                                    replaced.set(marked, new MoveValues.Where(table, key, columns.get(i)));
+                                }
                             } catch (MoveValues.Unstorable e) {
                                 whole = false;
                                 carried.add(null);
                                 refused++;
-                                if (nul == MoveValues.Nul.REFUSE && onlyForANul(raw[i], copy.targets().get(i), where))
+                                if (nul == MoveValues.Nul.REFUSE
+                                        && onlyForANul(raw[i], copy.targets().get(i), places[i]))
                                     nulOnly++;
-                                say("    " + e.getMessage());
+                                key = key != null ? key : rowKey(copy, raw, rows);
+                                say("    " + new MoveValues.Where(table, key, columns.get(i)) + ": " + e.why());
                             }
                         }
                         if (!whole) {

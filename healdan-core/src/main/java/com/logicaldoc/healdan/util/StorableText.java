@@ -28,16 +28,24 @@ public final class StorableText {
 	 *         true for null
 	 */
 	public static boolean holds(String text) {
+		return text == null || text.indexOf(NUL) < 0 && !hasLoneSurrogate(text);
+	}
+
+	/**
+	 * @param text some text, possibly null
+	 * @return true if the text holds a surrogate without its pair, which isn't
+	 *         a character; false for null
+	 */
+	public static boolean hasLoneSurrogate(String text) {
 		if (text == null)
-			return true;
+			return false;
 		for (int i = 0; i < text.length(); i++) {
-			char c = text.charAt(i);
 			if (paired(text, i))
 				i++;
-			else if (c == NUL || Character.isSurrogate(c))
-				return false;
+			else if (Character.isSurrogate(text.charAt(i)))
+				return true;
 		}
-		return true;
+		return false;
 	}
 
 	/**

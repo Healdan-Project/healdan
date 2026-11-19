@@ -12,6 +12,8 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Properties;
 
+import com.logicaldoc.healdan.db.HealdanMigrator;
+
 /**
  * The guard against starting an install empty (spec section 8.3). An install that starts on PostgreSQL without its
  * data would get a new, empty schema beside its conf and repository volumes, and a new install id that its storage
@@ -22,8 +24,8 @@ import java.util.Properties;
  */
 final class StartGuard {
 
-    /** The Install manual's page on moving an install's data from MariaDB to PostgreSQL */
-    static final String MOVE_PAGE = "https://docs.healdan.com/install/moving-from-mariadb/";
+    /** The Install manual's page on moving an install's data from MariaDB to PostgreSQL, as the app names it */
+    static final String MOVE_PAGE = HealdanMigrator.MOVE_PAGE;
 
     /** The Install manual's section on restoring a backup onto a fresh stack, the database before the app's start */
     static final String RESTORE_PAGE = "https://docs.healdan.com/install/backup-and-restore/#restoring-onto-a-fresh-stack";

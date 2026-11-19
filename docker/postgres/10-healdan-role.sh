@@ -12,6 +12,21 @@
 
 superuser="${POSTGRES_USER:-postgres}"
 
+# initdb's --auth-host should have left no TCP rule that trusts anyone. If a later image writes the file another
+# way, each such rule is made to ask for a password, before anything else here can stop: exiting wouldn't do, as the
+# image never runs these scripts again on a data folder it has made, and the restart would start the server on the
+# file as it is. Every TCP form counts: host, hostssl, hostnossl, hostgssenc and hostnogssenc, with any indent, whose
+# method, the field after the database, the user, the address and the address's mask when it has one, is trust.
+trusting='^([[:space:]]*host(ssl|nossl|gssenc|nogssenc)?[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+[^[:space:]]+[[:space:]]+([^[:space:]]+[[:space:]]+)?)trust([[:space:]]|$)'
+if grep -Eq "$trusting" "$PGDATA/pg_hba.conf"; then
+	echo "pg_hba.conf trusts a TCP connection: each such rule is made to ask for a password (scram-sha-256)." >&2
+	sed -E -i "s/$trusting/\\1scram-sha-256\\4/" "$PGDATA/pg_hba.conf" || exit 1
+fi
+if grep -Eq "$trusting" "$PGDATA/pg_hba.conf"; then
+	echo "pg_hba.conf still trusts a TCP connection; the superuser would be reachable without a password." >&2
+	exit 1
+fi
+
 if [ -z "${HEALDAN_DB_USER:-}" ] || [ -z "${HEALDAN_DB_NAME:-}" ] || [ -z "${HEALDAN_DB_PASSWORD:-}" ]; then
 	echo "DB_NAME, DB_USER and DB_PASSWORD must all be set, and not empty." >&2
 	exit 1
@@ -45,12 +60,3 @@ create role :"u" login password :'p';
 create database :"d" owner :"u" template template0 encoding 'UTF8' locale_provider builtin builtin_locale 'C.UTF-8' locale 'C';
 alter role :"admin" password null;
 SQL
-
-# initdb's --auth-host should have left no TCP rule that trusts anyone. If a later image writes the file another
-# way, stop rather than leave the superuser open. Every TCP form counts: host, hostssl, hostnossl, hostgssenc and
-# hostnogssenc, with any indent, and trust with anything after it.
-if grep -Eq '^[[:space:]]*host(ssl|nossl|gssenc|nogssenc)?[[:space:]].*[[:space:]]trust([[:space:]].*)?$' \
-	"$PGDATA/pg_hba.conf"; then
-	echo "pg_hba.conf still trusts a TCP connection; the superuser would be reachable without a password." >&2
-	exit 1
-fi
