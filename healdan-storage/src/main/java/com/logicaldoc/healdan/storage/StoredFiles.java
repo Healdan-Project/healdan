@@ -117,13 +117,9 @@ public class StoredFiles {
 	 * Records a write as {@link #recordWrite(long, String, long, Long, long)} does, for a caller that has read the row
 	 * already, holding the file's lock, and knows its Store's backend.
 	 * <p>
-	 * A new row is inserted, never first tried as an update: on MariaDB, whose isolation is REPEATABLE READ, an UPDATE
-	 * that matches no row takes a gap lock that lasts until its transaction commits. CE's folder copy stores every new
-	 * file in one transaction, so such a lock would hold every other save of a new file in that gap (the higher
-	 * document ids) until the copy commits, each waiting while it holds its file's lock, which may share a stripe with
-	 * a file the copy stores next. A plain read takes no lock, and an insert into a gap only an insert intention lock,
-	 * which other inserts don't wait for. An insert that finds the key taken, by a transaction that hadn't committed
-	 * when the row was read, updates that row instead.
+	 * A new row is inserted, never first tried as an update, since nearly every call adds a file's first row. An insert
+	 * that finds the key taken, by a transaction that hadn't committed when the row was read, does nothing, on
+	 * conflict, and the row is updated instead; the statement fails nowhere, so the caller's transaction goes on.
 	 *
 	 * @param rowExists whether the file has a row, as the caller read it holding the file's lock
 	 * @param inPlace whether the bytes landed on the backend the Store uses ({@link #storeBackend})
@@ -138,7 +134,7 @@ public class StoredFiles {
 			return write;
 		if (jdbc.update("insert into hd_storage_file (hd_docid, hd_resource, hd_backendid, hd_storeid, hd_size, "
 				+ "hd_write, hd_stored, hd_waiting, hd_attempts, hd_stuck) values (?, ?, ?, ?, ?, ?, ?, ?, 0, 0) "
-				+ "on conflict do nothing", docId, resource, backendId, storeId, size, write, now,
+				+ "on conflict (hd_docid, hd_resource) do nothing", docId, resource, backendId, storeId, size, write, now,
 				inPlace ? null : now) == 0)
 			update(docId, resource, backendId, storeId, size, write, now, inPlace);
 		return write;

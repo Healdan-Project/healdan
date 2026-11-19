@@ -19,6 +19,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -133,11 +135,11 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 
 		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
 			assertNull(EmailIndex.get().messageIdOf(4242));
-			try (Connection other = dataSource.getConnection(); java.sql.Statement statement = other.createStatement()) {
+			try (Connection other = dataSource.getConnection(); Statement statement = other.createStatement()) {
 				other.setAutoCommit(true);
 				statement.executeUpdate("insert into hd_email (hd_docid, hd_messageid, hd_messageidhash) values "
 						+ "(4242, 'theirs@example.com', '" + MessageIds.hash("theirs@example.com") + "')");
-			} catch (java.sql.SQLException e) {
+			} catch (SQLException e) {
 				throw new IllegalStateException(e);
 			}
 			EmailIndex.get().put(4242, "mine@example.com");
@@ -506,7 +508,7 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 
 	/**
 	 * Inside a transaction, as a check-in inside one puts the new version's Message-ID: the insert that finds the row
-	 * there fails in a savepoint, the update follows, and the transaction goes on (spec section 7.3)
+	 * there updates it, on conflict, and the transaction goes on (spec section 7.3)
 	 */
 	@Test
 	public void testPutTwiceInsideATransactionKeepsIt() {
