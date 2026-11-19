@@ -5,6 +5,7 @@ package com.logicaldoc.healdan;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -68,6 +69,39 @@ public class TestDatabaseTest {
 		try (Connection connection = dataSource.getConnection()) {
 			assertTrue(count(connection, "select count(*) from hd_schema_history where success") > 1);
 			assertEquals(0, count(connection, "select count(*) from hd_setting where name like 'seed.%'"));
+		}
+	}
+
+	/** Spec section 6.2's, as PostgresMigrationsTest checks for an empty database */
+	@Test
+	public void testACopyHasTheLocaleHealdanRunsOn() throws SQLException {
+		parked();
+		String database = databases.get(databases.size() - 1);
+
+		try (Connection connection = TestDatabase.dataSource(database).getConnection();
+				Statement statement = connection.createStatement();
+				ResultSet rs = statement.executeQuery("select datlocprovider, datlocale, datcollate, "
+						+ "pg_encoding_to_char(encoding) from pg_database where datname = current_database()")) {
+			assertTrue(rs.next());
+			assertEquals("b", rs.getString(1));
+			assertEquals("C.UTF-8", rs.getString(2));
+			assertEquals("C", rs.getString(3));
+			assertEquals("UTF8", rs.getString(4));
+		}
+	}
+
+	@Test
+	public void testATemplateThatHasGoneIsMadeAgain() throws SQLException {
+		String gone = TestDatabase.template(SCRIPTS);
+		// As when the server is made again during a run
+		TestDatabase.drop(gone);
+
+		DataSource dataSource = parked();
+
+		assertNotEquals(gone, TestDatabase.template(SCRIPTS));
+		try (Connection connection = dataSource.getConnection()) {
+			TestDatabase.unpark(connection);
+			assertTrue(tableInSight(connection, "ld_user"));
 		}
 	}
 

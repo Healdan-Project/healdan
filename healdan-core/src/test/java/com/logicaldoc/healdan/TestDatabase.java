@@ -123,21 +123,27 @@ public final class TestDatabase {
 	 * as {@link #create()} makes one, the scripts loaded as {@link #load}
 	 * loads them, then {@link HealdanMigrator}'s migrations, which do nothing
 	 * when the scripts made no CE schema. Every call copies it, so the copy has
-	 * its encoding and locale.
+	 * its encoding and locale. A template that has gone, as when the server
+	 * was made again during the run, is made again.
 	 *
 	 * @param scripts the classpath resources that make the database, in order
 	 * @return its name, unique to this JVM and call
 	 * @throws IllegalStateException with {@link #HOW_TO_START} when no server
-	 *         answers, or if the template can't be made
+	 *         answers, or if a script can't be read or run
+	 * @throws HealdanStartupException as {@link HealdanMigrator} throws it, if
+	 *         a migration fails
 	 */
 	public static synchronized String createParked(List<String> scripts) {
-		String template = TEMPLATES.get(scripts);
-		if (template == null) {
-			template = template(scripts);
-			TEMPLATES.put(List.copyOf(scripts), template);
-		}
 		String name = name("test");
-		execute("create database " + name + " template " + template);
+		try {
+			execute("create database " + name + " template " + template(scripts));
+		} catch (IllegalStateException e) {
+			// SQL state 3D000: no such database, the template here
+			if (!(e.getCause() instanceof SQLException cause) || !"3D000".equals(cause.getSQLState()))
+				throw e;
+			TEMPLATES.remove(scripts);
+			execute("create database " + name + " template " + template(scripts));
+		}
 		return name;
 	}
 
@@ -152,15 +158,29 @@ public final class TestDatabase {
 	public static void unpark(Connection connection) throws SQLException {
 		boolean autoCommit = connection.getAutoCommit();
 		connection.setAutoCommit(false);
+		SQLException failure = null;
 		try (Statement statement = connection.createStatement()) {
 			statement.execute("drop schema public");
 			statement.execute("alter schema " + PARKED + " rename to public");
 			connection.commit();
 		} catch (SQLException e) {
-			connection.rollback();
+			// The refusal says why, so a rollback or a restore that fails too, as on a broken connection, only adds
+			// to it
+			failure = e;
+			try {
+				connection.rollback();
+			} catch (SQLException rollingBack) {
+				e.addSuppressed(rollingBack);
+			}
 			throw e;
 		} finally {
-			connection.setAutoCommit(autoCommit);
+			try {
+				connection.setAutoCommit(autoCommit);
+			} catch (SQLException restoring) {
+				if (failure == null)
+					throw restoring;
+				failure.addSuppressed(restoring);
+			}
 		}
 	}
 
@@ -221,11 +241,24 @@ public final class TestDatabase {
 	}
 
 	/**
+	 * @param scripts the classpath resources that make the database, in order
+	 * @return this JVM's template of the scripts, made if it has none yet
+	 */
+	static synchronized String template(List<String> scripts) {
+		String template = TEMPLATES.get(scripts);
+		if (template == null) {
+			template = makeTemplate(scripts);
+			TEMPLATES.put(List.copyOf(scripts), template);
+		}
+		return template;
+	}
+
+	/**
 	 * Makes the template of a list of scripts. Nothing may be connected to a
 	 * database while it is copied, so the template then takes no connection:
 	 * autovacuum leaves it alone too.
 	 */
-	private static String template(List<String> scripts) {
+	private static String makeTemplate(List<String> scripts) {
 		String name = name("template");
 		execute("create database " + name + EMPTY);
 		try {
@@ -240,7 +273,8 @@ public final class TestDatabase {
 			}
 			execute("alter database " + name + " with allow_connections false");
 			return name;
-		} catch (SQLException | IOException | RuntimeException e) {
+		} catch (Throwable e) {
+			// An Error too: a half-made template that TEMPLATES doesn't name would stay on the server
 			try {
 				drop(name);
 			} catch (RuntimeException dropping) {
@@ -248,6 +282,8 @@ public final class TestDatabase {
 			}
 			if (e instanceof RuntimeException runtime)
 				throw runtime;
+			if (e instanceof Error error)
+				throw error;
 			throw new IllegalStateException("Can't make the template database of " + scripts + ": " + e.getMessage(), e);
 		}
 	}

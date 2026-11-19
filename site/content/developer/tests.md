@@ -60,7 +60,8 @@ docker/tests/test-db.sh stop    # removes the container
 - **Its password is hashed with one SCRAM iteration,** where PostgreSQL's default is 4,096 (`-c scram_iterations=1`
   to `initdb`, which hashes it). Each test opens about 40 connections, most of them LogicalDOC's, which reads each
   setting of its context on a connection of its own, and the hashing was most of what a connection cost. The
-  password is checked as before.
+  password is checked as before. A server started before `start` passed the setting keeps its old hash, as `start`
+  leaves a running server as it is: `stop` and `start` it.
 - **Each test has a database of its own** (`TestDatabase`, in `healdan-core`'s test-jar), in UTF-8 with PostgreSQL's
   built-in `C.UTF-8` locale, the encoding and locale Healdan uses on PostgreSQL, whatever the server's own default.
   So the tests sort and compare text as Healdan does there. Each name carries a number unique to the JVM that made

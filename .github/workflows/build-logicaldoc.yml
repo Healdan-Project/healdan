@@ -206,8 +206,10 @@ jobs:
       - name: PostgreSQL's address
         env:
           CONTAINER: ${{ job.services.postgres.id }}
+        # Each network's address on a line of its own, and the first: the service is on the job's network alone, but
+        # two addresses run together would make one that isn't
         run: |
-          address=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CONTAINER")
+          address=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}' "$CONTAINER" | grep -m 1 . || true)
           if [ -z "$address" ]; then
             echo "::error::The PostgreSQL service container has no address."
             exit 1
