@@ -1,6 +1,6 @@
 ---
 title: Known Limitations
-weight: 12
+weight: 13
 ---
 
 - **LogicalDOC's database schema is never migrated.** Healdan upgrades its own tables on every start, but not
@@ -8,8 +8,12 @@ weight: 12
   hand, after a backup and before the new version's first start. Upgrading's
   [Changes to LogicalDOC's Tables](../upgrading/#changes-to-logicaldocs-tables) gives it for each change. The app
   checks as it starts, and stops if a table or column is missing.
-- **MariaDB only.** Healdan runs on MariaDB. MySQL, Oracle and SQL Server aren't supported, and PostgreSQL support
-  comes later. See [Supported Databases](../what-runs/#supported-databases).
+- **PostgreSQL only.** Healdan runs on PostgreSQL 18. MariaDB, MySQL, Oracle and SQL Server aren't supported. See
+  [Supported Databases](../what-runs/#supported-databases). An install made on MariaDB, before November 2026, moves
+  its data across once: see [Moving from MariaDB to PostgreSQL](../moving-from-mariadb/).
+- **An administrator's tag search misses tags with a backslash.** In the Classic Interface, a search by a tag that
+  holds a `\`, run by an administrator, finds no document: LogicalDOC writes each `\` into its query twice, and
+  PostgreSQL looks for both. Others' tag searches find them.
 - **No HTTPS on its own.** The app speaks plain HTTP, so anything beyond the machine running Docker goes through a
   [reverse proxy](../reverse-proxy/).
 - **Signed-in Devices lists device sign-ins only.** The app's **Signed-in Devices** shows a person the sign-ins of

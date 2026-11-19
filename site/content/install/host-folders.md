@@ -1,6 +1,6 @@
 ---
 title: Host Folders Instead of Volumes
-weight: 10
+weight: 11
 ---
 
 By default the stack keeps its data in Docker volumes. To keep it in folders on the host instead, for example on
@@ -15,16 +15,21 @@ services:
       - /srv/logicaldoc/cache:/opt/logicaldoc/cache
   db:
     volumes:
-      - /srv/logicaldoc/db:/var/lib/mysql
+      - /srv/logicaldoc/postgresql:/var/lib/postgresql
 ```
 
 Compose reads `compose.override.yaml` by itself, unless `COMPOSE_FILE` is set in `.env`. If it is, add the file to
 that list.
 
 When it starts, the app hands its three folders to user and group id 1000: the configuration, the repository and
-the read cache of [storage backends](../../admin/storage-backends/the-read-cache/), which holds only copies. MariaDB
-manages its own folder. If a share refuses the change of owner, as an NFS share with `root_squash` does, see
+the read cache of [storage backends](../../admin/storage-backends/the-read-cache/), which holds only copies. If a
+share refuses the change of owner, as an NFS share with `root_squash` does, see
 [Troubleshooting](../troubleshooting/).
+
+PostgreSQL manages its own folder, and keeps its data in a folder for its major version inside it, `18/docker`. Give
+it a folder of its own, empty to begin with. An install that ran on MariaDB keeps MariaDB's folder, such as
+`/srv/logicaldoc/db`, apart from it: see
+[If MariaDB's Data Is in a Host Folder](../moving-from-mariadb/#if-mariadbs-data-is-in-a-host-folder).
 
 ## Folders for More Storage Backends
 

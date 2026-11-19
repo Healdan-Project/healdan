@@ -3,8 +3,9 @@ title: Quick Start
 weight: 1
 ---
 
-Healdan runs as a Docker Compose stack on one server: a MariaDB database and the Healdan app. This page takes you
-from nothing to signing in.
+Healdan runs as a Docker Compose stack on one server: a PostgreSQL database and the Healdan app. This page takes you
+from nothing to signing in. An install already running on MariaDB moves to PostgreSQL instead: see
+[Moving from MariaDB to PostgreSQL](../moving-from-mariadb/).
 
 You need Docker with Compose v2.24.4 or newer, and at least 8 GB of memory for Docker. The first start builds
 Healdan from source, which takes 5 to 30 minutes depending on your machine and network.
@@ -55,7 +56,8 @@ By default Healdan is only reachable from the machine running Docker. To use it 
 
 ## What Happens on First Start
 
-On its first start the app creates LogicalDOC's database schema. Then, on this and every later start, Healdan sets
+On its first start the database makes the app's role and its database, from `DB_USER`, `DB_PASSWORD` and
+`DB_NAME`, and the app creates LogicalDOC's database schema in it. Then, on this and every later start, Healdan sets
 up its own data:
 
 1. **Healdan's tables.** Healdan creates or upgrades its own tables, whose names start `hd_`. It never changes
