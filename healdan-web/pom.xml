@@ -130,8 +130,9 @@
 					</execution>
 				</executions>
 			</plugin>
-			<!-- Copies the build into the jar, where AppServlet reads it. With the skip flag web/apps/user/dist/ may not
-				exist (or may be a stale build): the copy skips a missing folder and so nothing fails. -->
+			<!-- Copies each app's build into the jar, the User app's where AppServlet reads it and the Admin app's for
+				AdminAppServlet. With the skip flag web/apps/*/dist/ may not exist (or may be a stale build): each copy
+				skips a missing folder and so nothing fails. -->
 			<plugin>
 				<artifactId>maven-resources-plugin</artifactId>
 				<executions>
@@ -146,6 +147,21 @@
 							<resources>
 								<resource>
 									<directory>web/apps/user/dist</directory>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
+					<execution>
+						<id>copy-admin-app</id>
+						<phase>process-resources</phase>
+						<goals>
+							<goal>copy-resources</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.outputDirectory}/healdan/app/admin</outputDirectory>
+							<resources>
+								<resource>
+									<directory>web/apps/admin/dist</directory>
 								</resource>
 							</resources>
 						</configuration>
