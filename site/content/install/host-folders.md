@@ -27,9 +27,12 @@ share refuses the change of owner, as an NFS share with `root_squash` does, see
 [Troubleshooting](../troubleshooting/).
 
 PostgreSQL manages its own folder, and keeps its data in a folder for its major version inside it, `18/docker`. Give
-it a folder of its own, empty to begin with. An install that ran on MariaDB keeps MariaDB's folder, such as
-`/srv/logicaldoc/db`, apart from it: see
-[If MariaDB's Data Is in a Host Folder](../moving-from-mariadb/#if-mariadbs-data-is-in-a-host-folder).
+it a folder of its own, empty to begin with.
+
+An install still on MariaDB keeps MariaDB's line, such as `- /srv/logicaldoc/db:/var/lib/mysql`, in its `db`
+service until it has moved, and adds PostgreSQL's beside it, as
+[Before You Move the Data](../moving-from-mariadb/#before-you-move-the-data) shows. Changing MariaDB's line to
+PostgreSQL's would leave the old version with an empty MariaDB, on which it makes a new, empty install.
 
 ## Folders for More Storage Backends
 

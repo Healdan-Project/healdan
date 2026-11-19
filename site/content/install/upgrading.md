@@ -181,9 +181,10 @@ docker compose exec db ls /var/lib/postgresql
 docker compose exec db psql -U postgres -Atc 'show server_version'
 ```
 
-The first lists a folder for each major version the volume has held, such as `18  19`, and the second prints the
-version that runs, such as `19.1`, whose folder is the live database. Only when the list shows two, remove the other
-one, here 18's:
+The first lists a folder for each major version the volume has held, such as `18  19`. The second prints the
+version that runs, in the form `18.4 (Debian 18.4-1.pgdg13+1)`: the number before the first dot names the live
+database's folder, `18` there, and after a move to 19 it begins `19.`. Only when the list shows two folders,
+remove the one that isn't the running version's, here 18's:
 
 ```bash
 docker compose exec db rm -rf /var/lib/postgresql/18

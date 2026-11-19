@@ -23,12 +23,20 @@ it doesn't, and neither does a new install.
 `this install's conf volume names MariaDB as its database, …`. Nothing was changed, and MariaDB's data is as it was.
 Run `docker compose down`, then go back to the last MariaDB version as
 [Upgrade to the Last MariaDB Version](#upgrade-to-the-last-mariadb-version) says, take the backup in
-[Before You Start](#before-you-start), and carry on from [Move](#move).
+[Before You Start](#before-you-start), and carry on from [Move](#move). On a stack with host folders, the old
+version must find MariaDB's folder on the `db` service: if you changed `compose.override.yaml` to the new form in
+[Host Folders Instead of Volumes](../host-folders/), with only PostgreSQL's line, put MariaDB's line back beside it,
+as [Before You Move the Data](#before-you-move-the-data) shows, before the old version starts. Without it, the old
+version would start an empty MariaDB, and make a new, empty install on it beside your files.
 
 ## Before You Start
 
-- **Take a backup** on the version you run now, with MariaDB's own tools. From the folder with Healdan's
-  `compose.yaml`:
+- **If your stack keeps its data in host folders,** read
+  [If MariaDB's Data Is in a Host Folder](#if-mariadbs-data-is-in-a-host-folder) now: the backup and several steps
+  below take another form there, and a note before each says so.
+- **Take a backup** on the version you run now, with MariaDB's own tools, from the folder with Healdan's
+  `compose.yaml`. With host folders, use [The Backup's Files](#the-backups-files)' `tar` in place of the third
+  command, which would make empty volumes and archive them:
 
   ```bash
   docker compose stop app
@@ -51,9 +59,12 @@ Run `docker compose down`, then go back to the last MariaDB version as
   the new version's are PostgreSQL's. Left in, the move and the new version look for PostgreSQL on MariaDB's port,
   and stop with `database not reachable at jdbc:postgresql://db:3306/…`. If they name a MariaDB of your own, see
   [A MariaDB of Your Own](#a-mariadb-of-your-own) instead.
-- **If your stack keeps its data in host folders,** read
-  [If MariaDB's Data Is in a Host Folder](#if-mariadbs-data-is-in-a-host-folder) now: the backup and several steps
-  below take another form there.
+- **Take MariaDB's settings out of `compose.override.yaml`.** If you have that file, and its `db` service has
+  anything for MariaDB, such as a `command:` with MariaDB's options, a `healthcheck:` that runs MariaDB's
+  `healthcheck.sh`, or `MARIADB_` variables, take it out before [Start Healdan](#start-healdan). The new version's
+  `docker compose up -d` reads the file, and PostgreSQL won't start with MariaDB's options, nor pass its health
+  check. The old version's own `compose.yaml` has what MariaDB needs. Keep a host folder's mount: see
+  [Before You Move the Data](#before-you-move-the-data).
 
 ## Upgrade to the Last MariaDB Version
 
@@ -242,16 +253,15 @@ Compose's own lines, about the containers it starts, come before it.
 The `Source` line's zone is MariaDB's, which takes it from `TZ` in `.env`, as the old stack's did, such as
 `time zone UTC (the server's, +00:00)`. It has to be the zone your install ran with: `TZ` in `.env`, or `UTC` when
 `.env` doesn't set it. If it isn't, don't start Healdan. Put `TZ` back as the install had it, then remove what the
-move made and move again:
+move made and move again. With host folders, PostgreSQL's data is in its folder, not the volume these commands
+remove: use [Starting the Move Over](#starting-the-move-over)'s commands instead. On volumes:
 
 ```bash
 docker compose -f compose.yaml -f compose.move.yaml down
 docker volume rm logicaldoc_pg-data
 ```
 
-That volume holds only the move. With host folders, PostgreSQL's data is in its folder instead: empty that, as
-[Starting the Move Over](#starting-the-move-over) says, as `docker volume rm` would leave the move in place, and the
-next one would refuse. Then run [Move the Data](#move-the-data) and the steps after it again.
+That volume holds only the move. Then run [Move the Data](#move-the-data) and the steps after it again.
 
 ### Characters PostgreSQL Can't Keep, and `--replace-nul`
 
@@ -279,8 +289,9 @@ is the only record of what changed, so keep `~/move-report.txt`. Nothing else is
 
 When the move can't finish, it prints a line beginning `[move] ERROR:` that says why and what to do. The places it
 means are listed with it: under it, or, for values PostgreSQL can't hold, above it, where the copy found them. It
-never changes MariaDB. A move that stops before it writes to PostgreSQL leaves it as it was, and most of those errors
-say `Nothing was changed` or `changed nothing`. One that stops later leaves PostgreSQL marked as holding a move that
+never changes MariaDB. A move that stops before it writes to PostgreSQL, as when it can't connect or a check of
+either database refuses, leaves PostgreSQL as it was. Some of those errors say so, with `Nothing was changed` or
+`changed nothing`, and the others don't. A move that stops later leaves PostgreSQL marked as holding a move that
 didn't finish, which Healdan won't start on. Either way, put the cause right, then run
 [Move the Data](#move-the-data) again: it removes what an unfinished move made and starts over.
 
@@ -340,10 +351,18 @@ When the log shows `Server startup`, sign in, open a few documents, and file one
 ## Going Back
 
 The move only read MariaDB, so the old version and its volume are as they were. To go back to them, take the new
-version down, check out the old one, put the configuration's database settings back to MariaDB's, and start it:
+version down, check out the old one, put the configuration's database settings back to MariaDB's, and start it.
+
+Before you do:
+
+- **With host folders,** the `sed` below has to run on the configuration's folder, and the override has to keep
+  MariaDB's folder on the `db` service: use [Going Back with Host Folders](#going-back-with-host-folders)' `sed`
+  instead. Without MariaDB's folder, the old version would start an empty MariaDB, and make a new, empty install on it
+  beside your files.
+- **If `DB_HOST` and `DB_PORT` named a MariaDB of your own,** put both back in `.env` before the old version starts.
 
 ```bash
-docker compose down
+docker compose -f compose.yaml -f compose.move.yaml down
 git checkout mariadb-final
 docker run --rm -v logicaldoc_logicaldoc-conf:/conf busybox sed -i \
   -e 's/^jdbc\.driver=.*/jdbc.driver=org.mariadb.jdbc.Driver/' -e 's/^jdbc\.dbms=.*/jdbc.dbms=mariadb/' \
@@ -351,13 +370,13 @@ docker run --rm -v logicaldoc_logicaldoc-conf:/conf busybox sed -i \
 docker compose up -d --build
 ```
 
-Without the `sed`, the old version can't reach MariaDB: its log says `No suitable driver`. The build takes as long
-as it did before.
+The first command names `compose.move.yaml` too, so that it also removes the move's MariaDB if it's still there, as
+when [Remove the Move's MariaDB](#remove-the-moves-mariadb) was skipped: the old version's `db` mustn't start on the
+same data while it runs. Without the `sed`, the old version can't reach MariaDB: its log says `No suitable driver`.
+The build takes as long as it did before.
 
-- **With host folders,** run the `sed` on the configuration's folder, and keep MariaDB's folder on the `db` service,
-  as [If MariaDB's Data Is in a Host Folder](#if-mariadbs-data-is-in-a-host-folder) says. Without it, the old version
-  would start an empty MariaDB, and make a new, empty install on it beside your files.
-- **If `DB_HOST` and `DB_PORT` named a MariaDB of your own,** put both back in `.env` before the old version starts.
+After going back:
+
 - **What was done on PostgreSQL stays there.** Documents filed and changes made since the move aren't in MariaDB.
 - **It's only as safe as restoring a backup** once the new version has moved files between
   [storage backends](../../admin/storage-backends/) or removed held copies. MariaDB then names files as they were,
@@ -382,15 +401,14 @@ the old version's own copy of Backup and Restore does: with `mariadb-final` chec
 
 ## Remove the Old Volume
 
-When you're content with Healdan on PostgreSQL, and its backups work, remove MariaDB's volume:
+When you're content with Healdan on PostgreSQL, and its backups work, remove MariaDB's data. With host folders, it's
+a folder, not this volume: follow [Removing MariaDB's Folder](#removing-mariadbs-folder) instead. On volumes:
 
 ```bash
 docker volume rm logicaldoc_db-data
 ```
 
-With host folders, remove MariaDB's folder instead, as
-[If MariaDB's Data Is in a Host Folder](#if-mariadbs-data-is-in-a-host-folder) says. After that, going back means
-restoring the last MariaDB backup onto the old version.
+After that, going back means restoring the last MariaDB backup onto the old version.
 
 ## If MariaDB's Data Is in a Host Folder
 
@@ -443,9 +461,8 @@ docker run --rm -v /srv/logicaldoc/conf:/conf -v /srv/logicaldoc/repository:/rep
    `db` looks for it, so that [going back](#going-back) finds MariaDB's data. Without it, the old version would
    start an empty MariaDB, and make a new, empty install on it, signing in as `admin` with `admin`, beside your
    files.
-2. **Take MariaDB's settings out.** If the override's `db` service has anything else for MariaDB, such as a
-   `command:` with MariaDB's options, or `MARIADB_` variables, take it out: PostgreSQL won't start with MariaDB's
-   options. The old version's own `compose.yaml` has what MariaDB needs.
+2. **Take MariaDB's settings out** of the override's `db` service, but for the two mounts, as
+   [Before You Start](#before-you-start) says.
 3. **Point the move's MariaDB at its folder,** in a file of its own beside `compose.yaml`:
 
    ```yaml {filename="compose.move-folders.yaml"}
@@ -503,12 +520,14 @@ docker compose down
 
 Take MariaDB's line, `- /srv/logicaldoc/db:/var/lib/mysql`, out of `compose.override.yaml`, which leaves the `db`
 service as [Host Folders Instead of Volumes](../host-folders/) has it, and delete `compose.move-folders.yaml`. Then
-remove MariaDB's folder, and start again:
+empty MariaDB's folder, mounting only that folder, and start again:
 
 ```bash
-docker run --rm -v /srv/logicaldoc:/srv busybox rm -rf /srv/db
+docker run --rm -v /srv/logicaldoc/db:/db busybox find /db -mindepth 1 -delete
 docker compose up -d
 ```
+
+The folder itself stays, empty, for you to remove on the host if you like.
 
 ## A MariaDB of Your Own
 
