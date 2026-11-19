@@ -6,9 +6,11 @@ package com.logicaldoc.healdan.admin;
 /**
  * Where the admin request this thread is serving came from, for the
  * administration record (Admin app spec section 9.3). The API's admin filter
- * sets it once the request may go on and clears it when the request ends, so
- * a thread that serves one request after another never hands an address on.
- * Outside an admin request, such as in the Classic Interface, there's none.
+ * sets it once the request may go on, and the API's servlet clears it before
+ * and after every request, once the response is written: a streamed body,
+ * such as an export's, still has it, and a thread that serves one request
+ * after another never hands an address on. Outside an admin request, such as
+ * in the Classic Interface, there's none.
  */
 public final class AdminContext {
 

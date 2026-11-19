@@ -132,7 +132,7 @@ public class ApiServer implements ApplicationContextAware {
 	 * @return the Spring beans in this package, or one below it, that carry
 	 *         {@link Path}
 	 */
-	static List<Object> resources() {
+	public static List<Object> resources() {
 		return Context.get(ApiServer.class).findResources();
 	}
 

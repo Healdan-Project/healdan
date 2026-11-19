@@ -4,15 +4,21 @@
 package com.logicaldoc.healdan.api.admin;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.util.ClassUtils;
 
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.Tenant;
@@ -22,29 +28,43 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.admin.AdminArea;
 import com.logicaldoc.healdan.admin.AdminContext;
+import com.logicaldoc.healdan.api.ApiCall;
 import com.logicaldoc.healdan.api.ApiProblem;
 import com.logicaldoc.healdan.api.ApiResponse;
+import com.logicaldoc.healdan.api.ApiServer;
 import com.logicaldoc.healdan.api.ApiTestCase;
 import com.logicaldoc.healdan.api.ProblemMapper;
 import com.logicaldoc.healdan.api.Public;
+import com.logicaldoc.healdan.api.RouteCoverageTest;
 import com.logicaldoc.healdan.support.LogCapture;
 
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.StreamingOutput;
 
 /**
  * The admin API's checks (Admin app spec section 9.1), which
  * {@link AdminFilter} makes before any admin resource runs: only the web
- * session of someone allowed the area gets through. Every refusal here is the
- * filter's: the test-only resource counts its calls, and refuses nothing.
+ * session of someone allowed the area gets through, and a route under
+ * {@code /v1/admin} without {@link AdminRoute} lets nobody through. Every
+ * refusal here is the filter's: the test-only resources count their calls,
+ * and refuse nothing.
  */
 public class AdminFilterTest extends ApiTestCase {
 
 	private static final String PING = "/api/v1/admin/test/ping";
 
 	private static final String FAIL = "/api/v1/admin/test/fail";
+
+	private static final String STREAM = "/api/v1/admin/test/stream";
+
+	private static final String UNMARKED = "/api/v1/admin/test/unmarked";
 
 	/**
 	 * A test-only admin resource. Its routes aren't in
@@ -76,6 +96,50 @@ public class AdminFilterTest extends ApiTestCase {
 			address = AdminContext.address();
 			throw new IllegalStateException("The ping failed on purpose");
 		}
+
+		/**
+		 * A body written after the response filters ran, as an export's
+		 * would be, which reads the address as it's written
+		 */
+		@GET
+		@Path("stream")
+		public Response stream() {
+			calls.incrementAndGet();
+			StreamingOutput body = out -> {
+				address = AdminContext.address();
+				out.write(("{\"type\": \"https://healdan.com/problems/streamed\", \"title\": \"Streamed\", "
+						+ "\"status\": 409, \"detail\": \"Streamed.\", \"code\": \"streamed\"}")
+						.getBytes(StandardCharsets.UTF_8));
+			};
+			return Response.status(409).type(ProblemMapper.PROBLEM_JSON).entity(body).build();
+		}
+
+		/** A route with a template and a body, for the sweep */
+		@POST
+		@Path("items/{id}")
+		@Consumes(MediaType.APPLICATION_JSON)
+		public String item(@PathParam("id") long id, Map<String, Object> body) {
+			calls.incrementAndGet();
+			throw ApiProblem.conflict("pinged", "Pinged.");
+		}
+	}
+
+	/**
+	 * A test-only resource under {@code /v1/admin} left without
+	 * {@link AdminRoute} on purpose, which the filter must refuse to everyone;
+	 * {@link AdminRoutesTest} would refuse it, and leaves it out by name
+	 */
+	@Path("/v1/admin/test/unmarked")
+	@Produces(MediaType.APPLICATION_JSON)
+	public static class Unmarked {
+
+		static final AtomicInteger calls = new AtomicInteger();
+
+		@GET
+		public String get() {
+			calls.incrementAndGet();
+			throw ApiProblem.conflict("unmarked", "Unmarked.");
+		}
 	}
 
 	/** A test-only resource that isn't the admin API's */
@@ -95,13 +159,14 @@ public class AdminFilterTest extends ApiTestCase {
 
 	@Override
 	protected List<Object> extraBeans() {
-		return List.of(new Ping(), new AddressProbe());
+		return List.of(new Ping(), new AddressProbe(), new Unmarked());
 	}
 
 	@Before
 	public void forget() {
 		Ping.calls.set(0);
 		Ping.address = null;
+		Unmarked.calls.set(0);
 		AddressProbe.seen = "not asked";
 		AdminContext.clear();
 	}
@@ -210,6 +275,106 @@ public class AdminFilterTest extends ApiTestCase {
 		assertNull(AdminContext.address());
 	}
 
+	// An export's body is written after the response filters: it still has the address (ApiServlet clears it)
+	@Test
+	public void testAStreamedBodyHasTheAddress() throws Exception {
+		User boss = fx.user("boss", "admin");
+
+		assertProblem(get(STREAM).webSession(signInWeb(boss)).remote("10.1.2.3").send(), 409, "streamed");
+
+		assertEquals("10.1.2.3", Ping.address);
+		assertNull(AdminContext.address());
+	}
+
+	// Fails closed: a route under /v1/admin without @AdminRoute is a programming fault, refused to everyone
+	@Test
+	public void testAnUnmarkedAdminRouteIsRefused() throws Exception {
+		User boss = fx.user("boss", "admin");
+
+		try (LogCapture log = LogCapture.of(AdminFilter.class)) {
+			assertProblem(get(UNMARKED).webSession(signInWeb(boss)).send(), 403, "admins-only");
+			assertTrue(log.lines().toString(), log.lines().stream()
+					.anyMatch(line -> line.startsWith("ERROR ") && line.contains(Unmarked.class.getName())));
+		}
+		assertProblem(get(UNMARKED).token(signInAdmin()).send(), 403, "admins-only");
+		// Nobody signed in is still TokenFilter's
+		assertProblem(get(UNMARKED).send(), 401, "unauthenticated");
+
+		assertEquals(0, Unmarked.calls.get());
+		assertNull(AdminContext.address());
+	}
+
+	@Test
+	public void testTheAdminPath() {
+		assertTrue(AdminFilter.admin("v1/admin"));
+		assertTrue(AdminFilter.admin("/v1/admin/dashboard"));
+		assertTrue(AdminFilter.admin("v1//admin///dashboard"));
+		assertFalse(AdminFilter.admin("v1/administrators"));
+		assertFalse(AdminFilter.admin("/v1/test/address"));
+		assertFalse(AdminFilter.admin("v2/admin"));
+	}
+
+	// Every admin route the server has, the test-only ones included, is refused by the filter (spec section 9.1)
+	@Test
+	public void testTheFilterRefusesEveryAdminRoute() throws Exception {
+		String adminToken = signInAdmin();
+		MockHttpSession clerk = signInWeb(fx.user("clerk"));
+
+		List<Object> served = new ArrayList<>(ApiServer.resources());
+		served.addAll(extraBeans());
+		List<String> swept = new ArrayList<>();
+		for (Object resource : served) {
+			Class<?> type = ClassUtils.getUserClass(resource);
+			boolean marked = type.isAnnotationPresent(AdminRoute.class);
+			for (Method method : type.getMethods()) {
+				String verb = RouteCoverageTest.httpMethod(method);
+				if (verb == null)
+					continue;
+				Path methodPath = method.getAnnotation(Path.class);
+				String path = RouteCoverageTest.normalize(type.getAnnotation(Path.class).value() + "/"
+						+ (methodPath != null ? methodPath.value() : ""));
+				if (!RouteCoverageTest.admin(path))
+					continue;
+				String route = verb + " " + path;
+				swept.add(route);
+				String uri = "/api" + path.replaceAll("\\{[^}]*\\}", "1");
+				String consumes = consumes(type, method);
+
+				ApiResponse token = request(verb, uri, consumes).token(adminToken).send();
+				assertProblem(route + " with an admin's device token", token, 403,
+						marked ? "web-session-only" : "admins-only");
+				ApiResponse web = request(verb, uri, consumes).webSession(clerk).send();
+				assertProblem(route + " on a non-admin's web session", web, 403, "admins-only");
+			}
+		}
+
+		assertTrue(swept.toString(), swept.containsAll(List.of("GET /v1/admin/test/ping",
+				"POST /v1/admin/test/items/{id}", "GET /v1/admin/test/unmarked")));
+		assertEquals(0, Ping.calls.get());
+		assertEquals(0, Unmarked.calls.get());
+	}
+
+	/**
+	 * @param consumes the media type the route takes, or null for none
+	 * @return the request, with an empty body of that type when it takes one
+	 */
+	private ApiCall request(String verb, String uri, String consumes) {
+		ApiCall call = call(verb, uri);
+		if (consumes != null)
+			call.body(consumes, (consumes.contains("json") ? "{}" : "").getBytes(StandardCharsets.UTF_8));
+		return call;
+	}
+
+	/**
+	 * @return the first media type the method, or else its class, consumes;
+	 *         null if neither says
+	 */
+	private static String consumes(Class<?> type, Method method) {
+		Consumes consumes = method.isAnnotationPresent(Consumes.class) ? method.getAnnotation(Consumes.class)
+				: type.getAnnotation(Consumes.class);
+		return consumes != null && consumes.value().length > 0 ? consumes.value()[0] : null;
+	}
+
 	@Test
 	public void testNoAddressIsHandedOn() {
 		// As a thread might hold one had a request ended without clearing it
@@ -222,7 +387,11 @@ public class AdminFilterTest extends ApiTestCase {
 	}
 
 	private static void assertProblem(ApiResponse response, int status, String code) {
-		assertEquals(response.toString(), status, response.status());
-		assertEquals(response.toString(), code, response.code());
+		assertProblem("", response, status, code);
+	}
+
+	private static void assertProblem(String what, ApiResponse response, int status, String code) {
+		assertEquals(what + " " + response, status, response.status());
+		assertEquals(what + " " + response, code, response.code());
 	}
 }

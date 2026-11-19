@@ -67,8 +67,8 @@ public class ApiServlet extends CXFNonSpringServlet {
 	 * nothing left after it, whatever happens: Tomcat's threads serve one
 	 * request after another. Only here is it cleared, so that a streamed body
 	 * (a document's content) still has its caller. The admin API's address
-	 * ({@link AdminContext}) goes with it, whether or not its response filter
-	 * ran.
+	 * ({@link AdminContext}) goes with it, here only too, so an export's
+	 * streamed body still has it.
 	 */
 	@Override
 	protected void invoke(HttpServletRequest request, HttpServletResponse response) throws ServletException {

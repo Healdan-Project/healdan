@@ -54,6 +54,9 @@ public class AdminRoutesTest {
 	@Test
 	public void testTheCheckFindsWhatsWrong() {
 		assertEquals(Set.of(), problems(AdminFilterTest.Ping.class));
+		assertEquals(
+				Set.of(AdminFilterTest.Unmarked.class.getName() + " GET /v1/admin/test/unmarked has no @AdminRoute"),
+				problems(AdminFilterTest.Unmarked.class));
 		assertEquals(Set.of(Unmarked.class.getName() + " GET /v1/admin/unmarked has no @AdminRoute"),
 				problems(Unmarked.class));
 		assertEquals(Set.of(Outside.class.getName() + " carries @AdminRoute outside /v1/admin"),
@@ -104,6 +107,8 @@ public class AdminRoutesTest {
 	/**
 	 * @return every class in the API's package or below it, main or test, with
 	 *         {@link Path} or {@link AdminRoute}, but this test's own examples
+	 *         and {@link AdminFilterTest.Unmarked}, left unmarked on purpose to
+	 *         show the filter refuses it
 	 */
 	private static List<Class<?>> resources() {
 		ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false) {
@@ -119,7 +124,7 @@ public class AdminRoutesTest {
 		for (BeanDefinition definition : scanner.findCandidateComponents(PACKAGE)) {
 			Class<?> type = ClassUtils.resolveClassName(definition.getBeanClassName(),
 					AdminRoutesTest.class.getClassLoader());
-			if (type.getEnclosingClass() != AdminRoutesTest.class)
+			if (type.getEnclosingClass() != AdminRoutesTest.class && type != AdminFilterTest.Unmarked.class)
 				resources.add(type);
 		}
 		return resources;

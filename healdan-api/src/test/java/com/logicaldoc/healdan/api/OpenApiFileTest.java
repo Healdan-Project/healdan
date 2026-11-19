@@ -9,17 +9,21 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import org.junit.Test;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import io.swagger.v3.core.util.Yaml;
 import io.swagger.v3.oas.models.OpenAPI;
@@ -37,6 +41,13 @@ import io.swagger.v3.parser.core.models.SwaggerParseResult;
  * components.
  */
 public class OpenApiFileTest {
+
+	/** What the admin file repeats of the first file's components: "kind/name" */
+	private static final Set<String> REPEATED = Set.of("schemas/Problem", "schemas/FieldError", "schemas/Page",
+			"responses/Problem");
+
+	/** The keywords that only say things, which copies may word their own way */
+	private static final Set<String> WORDS = Set.of("description", "examples");
 
 	@Test
 	public void testParsesWithoutMessages() {
@@ -112,23 +123,143 @@ public class OpenApiFileTest {
 		JsonNode first = tree(Contract.openApi()).path("components");
 		JsonNode admin = tree(Contract.openApiAdmin()).path("components");
 
-		assertTrue(admin.path("schemas").has("Problem"));
-		assertTrue(admin.path("schemas").has("Page"));
-		assertTrue(admin.path("responses").has("Problem"));
+		for (String component : REPEATED)
+			assertTrue(component, admin.at("/" + component).isObject());
+		assertEquals("Copies that differ from openapi.yaml's", List.of(), differences(first, admin));
+	}
 
-		// Every component both files have, but the security schemes, which describe each file's own sign-in
+	// The admin file repeats only these, so its Problem documents the admin API's codes, not the public API's
+	@Test
+	public void testAdminFileRepeatsOnlyWhatItNeeds() {
+		JsonNode first = tree(Contract.openApi()).path("components");
+		JsonNode admin = tree(Contract.openApiAdmin()).path("components");
+
+		assertEquals(Set.of(), shared(first, admin).stream().filter(c -> !REPEATED.contains(c))
+				.collect(Collectors.toCollection(TreeSet::new)));
+
+		JsonNode problem = admin.path("schemas").path("Problem");
+		assertEquals(List.of("code", "detail", "fields", "status", "title", "type"),
+				names(problem.path("properties")));
+		assertEquals(List.of("web-session-only", "admins-only", "not-found", "refused", "validation"),
+				texts(problem.path("properties").path("code").path("examples")));
+	}
+
+	// The comparison catches a copy that drifts, and lets the admin Problem leave out what it doesn't use
+	@Test
+	public void testTheComparisonFindsDrift() {
+		JsonNode first = tree(Contract.openApi()).path("components");
+		JsonNode admin = tree(Contract.openApiAdmin()).path("components");
+		assertEquals(List.of(), differences(first, admin));
+
+		// Words may differ
+		ObjectNode reworded = admin.deepCopy();
+		((ObjectNode) reworded.at("/schemas/Page")).put("description", "Another description.");
+		((ObjectNode) reworded.at("/schemas/FieldError/properties/code")).putArray("examples").add("other");
+		assertEquals(List.of(), differences(first, reworded));
+
+		// A property in a copy that differs
+		ObjectNode drifted = admin.deepCopy();
+		((ObjectNode) drifted.at("/schemas/Page/properties/offset")).put("minimum", 1);
+		assertEquals(List.of("schemas/Page"), differences(first, drifted));
+
+		// A property the admin Problem declares as the first file's doesn't, or that the first file lacks
+		ObjectNode retyped = admin.deepCopy();
+		((ObjectNode) retyped.at("/schemas/Problem/properties/code")).put("type", "integer");
+		assertEquals(List.of("schemas/Problem"), differences(first, retyped));
+		ObjectNode extra = admin.deepCopy();
+		((ObjectNode) extra.at("/schemas/Problem/properties")).putObject("colour").put("type", "string");
+		assertEquals(List.of("schemas/Problem"), differences(first, extra));
+
+		// The admin Problem's type and required members are the first file's
+		ObjectNode loosened = admin.deepCopy();
+		((ObjectNode) loosened.at("/schemas/Problem")).putArray("required").add("code");
+		assertEquals(List.of("schemas/Problem"), differences(first, loosened));
+
+		// Fewer properties are allowed: the first file's Problem has more than the admin one
+		assertTrue(names(first.at("/schemas/Problem/properties"))
+				.containsAll(names(admin.at("/schemas/Problem/properties"))));
+		assertTrue(names(first.at("/schemas/Problem/properties")).size() > names(
+				admin.at("/schemas/Problem/properties")).size());
+	}
+
+	/**
+	 * @param first {@code openapi.yaml}'s {@code components}
+	 * @param admin {@code openapi-admin.yaml}'s
+	 * @return each component both have, but the security schemes, which
+	 *         describe each file's own sign-in, that differs, once
+	 *         {@code description} and {@code examples} are left out: equal,
+	 *         but for {@code schemas/Problem}, whose {@code type} and
+	 *         {@code required} must be the same, and every property it
+	 *         declares one of the first file's, the same
+	 */
+	static List<String> differences(JsonNode first, JsonNode admin) {
 		List<String> different = new ArrayList<>();
-		for (Iterator<String> kinds = admin.fieldNames(); kinds.hasNext();) {
-			String kind = kinds.next();
-			if (kind.equals("securitySchemes"))
-				continue;
-			for (Iterator<String> names = admin.path(kind).fieldNames(); names.hasNext();) {
-				String name = names.next();
-				if (first.path(kind).has(name) && !first.path(kind).path(name).equals(admin.path(kind).path(name)))
-					different.add(kind + "/" + name);
+		for (String component : shared(first, admin)) {
+			JsonNode theirs = withoutWords(first.at("/" + component), null);
+			JsonNode ours = withoutWords(admin.at("/" + component), null);
+			boolean same;
+			if (component.equals("schemas/Problem")) {
+				same = theirs.path("type").equals(ours.path("type"))
+						&& theirs.path("required").equals(ours.path("required"));
+				for (String name : names(ours.path("properties")))
+					same &= theirs.path("properties").path(name).equals(ours.path("properties").path(name));
+			} else {
+				same = theirs.equals(ours);
 			}
+			if (!same)
+				different.add(component);
 		}
-		assertEquals("Copies that differ from openapi.yaml's", List.of(), different);
+		return different;
+	}
+
+	/**
+	 * @return "kind/name" of each component both files define, but the
+	 *         security schemes
+	 */
+	private static List<String> shared(JsonNode first, JsonNode admin) {
+		List<String> shared = new ArrayList<>();
+		for (String kind : names(admin))
+			if (!kind.equals("securitySchemes"))
+				for (String name : names(admin.path(kind)))
+					if (first.path(kind).has(name))
+						shared.add(kind + "/" + name);
+		return shared;
+	}
+
+	/**
+	 * @param parent the member the node is the value of, or null
+	 * @return a copy of the node without its {@code description} and
+	 *         {@code examples} keywords, at any depth; a property of that name,
+	 *         under {@code properties}, stays
+	 */
+	private static JsonNode withoutWords(JsonNode node, String parent) {
+		if (node.isObject()) {
+			ObjectNode copy = JsonNodeFactory.instance.objectNode();
+			node.fields().forEachRemaining(field -> {
+				if ("properties".equals(parent) || !WORDS.contains(field.getKey()))
+					copy.set(field.getKey(), withoutWords(field.getValue(), field.getKey()));
+			});
+			return copy;
+		}
+		if (node.isArray()) {
+			ArrayNode copy = JsonNodeFactory.instance.arrayNode();
+			node.forEach(element -> copy.add(withoutWords(element, null)));
+			return copy;
+		}
+		return node;
+	}
+
+	private static List<String> names(JsonNode node) {
+		List<String> names = new ArrayList<>();
+		node.fieldNames().forEachRemaining(names::add);
+		Collections.sort(names);
+		return names;
+	}
+
+	private static List<String> texts(JsonNode array) {
+		List<String> texts = new ArrayList<>();
+		array.forEach(element -> texts.add(element.asText()));
+		return texts;
 	}
 
 	// Every reference is to a component of the admin file itself
