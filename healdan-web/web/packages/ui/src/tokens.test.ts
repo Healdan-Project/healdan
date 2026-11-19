@@ -62,10 +62,18 @@ const KINDS = Object.keys(lightOwn).filter((name) => name.startsWith('--hd-kind-
 const KIND_SURFACES = ['window', 'row-alt', 'sidebar', 'line', 'pill', 'selection-inactive', 'field']
 const KIND_PAIRS = KINDS.flatMap((kind) => KIND_SURFACES.map((bg): [string, string] => [kind, `--hd-${bg}`]))
 
+// StatusDot's dots: ok, attention and off
+const STATUS_DOTS = ['--hd-yours', '--hd-caution', '--hd-text-secondary']
+const STATUS_DOT_PAIRS = STATUS_DOTS.flatMap((dot) => PLAIN.map((bg): [string, string] => [dot, `--hd-${bg}`]))
+
 describe('tokens.css', () => {
   it('defines the row height and the same names for dark as light', () => {
     expect(light['--row-height']).toBe('34px')
     for (const name of Object.keys(dark)) expect(light).toHaveProperty([name])
+  })
+
+  it('gives the search mark a tint of its own in dark', () => {
+    expect(dark).toHaveProperty(['--hd-mark'])
   })
 
   // Light's colours are too dark for the dark theme: each kind has its own there, unless it is another token, which does
@@ -101,6 +109,21 @@ describe('tokens.css', () => {
     // (WCAG 1.4.11's 3:1 for what shows a control's state).
     it.each(PLAIN)(`${scheme}: the filled star's edge shows on --hd-%s`, (bg) => {
       expect(contrast(tokens['--hd-star-edge']!, tokens[`--hd-${bg}`]!)).toBeGreaterThanOrEqual(3)
+    })
+
+    // A status's dot (StatusDot) shows on every plain surface, beside the words that say the status (WCAG 1.4.11)
+    it.each(STATUS_DOT_PAIRS)(`${scheme}: the status dot %s shows on %s`, (fg, bg) => {
+      expect(contrast(tokens[fg]!, tokens[bg]!)).toBeGreaterThanOrEqual(3)
+    })
+
+    // A progress bar's fill shows how far it has got against its track and the surfaces around it (WCAG 1.4.11)
+    it.each(['line', ...PLAIN])(`${scheme}: a progress bar's fill shows on --hd-%s`, (bg) => {
+      expect(contrast(tokens['--hd-accent-text']!, tokens[`--hd-${bg}`]!)).toBeGreaterThanOrEqual(3)
+    })
+
+    // A search's matched text (SearchPicker's Highlight) is marked in a tint that holds --hd-text at AA
+    it(`${scheme}: --hd-text on --hd-mark reaches AA`, () => {
+      expect(contrast(tokens['--hd-text']!, tokens['--hd-mark']!)).toBeGreaterThanOrEqual(4.5)
     })
 
     // The red button's face shows against the surface it sits on (WCAG 1.4.11)

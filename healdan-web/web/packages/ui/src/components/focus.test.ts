@@ -16,9 +16,13 @@ describe('focus style', () => {
       './DatePicker.module.css',
       './Dialog.module.css',
       './Fields.module.css',
+      './GroupChip.module.css',
       './Menu.module.css',
       './Overlay.module.css',
+      './ProgressBar.module.css',
+      './SearchPicker.module.css',
       './Splitter.module.css',
+      './StatusDot.module.css',
       './Table.module.css',
       './Tabs.module.css',
       './Toast.module.css',
@@ -32,13 +36,15 @@ describe('focus style', () => {
   for (const [file, css] of Object.entries(sheets)) {
     it(`${file} uses the shared focus outline on focus-visible`, () => {
       const rules = [...css.matchAll(/([^{}]*\[data-focus-visible\][^{}]*)\{([^}]*)\}/g)]
-      if (file === './Dialog.module.css' || file === './Overlay.module.css' || file === './Tray.module.css' || file === './VisuallyHidden.module.css') {
-        // The dialog and the tray hold focusable parts, not focus of their own; hidden text is never focused
+      const unfocused = ['Dialog', 'Overlay', 'Tray', 'VisuallyHidden', 'ProgressBar', 'StatusDot', 'GroupChip'].map((name) => `./${name}.module.css`)
+      if (unfocused.includes(file)) {
+        // The dialog and the tray hold focusable parts, not focus of their own; hidden text, a progress bar, a status and a
+        // group's chip are never focused
         expect(rules).toHaveLength(0)
         return
       }
       expect(rules.length).toBeGreaterThan(0)
-      if (file === './Table.module.css') {
+      if (file === './Table.module.css' || file === './SearchPicker.module.css') {
         // Rows touch, and an outline set off outside them would be cut off by the box they scroll in
         for (const [, selector, body] of rules) expect(body, selector).toContain('box-shadow: var(--hd-focus-inset)')
         return

@@ -1,0 +1,19 @@
+{
+  "name": "@healdan/admin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ../../scripts/check-dist.mjs admin"
+  },
+  "dependencies": {
+    "@healdan/api": "*",
+    "@healdan/shell": "*",
+    "@healdan/ui": "*",
+    "@tanstack/react-query": "5.107.1",
+    "@tanstack/react-router": "1.170.46",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  }
+}

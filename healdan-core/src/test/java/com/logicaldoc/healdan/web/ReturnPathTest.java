@@ -4,6 +4,8 @@
 package com.logicaldoc.healdan.web;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -29,6 +31,45 @@ public class ReturnPathTest {
 			assertEquals(String.valueOf(path), "/app/", ReturnPath.safe(path));
 	}
 
+	// The Admin app's addresses come back too (admin spec 6.2)
+	@Test
+	public void testAdminKept() {
+		for (String path : new String[] { "/admin/", "/admin/x?y=1", "/admin/matters/1001.1",
+				"/admin/users?q=ada*&group=7", "/admin/search-index" })
+			assertEquals(path, ReturnPath.safe(path));
+	}
+
+	// One under /admin that the rule refuses, or bare /admin, comes back to the Admin app's own front page
+	@Test
+	public void testAdminRefusedFallsBackToAdmin() {
+		for (String path : new String[] { "/admin", "/admin?x=1", "/admin//x", "/admin//evil.example/",
+				"/admin/x'+alert(1)+'", "/admin/x\"", "/admin/</script><script>", "/admin/x;y", "/admin/\\evil",
+				"/admin/x y", "/admin/x\ny", "/admin/" + "a".repeat(2000) })
+			assertEquals(path, "/admin/", ReturnPath.safe(path));
+	}
+
+	// Anything else that only looks like it is the User app's
+	@Test
+	public void testNotAdminFallsBackToApp() {
+		for (String path : new String[] { "/administrator/", "/admins/x", "/adminx", "/Admin/", "//admin/",
+				"/x/admin/", "https://evil.example/admin/" })
+			assertEquals(path, "/app/", ReturnPath.safe(path));
+	}
+
+	@Test
+	public void testWaiting() {
+		MockHttpServletRequest root = new MockHttpServletRequest();
+		for (String stored : new String[] { "/app/", "/app/doc/1", "/admin/", "/admin/matters?x=1" })
+			assertTrue(stored, ReturnPath.waiting(stored, root));
+		for (Object stored : new Object[] { null, "", "/frontend.jsp", "/administrator/", "/admin", "/elsewhere", 7 })
+			assertFalse(String.valueOf(stored), ReturnPath.waiting(stored, root));
+
+		MockHttpServletRequest nested = new MockHttpServletRequest(deployed("/healdan"));
+		assertTrue(ReturnPath.waiting("/healdan/admin/x", nested));
+		assertTrue(ReturnPath.waiting("/healdan/app/x", nested));
+		assertFalse(ReturnPath.waiting("/admin/x", nested));
+	}
+
 	@Test
 	public void testLongestKept() {
 		String path = "/app/" + "a".repeat(ReturnPath.MAX_LENGTH - 5);
@@ -50,6 +91,11 @@ public class ReturnPathTest {
 
 		ReturnPath.remember(nested, "/x'");
 		assertEquals("/healdan/app/", nested.getSession().getAttribute(ReturnPath.ATTRIBUTE));
+
+		ReturnPath.remember(nested, "/admin/matters?x=1");
+		assertEquals("/healdan/admin/matters?x=1", nested.getSession().getAttribute(ReturnPath.ATTRIBUTE));
+		ReturnPath.remember(nested, "/admin/x'+alert(1)+'");
+		assertEquals("/healdan/admin/", nested.getSession().getAttribute(ReturnPath.ATTRIBUTE));
 	}
 
 	private static MockServletContext deployed(String contextPath) {

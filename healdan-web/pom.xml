@@ -82,9 +82,205 @@
 			<artifactId>junit</artifactId>
 			<scope>test</scope>
 		</dependency>
+
+		<!-- AdminAppServletTest signs real people in on healdan-core's test database, so the tests build healdan-core's
+			test context (its base test case and fixtures are in the with-tests profile below), and its scan finds
+			healdan-api's beans too: the test classpath is healdan-api's, of which these are what the WAR ships and the
+			two modules leave provided -->
+		<dependency>
+			<groupId>org.apache.cxf</groupId>
+			<artifactId>cxf-rt-frontend-jaxrs</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.cxf</groupId>
+			<artifactId>cxf-rt-transports-http</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.cxf</groupId>
+			<artifactId>cxf-rt-rs-service-description</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.lucene</groupId>
+			<artifactId>lucene-queryparser</artifactId>
+			<version>8.11.4</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>jakarta.ws.rs</groupId>
+			<artifactId>jakarta.ws.rs-api</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-core</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-annotations</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.jakarta.rs</groupId>
+			<artifactId>jackson-jakarta-rs-json-provider</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-core</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-core</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-tx</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-orm</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context-support</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.hibernate.orm</groupId>
+			<artifactId>hibernate-core</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.logicaldoc</groupId>
+			<artifactId>logicaldoc-gui</artifactId>
+			<version>${project.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.logicaldoc</groupId>
+			<artifactId>logicaldoc-webservice</artifactId>
+			<version>${project.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.logicaldoc</groupId>
+			<artifactId>logicaldoc-webdav</artifactId>
+			<version>${project.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.logicaldoc</groupId>
+			<artifactId>logicaldoc-cmis</artifactId>
+			<version>${project.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>commons-lang</groupId>
+			<artifactId>commons-lang</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.jdom</groupId>
+			<artifactId>jdom2</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>jakarta.annotation</groupId>
+			<artifactId>jakarta.annotation-api</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.gwtproject</groupId>
+			<artifactId>gwt-servlet-jakarta</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.hsqldb</groupId>
+			<artifactId>hsqldb</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.hsqldb</groupId>
+			<artifactId>sqltool</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- The PostgreSQL the tests run on (healdan-core's TestDatabase); the version the WAR ships (logicaldoc-parent's postgresql.version) -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<version>${postgresql.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.zaxxer</groupId>
+			<artifactId>HikariCP</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-dbcp2</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.quartz-scheduler</groupId>
+			<artifactId>quartz</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.infinispan</groupId>
+			<artifactId>infinispan-core</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.infinispan</groupId>
+			<artifactId>${infinispan.hibernate.artifact}</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 	<build>
+		<testResources>
+			<testResource>
+				<directory>src/test/resources</directory>
+			</testResource>
+			<!-- The tests build healdan-core's test context. CE reads context.properties as a file, so they can't take it
+				from inside healdan-core's test-jar -->
+			<testResource>
+				<directory>../healdan-core/src/test/resources</directory>
+				<includes>
+					<include>context.properties</include>
+				</includes>
+			</testResource>
+		</testResources>
 		<plugins>
+			<!-- SecretBox makes its key file on the first secret it seals. A test must not make one in the home folder of
+				whoever runs it -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<systemPropertyVariables>
+						<healdan.secretKey>${project.build.directory}/healdan-secret.key</healdan.secretKey>
+					</systemPropertyVariables>
+				</configuration>
+			</plugin>
 			<!-- Builds the User app (web/, an npm workspace) with a Node that Maven downloads into target/, the version in
 				web/.nvmrc. npm runs no scripts (ignore-scripts): the build tools' binaries come from platform packages. -->
 			<plugin>
@@ -130,8 +326,9 @@
 					</execution>
 				</executions>
 			</plugin>
-			<!-- Copies the build into the jar, where AppServlet reads it. With the skip flag web/apps/user/dist/ may not
-				exist (or may be a stale build): the copy skips a missing folder and so nothing fails. -->
+			<!-- Copies each app's build into the jar, the User app's where AppServlet reads it and the Admin app's for
+				AdminAppServlet. With the skip flag web/apps/*/dist/ may not exist (or may be a stale build): each copy
+				skips a missing folder and so nothing fails. -->
 			<plugin>
 				<artifactId>maven-resources-plugin</artifactId>
 				<executions>
@@ -146,6 +343,21 @@
 							<resources>
 								<resource>
 									<directory>web/apps/user/dist</directory>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
+					<execution>
+						<id>copy-admin-app</id>
+						<phase>process-resources</phase>
+						<goals>
+							<goal>copy-resources</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.outputDirectory}/healdan/app/admin</outputDirectory>
+							<resources>
+								<resource>
+									<directory>web/apps/admin/dist</directory>
 								</resource>
 							</resources>
 						</configuration>
