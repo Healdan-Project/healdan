@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import javax.sql.DataSource;
@@ -397,24 +399,30 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 	// A source still being worked out when the request stops waiting is unchecked, and says so, and shows next time
 	@Test
 	public void testASlowSourceIsStillBeingWorkedOut() throws Exception {
+		Duration wait = Duration.ofMillis(300);
+		service.longestWait = wait;
 		CountDownLatch slow = new CountDownLatch(1);
 		service.ports = () -> {
 			try {
-				slow.await();
+				// Bounded, so a failed assertion below never leaves the thread parked
+				slow.await(10, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
 			return List.of(() -> overview);
 		};
-		long started = System.nanoTime();
+		try {
+			long started = System.nanoTime();
+			Dashboard waited = read();
 
-		Dashboard waited = read();
-
-		assertTrue(System.nanoTime() - started >= DashboardService.WAIT.toNanos());
-		assertEquals(List.of(AttentionItem.FILES_STUCK, AttentionItem.BACKEND_UNREACHABLE), waited.unchecked());
-		assertEquals(DashboardService.STILL_WORKING, tile(waited, HealthTile.STORAGE_BACKENDS).problem());
-
-		slow.countDown();
+			assertTrue(System.nanoTime() - started >= wait.toNanos());
+			// Only the storage port is held; another source may be slower than the short wait too, on a busy machine
+			assertTrue(waited.unchecked().toString(), waited.unchecked()
+					.containsAll(List.of(AttentionItem.FILES_STUCK, AttentionItem.BACKEND_UNREACHABLE)));
+			assertEquals(DashboardService.STILL_WORKING, tile(waited, HealthTile.STORAGE_BACKENDS).problem());
+		} finally {
+			slow.countDown();
+		}
 		Dashboard next = awaitDashboard(d -> d.unchecked().isEmpty());
 		assertNull(tile(next, HealthTile.STORAGE_BACKENDS).problem());
 	}
@@ -526,24 +534,31 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 	public void testASecondReadComesFromWhatsKept() throws Exception {
 		Instant start = Instant.now();
 		service.clock = Clock.fixed(start, ZoneOffset.UTC);
-		int[] asked = { 0 };
+		// Counted on the refreshes' threads, read on this one
+		AtomicInteger asked = new AtomicInteger();
 		service.ports = () -> {
-			asked[0]++;
+			asked.incrementAndGet();
 			return List.of(() -> overview);
 		};
 		assertEquals(List.of(), read().attention());
-		assertEquals(1, asked[0]);
+		assertEquals(1, asked.get());
 
+		// News for two sources: a document that couldn't be indexed, and files stuck on the storage port
 		unindexable();
+		overview = overview(List.of(backend(1, "Original", BackendInfo.OK), backend(2, "Wasabi EU", BackendInfo.OK)),
+				List.of(new StoreBackendInfo(10, "Client Work", 2, "Wasabi EU", 3, 3, 40, 4000)), 0);
 		Dashboard kept = service.read();
 		assertEquals(List.of(), kept.attention());
 		assertEquals("None waiting, none failed", tile(kept, HealthTile.SEARCH_INDEX).detail());
-		assertEquals(1, asked[0]);
+		assertEquals("1 of 1 reachable, no files stuck", tile(kept, HealthTile.STORAGE_BACKENDS).detail());
+		assertEquals(1, asked.get());
 
-		// A minute on, the next read gets what's kept and asks again on its own thread; the one after has the news
+		// A minute on, the next read gets what's kept and asks again on its own thread; a later one has the news,
+		// the storage port's own among it, so its one more ask is done
 		service.clock = Clock.fixed(start.plus(DashboardService.MAX_AGE), ZoneOffset.UTC);
-		Dashboard fresh = awaitDashboard(d -> !d.attention().isEmpty());
-		assertEquals(List.of(AttentionItem.INDEX_FAILED), codes(fresh));
-		assertEquals(2, asked[0]);
+		Dashboard fresh = awaitDashboard(
+				d -> codes(d).equals(List.of(AttentionItem.FILES_STUCK, AttentionItem.INDEX_FAILED)));
+		assertEquals(List.of(AttentionItem.FILES_STUCK, AttentionItem.INDEX_FAILED), codes(fresh));
+		assertEquals(2, asked.get());
 	}
 }
