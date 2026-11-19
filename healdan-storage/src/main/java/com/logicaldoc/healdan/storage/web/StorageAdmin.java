@@ -780,8 +780,8 @@ public class StorageAdmin {
 	 * Gives a Store another backend (spec section 5.4). The Store's rows are checked first
 	 * ({@link StoreTracking#checkStore}); then its {@code hd_storage_store} row is written, or deleted to go back to
 	 * Original, with its rows' waiting marks set or cleared ({@link StoredFiles#storeBackendChanged}), in a short
-	 * transaction of its own, as the mover's commits read that row and on MariaDB would wait for a long one; then the
-	 * mover is woken.
+	 * transaction of its own, as the mover's commits read that row and see the change only once it's committed; then
+	 * the mover is woken.
 	 *
 	 * @param storeId the Store
 	 * @param backendId the backend, which must be offered to Stores

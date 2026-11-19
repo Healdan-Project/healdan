@@ -49,8 +49,9 @@ public class ApiTokens {
 	public static final String UNNAMED = "Unnamed device";
 
 	/**
-	 * The longest sealed refresh token a token row holds: {@code hd_refresh}'s
-	 * width since V7 (ruling R35), {@code text} on MariaDB. Sealed, that's a
+	 * The longest sealed refresh token a token row takes, the limit V7 set
+	 * (ruling R35). {@code hd_refresh} is {@code text}, which on PostgreSQL has
+	 * no limit of its own, so the limit is this alone. Sealed, that's a
 	 * provider's refresh token of up to 49,121 characters.
 	 */
 	public static final int MAX_REFRESH = 65_535;

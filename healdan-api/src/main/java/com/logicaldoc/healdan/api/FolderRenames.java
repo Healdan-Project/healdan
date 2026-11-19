@@ -142,8 +142,8 @@ final class FolderRenames {
 			throw ApiProblem.validation(List.of(new FieldError("name", "required", "Give the folder a name.")));
 
 		List<FieldError> errors = new ArrayList<>();
-		// As a document's and a favourite's name: no slash, backslash or control character, nothing outside the Basic
-		// Multilingual Plane, and at most 255 characters
+		// As a document's and a favourite's name: no slash, backslash or control character, nothing PostgreSQL can't
+		// store (a NUL or a lone surrogate, StorableText), and at most 255 characters
 		Uploads.checkText(sent, "name", Uploads.MAX_NAME_LENGTH, false, errors);
 		boolean invalid = errors.stream().anyMatch(error -> "invalid".equals(error.code()));
 		// A direction override shows a name as another, such as "Invoice", U+202E, then "fdp.exe" as "Invoiceexe.pdf"

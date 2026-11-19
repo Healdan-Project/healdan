@@ -66,9 +66,9 @@ public final class Savepoints {
 				connection.releaseSavepoint(savepoint);
 			} catch (SQLException release) {
 				/*
-				 * On PostgreSQL, as when the work caught a failed statement of its own, which left the transaction
-				 * aborted: rolled back to the savepoint, the transaction goes on. On MariaDB a release fails only
-				 * when the savepoint is gone, and so does this rollback.
+				 * As when the work caught a failed statement of its own, which left the transaction aborted: rolled
+				 * back to the savepoint, the transaction goes on. A release that fails because the savepoint is gone
+				 * fails this rollback too.
 				 */
 				try {
 					connection.rollback(savepoint);

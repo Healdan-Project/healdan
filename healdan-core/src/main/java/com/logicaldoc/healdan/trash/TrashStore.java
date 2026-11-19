@@ -122,7 +122,8 @@ public class TrashStore {
 			ps.setTimestamp(i, Timestamp.from(item.deletedAt()));
 			return ps;
 		}, keys);
-		// MariaDB gives the one key; PostgreSQL gives every column, so take hd_id by its name there
+		// PostgreSQL's driver gives every column of the inserted row as its keys, so hd_id is taken by its name; a map
+		// of one is that key alone
 		Map<String, Object> generated = keys.getKeyList().get(0);
 		Object key = generated.size() == 1 ? generated.values().iterator().next() : generated.get("hd_id");
 		long id = ((Number) key).longValue();

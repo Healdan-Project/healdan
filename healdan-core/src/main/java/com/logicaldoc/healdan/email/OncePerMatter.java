@@ -64,12 +64,16 @@ import com.logicaldoc.util.spring.Context;
  * is open. So {@link OncePerMatterListener}'s check, inside the store, sees
  * every filing before it. Healdan takes no lock of its own: one taken inside
  * that block and held by a longer transaction would wait on the block in
- * turn. On MariaDB a transaction reads from the snapshot its first read took
- * (REPEATABLE READ), which can be older than a filing committed since, so a
- * transaction begun before the call that checks, whose reads come from a
- * snapshot, looks again in a new one. One the call began, such as the
- * store's own inside the block, took its snapshot after every filing before
- * it.
+ * turn. Healdan's connections keep PostgreSQL's default, READ COMMITTED, at
+ * which each statement sees every commit made before it began, so the check
+ * sees every filing before it. A transaction at REPEATABLE READ or
+ * SERIALIZABLE reads from the snapshot its first statement took, which can be
+ * older than a filing committed since: there, a transaction begun before the
+ * call that checks looks again in a new one ({@code readsFromSnapshot}).
+ * Nothing in Healdan or CE asks for those levels, so that second look doesn't
+ * fire today; it stays for a caller that does. One the call began, such as
+ * the store's own inside the block, takes its snapshot after every filing
+ * before it.
  * <p>
  * What that leaves: a transaction of several stores commits after the block,
  * and a folder move or restore doesn't go through it at all. So CE's folder
@@ -323,6 +327,7 @@ public class OncePerMatter {
 		if (arriving.isEmpty())
 			return;
 		Optional<Document> copy = firstCopy(arriving, target.getId(), selves, actor);
+		// A second look in a new transaction, only for one that reads from an older snapshot: never at READ COMMITTED
 		if (copy.isEmpty() && readsFromSnapshot())
 			copy = inNewTransaction(() -> firstCopy(arriving, target.getId(), selves, actor));
 		if (copy.isPresent())
@@ -434,8 +439,9 @@ public class OncePerMatter {
 	 *         READ or SERIALIZABLE) that can be older than another filing's
 	 *         commit: one begun before the innermost transactional call, such as
 	 *         a folder copy's around each document's store. The store's own,
-	 *         begun inside {@code DocumentManager}'s block, took its snapshot
-	 *         after every filing before it.
+	 *         begun inside {@code DocumentManager}'s block, takes its snapshot
+	 *         after every filing before it. Always false at PostgreSQL's
+	 *         default, READ COMMITTED, which Healdan's connections keep.
 	 */
 	private boolean readsFromSnapshot() {
 		if (!TransactionSynchronizationManager.isActualTransactionActive() || begunByTheCall())
