@@ -214,6 +214,15 @@ jobs:
           DOTNET_CLI_TELEMETRY_OPTOUT: '1'
         run: bash docker/smoke-test.sh
 
+      # The move from MariaDB (PostgreSQL spec section 10.2): moves the frozen fixture in docker/tests/move-fixture
+      # with the move-from-mariadb command, and starts the app on the result, with the image the smoke test ran. On
+      # one architecture: the command is Java, and its fixture the same on both. It stays while the command does.
+      - name: Move test (amd64)
+        if: steps.changes.outputs.code == 'true' && matrix.arch == 'amd64'
+        env:
+          LOGICALDOC_IMAGE: logicaldoc-community:ci
+        run: bash docker/tests/test-move.sh
+
   publish:
     name: Publish (${{ matrix.arch }})
     needs: test
