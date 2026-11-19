@@ -49,19 +49,21 @@ public record JobView(String name, String label, Instant lastStart, Instant last
 	/**
 	 * Whether the job is overdue: its next run is more than twice its interval
 	 * past, and an hour at least. A disabled job never is, nor one with no next
-	 * run. The interval is the time from the run that set the next run to that
-	 * next run: for Healdan's jobs, from the end of their last run, as each
-	 * works out its next run once a run ends (its delay, or for a nightly job
-	 * the time to the next night); for CE's tasks, from their last start, as
-	 * CE's next fire time is the schedule's after it (the simple schedule's
-	 * interval, or the gap to the cron expression's next time). With neither,
-	 * as before the first run, the hour applies alone.
+	 * run, nor one running: while a run goes on, its next run is still the time
+	 * that run was due, however long it takes. The interval is the time from
+	 * the run that set the next run to that next run: for Healdan's jobs, from
+	 * the end of their last run, as each works out its next run once a run
+	 * ends (its delay, or for a nightly job the time to the next night); for
+	 * CE's tasks, from their last start, as CE's next fire time is the
+	 * schedule's after it (the simple schedule's interval, or the gap to the
+	 * cron expression's next time). With neither, as before the first run, the
+	 * hour applies alone.
 	 *
 	 * @param now the time to judge at
 	 * @return whether it is overdue
 	 */
 	public boolean overdue(Instant now) {
-		if (!enabled || nextRun == null)
+		if (!enabled || running || nextRun == null)
 			return false;
 		Instant from = logicalDocTask ? lastStart : lastEnd;
 		Duration interval = from != null && from.isBefore(nextRun) ? Duration.between(from, nextRun) : Duration.ZERO;

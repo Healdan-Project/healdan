@@ -214,10 +214,11 @@ public class ErrorStore {
 
 	/**
 	 * The faults last seen through any of some loggers at a time or since,
-	 * the latest first: a CE task's last errors (Admin app spec section 9.5), as CE keeps
-	 * a task's own last error with no getter. A fault is counted against the
-	 * logger it was first logged through, so one that two loggers log from the
-	 * same place, with the same exception and message, is the first one's.
+	 * the latest first: a CE task's last errors (Admin app spec section 9.5),
+	 * as CE keeps a task's own last error with no getter. A fault is counted
+	 * against the logger it was first logged through, which is its only one
+	 * when where it was logged is a class the logger isn't named for, as CE's
+	 * {@code Task.run} logs through each task's logger ({@link ErrorFingerprint}).
 	 *
 	 * @param loggers the loggers' names
 	 * @param since the earliest time a fault was last seen, to the millisecond

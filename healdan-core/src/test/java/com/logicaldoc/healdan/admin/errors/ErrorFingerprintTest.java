@@ -3,20 +3,24 @@
 
 package com.logicaldoc.healdan.admin.errors;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.security.MessageDigest;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.List;
 
 import org.junit.Test;
 
 /**
  * What makes two errors one fault (Admin app spec section 9.4): the exception's
- * class, where it was logged, and the message without its numbers and quoted
- * names; and the documents a message names.
+ * class, where it was logged, the message without its numbers and quoted
+ * names, and the logger when it isn't named for where it was logged; and the
+ * documents a message names.
  */
 public class ErrorFingerprintTest {
 
@@ -52,6 +56,45 @@ public class ErrorFingerprintTest {
 		assertNotEquals(ErrorFingerprint.of(new CapturedError(Instant.now(), "ERROR", "a.B", null, null, "It failed",
 				null)), ErrorFingerprint.of(new CapturedError(Instant.now(), "ERROR", "a.C", null, null, "It failed",
 						null)));
+	}
+
+	/**
+	 * A base class that logs through each subclass's logger, as CE's Task.run does for each task, gives a fault per
+	 * logger; a logger named for the class it logs from, or for one that class is nested in, keeps the recipe as it
+	 * was, so the faults recorded so far stay one each
+	 */
+	@Test
+	public void testTheLoggerCountsWhenItIsntNamedForWhereItLogged() throws Exception {
+		String base = "com.logicaldoc.core.task.Task:238";
+		String exception = IllegalStateException.class.getName();
+		String indexer = ErrorFingerprint.of(new CapturedError(Instant.now(), "ERROR",
+				"com.logicaldoc.core.searchengine.indexer.IndexerTask", base, exception, "Connection refused", null));
+		String tags = ErrorFingerprint.of(new CapturedError(Instant.now(), "ERROR",
+				"com.logicaldoc.core.document.TagsProcessor", base, exception, "Connection refused", null));
+		assertNotEquals(indexer, tags);
+		assertEquals(indexer, ErrorFingerprint.of(new CapturedError(Instant.EPOCH, "ERROR",
+				"com.logicaldoc.core.searchengine.indexer.IndexerTask", base, exception, "Connection refused", null)));
+		assertEquals(sha256(exception + "\n" + base + "\nConnection refused\ncom.logicaldoc.core.document.TagsProcessor"),
+				tags);
+
+		// Named for its own class, or the class it is nested in: the recipe as it was
+		String own = "com.logicaldoc.healdan.preview.PreviewWorker";
+		assertEquals(sha256("\n" + LOCATION + "\nIt failed"), of("It failed"));
+		assertEquals(sha256(exception + "\n" + own + "$Round:51\nIt failed"), ErrorFingerprint.of(new CapturedError(
+				Instant.now(), "ERROR", own, own + "$Round:51", exception, "It failed", null)));
+		// A logger whose name only starts the same is another
+		assertNotEquals(sha256("\n" + own + "Test:9\nIt failed"), ErrorFingerprint.of(
+				new CapturedError(Instant.now(), "ERROR", own, own + "Test:9", null, "It failed", null)));
+		// Without a location the logger stands for it, as before
+		assertEquals(sha256("\na.B\nIt failed"),
+				ErrorFingerprint.of(new CapturedError(Instant.now(), "ERROR", "a.B", null, null, "It failed", null)));
+		// The root logger, whose name is empty, adds nothing
+		assertEquals(sha256("\n" + LOCATION + "\nIt failed"), ErrorFingerprint
+				.of(new CapturedError(Instant.now(), "ERROR", "", LOCATION, null, "It failed", null)));
+	}
+
+	private static String sha256(String text) throws Exception {
+		return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(UTF_8)));
 	}
 
 	@Test

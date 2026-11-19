@@ -493,7 +493,9 @@ public class EmailIndexWorkerTest extends AbstractHealdanTestCase {
 		JobView failed = jobs.one(EmailIndexWorker.JOB);
 		assertEquals(JobView.FAILED, failed.result());
 		assertEquals(CannotGetJdbcConnectionException.class.getName(), failed.error());
-		// The loop tries again in 30 seconds
-		assertEquals(failed.lastEnd().plusSeconds(30).toEpochMilli(), failed.nextRun().toEpochMilli(), 50);
+		// The loop tries again in 30 seconds, worked out after the run began and before its end, which no pause on a
+		// busy machine changes
+		assertFalse(failed.nextRun().isBefore(failed.lastStart().plusSeconds(30)));
+		assertFalse(failed.nextRun().isAfter(failed.lastEnd().plusSeconds(30)));
 	}
 }
