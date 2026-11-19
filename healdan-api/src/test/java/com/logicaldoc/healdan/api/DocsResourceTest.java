@@ -22,6 +22,17 @@ public class DocsResourceTest extends ApiTestCase {
 		assertEquals(Contract.openApi(), response.text());
 	}
 
+	// The admin API's routes are in a file of their own, which isn't served (Admin app spec section 9.2)
+	@Test
+	public void testDescriptionFileHoldsNoAdminRoute() {
+		ApiResponse response = get("/api/v1/openapi.yaml").send();
+
+		assertEquals(200, response.status());
+		assertFalse(response.text().contains("/v1/admin"));
+		assertEquals(404, get("/api/v1/openapi-admin.yaml").send().status());
+		assertEquals(404, get("/api/docs/openapi-admin.yaml").send().status());
+	}
+
 	@Test
 	public void testDocsRedirectsToTheFolder() {
 		ApiResponse response = get("/api/docs").send();

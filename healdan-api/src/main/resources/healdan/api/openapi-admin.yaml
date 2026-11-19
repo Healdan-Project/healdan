@@ -1,0 +1,110 @@
+openapi: 3.1.0
+info:
+  title: Healdan Admin API
+  version: v1
+  summary: The JSON API of Healdan's Admin app, for administrators only.
+  description: |
+    The routes under `/api/v1/admin`, which the Admin app calls. This file is
+    their source of truth, as `openapi.yaml` is for the rest of the API, which
+    doesn't list them: the server implements it, and the tests check every
+    response under `/api/v1/admin/` against it.
+
+    - Only the browser's web session signs in here (`cookieAuth`). A device
+      token is `403 web-session-only`, so a stolen token can't administer
+      anything. No session is `401 unauthenticated`.
+    - Only members of the `admin` group get in. Anyone else is
+      `403 admins-only`, asked again at every request, so someone taken out of
+      `admin` is refused at their next one.
+    - Field names, timestamps, problems and lists are as `openapi.yaml`
+      describes them. `$ref` doesn't reach across the two files, so this one
+      repeats `Page`, `FieldError` and the `Problem` response unchanged, and
+      `Problem` with only the members the admin API answers with.
+servers:
+  - url: /api
+security:
+  - cookieAuth: []
+paths: {}
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+      description: |
+        The browser's web session, for the Admin app, served from the same
+        origin, on the rules `openapi.yaml`'s `cookieAuth` describes. A device
+        token, sent as a Bearer `Authorization` header, is
+        `403 web-session-only` here.
+  responses:
+    Problem:
+      description: A refusal or an error
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      description: |
+        An RFC 9457 problem, as in `openapi.yaml`, with the codes the admin
+        API answers. `validation` adds `fields`.
+      required: [type, title, status, detail, code]
+      properties:
+        type:
+          type: string
+          description: '`https://healdan.com/problems/<code>`; it needn''t resolve.'
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+          description: An English sentence a client can show as it is.
+        code:
+          type: string
+          description: What clients switch on.
+          examples: [web-session-only, admins-only, not-found, refused, validation]
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code, detail]
+      properties:
+        field:
+          type: string
+          description: |
+            The field that is wrong: a property's name, or a request's member.
+            One element of a list is named with its position or index, as
+            `fileEmail` names a ticked attachment `attachments[2]`.
+          examples: [docclass, 'attachments[2]']
+        code:
+          type: string
+          examples: [required, not-an-email, not-an-attachment]
+        detail:
+          type: string
+          examples: [Class is required.]
+    Page:
+      type: object
+      description: |
+        The shape of every list. A list of things is
+        `allOf: [{$ref: Page}, {properties: {items: {type: array, items: {$ref: Thing}}}}]`
+        with `unevaluatedProperties: false`, as `TokenPage` is.
+      required: [items, offset, limit, total]
+      properties:
+        items:
+          type: array
+        offset:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 0
+        total:
+          type: [integer, 'null']
+          minimum: 0
+          description: Null where counting would be expensive, such as a full-text search.

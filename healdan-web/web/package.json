@@ -7,7 +7,7 @@
     "apps/*"
   ],
   "scripts": {
-    "generate": "openapi-typescript ../../healdan-api/src/main/resources/healdan/api/openapi.yaml -o packages/api/src/schema.d.ts",
+    "generate": "openapi-typescript ../../healdan-api/src/main/resources/healdan/api/openapi.yaml -o packages/api/src/schema.d.ts && openapi-typescript ../../healdan-api/src/main/resources/healdan/api/openapi-admin.yaml -o packages/api/src/admin-schema.d.ts",
     "typecheck": "tsc -p . && tsc -p apps/user && tsc -p apps/admin",
     "lint": "eslint .",
     "test": "vitest run && node --test 'scripts/*.test.mjs'",
