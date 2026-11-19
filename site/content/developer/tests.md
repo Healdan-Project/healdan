@@ -57,11 +57,27 @@ docker/tests/test-db.sh stop    # removes the container
   300 connections, as nothing on it has to outlast the container. A run that was killed leaves its databases behind;
   `stop` clears them with the rest. It removes the server for every run using it, so don't stop it while another
   run's tests may still be going.
-- **Each test makes a database of its own** (`TestDatabase`, in `healdan-core`'s test-jar), from `template0`, in
-  UTF-8 with PostgreSQL's built-in `C.UTF-8` locale, the encoding and locale Healdan uses on PostgreSQL, whatever
-  the server's own default. So the tests sort and compare text as Healdan does there. Each name carries a number
-  unique to the JVM that made it, so `healdan-core`'s, `healdan-api`'s and `healdan-storage`'s tests can run at once
-  against one server.
+- **Its password is hashed with one SCRAM iteration,** where PostgreSQL's default is 4,096 (`-c scram_iterations=1`
+  to `initdb`, which hashes it). Each test opens about 40 connections, most of them LogicalDOC's, which reads each
+  setting of its context on a connection of its own, and the hashing was most of what a connection cost. The
+  password is checked as before.
+- **Each test has a database of its own** (`TestDatabase`, in `healdan-core`'s test-jar), in UTF-8 with PostgreSQL's
+  built-in `C.UTF-8` locale, the encoding and locale Healdan uses on PostgreSQL, whatever the server's own default.
+  So the tests sort and compare text as Healdan does there. Each name carries a number unique to the JVM that made
+  it, so `healdan-core`'s, `healdan-api`'s and `healdan-storage`'s tests can run at once against one server.
+- **It's a copy of a template.** The first test in a JVM to need a given list of scripts makes the template: an
+  empty database from `template0`, LogicalDOC's scripts loaded into it, then Healdan's migrations. Every test's
+  database is a copy of it (`create database … template`), which takes about 20 ms where loading the scripts and
+  migrating took about 130. The JVM drops its templates as it ends; one that was killed leaves them for `stop`.
+  - **A row the scripts or the migrations insert carries the template's time,** not the test's.
+  - **The setup steps still run in every test,** in the test's own context, so a test sees what they made as it
+    did before.
+- **The template's tables are parked,** in a schema of their own, `healdan_parked`, which no unqualified name
+  reaches, beside an empty `public`. LogicalDOC's context has to start with none of its tables in sight, as it did
+  when every test began on an empty database: Healdan then finds no LogicalDOC schema as it starts, so it runs no
+  setup step before the base class has emptied the store, and starts no worker. Once the context is up, the base
+  class drops the empty `public` and renames the parked schema to it (`TestDatabase.unpark`), which fails if
+  anything was made in `public` meanwhile. `TestDatabaseTest` pins both.
 - **Three environment variables** say where the server is, and their defaults reach the one `start` runs:
 
   | Variable | Default | What it is |
