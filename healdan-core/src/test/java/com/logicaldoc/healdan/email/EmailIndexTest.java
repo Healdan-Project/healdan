@@ -122,6 +122,35 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 		return jdbc.queryForObject("select count(*) from hd_email", Integer.class);
 	}
 
+	/**
+	 * The race of the recon's section 4.2: the put's read finds no row, another session inserts one and commits, and
+	 * the put that follows meets it. The transaction goes on, and the row ends with this put's Message-ID.
+	 */
+	@Test
+	public void testPutMeetsAnotherSessionsRow() throws Exception {
+		DataSource dataSource = Context.get(DataSource.class);
+		jdbc.update("insert into hd_setting (name, value) values ('email.race', 'before')");
+
+		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+			assertNull(EmailIndex.get().messageIdOf(4242));
+			try (Connection other = dataSource.getConnection(); java.sql.Statement statement = other.createStatement()) {
+				other.setAutoCommit(true);
+				statement.executeUpdate("insert into hd_email (hd_docid, hd_messageid, hd_messageidhash) values "
+						+ "(4242, 'theirs@example.com', '" + MessageIds.hash("theirs@example.com") + "')");
+			} catch (java.sql.SQLException e) {
+				throw new IllegalStateException(e);
+			}
+			EmailIndex.get().put(4242, "mine@example.com");
+			jdbc.update("update hd_setting set value = 'after' where name = 'email.race'");
+		});
+
+		assertEquals("mine@example.com", EmailIndex.get().messageIdOf(4242));
+		assertEquals(1, jdbc.queryForObject("select count(*) from hd_email where hd_docid = 4242", Integer.class)
+				.intValue());
+		assertEquals("after",
+				jdbc.queryForObject("select value from hd_setting where name = 'email.race'", String.class));
+	}
+
 	@Test
 	public void testANewEmailIsIndexed() throws Exception {
 		Document doc = file("healdan-cc.eml", "upload.eml");

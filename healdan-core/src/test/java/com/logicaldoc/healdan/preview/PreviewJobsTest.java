@@ -6,6 +6,8 @@ package com.logicaldoc.healdan.preview;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.sql.Connection;
+import java.sql.Statement;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -53,6 +55,36 @@ public class PreviewJobsTest extends AbstractHealdanTestCase {
 		assertEquals(0, jobs.find(7, "1.0").orElseThrow().attempts());
 		assertEquals("after",
 				jdbc.queryForObject("select value from hd_setting where name = 'preview.test'", String.class));
+	}
+
+	/**
+	 * The race of the recon's section 4.2: the requeue's update finds no row, another session inserts the job and
+	 * commits, and the add that follows meets it. The transaction goes on and the job is there once.
+	 */
+	@Test
+	public void testAnAddThatMeetsAnotherSessionsInsert() {
+		DataSource dataSource = Context.get(DataSource.class);
+		JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+		jdbc.update("insert into hd_setting (name, value) values ('preview.race', 'before')");
+		PreviewJobs jobs = PreviewJobs.get();
+
+		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+			assertEquals(0, jdbc.update("update hd_preview_job set hd_attempts = 0 where hd_docid = 7 and hd_fileversion = '1.0'"));
+			try (Connection other = dataSource.getConnection(); Statement statement = other.createStatement()) {
+				other.setAutoCommit(true);
+				statement.executeUpdate("insert into hd_preview_job (hd_docid, hd_fileversion, hd_attempts, hd_nexttry, "
+						+ "hd_created) values (7, '1.0', 0, now(), now())");
+			} catch (java.sql.SQLException e) {
+				throw new IllegalStateException(e);
+			}
+			jobs.add(7, "1.0", T);
+			jdbc.update("update hd_setting set value = 'after' where name = 'preview.race'");
+		});
+
+		assertEquals(1, jdbc.queryForObject("select count(*) from hd_preview_job where hd_docid = 7", Integer.class)
+				.intValue());
+		assertEquals("after",
+				jdbc.queryForObject("select value from hd_setting where name = 'preview.race'", String.class));
 	}
 
 	@Test

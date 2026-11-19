@@ -21,7 +21,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 
-import com.logicaldoc.healdan.util.Savepoints;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -30,8 +29,7 @@ import com.logicaldoc.util.spring.Context;
  * <p>
  * Every per-file write ({@link #recordWrite}, {@link #moved}, {@link #delete}) is called holding the file's lock. The
  * lock ends before the caller's transaction commits, so another transaction may insert a row that {@code recordWrite}
- * read as missing; its insert then runs in a savepoint ({@link Savepoints}) and becomes an update, which PostgreSQL
- * forgives inside a transaction.
+ * read as missing; its insert then does nothing, on conflict, and becomes an update.
  */
 @Component
 public class StoredFiles {
@@ -138,10 +136,10 @@ public class StoredFiles {
 		// Only a delete that didn't take the file's lock could have taken a row that was read
 		if (rowExists && update(docId, resource, backendId, storeId, size, write, now, inPlace))
 			return write;
-		if (!Savepoints.insertIfAbsent(jdbc,
-				"insert into hd_storage_file (hd_docid, hd_resource, hd_backendid, hd_storeid, hd_size, "
-						+ "hd_write, hd_stored, hd_waiting, hd_attempts, hd_stuck) values (?, ?, ?, ?, ?, ?, ?, ?, 0, 0)",
-				docId, resource, backendId, storeId, size, write, now, inPlace ? null : now))
+		if (jdbc.update("insert into hd_storage_file (hd_docid, hd_resource, hd_backendid, hd_storeid, hd_size, "
+				+ "hd_write, hd_stored, hd_waiting, hd_attempts, hd_stuck) values (?, ?, ?, ?, ?, ?, ?, ?, 0, 0) "
+				+ "on conflict do nothing", docId, resource, backendId, storeId, size, write, now,
+				inPlace ? null : now) == 0)
 			update(docId, resource, backendId, storeId, size, write, now, inPlace);
 		return write;
 	}

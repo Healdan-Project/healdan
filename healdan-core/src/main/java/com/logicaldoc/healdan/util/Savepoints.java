@@ -11,7 +11,6 @@ import java.util.function.Supplier;
 import javax.sql.DataSource;
 
 import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.UncategorizedSQLException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceUtils;
@@ -21,9 +20,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * Statements that may fail inside a caller's transaction, run so that the transaction survives them (spec section
  * 7.3). On PostgreSQL a statement that fails aborts the whole transaction, whatever Java then catches, where MariaDB
  * fails only the statement. So work that may fail without failing its caller runs inside a savepoint, which a failure
- * rolls back to: an insert that may meet a row another transaction added since the caller's read, and a listener that
- * logs and swallows a failure inside CE's save, so that the save is kept. Outside a transaction a statement commits on
- * its own, and the work runs as it is.
+ * rolls back to: a hold's statements, and a listener that logs and swallows a failure inside CE's save, so that the
+ * save is kept. An insert that may meet a row another transaction added since the caller's read isn't one: it says
+ * {@code on conflict}, so that it fails nowhere, and PostgreSQL's log has no error for it. Outside a transaction a
+ * statement commits on its own, and the work runs as it is.
  */
 public final class Savepoints {
 
@@ -125,22 +125,5 @@ public final class Savepoints {
 	/** @return whether the connection is the caller's transaction's, and doesn't commit each statement */
 	private static boolean transactional(Connection connection, DataSource dataSource) throws SQLException {
 		return DataSourceUtils.isConnectionTransactional(connection, dataSource) && !connection.getAutoCommit();
-	}
-
-	/**
-	 * Inserts a row unless its key is taken, as by another transaction since the caller's read.
-	 *
-	 * @param jdbc the template to insert with
-	 * @param sql the insert
-	 * @param arguments its arguments
-	 * @return true if the row was inserted, false if one with its key was there
-	 */
-	public static boolean insertIfAbsent(JdbcTemplate jdbc, String sql, Object... arguments) {
-		try {
-			run(jdbc, () -> jdbc.update(sql, arguments));
-			return true;
-		} catch (DuplicateKeyException e) {
-			return false;
-		}
 	}
 }

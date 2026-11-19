@@ -68,10 +68,10 @@ public class HeldCopies {
 			Long holds = jdbc.queryForObject(
 					"select count(*) from hd_storage_held where hd_backendid = ? and hd_location = ?", Long.class,
 					backendId, location);
-			if ((holds != null && holds > 0) || !Savepoints.insertIfAbsent(jdbc,
+			if ((holds != null && holds > 0) || jdbc.update(
 					"insert into hd_storage_held (hd_backendid, hd_location, hd_docid, hd_resource, hd_held, "
-							+ "hd_purge) values (?, ?, ?, ?, ?, ?)",
-					backendId, location, docId, resource, now, purge))
+							+ "hd_purge) values (?, ?, ?, ?, ?, ?) on conflict do nothing",
+					backendId, location, docId, resource, now, purge) == 0)
 				jdbc.update("update hd_storage_held set hd_docid = ?, hd_resource = ?, hd_held = ?, hd_purge = ? "
 						+ "where hd_backendid = ? and hd_location = ?", docId, resource, now, purge, backendId,
 						location);
