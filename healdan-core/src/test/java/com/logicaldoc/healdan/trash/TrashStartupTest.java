@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.trash;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assume.assumeNotNull;
 
@@ -21,9 +22,17 @@ import java.util.TimeZone;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import javax.sql.DataSource;
+
 import org.junit.Test;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
+import com.logicaldoc.healdan.admin.jobs.JobView;
+import com.logicaldoc.healdan.admin.jobs.Jobs;
+import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.util.CacheEvictor;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * The nightly job runs at 02:47 server time, and never in the first 10
@@ -156,5 +165,54 @@ public class TrashStartupTest extends AbstractHealdanTestCase {
 				assertFalse(removed + " " + days,
 						removedAt.isBefore(TrashDestroyer.cutoff(night.minusDays(1).toInstant(), days)));
 			}
+	}
+
+	/**
+	 * Each night's run reports to the background jobs' status (Admin app spec section 9.5), with the next night as
+	 * its next run; one that fails gives its exception's class alone, as the job logs it, since a message can name a
+	 * folder or a file
+	 */
+	@Test
+	public void testTheNightlyRunReportsToTheJobList() {
+		Jobs jobs = Context.get(Jobs.class);
+		ZonedDateTime next = TrashStartup.nightlyAfter(ZonedDateTime.now().plusDays(1));
+		TrashDestroyer failing = new TrashDestroyer(TrashStore.get(), Context.get(DataSource.class),
+				Context.get(PlatformTransactionManager.class), HealdanSettings.get(), CacheEvictor.get()) {
+			@Override
+			public int runOnce(Instant now) {
+				throw new IllegalStateException("Trash item 12, folder 'Smith v Jones', can't be read");
+			}
+		};
+		Instant before = Instant.now();
+		new TrashStartup(failing).runNightly(next);
+
+		JobView failed = jobs.one(TrashStartup.JOB);
+		assertEquals(JobView.FAILED, failed.result());
+		assertEquals("IllegalStateException", failed.error());
+		assertEquals(next.toInstant(), failed.nextRun());
+		assertFalse(failed.lastStart().isBefore(before));
+		assertFalse(failed.running());
+
+		new TrashStartup(TrashDestroyer.get()).runNightly(next);
+		JobView succeeded = jobs.one(TrashStartup.JOB);
+		assertEquals(JobView.SUCCEEDED, succeeded.result());
+		assertNull(succeeded.error());
+		assertEquals(next.toInstant(), succeeded.nextRun());
+	}
+
+	/** The first night is known as soon as it is scheduled, before the job has run */
+	@Test
+	public void testTheFirstNightIsKnownAtTheStart() throws Exception {
+		TrashStartup startup = new TrashStartup(TrashDestroyer.get());
+		startup.afterStart = Duration.ofDays(2);
+		CompletableFuture<ZonedDateTime> first = new CompletableFuture<>();
+		startup.nightlyScheduled = first::complete;
+		try {
+			startup.started();
+			assertEquals(first.get(20, TimeUnit.SECONDS).toInstant(),
+					Context.get(Jobs.class).one(TrashStartup.JOB).nextRun());
+		} finally {
+			startup.stop();
+		}
 	}
 }

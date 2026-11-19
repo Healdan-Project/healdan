@@ -39,6 +39,8 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
+import com.logicaldoc.healdan.admin.jobs.JobView;
+import com.logicaldoc.healdan.admin.jobs.Jobs;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
@@ -498,5 +500,52 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 		assertEquals(0, job.attempts());
 		assertEquals(null, job.lastError());
 		assertFalse(Store.get().exists(pdfOf(a, "1.0")));
+	}
+
+	/** Each round reports to the background jobs' status (Admin app spec section 9.5), as the loop's do */
+	@Test
+	public void testARoundReportsToTheJobList() throws Exception {
+		Jobs jobs = Context.get(Jobs.class);
+		Instant before = Instant.now();
+		assertEquals(0, worker.runOnce(T));
+
+		JobView idle = jobs.one(PreviewWorker.JOB);
+		assertFalse(idle.lastStart().isBefore(before));
+		assertFalse(idle.lastEnd().isBefore(idle.lastStart()));
+		assertEquals(JobView.SUCCEEDED, idle.result());
+		assertFalse(idle.running());
+		// Nothing was due, so the loop sleeps 5 seconds
+		assertEquals(idle.lastEnd().plusSeconds(5).toEpochMilli(), idle.nextRun().toEpochMilli(), 50);
+
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		assertEquals(1, worker.runOnce(T));
+		JobView worked = jobs.one(PreviewWorker.JOB);
+		// A round that worked is followed at once
+		assertEquals(worked.lastEnd().toEpochMilli(), worked.nextRun().toEpochMilli(), 50);
+		assertTrue(Store.get().exists(pdfOf(a, "1.0")));
+
+		PreviewJobs unreadable = new PreviewJobs(Context.get(DataSource.class)) {
+			@Override
+			public List<PreviewJob> due(Instant now, int limit) {
+				throw new IllegalStateException("The queue can't be read");
+			}
+		};
+		PreviewWorker failing = new PreviewWorker() {
+			@Override
+			PreviewJobs jobs() {
+				return unreadable;
+			}
+		};
+		try {
+			failing.runOnce(T);
+			org.junit.Assert.fail("the round's failure goes on to the loop, which logs it");
+		} catch (IllegalStateException expected) {
+			// As before
+		}
+		JobView failed = jobs.one(PreviewWorker.JOB);
+		assertEquals(JobView.FAILED, failed.result());
+		assertEquals("IllegalStateException: The queue can't be read", failed.error());
+		assertFalse(failed.running());
+		assertEquals(failed.lastEnd().plusSeconds(5).toEpochMilli(), failed.nextRun().toEpochMilli(), 50);
 	}
 }
