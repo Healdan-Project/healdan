@@ -753,7 +753,9 @@ Every test in a `healdan-*` module runs on PostgreSQL, and none on HSQLDB.
 - **The base class** is the trial's, made permanent: `AbstractHealdanTestCase` makes a database for each test on a
   PostgreSQL server named by the environment, with a default on the local machine; hands upstream's `AbstractTestCase`
   no scripts; loads CE's core script and the test data itself; points the test's configuration at the database; and
-  drops it afterwards. No upstream file is edited. A server it can't reach fails the test at once, with a message
+  drops it afterwards (changed after PR A: the scripts and the migrations are loaded once in a JVM, into a template
+  each test's database is a copy of, its tables parked out of the context's sight until it has started; the Developer
+  Guide's Tests page has it). No upstream file is edited. A server it can't reach fails the test at once, with a message
   that says how to start one.
 - **Each test's database has the locale of §6.2,** whatever the server's default is, so the tests sort and compare as
   a real install does.
@@ -770,7 +772,11 @@ Every test in a `healdan-*` module runs on PostgreSQL, and none on HSQLDB.
   database of its own. It runs with the settings the local server has, `fsync`, `synchronous_commit` and
   `full_page_writes` off, 300 connections and its data on a tmpfs (changed in the build: this didn't say, and the
   plan's service had PostgreSQL's defaults; every test makes a database and loads CE's schema statement by statement,
-  and the settings are there so that CI's time to green doesn't grow, as §2.4 requires; plan, Decision Log 4).
+  and the settings are there so that CI's time to green doesn't grow, as §2.4 requires; plan, Decision Log 4). The
+  user's password is hashed with one SCRAM iteration (changed after PR A: every test opens about 40 connections, and
+  PostgreSQL's 4,096 iterations were most of what one cost; the plan's Expected Costs has what PR A measured).
+  The service publishes no port, and the tests reach it at its container's own address (changed after PR A too: a
+  connection to a published port goes through Docker's proxy, which doubled a statement's round trip on a runner).
   `test-shards.py` and the timing cache are unchanged.
 - **Locally,** a PostgreSQL in Docker, started by one command that `CLAUDE.md` and the Developer Guide's Tests page
   give.

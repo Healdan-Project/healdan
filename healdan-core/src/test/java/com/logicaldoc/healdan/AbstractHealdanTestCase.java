@@ -31,6 +31,10 @@ import com.logicaldoc.util.spring.Context;
  * {@link TestDatabase}'s server, with CE's schema and test data, Healdan's
  * migrations and seeds; an empty store; and the logicaldoc-core and
  * healdan-core plugins registered. The database is dropped after the test.
+ * <p>
+ * CE's schema, the test data and the migrations come from a template the JVM
+ * makes once for each list of scripts, so a row they insert carries the
+ * template's time, not the test's. The seeds run in every test.
  */
 public abstract class AbstractHealdanTestCase extends AbstractTestCase {
 
@@ -124,19 +128,22 @@ public abstract class AbstractHealdanTestCase extends AbstractTestCase {
 
 	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
-		// Before the context, which getConfigResource() points at it
-		database = TestDatabase.create();
+		// Before the context, which getConfigResource() points at it. The database holds CE's schema and Healdan's
+		// tables already, parked out of sight: the context has to start as on an empty database, where
+		// HealdanStartup finds no CE schema, so it runs no seed before the store is emptied and starts no worker
+		database = TestDatabase.createParked(databaseScripts());
 		super.setUp();
 		assertBooleansBindAsIntegers();
 		try (Connection connection = getConnection()) {
-			TestDatabase.load(connection, databaseScripts());
+			TestDatabase.unpark(connection);
 		}
 		// Ids restart with each test's database, while the store under target/ stays between tests and classes: a
 		// file an earlier one left, such as a PDF conversion, would be taken for one of this test's documents
 		File store = new File(Context.get().getConfig().getProperty("store.1.dir"));
 		if (store.isDirectory())
 			FileUtils.cleanDirectory(store);
-		// The context was built before the CE schema existed, so this is the run that migrates
+		// The context was built before the CE schema was in sight, so this is the run that seeds. The template has
+		// the migrations, of which it finds none to apply
 		Context.get(HealdanStartup.class).run();
 	}
 

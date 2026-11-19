@@ -169,9 +169,13 @@ jobs:
     if: needs.checks.outputs.code == 'true'
     runs-on: ubuntu-latest
     # The PostgreSQL Healdan's tests run on, as docker/tests/test-db.sh runs one locally: each test makes a database of
-    # its own on it (TestDatabase), whose defaults reach it at localhost:5432. Every test makes a database and loads CE's
-    # schema, so it runs as the local one does: on a tmpfs, without fsync, with 300 connections (initdb writes each -c
-    # into postgresql.conf).
+    # its own on it (TestDatabase). Every test makes a database, opens some 40 connections and sends some 1,800
+    # statements, so it runs as the local one does: on a tmpfs, without fsync, with 300 connections, and with the user's
+    # password hashed with one SCRAM iteration, as the hashing was most of what a connection cost (initdb writes each -c
+    # into postgresql.conf, and hashes the password itself).
+    # It publishes no port. The tests reach it at its container's own address, which the step "PostgreSQL's address"
+    # gives them: a connection to a published port goes through Docker's proxy, which doubled a statement's round trip
+    # on a runner (46 microseconds without it, 89 with).
     services:
       postgres:
         image: postgres:18
@@ -180,9 +184,7 @@ jobs:
           POSTGRES_PASSWORD: healdan-test
           POSTGRES_INITDB_ARGS: >-
             --encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C
-            -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=300
-        ports:
-          - 5432:5432
+            -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=300 -c scram_iterations=1
         options: >-
           --tmpfs /var/lib/postgresql
           --health-cmd "pg_isready -h 127.0.0.1 -U healdan" --health-interval 5s --health-timeout 5s --health-retries 20
@@ -198,6 +200,22 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+
+      # Where the tests find PostgreSQL: its container's address on the job's Docker network, which the runner routes
+      # to, in place of TestDatabase's default, localhost (see the service's comment).
+      - name: PostgreSQL's address
+        env:
+          CONTAINER: ${{ job.services.postgres.id }}
+        # Each network's address on a line of its own, and the first: the service is on the job's network alone, but
+        # two addresses run together would make one that isn't
+        run: |
+          address=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{println .IPAddress}}{{end}}' "$CONTAINER" | grep -m 1 . || true)
+          if [ -z "$address" ]; then
+            echo "::error::The PostgreSQL service container has no address."
+            exit 1
+          fi
+          echo "HEALDAN_TEST_DB_URL=jdbc:postgresql://$address:5432/" >> "$GITHUB_ENV"
+          echo "PostgreSQL is at $address."
 
       - name: Set up JDK
         uses: actions/setup-java@v5
