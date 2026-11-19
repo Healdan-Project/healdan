@@ -263,6 +263,9 @@ public class DashboardService {
 	/** How folders are measured; tests give their own */
 	volatile Disks disks = DashboardService::measure;
 
+	/** The longest a request waits for sources with no answer it can give, {@link #WAIT}; tests shorten it */
+	volatile Duration longestWait = WAIT;
+
 	private final JdbcTemplate jdbc;
 
 	private final ErrorStore errors;
@@ -351,7 +354,7 @@ public class DashboardService {
 		CompletableFuture<Outcome<List<Provider>>> signInAsked = signIn.outcome();
 		CompletableFuture<Outcome<Mail>> mailAsked = mail.outcome();
 
-		long deadline = System.nanoTime() + WAIT.toNanos();
+		long deadline = System.nanoTime() + longestWait.toNanos();
 		Outcome<Storage> storageNow = await(storageAsked, deadline);
 		Outcome<IndexCounts.Counts> indexNow = await(indexAsked, deadline);
 		Outcome<Previews> previewsNow = await(previewsAsked, deadline);
