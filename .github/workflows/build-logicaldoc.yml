@@ -200,22 +200,6 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      # EXPERIMENT, not for merging: the odd shards reach PostgreSQL at its container's own address, the even ones at
-      # localhost, through Docker's proxy for the published port. One run then shows what the proxy costs a test.
-      - name: PostgreSQL's address (experiment)
-        env:
-          SHARD: ${{ matrix.shard }}
-          CONTAINER: ${{ job.services.postgres.id }}
-        run: |
-          if [ $((SHARD % 2)) -eq 1 ]; then
-            address=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$CONTAINER")
-            test -n "$address"
-            echo "HEALDAN_TEST_DB_URL=jdbc:postgresql://$address:5432/" >> "$GITHUB_ENV"
-            echo "PostgreSQL at its container's address, $address"
-          else
-            echo "PostgreSQL at localhost, through the published port"
-          fi
-
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
