@@ -15,14 +15,16 @@ services:
       POSTGRES_DB: postgres
       # The built-in provider's C.UTF-8: code-point order, Unicode lower(), LIKE prefixes on their index, and no
       # change with the image's operating system. --locale=C goes with it, or datcollate reads en_US.utf8.
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C --auth-host=scram-sha-256 --auth-local=trust"
       HEALDAN_DB_NAME: ${DB_NAME:-logicaldoc}
       HEALDAN_DB_USER: ${DB_USER:-logicaldoc}
       HEALDAN_DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       TZ: ${TZ:-UTC}
     healthcheck:
-      # Over TCP: the image's first start runs a temporary server on its socket only
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$HEALDAN_DB_USER\" -d \"$$HEALDAN_DB_NAME\""]
+      # Over TCP first: the image's first start runs a temporary server on its socket only, which a check on the
+      # socket would take for the real one. Then the app's role must be able to use its database (over the socket,
+      # which needs no password), as a refused first start leaves a data folder the image never initialises again.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$HEALDAN_DB_USER\" -d \"$$HEALDAN_DB_NAME\" && psql -U \"$$HEALDAN_DB_USER\" -d \"$$HEALDAN_DB_NAME\" -Atc 'select 1' >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 30
