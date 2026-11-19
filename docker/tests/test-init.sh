@@ -60,6 +60,22 @@ db_script() {
 }
 # tables <database>: how many tables the database's public schema holds
 tables() { db_admin "select count(*) from pg_tables where schemaname = 'public'" "$1"; }
+# table_names <database>: the names of the tables in its public schema, a line each
+table_names() { db_admin "select tablename from pg_tables where schemaname = 'public' order by tablename" "$1"; }
+# role_settings <database> [role]: how many settings, such as lock_timeout, the role (the app's) has in the database
+role_settings() {
+  db_admin "select count(*) from pg_db_role_setting s join pg_roles r on r.oid = s.setrole
+    join pg_database d on d.oid = s.setdatabase where r.rolname = '${2:-logicaldoc}' and d.datname = '$1'" postgres
+}
+# untouched <the table names before>: the app's database holds the same tables as before, and no setting for the app's
+# role, which section 8 takes away first: a start that wrote nothing in it
+untouched() {
+  local now settings
+  now=$(table_names logicaldoc) && settings=$(role_settings logicaldoc) || { echo "  can't read the database"; return 1; }
+  [ -n "$1" ] && [ "$now" = "$1" ] && [ "$settings" = 0 ] && return 0
+  echo "  tables the same: $([ -n "$1" ] && [ "$now" = "$1" ] && echo yes || echo no); the role's settings: $settings"
+  return 1
+}
 
 # As compose.yaml's db service: the built-in C.UTF-8 locale, passwords over TCP, the trusted socket, and the role
 # script, which makes the app's role and its database
@@ -235,13 +251,17 @@ out=$(init -e DB_NAME=nocreate -e DB_USER=nocreate -e DB_PASSWORD=nocreate-pw 2>
 check "exits 1" test "$rc" = 1
 check "names the role and the schema" grep -qF "the role 'nocreate' can't create tables in the schema 'public', as Healdan has to" <<<"$out"
 check "creates no table" test "$(tables nocreate)" = 0
-check "sets no lock_timeout for it" test "$(db_admin "select count(*) from pg_db_role_setting s join pg_roles r on r.oid = s.setrole where r.rolname = 'nocreate'" postgres)" = 0
+check "sets no lock_timeout for it" test "$(role_settings nocreate nocreate)" = 0
 
 # The guard against starting an install empty (PostgreSQL spec §8.3), against the app's database and conf volume:
-# each refusal comes before the start writes anything, to the conf volume or to the database
+# each refusal comes before the start writes anything, to the conf volume or to the database. The app's role loses its
+# lock_timeout in the app's database first, which every start that gets past the guard sets again, so a refused start
+# that wrote to the database would show.
 GUARD_MOVE_PAGE=https://docs.healdan.com/install/moving-from-mariadb/
 echo "== 8. a conf volume that names MariaDB, with PostgreSQL not answering: move first"
 name_mariadb
+db_admin "alter role logicaldoc in database logicaldoc reset lock_timeout" postgres
+check "the app's role has no setting in its database" test "$(role_settings logicaldoc)" = 0
 before=$(conf_sha)
 start=$SECONDS
 out=$(init -e DB_HOST=ldtest-nowhere -e DB_WAIT_SECONDS=120 2>&1) && rc=0 || rc=$?
@@ -251,18 +271,22 @@ check "waits 15 seconds for an answer, not DB_WAIT_SECONDS" test $((SECONDS - st
 check "leaves the conf volume as it was" conf_unchanged "$before"
 
 echo "== 8b. a conf volume that names MariaDB, with PostgreSQL answering and holding no move: move first"
+tables_before=$(table_names logicaldoc)
 out=$(init 2>&1) && rc=0 || rc=$?
 check "exits 1" test "$rc" = 1
 check "says to move first" grep -qF "names MariaDB as its database, so its data is in MariaDB" <<<"$out"
 check "leaves the conf volume as it was" conf_unchanged "$before"
+check "and the database: the same tables, and no setting for the role" untouched "$tables_before"
 
 echo "== 8c. a move that didn't finish: run it again"
 db_sql "create table docker_move (started timestamp not null, finished timestamp)"
 db_sql "insert into docker_move (started) values (current_timestamp)"
+tables_before=$(table_names logicaldoc)
 out=$(init 2>&1) && rc=0 || rc=$?
 check "exits 1, with the conf naming MariaDB" test "$rc" = 1
 check "says to run the move again" grep -qF "the database holds a move from MariaDB that didn't finish: it failed, or was stopped part-way. Healdan won't start on it, so this start stopped and changed nothing. Run the move-from-mariadb command again, which starts the move over, as Moving from MariaDB to PostgreSQL describes: $GUARD_MOVE_PAGE" <<<"$out"
 check "leaves the conf volume as it was" conf_unchanged "$before"
+check "and the database: the same tables, and no setting for the role" untouched "$tables_before"
 
 echo "== 8d. a finished move: the start goes on, and puts the conf volume's database keys right"
 db_sql "update docker_move set finished = current_timestamp"
@@ -274,14 +298,18 @@ check "the conf names PostgreSQL's driver again" test "$(conf_key jdbc.driver)" 
 check "and PostgreSQL as its dbms" test "$(conf_key jdbc.dbms)" = postgresql
 check "and the URL of the PostgreSQL it started on" \
   test "$(conf_key jdbc.url)" = "jdbc:postgresql://$DB:5432/logicaldoc?logServerErrorDetail=false"
+check "gives the app's role its lock_timeout in its database again" test "$(db_sql 'show lock_timeout')" = 50s
 
 echo "== 8e. a conf volume that names PostgreSQL, with an unfinished move: run it again"
 db_sql "update docker_move set finished = null"
+db_admin "alter role logicaldoc in database logicaldoc reset lock_timeout" postgres
 before=$(conf_sha)
+tables_before=$(table_names logicaldoc)
 out=$(init 2>&1) && rc=0 || rc=$?
 check "exits 1" test "$rc" = 1
 check "says to run the move again" grep -qF "the database holds a move from MariaDB that didn't finish" <<<"$out"
 check "leaves the conf volume as it was" conf_unchanged "$before"
+check "and the database: the same tables, and no setting for the role" untouched "$tables_before"
 db_sql "drop table docker_move"
 
 echo "== 8f. an empty database beside a repository that holds an install's files: restore first"
@@ -293,6 +321,7 @@ check "exits 1" test "$rc" = 1
 check "says to restore the database first, and where that's described" grep -qF "the database is empty, but the repository volume already holds an install's files." <<<"$out"
 check "names the restore's page" grep -qF "Restore the database first, as Restoring onto a Fresh Stack describes: https://docs.healdan.com/install/backup-and-restore/#restoring-onto-a-fresh-stack" <<<"$out"
 check "creates no table" test "$(tables emptydb)" = 0
+check "sets no lock_timeout for the role in it" test "$(role_settings emptydb)" = 0
 check "leaves the conf volume as it was" conf_unchanged "$before"
 docker run --rm -v "$REPO:/r" "$TOOLS" rm -rf /r/docs
 

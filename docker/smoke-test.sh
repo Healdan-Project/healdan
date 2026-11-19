@@ -94,12 +94,14 @@ db_query() {
 # the Java around it swallowed. docker/tests/db-log-expected.txt lists those a run is expected to have, one extended
 # regular expression a line, each with its reason above it. Until the list has held for five consecutive runs on both
 # architectures, a line it doesn't expect is printed, and passes: the last commit of the switch makes it fail the run.
+# A log that can't be read, or isn't PostgreSQL's, fails now: a clean log has to be one that was read.
+DB_LOG_SERVICE=db
 DB_LOG_EXPECTED=docker/tests/db-log-expected.txt
-# db_log_errors: each line of the db container's log that holds ERROR:, with the first line of the statement
-# PostgreSQL logged after it for the same process, if it did, appended as " STATEMENT:  <statement>". Its DETAIL, which
-# can quote a row's values, is left out.
+# db_log_errors <log file>: each line of the log that holds ERROR:, with the first line of the statement PostgreSQL
+# logged after it for the same process, if it did, appended as " STATEMENT:  <statement>". Its DETAIL, which can quote
+# a row's values, is left out.
 db_log_errors() {
-  compose logs --no-log-prefix db 2>&1 | awk '
+  awk '
     function pid(line) { return match(line, /\[[0-9]+\]/) ? substr(line, RSTART, RLENGTH) : "" }
     function flush() { if (entry != "") print entry; entry = "" }
     index($0, "ERROR:") { flush(); entry = $0; owner = pid($0); next }
@@ -107,20 +109,47 @@ db_log_errors() {
     entry != "" && pid($0) == owner && $0 ~ / (DETAIL|HINT|CONTEXT|QUERY|LOCATION):  / { next }
     # A line without a time, such as the second line of a statement, belongs to the entry before it
     /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] / { flush() }
-    END { flush() }'
+    END { flush() }' "$1"
 }
-# check_db_log <the steps the db container's log covers>: prints the ERROR lines' count, expected and unexpected, how
-# many each pattern matched, and every unexpected line
+# check_db_log <the steps the db container's log covers>: reads the db service's whole log, and fails when it can't, when
+# it's empty or isn't PostgreSQL's (no "database system is ready to accept connections"), and when the list of
+# expected lines can't be read. Then it prints the lines read, the ERROR lines' count, expected and unexpected, how many
+# each pattern matched, and every unexpected line, which passes until the list has held.
 check_db_log() {
-  local lines=$WORK/db-log-errors patterns=$WORK/db-log-patterns total unexpected pattern
-  db_log_errors > "$lines" || true
-  grep -vE '^[[:space:]]*(#|$)' "$DB_LOG_EXPECTED" > "$patterns" || true
+  local log=$WORK/db-log lines=$WORK/db-log-errors patterns=$WORK/db-log-patterns status=0 read_lines total unexpected pattern
+  compose logs --no-log-prefix "$DB_LOG_SERVICE" > "$log" 2> "$log.err" || status=$?
+  if [ "$status" != 0 ]; then
+    echo "  couldn't read the $DB_LOG_SERVICE service's log (exit status $status): $(tail -n 3 "$log.err")"
+    return 1
+  fi
+  read_lines=$(wc -l < "$log" | tr -d ' ')
+  if [ "$read_lines" = 0 ]; then
+    echo "  the $DB_LOG_SERVICE service's log is empty"
+    return 1
+  fi
+  if ! grep -qF 'database system is ready to accept connections' "$log"; then
+    echo "  the $read_lines lines of the $DB_LOG_SERVICE service's log have no 'database system is ready to accept" \
+      "connections': they aren't PostgreSQL's log"
+    return 1
+  fi
+  if ! [ -f "$DB_LOG_EXPECTED" ] || ! [ -r "$DB_LOG_EXPECTED" ]; then
+    echo "  there's no readable list of the expected lines at '$DB_LOG_EXPECTED'"
+    return 1
+  fi
+  # grep's 1 is a list with no pattern; 2 is a list it couldn't read
+  status=0
+  grep -vE '^[[:space:]]*(#|$)' "$DB_LOG_EXPECTED" > "$patterns" || status=$?
+  if [ "$status" -gt 1 ]; then
+    echo "  couldn't read the list of the expected lines at '$DB_LOG_EXPECTED'"
+    return 1
+  fi
+  db_log_errors "$log" > "$lines"
   total=$(wc -l < "$lines" | tr -d ' ')
   # With no pattern, grep -f matches nothing, so every line is unexpected
   unexpected=$(grep -cvEf "$patterns" "$lines" || true)
   # A pattern grep can't read leaves no count: then every line counts as unexpected
   unexpected=${unexpected:-$total}
-  echo "PostgreSQL's log, $1: $total ERROR lines, $((total - unexpected)) expected and $unexpected unexpected"
+  echo "PostgreSQL's log, $1: $read_lines lines read, $total ERROR lines, $((total - unexpected)) expected and $unexpected unexpected"
   while IFS= read -r pattern; do
     echo "  $(grep -cE -- "$pattern" "$lines" || true)  $pattern" | cut -c 1-160
   done < "$patterns"
@@ -498,33 +527,33 @@ rpc() {
     -H "sid: $sid" --data-binary "7|0|$count|$strings|$4|"
 }
 
-# A matter named with the emoji, through the New Matter dialog's call, HealdanMatterService.create(GUIMatter): client
-# 1's matter 5 (1.1 is the smoke fixture's, 1.2 and 1.3 the storage overlay's, 1.4 Second Matter) in the Store Smoke,
-# with matter 1.1's client, template and owner. GWT sends the GUIMatter's fields by name: clientId, clientName,
+# A matter named with the emoji, through the New Matter dialog's call, HealdanMatterService.create(GUIMatter): matter
+# 1.1's client's next number (1.1 is the smoke fixture's, 1.2 and 1.3 the storage overlay's, 1.4 Second Matter) in the
+# Store Smoke, with matter 1.1's template and owner. GWT sends the GUIMatter's fields by name: clientId, clientName,
 # clientNumber, description, display, folderId, id, name, number, ownerId, ownerName, storeId, then templateId, a Long.
 MATTER_NAME="Smoke $EMOJI Matter"
-MATTER_NUMBER=5
-read -r client_id template_id owner_id <<<"$(db_query \
-  "select hd_clientid, hd_templateid, hd_ownerid from hd_matter where hd_folderid = $matter_id")"
+read -r client_id client_number template_id owner_id <<<"$(db_query "select m.hd_clientid, c.hd_number, m.hd_templateid,
+  m.hd_ownerid from hd_matter m join hd_client c on c.ld_id = m.hd_clientid where m.hd_folderid = $matter_id")"
+MATTER_NUMBER=$(db_query "select coalesce(max(hd_number), 0) + 1 from hd_matter where hd_clientid = ${client_id:-0}")
 matter_types=$(rpc_types frontend com.logicaldoc.gui.frontend.client.healdan.beans.GUIMatter java.lang.Long || true)
 { read -r policy; read -r matter_type; read -r long_type; } <<<"$matter_types" || true
 create_matter() {
   local reply
   reply=$(rpc healdanmatter "$policy" \
     "com.logicaldoc.gui.frontend.client.healdan.services.HealdanMatterService|create|$matter_type|$MATTER_NAME|$long_type" \
-    "1|2|3|4|1|5|5|$(gwt_long "${client_id:-0}")|0|A|0|0|A|A|6|$(gwt_long $MATTER_NUMBER)|$(gwt_long "${owner_id:-0}")|0|$(gwt_long "${store_id:-0}")|7|$(gwt_long "${template_id:-0}")")
+    "1|2|3|4|1|5|5|$(gwt_long "${client_id:-0}")|0|A|0|0|A|A|6|$(gwt_long "${MATTER_NUMBER:-0}")|$(gwt_long "${owner_id:-0}")|0|$(gwt_long "${store_id:-0}")|7|$(gwt_long "${template_id:-0}")")
   case $reply in
     //OK*) ;;
     *) echo "  HealdanMatterService.create answered: ${reply:0:300}"; return 1 ;;
   esac
 }
-check "matter 1.$MATTER_NUMBER, '$MATTER_NAME', created through the Classic Interface's service" create_matter
-new_matter=$(db_query "select ld_id from hd_matter where hd_clientid = ${client_id:-0} and hd_number = $MATTER_NUMBER")
+check "matter $client_number.$MATTER_NUMBER, '$MATTER_NAME', created through the Classic Interface's service" create_matter
+new_matter=$(db_query "select ld_id from hd_matter where hd_clientid = ${client_id:-0} and hd_number = ${MATTER_NUMBER:-0}")
 new_matter_json=$(bearer "$BASE/api/v1/matters/${new_matter:-0}" || true)
 check "the API reads its name back with the emoji" test "$(jq -r '.name // empty' <<<"$new_matter_json")" = "$MATTER_NAME"
 check "and its workspace's name" test "$(api -H 'Accept: application/json' \
   "$BASE/services/rest/folder/getFolder?folderId=$(jq -r '.folderId // 0' <<<"$new_matter_json")" | jq -r '.name // empty' \
-  || true)" = "1.$MATTER_NUMBER "$'\xe2\x80\x93'" $MATTER_NAME"
+  || true)" = "$client_number.$MATTER_NUMBER "$'\xe2\x80\x93'" $MATTER_NAME"
 
 # A document filed through the JSON API under a name with the emoji
 printf 'Notes.\n' > "$WORK/notes.txt"
@@ -578,7 +607,8 @@ check "and the API no longer finds apiuser among the active" inactive apiuser
 check "apiuser enabled again" change_status 1
 check "the database keeps that edit too" test "$(db_query "select ld_enabled from ld_user where ld_id = ${api_user:-0}")" = 1
 check "and the API finds apiuser again" active apiuser
-curl -s -o /dev/null -X DELETE -H "Authorization: Bearer $api_token" "$BASE/api/v1/auth/tokens/current" || true
+check "admin's device token signed out" test "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+  -H "Authorization: Bearer $api_token" "$BASE/api/v1/auth/tokens/current")" = 204
 
 echo "== 5a. full text in Office and email files (spec §9)"
 # Uploads a .docx and an .eml into the Smoke Matter and searches for a token in each; their output carries its own PASS/FAIL lines
