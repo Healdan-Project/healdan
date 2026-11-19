@@ -5,7 +5,8 @@
 # The User app in Chromium and WebKit against the smoke stack (M6 spec §15.1): the specs in
 # healdan-web/web/e2e/ run in Playwright's Docker image, whose tag is the version of @playwright/test in the
 # workspace's package-lock.json. Then curl checks the forgery refusals a browser can't make: a cross-site sign-out
-# and a sign-out without the app's header, and that the web session's GET works.
+# and a sign-out without the app's header, and that the web session's GET works. And the Admin app's refusals (admin
+# spec §17.1): webuser's /admin/ is 403, and a signed-out request for a file of its build isn't 200.
 # Needs the smoke fixture, whose SmokeWebUserSeed makes webuser (test-api.sh's apiuser is blocked by its throttle
 # check, so the browser tests use another user), a running stack, Docker, curl and python3.
 # Usage: BASE=http://127.0.0.1:18080 docker/tests/test-web.sh
@@ -75,5 +76,17 @@ check "a cross-site sign-out is refused with 401" \
 check "a sign-out without the app's header is refused with 403" \
   test "$(code -H 'Sec-Fetch-Site: same-origin' -X DELETE "$BASE/api/v1/session")" = 403
 check "the session is still there after the refusals" test "$(code -H 'Sec-Fetch-Site: same-origin' "$BASE/api/v1/me")" = 200
+
+# The Admin app is for administrators only: webuser, who isn't one, gets 403 at its page
+check "webuser gets 403 at /admin/" test "$(code "$BASE/admin/")" = 403
+# A signed-out caller gets none of its build. It can't read the real files' names, so a made-up one stands for them:
+# the servlet answers any path under /admin/assets/ by the path alone, 401 whether the build holds that file or not.
+# No answer at all fails too
+signed_out_asset() {
+  local status
+  status=$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' "$BASE/admin/assets/x.js") || return 1
+  [ "$status" != 200 ]
+}
+check "a signed-out request for a file of the Admin app isn't 200" signed_out_asset
 
 finish

@@ -999,6 +999,27 @@ against it, as they check the others against `openapi.yaml`.
 - **Only members of the `admin` group get in.** Anyone else is `403 admins-only`, asked again at every request, so
   someone taken out of `admin` is refused at their next one.
 
+The server answers two routes there:
+
+- **`GET /v1/admin/dashboard/usage`** is the Dashboard's Usage, from one summary the server keeps in memory and works
+  out on a thread of its own, at the start and then 15 minutes after the last one ended, never for a request (see
+  [How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/#healdans-code)). It has the documents, their
+  storage, the matters, the clients and the people, each as a total with how much of it came in the last 7 and 30
+  days, how many people are signed in now, the documents filed on each of the last 30 days, each Store but Default
+  and Templates with its documents, bytes and backend, and up to five matters most documents were filed in in the last
+  7 days. `computedAt` says when it was worked out, and is null, with the totals, until the first summary after a
+  start. `failedAt` says when the last try failed, beside the last summary that didn't, until a try works again; the
+  error itself is only in the server's log.
+- **`GET /v1/admin/find?q=`** is the top bar's find: at most five each of clients (by name or number), live matters
+  (by name, by a number such as `1001.1`, or all of a client's for a bare client number) and people (by username or
+  name, disabled ones too, never a system account). `%` and `_` in `q` are taken as they are, and a blank `q` is
+  `422 validation`.
+
+The file also describes `GET /v1/admin/dashboard`, the Dashboard's Needs Attention and Server Health, which the
+server doesn't answer yet: `attention`, what an administrator should act on, each with a count, a line and a link;
+`unchecked`, the kinds of attention whose source couldn't be read; and `health`, ten tiles, each `ok`, `attention` or
+`off`.
+
 ## Healdan's Own Client
 
 The Healdan Helper, which brings Healdan into LibreOffice, is a client of this API, and uses most of what's above:

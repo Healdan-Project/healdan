@@ -128,7 +128,9 @@ Healdan's migrations and setup steps on it.
   a `/v1` route the file leaves out. `OpenApiFileTest` checks that the file parses.
 - **The admin API has a file of its own,** `openapi-admin.yaml` (see the [API](../api/#the-admin-apps-routes)).
   `Contract` checks every answer under `/api/v1/admin` against it instead, and `RouteCoverageTest` compares the
-  routes with both files, failing on a `/v1/admin` path in `openapi.yaml` or another in `openapi-admin.yaml`.
+  routes with both files, failing on a `/v1/admin` path in `openapi.yaml` or another in `openapi-admin.yaml`. A route
+  the admin file describes before the server answers it is in `RouteCoverageTest`'s `DESCRIBED_AHEAD`, which fails
+  once the server answers it, so the list never hides a route that's missing.
   `OpenApiFileTest` checks that the admin file parses, uses the web session only and refers only to itself, and that
   its copies of `Page`, `FieldError` and the `Problem` response are the first file's, but for their words, and its
   `Problem` the first file's with fewer members. `DocsResourceTest` checks that the served `openapi.yaml` holds no
@@ -197,6 +199,44 @@ document delete's order in `DocumentServiceImpl` and `FolderServiceImpl`),
 and `ResourceServiceImplTest#testMoveFolder` (WebDAV's move). `RpcPermissionGapsTest`, `SoapPermissionGapsTest` and
 `HealdanHooksTest` were already there (`HealdanHooksTest#testFolderRestoreTakesTheScope` covers the restore's scope, and
 `#testFolderDeleteTreeStoppedAtAnImmutableDocumentCallsTheAfterHook` `deleteTree`'s early return), and now cover `FolderServiceImpl.move`, `SoapFolderService.move` and the new hooks.
+
+### The Admin App's Server Tests
+
+The administration record's, the error capture's and the Dashboard's tests are in `healdan-core`
+(`com.logicaldoc.healdan.admin` and the packages under it) and `healdan-api`. No test makes a real start, so they call
+`ErrorWriter.drainOnce()` and `UsageSummary.refreshNow()` themselves, and the tests of the threads start them.
+
+- **`AdminEventsTest`** checks the record: who, what, when and from where, the detail's fields in the order of their
+  names, no address outside an admin request, the record rolled back with its change and committed with it, a failed
+  `record` failing its caller, a failed `recordAfter` logging no value and leaving its caller's transaction to commit,
+  a secret with no value, and text too long for its column cut to fit. `ClientServiceTest` and `MatterServiceTest`
+  check that their creates and edits are recorded, and `ClientServiceTest` that a rename whose record fails is rolled
+  back.
+- **`ErrorCaptureTest`** runs the appender on a Log4j context of its own (`capture-log4j.xml`): errors on additive and
+  non-additive loggers, one appender however often it's attached, a new one after a reload, a storm of 5,000 that
+  keeps the first 1,000, counts the rest and makes nobody wait, its own package's loggers and the writer's thread left
+  out, detaching, and the caps.
+- **`ErrorWriterTest`** checks the writer: the queue kept while the database is down and written once it's back, an
+  error refused itself left out after three tries, and its count started again when the database goes down between
+  them, a database that fails every write (a timeout, a lock, a full disk, a read-only database, an exhausted pool)
+  leaving nothing out, which failures count as a refusal, the prune once a day, and, at a real start, the appender on
+  the JVM's own logging, for a logger nothing else in the fork uses.
+- **`ErrorStoreTest`** checks the tables: one row per fault with its counts by the hour, an older error written late,
+  the caps and text the database would refuse, resolving, reopening and a resolved fault seen again, the list's time
+  windows, filters and paging, and the prune. `ErrorFingerprintTest` checks the fingerprint and the documents a
+  message names, and `ErrorAreasTest` the areas.
+- **`UsageSummaryTest`** checks the Usage: nothing before the first summary, the totals, 30 days of documents,
+  storage by Store with the backends the storage port names and a port that fails, the busiest matters, each matter's
+  figures, the stamps read trimmed, the people signed in, reading the summary running no query (counted on a
+  `CountingDataSource`), a failed refresh keeping the last summary, stopping during a refresh logging no error, and
+  the summary's own thread.
+- **`IndexCountsTest`** checks the failed, the waiting and the indexed, beside shortcuts, the Trash, skipped and
+  archived documents; the latest of 200 tries deciding; two events at the same moment taken in the order they were
+  written; and the failed list's order, matters and paging.
+- **`AdminDashboardResourceTest` and `AdminFindResourceTest`**, in `healdan-api`, check the usage route, before the
+  first summary and after a failed refresh too, the find's clients, live matters and people, at most five of each,
+  wildcards taken as they are, a blank query `422`, and the refusals of a non-administrator and of a device token,
+  each answer against `openapi-admin.yaml`.
 
 ### The Storage Tests
 
@@ -295,7 +335,7 @@ build out (see [Building from Source](../building-from-source/#commands)).
 | `docker/tests/test-previews.sh` | Office and drawing previews: converted ahead of time, text, markup and thumbnails, no fetching or macros while converting, a broken file failing cleanly, leftover processes cleaned up |
 | `docker/tests/test-proxies.sh` | which forwarded addresses Tomcat believes with `LOGICALDOC_TRUSTED_PROXIES` unset: a header from the Docker host, but not a private address in the chain or a header sent from inside the app's container. It reads the sign-in throttle's per-address counters, so it needs a running stack: `BASE=http://127.0.0.1:8080 APP_CONTAINER=<id> DB_CONTAINER=<id> docker/tests/test-proxies.sh` |
 | `docker/tests/test-api.sh` | the API through the image's real filter chain, as the non-admin `apiuser` that the `smoke-api-user` setup step makes (`test-web.sh` signs in as `webuser`, made by `smoke-web-user`, since this script leaves `apiuser` blocked by the throttle for 15 minutes): LogicalDOC's SOAP services answering 404, M2's client flow (sign in, find the smoke matter, file a `.docx`, check it out, save twice, download two versions, sign out), the docs page, a session cookie refused without a token, the sign-in throttle, and LogicalDOC's `loginApiKey` refusing the token. Then M3's additions: searching inside the matter, a new folder and a favourite, a stamped `.docx`, a second device refused with `held-elsewhere`, moving the check-out, `ifVersion` and a repeated `saveId`, and the `#1234 v2.1` lookup. Then M5's: an `.eml` inspected, filed with its attachment and found by its Message-ID, and `already-filed` for filing it again and for uploading it into the matter. Run it against a fresh stack with the smoke overlay: `BASE=http://127.0.0.1:8080 docker/tests/test-api.sh` |
-| `docker/tests/test-web.sh` | the User app in a browser, against a stack with the smoke overlay (see [The Web Apps' Tests](#the-web-apps-tests)): Playwright's specs in Chromium and WebKit, then `curl` checks of the web session's forgery refusals. Needs Docker, curl and Python 3: `BASE=http://127.0.0.1:18080 docker/tests/test-web.sh`, which `docker/smoke-test.sh` runs as step 9, the last. It needs the Indexer set to every few seconds (see [The Web Apps' Tests](#the-web-apps-tests)) |
+| `docker/tests/test-web.sh` | the User app in a browser, against a stack with the smoke overlay (see [The Web Apps' Tests](#the-web-apps-tests)): Playwright's specs in Chromium and WebKit, then `curl` checks of the web session's forgery refusals and the Admin app's refusals. Needs Docker, curl and Python 3: `BASE=http://127.0.0.1:18080 docker/tests/test-web.sh`, which `docker/smoke-test.sh` runs as step 9, the last. It needs the Indexer set to every few seconds (see [The Web Apps' Tests](#the-web-apps-tests)) |
 | `docker/tests/test-signin.sh` | provider sign-in through the stand-in Keycloak (see below), with `curl` and a cookie jar: the web page's sign-in ending at the User app, signed in, a local account linked by email losing its password and its device token, the gate refusing someone in none of the mapped groups, the helper's sign-in handing a code to a pretend loopback address and the code exchanged for a device token, and a person disabled at Keycloak losing that token at its next re-check. Run it against a fresh stack with the sign-in overlay: `BASE=http://127.0.0.1:8080 KEYCLOAK=127.0.0.1:18180 docker/tests/test-signin.sh` |
 | `docker/tests/test-storage.sh` | storage backends against the stand-in Garage (see below): a file filed in Smoke Cloud reaching Garage encrypted, files moved in from Smoke moving up and not cached, reads through Garage and from the read cache, then with Garage stopped a save waiting in staging, an uncached file answering `503` through the API, `/download` and a shared link, and `/convertpdf` of an uncached PDF serving LogicalDOC's placeholder, and a matter moved to Smoke bringing its files home while Garage keeps them held. With `after-restart` it checks the same rows after a restart, a first read through Garage, and a read from the cache rebuilt from its folder with Garage stopped. It stops and starts Garage itself, and needs curl 8.0.0 or later, jq, sha256sum and docker: `docker/smoke-test.sh` runs it, passing it the stack's containers, as step 5f and again in step 8 |
 | `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache`, a Content-Security-Policy with `object-src 'none'` and Tomcat's JVM having its Base64 intrinsics off, though the stack's `CATALINA_OPTS` asks for them (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the stack running on Healdan's storage (its setup steps recorded and Original's marker written, step 5), M2's client flow through the API (`test-api.sh`, step 5c), the User app in Chromium and WebKit (`test-web.sh`, step 9, the last), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), storage backends against a stand-in S3 server, Garage (`test-storage.sh`, step 5f, and again after step 8's restart), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which checks LogicalDOC's tables, replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one. Two can run on one machine at once (see [Two Smoke Tests at Once](#two-smoke-tests-at-once)) |
@@ -452,9 +492,10 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
   `@playwright/test` version in `package-lock.json`, so the image's browsers are the ones that version expects.
   The script copies the workspace in without `node_modules`, installs its packages inside the container, and
   runs the specs against `BASE`. They sign in as `webuser`, whom the `smoke-web-user` setup step makes on a stack
-  with the smoke overlay (its password is `SmokeWebUserSeed.PASSWORD`), and do not depend on anything an earlier
-  smoke step left. They check that a link into the app, and a doc # link with its version (`/app/doc/<n>.1`, for a
-  document `signin.spec.ts` files through the API first), followed signed out, come back to their page after signing
+  with the smoke overlay (its password is `SmokeWebUserSeed.PASSWORD`), through `helpers.ts`' `signIn`, which signs
+  in as someone else when a spec names them, and do not depend on anything an earlier smoke step left. They check
+  that a link into the app, and a doc # link with its version (`/app/doc/<n>.1`, for a document `signin.spec.ts`
+  files through the API first), followed signed out, come back to their page after signing
   in, that signing in lands on **Recent Documents**, the way to the Classic Interface and back, and **Sign Out**. `finding.spec.ts` files three documents into
   matter 1.1's **Documents** folder through the API with a device token, under a word unique to the run, and then,
   through the page: opens the matter by its number in the Matters scope, adds it to My Matters and opens it from the
@@ -468,9 +509,11 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
   error, which is how a change to PDF.js's settings or its version is caught under `AppServlet`'s policy, and that Esc
   gives the focus back to the row. It also files an `.eml` with an HTML body, a tracking picture on a host under `.invalid`, a link and a PDF attached, and through the page opens it in Quick Look: the body renders in its frame, no request reaches the tracker until **Show Pictures** and one does after, the link opens a page of its own with no `opener`, and **Save to Matter** on the attachment makes its chip show the new doc #. It files a text file too, and with the page showing its details checks it out and saves a snapshot to it through the API, with the device token, as the helper does after Open in App. After each, once the page has every answer it asked for, it fires `focus` on `window`, as coming back from Excel to the browser's window would, and waits for the details' **Check-Out Info** to name the token as its **Computer**, and the row's marker to say **Checked out by you**, then for the details to show **Version 1.1**, in the **Versions** tab too. `filing.spec.ts` drops three files on the folder's list (Playwright can't drag real ones, so it dispatches `dragenter`, `dragover` and `drop` with a `DataTransfer` built in the page), one of them an `.eml` the matter already holds, and checks that the tray says **Already in this matter as #**, that the other two are filed and show in the list, and that one file dropped on a row and saved as **Version 2** is version 2.0 of that document. `organising.spec.ts` files six documents and makes two folders through the API, all inside the specs' shared `E2E` folder, adds the matter to My Matters, and through the page: makes a folder with **New Folder**; renames a document in place with F2, where another extension is refused beside the field and Esc leaves the name alone; moves a document with **More › Move To…**; drags two selected rows onto a folder in the tree (dispatching `dragstart` on the row and then `dragenter`, `dragover` and `drop` with one `DataTransfer` built in the page, so the row's own `dragstart` fills what the drop reads) and checks the folder lights up; and deletes two with the question, which it cancels first (the focus back in the row), then confirms. It needs the smoke fixture's Everyone group to hold the Rename, Move and Delete permissions, which the `smoke-organising` seed step gives it after `smoke-fixture`. `folders.spec.ts` makes its own folders inside `E2E` through the API and renames them: by F2 in a list, where a taken name is refused beside the field and the tree follows; from the tree's ⋯ and from the ⋯ beside the open folder's name, where the heading, the tree and the breadcrumb follow; by right-click › Rename on a list row; and once by keyboard alone. It also moves folders, in a folder of its own inside that one: by the dispatched drag events onto a folder of the tree (which lights up), by **Move To…** (whose picker greys out the folder itself and **Move Here** with its reason, **Already there**), once by keyboard alone (Tab, the arrow keys and Enter, to the picker's last choice), by a pointer's own drag of one tree folder onto another (Playwright's `dragTo`, from the start of the folder's name, as the middle of a long one is under the row's ⋯), and out of the matter into matter 1.4, **Second Matter**, which the `smoke-second-matter` seed step makes: the question names the matter and what its documents will take, **Cancel** leaves the folder, **Move** moves it, and a document in it then shows matter 1.4 through the API. It also checks that `webuser`, who isn't an administrator, sees Rename, **Move To…** and Delete greyed out on matter 1.1's top-level Documents folder, and that F2 and Delete there show their notes. Afterwards the script signs in with `curl`, checking
   for LogicalDOC's `SID` header so a failed sign-in says so, and checks that the web session refuses a cross-site
-  sign-out and one without the `X-Healdan-Client` header, and still answers `GET`s; each `curl` has `--max-time 30`.
-  Playwright stops after 10 failures (`maxFailures` in `playwright.config.ts`), so a stack that came up healthy but
-  broken fails step 9 in minutes rather than the job's timeout.
+  sign-out and one without the `X-Healdan-Client` header, and still answers `GET`s, then that the Admin app answers
+  `webuser` `403` at `/admin/`, and a signed-out request for `/admin/assets/x.js`, a name that stands for any of its
+  build's files, anything but `200`; each `curl` has `--max-time 30`. Playwright stops after 10 failures
+  (`maxFailures` in `playwright.config.ts`), so a stack that came up healthy but broken fails step 9 in minutes rather
+  than the job's timeout.
   - `trash.spec.ts` checks the Trash (folders and Trash spec §7). It makes two folders, each with a document, and two documents
     of their own, in a folder inside `E2E`, and through the page: deletes a folder from the menu a right-click opens (the
     question says what it holds) and presses **Undo** on the toast, which puts the folder and its document back; deletes it

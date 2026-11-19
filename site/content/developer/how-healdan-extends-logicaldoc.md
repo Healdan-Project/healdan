@@ -338,6 +338,83 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
       has no such table, and the failed statement made a transaction around the destroy roll back
       (`DocumentManagerTest`). It fixes the Classic Interface's Destroy Documents too.
     - The fork-owned `HealdanHooks`, `HealdanTreeChecks` and `HealdanRpcChecks` gain the methods above.
+- **The Admin app's records** are `healdan-core`'s, in `com.logicaldoc.healdan.admin` and the packages under it,
+  and its routes are the admin API's (see `healdan-api` above).
+  - **`hd_admin_event`** (`V12__admin.sql`) is the administration record: a row for each administrative change, with
+    when (the JVM's clock, to the millisecond), who (their id and username), from where, the Admin app's area
+    (`AdminArea`), the action, such as `client.renamed`, what it acted on (its kind, id and name), and a JSON detail of
+    the fields it changed, each as `{"before":…,"after":…}`, in the order of their names. A changed secret is
+    `{"secret":true}`, with neither value (`AdminEvent.Change.secret()`), so no secret is ever in it. A username, an
+    address or a name too long for its column is cut to fit, rather than fail the change; the detail is kept whole.
+  - **From where** is the request's address, as Tomcat believes it (a trusted proxy's `X-Forwarded-For` already
+    applied), which `AdminFilter` puts in `AdminContext` for the request. A change made outside an admin request, as
+    from the Classic Interface, has none.
+  - **`AdminEvents` writes it.** `record` writes in the caller's transaction, if one is open, so a change that's one
+    database transaction and its record stand or fall together, and a record that fails fails the change.
+    `recordAfter` is for a change that isn't one transaction, such as one with network or file steps: it writes once
+    the change has succeeded, inside a savepoint when a transaction is open, and never throws. If the record fails,
+    the change stands, and the failure is logged at error level, naming the action and the target's kind and id,
+    never a value.
+  - **The client and matter services record their own changes.** `ClientService`'s create and rename and
+    `MatterService`'s create and edit are transactions (`@Transactional`) that record `client.created`,
+    `client.renamed`, `matter.created` and `matter.updated` inside them, so the Classic Interface's client and matter
+    changes are recorded too, and so are the clients and matters setup steps make, such as the smoke stack's. A
+    create records every field it set, and an edit only those whose values changed, an owner by full name. A rename
+    or an edit that changes nothing isn't recorded.
+  - **`hd_error` and `hd_error_hour`** (`V12__admin.sql` too) hold the errors the server logged, by fault. `hd_error`
+    has a row for each fingerprint: the level, the area, the logger, the latest message, its stack and the documents
+    it names (the ids a message names as `doc 10412` or `document id 10412`), how many times it was seen, when first
+    and last, and whether and by whom it was resolved. `hd_error_hour` counts each fault's errors in each hour, in
+    UTC, for the time windows. `ErrorStore` reads and writes them.
+  - **Errors are caught as they're logged** (`com.logicaldoc.healdan.admin.errors`). At a real start `ErrorWriter`, a
+    `HealdanStartListener`, attaches `ErrorCapture`'s Log4j appender in code, so `log.xml` isn't edited, for `ERROR`
+    and above: to the root logger, and to every logger whose additivity is false, such as the Indexer's, whose events
+    never reach the root (36 in the webapp's `log.xml`). When the logging configuration is reloaded, a listener on the
+    context attaches a new instance, but only if the root lacks one, as attaching makes Log4j tell the listener
+    again. It uses Log4j's own classes, so `healdan-core` takes `log4j-core` as `provided`: the WAR ships it.
+  - **The appender never blocks, logs or reaches the database.** On the logging thread it copies the event (its time,
+    level and logger, the class and line it was logged from when the configuration records that, the exception's
+    class, the message up to 4,000 characters and the stack up to 16,000, with any NUL character taken out, which
+    PostgreSQL refuses in text) onto a queue in memory that holds 1,000, and counts what doesn't fit. It leaves out
+    what its own package's loggers log and anything logged on the writer's thread, so a failure to write the errors
+    can't feed itself.
+  - **One thread, `healdan-error-writer`, writes them.** It takes the queue's errors in batches of 100, oldest first.
+    An error it can't write stays at the head of its batch while the queue fills behind it, so while the database is
+    down nothing is lost but what doesn't fit; the thread logs a warning, waits a second, doubling up to a minute, and
+    tries again, and never stops for a failure. An error is left out only when it's refused itself three times in a
+    row, so that it can't hold up the rest: when the database refuses its values (Spring's
+    `DataIntegrityViolationException`, from SQLState classes 22 and 23, such as a value too long), or when it fails
+    outside the database. A connection, a timeout, a lock, a full disk or a read-only database fails every error
+    alike, and never leaves one out. The writer counts what it left out (`skipped()`), and the capture what didn't fit
+    on the queue (`dropped()`).
+  - **Grouping.** A fault's fingerprint (`ErrorFingerprint`) is the SHA-256 of the exception's class, where it was
+    logged (the class and line, or the logger's name), and the message with its numbers and quoted names taken out.
+    Its area (`ErrorAreas`) comes from the logger's package or class: Previews, Storage, Search Index, Email,
+    Sign-In, Background Jobs, or Server for any other. As one thread writes, two writes of one fault never run at
+    once, so a write updates the fault's row first and inserts one when no row changed, with no statement expected to
+    fail. A fault seen again after it was resolved is unresolved, and an older error written late only counts.
+  - **Pruning.** Ten minutes after the start, then once a day, the writer deletes the hours' counts older than 31 days,
+    and the resolved faults not seen for 90 days, with their counts. A fault nobody has resolved stays, however old.
+  - **The Dashboard's Usage** is worked out by `UsageSummary` (`com.logicaldoc.healdan.admin.dashboard`), a
+    `HealdanStartListener`, on a daemon thread of its own, `healdan-admin-summary`: at the start, then 15 minutes after
+    the last one ended, never on a request's thread. It keeps one summary in memory, which a request reads with no
+    query: only the count of people signed in is made at each request, from the server's sessions in memory. A
+    refresh that fails keeps the last summary and says when it failed, and stopping the server during one logs no
+    error, so it never shows as a fault. It counts a matter's documents through the client and matter numbers stamped
+    on them, in `ld_document_ext`, so no folder is walked, and a Store's documents are its matters'. Its days are the
+    server's, in its time zone. The storage port names each Store's backend, and one that fails leaves the backends
+    out and the rest whole. Tests call `refreshNow()` themselves, as no test makes a real start.
+  - **The Search Index's counts** (`IndexCounts`, `com.logicaldoc.healdan.admin.index`) tell a document that failed
+    from one that waits (Admin app spec §9.6), among the documents not in the Trash, shortcuts left out. A document
+    has failed when it waits to be indexed (`ld_indexed` is `TO_INDEX`), isn't archived, and its latest
+    `event.indexed` or `event.indexed.error` row in `ld_history` is the error, whose comment says why.
+    `DocumentManager.index` writes those rows, and LogicalDOC's Indexer goes on trying such a document on its
+    schedule, with an error row each time. A document waits when the Indexer will take it (`TO_INDEX` or
+    `TO_INDEX_METADATA`, not archived) and it hasn't failed. Its latest event is chosen by one look through its own
+    rows, on `ld_history`'s index by document: the latest time first, a row with no time counting as older than any
+    with one, and rows at the same moment, as MariaDB's whole seconds give, by the order they were written in.
+    `counts()` gives the indexed, the waiting and the failed in one pass, and `failed(offset, limit)` lists the
+    failed, latest error first, each with the matter stamped on it.
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a
   new default ships as a new step.
