@@ -654,6 +654,8 @@ Every test in a `healdan-*` module runs on PostgreSQL, and none on HSQLDB.
   and the settings are there so that CI's time to green doesn't grow, as §2.4 requires; plan, Decision Log 4). The
   user's password is hashed with one SCRAM iteration (changed after PR A: every test opens about 40 connections, and
   PostgreSQL's 4,096 iterations were most of what one cost; the plan's Expected Costs has what PR A measured).
+  The service publishes no port, and the tests reach it at its container's own address (changed after PR A too: a
+  connection to a published port goes through Docker's proxy, which doubled a statement's round trip on a runner).
   `test-shards.py` and the timing cache are unchanged.
 - **Locally,** a PostgreSQL in Docker, started by one command that `CLAUDE.md` and the Developer Guide's Tests page
   give.

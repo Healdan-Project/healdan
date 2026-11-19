@@ -41,7 +41,9 @@ weight: 4
    `fsync`, `synchronous_commit` and `full_page_writes` off, with 300 connections and the password hashed with one
    SCRAM iteration, through `POSTGRES_INITDB_ARGS`' `-c` flags and `--tmpfs` in the service's `options`. Every test
    makes a database and opens about 40 connections, so the server is set up for speed, as nothing on it has to
-   last. The tests' defaults reach it at `localhost:5432`.
+   last. It publishes no port: a step reads the container's own address and gives it to the tests in
+   `HEALDAN_TEST_DB_URL`. A connection to a published port goes through Docker's proxy, which doubled a
+   statement's round trip on a runner (46 microseconds without it, 89 with), about 0.09 seconds a test.
 3. **`build`** passes when `checks` and every shard passed. It's the check `master` requires.
 4. **`test-times`** saves how long each test class took, for the next run's plan. It isn't part of `build`.
 

@@ -92,6 +92,10 @@ docker/tests/test-db.sh stop    # removes the container
 - **Maven in a container** reaches the server on the `healdan-test` network: start the container with
   `--network healdan-test` and set `HEALDAN_TEST_DB_URL=jdbc:postgresql://healdan-test-db:5432/`, as `start`
   prints.
+- **On a Linux host,** a connection to the published port goes through Docker's proxy, which about doubles each
+  statement's round trip. CI's jobs give the tests the container's own address for that reason (see
+  [Continuous Integration](../continuous-integration/)). Maven in a container on the `healdan-test` network
+  doesn't go through the proxy either.
 - **Without a server,** each test fails as it starts, with `Healdan's tests need a PostgreSQL. Start one with:
   docker/tests/test-db.sh start`.
 - **The driver.** PostgreSQL's JDBC driver, pgjdbc, is a test dependency of `healdan-core`, `healdan-api` and
