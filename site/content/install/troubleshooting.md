@@ -10,7 +10,8 @@ docker compose logs app
 ```
 
 Healdan's own log is `repository/logs/dms.log`, in the repository volume. PostgreSQL's is
-`docker compose logs db`.
+`docker compose logs db`. Its error lines can quote the row a statement failed on, with names, subjects and comments
+in it, so read what you copy from it before you post it anywhere, such as in an issue.
 
 ## The Build Stops with "Illegal Instruction"
 

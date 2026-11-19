@@ -387,9 +387,10 @@ PostgreSQL's log, steps 1 to 7: 62 lines read, 0 ERROR lines, 0 expected and 0 u
   A line's `DETAIL`, which can quote a row's values, is left out.
 - **It fails** when it can't read the log, when the log is empty or isn't PostgreSQL's (it has no `database system
   is ready to accept connections`), and when the list can't be read, so a clean log is one it read.
-- **An unexpected line doesn't fail the run yet.** It prints every one, and passes, until the list has held over
-  several runs on both architectures. The switch to failing is the function's last line, `return 0`, becoming
-  `[ "$unexpected" = 0 ]`.
+- **An unexpected line doesn't fail the run yet.** It prints every one, and passes, until the list has held for five
+  consecutive runs of the switch's draft pull request's CI on each architecture, each run's `PostgreSQL's log` lines
+  reporting 0 unexpected. Then, before that pull request is marked ready, a commit of it makes the check fail on one:
+  the function's last line, `return 0`, becomes `[ "$unexpected" = 0 ]`.
 
 The start-up tool asks whether a table exists with `to_regclass`, never by reading it, so a start leaves no `ERROR`
 line, and `test-move.sh` checks the moves left none either.
@@ -434,27 +435,35 @@ moves a frozen install, the fixture in `docker/tests/move-fixture/`.
   try the move: an avatar of 6,000 characters, dates at fractions of a second, an accented matter in a Store on an
   encrypted local storage backend with a file on it, a sealed sign-in secret, a Trash item, and counters past their
   first values. Its `README.md` says what's in it and when it's made again. It holds only invented data and the smoke
-  stack's published test passwords, and `make.sh` checks it names no address but loopback's.
-- **The cases,** in the order a move would meet them: a source at an older schema version, refused before anything
-  is written; a zero date, which stops the move part-way, and the app refusing to start on what it left; a NUL, which
-  stops it unless `--replace-nul` is given; a value a test-only trigger changes on the target, which only the move's
-  own comparison sees, so it refuses and leaves the target unfinished; and a run with `--replace-nul`, which starts
-  over and finishes. Each run's output must hold the command's own lines and nothing else, so a stack trace fails it.
-- **Then the result:** the report; the rows read back with `psql` (the avatar whole, the dates to the millisecond,
-  the NUL a space, the accented name, the documents' sequence going on from MariaDB's); MariaDB untouched by every
-  run, its sequences included; PostgreSQL's log with no `ERROR` line; and the app on the moved database, where
-  `apiuser` signs in, a file reads back from Original's folder and one through the encrypted backend's key and
-  marker, the sign-in provider's sealed secret opens, a new document takes the next doc # and ids after the
-  fixture's, and its delete makes a Trash item after the fixture's.
+  stack's published test passwords, and `make.sh` checks it names no address but loopback's and LogicalDOC's own
+  multicast default, `228.8.8.8`.
+- **The cases,** in the order a move would meet them: the app started on the fixture before any move, which the
+  start-up tool refuses, as its conf volume names MariaDB, changing neither the conf file nor the empty database; a
+  source at an older schema version, refused before anything is written; a zero date, which stops the move part-way,
+  and the app refusing to start on what it left; a NUL, which stops it unless `--replace-nul` is given; a value a
+  test-only trigger changes on the target, which only the move's own comparison sees, so it refuses and leaves the
+  target unfinished; and a run with `--replace-nul`, which starts over and finishes. Each run's output must hold the
+  command's own lines and nothing else, so a stack trace fails it.
+- **Then the result:** the report; every table's rows counted on both sides, by one query a side made from each
+  database's catalogue, and the two lists compared; the rows read back with `psql` (the avatar whole, the dates to the
+  millisecond, the NUL a space, the accented name, the documents' sequence going on from MariaDB's); MariaDB untouched
+  by every run, its sequences included; PostgreSQL's log with no `ERROR` line; and the app on the moved database,
+  where `apiuser` signs in, a file reads back from Original's folder and one through the encrypted backend's key and
+  marker, the sign-in provider's sealed secret opens, a new document takes the next doc # and ids after the fixture's,
+  and its delete makes a Trash item after the fixture's.
 - **Its settings:** `LOGICALDOC_IMAGE` names the image (`logicaldoc-community:local`, which `docker compose build`
   tags), `MOVE_PROJECT` the Compose project (`healdan-move`) and `MOVE_PORT` the app's port on `127.0.0.1` (18090). It
   claims its project as the smoke test does, refuses one that's in use, and removes everything it made. A run takes
   about a minute. CI runs it on amd64 only, after the smoke test (see
   [Continuous Integration](../continuous-integration/#the-moves-test-in-the-image-ci)).
 
-The command and its test are kept for a while after the switch to PostgreSQL, and then removed. While they're here, a
-change that adds a table or a column to the schema, Healdan's or LogicalDOC's, fails this test: the move makes its
-target with the new scripts, and refuses a table or column that its MariaDB source lacks.
+The command and its test are kept for a while after the switch to PostgreSQL, and then removed. While they're here,
+an upstream sync that adds, drops or renames a table or a column in LogicalDOC's scripts fails this test: the move
+makes LogicalDOC's tables with the new scripts and refuses a table or column that its MariaDB source lacks, and the
+report's last lines, which the test checks, list one only the source has. Hold such a sync, and ask the owner.
+Healdan's own migrations don't trip it: the move takes Healdan's tables to version 12, the one that goes with its
+source's 11, and no further, and the app's first start applies any later one to the moved rows, as on every upgrade,
+which this test's start of the app checks.
 
 ## The User App's Tests
 

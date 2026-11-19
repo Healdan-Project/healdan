@@ -120,9 +120,9 @@ its tables are made by its generic ones. These make LogicalDOC's code, and Heald
 
 In the image, `docker/tools`' `DockerInit` runs before Tomcat on every start. Before it writes anything, to the conf
 volume or to the database, it stops, changing nothing, when an install would start empty beside its own data
-(`StartGuard`): its conf volume names MariaDB and PostgreSQL holds no finished move from it, or doesn't answer within
-15 seconds; the database holds a move that didn't finish; or the database is empty and Original's folder already
-holds an install's files. Then it:
+(`StartGuard`): its conf volume names MariaDB and PostgreSQL holds no move from it, or doesn't answer within 15
+seconds; the database holds a move that didn't finish, whatever the conf volume names; or the database is empty and
+Original's folder already holds an install's files. Then it:
 
 - sets the database settings in `context.properties` on every start: `jdbc.url`, from `DB_HOST`, `DB_PORT` and
   `DB_NAME`, with `?logServerErrorDetail=false`, and `jdbc.driver`, `jdbc.dbms` (`postgresql`, as LogicalDOC's code
@@ -258,7 +258,9 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     [Moving from MariaDB to PostgreSQL](../../install/moving-from-mariadb/), and any other database, MySQL and HSQLDB
     included, with `Healdan's tables support PostgreSQL only; found …`. V1 to V11 are the scripts Healdan ran on
     MariaDB, translated one for one, with the same versions and names, so a version means the same on both sides of a
-    move. PostgreSQL rolls a failed script back whole, and the start stops. The history table, `hd_schema_history`,
+    move. The move makes them at V12, the version that goes with a MariaDB install's 11, and no later one
+    (`HealdanMigrator.migrateTo`), so the app's first start applies any later script to the moved rows, as on any
+    upgrade. PostgreSQL rolls a failed script back whole, and the start stops. The history table, `hd_schema_history`,
     starts with Flyway's version `0` baseline, as LogicalDOC's tables are there first.
   - `hd_email` indexes email: a row for each email document, with its Message-ID and the SHA-256 of it that
     lookups search by. `EmailDocumentListener` adds the row when an email is filed, from the Message-ID it read

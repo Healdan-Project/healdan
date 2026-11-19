@@ -27,10 +27,13 @@ git remote add upstream https://github.com/logicaldoc/community.git
     `docker compose exec -T db sh -c 'psql -U "$HEALDAN_DB_USER" -d "$HEALDAN_DB_NAME"' <<'SQL'`, the SQL, then a
     line `SQL`. `docker/tests/test-init.sh` finds each change written so and runs it (see
     [Docker Tests](../tests/#docker-tests)).
-  - **While the move from MariaDB is in the image,** such a change also fails its test, as the move makes its target
-    with the new scripts and refuses a table or column its MariaDB source lacks (see
-    [The Move's Test](../tests/#the-moves-test)). The test is a step of `Test (amd64)`, which `master` requires, so
-    the sync can't merge as it is.
+  - **While the move from MariaDB is in the image,** a sync that adds, drops or renames a table or a column in
+    LogicalDOC's scripts also fails its test: the move makes LogicalDOC's tables with the new scripts and refuses a
+    table or column its MariaDB source lacks, and the test's check of the report fails on one only the source has
+    (see [The Move's Test](../tests/#the-moves-test)). The test is a step of `Test (amd64)`, which `master`
+    requires, so the sync can't merge as it is: hold it, and ask the owner. Healdan's own migrations don't trip it,
+    as the move stops Healdan's tables at the version that goes with its source, and the app's first start applies
+    the later ones.
 - **`.github/workflows/upstream-sync.yml`** runs a sync every week. `.github/scripts/upstream-sync.sh` does the
   merge.
 

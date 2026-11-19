@@ -35,14 +35,17 @@ version would start an empty MariaDB, and make a new, empty install on it beside
   [If MariaDB's Data Is in a Host Folder](#if-mariadbs-data-is-in-a-host-folder) now: the backup and several steps
   below take another form there, and a note before each says so.
 - **Take a backup** on the version you run now, with MariaDB's own tools, from the folder with Healdan's
-  `compose.yaml`. With host folders, use [The Backup's Files](#the-backups-files)' `tar` in place of the third
-  command, which would make empty volumes and archive them:
+  `compose.yaml`. It goes into a folder of its own in your home folder, `healdan-backup`, outside the checkout the
+  image is built from: a backup in the checkout would go into each build, and make it slower. With host folders, use
+  [The Backup's Files](#the-backups-files)' `tar` in place of the fourth command, which would make empty volumes and
+  archive them:
 
   ```bash
+  mkdir -p ~/healdan-backup
   docker compose stop app
-  docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump -u"$MARIADB_USER" --single-transaction "$MARIADB_DATABASE"' > logicaldoc-db.sql
+  docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump -u"$MARIADB_USER" --single-transaction "$MARIADB_DATABASE"' > ~/healdan-backup/logicaldoc-db.sql
   docker run --rm -v logicaldoc_logicaldoc-conf:/conf -v logicaldoc_logicaldoc-repository:/repository \
-    -v "$PWD":/backup busybox tar czf /backup/logicaldoc-files.tgz /conf /repository
+    -v ~/healdan-backup:/backup busybox tar czf /backup/logicaldoc-files.tgz /conf /repository
   docker compose start app
   ```
 
@@ -215,7 +218,7 @@ A move of a small install, with most of the tables' lines left out:
 ```text
 [move] Source: MariaDB 11.4.13, Healdan schema version 11, time zone UTC (the server's, +00:00) ... ok
 [move] Target: PostgreSQL 18.4, empty ... ok
-[move] Schema: made as a fresh install's, by LogicalDOC's scripts and Healdan's migrations (77 tables) ... ok
+[move] Schema: made as a fresh install's, by LogicalDOC's scripts and Healdan's migrations to version 12 (77 tables) ... ok
 [move] Copying 75 tables ...
 [move]   hd_api_token: 2 rows
 [move]   hd_client: 1 row
@@ -237,7 +240,7 @@ Compose's own lines, about the containers it starts, come before it.
 |---|---|
 | `Source:` | MariaDB's version, the version of Healdan's tables (11, the last on MariaDB), and the time zone the dates were read in. Check that zone, as [Checking the Time Zone](#checking-the-time-zone) says |
 | `Target:` | PostgreSQL's version, and that its database was empty. After a move that stopped part-way, it says `an unfinished move's tables removed` |
-| `Schema:` | PostgreSQL's tables, made as a new install's are |
+| `Schema:` | PostgreSQL's tables, made as a new install's are, with Healdan's own at version 12, the one that goes with MariaDB's 11. Healdan's first start brings them up to date |
 | `Copying` | each table, with its rows. A large table also says how many it has copied every 100,000 rows |
 | `Copied` | the tables and rows in all |
 | `Sequences`, `identity counters` | the counters that hand out ids, each set to carry on after the ids MariaDB handed out |
@@ -312,7 +315,8 @@ didn't finish, which Healdan won't start on. Either way, put the cause right, th
 | `… foreign keys don't hold on the copied rows …`, or `doesn't hold` | Some rows refer to rows their tables lack, such as a document whose folder has gone. Each is listed by table and id, with the column that refers: `table ld_document, row ld_id=4952: ld_folderid=999999 isn't in ld_folder`. Go back, mend those rows on the old version, or [ask for help](https://github.com/Healdan-Project/healdan/issues) with the lines, and move again |
 | `can't connect to the source, …` | The move couldn't sign in to MariaDB. Check that `DB_NAME`, `DB_USER` and `DB_PASSWORD` in `.env` are the ones the old version ran with, or see [A MariaDB of Your Own](#a-mariadb-of-your-own) |
 | `the target database already holds a finished move from MariaDB` | It's moved already: [start Healdan](#start-healdan). To move again from the start, as after the wrong time zone, PostgreSQL's database has to be emptied first, as [Checking the Time Zone](#checking-the-time-zone) shows |
-| `the target database already holds … tables, …, which no move from MariaDB made` | PostgreSQL's database holds something else. The message says what to do. With host folders, its data is in a folder, not the volume `pg-data` the message names: see [Starting the Move Over](#starting-the-move-over) |
+| `the target database already holds … tables, …, which no move from MariaDB made` | PostgreSQL's database holds something else. The message says what to do, on volumes or with host folders, as [Starting the Move Over](#starting-the-move-over) gives it |
+| `the target database holds a move from MariaDB that didn't finish, and the start-up tool's marker, docker_init, …` | Something other than the move changed PostgreSQL's database, and Healdan may have started on it, so the move won't empty it. Keep it as it is, take a backup of it as [Backup and Restore](../backup-and-restore/) says, and [ask for help](https://github.com/Healdan-Project/healdan/issues) with the lines |
 | `the target doesn't hold what the source holds` or `a counter could hand out an id already in use` | Run the move again. If it stops the same way, keep both volumes as they are, and [report it](https://github.com/Healdan-Project/healdan/issues) with the lines |
 | `reading … failed` or `writing … failed`, or no error at all, as when the server lost power | Run the move again |
 
@@ -341,7 +345,9 @@ Its first start on PostgreSQL:
 - **Puts the configuration's database settings right,** as the log says:
   `set Healdan's own: hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect, jdbc.dbms=postgresql, jdbc.driver=org.postgresql.Driver`.
 - **Checks LogicalDOC's tables,** as every start does.
-- **Finds Healdan's own tables up to date,** as the move made them at this version's.
+- **Brings Healdan's own tables up to date.** The move made them at version 12, the one that goes with MariaDB's
+  11, and the first start makes any later version's changes on the moved rows, as every upgrade does. On a version
+  with none, it has nothing to do.
 - **Runs no setup step again.** The move brought the record of every step that had run.
 - **Finds everything else as it was:** the documents' files, the storage backends and their markers, the
   encryption keys and the search index all belong to the same ids, so nothing moves or is indexed again.
@@ -395,9 +401,11 @@ A backup job that runs `mariadb-dump` backs up nothing now: `docker compose exec
 answers `mariadb-dump: not found`, and the job leaves an empty file. Change it to
 [Backup and Restore](../backup-and-restore/)'s commands, which save PostgreSQL's database as `logicaldoc-db.dump`.
 
-Keep the last MariaDB backup. It restores only onto the old version. This site no longer gives the commands, but
-the old version's own copy of Backup and Restore does: with `mariadb-final` checked out, it's
-`site/content/install/backup-and-restore.md` in the checkout, under Restoring onto a Fresh Stack.
+Keep the last MariaDB backup, in `~/healdan-backup`. It restores only onto the old version. This site no longer
+gives the commands, but the old version's own copy of Backup and Restore does: with `mariadb-final` checked out,
+it's `site/content/install/backup-and-restore.md` in the checkout, under Restoring onto a Fresh Stack. Its commands
+read the two files from the folder with `compose.yaml`, so copy them there first, and delete the copies once the
+restore has worked.
 
 ## Remove the Old Volume
 
@@ -432,11 +440,12 @@ The page's commands that name a volume take another form for such a stack, with 
 
 ### The Backup's Files
 
-[Before You Start](#before-you-start)'s `tar` reads the configuration and repository folders:
+[Before You Start](#before-you-start)'s `tar` reads the configuration and repository folders, and writes into the
+same `healdan-backup` folder:
 
 ```bash
 docker run --rm -v /srv/logicaldoc/conf:/conf -v /srv/logicaldoc/repository:/repository \
-  -v "$PWD":/backup busybox tar czf /backup/logicaldoc-files.tgz /conf /repository
+  -v ~/healdan-backup:/backup busybox tar czf /backup/logicaldoc-files.tgz /conf /repository
 ```
 
 ### Before You Move the Data

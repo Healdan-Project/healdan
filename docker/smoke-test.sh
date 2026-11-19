@@ -92,8 +92,10 @@ db_query() {
 }
 # PostgreSQL's own log (PostgreSQL spec section 10.1): a statement PostgreSQL refuses is an ERROR line there, whatever
 # the Java around it swallowed. docker/tests/db-log-expected.txt lists those a run is expected to have, one extended
-# regular expression a line, each with its reason above it. Until the list has held for five consecutive runs on both
-# architectures, a line it doesn't expect is printed, and passes: the last commit of the switch makes it fail the run.
+# regular expression a line, each with its reason above it. A line it doesn't expect is printed, and passes, until the
+# list has held for five consecutive runs of the draft pull request's CI on each architecture (each run's "PostgreSQL's
+# log" lines reporting 0 unexpected); then, before that pull request is marked ready, a commit of it makes check_db_log
+# fail on one: its return 0 becomes [ "$unexpected" = 0 ] (the plan's Task 23).
 # A log that can't be read, or isn't PostgreSQL's, fails now: a clean log has to be one that was read.
 DB_LOG_SERVICE=db
 DB_LOG_EXPECTED=docker/tests/db-log-expected.txt

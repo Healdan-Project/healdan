@@ -75,8 +75,8 @@ nobody has. And one database lets Healdan use what PostgreSQL offers, where two 
 
 ### 2.4 Constraints
 
-- **Mergeable with upstream** (principle 5): two small upstream edits (§11.1), and no upstream SQL, `context.xml` or
-  `context.properties` changed.
+- **Mergeable with upstream** (principle 5): small edits to four upstream files across PR A and PR B (§11.1), and no
+  upstream SQL, `context.xml` or `context.properties` changed.
 - **Every id is kept** in a move, as files, keys, the read cache and the search index are named by them.
 - **One install, one install id:** an old and a new stack, or a copy and its original, never run against the same
   storage backends (the S3 spec's §12).
@@ -312,7 +312,11 @@ script as a `varchar` PostgreSQL enforces:
   `HealdanMigrator` stops taking HSQLDB then.
 - **The `mariadb/` folder and `flyway-mysql` go** at the switch. A shipped script still never changes; these stop
   shipping. The move command needs neither: it reads the source's history, and never migrates it (§9.2).
-- **From then on a migration is one script,** in `postgresql/`.
+- **From then on a migration is one script,** in `postgresql/`. (Changed in the review: while the move from MariaDB
+  exists, such a script needs nothing of the move, which makes Healdan's tables at V12 only and leaves the later ones
+  to the app's first start, §9.3. An upstream sync that adds, drops or renames a table or a column in CE's scripts
+  still breaks the move or its test, an open question for the owner: the plan's Open Points for the Owner Before the
+  Merge, and its Decision Log 42.)
 - **Until the switch merges,** a migration another change adds goes into every folder that exists, `postgresql/`
   included, and the move's expected version and fixture follow (§9.2, §10.2).
 
@@ -625,6 +629,12 @@ text's length in code points; a name one side gives twice, whatever the case, an
 Nothing printed holds a row's value: a failure while rows are read or written names the table, the SQLSTATE and the
 exception's class; plan, Decision Log 34, 35 and 36.)
 
+(Changed in the review: step 2 runs Healdan's migrations up to version 12 and no further, the version that pairs
+with a source at 11, and checks that the target reached it. A later migration that changes or adds rows would
+otherwise run on the empty target, be emptied with the scripts' rows in step 3, and be recorded as applied, so a
+moved install would never get it; the app's first start applies it to the moved rows instead, as on any upgrade.
+The report's Schema line names the version; plan, Decision Log 42.)
+
 ### 9.4 What It Never Does
 
 It never writes to MariaDB, never reads or writes the conf, repository or cache volumes (nor does the entrypoint on
@@ -639,12 +649,17 @@ The start-up tool won't start the app on it (§8.3). Running the command again s
 unfinished move made, and only that. A target that holds anything else is refused. (Changed in the build: the marker
 is a table, `docker_move`, looked up in `current_schema()`, and one with no row counts as unfinished. A session
 advisory lock refuses a second move while one runs, and the command reaches an exit status whatever happens, so no
-open connection keeps it running; plan, Decision Log 36.)
+open connection keeps it running; plan, Decision Log 36. Changed in the review: an unfinished move beside the
+start-up tool's marker, which a move makes only as it finishes, is refused and never emptied, as only a database
+Healdan may have started on has both; and a failure to close a connection after the finish is a warning, so a
+finished move always ends `Move complete.` with status 0; plan, Decision Log 43 and 44.)
 
 ### 9.6 After the Move
 
 - **The first start** finds the schema and the marker, sets the conf volume's database keys (§8.2), checks CE's
-  tables, and starts Tomcat. Flyway has nothing to apply and no seed is new.
+  tables, and starts Tomcat. Flyway has nothing to apply and no seed is new. (Changed in the review: Flyway
+  applies any migration after V12 to the moved rows, as on any upgrade, as the move stops at V12, §9.3; while V12
+  is the newest it has nothing to apply; plan, Decision Log 42.)
 - **The way back** is the old version and the old volume, which nothing has touched, and it's safe only until the new
   stack's mover and purge have run: after that, going back behaves like restoring a backup, with the S3 spec's
   holding period as its limit (recon §5.8). The page says so, and says the two stacks must never run at once.
@@ -662,6 +677,11 @@ Until the owner says so: about a month after the owner's server has moved. A fol
 command, its overlay, its test and its fixture, drops MariaDB's driver from the WAR (an upstream POM edit, as SQL
 Server's was) and adds the driver to `check-database-drivers.py`. The Moving from MariaDB page stays, saying to check
 out the last version that had the command, move, and then upgrade.
+
+(Changed in the review: while the command stays, an upstream sync that adds, drops or renames a table or a column in
+CE's scripts makes the required Move test fail, the move refusing a table or column its source lacks. What to do about
+it is the owner's to decide, in the plan's Open Points for the Owner Before the Merge, and until then such a sync is
+held. Healdan's own later migrations aren't part of it, §9.3.)
 
 ## 10. Tests and CI
 
@@ -684,13 +704,14 @@ out the last version that had the command, move, and then upgrade.
   twelve missing tables (§4.1). Nothing Healdan does in the ordinary way may be on that list, which is why §7.3 takes
   every expected duplicate out of the log. That watches CE's own SQL, which nobody has read through, on every run. It
   can't see the typed reads' fault, which never reaches the server. The list is settled over several runs before the
-  check may fail a build. (Changed in the build: until then the check prints each unexpected line and passes; it
-  fails only when it couldn't read the log, a failed or empty read or one with no "ready to accept connections"
-  line, or its list is missing. Making it fail on an unexpected line is left for after the rehearsal, as the switch
-  stays a draft until then. Each `ERROR` line is read with the first line of its statement, never its `DETAIL`. The
-  list holds `StatsCollector`'s two patterns, taken from a stack with its 30-minute delay shortened, as no smoke run
-  lives that long; the two start-up probes are gone, §8.2. The new checks found no fault, and no run's log held an
-  `ERROR` line; plan, Decision Log 38.)
+  check may fail a build. (Changed in the build: until then the check prints each unexpected line and passes; it fails
+  only when it couldn't read the log, a failed or empty read or one with no "ready to accept connections" line, or its
+  list is missing. An unexpected line prints, and passes, until the list has held for five consecutive runs of the
+  draft pull request's CI on each architecture; then, before the pull request is marked ready, a commit of it makes
+  the check fail on one (the plan's Task 23, Decision Log 46). Each `ERROR` line is read with the first line of its
+  statement, never its `DETAIL`. The list holds `StatsCollector`'s two patterns, taken from a stack with its 30-minute
+  delay shortened, as no smoke run lives that long; the two start-up probes are gone, §8.2. The new checks found no
+  fault, and no run's log held an `ERROR` line; plan, Decision Log 38.)
 - **`test-init.sh`'s step that runs Upgrading's SQL** follows the page (§12): with no change listed for PostgreSQL
   yet, it has nothing to run until an upstream sync adds one.
 - **`test-init.sh`, `test-image.sh` and `test-overlays.sh`,** which are run by hand, move to PostgreSQL, with the
@@ -718,7 +739,12 @@ out the last version that had the command, move, and then upgrade.
 service, so that its folder and row agree. A failed comparison is made with a test-only event trigger that changes a
 value on the target, so that the command's own comparison refuses. Every run's raw output must hold only the
 command's lines, so a stack trace fails the test, and MariaDB's sequences are part of what stays untouched; plan,
-Decision Log 37.)
+Decision Log 37. Changed in the review: the fixture holds no sealed refresh token, and the sealed sign-in client
+secret stands in for one. It has rows in 46 of the 77 tables; the rest, among them the three tables with no primary
+key that hold people's data, are first copied for real at the rehearsal, §13.2. The test also starts the app on the
+fixture before any move, which the guard refuses with its move-first message, changing neither the conf file nor
+the database, and counts every table's rows on both sides, one query a side made from each catalogue, apart from the
+move's own report; plan, Decision Log 45.)
 
 ### 10.3 Healdan's Java Tests (owner)
 
