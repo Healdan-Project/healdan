@@ -8,7 +8,9 @@
   running beside the session (§4). The owner approved this written spec the same day. Implementation plan:
   [`docs/superpowers/plans/2026-11-18-postgresql.md`](../plans/2026-11-18-postgresql.md); its "Spec Corrections and
   Calls This Plan Makes" lists where it decides what this spec left open. PR A (the plan's Tasks 1 to 9) was built
-  on 2026-11-18; the switch (PR B) isn't built yet.
+  on 2026-11-18 and merged on 2026-11-19 (Healdan-Project/healdan#277). The switch (PR B, Tasks 10 to 22) was built
+  on 2026-11-19, and stays a draft pull request until the rehearsal of §13.2 has passed. Where the build departed
+  from this text, the section says so in a "changed in the build" clause, with the plan's Decision Log number.
 - **Inputs:**
   - the [PostgreSQL recon](../../reference/postgresql-recon.md) of 2026-11-03, re-checked on 2026-11-18, whose
     sections this spec cites as "recon §n" and whose questions Q1 to Q15 it answers (§15);
@@ -249,7 +251,13 @@ The app connects as an ordinary role that owns its database, as it connects to M
 not as PostgreSQL's superuser. The stack's `db` service makes the role and the database on its first start, from
 `DB_USER`, `DB_PASSWORD` and `DB_NAME`, and leaves the superuser reachable only from inside the `db` container, where
 backups and an admin's `psql` run. The owner of a database can create tables in its `public` schema, which is all
-the start-up tool and Flyway need. Healdan's tables and CE's stay in `public` (recon §3.3).
+the start-up tool and Flyway need. Healdan's tables and CE's stay in `public` (recon §3.3). (Changed in the build:
+this didn't say how the superuser is kept inside. The image's own `pg_hba.conf` trusts loopback TCP, so taking its
+password away wasn't enough: initdb's `--auth-host=scram-sha-256 --auth-local=trust` makes every TCP connection ask
+for a password, and the socket stays trusted. The role script, `docker/postgres/10-healdan-role.sh`, refuses before
+any statement a `DB_USER` that is the superuser's name or begins `pg_`, a `DB_NAME` of `postgres`, `template0` or
+`template1`, and an empty setting; it fails loudly when `psql` does, and never lets a failing statement put the
+password into the log; plan, Decision Log 33.)
 
 ### 6.4 CE's Tables, and the One Exception (owner)
 
@@ -296,7 +304,10 @@ script as a `varchar` PostgreSQL enforces:
 - **`HealdanMigrator`** takes PostgreSQL. After the switch it takes nothing else, and refuses MariaDB and MySQL with
   a message that names the Moving from MariaDB page. Its recovery message becomes PostgreSQL's: a failed script is
   rolled back whole, so "fix the cause and restart" is usually all, with the steps for a script Flyway ran outside a
-  transaction (`success = false`; recon §3.3).
+  transaction (`success = false`; recon §3.3). (Changed in the build: only MariaDB, known by its product name or by
+  a version that names it through MySQL's driver, is told of the page. MySQL gets "Healdan's tables support
+  PostgreSQL only; found …", as any other database does: Healdan never ran on MySQL, so there is nothing to move
+  from it; plan, Decision Log 29.)
 - **The `hsqldb/` folder and `flyway-database-hsqldb` go** when Healdan's tests move to PostgreSQL (§10.3), and
   `HealdanMigrator` stops taking HSQLDB then.
 - **The `mariadb/` folder and `flyway-mysql` go** at the switch. A shipped script still never changes; these stop
@@ -352,7 +363,11 @@ transaction, and one that may fail without failing its caller runs inside a save
   closes the race the recon reproduced.
 - **`healdan-storage`'s `Savepoints.insertIfAbsent`** (`StoredFiles.recordWrite`, `HeldCopies.hold`) lets a duplicate
   fail inside a savepoint by design. That's safe, but PostgreSQL logs each one as an error, which §10.1's check of
-  its log would trip over now and then. At the switch those inserts become `on conflict do nothing` too.
+  its log would trip over now and then. At the switch those inserts become `on conflict do nothing` too. (Changed
+  in the build: each of the four inserts names its conflict key, `on conflict (hd_docid, hd_resource)` and
+  `(hd_backendid, hd_location)` here, so that a unique index added later fails loudly instead of being swallowed,
+  and `EmailIndex.put` is one upsert. `insertIfAbsent` is gone, as these were its only callers. `hold`'s duplicate
+  path has no test, as only a second thread blocked on the insert reaches it; plan, Decision Log 30.)
 - **`Savepoints` moves from `healdan-storage` to `healdan-core`,** and becomes public, for what's left: work that
   isn't expected to fail, but mustn't fail its caller if it does.
 - **Listeners that log and swallow a failure inside CE's save** run their statements inside a savepoint, so that the
@@ -402,7 +417,9 @@ PostgreSQL's behaviour stands. Where Healdan's code assumed MariaDB's, the code 
   nothing changed there; plan, Decision Log 18. The legacy doc # is stripped of whitespace at both ends, which
   changes two edge answers on MariaDB too, §13.1; Decision Log 21. Changed in the review: the stored number is
   compared without the spaces at either end, `trim()` on both databases, so a number stored with them is still
-  found; Decision Log 25.)
+  found; Decision Log 25. Changed in the switch's build: a search folder's rule compares the stored value trimmed in the
+  same way, `SearchFolderService.appendValue`, and a folder's child found by name, `StoredRows.liveChild`, compares
+  as the database does, as it predicts what LogicalDOC's own `ld_name = ?` finds; Decision Log 27.)
 - **Finer times.** `VersionResource`'s tie on a version's date no longer has whole seconds to rely on, and is
   ordered so that it doesn't need them.
 - **Isolation** stays PostgreSQL's default, `READ COMMITTED`, which is what Healdan's conditional updates already
@@ -421,6 +438,12 @@ surrogate isn't a character at all.
   Healdan can't keep and doesn't name emoji or the database. The four that replace put a space for NUL, as the email
   code does today, and U+FFFD for a lone surrogate, and leave everything else alone.
 - **The API refuses a NUL in a query parameter** with a `400`, where the recon found a `500` (§4.7). (call)
+  (Changed in the build: it refuses a NUL or a lone surrogate in any text a JSON body carries too, values read as
+  `JsonNode` trees included, as `400 bad-request` naming the field, so a body never reaches the resources' own
+  `422 invalid` checks with such text, and `openapi.yaml` says the rule once, in its header. The query parameters'
+  check runs before the token's, so a request that isn't signed in gets the `400` too. A NUL in a multipart part's
+  file name stays `422 invalid`, as a control character. `StorableText` also has `cut`, which never splits a
+  surrogate pair when it shortens text to a column's length; plan, Decision Log 28.)
 - **Message-IDs keep today's rule,** to the character: `MessageIds` on the server and in the Helper still replace
   each character beyond the plane with U+FFFD, because the two have to agree and `hd_email` is indexed by the result.
   The replacement moves into `MessageIds` itself. The Helper's code doesn't change, only a comment that blames
@@ -441,6 +464,10 @@ surrogate isn't a character at all.
   names and meanings, and `.env.example` says PostgreSQL.
 - **`compose.dev.yaml`** publishes PostgreSQL's port on `DEV_DB_PORT`, by default `5432`.
 
+(Changed in the build: the health check also asks, over the socket, that the app's role can use its database, so a
+first start the role script refused never reads healthy, and `POSTGRES_INITDB_ARGS` adds initdb's
+`--auth-host=scram-sha-256 --auth-local=trust` after the four locale flags, §6.3; plan, Decision Log 33.)
+
 ### 8.2 The Start-Up Tool
 
 `DockerInit` and `ConfigPlan` become PostgreSQL's, as the trial patched them (recon §5.1's table):
@@ -453,6 +480,15 @@ surrogate isn't a character at all.
   start after the move. (call)
 - the lock timeout of §7.4, in a key the tool owns;
 - the checks of §6.1 and §6.2: the server's version, the database's encoding and its collation.
+
+(Changed in the build. The lock timeout is a setting of the app's role in its database, `alter role … in database …
+set lock_timeout = '50s'`, read back on a new connection, as the plan's call 1 decided, and a refused `alter role`
+stops the start with a message. The tool's probes ask `to_regclass`, never reading a table that may be missing, where
+this said a missing table is read by `42P01`, so a start writes no `ERROR` line to PostgreSQL's log. The checks of
+the server and the database are one method, which the move shares, and their notes print as `WARNING:` lines. The
+URL the tool writes, which the move's connections use too, ends `?logServerErrorDetail=false`, so that a failed
+statement's message never quotes a row's values; PostgreSQL's own log keeps the detail; plan, Decision Log 26 and
+31.)
 
 ### 8.3 The Guard Against Starting an Install Empty (call)
 
@@ -474,6 +510,16 @@ does on every start, and before it creates a schema. It stops, changing nothing,
 
 A fresh install passes all three: the entrypoint copies the image's defaults into its conf volume before the tool
 runs, and those name neither database, and its repository is empty.
+
+(Changed in the build: the guard connects before the tool writes anything, and reads the conf's `jdbc.url` and
+`jdbc.dbms`, and `context-override.properties`' beside it, with a plain read that leaves the file's bytes and time as
+they were. When the conf names MariaDB, a database that doesn't answer within 15 seconds counts as not answering,
+whatever `DB_WAIT_SECONDS` says. A conf that names MySQL counts as MariaDB's, a marker table with no row as an
+unfinished move, and a folder that exists but can't be listed as holding files. A sign-in the database refuses stops
+the start with its own message. The third case's message also points to the move, for an install whose conf volume
+was lost before it moved. A database setting with a line break, or beyond Latin-1, is refused before the guard
+connects. The entrypoint's own writes before the tool runs, which touch no existing `context.properties`, are
+unchanged; plan, Decision Log 32.)
 
 ### 8.4 The Setup Wizard (call)
 
@@ -516,6 +562,14 @@ docker compose up -d
   place of the start-up tool and Tomcat, and exits with its status.
 - The numbers above are examples.
 
+(Changed in the build. The page removes the move's MariaDB with `rm --stop --force mariadb`, as `stop` leaves its
+container, which holds `db-data` and which every later `up` warns of. The report prints "Foreign keys rebuilt" before
+"Comparing", in the order the steps run; its Source line names the source's time zone; and the lists of what only the
+source had and of every replaced NUL print before the finish is committed, so `Move complete.` is the last line. The
+page keeps the report with `tee`, outside the checkout, as `run --rm` removes the container and its log.
+`compose.move.yaml` mounts the named volume `db-data`, so an install whose MariaDB data is a host folder adds a file
+of its own while it moves, which the page gives; plan, Decision Log 36 and 39.)
+
 ### 9.2 What It Requires
 
 - **The source at the last MariaDB version.** A git tag, `mariadb-final`, marks the last commit that runs on MariaDB
@@ -557,6 +611,20 @@ docker compose up -d
    the value itself.
 8. **Marks the move finished** and the schema initialised (the start-up tool's marker), last, and prints its report.
 
+(Changed in the build. MariaDB's driver in the WAR misreads a `datetime(3)` under a tenth of a second through
+`getString`, and step 7 compares what was carried with what PostgreSQL holds, so it can't see a value changed as it
+was read. So dates are read as `cast(col as char)`, rows in MariaDB's binary protocol, as its text protocol rounds
+floats, and each table is also checked in step 4, in the same snapshot, against MariaDB's own `count` of every column
+and `sum(crc32(…))` of every column but the floating-point ones. After a refusal in step 4 the command reads every
+remaining table, writing nothing, so that the report names every place in one run. In step 5 an identity column's
+counter starts from the higher of its highest value and MariaDB's `AUTO_INCREMENT − 1`, where this said from its
+highest value: a gap, never a repeat. A foreign key that can't be rebuilt in step 6 lists its orphan rows by table,
+key and column, twenty at most. Carrying a value refuses a target type it doesn't know even for a null, pads a
+`character(n)` value as PostgreSQL stores it, refuses a floating-point number for a `numeric` column, and counts a
+text's length in code points; a name one side gives twice, whatever the case, and a lone surrogate stop the move.
+Nothing printed holds a row's value: a failure while rows are read or written names the table, the SQLSTATE and the
+exception's class; plan, Decision Log 34, 35 and 36.)
+
 ### 9.4 What It Never Does
 
 It never writes to MariaDB, never reads or writes the conf, repository or cache volumes (nor does the entrypoint on
@@ -568,7 +636,10 @@ and the search index (recon §5.8).
 
 Any failed check, error or interruption leaves the target marked unfinished and the command's exit status non-zero.
 The start-up tool won't start the app on it (§8.3). Running the command again starts over: it removes what the
-unfinished move made, and only that. A target that holds anything else is refused.
+unfinished move made, and only that. A target that holds anything else is refused. (Changed in the build: the marker
+is a table, `docker_move`, looked up in `current_schema()`, and one with no row counts as unfinished. A session
+advisory lock refuses a second move while one runs, and the command reaches an exit status whatever happens, so no
+open connection keeps it running; plan, Decision Log 36.)
 
 ### 9.6 After the Move
 
@@ -577,6 +648,11 @@ unfinished move made, and only that. A target that holds anything else is refuse
 - **The way back** is the old version and the old volume, which nothing has touched, and it's safe only until the new
   stack's mover and purge have run: after that, going back behaves like restoring a backup, with the S3 spec's
   holding period as its limit (recon §5.8). The page says so, and says the two stacks must never run at once.
+  (Changed in the build: the old version can't start on the conf volume as the new one left it. The new version's
+  first start writes PostgreSQL's `jdbc.driver`, `jdbc.dbms` and dialect, which `mariadb-final` seeds only once, so
+  it fails with `No suitable driver`. The page's Going Back puts the three back with one command first, and takes the
+  stack down with both Compose files named, so that the move's MariaDB goes too. Making `mariadb-final` own those
+  keys would have needed a change to `master` before the tag; plan, Decision Log 39.)
 - **The backup job changes with the database** (§12): a job that runs `mariadb-dump` backs up nothing after the move.
 - **The old volume is removed by hand,** when the admin is content. The page gives the command.
 
@@ -596,14 +672,25 @@ out the last version that had the command, move, and then upgrade.
   run.
 - **New checks:** an emoji in a matter's name, a document's name and an email's subject is kept; a NUL in a query
   parameter is a `400`; and a user's edit is still there when read back (§7.2), beside the twelve checks that already
-  fail without the typed-reads fix (§4.1).
+  fail without the typed-reads fix (§4.1). (Changed in the build: the user's edit is Disable and Enable of `apiuser`
+  over the Classic Interface's GWT-RPC, `changeStatus`, which goes through `UserDAO.store` and the typed read of
+  `ld_enabled`, as LogicalDOC has no REST user service and SOAP is removed. The matter is made over GWT-RPC too, as
+  the API can't create matters, and takes its client's next free number, 1.5 today, so every smoke stack has it. A
+  check that the app's role waits 50 seconds for a lock joins them. The scripts run by hand take their names from the
+  environment, so two runs can share a machine; plan, Decision Log 38.)
 - **PostgreSQL's log is checked too (call).** A statement PostgreSQL refuses is an `ERROR` line in the `db` service's
   log, whatever the Java around it swallowed, and the trial's full run had two. The smoke test fails on an `ERROR`
   line it doesn't expect, with a short list of those it does: the ones its own steps provoke, and `StatsCollector`'s
   twelve missing tables (§4.1). Nothing Healdan does in the ordinary way may be on that list, which is why §7.3 takes
   every expected duplicate out of the log. That watches CE's own SQL, which nobody has read through, on every run. It
   can't see the typed reads' fault, which never reaches the server. The list is settled over several runs before the
-  check may fail a build.
+  check may fail a build. (Changed in the build: until then the check prints each unexpected line and passes; it
+  fails only when it couldn't read the log, a failed or empty read or one with no "ready to accept connections"
+  line, or its list is missing. Making it fail on an unexpected line is left for after the rehearsal, as the switch
+  stays a draft until then. Each `ERROR` line is read with the first line of its statement, never its `DETAIL`. The
+  list holds `StatsCollector`'s two patterns, taken from a stack with its 30-minute delay shortened, as no smoke run
+  lives that long; the two start-up probes are gone, §8.2. The new checks found no fault, and no run's log held an
+  `ERROR` line; plan, Decision Log 38.)
 - **`test-init.sh`'s step that runs Upgrading's SQL** follows the page (§12): with no change listed for PostgreSQL
   yet, it has nothing to run until an upstream sync adds one.
 - **`test-init.sh`, `test-image.sh` and `test-overlays.sh`,** which are run by hand, move to PostgreSQL, with the
@@ -624,6 +711,14 @@ out the last version that had the command, move, and then upgrade.
   person signs in, a document's bytes come back, the next doc # and the next ids follow the old ones, a delete makes
   a Trash item, and the storage backend's marker is accepted.
 - **In CI** it runs in the image workflow's amd64 job, after the smoke test, while the command exists.
+
+(Changed in the build: the fixture was made from `84c802acb`, the commit of `master` the switch merges onto, by
+`make.sh`, and is about 53 KB. It also holds a date under a tenth of a second, which MariaDB's driver misreads
+(§9.3), a sealed sign-in client secret that must still open, and an accented matter made through New Matter's
+service, so that its folder and row agree. A failed comparison is made with a test-only event trigger that changes a
+value on the target, so that the command's own comparison refuses. Every run's raw output must hold only the
+command's lines, so a stack trace fails the test, and MariaDB's sequences are part of what stays untouched; plan,
+Decision Log 37.)
 
 ### 10.3 Healdan's Java Tests (owner)
 
@@ -673,7 +768,9 @@ Every test in a `healdan-*` module runs on PostgreSQL, and none on HSQLDB.
 | `logicaldoc-parent/pom.xml`, `logicaldoc-webapp/pom.xml` (PR A) | `postgresql.version`, a property the WAR's pgjdbc dependency uses | The `healdan-*` modules' tests use it too, so they run on the driver the WAR ships |
 
 Nothing else upstream changes: not `context.xml`, not `context.properties`, not CE's SQL scripts. The removal of §9.7
-later edits `logicaldoc-webapp/pom.xml`. (Changed in the review: the two PR A rows, plan, Decision Log 25.)
+later edits `logicaldoc-webapp/pom.xml`. (Changed in the review: the two PR A rows, plan, Decision Log 25.) At the
+end of the switch's build, `git diff --stat 84c802acb` over everything outside the fork's own folders listed
+`Setup.java` alone, two lines changed: the second row's wizard default.
 
 ### 11.2 Fork-Owned Files
 
@@ -713,6 +810,14 @@ later edits `logicaldoc-webapp/pom.xml`. (Changed in the review: the two PR A ro
 - **`CLAUDE.md`:** the database, persistence, Flyway, Docker, build-and-test, tests and upstream-edits paragraphs, and
   the rules for new SQL, which become PostgreSQL's (§7.3).
 - **The roadmap:** principle 9, the backlog row and §6's schema rule.
+
+(Changed in the build, from running every procedure the Install manual gives. Backup and Restore dumps
+`$HEALDAN_DB_NAME`, not recon §5.3's `$POSTGRES_DB`, which is the empty `postgres`, and restores as the app's role
+with `--no-owner --single-transaction`, so the app owns its tables. The move's page has a section for MariaDB data in
+a host folder (§9.1) and a Going Back that puts the conf volume's database keys back (§9.6). Upgrading's new major
+initialises its own versioned folder in the same volume, as the 18 image lays it out, not a new volume. The stack's
+password change uses `psql`'s `\password`; plan, Decision Log 39. The Developer Guide's Building from Source says what
+an install outside Docker, which gets none of the start-up tool's work, sets by hand; Decision Log 40.)
 
 ## 13. Delivery and Acceptance (call)
 
@@ -777,21 +882,34 @@ later edits `logicaldoc-webapp/pom.xml`. (Changed in the review: the two PR A ro
 
 ## 14. Left to the Builder
 
+How the build settled each, by the plan's calls and its Decision Log:
+
 - Where the lock timeout is set: the URL's `options`, or the pools' connection-init keys, both of which
-  `context.properties` has.
+  `context.properties` has. **Neither:** a setting of the app's role in its database, which the start-up tool
+  applies and reads back at every start (the plan's call 1; Decision Log 31).
 - How the `db` service makes the role and hides the superuser (an init script mounted from the checkout is enough
-  while installs build from source).
+  while installs build from source). **An init script mounted from the checkout,**
+  `docker/postgres/10-healdan-role.sh`, and initdb's `--auth-host=scram-sha-256 --auth-local=trust` (Decision Log 33).
 - How the move marks a target unfinished and finished, how it orders its work within the steps of §9.3, its batch
-  size, and how the checksum treats a MariaDB `float`.
+  size, and how the checksum treats a MariaDB `float`. **A table, `docker_move`,** with `started` and `finished`,
+  beside the start-up tool's `docker_init` (the plan's call 7); the ten steps `MoveFromMariaDb` lists; 1,000 rows a
+  batch, one transaction a table; a `float` is read in MariaDB's binary protocol, carried as the double it is, summed
+  in the checksum by its `Double.toString`, and counted but not hashed in MariaDB's own tally (Decision Log 35).
 - The new text check's name, the API's code for a NUL (an existing `400` code), and the name of the move's option
-  that replaces NULs.
-- What tells the start-up tool that a repository volume holds an install (§8.3).
+  that replaces NULs. **`StorableText`, `400 bad-request` and `--replace-nul`** (Decision Log 28).
+- What tells the start-up tool that a repository volume holds an install (§8.3). **Any entry in Original's folder,**
+  a storage marker or a document's folder, or a folder that can't be listed (Decision Log 32).
 - The counters' arithmetic (§9.3, step 7), confirmed with one query on a real install before it's relied on.
+  **Confirmed** on the owner's data on 2026-11-18, read-only (the plan's call 11), and `MoveCounters` checks it.
 - Each site of §7.3 and §7.4, from the recon's lists and the trial's failures, and how the read-back after a failed
-  save finds CE's transaction ended.
-- How a test names its PostgreSQL server, and the command that starts one locally.
-- Whether the start-up tool's probes of an empty database can stop raising errors in PostgreSQL's log.
-- The fixture's exact rows.
+  save finds CE's transaction ended. **In PR A** (Decision Log 13 to 25), with the two comparisons left open there
+  settled in PR B (Decision Log 27).
+- How a test names its PostgreSQL server, and the command that starts one locally. **`HEALDAN_TEST_DB_URL`,
+  `HEALDAN_TEST_DB_USER` and `HEALDAN_TEST_DB_PASSWORD`,** whose defaults reach the server
+  `docker/tests/test-db.sh start` runs (PR A, Task 1).
+- Whether the start-up tool's probes of an empty database can stop raising errors in PostgreSQL's log. **They can,
+  and do:** they ask `to_regclass` (Decision Log 31).
+- The fixture's exact rows. **`docker/tests/move-fixture/README.md`** lists them (Decision Log 37).
 
 ## 15. Decisions Made in This Session
 

@@ -19,10 +19,18 @@ git remote add upstream https://github.com/logicaldoc/community.git
   repository, or taking out an Oracle or SQL Server driver or wizard choice, belong in the sync itself.
 - **A change to LogicalDOC's tables gets an entry in Upgrading.** Healdan never changes LogicalDOC's tables on an
   existing database, so a sync that changes them, in a `logicaldoc-*` module's `sql/` scripts or in the columns an
-  entity maps, adds the SQL an existing database needs, with a check, to the Install manual's
+  entity maps, adds the SQL an existing PostgreSQL database needs, with a check, to the Install manual's
   [Changes to LogicalDOC's Tables](../../install/upgrading/#changes-to-logicaldocs-tables). That's a fix the merge
   needs too. Until an existing database has the change, the init tool stops its start, naming each table and column
   the scripts create that it lacks, so a sync that changes the scripts without an entry leaves admins stuck.
+  - **The SQL goes to `psql` as the app's role,** in a heredoc inside that section, as the section says:
+    `docker compose exec -T db sh -c 'psql -U "$HEALDAN_DB_USER" -d "$HEALDAN_DB_NAME"' <<'SQL'`, the SQL, then a
+    line `SQL`. `docker/tests/test-init.sh` finds each change written so and runs it (see
+    [Docker Tests](../tests/#docker-tests)).
+  - **While the move from MariaDB is in the image,** such a change also fails its test, as the move makes its target
+    with the new scripts and refuses a table or column its MariaDB source lacks (see
+    [The Move's Test](../tests/#the-moves-test)). The test is a step of `Test (amd64)`, which `master` requires, so
+    the sync can't merge as it is.
 - **`.github/workflows/upstream-sync.yml`** runs a sync every week. `.github/scripts/upstream-sync.sh` does the
   merge.
 

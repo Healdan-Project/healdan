@@ -166,7 +166,7 @@ Some renames aren't allowed, and the app says why:
 - **Two folders side by side can't share a name.** Healdan says "There's already a folder called Drafts here." beside
   the field, which stays open for you to choose another. Changing only the case of the folder's own name, such as
   `drafts` to `Drafts`, works.
-- **A name can't have** `/`, `\`, emoji or HTML tags in it, or characters that turn the text round.
+- **A name can't have** `/`, `\` or HTML tags in it, or characters that turn the text round. Emoji are fine.
 
 The rename is in the folder's history. Its documents keep their doc #s and properties.
 
