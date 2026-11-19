@@ -17,7 +17,9 @@ export default defineConfig(({ mode }) => {
     // pressable.css, which both apps' pages link, is @healdan/ui's
     publicDir: '../../packages/ui/public',
     plugins: [react()],
+    // strings/problems.test.ts reads the admin contract (healdan-api's openapi-admin.yaml), which is outside this app.
     server: {
+      fs: { allow: ['../../../..'] },
       proxy: { '/api': toStack, '/login.jsp': toStack, '/j_spring_security_check': toStack, '/app': toStack },
     },
     build: {

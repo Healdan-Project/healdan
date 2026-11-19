@@ -178,14 +178,16 @@ know, a newer server's, shows the server's own detail or name rather than failin
 
 ### Refusals Are the App's
 
-A screen never handles a `401` or a `403 admins-only` itself. `App.tsx` gives `ServicesProvider` the client that
-`guardApi(api, access, signedOut)` (`access.tsx`) makes, so every `useApi()` gets it. Its `get`, `getResponse` and
-`send` mark `access` at a `403 admins-only` from any call, and once that or a `401` has come (the shell's signed-out
-state, which `createApi` marks), no call is sent again: each throws the refusal, made in the browser. `url()` makes an
-address, not a call, so it isn't guarded. `Frame` reads `useSignedOut()` and `useRefused()`, and draws `SignedOut` or
-`NoAdminAccess` in place of the frame and every screen in it, which stops their polls; the guard stops a call already
-on its way and one an effect makes as it goes. `access` never goes back: only a page load, which the server answers,
-lets someone in again. Any other refusal or failure is the screen's own. `access.test.ts` has the cases.
+A screen never handles a `401` or a `403 admins-only` itself. `start`, in `main.tsx`, makes the app's one client with
+`guardApi(api, access, signedOut)` (`access.tsx`) where it makes the raw one, and hands it and `access` to `App`, which
+gives it to `ServicesProvider`, so every `useApi()` gets it and nothing in the app can reach a client that isn't
+guarded; the tests' `renderApp` does the same over the fake API. Its `get`, `getResponse` and `send` mark `access` at a
+`403 admins-only` from any call, and once that or a `401` has come (the shell's signed-out state, which `createApi`
+marks), no call is sent again: each throws the refusal, made in the browser. `url()` makes an address, not a call, so it
+isn't guarded. `Frame` reads `useSignedOut()` and `useRefused()`, and draws `SignedOut` or `NoAdminAccess` in place of
+the frame and every screen in it, which stops their polls; the guard stops a call already on its way and one an effect
+makes as it goes. `access` never goes back: only a page load, which the server answers, lets someone in again. Any other
+refusal or failure is the screen's own. `access.test.ts` has the cases.
 
 ## Lists
 
@@ -704,10 +706,12 @@ Space previews rather than selects, and leaves them to a field inside a row.
 ## The Catalogue
 
 Every word the app shows is in one typed catalogue, `packages/ui/src/strings/en-US.ts`, and a view gets it with
-`t('key')`. A translation is a new file beside it. Labels are in US English and Title Case. `{matter}` and
-`{matters}` are the firm's own words for a matter, which the app reads from `GET /server`, and other `{name}`s are
-filled from the variables `t()` is given. Each of the API's problem `code`s has a message here too, so the wording
-is decided in one place, and a test fails when one has none.
+`t('key')`. A translation is a new file beside it. Labels are in US English and Title Case. `{matter}` and `{matters}`
+are the firm's own words for a matter, which each app's `start` reads from `GET /server` before it first draws, waiting
+5 seconds at most, and other `{name}`s are filled from the variables `t()` is given. Each of the API's problem `code`s
+has a message here too, so the wording is decided in one place, and a test fails when one has none: the User app's
+`frame/errors.test.ts` reads `openapi.yaml`'s codes, and the Admin app's `strings/problems.test.ts` reads
+`openapi-admin.yaml`'s, which may have a message in the Admin app's catalogue or the shared one.
 
 An app's own words are a catalogue of their own over the shared one, so neither app downloads the other's:
 `createCatalogue(strings, plurals)` in `@healdan/ui` gives a `t()` and a `plural()` that look in the app's strings

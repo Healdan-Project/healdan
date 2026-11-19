@@ -42,7 +42,7 @@ export const health: A['HealthTile'][] = [
 ]
 
 export const attention: A['AttentionItem'][] = [
-  { code: 'files-stuck', count: 3, detail: 'Client Work, retrying since 09:12', link: '/frontend.jsp' },
+  { code: 'files-stuck', count: 3, detail: 'Client Work, moving to Wasabi EU', link: '/frontend.jsp' },
   { code: 'index-failed', count: 2, detail: '# 10412, # 10398', link: '/admin/search-index' },
   { code: 'errors', count: 14, detail: 'Latest 10:41, a preview timed out', link: '/frontend.jsp' },
 ]

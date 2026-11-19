@@ -4,6 +4,7 @@
 import { act, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from './test/axe'
+import { t } from './strings'
 import { start } from './main'
 
 describe('Starting the Admin app', () => {
@@ -16,6 +17,30 @@ describe('Starting the Admin app', () => {
     root?.remove()
     vi.restoreAllMocks()
   })
+
+  /**
+   * A server whose GET /v1/server answers after `ms` with the firm's words, or never; every other request never ends but by
+   * an abort, as with a real fetch
+   */
+  function slowServer(ms?: number) {
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const signal = init?.signal ?? undefined
+      if (ms !== undefined && String(input).endsWith('/api/v1/server')) {
+        const info = { labels: { matter: 'Case', matters: 'Cases' } }
+        return new Promise<Response>((resolve) => setTimeout(() => resolve(new Response(JSON.stringify(info), { headers: { 'Content-Type': 'application/json' } })), ms))
+      }
+      return new Promise<Response>((_resolve, reject) => signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))))
+    })
+  }
+
+  function startNow(on: HTMLElement): () => boolean {
+    let drawn = false
+    void start(on, true).then((done) => {
+      drawn = true
+      unmount = done
+    })
+    return () => drawn
+  }
 
   it("at an address that isn't secure shows only the page that says so, with the Classic Interface, and asks the server nothing", async () => {
     const fetch = vi.spyOn(globalThis, 'fetch')
@@ -30,15 +55,64 @@ describe('Starting the Admin app', () => {
     await expectNoAxeViolations(root)
   })
 
-  it('at a secure address draws the app', async () => {
-    // A server that doesn't answer: the frame and the Dashboard's heading draw all the same, and each part waits
-    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => {}))
+  it("takes the firm's word for a matter before it draws the app", async () => {
+    vi.useFakeTimers()
+    slowServer(100)
     root = document.body.appendChild(document.createElement('div'))
-    await act(async () => {
-      unmount = await start(root!, true)
-    })
-    expect(await screen.findByRole('link', { name: 'Healdan Admin' })).toBeTruthy()
+    const drawn = startNow(root)
+
+    await act(() => vi.advanceTimersByTimeAsync(99))
+    expect(drawn()).toBe(false)
+    await act(() => vi.advanceTimersByTimeAsync(1))
+    await act(() => vi.waitFor(() => expect(drawn()).toBe(true)))
+    expect(t('admin.find.matters')).toBe('Cases')
+    expect(t('admin.usage.busiest')).toBe('Busiest Cases This Week')
+    expect(screen.getByRole('banner')).toBeTruthy()
+  })
+
+  it("draws the app with the default words once the server hasn't said what a matter is called within five seconds", async () => {
+    // A server that doesn't answer: the frame and the Dashboard's heading draw all the same, and each part waits
+    vi.useFakeTimers()
+    slowServer()
+    root = document.body.appendChild(document.createElement('div'))
+    const drawn = startNow(root)
+
+    await act(() => vi.advanceTimersByTimeAsync(4_999))
+    expect(drawn()).toBe(false)
+    await act(() => vi.advanceTimersByTimeAsync(1))
+    await act(() => vi.waitFor(() => expect(drawn()).toBe(true)))
+    expect(t('admin.usage.busiest')).toBe('Busiest Matters This Week')
+    expect(screen.getByRole('link', { name: 'Healdan Admin' })).toBeTruthy()
     expect(screen.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Healdan needs a secure address.' })).toBeNull()
+  })
+
+  it("takes the firm's words when the server says them after the app was drawn, and draws it again", async () => {
+    vi.useFakeTimers()
+    slowServer(6_000)
+    root = document.body.appendChild(document.createElement('div'))
+    const drawn = startNow(root)
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    await act(() => vi.waitFor(() => expect(drawn()).toBe(true)))
+    expect(t('admin.find.matters')).toBe('Matters')
+
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    await act(() => vi.waitFor(() => expect(t('admin.find.matters')).toBe('Cases')))
+    expect(screen.getByRole('banner')).toBeTruthy()
+  })
+
+  it('draws nothing again when the words come after the app was taken away', async () => {
+    vi.useFakeTimers()
+    slowServer(6_000)
+    root = document.body.appendChild(document.createElement('div'))
+    const drawn = startNow(root)
+    await act(() => vi.advanceTimersByTimeAsync(5_000))
+    await act(() => vi.waitFor(() => expect(drawn()).toBe(true)))
+    act(() => unmount?.())
+    unmount = undefined
+
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    await act(() => vi.waitFor(() => expect(t('admin.find.matters')).toBe('Cases')))
+    expect(root.childElementCount).toBe(0)
   })
 })
