@@ -150,7 +150,8 @@ pane's foot, apart from `NAV`. A screen joins when its phase ships:
    `GET /v1/admin/dashboard` only while an entry it shows has a `count`. `aria-current="page"` marks the open entry:
    the Dashboard at `/` only, and any other at its address and the pages under it.
 4. Point what led to the Classic Interface at it: the Dashboard's links, which the server gives (`AttentionItem.link`
-   and `HealthTile.link`, `/frontend.jsp` until the screen ships), and the find's `DESTINATIONS`. An attention row's
+   and `HealthTile.link`, from `healdan-core`'s `DashboardService.Screen`, `/frontend.jsp` until the screen ships),
+   and the find's `DESTINATIONS`. An attention row's
    link takes its label from `NAV` (`screenAt`: the screen's name, **Classic Interface** for `/frontend.jsp`, or
    **Open**), so it follows by itself.
 5. Add its words to the app's catalogue, and test it with `renderApp`, the fake API and `expectNoAxeViolations`.

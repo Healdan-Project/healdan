@@ -68,7 +68,9 @@ pixels wide or more, and works at a tablet's 768.
 
 The Dashboard is the Admin app's first page, at `/admin/`. Beside its title, "Updated" and a time say when it was last
 brought up to date, and **Refresh** asks again at once. It also asks again every 30 seconds while it's showing, and
-each time you come back to its window, but not while its tab is hidden.
+each time you come back to its window, but not while its tab is hidden. Healdan keeps what it last read for Needs
+Attention and Server Health for a minute, and the database's for five, then shows that while it reads again, so a
+figure can be a minute or two old, and the database's up to ten.
 
 Each of its three parts loads on its own. One that can't be loaded says so, with **Try Again**, and the others still
 work.
@@ -82,16 +84,16 @@ which Store or since when, and a link to where it's fixed. Until that place is i
 | It says, for example | What it means |
 |---|---|
 | "3 files are stuck moving to storage" | files Healdan gave up moving to their Store's storage backend: see [Stuck Files and Retry](../storage-backends/waiting-and-stuck-files/#stuck-files-and-retry) |
-| "1 storage backend can't be reached" | a storage backend Healdan can't reach now: see [When a Backend Fails](../storage-backends/when-a-backend-fails/) |
+| "1 storage backend can't be reached" | a storage backend Healdan can't reach now, or that's failing for another reason, so Healdan can't use it: see [When a Backend Fails](../storage-backends/when-a-backend-fails/) |
 | "12 documents couldn't be indexed, so search won't find their text" | documents the [Indexer](../system/scheduled-tasks/) failed on at its last try, which it goes on trying: see [Search and Indexing](../system/search-and-indexing/) |
-| "4 unresolved errors in the last 24 hours" | errors the server logged in the last 24 hours. The server's log is on the **Log** tab of [System Information](../system/system-information/) |
+| "4 unresolved errors in the last 24 hours" | errors the server logged in the last 24 hours that nobody has resolved, an error logged again and again counting once. The server's log is on the **Log** tab of [System Information](../system/system-information/) |
 | "2 previews were given up on" | Office previews Healdan gave up making after their last try: see [Office Previews](../office-previews/) |
-| "1 background job failed when it last ran" | a background job, Healdan's own work or one of LogicalDOC's [scheduled tasks](../system/scheduled-tasks/), whose last run failed |
-| "1 background job hasn't run when it should have" | a background job that's overdue |
-| "1 disk is more than 85% full" | a disk the server writes to, such as the repository's |
+| "1 background job failed when it last ran" | a background job that's switched on, Healdan's own work or one of LogicalDOC's [scheduled tasks](../system/scheduled-tasks/), whose last run failed. A scheduled task's run counts as failed when it logged an error while it ran, even one it went on from |
+| "1 background job hasn't run when it should have" | a background job that's switched on and not running, whose next run is late by more than twice the time between its runs, and by an hour at least |
+| "1 disk is more than 85% full" | the disk of the repository, the search index or the logs, more than 85% full |
 
-When Healdan couldn't check something this time, it names it, as in "Couldn't check Stuck Files, Errors.", and never
-says that nothing needs your attention while it can't tell.
+When Healdan couldn't check something this time, or is still working it out, it names it, as in "Couldn't check
+Stuck Files, Errors.", and never says that nothing needs your attention while it can't tell.
 
 ### Server Health
 
@@ -101,20 +103,21 @@ Classic Interface. The status is:
 - **OK** when all is well;
 - **Needs Attention** when something needs acting on;
 - **Off** when what the tile shows isn't set up or is switched off, such as **Outgoing Email** with no mail server;
-- **Unavailable** when Healdan couldn't read it, with why in place of the detail. The other tiles are still whole.
+- **Unavailable**, in place of the status, when Healdan couldn't read what the tile shows, or is still working it
+  out: the line under it says which, in place of the detail. The other tiles are still whole.
 
 | Tile | What it shows |
 |---|---|
 | Server | how long the server has been up, and Healdan's version |
 | Database | the database's product, its version and its size |
-| Disk | the space used and the size of the repository's disk, and of the search index's and the logs' where they're on other disks, with a bar for how full |
+| Disk | the space used and the size of the repository's disk, and of the search index's and the logs' where they're on other disks, with a bar for the fullest. **Needs Attention** when one is more than 85% full |
 | Memory | how much of the memory Java may take (its heap) is used, with a bar for how full |
-| Sign-In | whether each [sign-in provider](../../install/sign-in/) that's turned on answers |
-| Storage Backends | how many [storage backends](../storage-backends/) can be reached, and any stuck files |
+| Sign-In | whether each [sign-in provider](../../install/sign-in/) people can sign in through answers, each asked at most every 5 minutes. **Off** with none |
+| Storage Backends | how many [storage backends](../storage-backends/) can be reached, and any stuck files. **Off** on a server that doesn't use them |
 | Search Index | how many documents wait to be indexed, and how many couldn't be |
 | Previews | how many [previews](../office-previews/) wait to be made, and how many were given up on |
-| Background Jobs | whether the background jobs are on schedule, or which aren't |
-| Outgoing Email | whether [outgoing email](../system/outgoing-email/) is set up, and how its last send went |
+| Background Jobs | how many background jobs are on schedule, which failed or are overdue, and how many are switched off |
+| Outgoing Email | whether [outgoing email](../system/outgoing-email/) is set up, and whether a send failed in the last 24 hours: an error the server logged sending that nobody has resolved. **Off** when it isn't set up |
 
 ### Usage
 

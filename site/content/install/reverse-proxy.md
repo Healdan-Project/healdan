@@ -27,8 +27,10 @@ Whichever proxy you use:
   or the address the browser used, makes the app say "Healdan refused that from this page", and signs nobody out.
 - **HTTPS for the User and Admin apps.** Browsers send `Sec-Fetch-Site` only to an `https://` address, or to the
   machine they run on, so the User app and the Admin app need the proxy's HTTPS. Opened at a plain `http://` address
-  from another machine, each shows a page saying it needs a secure address, with a link to the Classic Interface, and
-  nothing else. `/admin/` needs nothing more of the proxy than `/app/` does.
+  from another machine, the User app, and the Admin app for an administrator opening `/admin/`, show a page saying
+  they need a secure address, with a link to the Classic Interface, and nothing else. Someone who isn't an
+  administrator gets the Admin app's no-access page there, as anywhere. `/admin/` needs nothing more of the proxy
+  than `/app/` does.
 - **The root of the host name.** The User app works only at the root of its address, such as
   `https://docs.example.org/app/`, not under a path such as `https://example.org/healdan/app/`, and so does the Admin
   app at `/admin/`. Give Healdan a host name of its own: see [Known Limitations](../known-limitations/#the-user-app).

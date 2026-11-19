@@ -4,7 +4,9 @@ weight: 6
 ---
 
 LogicalDOC's background work runs as tasks on schedules, listed under **Administration → System → Scheduled
-Tasks**. Healdan adds no tasks of its own: its [Office previews](../../office-previews/) are made as files arrive.
+Tasks**. Healdan's own background work, such as making [Office previews](../../office-previews/) as files arrive,
+isn't listed here: the [Admin app](../../the-admin-app/)'s Dashboard shows it beside these tasks, on its
+**Background Jobs** tile, with any that failed or are overdue under **Needs Attention**.
 
 ![The Scheduled Tasks list: Index Optimizer, Indexer, Tags Processor, Digest Processor, Statistics Collector and Paths Calculator, each with its last start, duration, next start, schedule and progress](scheduled-tasks.png)
 

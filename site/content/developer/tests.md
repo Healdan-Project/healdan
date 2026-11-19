@@ -129,12 +129,15 @@ Healdan's migrations and setup steps on it.
 - **The admin API has a file of its own,** `openapi-admin.yaml` (see the [API](../api/#the-admin-apps-routes)).
   `Contract` checks every answer under `/api/v1/admin` against it instead, and `RouteCoverageTest` compares the
   routes with both files, failing on a `/v1/admin` path in `openapi.yaml` or another in `openapi-admin.yaml`. A route
-  the admin file describes before the server answers it is in `RouteCoverageTest`'s `DESCRIBED_AHEAD`, which fails
-  once the server answers it, so the list never hides a route that's missing.
+  the admin file describes before the server answers it, so the Admin app can be built against it, goes in
+  `RouteCoverageTest`'s `DESCRIBED_AHEAD`, which fails once the server answers it, so the list never hides a route
+  that's missing. It's empty now: the server answers every route the file describes.
   `OpenApiFileTest` checks that the admin file parses, uses the web session only and refers only to itself, and that
   its copies of `Page`, `FieldError` and the `Problem` response are the first file's, but for their words, and its
-  `Problem` the first file's with fewer members. `DocsResourceTest` checks that the served `openapi.yaml` holds no
-  admin route and that `openapi-admin.yaml` isn't served.
+  `Problem` the first file's with fewer members. It also checks that every value of a string enum, in both files, is
+  a string: YAML reads a bare `off`, `on`, `yes` or `no` as a boolean, as the Dashboard's tile status `off` would be.
+  `DocsResourceTest` checks that the served `openapi.yaml` holds no admin route and that `openapi-admin.yaml` isn't
+  served.
 - **`AdminFilterTest`** checks the admin API's refusals through test-only resources under `/api/v1/admin/test/`,
   which count their calls: an administrator's web session gets through, a device token is
   `403 web-session-only`, someone not in `admin` `403 admins-only` (and someone taken out of it at their next
@@ -202,9 +205,10 @@ and `ResourceServiceImplTest#testMoveFolder` (WebDAV's move). `RpcPermissionGaps
 
 ### The Admin App's Server Tests
 
-The administration record's, the error capture's and the Dashboard's tests are in `healdan-core`
-(`com.logicaldoc.healdan.admin` and the packages under it) and `healdan-api`. No test makes a real start, so they call
-`ErrorWriter.drainOnce()` and `UsageSummary.refreshNow()` themselves, and the tests of the threads start them.
+The administration record's, the error capture's, the job status's and the Dashboard's tests are in `healdan-core`
+(`com.logicaldoc.healdan.admin` and the packages under it), `healdan-api` and `healdan-storage`. No test makes a real
+start, so they call `ErrorWriter.drainOnce()` and `UsageSummary.refreshNow()` themselves, and the tests of the threads
+start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashboard keeps, before it reads again.
 
 - **`AdminEventsTest`** checks the record: who, what, when and from where, the detail's fields in the order of their
   names, no address outside an admin request, the record rolled back with its change and committed with it, a failed
@@ -223,8 +227,24 @@ The administration record's, the error capture's and the Dashboard's tests are i
   the JVM's own logging, for a logger nothing else in the fork uses.
 - **`ErrorStoreTest`** checks the tables: one row per fault with its counts by the hour, an older error written late,
   the caps and text the database would refuse, resolving, reopening and a resolved fault seen again, the list's time
-  windows, filters and paging, and the prune. `ErrorFingerprintTest` checks the fingerprint and the documents a
-  message names, and `ErrorAreasTest` the areas.
+  windows, filters and paging, and the prune. `ErrorFingerprintTest` checks the fingerprint, the logger's name in it
+  when the error was logged from another class, and the documents a message names, and `ErrorAreasTest` the areas.
+- **`JobsTest`** checks the job status: a worker's report, start, end, result and error, the error its exception's
+  class and message, capped; reporting that never throws; a first run known before it's made; Healdan's jobs first,
+  in their order, then LogicalDOC's six tasks; the email index `done` once its setting says so; a task's error, the
+  latest its logger logged since its start, `Task.run`'s stop not a failure, and two tasks failing alike each with
+  their own; and overdue, never while running or switched off. `PreviewWorkerTest`, `EmailIndexWorkerTest` and
+  `TrashStartupTest` check that their jobs report, and `StorageJobsTest`, in `healdan-storage`, that the storage
+  jobs are listed after `healdan-core`'s and that the mover, the purge and the retests report under their names, a
+  purge that fails saying why.
+- **`DashboardServiceTest`** checks Needs Attention and Server Health over fakes of each source: each attention code,
+  several backends and Stores, the ten tiles in order and those that need attention, a part that fails leaving the
+  rest whole, a source that can't be read unchecked, a slow one still being worked out, storage backends off, the
+  database's tile on PostgreSQL, Sign-In and Outgoing Email, and a second read coming from what's kept. `CachedTest`
+  checks what's kept: one ask per period however many read, the last answer while it's asked again, none older than
+  two periods, a failure kept like an answer, `forget()` and a clock set back. `WordsTest` checks the tiles' words,
+  and `ProviderClientTest` that `answers` fetches a provider's discovery document afresh and remembers a failure for
+  30 seconds.
 - **`UsageSummaryTest`** checks the Usage: nothing before the first summary, the totals, 30 days of documents,
   storage by Store with the backends the storage port names and a port that fails, the busiest matters, each matter's
   figures, the stamps read trimmed, the people signed in, reading the summary running no query (counted on a
@@ -233,10 +253,10 @@ The administration record's, the error capture's and the Dashboard's tests are i
 - **`IndexCountsTest`** checks the failed, the waiting and the indexed, beside shortcuts, the Trash, skipped and
   archived documents; the latest of 200 tries deciding; two events at the same moment taken in the order they were
   written; and the failed list's order, matters and paging.
-- **`AdminDashboardResourceTest` and `AdminFindResourceTest`**, in `healdan-api`, check the usage route, before the
-  first summary and after a failed refresh too, the find's clients, live matters and people, at most five of each,
-  wildcards taken as they are, a blank query `422`, and the refusals of a non-administrator and of a device token,
-  each answer against `openapi-admin.yaml`.
+- **`AdminDashboardResourceTest` and `AdminFindResourceTest`**, in `healdan-api`, check the Dashboard's route, the
+  usage route, before the first summary and after a failed refresh too, the find's clients, live matters and people,
+  at most five of each, wildcards taken as they are, a blank query `422`, and the refusals of a non-administrator and
+  of a device token, each answer against `openapi-admin.yaml`.
 
 ### The Storage Tests
 
@@ -335,7 +355,7 @@ build out (see [Building from Source](../building-from-source/#commands)).
 | `docker/tests/test-previews.sh` | Office and drawing previews: converted ahead of time, text, markup and thumbnails, no fetching or macros while converting, a broken file failing cleanly, leftover processes cleaned up |
 | `docker/tests/test-proxies.sh` | which forwarded addresses Tomcat believes with `LOGICALDOC_TRUSTED_PROXIES` unset: a header from the Docker host, but not a private address in the chain or a header sent from inside the app's container. It reads the sign-in throttle's per-address counters, so it needs a running stack: `BASE=http://127.0.0.1:8080 APP_CONTAINER=<id> DB_CONTAINER=<id> docker/tests/test-proxies.sh` |
 | `docker/tests/test-api.sh` | the API through the image's real filter chain, as the non-admin `apiuser` that the `smoke-api-user` setup step makes (`test-web.sh` signs in as `webuser`, made by `smoke-web-user`, since this script leaves `apiuser` blocked by the throttle for 15 minutes): LogicalDOC's SOAP services answering 404, M2's client flow (sign in, find the smoke matter, file a `.docx`, check it out, save twice, download two versions, sign out), the docs page, a session cookie refused without a token, the sign-in throttle, and LogicalDOC's `loginApiKey` refusing the token. Then M3's additions: searching inside the matter, a new folder and a favourite, a stamped `.docx`, a second device refused with `held-elsewhere`, moving the check-out, `ifVersion` and a repeated `saveId`, and the `#1234 v2.1` lookup. Then M5's: an `.eml` inspected, filed with its attachment and found by its Message-ID, and `already-filed` for filing it again and for uploading it into the matter. Run it against a fresh stack with the smoke overlay: `BASE=http://127.0.0.1:8080 docker/tests/test-api.sh` |
-| `docker/tests/test-web.sh` | the User app in a browser, against a stack with the smoke overlay (see [The Web Apps' Tests](#the-web-apps-tests)): Playwright's specs in Chromium and WebKit, then `curl` checks of the web session's forgery refusals and the Admin app's refusals. Needs Docker, curl and Python 3: `BASE=http://127.0.0.1:18080 docker/tests/test-web.sh`, which `docker/smoke-test.sh` runs as step 9, the last. It needs the Indexer set to every few seconds (see [The Web Apps' Tests](#the-web-apps-tests)) |
+| `docker/tests/test-web.sh` | the User app and the Admin app in a browser, against a stack with the smoke overlay (see [The Web Apps' Tests](#the-web-apps-tests)): Playwright's specs in Chromium and WebKit, then `curl` checks of the web session's forgery refusals and the Admin app's refusals. Needs Docker, curl and Python 3: `BASE=http://127.0.0.1:18080 docker/tests/test-web.sh`, which `docker/smoke-test.sh` runs as step 9, the last. It needs the Indexer set to every few seconds (see [The Web Apps' Tests](#the-web-apps-tests)) |
 | `docker/tests/test-signin.sh` | provider sign-in through the stand-in Keycloak (see below), with `curl` and a cookie jar: the web page's sign-in ending at the User app, signed in, a local account linked by email losing its password and its device token, the gate refusing someone in none of the mapped groups, the helper's sign-in handing a code to a pretend loopback address and the code exchanged for a device token, and a person disabled at Keycloak losing that token at its next re-check. Run it against a fresh stack with the sign-in overlay: `BASE=http://127.0.0.1:8080 KEYCLOAK=127.0.0.1:18180 docker/tests/test-signin.sh` |
 | `docker/tests/test-storage.sh` | storage backends against the stand-in Garage (see below): a file filed in Smoke Cloud reaching Garage encrypted, files moved in from Smoke moving up and not cached, reads through Garage and from the read cache, then with Garage stopped a save waiting in staging, an uncached file answering `503` through the API, `/download` and a shared link, and `/convertpdf` of an uncached PDF serving LogicalDOC's placeholder, and a matter moved to Smoke bringing its files home while Garage keeps them held. With `after-restart` it checks the same rows after a restart, a first read through Garage, and a read from the cache rebuilt from its folder with Garage stopped. It stops and starts Garage itself, and needs curl 8.0.0 or later, jq, sha256sum and docker: `docker/smoke-test.sh` runs it, passing it the stack's containers, as step 5f and again in step 8 |
 | `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache`, a Content-Security-Policy with `object-src 'none'` and Tomcat's JVM having its Base64 intrinsics off, though the stack's `CATALINA_OPTS` asks for them (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the stack running on Healdan's storage (its setup steps recorded and Original's marker written, step 5), M2's client flow through the API (`test-api.sh`, step 5c), the User app in Chromium and WebKit (`test-web.sh`, step 9, the last), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), storage backends against a stand-in S3 server, Garage (`test-storage.sh`, step 5f, and again after step 8's restart), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which checks LogicalDOC's tables, replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one. Two can run on one machine at once (see [Two Smoke Tests at Once](#two-smoke-tests-at-once)) |
@@ -599,6 +619,25 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     page's Content-Security-Policy doesn't govern, so the policy stays as the app ships it. No spec turns it off:
     `addScriptTag` with the source in it would be blocked by `script-src 'self'`, and `bypassCSP` would test a page the
     app never serves.
+  - `admin-access.spec.ts` checks the way into the Admin app (Admin app spec §6.1, §6.2 and §6.4). It follows
+    `/admin/?x=1` signed out, signs in as the smoke stack's `admin` (`ADMIN_PASSWORD`) and checks it comes back to that
+    address, with the Dashboard; reads the build's entry script from that page, under `/admin/assets/`, and checks
+    the administrator gets it with `Cache-Control: private`; finds **Admin** just above **Classic Interface** in
+    `admin`'s person menu in the User app, which opens the Dashboard, and not in `webuser`'s; checks that `webuser`
+    gets `403` at `/admin/` and the no-access page, with **Open Healdan** to `/app/`, passing axe, and for the real
+    script, asked with `webuser`'s own session (`page.request`), a `403`, `no-store`, without the file's bytes; and
+    that a request for it with no session isn't `200`, and holds none of its bytes either. It changes nothing on the
+    stack.
+  - `admin-a11y.spec.ts` runs axe on the Admin app as `admin`, in the light theme and again in the dark one, as
+    `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart,
+    so a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
+    person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes
+    it, and the focus goes back to **☰**), and last the signed-out screen. This is where the Dashboard's colour
+    contrast is checked. The find's list is checked on its own (`expectNoViolations`' `within`), without axe's
+    `region` (its `skip`): while the list is open, React Aria's combo box hides the rest of the page from screen
+    readers with `aria-hidden` over parts that hold links, which axe's `aria-hidden-focus` and its page-level rules
+    refuse, and its popover sits outside every landmark. The User app's search box is the same component, and
+    `a11y.spec.ts` doesn't open it.
   - `resizing.spec.ts` files a document into a folder of its own inside `E2E`, and through the page drags the left
     pane's divider with the mouse and checks the pane's width, its value and that the list's Title column narrowed (the
     virtualiser measured the narrower list); reloads and finds the width kept; moves it by keys; checks that a window
