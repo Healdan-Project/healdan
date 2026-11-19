@@ -8,9 +8,10 @@
 # LOGICALDOC_IMAGE names the image (logicaldoc-community:local, which docker compose build tags), MOVE_PROJECT the
 # Compose project (healdan-move) and MOVE_PORT the app's port on 127.0.0.1 (18090).
 #
-# The fixture is loaded once, and the cases run in the order a move would meet them: refused (an older source), stopped
-# part-way (a zero date) with the app's start refused on what it left, stopped again (a NUL), stopped by its own
-# comparison (a value changed on the target), and run again to the end with --replace-nul. Then the report, the data,
+# The fixture is loaded once, and the cases run in the order a move would meet them: the app's start refused before
+# any move (its conf volume names MariaDB), refused (an older source), stopped part-way (a zero date) with the app's
+# start refused on what it left, stopped again (a NUL), stopped by its own comparison (a value changed on the target),
+# and run again to the end with --replace-nul. Then the report, the data, every table's rows counted on both sides,
 # and the app on it.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -224,6 +225,22 @@ same() {
   diff "$WORK/$1" "$WORK/$2" | head -20
   return 1
 }
+# conf_sha: the SHA-256 of the conf volume's context.properties, read through a read-only mount
+conf_sha() {
+  docker run --rm -v "${PROJECT}_logicaldoc-conf:/c:ro" --entrypoint sha256sum "$IMAGE" /c/context.properties \
+    | cut -d' ' -f1
+}
+# refused_start: starts the app as an admin's docker compose up -d does, and waits, looking every second, for the
+# start-up tool to stop it; its container is $app. Refused, the restart policy would start it again, refused each time:
+# without it, it stays stopped, and says how.
+refused_start() {
+  compose_app up -d app
+  app=$(compose_app ps -aq app)
+  docker update --restart=no "$app" >/dev/null
+  local deadline=$((SECONDS + 120))
+  until [ "$(docker inspect -f '{{.State.Status}}' "$app")" = exited ] || [ "$SECONDS" -ge "$deadline" ]; do sleep 1; done
+}
+app_said() { docker logs "$app" 2>&1 | grep -F -- "$1" >/dev/null; }
 
 echo "== 1. the fixture: its MariaDB from the dump, and its conf and repository volumes"
 compose_move up -d mariadb
@@ -251,6 +268,25 @@ check "MariaDB holds the fixture's $COUNT_ld_document documents, and the documen
   is "$COUNT_ld_document"$'\t'"$DOCUMENT_SEQ_NEXT" \
   "$(maria "select count(*), (select next_not_cached_value from ld_document_SEQ) from ld_document")"
 [ "$FAILED" = 0 ] || exit 1
+
+echo "== 1a. the app started before the move: refused, as its conf volume names MariaDB and PostgreSQL holds no move"
+# The upgrade without the move that the Install manual warns of, on the fixture's volumes and an empty PostgreSQL
+conf_before=$(conf_sha)
+# The claim has held the port, which the app takes now
+docker kill "$CLAIM" >/dev/null 2>&1 || true
+refused_at=$SECONDS
+refused_start
+check "the app's start stopped with status 1" \
+  is "exited 1" "$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' "$app")"
+check "the start-up tool says to move the data first" app_said "[docker-init] ERROR: this install's conf volume names MariaDB as its database, so its data is in MariaDB, and the PostgreSQL database that DB_HOST, DB_PORT and DB_NAME name didn't answer within 15 seconds or holds no finished move. Healdan now runs on PostgreSQL only, so this start stopped and changed nothing. Move the data across first with the move-from-mariadb command"
+check "Tomcat never started" lacks 'starting: catalina.sh run' "$(docker logs "$app" 2>&1)"
+check "the conf volume's context.properties is as it was" is "$conf_before" "$(conf_sha)"
+check "PostgreSQL's database holds no table" \
+  is 0 "$(pg "select count(*) from pg_class where relnamespace = 'public'::regnamespace")"
+compose_app rm -sf app >/dev/null 2>&1
+echo "the refused start took $((SECONDS - refused_at)) s, PostgreSQL's first start included"
+# After the refused start, whose entrypoint makes the repository's folders and re-adds the image's allowed commands
+# before the start-up tool's guard: the snapshots compare what the moves do
 snapshot volumes-0
 
 echo "== 2. refused: a source at an older Healdan schema version"
@@ -290,15 +326,7 @@ check "it printed nothing else" alone zero
 snapshot volumes-1
 check "the moves so far changed nothing in the conf and repository volumes" same volumes-0 volumes-1
 
-# The claim has held the port, which the app takes now
-docker kill "$CLAIM" >/dev/null 2>&1 || true
-compose_app up -d app
-app=$(compose_app ps -aq app)
-# Refused, the restart policy would start it again, refused each time: without it, it stays stopped, and says how
-docker update --restart=no "$app" >/dev/null
-deadline=$((SECONDS + 120))
-until [ "$(docker inspect -f '{{.State.Status}}' "$app")" = exited ] || [ "$SECONDS" -ge "$deadline" ]; do sleep 1; done
-app_said() { docker logs "$app" 2>&1 | grep -F -- "$1" >/dev/null; }
+refused_start
 check "the app's start stopped with status 1" \
   is "exited 1" "$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' "$app")"
 check "the start-up tool says to run the move again" app_said "[docker-init] ERROR: the database holds a move from MariaDB that didn't finish: it failed, or was stopped part-way. Healdan won't start on it, so this start stopped and changed nothing. Run the move-from-mariadb command again, which starts the move over"
@@ -407,6 +435,22 @@ check "no counter can hand out an id its table holds" \
   says done "[move] Counters: none can hand out an id its table already holds ... ok"
 
 echo "== 5. the data, by psql"
+# Every table counted on both sides, apart from the move's own report: one query a side, each made from its catalogue,
+# a line per table, its name in lower case and its rows. Flyway's history and the markers are each side's own, as the
+# move has them (MovePlan.OWN): MariaDB has the start-up tool's marker too.
+maria "select concat('select ''', lower(table_name), ''', count(*) from \`', table_name, '\`')
+  from information_schema.tables where table_schema = database() and table_type = 'BASE TABLE'
+  and lower(table_name) not in ('hd_schema_history', 'docker_init', 'docker_move') order by table_name" \
+  | sed '1!s/^/union all /' > "$WORK/maria-counts.sql"
+maria "$(cat "$WORK/maria-counts.sql")" | LC_ALL=C sort > "$WORK/counts-maria"
+pg "select string_agg(format('select %L, count(*) from %I', lower(tablename), tablename), ' union all '
+  order by tablename) from pg_tables where schemaname = 'public'
+  and tablename not in ('hd_schema_history', 'docker_init', 'docker_move')" > "$WORK/pg-counts.sql"
+pg "$(cat "$WORK/pg-counts.sql")" | tr '|' '\t' | LC_ALL=C sort > "$WORK/counts-pg"
+counted=$(wc -l < "$WORK/counts-maria" | tr -d ' ')
+check "MariaDB's tables were all counted ($counted)" test "$counted" -gt 70
+check "every table has as many rows on PostgreSQL as on MariaDB, and neither side has a table the other lacks" \
+  same counts-maria counts-pg
 for t in ld_document ld_version ld_history ld_user hd_matter hd_trash hd_storage_file hd_email; do
   eval "want=\$COUNT_$t"
   check "$t has its $want rows" is "$want" "$(pg "select count(*) from $t")"

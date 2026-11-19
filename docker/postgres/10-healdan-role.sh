@@ -47,8 +47,10 @@ alter role :"admin" password null;
 SQL
 
 # initdb's --auth-host should have left no TCP rule that trusts anyone. If a later image writes the file another
-# way, stop rather than leave the superuser open.
-if grep -Eq '^host[[:space:]].*[[:space:]]trust[[:space:]]*$' "$PGDATA/pg_hba.conf"; then
+# way, stop rather than leave the superuser open. Every TCP form counts: host, hostssl, hostnossl, hostgssenc and
+# hostnogssenc, with any indent, and trust with anything after it.
+if grep -Eq '^[[:space:]]*host(ssl|nossl|gssenc|nogssenc)?[[:space:]].*[[:space:]]trust([[:space:]].*)?$' \
+	"$PGDATA/pg_hba.conf"; then
 	echo "pg_hba.conf still trusts a TCP connection; the superuser would be reachable without a password." >&2
 	exit 1
 fi

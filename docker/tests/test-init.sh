@@ -22,7 +22,8 @@ REPO=$NET-repo
 PW='sm0ke,p=a\ss $x #1 é:! '
 
 cleanup() {
-  docker rm -f "$DB" >/dev/null 2>&1 || true
+  # -v: the postgres image declares its data folder a volume, which the database container gets as an anonymous one
+  docker rm -fv "$DB" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
   docker volume rm -f "$CONF" "$REPO" >/dev/null 2>&1 || true
 }
