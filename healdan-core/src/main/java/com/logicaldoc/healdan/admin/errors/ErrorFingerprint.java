@@ -50,6 +50,12 @@ public final class ErrorFingerprint {
 	 * name when the configuration doesn't record where) and the message with
 	 * its numbers and quoted names taken out. The level and the time don't
 	 * count.
+	 * <p>
+	 * When where it was logged is a class the logger isn't named for, the
+	 * logger's name counts too: a base class logging through each subclass's
+	 * logger, as CE's {@code Task.run} does for every scheduled task, gives one
+	 * fault per logger, so each task's failure is its own. A logger named for
+	 * the class, or for a class it is nested in, adds nothing.
 	 *
 	 * @param error the error
 	 * @return its fingerprint
@@ -58,12 +64,26 @@ public final class ErrorFingerprint {
 		String where = error.location() != null ? error.location() : error.logger();
 		String text = (error.exception() != null ? error.exception() : "") + "\n" + where + "\n"
 				+ normalised(error.message());
+		if (error.location() != null && !error.logger().isBlank() && !namedFor(error.logger(), error.location()))
+			text += "\n" + error.logger();
 		try {
 			byte[] hash = MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
 			return HexFormat.of().formatHex(hash);
 		} catch (NoSuchAlgorithmException e) {
 			throw new IllegalStateException("Every Java has SHA-256", e);
 		}
+	}
+
+	/**
+	 * @param logger a logger's name
+	 * @param location where an error was logged, as {@code com.example.Thing:120}
+	 * @return whether the logger is named for the location's class, or for a
+	 *         class it is nested in
+	 */
+	static boolean namedFor(String logger, String location) {
+		int colon = location.lastIndexOf(':');
+		String type = colon >= 0 ? location.substring(0, colon) : location;
+		return type.equals(logger) || type.startsWith(logger + "$");
 	}
 
 	/**

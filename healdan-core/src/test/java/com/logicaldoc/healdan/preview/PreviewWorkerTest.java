@@ -514,14 +514,14 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 		assertFalse(idle.lastEnd().isBefore(idle.lastStart()));
 		assertEquals(JobView.SUCCEEDED, idle.result());
 		assertFalse(idle.running());
-		// Nothing was due, so the loop sleeps 5 seconds
-		assertEquals(idle.lastEnd().plusSeconds(5).toEpochMilli(), idle.nextRun().toEpochMilli(), 50);
+		// Nothing was due, so the loop sleeps 5 seconds: worked out after the round began and before its end
+		assertWithin(idle.lastStart().plusSeconds(5), idle.nextRun(), idle.lastEnd().plusSeconds(5));
 
 		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
 		assertEquals(1, worker.runOnce(T));
 		JobView worked = jobs.one(PreviewWorker.JOB);
 		// A round that worked is followed at once
-		assertEquals(worked.lastEnd().toEpochMilli(), worked.nextRun().toEpochMilli(), 50);
+		assertWithin(worked.lastStart(), worked.nextRun(), worked.lastEnd());
 		assertTrue(Store.get().exists(pdfOf(a, "1.0")));
 
 		PreviewJobs unreadable = new PreviewJobs(Context.get(DataSource.class)) {
@@ -546,6 +546,12 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 		assertEquals(JobView.FAILED, failed.result());
 		assertEquals("IllegalStateException: The queue can't be read", failed.error());
 		assertFalse(failed.running());
-		assertEquals(failed.lastEnd().plusSeconds(5).toEpochMilli(), failed.nextRun().toEpochMilli(), 50);
+		assertWithin(failed.lastStart().plusSeconds(5), failed.nextRun(), failed.lastEnd().plusSeconds(5));
+	}
+
+	/** Asserts a time is at or after one and at or before another, which no pause on a busy machine changes */
+	private static void assertWithin(Instant low, Instant value, Instant high) {
+		assertFalse(value + " before " + low, value.isBefore(low));
+		assertFalse(value + " after " + high, value.isAfter(high));
 	}
 }

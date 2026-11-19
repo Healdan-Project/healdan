@@ -18,10 +18,13 @@ import java.util.Date;
 import java.util.List;
 import java.util.Set;
 
+import javax.sql.DataSource;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.quartz.Trigger;
 import org.quartz.spi.OperableTrigger;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.searchengine.indexer.IndexerTask;
 import com.logicaldoc.core.task.Task;
@@ -278,6 +281,53 @@ public class JobsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testAStoppedRunIsntAFailure() {
+		Task indexer = task(IndexerTask.NAME);
+		Instant start = Instant.now().minusSeconds(60).truncatedTo(ChronoUnit.MILLIS);
+		indexer.getScheduling().setPreviousFireTime(Date.from(start));
+		// What Task.run logs when a run is interrupted, from its own line
+		ErrorStore.get().add(new CapturedError(start.plusSeconds(1), "ERROR", IndexerTask.class.getName(),
+				"com.logicaldoc.core.task.Task:235", null, "The task gets interrupted", null));
+
+		JobView stopped = jobs.one(IndexerTask.NAME);
+		assertEquals(JobView.SUCCEEDED, stopped.result());
+		assertNull(stopped.error());
+	}
+
+	/**
+	 * CE's Task.run logs each task's failure from its own lines, through the task's logger: two tasks failing alike,
+	 * in a database outage say, are two faults, so each run's result is its own
+	 */
+	@Test
+	public void testTwoTasksFailingAlikeEachHaveTheirOwnError() {
+		Instant start = Instant.now().minusSeconds(60).truncatedTo(ChronoUnit.MILLIS);
+		Task indexer = task(IndexerTask.NAME);
+		Task tags = task("TagsProcessor");
+		indexer.getScheduling().setPreviousFireTime(Date.from(start));
+		tags.getScheduling().setPreviousFireTime(Date.from(start));
+		ErrorStore errors = ErrorStore.get();
+		String exception = "org.springframework.jdbc.CannotGetJdbcConnectionException";
+
+		// The Indexer fails first, then succeeds, then the Tags Processor fails the same way
+		errors.add(taskError(start.plusSeconds(1), IndexerTask.class.getName(), exception));
+		indexer.getScheduling().setPreviousFireTime(Date.from(start.plusSeconds(10)));
+		errors.add(taskError(start.plusSeconds(20), "com.logicaldoc.core.document.TagsProcessor", exception));
+
+		assertEquals(2, new JdbcTemplate(Context.get(DataSource.class))
+				.queryForObject("select count(*) from hd_error", Integer.class).intValue());
+		assertEquals("its own later run succeeded", JobView.SUCCEEDED, jobs.one(IndexerTask.NAME).result());
+		JobView failed = jobs.one("TagsProcessor");
+		assertEquals(JobView.FAILED, failed.result());
+		assertEquals("Failed to obtain JDBC Connection", failed.error());
+	}
+
+	/** @return an error as CE's Task.run logs what a run failed with, from its own line, through the task's logger */
+	private static CapturedError taskError(Instant when, String logger, String exception) {
+		return new CapturedError(when, "ERROR", logger, "com.logicaldoc.core.task.Task:238", exception,
+				"Failed to obtain JDBC Connection", exception + ": Failed to obtain JDBC Connection");
+	}
+
+	@Test
 	public void testOverdue() {
 		Instant now = Instant.parse("2026-11-19T12:00:00Z");
 
@@ -308,6 +358,18 @@ public class JobsTest extends AbstractHealdanTestCase {
 		assertFalse(task(now.minus(Duration.ofDays(30)), now.minus(Duration.ofDays(20)), false).overdue(now));
 		assertFalse(healdan(now.minus(Duration.ofDays(30)), null, true).overdue(now));
 		assertFalse(healdan(now.minusSeconds(5), now.plusSeconds(5), true).overdue(now));
+
+		// Nor one running: the first night after a start, running for hours past the time it was due, as JobStatus
+		// keeps the run's own time as its next run until it ends
+		Instant due = now.minus(Duration.ofHours(5));
+		JobView firstNight = new JobView("job", "Job", due, null, null, null, due, true, true, false, false, false,
+				false);
+		assertFalse(firstNight.overdue(now));
+		assertTrue("the same once it has ended without setting a next run", new JobView("job", "Job", due, null, null,
+				null, due, true, false, false, false, false, false).overdue(now));
+		JobView taskRunning = new JobView("Task", "Task", due.minus(Duration.ofHours(1)), null, null, null, due, true,
+				true, false, true, true, true);
+		assertFalse(taskRunning.overdue(now));
 	}
 
 	/** A view of one of Healdan's jobs, as a run that ended at a time left it */
@@ -317,10 +379,11 @@ public class JobsTest extends AbstractHealdanTestCase {
 				enabled, false, false, false, false, false);
 	}
 
-	/** A view of one of CE's tasks, as a run that started at a time left it, running still */
+	/** A view of one of CE's tasks, idle, as a run that started at a time left it */
 	private static JobView task(Instant lastStart, Instant nextRun, boolean enabled) {
-		return new JobView("Task", "Task", lastStart, null, null, null, nextRun, enabled, lastStart != null, false,
-				true, true, true);
+		Instant lastEnd = lastStart != null ? lastStart.plusSeconds(1) : null;
+		return new JobView("Task", "Task", lastStart, lastEnd, lastStart != null ? JobView.SUCCEEDED : null, null,
+				nextRun, enabled, false, enabled, false, true, true);
 	}
 
 	/** @return CE's tasks' names, as TaskManager lists them */

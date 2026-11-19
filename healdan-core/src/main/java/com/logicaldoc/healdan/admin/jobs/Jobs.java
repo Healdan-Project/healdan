@@ -42,8 +42,16 @@ import com.logicaldoc.i18n.I18N;
  * and its next run its scheduling's next fire time. CE keeps a task's last
  * error with no getter, so its error is the latest one logged through the
  * task's logger since its last start ({@link ErrorStore#latest}), which makes
- * the run failed; one with none since its start succeeded, once it isn't
- * running. CE's run does nothing for a task that is disabled or running, and
+ * the run failed: any ERROR the task logs while it runs does, such as
+ * {@code PathCalculator}'s for a folder it can't process or a failed activity
+ * report's email, not only one that ends the run. {@code Task.run}'s own two
+ * lines say nothing of a failure ({@link #NOT_FAILURES}): one follows the
+ * error a run failed with, and the other is a stop. A run with no other error
+ * since its start succeeded, once it isn't running. Each task's errors are its
+ * own: {@code Task.run} logs through each task's logger, and the fingerprint
+ * counts the logger when it isn't named for the class an error was logged
+ * from ({@link com.logicaldoc.healdan.admin.errors.ErrorFingerprint}). CE's
+ * run does nothing for a task that is disabled or running, and
  * stops only one that is running, so it can run now only when it is enabled
  * and idle, and stop only while it runs. Each can be enabled and disabled.
  */
@@ -55,14 +63,14 @@ public class Jobs {
 			"storage-retest", "storage-purge", "storage-alert", "storage-nightly-check");
 
 	/**
-	 * What CE's {@code Task.run} logs after the error a run failed with, which
-	 * says nothing itself; it is one fault for every task, whose logger is the
-	 * first one's
+	 * What CE's {@code Task.run} logs at ERROR that isn't a failure of its own:
+	 * "The task is stopped" after the error a run failed with, and "The task
+	 * gets interrupted" when a run is stopped
 	 */
-	static final String TASK_STOPPED = "The task is stopped";
+	static final Set<String> NOT_FAILURES = Set.of("The task is stopped", "The task gets interrupted");
 
-	/** How many of a task's latest errors are read, to find one that isn't {@link #TASK_STOPPED} */
-	private static final int ERRORS_READ = 3;
+	/** How many of a task's latest errors are read: the two of {@link #NOT_FAILURES} and one more */
+	private static final int ERRORS_READ = NOT_FAILURES.size() + 1;
 
 	private final ObjectProvider<HealdanJob> healdanJobs;
 
@@ -157,7 +165,7 @@ public class Jobs {
 		// Each of CE's tasks logs through a logger named after its own class
 		String logger = ClassUtils.getUserClass(task).getName();
 		for (ErrorGroup error : errors.latest(Set.of(logger), since, ERRORS_READ))
-			if (!TASK_STOPPED.equals(error.message()))
+			if (!NOT_FAILURES.contains(error.message()))
 				return JobStatus.capped(error.message());
 		return null;
 	}
