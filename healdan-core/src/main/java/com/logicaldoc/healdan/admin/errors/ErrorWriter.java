@@ -8,13 +8,17 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.TransactionException;
 
 import com.logicaldoc.healdan.HealdanStartListener;
 
@@ -30,9 +34,14 @@ import jakarta.annotation.PreDestroy;
  * write stays at the head of its batch, and the queue keeps filling behind it
  * until it's full, so while the database is down nothing is lost but what
  * doesn't fit; the thread logs a warning, waits, from a second up to a minute,
- * and tries again, and never stops for a failure. An error the database
- * refuses on its own, three times in a row while it answers otherwise, is left
- * out, so that it can't hold up the rest.
+ * and tries again, and never stops for a failure. Only an error that is
+ * refused itself three times in a row is left out, so that it can't hold up
+ * the rest, and counted ({@link #skipped()}): one whose values the database
+ * refuses (SQLState classes 22 and 23, such as a value too long or an
+ * encoding it can't store, on both databases), or one that fails outside the
+ * database. A failure of the database itself, a connection, a timeout, a lock,
+ * a full disk or a read-only database, never counts, however often it comes:
+ * it fails every error alike.
  * <p>
  * It prunes the store 10 minutes after the start, then once a day.
  */
@@ -51,7 +60,7 @@ public class ErrorWriter implements HealdanStartListener {
 	/** The most errors it takes off the queue at once */
 	static final int BATCH = 100;
 
-	/** How many times in a row the database may refuse an error while it answers */
+	/** How many times in a row an error may be refused before it's left out */
 	static final int TRIES = 3;
 
 	private final ErrorCapture capture;
@@ -64,8 +73,8 @@ public class ErrorWriter implements HealdanStartListener {
 	/** How many times in a row the head of {@link #pending} was refused; guarded by this */
 	private int refusals;
 
-	/** How many errors were left out because the database refused them; guarded by this */
-	private long skipped;
+	/** How many errors were left out because they were refused; read without the drain's monitor */
+	private final AtomicLong skipped = new AtomicLong();
 
 	/** Guards {@link #thread}, apart from the monitor a drain holds, which a database that hangs can keep */
 	private final Object lifecycle = new Object();
@@ -147,26 +156,45 @@ public class ErrorWriter implements HealdanStartListener {
 	}
 
 	/**
-	 * After the head of the batch failed: whether the database refuses it,
-	 * the third time in a row while it answers, so that it's left out. A
-	 * failure while the database doesn't answer starts the count again.
+	 * After the head of the batch failed: whether it is refused itself
+	 * ({@link #refuses}) the third time in a row, so that it's left out. Any
+	 * other failure starts the count again.
 	 */
 	private boolean refusedAlone(RuntimeException failure) {
-		if (!store.answers()) {
+		if (!refuses(failure)) {
 			refusals = 0;
 			return false;
 		}
 		if (++refusals < TRIES)
 			return false;
-		skipped++;
-		log.warn("An error was left out of the Errors screen, as the database refused it {} times: {}", TRIES,
+		skipped.incrementAndGet();
+		log.warn("An error was left out of the Errors screen, as it was refused {} times: {}", TRIES,
 				causes(failure));
 		return true;
 	}
 
-	/** @return how many errors were left out because the database refused them */
-	synchronized long skipped() {
-		return skipped;
+	/**
+	 * @return whether a failure says the error itself is refused: the database
+	 *         refusing its values, which Spring translates from SQLState
+	 *         classes 22 and 23 to {@link DataIntegrityViolationException}, or
+	 *         a failure outside the database and its transactions. A
+	 *         connection, a timeout, a lock, a full disk or a read-only
+	 *         database fails every error alike, and never says so.
+	 */
+	static boolean refuses(RuntimeException failure) {
+		if (failure instanceof DataIntegrityViolationException)
+			return true;
+		return !(failure instanceof DataAccessException) && !(failure instanceof TransactionException);
+	}
+
+	/**
+	 * @return how many errors were left out of the Errors screen since the
+	 *         server started because they were refused themselves, apart
+	 *         from {@link ErrorCapture#dropped()}, those that didn't fit on
+	 *         the queue
+	 */
+	public long skipped() {
+		return skipped.get();
 	}
 
 	/** @return the capture it writes from */

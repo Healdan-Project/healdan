@@ -39,7 +39,8 @@ public record CapturedError(Instant when, String level, String logger, String lo
 	public static final int NAME_LIMIT = 255;
 
 	/** A stack trace's first line starts with its exception's class: a qualified Java name */
-	private static final Pattern CLASS_NAME = Pattern.compile("[\\p{L}_$][\\p{L}\\p{N}_$]*(\\.[\\p{L}_$][\\p{L}\\p{N}_$]*)+");
+	private static final Pattern CLASS_NAME = Pattern
+			.compile("[\\p{L}_$][\\p{L}\\p{N}_$]*(\\.[\\p{L}_$][\\p{L}\\p{N}_$]*)+");
 
 	public CapturedError {
 		Objects.requireNonNull(when, "when");

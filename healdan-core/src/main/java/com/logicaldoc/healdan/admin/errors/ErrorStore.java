@@ -265,19 +265,6 @@ public class ErrorStore {
 		return deleted != null ? deleted : 0;
 	}
 
-	/**
-	 * @return whether the database answers a query on {@code hd_error}, which
-	 *         tells a database that's down from an error it refuses
-	 */
-	boolean answers() {
-		try {
-			jdbc.queryForObject("select count(*) from hd_error where hd_id = 0", Long.class);
-			return true;
-		} catch (RuntimeException e) {
-			return false;
-		}
-	}
-
 	/** Reads a fault from {@link #COLUMNS}, at their places */
 	private static ErrorGroup group(ResultSet rs, String stack, long times) throws SQLException {
 		return new ErrorGroup(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5),
