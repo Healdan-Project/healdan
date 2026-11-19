@@ -356,7 +356,7 @@ public class AuthResource {
 		try {
 			return ApiTokens.checkName(credentials.name());
 		} catch (HealdanRuleException e) {
-			// Too long, as for any other name; otherwise characters the database can't store
+			// Too long, as for any other name; otherwise characters Healdan can't keep
 			errors.add(new FieldError("name", ApiTokens.nameTooLong(credentials.name()) ? Uploads.TOO_LONG : "invalid",
 					e.getMessage()));
 			return null;

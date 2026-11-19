@@ -31,7 +31,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.setting.HealdanSettings;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.util.StorableText;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -697,8 +697,8 @@ public class SignInProviders {
 	 * @param field the field's name in plain words, for the refusal
 	 * @param max the most characters it may have
 	 * @return the value, stripped
-	 * @throws HealdanRuleException if it's blank, too long, or has a character the
-	 *         database can't store
+	 * @throws HealdanRuleException if it's blank, too long, or has a character
+	 *         Healdan can't keep
 	 */
 	private static String required(String value, String field, int max) throws HealdanRuleException {
 		String text = StringUtils.strip(value);
@@ -706,9 +706,8 @@ public class SignInProviders {
 			throw refuse("The %s can't be empty.".formatted(field));
 		if (text.length() > max)
 			throw refuse("The %s can't be longer than %d characters.".formatted(field, max));
-		// MariaDB's utf8 tables hold no character beyond the Basic Multilingual Plane
-		if (!BasicPlane.holds(text))
-			throw refuse("The %s can't contain emoji or other characters the database can't store.".formatted(field));
+		if (!StorableText.holds(text))
+			throw refuse("The %s can't contain %s.".formatted(field, StorableText.CANT_KEEP));
 		return text;
 	}
 

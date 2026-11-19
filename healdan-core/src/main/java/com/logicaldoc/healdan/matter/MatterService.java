@@ -39,7 +39,7 @@ import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.security.AclMath;
 import com.logicaldoc.healdan.security.PermissionRules;
 import com.logicaldoc.healdan.setting.HealdanSettings;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.util.StorableText;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.html.HTMLSanitizer;
 import com.logicaldoc.util.spring.Context;
@@ -72,11 +72,11 @@ public class MatterService {
 
 	static final String UNSAFE_NAME = "A %s name can't contain '\\' or HTML tags.";
 
-	static final String OUTSIDE_PLANE_NAME = "A %s name can't contain emoji or other characters the database can't store.";
+	static final String CANT_KEEP_NAME = "A %s name can't contain " + StorableText.CANT_KEEP + ".";
 
 	static final String LONG_DESCRIPTION = "A %s description can't be longer than %d characters.";
 
-	static final String OUTSIDE_PLANE_DESCRIPTION = "A %s description can't contain emoji or other characters the database can't store.";
+	static final String CANT_KEEP_DESCRIPTION = "A %s description can't contain " + StorableText.CANT_KEEP + ".";
 
 	static final String NO_CLIENT = "That client no longer exists.";
 
@@ -326,17 +326,16 @@ public class MatterService {
 	 * @return the name, trimmed
 	 * @throws HealdanRuleException if it is empty, holds '/', or makes the
 	 *         display name, the workspace folder's name, too long; if it holds
-	 *         a character beyond the Basic Multilingual Plane, which would fail
-	 *         the insert on MariaDB (R33); or if CE would store the display name
-	 *         as another folder name
+	 *         a character Healdan can't keep ({@link StorableText}); or if CE
+	 *         would store the display name as another folder name
 	 */
 	private String cleanName(String name, long clientNumber, long matterNumber) throws HealdanRuleException {
 		String clean = name == null ? "" : name.strip();
 		int max = MAX_DISPLAY_LENGTH - MatterDisplay.format(clientNumber, matterNumber, "").length();
 		if (clean.isEmpty() || clean.contains("/") || clean.length() > max)
 			throw new HealdanRuleException(BAD_NAME.formatted(label(), max));
-		if (!BasicPlane.holds(clean))
-			throw new HealdanRuleException(OUTSIDE_PLANE_NAME.formatted(label()));
+		if (!StorableText.holds(clean))
+			throw new HealdanRuleException(CANT_KEEP_NAME.formatted(label()));
 		String display = MatterDisplay.format(clientNumber, matterNumber, clean);
 		if (!display.equals(asFolderName(display)))
 			throw new HealdanRuleException(UNSAFE_NAME.formatted(label()));
@@ -354,16 +353,15 @@ public class MatterService {
 	/**
 	 * @return the description, trimmed; null for none
 	 * @throws HealdanRuleException if it is too long for the matter's row and
-	 *         the folder, or holds a character beyond the Basic Multilingual
-	 *         Plane, which would fail the insert on MariaDB as a name's would
-	 *         (R33)
+	 *         the folder, or holds a character Healdan can't keep, as a name
+	 *         may not
 	 */
 	private String cleanDescription(String description) throws HealdanRuleException {
 		String clean = description == null ? "" : description.strip();
 		if (clean.length() > MAX_DESCRIPTION_LENGTH)
 			throw new HealdanRuleException(LONG_DESCRIPTION.formatted(label(), MAX_DESCRIPTION_LENGTH));
-		if (!BasicPlane.holds(clean))
-			throw new HealdanRuleException(OUTSIDE_PLANE_DESCRIPTION.formatted(label()));
+		if (!StorableText.holds(clean))
+			throw new HealdanRuleException(CANT_KEEP_DESCRIPTION.formatted(label()));
 		return clean.isEmpty() ? null : clean;
 	}
 

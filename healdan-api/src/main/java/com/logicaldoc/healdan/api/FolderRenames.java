@@ -129,7 +129,7 @@ final class FolderRenames {
 	 * @throws ApiProblem {@code 422 validation} for the field {@code name}:
 	 *         {@code required}, also for a name of characters that show
 	 *         nothing; {@code too-long}; {@code invalid} (a slash, a
-	 *         backslash, a control character, one the database can't store, one
+	 *         backslash, a control character, one Healdan can't keep, one
 	 *         that changes the text's direction, any HTML tag, or a character
 	 *         reference such as {@code &amp;}, which CE's folder DAO would turn
 	 *         into its character)

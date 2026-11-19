@@ -77,8 +77,8 @@ final class DocumentChanges {
 	 * @return the document, renamed
 	 * @throws ApiProblem {@code 422 validation} for the field {@code name}:
 	 *         {@code required}, {@code too-long}, {@code invalid} (a slash, a
-	 *         backslash, a control character, or one the database can't
-	 *         store), {@code extension}
+	 *         backslash, a control character, or one Healdan can't keep),
+	 *         {@code extension}
 	 */
 	DocumentView rename(long docNumber, String requested, Caller caller) {
 		if (requested == null)

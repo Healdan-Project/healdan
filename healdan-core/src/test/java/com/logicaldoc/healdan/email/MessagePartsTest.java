@@ -36,7 +36,7 @@ import com.logicaldoc.healdan.support.LogCapture;
 import jakarta.mail.internet.MimeMessage;
 
 /**
- * Spec §6.6: the walk of an {@code eml}'s parts that the inspect call and the
+ * Spec \u00a76.6: the walk of an {@code eml}'s parts that the inspect call and the
  * filing call share, so that an index means the same part in both.
  */
 public class MessagePartsTest {
@@ -435,8 +435,8 @@ public class MessagePartsTest {
 				{ "Content-Disposition: attachment; filename=\"/etc/passwd\"", "passwd" },
 				{ "Content-Disposition: attachment; filename=\"=?utf-8?Q?Caf=C3=A9_menu.pdf?=\"", "Caf\u00e9 menu.pdf" },
 				{ "Content-Disposition: attachment; filename*=utf-8''Caf%C3%A9.pdf", "Caf\u00e9.pdf" },
-				// Beyond the Basic Multilingual Plane, which MariaDB's tables refuse (R33)
-				{ "Content-Disposition: attachment; filename*=utf-8''Party%20%F0%9F%8E%89.pdf", "Party \ufffd.pdf" },
+				// Beyond the Basic Multilingual Plane, which Healdan keeps
+				{ "Content-Disposition: attachment; filename*=utf-8''Party%20%F0%9F%8E%89.pdf", "Party \ud83c\udf89.pdf" },
 				{ "Content-Disposition: attachment; filename=\"...\"", "Attachment" },
 				{ "Content-Disposition: attachment; filename=\"a<b>|c.pdf.\"", "a_b__c.pdf" },
 				// The Content-Type's name when the disposition has none

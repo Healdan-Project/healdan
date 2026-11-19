@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.storage.web;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.net.URI;
@@ -13,6 +14,7 @@ import java.net.URI;
 import org.junit.Test;
 
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageBackend;
+import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.storage.web.BackendDrafts.Draft;
 
 /**
@@ -42,6 +44,31 @@ public class BackendDraftsTest {
 		// What it is and where, to find it in a log
 		assertTrue(text, text.contains("Cloud"));
 		assertTrue(text, text.contains("healdan-tests"));
+	}
+
+	/** PostgreSQL stores no NUL, and a lone surrogate isn't a character; an emoji is kept (spec section 7.5) */
+	@Test
+	public void testTextHealdanCantKeep() throws Exception {
+		assertEquals("Cloud \uD83C\uDF89", BackendDrafts.name(" Cloud \uD83C\uDF89 "));
+		assertEquals("The name can't contain characters Healdan can't keep.",
+				assertThrows(HealdanRuleException.class, () -> BackendDrafts.name("Clo\u0000ud")).getMessage());
+		assertEquals("The name can't contain characters Healdan can't keep.",
+				assertThrows(HealdanRuleException.class, () -> BackendDrafts.name("Cloud \uD83C")).getMessage());
+
+		GUIStorageBackend typed = new GUIStorageBackend();
+		typed.setKind(GUIStorageBackend.S3);
+		typed.setName("Cloud");
+		typed.setEndpoint("https://s3.example.test");
+		typed.setRegion("test-1");
+		typed.setBucket("healdan-tests");
+		typed.setPrefix("heal\u0000dan/");
+		typed.setAccessKey("AKTEST");
+		assertEquals("The prefix can't contain characters Healdan can't keep.",
+				assertThrows(HealdanRuleException.class, () -> BackendDrafts.draft(typed, SECRET, null)).getMessage());
+		typed.setAccessKey("AK\u0000TEST");
+		typed.setPrefix("healdan/");
+		assertEquals("The access key can't contain characters Healdan can't keep.",
+				assertThrows(HealdanRuleException.class, () -> BackendDrafts.draft(typed, SECRET, null)).getMessage());
 	}
 
 	/** Two servers on one host are two S3 services; every host of AWS's is one, as its bucket names are */

@@ -10,9 +10,9 @@ namespace Healdan.Helper.Core.Mail;
 /// A message's Message-ID as the server compares it (M5 spec §6.1): the header's value without its angle brackets
 /// (every pair of them) or surrounding space, compared exactly, at most <see cref="MaxLength"/> characters. The server
 /// answers each id it was asked about in this form, so the helper puts the ids it sends, and the answers it matches
-/// them to, in it too. It follows the server's <c>MessageIds.normalize</c> to the character: a character beyond the
-/// Basic Multilingual Plane, or a lone surrogate, becomes U+FFFD (as MariaDB's tables can't hold it), NUL becomes a
-/// space, and the space trimmed is what Java's <c>strip()</c> trims, which leaves a no-break space alone.
+/// them to, in it too. It follows the server's <c>MessageIds.normalize</c> to the character, as the server indexes
+/// filed emails by the result: a character beyond the Basic Multilingual Plane, or a lone surrogate, becomes U+FFFD,
+/// NUL becomes a space, and the space trimmed is what Java's <c>strip()</c> trims, which leaves a no-break space alone.
 /// </summary>
 internal static class MessageIds
 {

@@ -141,10 +141,18 @@ public class FavoriteNamesTest extends ApiTestCase {
 		assertField(rename(id, "x".repeat(256), clerk), "too-long");
 		assertField(rename(id, "Smith\u0007Docs", clerk), "invalid");
 		assertField(rename(id, "Smith\nDocs", clerk), "invalid");
-		assertField(rename(id, "Smith Docs 📁", clerk), "invalid");
+		// A NUL is a control character; a lone surrogate isn't a character (PostgreSQL spec section 7.5)
+		assertField(rename(id, "Smith\u0000Docs", clerk), "invalid");
+		ApiResponse half = rename(id, "Smith Docs \uD83D", clerk);
+		assertField(half, "invalid");
+		assertEquals("A name can't contain characters Healdan can't keep.",
+				half.json().path("fields").path(0).path("detail").textValue());
 		assertEquals("Documents", nameIn(id, clerk));
 
 		assertEquals("x".repeat(255), renamed(id, "x".repeat(255), clerk));
+		// An emoji is kept
+		assertEquals("Smith Docs \uD83D\uDCC1", renamed(id, "Smith Docs \uD83D\uDCC1", clerk));
+		assertEquals("Smith Docs \uD83D\uDCC1", nameIn(id, clerk));
 	}
 
 	@Test

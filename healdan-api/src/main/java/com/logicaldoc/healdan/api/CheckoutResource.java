@@ -34,7 +34,7 @@ import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.token.ApiToken;
 import com.logicaldoc.healdan.token.DeviceHolds;
 import com.logicaldoc.healdan.token.HoldDevice;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.util.StorableText;
 
 import jakarta.persistence.OptimisticLockException;
 import jakarta.ws.rs.DELETE;
@@ -270,7 +270,7 @@ public class CheckoutResource {
 	 * @return it stripped, or null if it's blank
 	 * @throws ApiProblem {@code 422 validation} for the field {@code app}:
 	 *         {@code too-long} over 100 characters, {@code invalid} with
-	 *         characters the database can't store
+	 *         characters Healdan can't keep
 	 */
 	private static String app(String app) {
 		String clean = StringUtils.strip(app);
@@ -279,9 +279,9 @@ public class CheckoutResource {
 		if (clean.length() > MAX_APP_LENGTH)
 			throw ApiProblem.validation(List.of(new FieldError("app", Uploads.TOO_LONG,
 					"The app's name can't be longer than %d characters.".formatted(MAX_APP_LENGTH))));
-		if (!BasicPlane.holds(clean))
-			throw ApiProblem.validation(List.of(new FieldError("app", "invalid",
-					"The app's name can't contain emoji or other characters the database can't store.")));
+		if (!StorableText.holds(clean))
+			throw ApiProblem.validation(List.of(
+					new FieldError("app", "invalid", "The app's name can't contain " + StorableText.CANT_KEEP + ".")));
 		return clean;
 	}
 

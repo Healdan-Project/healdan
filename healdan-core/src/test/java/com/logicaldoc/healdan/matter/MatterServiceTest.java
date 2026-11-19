@@ -46,8 +46,8 @@ import com.logicaldoc.healdan.searchfolder.SearchFolderRule;
 import com.logicaldoc.healdan.searchfolder.SearchFolderRuleDAO;
 
 /**
- * Spec §5.3: an admin creates a matter from a workspace template, and edits,
- * deletes and restores it. The template is the owner's demo (spec §5.3 table):
+ * Spec \u00a75.3: an admin creates a matter from a workspace template, and edits,
+ * deletes and restores it. The template is the owner's demo (spec \u00a75.3 table):
  * Everyone reads the workspace, IT reads and modifies it; Documents inherits
  * it, and its Invoices folder sets Class = Financial; Secured Documents and
  * Emails are IT only; Recent Work and My Recent Work are search folders.
@@ -335,38 +335,44 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 
 	@Test
 	public void testRefusesNamesTheDatabaseCannotStore() throws Exception {
-		// MariaDB's utf8 tables hold no character beyond the Basic Multilingual Plane, such as an emoji (R33)
-		String message = "A matter name can't contain emoji or other characters the database can't store.";
-		assertRefused(message, () -> create(2, "Party \uD83C\uDF89", alice, demo));
+		// PostgreSQL stores no NUL, and a lone surrogate isn't a character (PostgreSQL spec section 7.5)
+		String message = "A matter name can't contain characters Healdan can't keep.";
+		assertRefused(message, () -> create(2, "Party\u0000Time", alice, demo));
 		assertRefused(message, () -> create(2, "Half \uD83C", alice, demo));
 		assertNoMatter(2);
 		assertRefused(message,
-				() -> service.update(matter.getId(), "Demo \uD83C\uDF89", null, matter.getOwnerId(), admin));
+				() -> service.update(matter.getId(), "Demo\u0000", null, matter.getOwnerId(), admin));
 		assertEquals("Healdan Demo", MatterDAO.get().findById(matter.getId()).getName());
 
-		// Every character of the plane is fine
+		// Every other character is fine, an emoji too
 		Matter fine = create(2, "Caf\u00e9 \u4e2d\u6587", alice, demo);
 		assertEquals("998.2 \u2013 Caf\u00e9 \u4e2d\u6587", workspace(fine).getName());
+		Matter party = create(3, "Party \ud83c\udf89", alice, demo);
+		assertEquals("Party \ud83c\udf89", MatterDAO.get().findById(party.getId()).getName());
+		assertEquals("998.3 \u2013 Party \ud83c\udf89", workspace(party).getName());
 	}
 
 	@Test
 	public void testRefusesDescriptionsTheDatabaseCannotStore() throws Exception {
-		// The description goes into hd_matter and ld_folder, both utf8 on MariaDB, as names do (R33)
-		String message = "A matter description can't contain emoji or other characters the database can't store.";
-		assertRefused(message, () -> create(2, "Party", alice, demo, "Launch \ud83c\udf89"));
+		// The description goes into hd_matter and ld_folder, as names do (PostgreSQL spec section 7.5)
+		String message = "A matter description can't contain characters Healdan can't keep.";
+		assertRefused(message, () -> create(2, "Party", alice, demo, "Launch\u0000"));
 		assertRefused(message, () -> create(2, "Party", alice, demo, "Half \uD83C"));
 		assertNoMatter(2);
 
 		Matter described = create(2, "Party", alice, demo, "Launch");
 		assertRefused(message,
-				() -> service.update(described.getId(), "Party", "Launch \ud83c\udf89", alice.getId(), admin));
+				() -> service.update(described.getId(), "Party", "Launch\u0000", alice.getId(), admin));
 		assertEquals("Launch", MatterDAO.get().findById(described.getId()).getDescription());
 		assertEquals("Launch", workspace(described).getDescription());
 
-		// Every character of the plane is fine
+		// Every other character is fine, an emoji too
 		service.update(described.getId(), "Party", "Caf\u00e9 \u4e2d\u6587", alice.getId(), admin);
 		assertEquals("Caf\u00e9 \u4e2d\u6587", MatterDAO.get().findById(described.getId()).getDescription());
 		assertEquals("Caf\u00e9 \u4e2d\u6587", workspace(described).getDescription());
+		service.update(described.getId(), "Party", "Launch \ud83c\udf89", alice.getId(), admin);
+		assertEquals("Launch \ud83c\udf89", MatterDAO.get().findById(described.getId()).getDescription());
+		assertEquals("Launch \ud83c\udf89", workspace(described).getDescription());
 	}
 
 	@Test

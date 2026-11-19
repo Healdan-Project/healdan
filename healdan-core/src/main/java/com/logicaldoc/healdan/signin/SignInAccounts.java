@@ -34,7 +34,7 @@ import com.logicaldoc.core.security.user.UserEvent;
 import com.logicaldoc.core.security.user.UserHistory;
 import com.logicaldoc.core.security.user.UserSource;
 import com.logicaldoc.healdan.signin.GroupSync.Change;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.util.StorableText;
 import com.logicaldoc.util.crypt.Encrypter;
 import com.logicaldoc.util.html.HTMLSanitizer;
 import com.logicaldoc.util.spring.Context;
@@ -725,12 +725,12 @@ public class SignInAccounts {
 	/**
 	 * Whether CE can store the username as a new account's: not blank, with no
 	 * space around it, no {@code >} (CE's impersonation separator, which its
-	 * store refuses), no control character, nothing MariaDB's {@code utf8}
-	 * tables can't hold, and no longer than the column
+	 * store refuses), no control character, nothing Healdan can't keep
+	 * ({@link StorableText}), and no longer than the column
 	 */
 	static boolean storable(String username) {
 		return StringUtils.isNotBlank(username) && username.equals(username.strip()) && username.length() <= MAX_TEXT
-				&& !username.contains(">") && BasicPlane.holds(username)
+				&& !username.contains(">") && StorableText.holds(username)
 				&& username.chars().noneMatch(Character::isISOControl);
 	}
 
@@ -775,28 +775,29 @@ public class SignInAccounts {
 
 	/**
 	 * @return a name claim as CE stores it (sanitised, its whitespace one
-	 *         space, characters beyond the Basic Multilingual Plane replaced, no
-	 *         longer than the column); null if it's missing or blank
+	 *         space, a NUL a space and a lone surrogate U+FFFD, no longer than
+	 *         the column, which a cut never reaches inside a surrogate pair);
+	 *         null if it's missing or blank
 	 */
 	private static String text(String claim) {
 		if (StringUtils.isBlank(claim))
 			return null;
 		String clean = HTMLSanitizer.sanitizeSimpleText(claim.strip().replaceAll("\\s+", " "));
-		clean = StringUtils.strip(BasicPlane.replaceOthers(clean));
+		clean = StringUtils.strip(StorableText.clean(clean));
 		if (StringUtils.isEmpty(clean))
 			return null;
-		return StringUtils.strip(StringUtils.left(clean, MAX_TEXT));
+		return StringUtils.strip(StorableText.cut(clean, MAX_TEXT));
 	}
 
 	/**
 	 * @return the email claim, stripped; null if it's missing, or isn't
 	 *         something an account's email could be (no {@code @}, a space or
-	 *         control character, a character the database can't hold, or longer
-	 *         than the column), which then neither links nor is stored
+	 *         control character, a character Healdan can't keep, or longer than
+	 *         the column), which then neither links nor is stored
 	 */
 	static String email(IdClaims claims) {
 		String email = StringUtils.strip(claims.email());
-		if (StringUtils.isEmpty(email) || email.length() > MAX_TEXT || !email.contains("@") || !BasicPlane.holds(email)
+		if (StringUtils.isEmpty(email) || email.length() > MAX_TEXT || !email.contains("@") || !StorableText.holds(email)
 				|| email.chars().anyMatch(c -> Character.isWhitespace(c) || Character.isISOControl(c)))
 			return null;
 		return email;

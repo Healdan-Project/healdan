@@ -36,10 +36,10 @@ import jakarta.ws.rs.ext.ExceptionMapper;
  * <ul>
  * <li>an {@link ApiProblem} as it is;</li>
  * <li>the once-per-matter rule's refusal as {@code 409 already-filed}, with
- * its message and the copy as {@code document} (M5 spec §6.4);</li>
+ * its message and the copy as {@code document} (M5 spec \u00a76.4);</li>
  * <li>a file that can't be read because its storage can't be reached as
  * {@code 503 storage-unreachable}, with its message, which names the Store
- * (S3 storage spec §6.5);</li>
+ * (S3 storage spec \u00a76.5);</li>
  * <li>any other Healdan veto as {@code 409 refused}, with its message;</li>
  * <li>JSON that can't be read as {@code 400 bad-request};</li>
  * <li>what JAX-RS raises with its own status: {@code 404 not-found},
@@ -231,12 +231,14 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 	static String describe(JsonProcessingException e) {
 		if (e instanceof UnrecognizedPropertyException unknown)
 			return "The request has a field the server doesn't know: %s.".formatted(unknown.getPropertyName());
+		boolean unkept = e instanceof ApiJson.UnkeptText;
 		if (e instanceof JsonMappingException mapping && !mapping.getPath().isEmpty()) {
 			String field = mapping.getPath().get(mapping.getPath().size() - 1).getFieldName();
 			if (field != null)
-				return "The field %s has the wrong type or format.".formatted(field);
+				return (unkept ? "The field %s has a character Healdan can't keep."
+						: "The field %s has the wrong type or format.").formatted(field);
 		}
-		return "The request body isn't the JSON expected.";
+		return unkept ? "The request has a character Healdan can't keep." : "The request body isn't the JSON expected.";
 	}
 
 	/**

@@ -17,18 +17,24 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.deser.std.StdScalarDeserializer;
+import com.fasterxml.jackson.databind.deser.std.StringDeserializer;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.type.LogicalType;
 import com.fasterxml.jackson.jakarta.rs.json.JacksonJsonProvider;
+import com.logicaldoc.healdan.util.StorableText;
 
 /**
  * The API's JSON conventions (spec sections 4.3 to 4.5): camelCase names as
  * the Java ones, {@code null} written rather than left out, timestamps as ISO
  * 8601 in UTC ({@code 2026-10-23T14:05:00Z}), and unknown request fields
- * refused.
+ * refused; and text with a character Healdan can't keep refused as it's read
+ * (PostgreSQL spec section 7.5).
  */
 public final class ApiJson {
 
@@ -37,6 +43,7 @@ public final class ApiJson {
 			.enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
 			.addModule(new SimpleModule("healdan-dates").addSerializer(Date.class, new UtcDateSerializer())
 					.addDeserializer(Date.class, new UtcDateDeserializer()))
+			.addModule(new SimpleModule("healdan-text").addDeserializer(String.class, new StorableStringDeserializer()))
 			.build();
 
 	private ApiJson() {
@@ -95,6 +102,51 @@ public final class ApiJson {
 		public void serialize(Date value, JsonGenerator generator, SerializerProvider serializers) throws IOException {
 			generator.writeString(DateTimeFormatter.ISO_INSTANT
 					.format(Instant.ofEpochMilli(value.getTime()).truncatedTo(ChronoUnit.SECONDS)));
+		}
+	}
+
+	/**
+	 * Reads text as Jackson does, and refuses text with a NUL or a lone
+	 * surrogate ({@link StorableText}), which {@link ProblemMapper} answers as
+	 * {@code 400 bad-request}: PostgreSQL would fail the statement given a NUL.
+	 * A {@code JsonNode}'s text isn't read through it.
+	 */
+	private static class StorableStringDeserializer extends StdScalarDeserializer<String> {
+
+		private static final long serialVersionUID = 1L;
+
+		StorableStringDeserializer() {
+			super(String.class);
+		}
+
+		@Override
+		public String deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+			String text = StringDeserializer.instance.deserialize(parser, context);
+			if (!StorableText.holds(text))
+				throw new UnkeptText(parser);
+			return text;
+		}
+
+		@Override
+		public LogicalType logicalType() {
+			return LogicalType.Textual;
+		}
+
+		@Override
+		public Object getEmptyValue(DeserializationContext context) {
+			return "";
+		}
+	}
+
+	/**
+	 * Text with a character Healdan can't keep, which {@link ProblemMapper#describe} names
+	 */
+	static final class UnkeptText extends JsonMappingException {
+
+		private static final long serialVersionUID = 1L;
+
+		private UnkeptText(JsonParser parser) {
+			super(parser, "Text with " + StorableText.CANT_KEEP);
 		}
 	}
 

@@ -79,14 +79,16 @@ public class ApiServer implements ApplicationContextAware {
 
 	/**
 	 * @return the providers every request goes through: JSON, problems, CORS
-	 *         (before matching, so a preflight needs no token), the token
-	 *         check, and the upload limit and clean-up
+	 *         (before matching, so a preflight needs no token), the refusal of
+	 *         a query parameter Healdan can't keep (before matching too), the
+	 *         token check, and the upload limit and clean-up
 	 */
 	static List<Object> providers() {
 		List<Object> providers = new ArrayList<>();
 		providers.add(ApiJson.provider());
 		providers.add(new ProblemMapper());
 		providers.add(new CorsFilter());
+		providers.add(new TextFilter());
 		providers.add(new TokenFilter());
 		providers.add(new UploadFilter());
 		// CXF answers ?_wadl with a WADL document whenever its generator is on the classpath, as the webservice

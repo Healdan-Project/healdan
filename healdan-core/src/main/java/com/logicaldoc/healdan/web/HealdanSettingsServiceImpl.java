@@ -46,7 +46,7 @@ import com.logicaldoc.healdan.signin.SignInIdentityDAO;
 import com.logicaldoc.healdan.signin.SignInProvider;
 import com.logicaldoc.healdan.signin.SignInProviders;
 import com.logicaldoc.healdan.token.ApiTokens;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.util.StorableText;
 import com.logicaldoc.healdan.web.PublicAddress.Address;
 
 import jakarta.servlet.annotation.WebServlet;
@@ -442,10 +442,8 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 		if (label.length() > MAX_LABEL_LENGTH)
 			throw new HealdanRuleException(
 					"The %s label cannot be longer than %d characters.".formatted(which, MAX_LABEL_LENGTH));
-		// MariaDB's utf8 tables hold no character beyond the Basic Multilingual Plane (R33)
-		if (!BasicPlane.holds(label))
-			throw new HealdanRuleException(
-					"The %s label cannot contain emoji or other characters the database can't store.".formatted(which));
+		if (!StorableText.holds(label))
+			throw new HealdanRuleException("The %s label cannot contain %s.".formatted(which, StorableText.CANT_KEEP));
 		return label;
 	}
 
