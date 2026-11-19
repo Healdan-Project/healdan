@@ -3,6 +3,7 @@
 
 package com.logicaldoc.healdan.matter;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -31,6 +32,10 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.HealdanRuleException;
+import com.logicaldoc.healdan.admin.AdminArea;
+import com.logicaldoc.healdan.admin.AdminEvent;
+import com.logicaldoc.healdan.admin.AdminEvent.Change;
+import com.logicaldoc.healdan.admin.AdminEvents;
 import com.logicaldoc.healdan.matter.FolderPosition.Kind;
 import com.logicaldoc.healdan.profile.Inheritance;
 import com.logicaldoc.healdan.profile.LocalValueDAO;
@@ -52,6 +57,10 @@ import com.logicaldoc.util.spring.Context;
  * the matter's row is recorded, client and matter are stamped on every folder,
  * and the owner's own group gets every permission on the workspace, which
  * then passes the permission rules (P2). Any refusal leaves nothing behind.
+ * <p>
+ * Each create and edit is recorded in the administration record inside its
+ * transaction, with the fields it set or changed, so a failed record undoes
+ * it.
  * <p>
  * Deleting and restoring a matter go through CE's trash: deleting the
  * workspace hides the matter and keeps its row, so its number stays taken for
@@ -90,6 +99,9 @@ public class MatterService {
 
 	static final String NO_MATTER = "That %s no longer exists.";
 
+	/** What the administration record calls a matter */
+	private static final String MATTER = "matter";
+
 	private final FilingRules filingRules;
 
 	private final MatterNumbering numbering;
@@ -110,10 +122,12 @@ public class MatterService {
 
 	private final JdbcTemplate jdbc;
 
+	private final AdminEvents events;
+
 	@Autowired
 	public MatterService(FilingRules filingRules, MatterNumbering numbering, MatterLocator locator,
 			TemplateCopier copier, PermissionRules permissionRules, LocalValueDAO locals, Propagation propagation,
-			HealdanSettings settings, CacheEvictor evictor, DataSource dataSource) {
+			HealdanSettings settings, CacheEvictor evictor, DataSource dataSource, AdminEvents events) {
 		this.filingRules = filingRules;
 		this.numbering = numbering;
 		this.locator = locator;
@@ -124,6 +138,7 @@ public class MatterService {
 		this.settings = settings;
 		this.evictor = evictor;
 		this.jdbc = new JdbcTemplate(dataSource);
+		this.events = events;
 	}
 
 	/**
@@ -202,6 +217,19 @@ public class MatterService {
 		propagation.restampSubtree(workspaceId);
 
 		permissionRules.checkP2(workspaceId, store.getId(), owner.getId());
+
+		// Every field the create set
+		Map<String, Change> fields = new HashMap<>();
+		fields.put("client", setTo(MatterDisplay.client(client.getNumber(), client.getName())));
+		fields.put("number", setTo(String.valueOf(req.number())));
+		fields.put("name", setTo(name));
+		if (description != null)
+			fields.put("description", setTo(description));
+		fields.put("store", setTo(store.getName()));
+		fields.put("template", setTo(template.getName()));
+		fields.put("owner", setTo(owner.getFullName()));
+		events.record(new AdminEvent(AdminArea.MATTERS, "matter.created", MATTER, matter.getId(), display, fields),
+				actor);
 		return matter;
 	}
 
@@ -209,7 +237,8 @@ public class MatterService {
 	 * Edits a matter: renames its workspace when the name changes, and on an
 	 * owner change gives the new owner's own group every permission on the
 	 * workspace and takes the old owner's entry away. The client and the number
-	 * never change.
+	 * never change. Only the fields whose values changed are recorded, an
+	 * owner by name; an edit that changes none isn't.
 	 *
 	 * @param matterId the matter
 	 * @param name the new name; it is trimmed
@@ -238,6 +267,8 @@ public class MatterService {
 		String cleanDescription = cleanDescription(description);
 		long oldOwnerId = matter.getOwnerId();
 		User owner = ownerId != oldOwnerId ? enabledOwner(ownerId) : null;
+		String oldName = matter.getName();
+		String oldDescription = matter.getDescription();
 
 		// The row first: the permission rules read the owner from it (P2)
 		matter.setName(clean);
@@ -267,6 +298,18 @@ public class MatterService {
 			FolderDAO.get().store(workspace, history(tx, FolderEvent.PERMISSION));
 			permissionRules.checkP2(workspace.getId(), workspace.getParentId(), owner.getId());
 		}
+
+		// Only what changed
+		Map<String, Change> changed = new HashMap<>();
+		if (!clean.equals(oldName))
+			changed.put("name", new Change(oldName, clean));
+		if (!Objects.equals(cleanDescription, oldDescription))
+			changed.put("description", new Change(oldDescription, cleanDescription));
+		if (owner != null)
+			changed.put("owner", new Change(fullName(oldOwnerId), owner.getFullName()));
+		if (!changed.isEmpty())
+			events.record(new AdminEvent(AdminArea.MATTERS, "matter.updated", MATTER, matter.getId(), display, changed),
+					actor);
 		return matter;
 	}
 
@@ -412,6 +455,30 @@ public class MatterService {
 					// In LIKE '_' matches any character: keep the exact names only
 					return found.equals(name) || found.startsWith(name + ".") ? rs.getLong(1) : null;
 				}, Tenant.DEFAULT_ID, name, name + ".%").stream().filter(Objects::nonNull).toList();
+	}
+
+	/**
+	 * @return the user's full name, as the matter dialog shows an owner; a
+	 *         deleted user's too, whose row CE keeps; null if there is no such
+	 *         user
+	 */
+	private String fullName(long userId) {
+		List<String> names = jdbc.query("select ld_firstname, ld_name, ld_username from ld_user where ld_id = ?",
+				(rs, i) -> {
+					User user = new User();
+					user.setFirstName(rs.getString(1));
+					user.setName(rs.getString(2));
+					user.setUsername(rs.getString(3));
+					return user.getFullName();
+				}, userId);
+		return names.isEmpty() ? null : names.get(0);
+	}
+
+	/**
+	 * @return a field's change on a create, which had no value before
+	 */
+	private static Change setTo(String value) {
+		return new Change(null, value);
 	}
 
 	private static void grantAll(Folder folder, Group group) {

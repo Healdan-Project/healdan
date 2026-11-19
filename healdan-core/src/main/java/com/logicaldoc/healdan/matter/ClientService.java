@@ -3,23 +3,43 @@
 
 package com.logicaldoc.healdan.matter;
 
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanRuleException;
+import com.logicaldoc.healdan.admin.AdminArea;
+import com.logicaldoc.healdan.admin.AdminEvent;
+import com.logicaldoc.healdan.admin.AdminEvent.Change;
+import com.logicaldoc.healdan.admin.AdminEvents;
 import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.util.BasicPlane;
 import com.logicaldoc.util.spring.Context;
 
 /**
- * Creating and renaming clients. Admins only.
+ * Creating and renaming clients. Admins only. Each change is recorded in the
+ * administration record inside the change's transaction, so a failed record
+ * undoes the change.
  */
 @Component
 public class ClientService {
 
 	/** The longest client name the table holds */
 	static final int MAX_NAME_LENGTH = 255;
+
+	/** What the administration record calls a client */
+	private static final String CLIENT = "client";
+
+	private final AdminEvents events;
+
+	@Autowired
+	public ClientService(AdminEvents events) {
+		this.events = events;
+	}
 
 	/**
 	 * @return the service bean
@@ -38,6 +58,7 @@ public class ClientService {
 	 *         character the database can't store
 	 * @throws PersistenceException error at data layer
 	 */
+	@Transactional(rollbackFor = Exception.class)
 	public Client create(long number, String name, User actor) throws PersistenceException {
 		requireAdmin(actor);
 		if (number < 1)
@@ -50,10 +71,15 @@ public class ClientService {
 		client.setNumber(number);
 		client.setName(clean);
 		ClientDAO.get().store(client);
+		events.record(new AdminEvent(AdminArea.MATTERS, "client.created", CLIENT, client.getId(), clean,
+				Map.of("number", new Change(null, String.valueOf(number)), "name", new Change(null, clean))), actor);
 		return client;
 	}
 
 	/**
+	 * A rename to the name the client already has changes nothing, and isn't
+	 * recorded.
+	 *
 	 * @param clientId the id of the client
 	 * @param name the new name; it is trimmed
 	 * @param actor the user who asks
@@ -63,6 +89,7 @@ public class ClientService {
 	 *         the database can't store
 	 * @throws PersistenceException error at data layer
 	 */
+	@Transactional(rollbackFor = Exception.class)
 	public Client rename(long clientId, String name, User actor) throws PersistenceException {
 		requireAdmin(actor);
 		String clean = cleanName(name);
@@ -70,8 +97,12 @@ public class ClientService {
 		if (client == null)
 			throw new HealdanRuleException("There is no such client.");
 
+		String before = client.getName();
 		client.setName(clean);
 		ClientDAO.get().store(client);
+		if (!clean.equals(before))
+			events.record(new AdminEvent(AdminArea.MATTERS, "client.renamed", CLIENT, client.getId(), clean,
+					Map.of("name", new Change(before, clean))), actor);
 		return client;
 	}
 
