@@ -74,8 +74,9 @@ see [Bookmarks](../../documents/bookmarks/).
 ## The Main Area
 
 When you sign in, the main area shows **Recent Documents**: the documents you filed, changed, checked in or out, or
-downloaded lately, newest first, as a list with each one's matter. A pencil at the end of a document's title means it's
-checked out, and a padlock that it's locked: point at it to see who has it (see
+downloaded lately, newest first, as a list with each one's matter, by number and name (point at it, or see the
+document's details, for the whole name and the client). A pencil at the end of a document's title means it's checked
+out, and a padlock that it's locked: point at it to see who has it (see
 [In the Lists](../../documents/checking-out-and-checking-in/#in-the-lists)). Click one to select it. Its doc # goes into the
 page's address, so the link you copy takes someone to the same place, and Back and Reload keep it. See
 [Recent](../../finding-documents/my-matters-and-recent-matters/#recent).

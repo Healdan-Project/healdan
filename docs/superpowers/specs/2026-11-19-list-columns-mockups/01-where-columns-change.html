@@ -1,0 +1,185 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>List columns mockup: where a list’s columns change</title>
+<style>:root{--border:#d1d1d6;--text-secondary:#6e6e73;--bg-secondary:#fff;--bg-tertiary:#e5e5e7}body{margin:24px auto;max-width:1340px;padding:0 24px;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:#1d1d1f;background:#f5f5f7}.subtitle{color:var(--text-secondary)}.options{display:flex;flex-direction:column;gap:.75rem}.option{display:flex;gap:1rem;align-items:flex-start;background:#fff;border:1px solid var(--border);border-radius:10px;padding:1rem}.option .letter{flex:none;width:28px;height:28px;border-radius:6px;background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;font-weight:600}.option .content{flex:1;min-width:0}.option h3{margin:0 0 .25rem;font-size:1rem}.option p{margin:0;color:var(--text-secondary);font-size:.9rem}.pros-cons{display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:.85rem}.pros-cons h4{margin:.25rem 0}.pros h4{color:#248a3d}.cons h4{color:#c42b1c}.pros-cons ul{margin:0;padding-left:1.1rem}</style>
+<style>
+  .hx { font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1d1d1f; background: #fff; border: 1px solid #d1d1d6; border-radius: 8px; position: relative; padding: 6px 12px 12px; min-height: 400px; margin-top: 8px; text-align: left; }
+  .hx-title { font-size: 17px; font-weight: 600; margin: 6px 0 8px; }
+  .hx-grid { display: grid; grid-template-columns: minmax(170px, 1.5fr) 52px 58px minmax(170px, 1.5fr) minmax(110px, 1fr) 96px 30px; }
+  .hx-h { color: #6e6e73; font-size: 12px; font-weight: 500; padding: 8px 10px; border-bottom: 1px solid #e5e5ea; white-space: nowrap; position: relative; }
+  .hx-h.end, .hx-c.end { text-align: right; font-variant-numeric: tabular-nums; }
+  .hx-h.active { background: #eef4fb; color: #1d1d1f; box-shadow: inset 0 0 0 2px #0a4f94; border-radius: 4px; }
+  .hx-h .chev { color: #6e6e73; margin-left: 4px; font-size: 10px; }
+  .hx-h .rz { position: absolute; right: -1px; top: 5px; bottom: 5px; width: 2px; background: #0c69c0; border-radius: 1px; }
+  .hx-c { padding: 9px 10px; border-bottom: 1px solid #f0f0f2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hx-c svg { vertical-align: -2px; margin-right: 6px; }
+  .hx-colbtn { display: flex; align-items: center; justify-content: center; border-bottom: 1px solid #e5e5ea; }
+  .hx-colbtn span { display: inline-flex; width: 22px; height: 22px; align-items: center; justify-content: center; border-radius: 5px; color: #6e6e73; }
+  .hx-colbtn span.on { background: #eef4fb; color: #0c69c0; box-shadow: inset 0 0 0 1px #0c69c0; }
+  .hx-menu { position: absolute; background: #fff; border: 1px solid #d1d1d6; border-radius: 8px; box-shadow: 0 10px 28px rgba(0,0,0,.18); padding: 4px; min-width: 190px; z-index: 5; font-size: 13px; }
+  .hx-mi { padding: 5px 12px 5px 28px; border-radius: 5px; position: relative; display: flex; justify-content: space-between; gap: 18px; white-space: nowrap; }
+  .hx-mi.on { background: #0c69c0; color: #fff; }
+  .hx-mi.dim { color: #aeaeb2; }
+  .hx-mi .ck { position: absolute; left: 10px; }
+  .hx-mi .hint { color: #8e8e93; font-size: 12px; }
+  .hx-mi.on .hint { color: #dbe9f7; }
+  .hx-sep { height: 1px; background: #e5e5ea; margin: 4px 6px; }
+  .hx-panel { position: absolute; right: 10px; top: 92px; width: 270px; background: #fff; border: 1px solid #d1d1d6; border-radius: 10px; box-shadow: 0 10px 28px rgba(0,0,0,.18); padding: 10px; z-index: 5; }
+  .hx-panel h4 { margin: 0; font-size: 14px; }
+  .hx-panel .sub { color: #6e6e73; font-size: 12px; margin: 2px 0 8px; }
+  .hx-pi { display: flex; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 5px; }
+  .hx-pi .grip { color: #aeaeb2; font-size: 12px; width: 10px; }
+  .hx-pi .box { width: 13px; height: 13px; border: 1.5px solid #8e8e93; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; }
+  .hx-pi .box.on { background: #0c69c0; border-color: #0c69c0; }
+  .hx-pi .lock { color: #8e8e93; font-size: 11px; margin-left: auto; }
+  .hx-pi.focus { box-shadow: inset 0 0 0 2px #0a4f94; }
+  .hx-group { color: #8e8e93; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin: 8px 6px 2px; }
+  .hx-cols2 { display: grid; grid-template-columns: 1fr 1fr; }
+  .hx-foot { display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e5ea; }
+  .hx-btn { border: 1px solid #d1d1d6; border-radius: 6px; padding: 3px 9px; background: #fff; font-size: 12px; }
+  .hx-btn.right { margin-left: auto; }
+  .hx-note { font-size: 12px; color: #6e6e73; margin-top: 6px; }
+  .hx-callout { position: absolute; font-size: 11px; color: #0c69c0; background: #eef4fb; border: 1px solid #b8d4ef; border-radius: 4px; padding: 2px 6px; z-index: 6; }
+</style>
+
+<h2>Where do you change a list's columns?</h2>
+<p class="subtitle">Recent Documents, with the new default widths (Matter now shares the spare room and shows the matter's name). Each option shows the same list with its controls open. Click the one that feels right.</p>
+
+<div class="options">
+
+  <!-- A -->
+  <div class="option" data-choice="a">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>A menu on each heading, and nothing else</h3>
+      <p>Right-click a heading (or Shift+F10 on it) for a menu that does everything: sort, resize, move, hide, and a Show Columns submenu with a tick for each column.</p>
+      <div class="hx" style="min-height: 660px;">
+        <div class="hx-title">Recent Documents</div>
+        <div class="hx-grid">
+          <div class="hx-h">Title</div><div class="hx-h end">Doc #</div><div class="hx-h end">Version</div>
+          <div class="hx-h active">Matter</div><div class="hx-h">Author</div><div class="hx-h">Edit Date</div><div class="hx-h"></div>
+          <div class="hx-c"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2b579a" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Untitled 1.odt</div><div class="hx-c end">57</div><div class="hx-c end">1.2</div><div class="hx-c">998.1 – Healdan General Demo</div><div class="hx-c">Priya Nair</div><div class="hx-c">Nov 16, 2026</div><div class="hx-c"></div>
+          <div class="hx-c"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c43e1c" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Linux Presentation.odp</div><div class="hx-c end">56</div><div class="hx-c end">1</div><div class="hx-c">998.1 – Healdan General Demo</div><div class="hx-c">Priya Nair</div><div class="hx-c">Nov 16, 2026</div><div class="hx-c"></div>
+          <div class="hx-c"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2b579a" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Some Important Demo Document.docx</div><div class="hx-c end">39</div><div class="hx-c end">1</div><div class="hx-c">998.3 – Healdan Client Data</div><div class="hx-c">Priya Nair</div><div class="hx-c">Nov 9, 2026</div><div class="hx-c"></div>
+        </div>
+        <div class="hx-menu" style="left: 37%; top: 90px;">
+          <div class="hx-mi">Sort Ascending</div>
+          <div class="hx-mi">Sort Descending</div>
+          <div class="hx-sep"></div>
+          <div class="hx-mi">Resize Column</div>
+          <div class="hx-mi">Move Left</div>
+          <div class="hx-mi">Move Right</div>
+          <div class="hx-mi">Hide Matter</div>
+          <div class="hx-sep"></div>
+          <div class="hx-mi on">Show Columns <span class="hint">▸</span></div>
+          <div class="hx-mi">Reset Columns</div>
+        </div>
+        <div class="hx-menu" style="left: calc(37% + 196px); top: 268px; min-width: 150px;">
+          <div class="hx-mi dim"><span class="ck">✓</span>Title</div>
+          <div class="hx-mi"><span class="ck">✓</span>Doc #</div>
+          <div class="hx-mi"><span class="ck">✓</span>Version</div>
+          <div class="hx-mi"><span class="ck">✓</span>Matter</div>
+          <div class="hx-mi">Client</div>
+          <div class="hx-mi">Location</div>
+          <div class="hx-mi"><span class="ck">✓</span>Author</div>
+          <div class="hx-mi">Typist</div>
+          <div class="hx-mi">Class</div>
+          <div class="hx-mi">Subclass</div>
+          <div class="hx-mi">Date Filed</div>
+          <div class="hx-mi"><span class="ck">✓</span>Edit Date</div>
+          <div class="hx-mi">Size</div>
+          <div class="hx-mi">File Type</div>
+          <div class="hx-mi">From · To · Sent …</div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>One place, nothing added to the screen</li><li>Every action is about the heading you're on</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Hard to discover: nothing says headings have a menu</li><li>Adding three columns means opening the menu three times</li><li>A new column lands at the end; ordering is Move Left, Move Left…</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- B -->
+  <div class="option" data-choice="b">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>A Columns button that opens a panel</h3>
+      <p>A small button at the end of the heading row opens the whole set at once: the shown columns in their order (drag them, or Move Up and Move Down), then the rest to tick. Headings themselves only sort, and resize by dragging their edges.</p>
+      <div class="hx" style="min-height: 520px;">
+        <div class="hx-title">Recent Documents</div>
+        <div class="hx-grid">
+          <div class="hx-h">Title</div><div class="hx-h end">Doc #</div><div class="hx-h end">Version</div>
+          <div class="hx-h">Matter</div><div class="hx-h">Author</div><div class="hx-h">Edit Date</div>
+          <div class="hx-colbtn"><span class="on" title="Columns"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9.5 4v16M14.5 4v16"/></svg></span></div>
+          <div class="hx-c"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2b579a" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Untitled 1.odt</div><div class="hx-c end">57</div><div class="hx-c end">1.2</div><div class="hx-c">998.1 – Healdan General Demo</div><div class="hx-c">Priya Nair</div><div class="hx-c">Nov 16, 2026</div><div class="hx-c"></div>
+          <div class="hx-c"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c43e1c" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Linux Presentation.odp</div><div class="hx-c end">56</div><div class="hx-c end">1</div><div class="hx-c">998.1 – Healdan General Demo</div><div class="hx-c">Priya Nair</div><div class="hx-c">Nov 16, 2026</div><div class="hx-c"></div>
+          <div class="hx-c"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2b579a" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Some Important Demo Document.docx</div><div class="hx-c end">39</div><div class="hx-c end">1</div><div class="hx-c">998.3 – Healdan Client Data</div><div class="hx-c">Priya Nair</div><div class="hx-c">Nov 9, 2026</div><div class="hx-c"></div>
+        </div>
+        <div class="hx-panel">
+          <h4>Columns</h4>
+          <div class="sub">For Recent Documents</div>
+          <div class="hx-group">Shown, in order</div>
+          <div class="hx-pi"><span class="grip"></span><span class="box on">✓</span>Title<span class="lock">Always shown</span></div>
+          <div class="hx-pi"><span class="grip">⠿</span><span class="box on">✓</span>Doc #</div>
+          <div class="hx-pi"><span class="grip">⠿</span><span class="box on">✓</span>Version</div>
+          <div class="hx-pi focus"><span class="grip">⠿</span><span class="box on">✓</span>Matter</div>
+          <div class="hx-pi"><span class="grip">⠿</span><span class="box on">✓</span>Author</div>
+          <div class="hx-pi"><span class="grip">⠿</span><span class="box on">✓</span>Edit Date</div>
+          <div class="hx-group">More columns</div>
+          <div class="hx-cols2">
+            <div class="hx-pi"><span class="box"></span>Client</div><div class="hx-pi"><span class="box"></span>Location</div>
+            <div class="hx-pi"><span class="box"></span>Typist</div><div class="hx-pi"><span class="box"></span>Class</div>
+            <div class="hx-pi"><span class="box"></span>Subclass</div><div class="hx-pi"><span class="box"></span>Date Filed</div>
+            <div class="hx-pi"><span class="box"></span>Size</div><div class="hx-pi"><span class="box"></span>File Type</div>
+            <div class="hx-pi"><span class="box"></span>From</div><div class="hx-pi"><span class="box"></span>To</div>
+            <div class="hx-pi"><span class="box"></span>Sent</div>
+          </div>
+          <div class="hx-foot"><span class="hx-btn">Move Up</span><span class="hx-btn">Move Down</span><span class="hx-btn right">Reset to Default</span></div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Easy to find, and you see the whole set and its order at once</li><li>Add Class, Subclass and Typist in one visit</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Resizing by keyboard needs a home of its own (headings have no menu)</li><li>Changing one column means going to the panel</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- C -->
+  <div class="option" data-choice="c">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Both: a short menu on each heading, and the Columns panel (my pick)</h3>
+      <p>The heading's menu does what's about that column (sort, resize, move, hide) and ends with Choose Columns…, which opens B's panel. The button at the end of the heading row opens the same panel, so it's easy to find.</p>
+      <div class="hx">
+        <div class="hx-title">Recent Documents</div>
+        <div class="hx-grid">
+          <div class="hx-h">Title</div><div class="hx-h end">Doc #</div><div class="hx-h end">Version</div>
+          <div class="hx-h active">Matter<span class="rz"></span></div><div class="hx-h">Author</div><div class="hx-h">Edit Date</div>
+          <div class="hx-colbtn"><span title="Columns"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9.5 4v16M14.5 4v16"/></svg></span></div>
+          <div class="hx-c"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2b579a" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Untitled 1.odt</div><div class="hx-c end">57</div><div class="hx-c end">1.2</div><div class="hx-c">998.1 – Healdan General Demo</div><div class="hx-c">Priya Nair</div><div class="hx-c">Nov 16, 2026</div><div class="hx-c"></div>
+          <div class="hx-c"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c43e1c" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Linux Presentation.odp</div><div class="hx-c end">56</div><div class="hx-c end">1</div><div class="hx-c">998.1 – Healdan General Demo</div><div class="hx-c">Priya Nair</div><div class="hx-c">Nov 16, 2026</div><div class="hx-c"></div>
+          <div class="hx-c"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2b579a" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>Some Important Demo Document.docx</div><div class="hx-c end">39</div><div class="hx-c end">1</div><div class="hx-c">998.3 – Healdan Client Data</div><div class="hx-c">Priya Nair</div><div class="hx-c">Nov 9, 2026</div><div class="hx-c"></div>
+        </div>
+        <div class="hx-callout" style="left: calc(37% + 150px); top: 44px;">drag the edge to resize · drag the heading to move</div>
+        <div class="hx-menu" style="left: 37%; top: 90px;">
+          <div class="hx-mi">Sort Ascending</div>
+          <div class="hx-mi">Sort Descending</div>
+          <div class="hx-sep"></div>
+          <div class="hx-mi">Resize Column</div>
+          <div class="hx-mi">Move Left</div>
+          <div class="hx-mi">Move Right</div>
+          <div class="hx-mi">Hide Matter</div>
+          <div class="hx-sep"></div>
+          <div class="hx-mi on">Choose Columns…</div>
+          <div class="hx-mi">Reset Columns</div>
+        </div>
+        <div class="hx-note" style="position:absolute; left: calc(37% + 205px); top: 300px; width: 240px;">Choose Columns… and the <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9.5 4v16M14.5 4v16"/></svg> button both open B's panel.</div>
+      </div>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Quick changes where you are; the full set when you want it</li><li>Keyboard resizing has its home (Resize Column, then the arrows)</li><li>The same right-click pattern the rows already have</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Two ways in to one feature</li><li>The most to build of the three</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>

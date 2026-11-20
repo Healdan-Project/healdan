@@ -71,9 +71,9 @@ Enter on words opens the results at `/app/search`, with your words and the scope
 - **Documents come by relevance,** best first, until you click a column header. A header sorts the results by that
   column, the server doing the sorting, and a second click reverses it. **Title**, **Doc #**, **Version**, **Author**
   and **Edit Date** sort; no header is marked while the order is relevance.
-- **The Matter column** shows the matter number with the client's name beside it in paler type, for example `1001.1
-  Saltmarsh Shipping Ltd`. Point at it to see the matter's name, or move to the row with a screen reader, which reads
-  the name with the cell.
+- **The Matter column** shows the matter's number and name, for example `1001.1 – Charter Dispute`. A name too long for
+  the column ends in an ellipsis, and a wider window gives the column more room. Point at it to see the whole name and
+  the client, or select the document and see its details. A screen reader reads the client with the cell.
 - **The count** above the list reads "6 documents". When there are more hits than the server counted, it says so,
   as "More than 10,000 documents", rather than guess. The server reads up to the first 10,000 hits of a search, and
   all of them when you sort by a column, so that is the largest number it names; a search by relevance can stop

@@ -414,8 +414,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await check('document search Filters')
       // With Filters open the list is narrow: Title keeps the room it needs, and any text that doesn't fit ends in an ellipsis
       const cells = await main().getByRole('row').nth(1).evaluate((row) => {
-        // The box that draws the ellipsis is the text's own or one around it inside the cell (a matter's client sits inside the box
-        // that holds the matter number), and a flex box can't draw one
+        // The box that draws the ellipsis is the text's own or one around it inside the cell, and a flex box can't draw one
         const endsInEllipsis = (from: Element, cell: Element) => {
           for (let box: Element | null = from; box; box = box === cell ? null : box.parentElement) {
             const style = getComputedStyle(box)
@@ -431,6 +430,9 @@ for (const scheme of ['light', 'dark'] as const) {
       })
       expect(cells.unclipped, 'cells whose text is cut with no ellipsis').toBe(0)
       expect(cells.title, "the Title column's width").toBeGreaterThanOrEqual(200)
+      // The columns' least widths fit the list beside Filters at 1,280, so it doesn't scroll sideways (list columns spec 4.1)
+      const sideways = await main().getByRole('grid').evaluate((list) => list.scrollWidth - list.clientWidth)
+      expect(sideways, 'how far the list beside Filters scrolls sideways').toBeLessThanOrEqual(1)
     })
 
     test('search results, in the Matters scope', async () => {
