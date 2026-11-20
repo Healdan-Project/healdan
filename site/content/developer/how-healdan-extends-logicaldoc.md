@@ -202,8 +202,8 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     (`/v1/admin/folders`, beside `AdminFolderAccessResource`: New Folder, rename, move, delete, the values and New
     Search Folder), `AdminSearchFoldersResource` (`/v1/admin/search-folders`, a search folder's rule) and
     `AdminTemplatesResource` (`/v1/admin/templates`), over `healdan-core`'s `WorkspaceAdmin` and `TemplateAdmin`. Names
-    go through `FolderRenames.name`, search folders' too, so CE's folder store never strips a character it would have
-    refused. A change that gives a folder a name holds the lock of the folder the name goes into, through
+    go through `FolderRenames.name`, search folders' too, which refuses a character Healdan doesn't keep in a name
+    rather than let the name be changed. A change that gives a folder a name holds the lock of the folder the name goes into, through
     `FolderChanges.withFolderLocks`, the public folder routes' locks: a rename its parent's, New Folder and New Search
     Folder the folder they're made in, a move both parents', in id order, and a template's create or rename the
     Templates Store's, and a rename or move checks, once it holds them, that the folder is still where it was. So two
@@ -647,7 +647,9 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     or is still being worked out, puts its codes in `unchecked` and gives its tiles `problem`, a fixed line, with
     `attention` for status, and the rest are whole; the failure is logged at warn with its class only, its stack at
     debug. Each item's and tile's link is the screen that fixes it, from `DashboardService.Screen`, a table of the
-    Admin app's addresses that is the Classic Interface's, `/frontend.jsp`, until each screen ships. Tests call
+    Admin app's addresses that is the Classic Interface's, `/frontend.jsp`, until each screen ships. Phase 2 gave
+    Clients, Matters and Workspace Templates theirs (`DashboardScreensTest`), though no item or tile links to them
+    yet. Tests call
     `read()` after `forget()`, which drops what's kept.
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a

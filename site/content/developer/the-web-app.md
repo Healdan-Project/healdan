@@ -129,9 +129,10 @@ takes Esc first).
 - **The find** (`FindBox.tsx`) is `@healdan/ui`'s `ComboBox`, as the User app's search box is. It asks
   `GET /v1/admin/find` once the typing has paused for 150 ms (`FIND_DELAY_MS`), from two characters, or a number of any
   length, as a client's is, sending at most 100 (`FIND_MAX`), and keeps the last answer on screen while the next comes.
-  What's chosen opens its page in the app: a client at `/admin/clients/{id}` and a matter at `/admin/matters/{id}`,
-  by the ids `FoundClient` and `FoundMatter` carry, through the router. A person opens the Classic Interface
-  (`/frontend.jsp`) until Phase 4's screens ship. A hidden `role="status"` says "Nothing found." or the error.
+  What's chosen opens where `DESTINATIONS` says for its kind: a client's page at `/admin/clients/{id}` and a
+  matter's at `/admin/matters/{id}`, by the ids `FoundClient` and `FoundMatter` carry, inside the app with the router
+  (`ServerLink.tsx`'s `useFollow`), and a person the Classic Interface (`/frontend.jsp`), with a page load, until
+  Phase 4's screens ship. A hidden `role="status"` says "Nothing found." or the error.
 - **An address no route has** is `views/NotFoundView.tsx`, in the frame, with **Go to the Dashboard**. A view that
   fails as it draws is `RouteError` (`router.tsx`): the catalogue's message and Try Again, never the error's own text.
 
@@ -151,11 +152,13 @@ so far.
    `GET /v1/admin/dashboard` only while an entry it shows has a `count`. `aria-current="page"` marks the open entry:
    the Dashboard at `/` only, and any other at its address and the pages under it.
 4. Point what led to the Classic Interface at it: the Dashboard's links, which the server gives (`AttentionItem.link`
-   and `HealthTile.link`, from `healdan-core`'s `DashboardService.Screen`, `/frontend.jsp` until the screen ships),
-   and the find (`FindBox.tsx`). A link to one of the app's own addresses, from the Dashboard or anywhere else an
-   answer gives one, opens through the router, without a page load, and one to the Classic Interface is a plain link.
-   An attention row's link takes its label from `NAV` (`screenAt`: the screen's name, **Classic Interface** for
-   `/frontend.jsp`, or **Open**), so it follows by itself.
+   and `HealthTile.link`, from `healdan-core`'s `DashboardService.Screen`, `/frontend.jsp` until the screen ships;
+   Phase 2 gave Clients, Matters and Workspace Templates theirs, though no row or tile links to them yet), and the
+   find's `DESTINATIONS`. The Dashboard's rows and tiles draw their links with `frame/ServerLink.tsx`: a plain click on
+   a link to one of the app's own addresses (`appAddressOf`) opens it with the router, without a page load, and the
+   Classic Interface, another origin, a click with a modifier or another button and a link with a `target` stay the
+   browser's. An attention row's link takes its label from `NAV` by its path (`linkLabel`, through `screenAt`: the
+   screen's name, **Classic Interface** for `/frontend.jsp`, or **Open**), so it follows by itself.
 5. Add its words to the app's catalogue, and test it with `renderApp`, the fake API and `expectNoAxeViolations`.
 
 ### Asking the Server

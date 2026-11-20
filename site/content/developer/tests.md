@@ -264,7 +264,9 @@ the packages under it), `healdan-api` and `healdan-storage`. No test makes a rea
 - **`DashboardServiceTest`** checks Needs Attention and Server Health over fakes of each source: each attention code,
   several backends and Stores, the ten tiles in order and those that need attention, a part that fails leaving the
   rest whole, a source that can't be read unchecked, a slow one still being worked out, storage backends off, the
-  database's tile on PostgreSQL, Sign-In and Outgoing Email, and a second read coming from what's kept. `CachedTest`
+  database's tile on PostgreSQL, Sign-In and Outgoing Email, and a second read coming from what's kept.
+  `DashboardScreensTest` pins where the links go: each shipped screen's Admin address, the Dashboard, Clients, Matters
+  and Workspace Templates, and the Classic Interface for every other. `CachedTest`
   checks what's kept: one ask per period however many read, the last answer while it's asked again, none older than
   two periods, a failure kept like an answer, `forget()` and a clock set back. `WordsTest` checks the tiles' words,
   and `ProviderClientTest` that `answers` fetches a provider's discovery document afresh and remembers a failure for
