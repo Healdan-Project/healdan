@@ -18,7 +18,8 @@ import { useMe, useTrash } from '../queries'
 import { useApi } from '../services'
 import { Toolbar } from './Toolbar'
 import { deletedFromText, DestroyIn, itemCount, placeText, TrashDetails, trashIcon } from './TrashDetails'
-import { useColumnLayout, type ListKind } from './columnLayouts'
+import type { ListKind } from './columnLayouts'
+import { useListWidths } from './useListColumns'
 import { pagedState, type ListingOrder } from './useListing'
 import styles from './views.module.css'
 
@@ -217,8 +218,8 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
     if (canRemove && targets.length > 0 && !running.current) setAsking({ items: targets })
   }
 
-  const columns = columnsOf[view]
-  const layout = useColumnLayout(kindOf[view], columns.map((column) => column.id))
+  // Each view's columns are its own, as for every list that isn't of documents: only their widths are kept, for the view
+  const { columns, resizing, onResetColumns } = useListWidths(kindOf[view], columnsOf[view])
   const rows = useMemo(() => items.map(rowOf), [items])
   const byKey = useMemo(() => new Map(items.map((item) => [keyOf(item), item])), [items])
   // What a key acts on: the selection when the row is in it, else the row alone
@@ -312,8 +313,8 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
               rows={rows}
               sort={shown}
               onSort={sortBy}
-              resizing={{ widths: layout.widths, onResizeEnd: layout.resized, onReset: layout.resetWidth }}
-              onResetColumns={layout.reset}
+              resizing={resizing}
+              onResetColumns={onResetColumns}
               selectionMode="multiple"
               selection={selection}
               onSelectionChange={setChosen}

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, createEvent, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
@@ -121,6 +121,23 @@ describe('FolderView', () => {
     expect(router.history.location.search).toBe('?sort=docNumber&order=desc')
   })
 
+  it('sorts by Edit Date newest first at its first click, asking the server, then oldest first', async () => {
+    const { api, router } = await renderApp('/folders/7', routes())
+    await findRow(/Drafts/)
+    fireEvent.click(header('Edit Date'))
+    await waitFor(() => expect(router.history.location.search).toBe('?sort=edited&order=desc'))
+    await waitFor(() =>
+      expect(api.callsTo('GET /v1/folders/7/children').at(-1)?.query).toEqual({ sort: 'edited', order: 'desc', zone, offset: 0, limit: 100 }),
+    )
+    await waitFor(() => expect(header('Edit Date').getAttribute('aria-sort')).toBe('descending'))
+
+    fireEvent.click(header('Edit Date'))
+    await waitFor(() => expect(router.history.location.search).toBe('?sort=edited&order=asc'))
+    await waitFor(() =>
+      expect(api.callsTo('GET /v1/folders/7/children').at(-1)?.query).toEqual({ sort: 'edited', order: 'asc', zone, offset: 0, limit: 100 }),
+    )
+  })
+
   it('keeps the rows, without a count, while a new order loads, marking the list busy', async () => {
     let release = () => {}
     await renderApp(
@@ -159,6 +176,51 @@ describe('FolderView', () => {
     expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Edit Date'])
   })
 
+  it('moves a column by a drag of its heading, kept for every folder, and the folder\'s drop zone files nothing and says nothing', async () => {
+    const { api } = await renderApp('/folders/7', routes())
+    await findRow(/Drafts/)
+    // What a browser's DataTransfer does in a drag, which jsdom lacks: one is carried from the dragstart to the dragend
+    const carried = new Map<string, string>()
+    const dataTransfer = {
+      get types() {
+        return [...carried.keys()]
+      },
+      setData: (type: string, value: string) => void carried.set(type, value),
+      getData: (type: string) => carried.get(type) ?? '',
+      effectAllowed: 'uninitialized',
+      dropEffect: 'none',
+    }
+    // A drag event with the pointer at clientX: jsdom has no DragEvent, so the place is set on the event. False when it was
+    // cancelled, as by whatever took the drop
+    const drag = (type: 'dragStart' | 'dragEnter' | 'dragOver' | 'drop' | 'dragEnd', target: Element, clientX = 0) => {
+      const event = createEvent[type](target, { dataTransfer })
+      Object.defineProperty(event, 'clientX', { value: clientX })
+      return fireEvent(target, event)
+    }
+    // jsdom lays nothing out: the headings are given their boxes, Title 0 to 220, then 100 pixels each
+    let left = 0
+    for (const [name, width] of [['Title', 220], ['Doc #', 100], ['Version', 100], ['Author', 100], ['Edit Date', 100]] as const) {
+      const box = new DOMRect(left, 0, width, 34)
+      header(name).getBoundingClientRect = () => box
+      left += width
+    }
+
+    // Author, dropped before Doc #'s midpoint (270), goes before Doc #
+    drag('dragStart', header('Author'))
+    drag('dragEnter', header('Doc #'), 240)
+    expect(drag('dragOver', header('Doc #'), 240)).toBe(false)
+    expect(drag('drop', header('Doc #'), 240)).toBe(false)
+    drag('dragEnd', header('Author'))
+    await waitFor(() => expect(headerNames()).toEqual(['Title', 'Author', 'Doc #', 'Version', 'Edit Date']))
+    expect(JSON.parse(window.localStorage.getItem('healdan.columns.folder')!).shown).toEqual(['title', 'author', 'docNumber', 'version', 'edited'])
+    // The folder's own drop zone, round the list, never heard of it: nothing filed, no form, no notice
+    expect(globalThis.document.querySelector('[data-dropping]')).toBeNull()
+    expect(api.callsTo('POST /v1/documents')).toHaveLength(0)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Notifications' })).toBeNull()
+    expect(screen.queryByText(/Drag the email to Finder/)).toBeNull()
+  })
+
   it('Choose Columns… shows Client', async () => {
     await renderApp('/folders/7', routes())
     await findRow(/Drafts/)
@@ -180,7 +242,7 @@ describe('FolderView', () => {
 
   it("doesn't sort by a column the server doesn't sort a folder by yet: no arrow and no Sort items", async () => {
     window.localStorage.setItem('healdan.columns.folder', JSON.stringify({ v: 1, shown: ['title', 'docNumber', 'matter', 'size'], widths: {} }))
-    const { api } = await renderApp('/folders/7', routes())
+    const { api, router } = await renderApp('/folders/7', routes())
     await findRow(/Drafts/)
     expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'Size'])
     expect(header('Matter').getAttribute('aria-sort')).toBeNull()
@@ -193,8 +255,11 @@ describe('FolderView', () => {
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('menu', { name: 'Matter Column' })).toBeNull())
     fireEvent.click(header('Matter'))
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // A sort would be in the address as the click ends (Doc #'s, below, is): there is none, and the list isn't asked again
+    expect(router.history.location.search).toBe('')
     expect(api.callsTo('GET /v1/folders/7/children')).toHaveLength(1)
+    fireEvent.click(header('Doc #'))
+    expect(router.history.location.search).toBe('?sort=docNumber&order=asc')
   })
 
   it('a refetch while the Columns panel is open keeps it open and its focus', async () => {
