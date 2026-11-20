@@ -1,14 +1,11 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import {
   Cell,
   Collection,
   Column,
-  DEFAULT_SLOT,
-  Dialog as AriaDialog,
-  Popover,
   ResizableTableContainer,
   Row,
   Table as AriaTable,
@@ -16,7 +13,6 @@ import {
   TableHeader,
   TableLayout,
   TableLoadMoreItem,
-  TextContext,
   Virtualizer,
   type Key,
   type Selection,
@@ -24,13 +20,13 @@ import {
 } from 'react-aria-components'
 import { Icon } from '../icons'
 import { t } from '../strings'
-import { Button } from './Button'
 import { ColumnEdge } from './ColumnEdge'
+import { ColumnsButton, ColumnsPopover } from './ColumnsButton'
 import { ContextMenu, type ItemMenu } from './ContextMenu'
 import { headingMenu } from './headingMenu'
-import menuStyles from './Menu.module.css'
 import styles from './Table.module.css'
 import { useColumnResizing } from './useColumnResizing'
+import { useColumnsPanel } from './useColumnsPanel'
 import { useHeadingDrag } from './useHeadingDrag'
 
 export { COLUMN_TYPE } from './useHeadingDrag'
@@ -361,50 +357,7 @@ export function Table<T extends TableRow>({
   const clearOfButton = (column: TableColumn<T>) => (column.id === besideButton ? styles.beforeButton : '')
 
   // The Columns panel, which the Columns button at the heading row's end and Choose Columns… open: one popover, by the button
-  const [panelOpen, setPanelOpen] = useState(false)
-  // A list whose columns are no longer chosen has no panel to keep open
-  if (panelOpen && !choice) setPanelOpen(false)
-  const columnsButton = useRef<HTMLButtonElement>(null)
-  const panelDescription = useId()
-  // The column whose heading's menu opened the panel; none when the button did
-  const opener = useRef<string | undefined>(undefined)
-  function openPanel(column?: string) {
-    opener.current = column
-    setPanelOpen(true)
-  }
-
-  // As the panel closes the focus goes back to what opened it: the heading, whose focus is its edge's slider on a resizable
-  // list (where the heading's own menu gives it back), or the button, as for a heading whose column the panel hid. Done once
-  // the popover has gone, which contains the focus until then: React Aria would give it to what had it as the popover
-  // opened, which for Choose Columns… is the menu's item, gone with its menu.
-  const wasOpen = useRef(false)
-  useLayoutEffect(() => {
-    if (wasOpen.current && !panelOpen) {
-      const column = opener.current
-      const headings = column === undefined ? [] : [...(frame.current?.querySelectorAll<HTMLElement>('[data-column-key]') ?? [])]
-      const heading = headings.find((element) => element.getAttribute('data-column-key') === column)
-      ;(heading?.querySelector<HTMLElement>('input[type="range"]') ?? heading ?? columnsButton.current)?.focus()
-    }
-    wasOpen.current = panelOpen
-  }, [panelOpen])
-
-  // The button stays at the visible end of the heading row, before a scrollbar that takes room (Windows', or a Mac's with a
-  // mouse), which runs beside the heading row as beside the rows, and which the button would otherwise cover. The list is
-  // drawn anew when resizing comes or goes, with React Aria's container round it or not.
-  const buttonPlace = useRef<HTMLDivElement>(null)
-  const resizable = resizing !== undefined
-  useLayoutEffect(() => {
-    const list = frame.current?.querySelector<HTMLElement>('[role="grid"]')
-    const place = buttonPlace.current
-    if (!list || !place || typeof ResizeObserver === 'undefined') return
-    const follow = () => {
-      place.style.insetInlineEnd = `${list.offsetWidth - list.clientWidth}px`
-    }
-    follow()
-    const observer = new ResizeObserver(follow)
-    observer.observe(list)
-    return () => observer.disconnect()
-  }, [hasButton, resizable])
+  const panel = useColumnsPanel(frame, { hasButton, resizable: resizing !== undefined, resizeLasts: resize.resized !== null })
 
   const menuOf = (column: string) =>
     headingMenu(columns, column, {
@@ -413,7 +366,7 @@ export function Table<T extends TableRow>({
       relevance,
       startResize: edges ? resize.startResize : undefined,
       choice,
-      onChoose: () => openPanel(column),
+      onChoose: () => panel.open(column),
       onResetColumns,
     })
   const grid = (
@@ -526,24 +479,14 @@ export function Table<T extends TableRow>({
           ) : (
             grid
           )}
-          {/* After the list, as Tab reaches it, and outside every heading: it isn't a column, and nothing drags from it */}
-          {choice && (
-            <div ref={buttonPlace} className={styles.columnsButton} title={t('columns.button')}>
-              <Button ref={columnsButton} variant="quiet" aria-label={t('columns.button')} aria-haspopup="dialog" aria-expanded={panelOpen} onPress={() => openPanel()}>
-                <Icon name="columns" size={14} />
-              </Button>
-            </div>
-          )}
+          {choice && <ColumnsButton placeRef={panel.placeRef} buttonRef={panel.buttonRef} isOpen={panel.isOpen} onPress={() => panel.open()} />}
         </div>
       </ContextMenu>
-      {/* Outside the list's menus and its handlers, which the panel's events would otherwise reach through React's tree. The
-          panel changes the list at once, so the popover stays open, its focus where it was, as the list is drawn again. */}
+      {/* Outside the list's menus and handlers, which the panel's events would otherwise reach through React's tree */}
       {choice && (
-        <Popover className={`${menuStyles.popover} ${styles.panelPopover}`} triggerRef={columnsButton} isOpen={panelOpen} onOpenChange={setPanelOpen} placement="bottom end">
-          <AriaDialog aria-describedby={panelDescription} className={styles.panelDialog}>
-            <TextContext.Provider value={{ slots: { [DEFAULT_SLOT]: {}, description: { id: panelDescription } } }}>{choice.panel}</TextContext.Provider>
-          </AriaDialog>
-        </Popover>
+        <ColumnsPopover triggerRef={panel.buttonRef} isOpen={panel.isOpen} onOpenChange={panel.onOpenChange}>
+          {choice.panel}
+        </ColumnsPopover>
       )}
     </>
   )

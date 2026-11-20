@@ -4,6 +4,7 @@
 import { act, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
+import { Heading } from 'react-aria-components'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import { bringObservedIntoView } from '../test/intersection'
@@ -1427,8 +1428,8 @@ describe('Table Columns button and panel', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'After' }))
   })
 
-  it('stays at the visible end of the heading row, before a scrollbar that takes room, and the last heading keeps clear of it', () => {
-    // jsdom has no ResizeObserver: these are called back by hand, as a browser calls them when a box changes
+  /** jsdom has no ResizeObserver: the ones made are called back by hand, as a browser calls them when a box changes */
+  function observeByHand() {
     const observers: ((entries: unknown[]) => void)[] = []
     vi.stubGlobal(
       'ResizeObserver',
@@ -1441,30 +1442,140 @@ describe('Table Columns button and panel', () => {
         disconnect() {}
       },
     )
+    return () => act(() => observers.forEach((observer) => observer([])))
+  }
+
+  /** jsdom lays nothing out: the list, what it holds (the virtualiser's box) and the button's place are given their widths */
+  function lay({ list, content, scrollbar = 0 }: { list: number; content: number; scrollbar?: number }) {
+    const grid = screen.getByRole('grid')
+    Object.defineProperty(grid, 'clientWidth', { configurable: true, value: list })
+    Object.defineProperty(grid, 'offsetWidth', { configurable: true, value: list + scrollbar })
+    Object.defineProperty(grid.firstElementChild!, 'offsetWidth', { configurable: true, value: content })
+    Object.defineProperty(columnsButton().parentElement!, 'offsetWidth', { configurable: true, value: 34 })
+  }
+
+  const resizable = () => ({ widths: {}, onResizeEnd: vi.fn(), onReset: vi.fn() })
+  const lastUnderButton = () => document.querySelector('.frame')!.hasAttribute('data-last-under-button')
+
+  it('stays at the visible end of the heading row, before a scrollbar that takes room', () => {
+    const measured = observeByHand()
     try {
-      render(<Chosen resizing={{ widths: {}, onResizeEnd: vi.fn(), onReset: vi.fn() }} />)
+      render(<Chosen resizing={resizable()} />)
       const place = columnsButton().parentElement!
       expect(place.className).toBe('columnsButton')
-      // A scrollbar 15 pixels wide, beside the heading row as beside the rows
-      const grid = screen.getByRole('grid')
-      Object.defineProperty(grid, 'offsetWidth', { configurable: true, value: 815 })
-      Object.defineProperty(grid, 'clientWidth', { configurable: true, value: 800 })
-      act(() => observers.forEach((observer) => observer([])))
+      // A scrollbar 15 pixels wide, beside the heading row as beside the rows, and then none
+      lay({ list: 800, content: 800, scrollbar: 15 })
+      measured()
       expect(place.style.insetInlineEnd).toBe('15px')
+      lay({ list: 815, content: 815 })
+      measured()
+      expect(place.style.insetInlineEnd).toBe('0px')
     } finally {
       vi.unstubAllGlobals()
     }
-    // Only the last heading, and its cells, make room for the button
-    expect(screen.getAllByRole('columnheader').map((one) => one.classList.contains('beforeButton'))).toEqual([false, false, false, true])
-    expect(within(row(/Letter 1/)).getAllByRole('gridcell').map((one) => one.classList.contains('beforeButton'))).toEqual([false, false, true])
-    // jsdom draws nothing, so the rules are read: a square the heading row's height over its end, on the heading's surface,
-    // shown pressed while its panel is open; the last heading's name ends before it, a column of numbers' cells in line with
-    // it, and the last edge and the drop line after the last heading are drawn where the button begins
-    expect(tableCss).toMatch(/\.columnsButton \{[^}]*position: absolute;[^}]*inset-block-start: 0;[^}]*inset-inline-end: 0;[^}]*width: var\(--row-height\);[^}]*height: var\(--row-height\);[^}]*border-bottom: 1px solid var\(--hd-line\);[^}]*background: var\(--hd-window\);[^}]*color: var\(--hd-text-secondary\)/)
+    expect(tableCss).toMatch(/\.columnsButton \{[^}]*position: absolute;[^}]*inset-block-start: 0;[^}]*inset-inline-end: 0;[^}]*width: var\(--row-height\);[^}]*height: var\(--row-height\);[^}]*border-bottom: 1px solid var\(--hd-line\);[^}]*background: var\(--hd-window\)/)
+  })
+
+  it('makes room for the button only while the last heading reaches it, and keeps the last edge still while a resize lasts', () => {
+    const measured = observeByHand()
+    try {
+      render(<Chosen resizing={resizable()} />)
+      // Only the last heading, and its cells, would make room
+      expect(screen.getAllByRole('columnheader').map((one) => one.classList.contains('beforeButton'))).toEqual([false, false, false, true])
+      expect(within(row(/Letter 1/)).getAllByRole('gridcell').map((one) => one.classList.contains('beforeButton'))).toEqual([false, false, true])
+      // Shares of the width fill the list: the last heading's end is under the button
+      lay({ list: 800, content: 800 })
+      measured()
+      expect(lastUnderButton()).toBe(true)
+      // Every width in pixels, and the last heading ends well before the button: its edge at its own end
+      lay({ list: 800, content: 600 })
+      measured()
+      expect(lastUnderButton()).toBe(false)
+      // A list wider than the window: its last heading ends at the visible end, or past it, however far it's scrolled
+      lay({ list: 800, content: 1500 })
+      measured()
+      expect(lastUnderButton()).toBe(true)
+
+      // A resize of the last column by keys: while it lasts, its edge stays where it began, under the keys (or the pointer)
+      lay({ list: 800, content: 800 })
+      measured()
+      const slider = within(header('Note')).getByRole('slider')
+      act(() => slider.focus())
+      press(slider, 'Enter')
+      press(slider, 'ArrowLeft')
+      lay({ list: 800, content: 600 })
+      measured()
+      expect(lastUnderButton()).toBe(true)
+      // As it ends, the widths it left place the edge
+      press(slider, 'Enter')
+      expect(lastUnderButton()).toBe(false)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    // jsdom draws nothing, so the rules are read: with the frame's word, the last heading's name ends before the button, a
+    // column of numbers' cells stay in line with it, and the last edge and the drop line after the last heading are drawn
+    // where the button begins; without it, at the column's own end
+    const under = String.raw`\.frame\[data-last-under-button\] `
+    expect(tableCss).toMatch(new RegExp(String.raw`${under}\.column\.beforeButton,\s*${under}\.cell\.end\.beforeButton \{[^}]*padding-inline-end: var\(--row-height\)`))
+    expect(tableCss).toMatch(new RegExp(String.raw`${under}\.beforeButton > \.resizer\[data-last\] \{[^}]*inset-inline-end: var\(--row-height\)`))
+    expect(tableCss).toMatch(new RegExp(String.raw`${under}\.column\.beforeButton\[data-drop-line='end'\]::after \{[^}]*inset-inline-end: var\(--row-height\)`))
+    expect(tableCss).not.toMatch(/(^|\})\s*\.(column\.)?beforeButton[^{]*\{/)
+  })
+
+  it('is drawn as the toolbar\'s icon buttons are: Button\'s own face, square, and pressed while its panel is open', async () => {
+    const user = userEvent.setup()
+    render(<Chosen />)
+    const button = columnsButton()
+    // The secondary face (More's), not the quiet one, with its icon alone
+    expect(button.className.split(' ').filter(Boolean)).toEqual(['button'])
+    expect(button.querySelectorAll('svg')).toHaveLength(1)
+    expect(button.textContent).toBe('')
+    // jsdom works the colours out from the stylesheets and tokens.css (light): the secondary face, with the text's colour
+    expect(getComputedStyle(button).backgroundColor).toBe('rgb(255, 255, 255)')
+    expect(getComputedStyle(button).color).toBe('rgb(29, 29, 31)')
+    await user.click(button)
+    await screen.findByRole('dialog', { name: 'Columns' })
+    // Pressed while open
+    expect(getComputedStyle(button).backgroundColor).toBe('rgb(220, 220, 220)')
+    // Square, 26 pixels, to fit the 34 of the heading row, with the plain button's own padding at either side of its icon
+    expect(tableCss).toMatch(/\.columnsButton > button \{[^}]*width: 26px;[^}]*height: 26px;[^}]*padding: 0 var\(--hd-space-2\)/)
     expect(tableCss).toMatch(/\.columnsButton > button\[aria-expanded='true'\] \{[^}]*border-color: var\(--hd-pressed-edge\);[^}]*background: var\(--hd-pressed\);[^}]*color: var\(--hd-text\)/)
-    expect(tableCss).toMatch(/\.column\.beforeButton,\s*\.cell\.end\.beforeButton \{[^}]*padding-inline-end: var\(--row-height\)/)
-    expect(tableCss).toMatch(/\.beforeButton > \.resizer\[data-last\] \{[^}]*inset-inline-end: var\(--row-height\)/)
-    expect(tableCss).toMatch(/\.column\.beforeButton\[data-drop-line='end'\]::after \{[^}]*inset-inline-end: var\(--row-height\)/)
+  })
+
+  it('takes Tab from the list to the button and on, and Shift+Tab back, on a list whose columns resize, as the views draw it', async () => {
+    const user = userEvent.setup()
+    render(
+      <>
+        <Chosen resizing={resizable()} />
+        <button>After</button>
+      </>,
+    )
+    await user.tab()
+    expect(document.activeElement).toBe(row(/Letter 1/))
+    await user.tab()
+    expect(document.activeElement).toBe(columnsButton())
+    await user.tab()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'After' }))
+    await user.tab({ shift: true })
+    expect(document.activeElement).toBe(columnsButton())
+    await user.tab({ shift: true })
+    expect(document.activeElement).toBe(row(/Letter 1/))
+  })
+
+  it('describes the panel\'s dialog only by a description the panel holds', async () => {
+    const user = userEvent.setup()
+    render(<Harness columns={listColumns} choice={{ onMove: vi.fn(), onHide: vi.fn(), panel: <Heading slot="title">Columns</Heading> }} />)
+    await user.click(columnsButton())
+    const dialog = await screen.findByRole('dialog', { name: 'Columns' })
+    expect(dialog.hasAttribute('aria-describedby')).toBe(false)
+    await expectNoAxeViolations(dialog.closest('.popover')!)
+  })
+
+  it('draws the busy strip over the button, which lies over the heading row\'s end', () => {
+    render(<Chosen busy />)
+    expect(columnsButton().closest('[aria-busy="true"]')).toBeTruthy()
+    const zIndex = (rule: RegExp) => Number(rule.exec(tableCss)?.[1])
+    expect(zIndex(/\.frame\[aria-busy='true'\]::before \{[^}]*z-index: (\d+)/)).toBeGreaterThan(zIndex(/\.columnsButton \{[^}]*z-index: (\d+)/))
   })
 
   it('passes axe with the panel open', async () => {
