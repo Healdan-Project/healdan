@@ -42,6 +42,25 @@ describe('DocResult', () => {
     expect(within(versions).getAllByRole('listitem').every((item) => item.getAttribute('aria-current') === null)).toBe(true)
   })
 
+  it("has the Documents search's columns, Matter among them, chosen there and here alike, and no sort", async () => {
+    window.localStorage.setItem('healdan.columns.documents', JSON.stringify({ v: 1, shown: ['title', 'docNumber', 'matter', 'client'], widths: {} }))
+    await renderApp('/doc/10388', routes())
+    const grid = await within(main()).findByRole('grid')
+    await within(grid).findByText('Letter from Dunmere Pryce.pdf')
+    expect(within(grid).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Title', 'Doc #', 'Matter', 'Client'])
+    // One document: nothing to order it by
+    expect(within(grid).getAllByRole('columnheader').every((h) => h.getAttribute('aria-sort') === null)).toBe(true)
+    await userEvent.click(within(main()).getByRole('button', { name: 'Columns' }))
+    expect(await screen.findByRole('dialog', { name: 'Columns', description: 'For Documents Search' })).toBeTruthy()
+  })
+
+  it('starts with the Documents search\'s default columns', async () => {
+    await renderApp('/doc/10388', routes())
+    const grid = await within(main()).findByRole('grid')
+    await within(grid).findByText('Letter from Dunmere Pryce.pdf')
+    expect(within(grid).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Title', 'Doc #', 'Version', 'Matter', 'Author', 'Edit Date'])
+  })
+
   // Spec 6.3: "#10388.2 selects version 2 in the details", which are in the Versions tab since the owner's dogfooding punch
   // list (2026-11-14): a # that names a version opens it
   it('opens the Versions tab with the version in the address marked', async () => {

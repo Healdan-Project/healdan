@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
+import { comeBack } from '../test/comeBack'
 import { children, document, favorite, folder, page, problem, zone, type Routes } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
 import { renderApp } from '../test/renderApp'
@@ -56,6 +57,15 @@ const list = () => within(main()).getByRole('grid')
 const dataRows = () => within(list()).getAllByRole('row').slice(1)
 // The list shows once the folder has answered
 const findRow = async (name: RegExp) => within(await within(main()).findByRole('grid')).findByRole('row', { name })
+const header = (name: string) => within(list()).getByRole('columnheader', { name: new RegExp(`^${name}`) })
+/** The headings of a grid, as found before a popover hid the page around it */
+const headerNames = (grid = list()) => within(grid).getAllByRole('columnheader', { hidden: true }).map((h) => h.textContent)
+
+/** Opens a heading's menu by a right-click on it */
+async function headingMenu(name: string) {
+  expect(fireEvent.contextMenu(header(name))).toBe(false)
+  return screen.findByRole('menu', { name: `${name} Column` })
+}
 
 describe('FolderView', () => {
   it('shows the breadcrumb, the name with its star, the count, and the list with subfolders first', async () => {
@@ -131,6 +141,89 @@ describe('FolderView', () => {
     act(() => release())
     await waitFor(() => expect(list().closest('[aria-busy="true"]')).toBeNull())
     expect(await within(main()).findByText('7 documents')).toBeTruthy()
+  })
+
+  it('hiding Author from its heading menu keeps the layout for every folder', async () => {
+    const reply = document({ docNumber: 10500, name: 'Draft Reply.docx', folder: { id: 8, name: 'Drafts', kind: 'folder' } })
+    const { router } = await renderApp('/folders/7', routes({ 'GET /v1/folders/8': drafts, 'GET /v1/folders/8/children': children([reply]) }))
+    await findRow(/Drafts/)
+    await userEvent.click(within(await headingMenu('Author')).getByRole('menuitem', { name: 'Hide Author' }))
+    await waitFor(() => expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Edit Date']))
+    // Kept for a folder's list, and for nothing else
+    expect(JSON.parse(window.localStorage.getItem('healdan.columns.folder')!).shown).toEqual(['title', 'docNumber', 'version', 'edited'])
+    expect(window.localStorage.getItem('healdan.columns.beside')).toBeNull()
+
+    await router.navigate({ to: '/folders/$id', params: { id: '8' } })
+    expect(await within(main()).findByRole('heading', { level: 1, name: 'Drafts' })).toBeTruthy()
+    await findRow(/Draft Reply/)
+    expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Edit Date'])
+  })
+
+  it('Choose Columns… shows Client', async () => {
+    await renderApp('/folders/7', routes())
+    await findRow(/Drafts/)
+    const grid = list()
+    await userEvent.click(within(await headingMenu('Doc #')).getByRole('menuitem', { name: 'Choose Columns…' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Columns', description: 'For Folders' })
+    // Every document column a folder's list doesn't show at first, and none of Recent's or Checked Out to Me's
+    for (const name of ['Matter', 'Client', 'Location', 'Date Filed', 'Size', 'File Type']) expect(within(dialog).getByRole('checkbox', { name })).toBeTruthy()
+    for (const name of ['Last Used', 'Computer', 'Checked Out']) expect(within(dialog).queryByRole('checkbox', { name })).toBeNull()
+
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'Client' }))
+    await waitFor(() => expect(headerNames(grid)).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date', 'Client']))
+    // A document's client, and the subfolder's, which is the client of the matter it's in
+    const rows = within(grid).getAllByRole('row', { hidden: true }).slice(1)
+    expect(within(rows[0]!).getAllByRole('gridcell', { hidden: true }).at(-1)!.textContent).toBe('Saltmarsh Shipping Ltd')
+    expect(within(rows[2]!).getAllByRole('gridcell', { hidden: true }).at(-1)!.textContent).toBe('Saltmarsh Shipping Ltd')
+    expect(JSON.parse(window.localStorage.getItem('healdan.columns.folder')!).shown).toEqual(['title', 'docNumber', 'version', 'author', 'edited', 'client'])
+  })
+
+  it("doesn't sort by a column the server doesn't sort a folder by yet: no arrow and no Sort items", async () => {
+    window.localStorage.setItem('healdan.columns.folder', JSON.stringify({ v: 1, shown: ['title', 'docNumber', 'matter', 'size'], widths: {} }))
+    const { api } = await renderApp('/folders/7', routes())
+    await findRow(/Drafts/)
+    expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'Size'])
+    expect(header('Matter').getAttribute('aria-sort')).toBeNull()
+    expect(header('Size').getAttribute('aria-sort')).toBeNull()
+    expect(header('Doc #').getAttribute('aria-sort')).toBe('none')
+    const menu = await headingMenu('Matter')
+    expect(within(menu).queryByRole('menuitemradio', { name: 'Sort Ascending' })).toBeNull()
+    expect(within(menu).queryByRole('menuitemradio', { name: 'Sort Descending' })).toBeNull()
+    expect(within(menu).getByRole('menuitem', { name: 'Hide Matter' })).toBeTruthy()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Matter Column' })).toBeNull())
+    fireEvent.click(header('Matter'))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(api.callsTo('GET /v1/folders/7/children')).toHaveLength(1)
+  })
+
+  it('a refetch while the Columns panel is open keeps it open and its focus', async () => {
+    let release: (value: unknown) => void = () => {}
+    let calls = 0
+    const { api } = await renderApp(
+      '/folders/7',
+      routes({
+        'GET /v1/folders/7/children': () => {
+          calls += 1
+          return calls === 1 ? children([drafts, ...seven]) : new Promise((resolve) => (release = resolve))
+        },
+      }),
+    )
+    await findRow(/Drafts/)
+    const grid = list()
+    await userEvent.click(within(main()).getByRole('button', { name: 'Columns' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Columns' })
+    const box = within(dialog).getByRole('checkbox', { name: 'Version' })
+    act(() => box.focus())
+
+    // A folder's list is asked for again at every return to the window
+    comeBack()
+    await waitFor(() => expect(api.callsTo('GET /v1/folders/7/children')).toHaveLength(2))
+    act(() => release(children([drafts, document({ docNumber: 10600, name: 'Another Letter.docx' }), ...seven])))
+    await waitFor(() => expect(within(grid).getAllByRole('rowheader', { hidden: true }).map((cell) => cell.textContent)).toContain('Another Letter.docx'))
+    expect(screen.getByRole('dialog', { name: 'Columns' })).toBe(dialog)
+    expect(within(dialog).getByRole('checkbox', { name: 'Version' })).toBe(box)
+    expect(globalThis.document.activeElement).toBe(box)
   })
 
   it('keeps a sort from the address', async () => {

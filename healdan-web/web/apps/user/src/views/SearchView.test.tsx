@@ -62,6 +62,14 @@ const rows = async () => {
   return within(found).getAllByRole('row').slice(1)
 }
 const funnel = () => within(main()).getByRole('button', { name: /^Filters/ })
+const header = (name: string) => within(grid2()).getByRole('columnheader', { name: new RegExp(`^${name}`) })
+const headerNames = () => within(grid2()).getAllByRole('columnheader').map((h) => h.textContent)
+
+/** Opens a heading's menu by a right-click on it */
+async function headingMenu(name: string) {
+  expect(fireEvent.contextMenu(header(name))).toBe(false)
+  return screen.findByRole('menu', { name: `${name} Column` })
+}
 
 describe('SearchView', () => {
   it('shows the words and where they were searched, the hits by relevance, and the count', async () => {
@@ -104,6 +112,46 @@ describe('SearchView', () => {
     await rows()
     fireEvent.click(within(await grid()).getByRole('columnheader', { name: /Edit Date/ }))
     await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toMatchObject({ sort: 'edited', order: 'desc' }))
+  })
+
+  it('Sort by Relevance takes a sorted search back to relevance', async () => {
+    const { api, router } = await renderApp('/search?scope=documents&q=charter&sort=title&order=desc&type=word', routes())
+    await rows()
+    expect(within(main()).getByText('in Documents')).toBeTruthy()
+    // From any heading's menu while the search is sorted, Matter's too, which doesn't sort yet
+    const menu = await headingMenu('Matter')
+    expect(within(menu).queryByRole('menuitemradio', { name: 'Sort Ascending' })).toBeNull()
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Sort by Relevance' }))
+    // The address loses the sort and keeps the rest; it was replaced, so Back leaves the search
+    await waitFor(() => expect(new URLSearchParams(router.history.location.search).has('sort')).toBe(false))
+    const address = new URLSearchParams(router.history.location.search)
+    expect(address.has('order')).toBe(false)
+    expect([address.get('scope'), address.get('q'), address.getAll('type')]).toEqual(['documents', 'charter', ['word']])
+    expect(router.history.length).toBe(1)
+    expect(await within(main()).findByText('in Documents, by relevance')).toBeTruthy()
+    await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toEqual({ scope: 'documents', q: 'charter', type: ['word'], zone, offset: 0, limit: 100 }))
+    await waitFor(() => expect(within(grid2()).getAllByRole('columnheader').map((h) => h.getAttribute('aria-sort'))).not.toContain('descending'))
+
+    // By relevance already, no menu offers it
+    expect(within(await headingMenu('Title')).queryByRole('menuitem', { name: 'Sort by Relevance' })).toBeNull()
+  })
+
+  it('chooses the columns of each document scope apart: Emails starts without Version', async () => {
+    const { view } = await renderApp('/search?scope=documents&q=charter', routes())
+    await rows()
+    await userEvent.click(within(await headingMenu('Author')).getByRole('menuitem', { name: 'Hide Author' }))
+    await waitFor(() => expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Matter', 'Edit Date']))
+    expect(JSON.parse(window.localStorage.getItem('healdan.columns.documents')!).shown).not.toContain('author')
+    view.unmount()
+
+    await renderApp('/search?scope=emails&q=charter', routes())
+    await rows()
+    expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'Author', 'Edit Date'])
+    await userEvent.click(within(main()).getByRole('button', { name: 'Columns' }))
+    expect(await screen.findByRole('dialog', { name: 'Columns', description: 'For Emails Search' })).toBeTruthy()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Columns' })).toBeNull())
+    expect(window.localStorage.getItem('healdan.columns.emails')).toBeNull()
   })
 
   it('keeps a sort, the filters and the scope from the address', async () => {
@@ -294,6 +342,32 @@ describe('SearchView', () => {
     await waitFor(() => expect(router.history.location.pathname).toBe('/app/folders/111'))
   })
 
+  it("the Folders scope's columns resize and keep their widths under its own name, with no Columns or Sort items", async () => {
+    window.localStorage.setItem('healdan.columns.folders', JSON.stringify({ v: 1, widths: { title: 300 } }))
+    await renderApp('/search?scope=folders&q=corr', routes({ 'GET /v1/search': hits([folder({ id: 111, name: 'Correspondence' })]) }))
+    await rows()
+    for (const one of within(await grid()).getAllByRole('columnheader')) expect(within(one).getByRole('slider')).toBeTruthy()
+    // A kept width is drawn on its column
+    await waitFor(() => expect(header('Title').style.width).toBe('300px'))
+    expect(within(main()).queryByRole('button', { name: 'Columns' })).toBeNull()
+
+    const slider = within(header('Title')).getByRole('slider')
+    act(() => slider.focus())
+    for (const key of ['Enter', 'ArrowRight', 'Enter']) {
+      fireEvent.keyDown(slider, { key })
+      fireEvent.keyUp(slider, { key })
+    }
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem('healdan.columns.folders')!).widths.title).toBe(310))
+    expect(window.localStorage.getItem('healdan.columns.documents')).toBeNull()
+    expect(window.localStorage.getItem('healdan.columns.matters')).toBeNull()
+
+    // Its heading's menu resizes and resets, and neither sorts nor chooses columns
+    const menu = await headingMenu('Title')
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Resize Column', 'Reset Columns'])
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Reset Columns' }))
+    await waitFor(() => expect(window.localStorage.getItem('healdan.columns.folders')).toBeNull())
+  })
+
   it('draws a folder by its kind: a search folder in the folders\' colour, and a matter\'s own folder as the matter', async () => {
     await renderApp(
       '/search?scope=folders&q=charter',
@@ -323,6 +397,8 @@ describe('SearchView', () => {
       routes({ 'GET /v1/search': hits([matter({ id: 11, folderId: 110 })]) }),
     )
     expect(within(await grid()).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Matter', 'Client'])
+    // Resized, as every list is, under the scope's own name
+    for (const one of within(await grid()).getAllByRole('columnheader')) expect(within(one).getByRole('slider')).toBeTruthy()
     const [row] = await rows()
     expect(row!.textContent).toContain('1001.1 – Charter Dispute')
     expect(row!.textContent).toContain('Saltmarsh Shipping Ltd')

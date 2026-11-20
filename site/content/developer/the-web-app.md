@@ -269,6 +269,12 @@ Out for Checked Out to Me; Client for Recent Clients), and keeps another in the 
 address)` reads it and writes it with `replace`, leaving the address without one when the list's own order is chosen
 again, and the routes' `validateSearch` keep only a column the list has (`sortSearch`).
 
+A folder (`folder`, a search folder too) and a search keep their sort in the address too, a column the server sorts by
+(`isSortColumn`), and take their columns with `serverSorted: true`. Each document scope of a search is a kind of its own (`documents`, `all`,
+`emails`), and its Folders, Matters and Clients scopes take `hitColumns(scope)` through `useListWidths`, unsorted.
+A sorted document search passes the Table `relevance`, whose **Sort by Relevance** replaces the address with one
+without `sort` and `order`.
+
 ## Keeping the Page Up to Date
 
 The app has no push updates yet (M6's spec §16). Instead it asks again for what's on screen each time the person comes
@@ -364,9 +370,9 @@ below), and **Copy Link** (`actions/copyLink.ts`) writes `location.origin + '/ap
 and shows a Toast, either way. The other actions are in "Working with a Document", next.
 
 `/app/doc/10388`, `/app/doc/10388.2` and the other forms of the lookup are `views/DocResult.tsx`: it asks
-`GET /v1/lookup?q=%2310388.2` and shows a list of that one document (`views/listColumns.tsx`, the folder list's
-columns), selected, with its details beside it on the Versions tab and the named version marked. `useSelection` takes the
-number from the address on this route. A `404` shows "No document # 10388 that you can see.", the same for a
+`GET /v1/lookup?q=%2310388.2` and shows a list of that one document (`useDocumentListColumns('documents', …)`, a
+Documents search's layout, with no sort), selected, with its details beside it on the Versions tab and the named
+version marked. `useSelection` takes the number from the address on this route. A `404` shows "No document # 10388 that you can see.", the same for a
 document that isn't there and one that can't be read, and says only the number as typed; a `400` shows the not-found
 view.
 

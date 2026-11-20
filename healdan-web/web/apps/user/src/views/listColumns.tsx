@@ -5,7 +5,7 @@ import type { components } from '@healdan/api'
 import { formatDate, formatDateTime, formatSize, formatVersion, Icon, t, VisuallyHidden, type TableColumn, type TableRow } from '@healdan/ui'
 import { computerLabel } from '../actions/checkout'
 import { HoldMarker } from '../actions/HoldMarker'
-import type { SearchScope } from '../search/scopes'
+import type { OtherScope } from '../search/scopes'
 import { typeLabel } from '../filters/FiltersPanel'
 import { itemIcon } from '../kindIcons'
 import { DocumentTitle, FolderName } from '../organising/RenameField'
@@ -205,26 +205,16 @@ export function columnsFor(kind: ListKind, shown: string[], serverSorted: boolea
   })
 }
 
-/** A folder's list: Title, Doc #, Version, Author and Edit Date. */
-export const listColumns: TableColumn<ListRow>[] = columnsFor('folder', ['title', 'docNumber', 'version', 'author', 'edited'], true)
-
-/** The columns a list of search hits or recent items has: the scope decides which. */
-export function hitColumns(scope: SearchScope): TableColumn<ListRow>[] {
-  if (scope === 'matters' || scope === 'clients') {
-    // A Client column of their own: the documents' Client shows the client of the matter a document or folder is in, and
-    // leaves a matter's own row blank, where this one shows the matter's client
-    return [
-      { ...title, name: t('list.matter'), allowsSorting: false },
-      { id: 'client', name: t('list.client'), width: '1fr', cell: ({ item }) => item.type === 'matter' && item.client.name },
-    ]
-  }
+/**
+ * The columns of a search's Folders, Matters or Clients scope, which aren't chosen (spec 4.8): only their widths are kept.
+ * A document scope's are chosen, as every list of documents' are (`useDocumentListColumns`).
+ */
+export function hitColumns(scope: OtherScope): TableColumn<ListRow>[] {
   if (scope === 'folders') return columnsFor('folders', ['title', 'matter'], true)
-  // Title first, sharing the spare width with Matter and Author; the others are narrower here than in a folder, and each
-  // ends in an ellipsis when it doesn't fit
-  return columnsFor('documents', ['title', 'docNumber', 'version', 'matter', 'author', 'edited'], true)
-}
-
-/** What a list keeps while the reading pane is open and the list is narrow (spec section 6.4): Title, Doc # and Edit Date. */
-export function narrowed(columns: TableColumn<ListRow>[]): TableColumn<ListRow>[] {
-  return columns.filter((column) => column.id === 'title' || column.id === 'docNumber' || column.id === 'edited')
+  // A Client column of their own: the documents' Client shows the client of the matter a document or folder is in, and
+  // leaves a matter's own row blank, where this one shows the matter's client
+  return [
+    { ...title, name: t('list.matter'), allowsSorting: false },
+    { id: 'client', name: t('list.client'), width: '1fr', cell: ({ item }) => item.type === 'matter' && item.client.name },
+  ]
 }

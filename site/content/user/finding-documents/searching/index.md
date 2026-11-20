@@ -70,7 +70,8 @@ Enter on words opens the results at `/app/search`, with your words and the scope
 
 - **Documents come by relevance,** best first, until you click a column header. A header sorts the results by that
   column, the server doing the sorting, and a second click reverses it. **Title**, **Doc #**, **Version**, **Author**
-  and **Edit Date** sort; no header is marked while the order is relevance.
+  and **Edit Date** sort; no header is marked while the order is relevance. **Sort by Relevance**, in a header's menu,
+  puts a sorted search back in that order.
 - **The Matter column** shows the matter's number and name, for example `1001.1 – Charter Dispute`. A name too long for
   the column ends in an ellipsis, and a wider window gives the column more room. Point at it to see the whole name and
   the client, or select the document and see its details. A screen reader reads the client with the cell.

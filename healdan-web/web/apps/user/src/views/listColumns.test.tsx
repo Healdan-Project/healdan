@@ -5,14 +5,14 @@ import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { client } from '../test/fakeApi'
 import type { components } from '@healdan/api'
-import { formatDate, formatDateTime } from '@healdan/ui'
+import { formatDate, formatDateTime, type TableColumn } from '@healdan/ui'
 import { DEFAULT_SHOWN, type DocumentListKind } from './columnLayouts'
 import { columnsFor, hitColumns, MatterCell, offeredFor, rowOf, SERVER_SORTS, type ListRow } from './listColumns'
 
 type S = components['schemas']
 
 /** The column with that id, which each test expects to be there */
-function column(columns: ReturnType<typeof hitColumns>, id: string) {
+function column(columns: TableColumn<ListRow>[], id: string) {
   const found = columns.find((one) => one.id === id)
   if (!found) throw new Error(`No ${id} column`)
   return found
@@ -39,7 +39,7 @@ describe('the Matter column', () => {
 
 describe('the default widths (spec 4.1)', () => {
   it('gives Matter a share of the spare width beside Title and Author', () => {
-    const columns = hitColumns('documents')
+    const columns = columnsFor('documents', DEFAULT_SHOWN.documents, true)
     expect(column(columns, 'title')).toMatchObject({ width: '2fr', minWidth: 220 })
     expect(column(columns, 'matter')).toMatchObject({ width: '1.5fr', minWidth: 100 })
     expect(column(columns, 'author')).toMatchObject({ width: '1fr' })

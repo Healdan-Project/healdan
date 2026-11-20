@@ -108,8 +108,9 @@ lists of documents also let you choose which columns show, and in what order.
 - **Move a column** by dragging its heading along the headings, or with **Move Left** and **Move Right**.
 - **Reset Columns** in a heading's menu puts back the list's default columns, order and widths.
 
-Each kind of list keeps its own columns: a folder's, a search's, Recent Documents', Recent Emails' and Checked Out to Me's
-are chosen apart. The list beside the reading pane, which keeps **Title**, **Doc #** and **Edit Date** at first, has a
+Each kind of list keeps its own columns: a folder's, a **Documents**, **Emails** or **Docs & Emails** search's, Recent
+Documents', Recent Emails' and Checked Out to Me's are chosen apart, and the page a doc # opens has a **Documents**
+search's. The list beside the reading pane, which keeps **Title**, **Doc #** and **Edit Date** at first, has a
 layout of its own too, whichever list it's showing. They're kept in this browser, so another browser or computer starts from the defaults, and so does this one if you clear
 the browser's data.
 

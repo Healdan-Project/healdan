@@ -23,7 +23,9 @@ it makes a good link in an email or a note.
 | `/app/doc/1234.2.1` or `/app/doc/1234v2.1` | exactly snapshot 2.1 |
 
 The page shows a list with just that document in it, already selected, and its details at the right: its properties
-and its versions. For a version or snapshot, the details open on the **Versions** tab, with that version marked.
+and its versions. For a version or snapshot, the details open on the **Versions** tab, with that version marked. The
+list has a **Documents** search's columns, and choosing them here chooses them there too (see [The List's
+Columns](../../getting-started/getting-around/#the-lists-columns)).
 
 ![The page for document # 31 in the web page: the toolbar, with Open, Preview, Download, Check Out and the ⋯ (More) button, above a list with just Subscription Agreement – Draft.docx, version 2, by Helen Ashcombe, selected, and its details at the right with its thumbnail, its name with the filled Favorites star, Open, Download, Copy Link and Check Out, and the Versions (3) tab, where Version 1.1, saved on 25 Oct 2026 at 15:30 by Priya Nair, is marked](doc-page.png)
 

@@ -37,8 +37,9 @@ Holding Space down doesn't open and close Quick Look over and over.
   **Close Preview**. Closing it brings the details back.
 - **The funnel still opens Filters in its place.** The reading pane comes back when you next click a row, or close
   Filters.
-- **The list keeps Title, Doc # and Edit Date** while the pane is open, so it fits beside it. The other columns come
-  back when you close it.
+- **The list beside the pane has columns of its own,** **Title**, **Doc #** and **Edit Date** at first, so it fits.
+  Choose others as in any list (see [The List's Columns](../../getting-started/getting-around/#the-lists-columns)):
+  every list beside the pane shows the ones you choose. The list's usual columns come back when you close it.
 - **With no document selected,** the pane waits for you to select one.
 
 ## What's Shown

@@ -22,7 +22,8 @@ import { RightRegionView, useRegionKind, useRightRegion } from '../frame/RightRe
 import { searchesDocuments, type SearchScope } from '../search/scopes'
 import { useSearchFacets, useSearchResults } from '../search/useSearchResults'
 import { Toolbar, type ListCount } from './Toolbar'
-import { hitColumns, narrowed, rowOf } from './listColumns'
+import { hitColumns, rowOf, type ListRow } from './listColumns'
+import { useDocumentListColumns, useListWidths, type DocumentListColumns, type ListWidths } from './useListColumns'
 import { isSortColumn, type ListingOrder, type SortColumn } from './useListing'
 import { useRowSelection } from './useRowSelection'
 import styles from './views.module.css'
@@ -37,7 +38,8 @@ export interface SearchViewProps {
 
 /**
  * /search: what the search box found, in the scope it was run in (spec section 6.3). Documents come by relevance until
- * a header sorts them, with Filters beside them; folders and matters are lists to open. The words, the scope, the
+ * a header sorts them, and Sort by Relevance in a heading's menu takes them back, with Filters beside them; folders and
+ * matters are lists to open. The words, the scope, the
  * filters, the sort and the selection are all in the address, so a search can be linked, reloaded and gone back to.
  */
 export function SearchView({ scope, q, sort, order }: SearchViewProps) {
@@ -55,10 +57,8 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const { selected, selection, change: changeSelection } = useRowSelection(results.rows)
   const rows = useMemo(() => results.rows.map(rowOf), [results.rows])
   const organising = useOrganisingTable(results.rows, selection, changeSelection)
-  const allColumns = useMemo(() => hitColumns(scope), [scope])
-  // The reading pane makes the list narrow: it keeps the columns that fit
-  // Only a view that draws the pane narrows for it, as the document scopes do
-  const columns = useRegionKind({ preview: documents, details: selected !== undefined }) === 'preview' ? narrowed(allColumns) : allColumns
+  // Only a view that draws the pane has a list beside it, as the document scopes do
+  const columns = useHitColumns(scope, useRegionKind({ preview: documents, details: selected !== undefined }) === 'preview')
   const hitDocuments = useMemo(() => documentsOf(results.rows), [results.rows])
   const preview = usePreviewKey(changeSelection)
   const openDocument = useOpenKey(hitDocuments, changeSelection)
@@ -82,6 +82,9 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
     const column = next.column
     void navigate({ to: '/search', search: (prev) => ({ ...prev, sort: column, order: next.direction === 'descending' ? 'desc' : 'asc' }), replace: true })
   }
+
+  // Sort by Relevance, in a sorted search's heading menus (spec 4.4): the address without the sort, as a new search has
+  const relevance = { onSelect: () => void navigate({ to: '/search', search: (prev) => ({ ...prev, sort: undefined, order: undefined }), replace: true }) }
 
   // A folder or a matter opens; a document opens in its app (or downloads, if the helper doesn't open its kind), and is selected
   function open(key: string) {
@@ -118,10 +121,11 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
             {documents && <FilterChips filters={filters} authors={authors} clients={clients} matters={matters} onRemove={remove} onClear={clear} onEmpty={() => funnel.current?.focus()} />}
             <Table
               aria-labelledby={headingId}
-              columns={columns}
+              {...columns}
               rows={rows}
               sort={asked}
               onSort={documents ? sortBy : undefined}
+              relevance={documents ? relevance : undefined}
               selectionMode="multiple"
               selection={selection}
               onSelectionChange={changeSelection}
@@ -166,4 +170,19 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
       <QuickLook documents={hitDocuments} total={results.total} loadMore={results.loadMore} />
     </section>
   )
+}
+
+/**
+ * A search's columns (spec 4.8): a document scope's are chosen, in the scope's own layout or beside the reading pane in that
+ * one's, and sort on the server, by the columns it sorts by yet; the Folders, Matters and Clients scopes keep their own
+ * columns, each scope its widths. Both hooks run at every render, as hooks can't be called by turns: the one a scope doesn't
+ * use reads a layout it never draws or writes.
+ */
+function useHitColumns(scope: SearchScope, beside: boolean): DocumentListColumns | ListWidths<ListRow> {
+  const documentScope = searchesDocuments(scope) ? scope : undefined
+  const otherScope = searchesDocuments(scope) ? undefined : scope
+  const chosen = useDocumentListColumns(documentScope ?? 'documents', { beside, serverSorted: true })
+  const own = useMemo(() => (otherScope ? hitColumns(otherScope) : []), [otherScope])
+  const widths = useListWidths(otherScope ?? 'folders', own)
+  return documentScope ? chosen : widths
 }
