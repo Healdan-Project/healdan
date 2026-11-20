@@ -292,6 +292,29 @@ describe('New Matter', () => {
     expect(await screen.findByText('Created 1004.1 – Community Hall Lease')).toBeTruthy()
   })
 
+  it("can't be cancelled, by Cancel or by Esc, while Create Matter is on its way, so nobody is taken to a matter they think they cancelled", async () => {
+    let answer!: (matter: A['Matter']) => void
+    const answered = new Promise<A['Matter']>((resolve) => {
+      answer = resolve
+    })
+    const { api, router, dialog } = await openNewMatter({ 'POST /v1/admin/matters': () => answered })
+    await fillIn(dialog)
+    await waitFor(() => expect(isDisabled(create(dialog))).toBe(false))
+    await userEvent.click(create(dialog))
+    await waitFor(() => expect(api.callsTo('POST /v1/admin/matters')).toHaveLength(1))
+    const cancel = within(dialog).getByRole('button', { name: 'Cancel' })
+    expect(isDisabled(cancel)).toBe(true)
+    await userEvent.click(cancel)
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'New Matter' })).toBeTruthy()
+    expect(router.state.location.pathname).toBe('/matters')
+
+    // The matter is made: the dialog closes and its page opens, as when nothing held it up
+    await act(async () => answer(matterOf()))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/matters/34'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
   it("shows the server's refusal in the rule's words, and a field it says is wrong beside the field", async () => {
     let answer: ApiError = problem(409, 'refused', 'Privileged grants more than its parent (group Partners: WRITE).')
     const { dialog, view } = await openNewMatter({ 'POST /v1/admin/matters': () => answer })

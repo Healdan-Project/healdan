@@ -161,6 +161,28 @@ describe('New Store', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  it("can't be cancelled, by Cancel or by Esc, while Create Store is on its way, so nothing is made that the person thinks they cancelled", async () => {
+    let answer!: (store: A['Store']) => void
+    const answered = new Promise<A['Store']>((resolve) => {
+      answer = resolve
+    })
+    const { api, onClose, onSaved } = renderDialog({ 'POST /v1/admin/stores': () => answered })
+    await userEvent.type(name(), 'Regional Office')
+    await userEvent.click(create())
+    await waitFor(() => expect(api.callsTo('POST /v1/admin/stores')).toHaveLength(1))
+    const cancel = within(dialog()).getByRole('button', { name: 'Cancel' })
+    expect(isDisabled(cancel)).toBe(true)
+    await userEvent.click(cancel)
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(dialog()).toBeTruthy()
+
+    // The Store is made: the dialog hands it on and closes, as it does when nothing held it up
+    await act(async () => answer(regionalOffice))
+    expect(onSaved).toHaveBeenCalledWith(regionalOffice)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it('closes without making anything when it is cancelled', async () => {
     const { api, onClose, onSaved } = renderDialog()
     await userEvent.click(within(dialog()).getByRole('button', { name: 'Cancel' }))

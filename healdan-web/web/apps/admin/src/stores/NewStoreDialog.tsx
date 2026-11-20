@@ -110,7 +110,7 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
     change()
   }
 
-  async function save(close: () => void) {
+  async function save() {
     setBusy(true)
     setFailure(undefined)
     try {
@@ -120,7 +120,8 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
       void queryClient.invalidateQueries({ queryKey: adminKeys.stores })
       toast(t('admin.newStore.created', { name: store.name }))
       onSaved?.(store)
-      close()
+      // Not through the dialog's own close, which is held while busy
+      onClose()
     } catch (error) {
       setFailure(error)
     } finally {
@@ -129,13 +130,14 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
   }
 
   return (
-    <Dialog title={t('admin.newStore.title')} isOpen onOpenChange={(open) => !open && onClose()}>
+    // Held while Create Store is on its way, by Cancel, Esc or a click outside alike: the Store would still be made
+    <Dialog title={t('admin.newStore.title')} isOpen onOpenChange={(open) => !open && !busy && onClose()}>
       {(close) => (
         <form
           className={formStyles.form}
           onSubmit={(event) => {
             event.preventDefault()
-            if (ready && !busy) void save(close)
+            if (ready && !busy) void save()
           }}
         >
           <TextField
@@ -207,7 +209,9 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
             </p>
           )}
           <div className={formStyles.buttons}>
-            <Button onPress={close}>{t('common.cancel')}</Button>
+            <Button onPress={close} isDisabled={busy}>
+              {t('common.cancel')}
+            </Button>
             <Button type="submit" variant="default" isDisabled={!ready} isPending={busy}>
               {t('admin.newStore.create')}
             </Button>

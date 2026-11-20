@@ -137,7 +137,7 @@ export function NewMatterDialog({ client: preset, onClose }: NewMatterDialogProp
     changed()
   }
 
-  async function save(close: () => void) {
+  async function save() {
     if (!filled) return
     setBusy(true)
     setFailure(undefined)
@@ -156,7 +156,8 @@ export function NewMatterDialog({ client: preset, onClose }: NewMatterDialogProp
       void queryClient.invalidateQueries({ queryKey: adminKeys.clients })
       void queryClient.invalidateQueries({ queryKey: adminKeys.templates })
       toast(t('admin.newMatter.created', { number: made.number, name: made.name }))
-      close()
+      // Not through the dialog's own close, which is held while busy
+      onClose()
       void navigate({ href: matterHref(made.id) })
     } catch (error) {
       setFailure(error)
@@ -170,14 +171,15 @@ export function NewMatterDialog({ client: preset, onClose }: NewMatterDialogProp
     prefix !== undefined && trimmedName !== '' ? t('admin.newMatter.folder', { number: prefix, name: trimmedName }) : (prefix ?? (trimmedName || t('admin.newMatter.unnamed')))
 
   return (
-    <Dialog title={t('admin.newMatter.title')} size="wide" isOpen onOpenChange={(open) => !open && onClose()}>
+    // Held while Create Matter is on its way, by Cancel, Esc or a click outside alike: the matter would still be made
+    <Dialog title={t('admin.newMatter.title')} size="wide" isOpen onOpenChange={(open) => !open && !busy && onClose()}>
       {(close) => (
         <>
           <form
             className={formStyles.form}
             onSubmit={(event) => {
               event.preventDefault()
-              if (ready && !busy) void save(close)
+              if (ready && !busy) void save()
             }}
           >
             <div className={styles.columns}>
@@ -299,7 +301,9 @@ export function NewMatterDialog({ client: preset, onClose }: NewMatterDialogProp
               </p>
             )}
             <div className={formStyles.buttons}>
-              <Button onPress={close}>{t('common.cancel')}</Button>
+              <Button onPress={close} isDisabled={busy}>
+                {t('common.cancel')}
+              </Button>
               <Button type="submit" variant="default" isDisabled={!ready} isPending={busy}>
                 {t('admin.newMatter.create')}
               </Button>
