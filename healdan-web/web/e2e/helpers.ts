@@ -21,10 +21,16 @@ export async function signIn(page: Page) {
   // The page keeps hidden copies of its fields, so only the visible ones count.
   const user = page.locator('input[placeholder="username"]:visible')
   const password = page.locator('input[placeholder="password"]:visible')
-  // The smoke stack has a provider set up, so the password form is folded behind a link until it's chosen.
-  const fold = page.getByText('Sign In with a Password')
-  await expect(user.or(fold).first()).toBeVisible()
-  if (!(await user.isVisible())) await fold.click()
+  // The page draws the password form first, then asks the server for its sign-in providers, and with any (the smoke stack
+  // has one) folds the form behind a link when the answer comes. A look at the page can't tell a form that stays from one
+  // about to be folded: a field found visible was folded away before it was filled, and the fill waited until the test's
+  // time ran out, with no sign-in ever sent. So this asks the server the same question, and with a provider waits for the
+  // link, which only the fold draws, and opens the form with it.
+  const server = await call<{ providers: unknown[]; passwordLabel: string }>(
+    page.request.get('/api/v1/server', { headers: { Accept: 'application/json' } }),
+    "the server's sign-in providers",
+  )
+  if (server.providers.length > 0) await page.getByText(server.passwordLabel).click()
   await user.fill(USERNAME)
   await password.fill(PASSWORD)
   await password.press('Enter')

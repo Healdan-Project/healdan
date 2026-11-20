@@ -546,6 +546,12 @@ code is laid out.
     connections for later requests, for as long as they stay open, and Tomcat closes one that has waited 20 seconds: a
     request sent on one at that moment fails with `socket hang up`, as `keyboard.spec.ts`'s sign-out after its tests
     did. A new spec makes its context with `apiContext` too.
+  - Each spec signs in through `signIn` in `helpers.ts`, which asks the server for its sign-in providers
+    (`GET /api/v1/server`) before it touches the page. The sign-in page draws the password form first, asks the same
+    question itself, and with a provider folds the form behind a link when the answer comes, so a helper that looks at
+    the page can find the field a moment before it is folded away, then wait to fill it until the test's time runs out,
+    with no sign-in sent. With a provider, the helper waits for the link, which only the fold draws. A new spec signs
+    in with `signIn` too.
   - It runs in `docker/smoke-test.sh` as step 9, on amd64 and arm64. On a Mac, Docker Desktop doesn't reach the
     host's ports from the default `--network host`: set `WEB_NETWORK=bridge`. The browser's container then joins the
     network of the container that publishes the stack's port, and the browser still opens `http://127.0.0.1:<port>`,
