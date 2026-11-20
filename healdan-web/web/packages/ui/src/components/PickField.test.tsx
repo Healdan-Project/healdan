@@ -93,6 +93,50 @@ describe('PickField', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
+  // Options the caller finds later, as UserField's come from the server once the typing pauses: none at first, then `found`
+  function Later({ found }: { found: PickFieldOption[] }) {
+    const [value, setValue] = useState<PickFieldOption | null>(null)
+    const [text, setText] = useState('')
+    return (
+      <>
+        <PickField label="Author" value={value} options={text === '' ? [] : found} onTextChange={setText} onChange={setValue} />
+        <button type="button">After</button>
+      </>
+    )
+  }
+
+  it('opens its list when options come after the typing has stopped, and not again once one is picked', async () => {
+    const { rerender } = render(<Later found={[]} />)
+    await userEvent.type(box(), 'pa')
+    expect(screen.queryByRole('listbox')).toBeNull()
+    // The answer comes with no key pressed
+    rerender(<Later found={[pat, jamie]} />)
+    const list = await screen.findByRole('listbox')
+    expect(within(list).getAllByRole('option').map((one) => one.textContent)).toEqual(['Pat Example', 'Jamie Clarke'])
+    await userEvent.keyboard('{ArrowDown}{Enter}')
+    expect(box().value).toBe('Pat Example')
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    // Another answer for the picked name doesn't open it again
+    rerender(<Later found={[pat]} />)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('leaves its list closed when options come after it was left or closed with Escape', async () => {
+    const { rerender } = render(<Later found={[]} />)
+    await userEvent.type(box(), 'pa')
+    await userEvent.tab()
+    rerender(<Later found={[pat]} />)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByRole('listbox')).toBeNull()
+    rerender(<Later found={[]} />)
+    await userEvent.type(box(), 'pa')
+    await userEvent.keyboard('{Escape}')
+    rerender(<Later found={[pat]} />)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
   it('shows an option\'s icon and its secondary text beside its label, in the option\'s name, and only the label once picked', async () => {
     const onChange = vi.fn()
     function WithMeta() {

@@ -394,7 +394,10 @@ view.
   narrowing, dates, number checks). A user property, such as Author or Typist, is `details/UserField.tsx`: `@healdan/ui`'s
   `PickField` (React Aria's ComboBox with its label above it), which asks `GET /v1/users?q=` once the typing pauses
   (one character is enough; the server answers 20 at most), offers the field's own person first, and sends `{ id }`,
-  as the helper does. A folder or document property stays text. `PickField` draws its list as `ComboBox` does (see
+  as the helper does. A folder or document property stays text. React Aria opens a combo box's list only as the text
+  changes, so people who come once the typing has stopped would wait for another key: `OpensWhenOptionsCome` (shared
+  with `ComboBox`) opens the list when they come, while the box has the focus and holds typed text, never the picked
+  person's name. `PickField` draws its list as `ComboBox` does (see
   [The Search Box and Search Results](#the-search-box-and-search-results)): right after the field, so in the form or in
   the filing form's dialog, in a layer fixed over the window. In a dialog the list is above the dialog's fields and can
   hang past its edge, and React Aria is kept from hiding the dialog's other fields and buttons while it's open; the

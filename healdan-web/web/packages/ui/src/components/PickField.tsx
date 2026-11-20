@@ -6,6 +6,7 @@ import { ComboBox as AriaComboBox, FieldError, Input, Label, ListBox, ListBoxIte
 import { Icon, type IconName } from '../icons'
 import comboStyles from './ComboBox.module.css'
 import { ComboBoxLayer, ComboBoxPopover } from './ComboBoxLayer'
+import { OpensWhenOptionsCome } from './OpensWhenOptionsCome'
 import styles from './Fields.module.css'
 
 export interface PickFieldOption {
@@ -55,6 +56,9 @@ export function PickField({ label, required, error, value, onChange, options, on
   // value again from a list as it reports leaving the box, so an emptied box with the value in its list couldn't tell
   // the two apart
   const items = value && text.trim() !== '' ? [value, ...options.filter((option) => option.id !== value.id)] : options
+  // Options found for what was typed, which may come once the typing has stopped (UserField's, from the server), and open
+  // the list then; never for the picked one's own name, which the box shows once it is picked
+  const found = options.length > 0 && text.trim() !== '' && text !== value?.label
 
   function type(next: string) {
     setText(next)
@@ -110,6 +114,7 @@ export function PickField({ label, required, error, value, onChange, options, on
           )}
         </Label>
         <Input className={styles.input} onBlur={leave} />
+        <OpensWhenOptionsCome text={text} hasOptions={found} />
         <FieldError className={styles.error}>{error}</FieldError>
         <ComboBoxPopover layer={layer} className={comboStyles.popover} placement="bottom start" offset={4}>
           <ListBox className={comboStyles.list}>
