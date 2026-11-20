@@ -172,3 +172,33 @@ export async function tabTo(page: Page, target: Locator, options: { from?: Locat
   }
   throw new Error(`Tab didn't reach ${target} in ${limit} presses`)
 }
+
+/**
+ * Where @healdan/ui's combo box draws its open list (ComboBox.module.css's `.layer`): in a layer as big as the window, so
+ * nothing round the box holds what is fixed inside it (a transform, a filter or containment there would shrink the layer
+ * and could cut the list off), with the list at the left edge of the field it lines up with, 4 pixels below it and as
+ * wide as the box in it (React Aria's width for it). jsdom has no layout, so this is where it's checked.
+ */
+export async function expectListUnder(field: Locator) {
+  const at = await field.boundingBox()
+  const box = await field.getByRole('combobox').boundingBox()
+  const drawn = await field
+    .page()
+    .getByRole('listbox')
+    .evaluate((list) => {
+      const rect = (element: Element | null) => {
+        const box = element?.getBoundingClientRect()
+        return box ? { x: box.x, y: box.y, width: box.width, height: box.height } : null
+      }
+      let layer = list.parentElement
+      while (layer !== null && getComputedStyle(layer).position !== 'fixed') layer = layer.parentElement
+      const page = document.documentElement
+      return { layer: rect(layer), window: { x: 0, y: 0, width: page.clientWidth, height: page.clientHeight }, list: rect(list.closest('[data-trigger="ComboBox"]')) }
+    })
+  expect(drawn.layer, "the list's layer covers the window").toEqual(drawn.window)
+  expect(at, 'the field is drawn').not.toBeNull()
+  expect(box, 'the box is drawn').not.toBeNull()
+  expect(drawn.list, 'the list is drawn').not.toBeNull()
+  const off = { left: drawn.list!.x - at!.x, top: drawn.list!.y - (at!.y + at!.height + 4), width: drawn.list!.width - box!.width }
+  for (const [what, by] of Object.entries(off)) expect(Math.abs(by), `the list's ${what} against the field's (off by ${by} pixels)`).toBeLessThanOrEqual(1)
+}

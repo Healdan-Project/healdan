@@ -3,7 +3,7 @@
 
 import { expect, test, type APIRequestContext, type BrowserContext, type Locator, type Page } from '@playwright/test'
 import { expectNoViolations } from './axe'
-import { PASSWORD, USERNAME, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, secondMatterFolders, signIn, specsFolder } from './helpers'
+import { PASSWORD, USERNAME, apiContext, authorized, call, deviceToken, escape, expectListUnder, fileDocument, matterFolders, minimalPdf, secondMatterFolders, signIn, specsFolder } from './helpers'
 
 // Signed-in Devices fits its dialog: nothing scrolls sideways, every Revoke is inside the dialog, and at 1280 a device's name
 // takes no more than two lines (the dialog is as wide as its table needs; at 768 a name may wrap between words further)
@@ -400,6 +400,25 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.goto('/app/search?scope=matters&q=Smoke')
       await expect(main().getByRole('grid').getByRole('row').nth(1)).toBeVisible()
       await check('search results')
+    })
+
+    test("the search box's suggestions", async () => {
+      await page.goto('/app/')
+      await expect(page.getByRole('heading', { name: 'Recent Documents' })).toBeVisible()
+      const box = page.getByRole('combobox', { name: 'Search' })
+      await box.fill('Smoke')
+      // The smoke fixture's matter 1.1, under its heading, and the search itself
+      const list = page.getByRole('listbox')
+      await expect(list.getByRole('option', { name: /Smoke Matter/ }).first()).toBeVisible()
+      await expect(list.getByRole('option', { name: 'Search Documents for "Smoke"' })).toBeVisible()
+      // The whole page with the list open: the list comes right after the box, in the search landmark, and the page around
+      // it stays shown to a screen reader (@healdan/ui's ComboBox), so nothing hidden holds a link (aria-hidden-focus)
+      await check("the search box's suggestions")
+      // Drawn over the window, under the search field (the scope picker and the box), as wide as it
+      await expectListUnder(page.getByRole('banner').getByRole('search'))
+      await page.keyboard.press('Escape')
+      await expect(list).toBeHidden()
+      await box.fill('')
     })
 
     test("a document's own page", async () => {
