@@ -276,6 +276,17 @@ export const enUS = {
   'list.clientNumber': 'Number',
   // A heading's edge, which resizes its column. React Aria names it by this and the heading it's in: "Resize Doc #"
   'columns.resizer': 'Resize',
+  // A heading's menu, named for its column: "Doc # Column"
+  'columns.menu': '{column} Column',
+  'columns.sortAscending': 'Sort Ascending',
+  'columns.sortDescending': 'Sort Descending',
+  'columns.sortByRelevance': 'Sort by Relevance',
+  'columns.resize': 'Resize Column',
+  'columns.moveLeft': 'Move Left',
+  'columns.moveRight': 'Move Right',
+  'columns.hide': 'Hide {column}',
+  'columns.choose': 'Choose Columns…',
+  'columns.reset': 'Reset Columns',
   'help.menu': 'Help',
   'help.guide': 'User Guide',
   'help.notices': 'Open-Source Notices',

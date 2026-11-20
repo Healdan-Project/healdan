@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -22,6 +22,13 @@ const columns: TableColumn<Item>[] = [
   { id: 'title', name: 'Title', isRowHeader: true, allowsSorting: true, cell: (row) => row.name },
   { id: 'docNumber', name: 'Doc #', allowsSorting: true, align: 'end', cell: (row) => row.number },
   { id: 'note', name: 'Note', cell: () => '' },
+]
+
+// Defaults a list gives: a share of the width, and pixels
+const sized: TableColumn<Item>[] = [
+  { ...columns[0]!, width: '3fr', minWidth: 220 },
+  { ...columns[1]!, width: 100 },
+  { ...columns[2]!, width: 120 },
 ]
 
 function items(count: number): Item[] {
@@ -412,13 +419,6 @@ describe('Table resizing', () => {
   const header = (name: RegExp | string) => screen.getByRole('columnheader', { name })
   const edge = (name: RegExp | string) => header(name).querySelector<HTMLElement>('.resizer')!
 
-  // Defaults a list gives: a share of the width, and pixels
-  const sized: TableColumn<Item>[] = [
-    { ...columns[0]!, width: '3fr', minWidth: 220 },
-    { ...columns[1]!, width: 100 },
-    { ...columns[2]!, width: 120 },
-  ]
-
   // A list that keeps its widths, as a view does: a resize's widths merged over those kept, a reset taking one away
   function Kept({ kept: initial = {}, onResizeEnd, onReset, ...rest }: Omit<HarnessProps, 'resizing'> & { kept?: Record<string, number> } & Partial<Omit<TableResizing, 'widths'>>) {
     const [widths, setWidths] = useState(initial)
@@ -697,6 +697,182 @@ describe('Table right-click menu', () => {
     } finally {
       platform.mockRestore()
     }
+  })
+})
+
+describe('Table heading menu', () => {
+  const header = (name: RegExp | string) => screen.getByRole('columnheader', { name })
+
+  // A document list's columns: Author comes after Title, so Doc # can move either way
+  const listColumns: TableColumn<Item>[] = [columns[0]!, { id: 'author', name: 'Author', allowsSorting: true, cell: () => 'Ann' }, columns[1]!, columns[2]!]
+
+  // What every list can switch on
+  function options() {
+    return {
+      onSort: vi.fn<(sort: TableSort) => void>(),
+      resizing: { widths: {}, onResizeEnd: vi.fn<(widths: Record<string, number>) => void>(), onReset: vi.fn<(column: string) => void>() },
+      onResetColumns: vi.fn<() => void>(),
+    }
+  }
+
+  // What a document list switches on besides
+  const choice = () => ({ onMove: vi.fn<(column: string, to: number) => void>(), onHide: vi.fn<(column: string) => void>(), panel: null })
+
+  /** The open menu's items in order, a separator as a dash */
+  const entries = (menu: HTMLElement) =>
+    [...menu.querySelectorAll('[role^="menuitem"], [role="separator"]')].map((one) => (one.getAttribute('role') === 'separator' ? '—' : one.textContent))
+
+  async function openMenu(name: string) {
+    expect(fireEvent.contextMenu(header(name))).toBe(false)
+    return screen.findByRole('menu', { name: `${name} Column` })
+  }
+
+  async function closeMenu() {
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    fireEvent.keyUp(document.activeElement!, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+  }
+
+  it('opens a heading\'s menu on a right-click and on Shift+F10, its first item focused, and gives the focus back on Esc', async () => {
+    const { rerender } = render(<Harness onSort={vi.fn()} />)
+    await openMenu('Doc #')
+    await closeMenu()
+    await waitFor(() => expect(document.activeElement).toBe(header('Doc #')))
+
+    // The arrows reach the headings from the rows
+    const first = row(/Letter 1/)
+    act(() => first.focus())
+    press(first, 'ArrowUp')
+    expect(document.activeElement).toBe(header('Title'))
+    press(header('Title'), 'ArrowRight')
+    expect(document.activeElement).toBe(header('Doc #'))
+    fireEvent.keyDown(header('Doc #'), { key: 'F10', shiftKey: true })
+    const menu = await screen.findByRole('menu', { name: 'Doc # Column' })
+    await waitFor(() => expect(document.activeElement).toBe(within(menu).getByRole('menuitemradio', { name: 'Sort Ascending' })))
+    await closeMenu()
+    await waitFor(() => expect(document.activeElement).toBe(header('Doc #')))
+
+    // And the menu key
+    fireEvent.keyDown(header('Doc #'), { key: 'ContextMenu' })
+    expect(await screen.findByRole('menu', { name: 'Doc # Column' })).toBeTruthy()
+    await closeMenu()
+
+    // A heading whose column resizes has its focus on its edge's slider (React Aria's), where its menu opens from
+    rerender(<Harness {...options()} />)
+    act(() => row(/Letter 1/).focus())
+    press(row(/Letter 1/), 'ArrowUp')
+    const slider = within(header('Title')).getByRole('slider')
+    expect(document.activeElement).toBe(slider)
+    fireEvent.keyDown(slider, { key: 'F10', shiftKey: true })
+    const resizable = await screen.findByRole('menu', { name: 'Title Column' })
+    await waitFor(() => expect(document.activeElement).toBe(within(resizable).getByRole('menuitemradio', { name: 'Sort Ascending' })))
+    await closeMenu()
+    await waitFor(() => expect(document.activeElement).toBe(slider))
+  })
+
+  it('offers Sort Ascending, Sort Descending, Resize Column and Reset Columns on every list, and Move Left, Move Right, Hide Doc #, Choose Columns… on a document list', async () => {
+    const sort = { column: 'docNumber', direction: 'ascending' } as const
+    const { rerender } = render(<Harness columns={listColumns} sort={sort} {...options()} />)
+    let menu = await openMenu('Doc #')
+    expect(entries(menu)).toEqual(['Sort Ascending', 'Sort Descending', '—', 'Resize Column', '—', 'Reset Columns'])
+    // The current sort is ticked, drawn and as a screen reader hears it
+    const ascending = within(menu).getByRole('menuitemradio', { name: 'Sort Ascending' })
+    const descending = within(menu).getByRole('menuitemradio', { name: 'Sort Descending' })
+    expect([ascending.getAttribute('aria-checked'), descending.getAttribute('aria-checked')]).toEqual(['true', 'false'])
+    expect([ascending.querySelector('.check'), descending.querySelector('.check')].map(Boolean)).toEqual([true, false])
+    await closeMenu()
+
+    rerender(<Harness columns={listColumns} sort={sort} {...options()} choice={choice()} />)
+    menu = await openMenu('Doc #')
+    expect(entries(menu)).toEqual(['Sort Ascending', 'Sort Descending', '—', 'Resize Column', '—', 'Move Left', 'Move Right', 'Hide Doc #', '—', 'Choose Columns…', 'Reset Columns'])
+    await expectNoAxeViolations(menu)
+  })
+
+  it('leaves Move and Hide off Title, Move Left off the column after Title, and Move Right off the last', async () => {
+    render(<Harness columns={listColumns} {...options()} choice={choice()} />)
+    expect(entries(await openMenu('Title'))).toEqual(['Sort Ascending', 'Sort Descending', '—', 'Resize Column', '—', 'Choose Columns…', 'Reset Columns'])
+    await closeMenu()
+    expect(entries(await openMenu('Author'))).toEqual(['Sort Ascending', 'Sort Descending', '—', 'Resize Column', '—', 'Move Right', 'Hide Author', '—', 'Choose Columns…', 'Reset Columns'])
+    await closeMenu()
+    // Note doesn't sort, so it has no Sort items either
+    expect(entries(await openMenu('Note'))).toEqual(['Resize Column', '—', 'Move Left', 'Hide Note', '—', 'Choose Columns…', 'Reset Columns'])
+  })
+
+  it('moves a column to the place it ends at, hides it and resets the columns, and Choose Columns… gives the focus back to the heading', async () => {
+    const user = userEvent.setup()
+    const chosen = choice()
+    const given = { onSort: vi.fn(), onResetColumns: vi.fn() }
+    render(<Harness columns={listColumns} {...given} choice={chosen} />)
+    await user.click(within(await openMenu('Doc #')).getByRole('menuitem', { name: 'Move Left' }))
+    expect(chosen.onMove).toHaveBeenLastCalledWith('docNumber', 1)
+    await user.click(within(await openMenu('Doc #')).getByRole('menuitem', { name: 'Move Right' }))
+    expect(chosen.onMove).toHaveBeenLastCalledWith('docNumber', 3)
+    await user.click(within(await openMenu('Doc #')).getByRole('menuitem', { name: 'Hide Doc #' }))
+    expect(chosen.onHide).toHaveBeenCalledExactlyOnceWith('docNumber')
+    await user.click(within(await openMenu('Doc #')).getByRole('menuitem', { name: 'Reset Columns' }))
+    expect(given.onResetColumns).toHaveBeenCalledOnce()
+    await user.click(within(await openMenu('Doc #')).getByRole('menuitem', { name: 'Choose Columns…' }))
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(header('Doc #')))
+    expect(chosen.onMove).toHaveBeenCalledTimes(2)
+    expect(given.onSort).not.toHaveBeenCalled()
+  })
+
+  it('offers Sort by Relevance only while sorted, and calls relevance.onSelect', async () => {
+    const user = userEvent.setup()
+    const relevance = { onSelect: vi.fn() }
+    const { rerender } = render(<Harness onSort={vi.fn()} relevance={relevance} />)
+    expect(entries(await openMenu('Doc #'))).toEqual(['Sort Ascending', 'Sort Descending'])
+    await closeMenu()
+
+    rerender(<Harness onSort={vi.fn()} relevance={relevance} sort={{ column: 'title', direction: 'ascending' }} />)
+    const menu = await openMenu('Doc #')
+    expect(entries(menu)).toEqual(['Sort Ascending', 'Sort Descending', 'Sort by Relevance'])
+    await user.click(within(menu).getByRole('menuitemradio', { name: 'Sort by Relevance' }))
+    expect(relevance.onSelect).toHaveBeenCalledOnce()
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+  })
+
+  it('Sort Descending on a heading sorts by it', async () => {
+    const user = userEvent.setup()
+    const onSort = vi.fn()
+    render(<Harness onSort={onSort} />)
+    await user.click(within(await openMenu('Doc #')).getByRole('menuitemradio', { name: 'Sort Descending' }))
+    expect(onSort).toHaveBeenCalledExactlyOnceWith({ column: 'docNumber', direction: 'descending' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    // "Ascending" is ascending whatever the column
+    await user.click(within(await openMenu('Doc #')).getByRole('menuitemradio', { name: 'Sort Ascending' }))
+    expect(onSort).toHaveBeenLastCalledWith({ column: 'docNumber', direction: 'ascending' })
+  })
+
+  it('Resize Column starts a resize by keys, which the arrows widen and Enter ends; an empty list has none to start', async () => {
+    const user = userEvent.setup()
+    const given = options()
+    const { rerender } = render(<Harness columns={sized} {...given} />)
+    await user.click(within(await openMenu('Doc #')).getByRole('menuitem', { name: 'Resize Column' }))
+    const slider = within(header('Doc #')).getByRole('slider')
+    await waitFor(() => expect(document.activeElement).toBe(slider))
+    press(slider, 'ArrowRight')
+    expect(header('Doc #').style.width).toBe('110px')
+    press(slider, 'Enter')
+    expect(given.resizing.onResizeEnd).toHaveBeenCalledExactlyOnceWith({ title: 220, docNumber: 110 })
+
+    // An empty list draws no edges, so nothing would start a resize
+    rerender(<Harness columns={sized} {...given} rows={[]} />)
+    expect(entries(await openMenu('Doc #'))).toEqual(['Sort Ascending', 'Sort Descending', '—', 'Reset Columns'])
+  })
+
+  it('keeps the browser\'s menu on a heading when no option is given', () => {
+    const { rerender } = render(<Harness />)
+    for (const one of screen.getAllByRole('columnheader')) expect(fireEvent.contextMenu(one)).toBe(true)
+    const title = header('Title')
+    act(() => title.focus())
+    expect(fireEvent.keyDown(title, { key: 'F10', shiftKey: true })).toBe(true)
+    expect(screen.queryByRole('menu')).toBeNull()
+    // Nor on a heading whose menu would offer nothing: Note doesn't sort, and nothing else is switched on
+    rerender(<Harness onSort={vi.fn()} />)
+    expect(fireEvent.contextMenu(header('Note'))).toBe(true)
+    expect(fireEvent.contextMenu(header('Doc #'))).toBe(false)
   })
 })
 

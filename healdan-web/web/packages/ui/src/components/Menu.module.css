@@ -49,6 +49,11 @@
   color: var(--hd-text-muted);
 }
 
+/* The tick on the checked one of a menu's choices, such as a heading's sorts, at the item's end */
+.check {
+  margin-inline-start: auto;
+}
+
 .separator {
   height: 1px;
   margin: var(--hd-space-2) 0;

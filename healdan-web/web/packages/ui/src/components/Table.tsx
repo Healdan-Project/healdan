@@ -21,7 +21,8 @@ import {
 import { Icon } from '../icons'
 import { t } from '../strings'
 import { ColumnEdge } from './ColumnEdge'
-import { ItemContextMenu, type ItemMenu } from './ContextMenu'
+import { ContextMenu, type ItemMenu } from './ContextMenu'
+import { headingMenu } from './headingMenu'
 import styles from './Table.module.css'
 import { useColumnResizing } from './useColumnResizing'
 
@@ -82,6 +83,16 @@ export interface TableResizing {
   onReset: (column: string) => void
 }
 
+/** A document list's columns, which the person moves, hides and chooses */
+export interface TableColumnChoice {
+  /** Move Left or Move Right: the index the column ends at among the columns as given, never before Title's */
+  onMove: (column: string, to: number) => void
+  /** Hide <column> */
+  onHide: (column: string) => void
+  /** The Columns panel, which Choose Columns… opens */
+  panel: ReactNode
+}
+
 interface TableBaseProps<T extends TableRow> {
   'aria-label'?: string
   'aria-labelledby'?: string
@@ -92,6 +103,12 @@ interface TableBaseProps<T extends TableRow> {
   onSort?: (sort: TableSort) => void
   /** Columns resize by their edges; widths in pixels by column id, as kept */
   resizing?: TableResizing
+  /** A document list's columns: moved, hidden, and chosen in `panel` */
+  choice?: TableColumnChoice
+  /** Reset Columns, in each heading's menu */
+  onResetColumns?: () => void
+  /** Sort by Relevance, in each heading's menu while `sort` is set */
+  relevance?: { onSelect: () => void }
   /** Enter or a double-click; a click on a row that can't be selected, or that opens on a click, and any click when nothing selects */
   onOpen?: (key: string) => void
   /** Space */
@@ -127,10 +144,15 @@ interface TableBaseProps<T extends TableRow> {
   busy?: boolean
   /**
    * A row's menu, in place of the browser's: a right-click on the row, or Shift+F10 or the menu key while it has the focus,
-   * opens it (ContextMenu). Everywhere else in the Table, and on a row whose `items` are undefined, the browser's own stays.
+   * opens it (ContextMenu). A heading has its own menu, of what `onSort`, `resizing`, `choice`, `onResetColumns` and
+   * `relevance` offer for its column. Everywhere else in the Table, on a row whose `items` are undefined, and on a heading
+   * whose menu would offer nothing, the browser's own stays.
    */
   contextMenu?: ItemMenu
 }
+
+/** What a menu of the Table is for: a row, or a column by its heading */
+type MenuSubject = { row: string } | { column: string }
 
 /**
  * The rows the person selects, which the caller keeps; or none, for a list that leads to a page, where a click or Enter
@@ -163,6 +185,9 @@ export function Table<T extends TableRow>({
   sort,
   onSort,
   resizing,
+  choice,
+  onResetColumns,
+  relevance,
   selectionMode = 'single',
   selection = NOTHING,
   onSelectionChange,
@@ -306,6 +331,20 @@ export function Table<T extends TableRow>({
   // as a resize going on: the hidden slider the focus first comes to would then keep Tab. The list takes the focus itself.
   const edges = resizing !== undefined && rows.length > 0
   const lastColumn = columns[columns.length - 1]?.id
+
+  // The Columns panel, which Choose Columns… opens, and the Columns button at the heading row's end
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the panel's popover, which isn't drawn yet, reads it
+  const [panelOpen, setPanelOpen] = useState(false)
+  const menuOf = (column: string) =>
+    headingMenu(columns, column, {
+      sort,
+      onSort,
+      relevance,
+      startResize: edges ? resize.startResize : undefined,
+      choice,
+      onChoose: () => setPanelOpen(true),
+      onResetColumns,
+    })
   const grid = (
     <Virtualizer layout={TableLayout} layoutOptions={{ rowHeight: ROW_HEIGHT, headingHeight: ROW_HEIGHT, loaderHeight: ROW_HEIGHT }}>
       <AriaTable
@@ -326,6 +365,7 @@ export function Table<T extends TableRow>({
           {(column) => (
             <Column
               id={column.id}
+              data-column-key={column.id}
               isRowHeader={column.isRowHeader}
               allowsSorting={column.allowsSorting && onSort !== undefined}
               width={resize.widthOf(column)}
@@ -373,7 +413,20 @@ export function Table<T extends TableRow>({
   )
 
   return (
-    <ItemContextMenu attribute="data-row-key" menu={contextMenu}>
+    <ContextMenu<MenuSubject>
+      target="[data-row-key], [data-column-key]"
+      subjectOf={(element) => {
+        const row = element.getAttribute('data-row-key')
+        if (row !== null) return contextMenu?.items(row) === undefined ? undefined : { row }
+        const column = element.getAttribute('data-column-key')
+        return column !== null && menuOf(column) ? { column } : undefined
+      }}
+      label={(subject) => ('row' in subject ? (contextMenu?.label(subject.row) ?? '') : (menuOf(subject.column)?.label ?? ''))}
+      items={(subject) => ('row' in subject ? contextMenu?.items(subject.row) : menuOf(subject.column)?.items)}
+      onOpen={(subject) => {
+        if ('row' in subject) contextMenu?.onOpen?.(subject.row)
+      }}
+    >
       {/* The handler only reads keys the rows inside already take; the wrapper isn't a control of its own. */}
       <div
         ref={frame}
@@ -394,6 +447,6 @@ export function Table<T extends TableRow>({
           grid
         )}
       </div>
-    </ItemContextMenu>
+    </ContextMenu>
   )
 }

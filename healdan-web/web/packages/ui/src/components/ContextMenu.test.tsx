@@ -117,6 +117,22 @@ describe('ContextMenu', () => {
     expect(onOpen).not.toHaveBeenCalled()
   })
 
+  it('opens on Shift+F10 from a slider inside an item, which has no text of its own to copy', async () => {
+    render(
+      <ContextMenu<string> target="li" subjectOf={() => 'heading'} label={() => 'Heading'} items={() => <MenuItem id="sort">Sort</MenuItem>}>
+        <ul>
+          <li tabIndex={-1}>
+            Width <input type="range" aria-label="Resize" />
+          </li>
+        </ul>
+      </ContextMenu>,
+    )
+    const slider = screen.getByRole('slider', { name: 'Resize' })
+    slider.focus()
+    expect(fireEvent.keyDown(slider, { key: 'F10', shiftKey: true })).toBe(false)
+    expect(await screen.findByRole('menu', { name: 'Heading' })).toBeTruthy()
+  })
+
   it('takes F10 without Shift, and Shift+F10 with another modifier, as other keys', () => {
     setup()
     const alpha = item('alpha')

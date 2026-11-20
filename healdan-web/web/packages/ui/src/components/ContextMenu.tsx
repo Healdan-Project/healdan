@@ -53,8 +53,11 @@ export function ItemContextMenu({ attribute, menu, children }: { attribute: stri
   )
 }
 
-/** Where the browser's own menu stays: copy, paste and spelling work there */
-const EDITABLE = 'input, textarea, select, [contenteditable]:not([contenteditable="false"])'
+/**
+ * Where the browser's own menu stays: copy, paste and spelling work there. A slider has no text, and has its item's menu: a
+ * resizable heading's focus is on its edge's slider (React Aria's), so the heading's menu opens from there.
+ */
+const EDITABLE = 'input:not([type="range"]), textarea, select, [contenteditable]:not([contenteditable="false"])'
 
 /** What marks a ContextMenu's own element (below) */
 const AREA = 'data-context-menu'
