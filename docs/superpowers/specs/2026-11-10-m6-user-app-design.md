@@ -96,7 +96,7 @@ The test for each feature was whether the owner would reach for it on an ordinar
 | | Making or editing a search folder's rule | new | later |
 | | CE's saved searches and tags | – | never (M1 turned saved searches off; search folders cover them) |
 | **Looking** | The document list: Title, Doc #, Version, Author and Edit Date, sorted by any column | exists | yes (roadmap) |
-| | Choosing and reordering columns | new | later |
+| | Choosing and reordering columns | new | later: designed on 2026-11-19 with resizing, and sorting on every list ([list columns spec](2026-11-19-list-columns-design.md)) |
 | | The breadcrumb, with the matter as `client.matter – name` | exists | yes (roadmap) |
 | | The details panel: properties and versions | exists | yes |
 | | A document's history | new | later |
@@ -171,7 +171,7 @@ The owner reviewed the layout in the browser, from mockups drawn with the demo f
 ### 6.3 Search
 
 - **Suggestions as you type** (call): matching matters first, then a few documents by title, then "Search Documents for "…"" with Enter. The arrow keys pick a suggestion.
-- **Enter runs the search** in the chosen scope. Results come by relevance; any column header sorts them instead. Document results add a Matter column: the matter number with the client muted, and the matter's name on hover.
+- **Enter runs the search** in the chosen scope. Results come by relevance; any column header sorts them instead. Document results add a Matter column: the matter number with the client muted, and the matter's name on hover (changed after M6: the [list columns spec](2026-11-19-list-columns-design.md) §4.1, the matter's number and name, with the whole of it and the client on hover).
 - **`#10388` then Enter** shows results with just that document, already selected with its details showing, ready to act on (roadmap principle 1), with the toolbar, F2 and Delete as in any list (changed in the build: R95). `#10388.2` selects version 2 in the details, whose Versions tab it opens (changed after M6: the owner's dogfooding punch list, 2026-11-14, which put the versions in a tab). A number the person can't read gets "No document # 10388 that you can see", the same words whether it exists or not. So does a legacy shortcut's number (changed in the build: R43; the API lists no shortcuts, so the lookup and `GET /documents/{n}` refuse them as unreadable).
 - **With the Matters scope, a matter number** such as `1001.1` then Enter opens the matter (M1).
 - **Nothing the person can't read appears,** in suggestions, results or counts.
@@ -564,7 +564,7 @@ Later phases, each designed when its turn comes, move features off the old UI (o
 - sharing: shared links, emailing from the server, zip export;
 - your profile and password;
 - making and editing search folders;
-- choosing and reordering columns;
+- choosing and reordering columns: designed on 2026-11-19, with resizing them and sorting every list by any column ([list columns spec](2026-11-19-list-columns-design.md));
 - setting properties on many documents;
 - ~~moving and deleting folders~~: built with the Trash, above (renaming them came forward on 2026-11-14, the [folder rename spec](2026-11-14-folder-rename-design.md));
 - copying and locking documents;

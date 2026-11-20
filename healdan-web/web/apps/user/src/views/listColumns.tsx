@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import type { components } from '@healdan/api'
-import { formatDate, formatVersion, Icon, t, type TableColumn, type TableRow } from '@healdan/ui'
+import { formatDate, formatVersion, Icon, t, VisuallyHidden, type TableColumn, type TableRow } from '@healdan/ui'
 import { computerLabel } from '../actions/checkout'
 import { HoldMarker } from '../actions/HoldMarker'
 import type { SearchScope } from '../search/scopes'
 import { itemIcon } from '../kindIcons'
-import { matterParts } from '../matterDisplay'
 import { DocumentTitle, FolderName } from '../organising/RenameField'
 import { childKey, selectable, type Hit } from './useListing'
 import styles from './views.module.css'
@@ -55,16 +54,17 @@ const edited: TableColumn<ListRow> = { id: 'edited', name: t('list.edited'), all
 export const listColumns: TableColumn<ListRow>[] = [title, docNumber, version, author, edited]
 
 /**
- * "1001.1", the client muted after it, and the matter's name as a tooltip. The name is text in the cell too: a screen
- * reader reads it, and a row that is hovered or has the keyboard's focus shows it in place of the client (views.module.css),
- * as a tooltip alone can't be reached by keyboard.
+ * "1001.1 – Charter Dispute", as the server formats it and the left pane's Recent Matters shows it (list columns spec
+ * 4.1). The name is the cell's own text, so a keyboard and a screen reader reach it as a pointer does; a matter with no
+ * name shows its number. The tooltip is the whole of it and the client, "1001.1 – Charter Dispute · Saltmarsh Shipping",
+ * so a name the column cuts short can still be read by pointing at it. The client is in the cell's text for a screen
+ * reader too, not drawn, as a tooltip can't be reached by keyboard; a sighted keyboard user finds it in the details.
  */
-function MatterCell({ matter }: { matter: S['MatterRef'] }) {
-  const { number, name } = matterParts(matter.display)
+export function MatterCell({ matter }: { matter: S['MatterRef'] }) {
   return (
-    <span className={styles.matterCell} title={name}>
-      {number} <span className={styles.matterClient}>{matter.client.name}</span>
-      {name && <span className={styles.matterName}>{name}</span>}
+    <span className={styles.oneLine} title={`${matter.display} · ${matter.client.name}`}>
+      {matter.display}
+      <VisuallyHidden>{` · ${matter.client.name}`}</VisuallyHidden>
     </span>
   )
 }
@@ -73,9 +73,10 @@ function matterOf(item: Hit): S['MatterRef'] | null {
   return item.type === 'matter' ? null : item.matter
 }
 
-// Built when a list draws, so the firm's own word for a matter (setLabels) is the heading
+// Built when a list draws, so the firm's own word for a matter (setLabels) is the heading. A share of the spare width,
+// as Title and Author have, so a wider window shows more of the matter's name (list columns spec 4.1).
 function matterColumn(): TableColumn<ListRow> {
-  return { id: 'matter', name: t('list.matter'), width: 150, cell: ({ item }) => {
+  return { id: 'matter', name: t('list.matter'), width: '1.5fr', minWidth: 100, cell: ({ item }) => {
     const matter = matterOf(item)
     return matter && <MatterCell matter={matter} />
   } }
@@ -89,9 +90,10 @@ export function hitColumns(scope: SearchScope): TableColumn<ListRow>[] {
       { id: 'client', name: t('list.client'), width: '1fr', cell: ({ item }) => item.type === 'matter' && item.client.name },
     ]
   }
-  if (scope === 'folders') return [title, matterColumn()]
-  // Title first: the others are narrower here than in a folder, and each ends in an ellipsis when it doesn't fit
-  return [{ ...title, minWidth: 220 }, { ...docNumber, width: 80 }, { ...version, width: 70 }, { ...matterColumn(), width: 130 }, author, { ...edited, width: 116 }]
+  if (scope === 'folders') return [{ ...title, width: '2fr' }, matterColumn()]
+  // Title first, sharing the spare width with Matter and Author; the others are narrower here than in a folder, and each
+  // ends in an ellipsis when it doesn't fit
+  return [{ ...title, width: '2fr', minWidth: 220 }, { ...docNumber, width: 80 }, { ...version, width: 70 }, matterColumn(), author, { ...edited, width: 116 }]
 }
 
 /** What a list keeps while the reading pane is open and the list is narrow (spec section 6.4): Title, Doc # and Edit Date. */
@@ -102,13 +104,13 @@ export function narrowed(columns: TableColumn<ListRow>[]): TableColumn<ListRow>[
 /**
  * "MacBook · Word": the computer, then the app muted after a dot, on one line, as a Standard row's 34 pixels have room
  * for one. Each is an element of its own, whose text is just the computer or the app; the dot is drawn only, and the
- * spaces around it keep the two apart for a screen reader. The whole text is a tooltip too, as the Matter cell's name
- * is, so an app the ellipsis cuts short can be read by pointing at it.
+ * spaces around it keep the two apart for a screen reader. The whole text is a tooltip too, as the Matter cell's whole
+ * matter is, so an app the ellipsis cuts short can be read by pointing at it.
  */
 function ComputerCell({ hold }: { hold: S['HoldView'] | null }) {
   const { computer, app } = computerLabel(hold)
   return (
-    <span className={styles.computerCell} title={app ? `${computer} · ${app}` : computer}>
+    <span className={styles.oneLine} title={app ? `${computer} · ${app}` : computer}>
       <span>{computer}</span>
       {app && (
         <>
@@ -123,13 +125,17 @@ function ComputerCell({ hold }: { hold: S['HoldView'] | null }) {
   )
 }
 
-/** Checked Out to Me: the server's order (latest check-out first), so nothing sorts, as its list takes no `onSort`. */
+/**
+ * Checked Out to Me: the server's order (latest check-out first), so nothing sorts, as its list takes no `onSort`. With
+ * Computer and Checked Out its least widths are wider than the list beside the details anyway, so Matter keeps at least
+ * its old fixed 130 there rather than give way to 100 (list columns spec 4.1).
+ */
 export function checkedOutColumns(): TableColumn<ListRow>[] {
   return [
-    { ...title, minWidth: 220 },
+    { ...title, width: '2fr', minWidth: 220 },
     { ...docNumber, width: 80 },
     { ...version, width: 70 },
-    { ...matterColumn(), width: 130 },
+    { ...matterColumn(), minWidth: 130 },
     {
       id: 'computer',
       name: t('list.computer'),

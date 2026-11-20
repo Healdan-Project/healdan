@@ -62,7 +62,7 @@ check in. Beside it, a count says how many there are, once there's at least one.
 |---|---|
 | **Title** | The document's name, with the pencil at its end |
 | **Doc #**, **Version** | Its doc # and version |
-| **Matter** | Its matter's number, with the client's name beside it in paler type |
+| **Matter** | Its matter's number and name, such as `1002.1 – Commercial Lease`; point at it, or see the document's details, for the whole name and the client |
 | **Computer** | The computer it's checked out on, such as "MacBook", with the app beside it in paler type, such as Word. **Web Page** for one checked out in the app or the Classic Interface, which belongs to no computer |
 | **Checked Out** | When you checked it out, or last saved to it from the computer that holds it, as **Check-Out Time** in its [Check-Out Info](#check-out-info) |
 | **Edit Date** | When it was last saved to Healdan |

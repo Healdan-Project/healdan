@@ -11,7 +11,6 @@ import { client, document, folder, matter, problem, zone, type Routes } from '..
 import { detailsRoutes } from '../test/details'
 import { bringObservedIntoView } from '../test/intersection'
 import { renderApp } from '../test/renderApp'
-import viewsCss from './views.module.css?raw'
 
 type S = components['schemas']
 
@@ -79,23 +78,11 @@ describe('SearchView', () => {
     expect(api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'documents', q: 'charter', zone, offset: 0, limit: 100 })
   })
 
-  it('puts the matter number with the client muted in the Matter column, and the matter name where a keyboard and a screen reader reach it', async () => {
+  it("shows each hit's own matter in the Matter column", async () => {
     await renderApp('/search?scope=documents&q=charter', routes())
     const [, second] = await rows()
-    const cell = within(second!).getAllByRole('gridcell').find((one) => one.textContent?.includes('Brightwell'))!
-    expect(cell.textContent).toContain('1002.1')
-    expect(cell.textContent).toContain('Brightwell')
-    // Hover shows the name, and so does the text a screen reader reads with the cell
-    expect(cell.querySelector('[title="Commercial Lease"]')).toBeTruthy()
-    expect(within(cell).getByText('Commercial Lease').className).toMatch(/matterName/)
-    expect(within(cell).getByText('Brightwell').className).toMatch(/matterClient/)
-    // A keyboard user sees the name too: the row's focus (an arrow key puts it there) swaps the client for it, as
-    // hovering does. jsdom draws no style, so the stylesheet is read.
-    expect(viewsCss).toMatch(/\[role='row'\]:focus-within\)\s+\.matterName/)
-    expect(viewsCss).toMatch(/\[role='row'\]:hover\)\s+\.matterName/)
-    const row = second!
-    row.focus()
-    expect(row.matches(':focus-within')).toBe(true)
+    // What the cell holds, its tooltip and its text for a screen reader, is MatterCell's (listColumns.test.tsx)
+    expect(within(second!).getAllByRole('gridcell').some((one) => one.textContent?.startsWith('1002.1 – Commercial Lease'))).toBe(true)
   })
 
   it('sorts by a header, asking the server, and reverses on a second click', async () => {

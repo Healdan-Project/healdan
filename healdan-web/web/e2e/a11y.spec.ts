@@ -196,7 +196,29 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Edit Properties' }).click()
       await expect(page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Save' })).toBeVisible()
       await check('the properties form')
-      await page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Cancel' }).click()
+      // Author's list of people open, with the whole page around it: the list comes right after the field, in the form, and
+      // the page stays shown to a screen reader (@healdan/ui's PickField), so nothing hidden holds a link (aria-hidden-focus).
+      // Author holds the filer, whom the list offers at once whatever is typed, so it's emptied first (Tab leaves it empty):
+      // the list then opens only once the people found for "a" come (OpensWhenOptionsCome), and axe looks at them as they are
+      const editing = page.getByRole('region', { name: 'Details' })
+      const author = editing.getByRole('combobox', { name: 'Author', exact: true })
+      await author.fill('')
+      await page.keyboard.press('Tab')
+      await expect(author).toHaveValue('')
+      await author.fill('a')
+      await expect(editing.getByRole('listbox').getByRole('option').first()).toBeVisible()
+      await check("the properties form with Author's list open")
+      // With someone picked, Esc closes the list and only the list: React Aria passes that Esc on, and PickField takes it, so
+      // the form's own Esc, which cancels the form, leaves it alone
+      await page.keyboard.press('ArrowDown')
+      await page.keyboard.press('Enter')
+      await expect(editing.getByRole('listbox')).toBeHidden()
+      await author.fill('a')
+      await expect(editing.getByRole('listbox')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(editing.getByRole('listbox')).toBeHidden()
+      await expect(editing.getByRole('button', { name: 'Save' })).toBeVisible()
+      await editing.getByRole('button', { name: 'Cancel' }).click()
       // A held document's Check-Out Info, a shaded box above the tabs, whose text axe checks for contrast in each theme
       const details = page.getByRole('region', { name: 'Details' })
       await heldRow.getByRole('rowheader').click()
@@ -265,9 +287,24 @@ for (const scheme of ['light', 'dark'] as const) {
       await main().getByRole('button', { name: 'Upload' }).focus()
       const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Alt+Enter')])
       await chooser.setFiles({ name: `Form ${RUN}.txt`, mimeType: 'text/plain', buffer: Buffer.from('form') })
-      await expect(page.getByRole('dialog', { name: 'File Documents' })).toBeVisible()
+      const form = page.getByRole('dialog', { name: 'File Documents' })
+      await expect(form).toBeVisible()
       await check('the File Documents form')
+      // Author's list open in the dialog: it is drawn in the dialog, over its fields, and the dialog's other fields stay shown
+      // to a screen reader (@healdan/ui's PickField). Author holds the filer, so it's emptied first, as in the properties form,
+      // and the list opens once the people come; Escape closes the list and leaves the dialog open
+      const formAuthor = form.getByRole('combobox', { name: 'Author', exact: true })
+      await formAuthor.fill('')
+      await page.keyboard.press('Tab')
+      await expect(formAuthor).toHaveValue('')
+      await formAuthor.fill('a')
+      await expect(form.getByRole('listbox').getByRole('option').first()).toBeVisible()
+      await check("the File Documents form with Author's list open")
       await page.keyboard.press('Escape')
+      await expect(form.getByRole('listbox')).toBeHidden()
+      await expect(form).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(form).toBeHidden()
     })
 
     test('the rename field, the delete question and the Help menu', async () => {
@@ -377,8 +414,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await check('document search Filters')
       // With Filters open the list is narrow: Title keeps the room it needs, and any text that doesn't fit ends in an ellipsis
       const cells = await main().getByRole('row').nth(1).evaluate((row) => {
-        // The box that draws the ellipsis is the text's own or one around it inside the cell (a matter's client sits inside the box
-        // that holds the matter number), and a flex box can't draw one
+        // The box that draws the ellipsis is the text's own or one around it inside the cell, and a flex box can't draw one
         const endsInEllipsis = (from: Element, cell: Element) => {
           for (let box: Element | null = from; box; box = box === cell ? null : box.parentElement) {
             const style = getComputedStyle(box)
@@ -394,6 +430,9 @@ for (const scheme of ['light', 'dark'] as const) {
       })
       expect(cells.unclipped, 'cells whose text is cut with no ellipsis').toBe(0)
       expect(cells.title, "the Title column's width").toBeGreaterThanOrEqual(200)
+      // The columns' least widths fit the list beside Filters at 1,280, so it doesn't scroll sideways (list columns spec 4.1)
+      const sideways = await main().getByRole('grid').evaluate((list) => list.scrollWidth - list.clientWidth)
+      expect(sideways, 'how far the list beside Filters scrolls sideways').toBeLessThanOrEqual(1)
     })
 
     test('search results, in the Matters scope', async () => {
