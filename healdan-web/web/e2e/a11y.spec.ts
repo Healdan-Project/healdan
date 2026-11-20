@@ -377,8 +377,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await check('document search Filters')
       // With Filters open the list is narrow: Title keeps the room it needs, and any text that doesn't fit ends in an ellipsis
       const cells = await main().getByRole('row').nth(1).evaluate((row) => {
-        // The box that draws the ellipsis is the text's own or one around it inside the cell (a matter's client sits inside the box
-        // that holds the matter number), and a flex box can't draw one
+        // The box that draws the ellipsis is the text's own or one around it inside the cell, and a flex box can't draw one
         const endsInEllipsis = (from: Element, cell: Element) => {
           for (let box: Element | null = from; box; box = box === cell ? null : box.parentElement) {
             const style = getComputedStyle(box)
