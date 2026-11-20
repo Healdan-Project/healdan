@@ -451,7 +451,8 @@ counted=$(wc -l < "$WORK/counts-maria" | tr -d ' ')
 check "MariaDB's tables were all counted ($counted)" test "$counted" -gt 70
 check "every table has as many rows on PostgreSQL as on MariaDB, and neither side has a table the other lacks" \
   same counts-maria counts-pg
-for t in ld_document ld_version ld_history ld_user hd_matter hd_trash hd_storage_file hd_email; do
+for t in ld_document ld_version ld_history ld_user hd_matter hd_trash hd_storage_file hd_email hd_admin_event \
+  hd_error hd_error_hour; do
   eval "want=\$COUNT_$t"
   check "$t has its $want rows" is "$want" "$(pg "select count(*) from $t")"
 done
@@ -463,6 +464,23 @@ check "one at .760 is .760" is '2026-11-19 10:15:31.760000' "$(when ld_date ld_h
 check "one at .000 is .000" is '2026-11-19 10:15:32.000000' "$(when ld_date ld_history "$DATE_000_ID")"
 check "a plain datetime, mended after the zero date, is as it was" \
   is "$VERSION_DATE.000000" "$(when ld_versiondate ld_version "$VERSION_ID")"
+# The Admin app's tables, V12's: an error's datetime(3)s, its accented message and its fingerprint, a char(64) that
+# PostgreSQL would pad were it shorter; its hours' counts, whose key is the error and a plain datetime; and the two
+# identity columns, whose sequences must be past every id moved
+check "the error's dates are to the millisecond, .069 as .069" \
+  is '2026-11-19 10:15:34.069000|2026-11-19 11:20:35.760000|2026-11-19 12:00:00.000000' \
+  "$(pg "select to_char(hd_firstseen, 'YYYY-MM-DD HH24:MI:SS.US'), to_char(hd_lastseen, 'YYYY-MM-DD HH24:MI:SS.US'),
+    to_char(hd_resolvedat, 'YYYY-MM-DD HH24:MI:SS.US') from hd_error where hd_id = $ERROR_ID")"
+check "its accented message, its fingerprint and who resolved it are as they were" \
+  is "$ERROR_MESSAGE|64|$ERROR_FINGERPRINT|1|admin" \
+  "$(pg "select hd_message, length(hd_fingerprint), hd_fingerprint, hd_resolved, hd_resolvedby from hd_error
+    where hd_id = $ERROR_ID")"
+check "its count for each hour is as it was" is '2026-11-19 10:00:00=2,2026-11-19 11:00:00=1' \
+  "$(pg "select string_agg(to_char(hd_hour, 'YYYY-MM-DD HH24:MI:SS') || '=' || hd_count, ',' order by hd_hour)
+    from hd_error_hour where hd_errorid = $ERROR_ID")"
+check "the administration record's and the errors' identity columns go on after ids $MAX_ADMIN_EVENT_ID and $MAX_ERROR_ID" \
+  is "t|t" "$(pg "select pg_sequence_last_value(pg_get_serial_sequence('hd_admin_event', 'hd_id')::regclass)
+    >= $MAX_ADMIN_EVENT_ID, pg_sequence_last_value(pg_get_serial_sequence('hd_error', 'hd_id')::regclass) >= $MAX_ERROR_ID")"
 check "the NUL became a space" is 'Quarterly Report' "$(pg "select ld_comment from ld_document where ld_id = $NUL_DOC_ID")"
 check "matter 1.$MATTER_NUMBER's accented name is as it was" \
   is "$MATTER_NAME" "$(pg "select hd_name from hd_matter where hd_number = $MATTER_NUMBER")"

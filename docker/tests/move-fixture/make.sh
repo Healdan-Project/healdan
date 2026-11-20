@@ -323,6 +323,23 @@ update ld_history set ld_date = '2026-11-19 10:15:30.069' where ld_id = $DATE_06
 update ld_history set ld_date = '2026-11-19 10:15:31.760' where ld_id = $DATE_760_ID;
 update ld_history set ld_date = '2026-11-19 10:15:32.000' where ld_id = $DATE_000_ID;
 update ld_version set ld_versiondate = '2026-11-19 10:15:33' where ld_id = $VERSION_ID;"
+# The Admin app's tables (V12). The app recorded step 3's matter in hd_admin_event itself. An error it logged goes in
+# here, resolved, with an accented message, first seen at .069 of a second, and its count for two hours, so that
+# hd_error's identity column, its char(64) fingerprint, its datetime(3)s and hd_error_hour's plain datetime and
+# two-column key all have rows to move.
+[ "$(sql "select count(*) from hd_admin_event where hd_action like 'matter.%'")" -gt 0 ] \
+  || die "the app recorded no matter in hd_admin_event"
+sql "insert into hd_error (hd_fingerprint, hd_level, hd_area, hd_logger, hd_message, hd_stack, hd_documents, hd_total,
+  hd_firstseen, hd_lastseen, hd_resolved, hd_resolvedby, hd_resolvedat)
+  values (sha2('move-fixture', 256), 'ERROR', 'Storage', 'com.logicaldoc.healdan.storage.MoveFixture',
+  'Le dépôt n''a pas répondu', 'java.io.IOException: Le dépôt n''a pas répondu', null, 3,
+  '2026-11-19 10:15:34.069', '2026-11-19 11:20:35.760', 1, 'admin', '2026-11-19 12:00:00.000');
+insert into hd_error_hour (hd_errorid, hd_hour, hd_count)
+  select hd_id, '2026-11-19 10:00:00', 2 from hd_error where hd_fingerprint = sha2('move-fixture', 256);
+insert into hd_error_hour (hd_errorid, hd_hour, hd_count)
+  select hd_id, '2026-11-19 11:00:00', 1 from hd_error where hd_fingerprint = sha2('move-fixture', 256);"
+ERROR_ID=$(sql "select hd_id from hd_error where hd_fingerprint = sha2('move-fixture', 256)")
+[ -n "$ERROR_ID" ] || die "the fixture's error isn't in hd_error"
 # The client addresses the app recorded, the Docker network's gateway here, become 127.0.0.1 wherever they are: in
 # ld_ip columns, ld_session's, and inside text such as ld_user_history's comments and ld_session.ld_clientid.
 address='[0-9]{1,3}([.][0-9]{1,3}){3}'
@@ -358,10 +375,13 @@ count() { sql "select count(*) from $1"; }
   echo "MAX_VERSION_ID=$(sql "select max(ld_id) from ld_version")"
   echo "MAX_HISTORY_ID=$(sql "select max(ld_id) from ld_history")"
   echo "MAX_TRASH_ID=$(sql "select max(hd_id) from hd_trash")"
+  echo "MAX_ADMIN_EVENT_ID=$(sql "select max(hd_id) from hd_admin_event")"
+  echo "MAX_ERROR_ID=$(sql "select max(hd_id) from hd_error")"
   echo "DOCUMENT_SEQ_NEXT=$(sql "select next_not_cached_value from ld_document_SEQ")"
   echo "TRASH_ID=$TRASH_ID"
   echo "# Row counts"
-  for t in ld_document ld_version ld_history ld_user hd_matter hd_trash hd_storage_file hd_email; do
+  for t in ld_document ld_version ld_history ld_user hd_matter hd_trash hd_storage_file hd_email hd_admin_event \
+    hd_error hd_error_hour; do
     echo "COUNT_$t=$(count "$t")"
   done
   echo "# Dates: three in ld_history (datetime(3)) and a plain datetime in ld_version"
@@ -370,6 +390,10 @@ count() { sql "select count(*) from $1"; }
   echo "DATE_000_ID=$DATE_000_ID"
   echo "VERSION_ID=$VERSION_ID"
   echo "VERSION_DATE='2026-11-19 10:15:33'"
+  echo "# The Admin app's tables: the error put in with SQL, first seen at .069 of a second, counted in two hours"
+  echo "ERROR_ID=$ERROR_ID"
+  echo "ERROR_FINGERPRINT=$(sql "select hd_fingerprint from hd_error where hd_id = $ERROR_ID")"
+  echo "ERROR_MESSAGE=\"Le dépôt n'a pas répondu\""
   echo "# Accented text, made through the app: matter 1.5's name"
   echo "MATTER_NUMBER=5"
   echo "MATTER_NAME='Dépôt Müller'"

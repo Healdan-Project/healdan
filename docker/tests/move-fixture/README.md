@@ -11,11 +11,11 @@ starts the app on the result (the PostgreSQL spec's §10.2). It's an install on 
 
 ## It's Frozen
 
-It was made once, on 2026-11-19, from commit `84c802acb`, `master`'s tip that day, which runs on MariaDB, with that
-commit's own image:
+It was made on 2026-11-20 (UTC), from commit `3390247e0`, `master`'s tip then, which runs on MariaDB at schema
+version 12, with that commit's own image:
 
 ```bash
-git worktree add ../mariadb-era 84c802acb
+git worktree add ../mariadb-era 3390247e0
 docker build -t pgb-mariadb:local ../mariadb-era
 MOVE_FIXTURE_CHECKOUT=../mariadb-era MOVE_FIXTURE_IMAGE=pgb-mariadb:local \
   MOVE_FIXTURE_PROJECT=pgb-fixture MOVE_FIXTURE_PORT=38091 docker/tests/move-fixture/make.sh
@@ -23,7 +23,10 @@ MOVE_FIXTURE_CHECKOUT=../mariadb-era MOVE_FIXTURE_IMAGE=pgb-mariadb:local \
 
 MariaDB's side never changes again, so neither does the fixture. It's made again only if a MariaDB migration or a
 change to LogicalDOC's tables reaches `master` before the switch to PostgreSQL merges: then run `make.sh` as above from
-the new last MariaDB commit, and commit the three files it writes.
+the new last MariaDB commit, and commit the three files it writes. That has happened once: the first fixture, of
+2026-11-19 from `84c802acb`, was at version 11, and the Admin app's `V12__admin.sql` reached `master` the same day. A
+MariaDB migration also moves the move's `SOURCE_VERSION` and `TARGET_VERSION` on by one, and the version of the
+script that widens LogicalDOC's text columns, which comes after every script MariaDB ran.
 
 ## What's in It
 
@@ -43,8 +46,12 @@ Keycloak. Then:
   - `apiuser`'s avatar, a data URL of 6,000 characters, where LogicalDOC's generic script has 4,000;
   - three history dates of doc # 1 at `.069`, `.760` and `.000` of a second, and its version 1.0's plain `datetime`;
   - every client address the app recorded, here the Docker network's gateway, put to `127.0.0.1`.
-- **Counters past their first values:** the sequences of every table written to, and `hd_trash`'s identity column,
-  so that the test can tell the next ids follow the old ones.
+- **The Admin app's tables,** which `V12__admin.sql` made: the administration record of the client and the matters
+  the stack made, the app's own rows; an error the app logged by itself (no mail server answers), with a stack of many
+  lines; and, with SQL, an error marked resolved, with an accented message, first seen at `.069` of a second, and its
+  counts for two hours.
+- **Counters past their first values:** the sequences of every table written to, and the identity columns of
+  `hd_trash`, `hd_admin_event` and `hd_error`, so that the test can tell the next ids follow the old ones.
 
 ## It's Public
 
