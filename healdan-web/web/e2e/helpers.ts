@@ -22,10 +22,14 @@ export async function signIn(page: Page, who: { username: string; password: stri
   // The page keeps hidden copies of its fields, so only the visible ones count.
   const user = page.locator('input[placeholder="username"]:visible')
   const password = page.locator('input[placeholder="password"]:visible')
-  // The smoke stack has a provider set up, so the password form is folded behind a link until it's chosen.
-  const fold = page.getByText('Sign In with a Password')
-  await expect(user.or(fold).first()).toBeVisible()
-  if (!(await user.isVisible())) await fold.click()
+  // The page draws the password form first, then asks the server for its sign-in providers, and with any (the smoke stack
+  // has one) folds the form behind a link when the answer comes. A look at the page can't tell a form that stays from one
+  // about to be folded: a field found visible was folded away before it was filled, and the fill waited until the test's
+  // time ran out, with no sign-in ever sent. So this waits for the mark the page puts on its body once that question is
+  // settled, answered or not (HealdanSignInButtons): `folded` when the form went behind the link, which this then opens.
+  const settled = page.locator('body[data-healdan-signin]')
+  await expect(settled).toBeAttached()
+  if ((await settled.getAttribute('data-healdan-signin')) === 'folded') await page.locator('[data-healdan-signin-link]').click()
   await user.fill(who.username)
   await password.fill(who.password)
   await password.press('Enter')

@@ -21,7 +21,7 @@ weight: 4
 | Check | Workflow | What it does |
 |---|---|---|
 | `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts and on upstream's retired ones (`check-maven-repositories.py`), for Oracle's and SQL Server's drivers (`check-database-drivers.py`) and for the licences of the User app's npm packages (`check-web-licences.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards, each with a PostgreSQL of its own (see below) |
-| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, `WarParsersTest`, `WarStorageTest` and `WarHibernateTest`, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`), the helper's open-save-close cycle (its stack test), provider sign-in through a stand-in Keycloak (`test-signin.sh`) and storage backends against a stand-in Garage (`test-storage.sh`) included, all on PostgreSQL 18, then on amd64 the move from MariaDB (`test-move.sh`) |
+| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, `WarParsersTest`, `WarStorageTest` and `WarHibernateTest`, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`), the helper's open-save-close cycle (its stack test), provider sign-in through a stand-in Keycloak (`test-signin.sh`) and storage backends against a stand-in Garage (`test-storage.sh`) included, all on PostgreSQL 18, then on amd64 the move from MariaDB (`test-move.sh`). A smoke test that fails uploads its logs and its failed browser tests' traces as an artifact (see [The Smoke Test's Results in the Image CI](#the-smoke-tests-results-in-the-image-ci)) |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
 | `Web` | `web.yml` | Builds and tests the User app and the Admin app in `healdan-web/web`: generates the APIs' types, typechecks, lints, runs the tests and builds (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
@@ -240,6 +240,30 @@ The smoke stack runs a throwaway Garage as a stand-in S3 server, and its step 5f
   of them are the first read to meet the outage it makes, which waits for the S3 client to give up, as the first
   read would on a server; the rest is the script's polls for the mover's work. Step 8 runs the script again after
   the restart.
+
+### The Smoke Test's Results in the Image CI
+
+The smoke test removes its stack when it ends, and the browser tests' container goes when they do, so what a failed
+run printed was all that was left of it. A single browser test failing now and then couldn't be explained from that:
+nothing said whether the request its page waited on had reached the server. So `docker-image.yml` sets
+`SMOKE_RESULTS` for the smoke test, and when the smoke test fails its next step, "Upload the smoke test's results",
+uploads the folder (see [What a Failed Run Keeps](../tests/#what-a-failed-run-keeps)). The folder is named once, in
+the smoke test's step, which hands it to the upload as its output `results`:
+
+- **The artifact is `smoke-results-<arch>-attempt-<n>`,** such as `smoke-results-amd64-attempt-1`, on the run's
+  page, kept 14 days. It holds the server's logs folder whole under `logs/`, Tomcat's access log among them, the
+  app's output, and under `e2e-results/` a folder for each failed browser test with its trace and screenshot.
+  `gh run download <run id> --name smoke-results-amd64-attempt-1` fetches it.
+- **Only a failed smoke test uploads.** A run that passes keeps no folder and uploads nothing, and a failure in
+  another step uploads nothing either. A smoke test that failed before its stack was up has nothing to upload,
+  which the step lets pass. A job cancelled at its 90-minute limit uploads nothing, so the browser tests, the step
+  most likely to hang, are stopped after 30 minutes, which fails the smoke test in time to keep its results.
+- **The attempt is in the name,** so a failed job run again uploads beside its first attempt's artifact, never in
+  its place. When the second attempt passes, the first attempt's artifact is the only record of the failure.
+- **It costs a run that passes nothing** but Tomcat writing a line for each request, about 9,000 in a run.
+- **Artifacts aren't Actions caches,** so they take none of the 10 GB under [Room for the Caches](#room-for-the-caches).
+- **Read it** with `npx playwright show-trace <test's folder>/trace.zip`, and find the request the page waited on in
+  `logs/access.log` by its time and path ([The Access Log](../tests/#the-access-log) has the line's form).
 
 ### The Move's Test in the Image CI
 
