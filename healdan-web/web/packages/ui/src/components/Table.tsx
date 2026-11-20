@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import {
   Cell,
   Collection,
   Column,
-  ColumnResizer,
   ResizableTableContainer,
   Row,
   Table as AriaTable,
@@ -21,8 +20,10 @@ import {
 } from 'react-aria-components'
 import { Icon } from '../icons'
 import { t } from '../strings'
+import { ColumnEdge } from './ColumnEdge'
 import { ItemContextMenu, type ItemMenu } from './ContextMenu'
 import styles from './Table.module.css'
+import { useColumnResizing } from './useColumnResizing'
 
 /** One row: what the Table needs to know of it, besides the caller's own fields. */
 export interface TableRow {
@@ -154,47 +155,6 @@ const rowParts = ['row', 'gridcell', 'rowheader']
 /** --row-height in tokens.css: the virtualiser lays rows out in pixels */
 const ROW_HEIGHT = 34
 
-interface EdgeProps {
-  column: string
-  /** The id of the heading's text, which alone names the heading */
-  headingId: string
-  /** The last heading's edge is the list's own, past which nothing is drawn */
-  last: boolean
-  /** The column's render props: whether React Aria is resizing it, and how to start a resize of it */
-  isResizing: boolean
-  startResize: () => void
-  /** React Aria is resizing the column */
-  onResizing: (column: string) => void
-  /** The column's startResize, or none once the heading is gone */
-  keepStart: (column: string, start: (() => void) | undefined) => void
-  onReset: (column: string) => void
-}
-
-// A heading's right edge, which a pointer drags to resize its column: React Aria's ColumnResizer, with the hidden slider it
-// resizes by from the keyboard, which tells a screen reader the width as it changes. The edge tells the Table which column
-// React Aria is resizing, which React Aria's resize handlers don't say, and keeps the column's startResize for the heading's
-// menu. A double-click puts the column's default width back.
-function Edge({ column, headingId, last, isResizing, startResize, onResizing, keepStart, onReset }: EdgeProps) {
-  const edge = useRef<HTMLDivElement>(null)
-  // Before any later event: the heading draws the resize's start in the render after it, and its moves come after that
-  useLayoutEffect(() => {
-    if (isResizing) onResizing(column)
-  }, [column, isResizing, onResizing])
-  useLayoutEffect(() => {
-    keepStart(column, startResize)
-    return () => keepStart(column, undefined)
-  }, [column, startResize, keepStart])
-  // The slider inside the heading would add its own name to the heading's, read on every heading, so the heading is named by
-  // its text alone. React Aria's Column takes no aria-labelledby, so it's set here.
-  useLayoutEffect(() => {
-    const heading = edge.current?.closest('[role="columnheader"]')
-    heading?.setAttribute('aria-labelledby', headingId)
-    return () => heading?.removeAttribute('aria-labelledby')
-  }, [headingId])
-  // React Aria names the slider by this and the heading it's in: "Resize Doc #"
-  return <ColumnResizer ref={edge} className={styles.resizer} aria-label={t('columns.resizer')} data-last={last || undefined} onDoubleClick={() => onReset(column)} />
-}
-
 // React Aria's Table, virtualised so a list of thousands draws only the rows on screen. Healdan's rule for a list's keys
 // sits here: Enter opens, Space previews, F2 renames and Delete deletes, each passed out for the view to do.
 export function Table<T extends TableRow>({
@@ -224,10 +184,9 @@ export function Table<T extends TableRow>({
   // refetch does) takes it from here.
   // `Collection` keeps each row's element with the ref callback of the render that last built it, and the Virtualizer can mount
   // that element again later. So a row's callback reads what is current from a ref, not from the render that made it.
-  // The headings are kept in the same way, so a heading's edge reads `resizing` from here too.
-  const latest = useRef({ drag, undraggable, resizing })
+  const latest = useRef({ drag, undraggable })
   useEffect(() => {
-    latest.current = { drag, undraggable, resizing }
+    latest.current = { drag, undraggable }
   })
   const canDragNow = (row: T) => latest.current.drag !== undefined && row.selectable !== false && row.id !== latest.current.undraggable
   const draggable = (row: T) => (element: HTMLElement | null) => {
@@ -340,61 +299,8 @@ export function Table<T extends TableRow>({
 
   const sortDescriptor: SortDescriptor | undefined = sort && { column: sort.column, direction: sort.direction }
 
-  // Resizing. Every column's width is given (React Aria's controlled width): the width a resize has reached while it lasts,
-  // else the kept one, else the column's default. React Aria only reports a resize's widths, which are drawn as it goes and
-  // handed to the caller at its end.
-  const [resized, setResized] = useState<Record<string, number> | null>(null)
+  const resize = useColumnResizing(columns, resizing)
   const headingIds = useId()
-  // The column being resized, as its heading drew it, and React Aria's widths when the resize began
-  const resizingColumn = useRef<string | undefined>(undefined)
-  const widthsAtStart = useRef<ReadonlyMap<Key, unknown>>(new Map())
-  // Each column's startResize, which starts a resize by the keyboard (the heading's menu's Resize Column)
-  const starts = useRef(new Map<string, () => void>())
-  const markResizing = (column: string) => {
-    resizingColumn.current = column
-  }
-  const keepStart = (column: string, start: (() => void) | undefined) => {
-    if (start) starts.current.set(column, start)
-    else starts.current.delete(column)
-  }
-  const reset = (column: string) => latest.current.resizing?.onReset(column)
-
-  function widthOf(column: TableColumn<T>): number | `${number}fr` | undefined {
-    if (!resizing) return column.width
-    return resized?.[column.id] ?? resizing.widths[column.id] ?? column.width ?? '1fr'
-  }
-
-  /**
-   * React Aria's widths as pixel widths of the column being resized and of the columns to its left, which a resize fixes
-   * (it freezes them at their widths then); the columns to its right keep what they had, so they're left out
-   */
-  function fixedBy(sizes: ReadonlyMap<Key, unknown>): Record<string, number> | undefined {
-    const widths: Record<string, number> = {}
-    for (const column of columns) {
-      const width = sizes.get(column.id)
-      if (typeof width === 'number') widths[column.id] = width
-      if (column.id === resizingColumn.current) return widths
-    }
-    return undefined
-  }
-
-  function onResizeStart(sizes: ReadonlyMap<Key, unknown>) {
-    widthsAtStart.current = sizes
-  }
-
-  function onResize(sizes: ReadonlyMap<Key, unknown>) {
-    const widths = fixedBy(sizes)
-    if (widths) setResized(widths)
-  }
-
-  function onResizeEnd(sizes: ReadonlyMap<Key, unknown>) {
-    const column = resizingColumn.current
-    const widths = fixedBy(sizes)
-    resizingColumn.current = undefined
-    setResized(null)
-    // A press on an edge that moved nothing, as each of a double-click's, fixes nothing
-    if (column !== undefined && widths && widths[column] !== widthsAtStart.current.get(column)) resizing?.onResizeEnd(widths)
-  }
 
   // An empty list draws no edges. React Aria turns its keyboard navigation off while the list is empty, which its edges take
   // as a resize going on: the hidden slider the focus first comes to would then keep Tab. The list takes the focus itself.
@@ -416,13 +322,13 @@ export function Table<T extends TableRow>({
         onRowAction={onOpen && ((key: Key) => onOpen(String(key)))}
       >
         {/* React Aria keeps each heading's element until a dependency changes, so what a heading draws from is one */}
-        <TableHeader columns={columns} dependencies={[columns, resizing === undefined, edges, resizing?.widths, resized]}>
+        <TableHeader columns={columns} dependencies={[columns, resizing === undefined, edges, resizing?.widths, resize.resized]}>
           {(column) => (
             <Column
               id={column.id}
               isRowHeader={column.isRowHeader}
               allowsSorting={column.allowsSorting && onSort !== undefined}
-              width={widthOf(column)}
+              width={resize.widthOf(column)}
               minWidth={column.minWidth}
               textValue={column.name}
               className={`${styles.column} ${column.align === 'end' ? styles.end : ''}`}
@@ -434,15 +340,13 @@ export function Table<T extends TableRow>({
                     {sortDirection && <Icon name={sortDirection === 'ascending' ? 'arrowUp' : 'arrowDown'} size={12} />}
                   </span>
                   {edges && (
-                    <Edge
+                    <ColumnEdge
                       column={column.id}
                       headingId={`${headingIds}-${column.id}`}
                       last={column.id === lastColumn}
                       isResizing={isResizing}
                       startResize={startResize}
-                      onResizing={markResizing}
-                      keepStart={keepStart}
-                      onReset={reset}
+                      events={resize.events}
                     />
                   )}
                 </>
@@ -483,7 +387,7 @@ export function Table<T extends TableRow>({
         aria-busy={busy || undefined}
       >
         {resizing ? (
-          <ResizableTableContainer className={styles.resizable} onResizeStart={onResizeStart} onResize={onResize} onResizeEnd={onResizeEnd}>
+          <ResizableTableContainer className={styles.resizable} {...resize.handlers}>
             {grid}
           </ResizableTableContainer>
         ) : (

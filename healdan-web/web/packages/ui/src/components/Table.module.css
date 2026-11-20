@@ -61,7 +61,9 @@
   color: var(--hd-text);
 }
 
-.column[data-hovered][data-allows-sorting] {
+/* A heading that sorts brightens while pointed at, but not while the pointer is on its edge, where a click doesn't sort
+   (the edge lies over the next heading's first 12 pixels too, so that one doesn't brighten either) */
+.column[data-hovered][data-allows-sorting]:not(:has(> .resizer[data-hovered])) {
   color: var(--hd-text);
 }
 

@@ -9,7 +9,7 @@ import { expectNoAxeViolations } from '../test/axe'
 import { bringObservedIntoView } from '../test/intersection'
 import '../tokens.css'
 import { Icon } from '../icons'
-import { Table, type TableColumn, type TableProps, type TableRow, type TableSort } from './Table'
+import { Table, type TableColumn, type TableProps, type TableResizing, type TableRow, type TableSort } from './Table'
 import tableCss from './Table.module.css?raw'
 import { MenuItem } from './Menu'
 
@@ -412,6 +412,42 @@ describe('Table resizing', () => {
   const header = (name: RegExp | string) => screen.getByRole('columnheader', { name })
   const edge = (name: RegExp | string) => header(name).querySelector<HTMLElement>('.resizer')!
 
+  // Defaults a list gives: a share of the width, and pixels
+  const sized: TableColumn<Item>[] = [
+    { ...columns[0]!, width: '3fr', minWidth: 220 },
+    { ...columns[1]!, width: 100 },
+    { ...columns[2]!, width: 120 },
+  ]
+
+  // A list that keeps its widths, as a view does: a resize's widths merged over those kept, a reset taking one away
+  function Kept({ kept: initial = {}, onResizeEnd, onReset, ...rest }: Omit<HarnessProps, 'resizing'> & { kept?: Record<string, number> } & Partial<Omit<TableResizing, 'widths'>>) {
+    const [widths, setWidths] = useState(initial)
+    return (
+      <Harness
+        {...rest}
+        resizing={{
+          widths,
+          onResizeEnd: (fixed) => {
+            onResizeEnd?.(fixed)
+            setWidths((kept) => ({ ...kept, ...fixed }))
+          },
+          onReset: (column) => {
+            onReset?.(column)
+            setWidths((kept) => Object.fromEntries(Object.entries(kept).filter(([id]) => id !== column)))
+          },
+        }}
+      />
+    )
+  }
+
+  /** Starts a resize of Doc # from its edge's slider and widens it by 10 pixels */
+  function widenDocNumber() {
+    const slider = within(header('Doc #')).getByRole('slider')
+    act(() => slider.focus())
+    press(slider, 'Enter')
+    press(slider, 'ArrowRight')
+  }
+
   it('draws no resizer without `resizing`, as before', () => {
     const { container } = render(<Harness />)
     expect(container.querySelector('.react-aria-ResizableTableContainer, .resizable')).toBeNull()
@@ -438,18 +474,33 @@ describe('Table resizing', () => {
     expect(tableCss).toMatch(/\.resizer::before \{[^}]*width: 2px/)
   })
 
-  it('takes no click from the heading\'s sort, and starts no drag of a row', async () => {
+  it('takes no click from the heading\'s sort, and lies in nothing that drags', async () => {
     const user = userEvent.setup()
     const onSort = vi.fn()
-    const data = { setData: vi.fn(), effectAllowed: 'uninitialized' }
     render(<Harness resizing={resizing()} onSort={onSort} drag={{ type: 'application/x-test-rows', data: (keys) => keys.join(',') }} />)
     await user.click(edge('Doc #'))
     expect(onSort).not.toHaveBeenCalled()
-    expect(fireEvent.dragStart(edge('Doc #'), { dataTransfer: data })).toBe(false)
-    expect(data.setData).not.toHaveBeenCalled()
+    // The browser starts a drag only from an element that is draggable, as the rows are, which jsdom can't do: the browser
+    // test that drags an edge (Task 12's) is the check that its drag resizes
+    expect(row(/Letter 1/).getAttribute('draggable')).toBe('true')
+    expect(edge('Doc #').closest('[draggable="true"]')).toBeNull()
     // The heading itself still sorts
     await user.click(header('Doc #'))
     expect(onSort).toHaveBeenCalledExactlyOnceWith({ column: 'docNumber', direction: 'ascending' })
+  })
+
+  it('keeps a heading\'s hover style off while the pointer is on its edge, where a click doesn\'t sort', async () => {
+    const user = userEvent.setup()
+    render(<Harness resizing={resizing()} onSort={vi.fn()} />)
+    // jsdom works the colours out from the stylesheets and tokens.css (light)
+    const secondary = 'rgb(110, 110, 115)'
+    const text = 'rgb(29, 29, 31)'
+    expect(getComputedStyle(header('Doc #')).color).toBe(secondary)
+    await user.hover(edge('Doc #'))
+    expect(header('Doc #').getAttribute('data-hovered')).toBe('true')
+    expect(getComputedStyle(header('Doc #')).color).toBe(secondary)
+    await user.hover(header('Doc #').querySelector('.heading')!)
+    expect(getComputedStyle(header('Doc #')).color).toBe(text)
   })
 
   it('draws a kept width on its column', () => {
@@ -457,22 +508,23 @@ describe('Table resizing', () => {
     expect(header('Doc #').style.width).toBe('140px')
   })
 
+  it('draws a width set from outside, and the column\'s default once it is taken away', () => {
+    const { rerender } = render(<Harness columns={sized} resizing={resizing({ docNumber: 140 })} />)
+    expect(header('Doc #').style.width).toBe('140px')
+    rerender(<Harness columns={sized} resizing={resizing()} />)
+    expect(header('Doc #').style.width).toBe('100px')
+    rerender(<Harness columns={sized} resizing={resizing({ docNumber: 260 })} />)
+    expect(header('Doc #').style.width).toBe('260px')
+  })
+
   it('hands out, at a resize\'s end, the width of the column resized and of those to its left, which it fixed', () => {
-    const sized: TableColumn<Item>[] = [
-      { ...columns[0]!, width: '3fr', minWidth: 220 },
-      { ...columns[1]!, width: 100 },
-      { ...columns[2]!, width: 120 },
-    ]
     const kept = resizing()
     render(<Harness columns={sized} resizing={kept} />)
-    const slider = within(header('Doc #')).getByRole('slider')
-    act(() => slider.focus())
     // Enter on the edge's slider starts a resize, and Right widens the column by 10 pixels, which the heading draws at once
-    press(slider, 'Enter')
-    press(slider, 'ArrowRight')
+    widenDocNumber()
     expect(header('Doc #').style.width).toBe('110px')
     expect(kept.onResizeEnd).not.toHaveBeenCalled()
-    press(slider, 'Enter')
+    press(within(header('Doc #')).getByRole('slider'), 'Enter')
     // Title, to its left, is fixed at its width then (jsdom's list has no width, so its least); Note, to its right, keeps its default
     expect(kept.onResizeEnd).toHaveBeenCalledExactlyOnceWith({ title: 220, docNumber: 110 })
   })
@@ -491,11 +543,40 @@ describe('Table resizing', () => {
 
   it('puts a column\'s default back on a double-click on its edge', async () => {
     const user = userEvent.setup()
-    const kept = resizing({ docNumber: 140 })
-    render(<Harness resizing={kept} />)
+    const onReset = vi.fn()
+    const onResizeEnd = vi.fn()
+    render(<Kept columns={sized} kept={{ docNumber: 140 }} onReset={onReset} onResizeEnd={onResizeEnd} />)
+    expect(header('Doc #').style.width).toBe('140px')
     await user.dblClick(edge('Doc #'))
-    expect(kept.onReset).toHaveBeenCalledExactlyOnceWith('docNumber')
+    expect(onReset).toHaveBeenCalledExactlyOnceWith('docNumber')
+    expect(header('Doc #').style.width).toBe('100px')
     // Its presses moved nothing, so they fixed nothing
+    expect(onResizeEnd).not.toHaveBeenCalled()
+  })
+
+  it('ends a resize cut short by the list emptying or resizing going off: nothing kept, the kept widths drawn, the keys back', () => {
+    const kept = resizing()
+    const { rerender } = render(<Harness columns={sized} resizing={kept} />)
+    widenDocNumber()
+    expect(header('Doc #').style.width).toBe('110px')
+    rerender(<Harness columns={sized} resizing={kept} rows={[]} />)
+    rerender(<Harness columns={sized} resizing={kept} />)
+    expect(header('Doc #').style.width).toBe('100px')
+    // The list's own keys work again, which React Aria turns off for a resize
+    const first = row(/Letter 1/)
+    act(() => first.focus())
+    press(first, 'ArrowDown')
+    expect(document.activeElement).toBe(row(/Letter 2/))
+    // And a width set from outside is drawn
+    const later = { ...kept, widths: { docNumber: 150 } }
+    rerender(<Harness columns={sized} resizing={later} />)
+    expect(header('Doc #').style.width).toBe('150px')
+
+    widenDocNumber()
+    expect(header('Doc #').style.width).toBe('160px')
+    rerender(<Harness columns={sized} />)
+    rerender(<Harness columns={sized} resizing={later} />)
+    expect(header('Doc #').style.width).toBe('150px')
     expect(kept.onResizeEnd).not.toHaveBeenCalled()
   })
 
@@ -539,12 +620,31 @@ describe('Table resizing', () => {
   })
 
   it('a kept layout wider than the list scrolls sideways and keeps each column\'s width', () => {
-    render(<Harness resizing={resizing({ title: 1500, docNumber: 700, note: 800 })} />)
-    expect(screen.getAllByRole('columnheader').map((one) => one.style.width)).toEqual(['1500px', '700px', '800px'])
-    const grid = screen.getByRole('grid')
-    expect(getComputedStyle(grid).overflowX).toMatch(/auto|scroll/)
-    // Rows keep their height: nothing wraps
-    expect(row(/Letter 1/).parentElement!.style.height).toBe('34px')
+    // jsdom lays nothing out, so the list is given a width, 2,000 pixels, which React Aria measures it by
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 2000 })
+    try {
+      const { rerender } = render(<Harness resizing={resizing()} />)
+      const grid = screen.getByRole('grid')
+      // What the list holds, which the virtualiser sizes
+      const content = () => Number.parseFloat((grid.firstElementChild as HTMLElement).style.width)
+      // Shares of the width fill the list
+      expect(screen.getAllByRole('columnheader').map((one) => one.style.width)).toEqual(['667px', '666px', '667px'])
+      expect(content()).toBe(grid.clientWidth)
+
+      rerender(<Harness resizing={resizing({ title: 1000, docNumber: 900, note: 1100 })} />)
+      // Each column is drawn at its width, its box the virtualiser's too: none is squeezed to fit
+      const headers = screen.getAllByRole('columnheader')
+      expect(headers.map((one) => one.style.width)).toEqual(['1000px', '900px', '1100px'])
+      expect(headers.map((one) => one.parentElement!.style.width)).toEqual(['1000px', '900px', '1100px'])
+      // So what it holds is wider than the list, which scrolls sideways: React Aria leaves the box's overflow to the stylesheet
+      expect(content()).toBe(3000)
+      expect(content()).toBeGreaterThan(grid.clientWidth)
+      expect(getComputedStyle(grid).overflowX).toBe('auto')
+      // Rows keep their height: nothing wraps
+      expect(row(/Letter 1/).parentElement!.style.height).toBe('34px')
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
+    }
   })
 })
 
