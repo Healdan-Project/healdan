@@ -18,19 +18,15 @@ interface Violation {
   nodes: { target: unknown[]; html: string; failureSummary?: string }[]
 }
 
-/**
- * Runs axe on the page, or on one part of it, and fails with each rule broken and where, in the colours the page is in now.
- * `skip` names rules not run, which only a part checked on its own may need, each with the caller's reason beside it.
- */
-export async function expectNoViolations(page: Page, what: string, within?: string, skip: string[] = []) {
+/** Runs axe on the page, or on one part of it, and fails with each rule broken and where, in the colours the page is in now. */
+export async function expectNoViolations(page: Page, what: string, within?: string) {
   // Once per page load: a navigation that loads the page again needs it again
   if (!(await page.evaluate(() => 'axe' in window))) await page.evaluate(source)
   const violations = await page.evaluate(
-    async ({ selector, skipped }) => {
+    async ({ selector }) => {
       const axe = (window as unknown as { axe: { run: (context: unknown, options: unknown) => Promise<{ violations: Violation[] }> } }).axe
-      const rules = Object.fromEntries(skipped.map((id) => [id, { enabled: false }]))
       // A frame holding a sender's page can't be reached (it is sandboxed without a script): the frame element itself is checked
-      const result = await axe.run(selector ? { include: [selector] } : document, { iframes: false, rules })
+      const result = await axe.run(selector ? { include: [selector] } : document, { iframes: false })
       return result.violations.map((one) => ({
         id: one.id,
         impact: one.impact,
@@ -38,7 +34,7 @@ export async function expectNoViolations(page: Page, what: string, within?: stri
         nodes: one.nodes.map((node) => ({ target: node.target, html: node.html.slice(0, 160), why: (node.failureSummary ?? '').replace(/\s+/g, ' ').slice(0, 240) })),
       }))
     },
-    { selector: within ?? null, skipped: skip },
+    { selector: within ?? null },
   )
   expect(violations, `${what}: axe`).toEqual([])
 }

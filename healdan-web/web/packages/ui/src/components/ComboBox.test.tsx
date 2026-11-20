@@ -3,6 +3,7 @@
 
 import axe from 'axe-core'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
@@ -132,9 +133,100 @@ describe('ComboBox', () => {
     await expectNoAxeViolations(container)
     type('ch')
     await screen.findByRole('listbox')
-    // The list is drawn in React Aria's overlay layer at the end of <body>, outside the page's landmarks by design, so the
-    // landmark rule can't hold for it.
-    const result = await axe.run(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } })
-    expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`)).toEqual([])
+    await expectNoAxeViolations(document.body)
+  })
+
+  // What carries aria-hidden, to say so when anything does
+  const hiddenOnes = () => [...document.querySelectorAll('[aria-hidden="true"]')].map((element) => element.outerHTML.slice(0, 80))
+
+  // A page as the apps' top bars have it: the box in a search landmark between links and buttons, and a main area
+  function Page() {
+    return (
+      <>
+        <header>
+          <a href="/app/">Home</a>
+          <form role="search">
+            <Example />
+          </form>
+          <button type="button">Help</button>
+        </header>
+        <main>
+          <h1>Recent Documents</h1>
+          <a href="/app/doc/10392">Charter.docx</a>
+        </main>
+      </>
+    )
+  }
+
+  it('leaves the page around it to a screen reader while its list is open, the list right after the box', async () => {
+    render(<Page />)
+    type('ch')
+    const list = await screen.findByRole('listbox')
+    // Found by role only when nothing hides them (aria-hidden on them or around them)
+    expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Help' })).toBeTruthy()
+    expect(within(screen.getByRole('main')).getByRole('heading', { level: 1, name: 'Recent Documents' })).toBeTruthy()
+    expect(hiddenOnes()).toEqual([])
+    // In the search landmark, after the box in reading order
+    const box = screen.getByRole('combobox', { name: 'Search' })
+    expect(screen.getByRole('search').contains(list)).toBe(true)
+    expect(box.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // The whole page, every rule but colour contrast (jsdom has no colours): nothing hidden holds a link (aria-hidden-focus),
+    // the page keeps its main landmark and heading, and the list is inside a landmark (region). jsdom's page has no title
+    // or language of its own, which the apps' index.html give theirs.
+    const { title, lang } = { title: document.title, lang: document.documentElement.lang }
+    document.title = 'Recent Documents'
+    document.documentElement.lang = 'en-US'
+    try {
+      const result = await axe.run(document, { rules: { 'color-contrast': { enabled: false } } })
+      expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`)).toEqual([])
+    } finally {
+      document.title = title
+      document.documentElement.lang = lang
+    }
+    // React Aria's mark for a layer it keeps shown is gone once it has looked
+    expect(document.querySelector('[data-react-aria-top-layer]')).toBeNull()
+  })
+
+  it('draws its list in a layer fixed over the window, which an element round the box that clips or is positioned leaves alone', async () => {
+    render(
+      <div style={{ position: 'relative', overflow: 'hidden' }}>
+        <Example />
+      </div>,
+    )
+    type('ch')
+    const list = await screen.findByRole('listbox')
+    let layer = list.parentElement
+    while (layer !== null && getComputedStyle(layer).position !== 'fixed') layer = layer.parentElement
+    expect(layer).not.toBeNull()
+    // The layer's last ancestor before the page is the caller's, not <body>: the list is right after the box
+    expect(layer!.parentElement).not.toBe(document.body)
+    expect(getComputedStyle(layer!).pointerEvents).toBe('none')
+    expect(getComputedStyle(list.closest('[data-trigger="ComboBox"]')!).pointerEvents).toBe('auto')
+  })
+
+  it('still keeps the page shown when the list opens again, and leaves nothing hidden once it closes', async () => {
+    render(<Page />)
+    const box = type('ch')
+    await screen.findByRole('listbox')
+    fireEvent.keyDown(box, { key: 'Escape' })
+    expect(screen.queryByRole('listbox')).toBeNull()
+    fireEvent.change(box, { target: { value: 'cha' } })
+    await screen.findByRole('listbox')
+    expect(hiddenOnes()).toEqual([])
+    fireEvent.keyDown(box, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    expect(hiddenOnes()).toEqual([])
+  })
+
+  it('goes on to the control after it with Tab, closing the list on the way', async () => {
+    const user = userEvent.setup()
+    render(<Page />)
+    await user.click(screen.getByRole('combobox', { name: 'Search' }))
+    await user.keyboard('ch')
+    await screen.findByRole('listbox')
+    await user.tab()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Help' }))
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
   })
 })
