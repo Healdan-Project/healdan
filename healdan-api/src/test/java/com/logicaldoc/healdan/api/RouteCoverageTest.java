@@ -45,10 +45,6 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 	 * ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and leaves the list once it's implemented.
 	 */
 	static final Set<String> DESCRIBED_AHEAD = Set.of(
-			// Task 14: matters
-			"GET /v1/admin/matters", "POST /v1/admin/matters", "POST /v1/admin/matters/check",
-			"GET /v1/admin/matters/next-number", "GET /v1/admin/matters/{id}", "PATCH /v1/admin/matters/{id}",
-			"DELETE /v1/admin/matters/{id}", "POST /v1/admin/matters/{id}/move",
 			// Task 15: Stores, and the groups a form needs
 			"GET /v1/admin/stores", "POST /v1/admin/stores", "GET /v1/admin/stores/{id}/access",
 			"PUT /v1/admin/stores/{id}/access", "GET /v1/admin/groups",

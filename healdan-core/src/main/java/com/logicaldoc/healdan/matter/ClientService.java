@@ -66,8 +66,7 @@ public class ClientService {
 		if (number < 1)
 			throw new HealdanRuleException("The client number must be a positive whole number.");
 		String clean = cleanName(name);
-		if (ClientDAO.get().findByNumber(number) != null)
-			throw new HealdanRuleException("Client number %d is already used.".formatted(number));
+		checkAvailable(number);
 
 		Client client = new Client();
 		client.setNumber(number);
@@ -107,6 +106,21 @@ public class ClientService {
 			events.record(new AdminEvent(AdminArea.MATTERS, "client.renamed", CLIENT, client.getId(),
 					MatterDisplay.client(client.getNumber(), clean), Map.of("name", new Change(before, clean))), actor);
 		return client;
+	}
+
+	/**
+	 * Refuses a number another client has. {@link #create} asks first; a
+	 * create that then loses a race for the number to another, on the table's
+	 * unique index, asks again once the other has committed, to be refused
+	 * with the same sentence.
+	 *
+	 * @param number the client number
+	 * @throws HealdanRuleException if a client has it
+	 * @throws PersistenceException error at data layer
+	 */
+	public void checkAvailable(long number) throws PersistenceException {
+		if (ClientDAO.get().findByNumber(number) != null)
+			throw new HealdanRuleException("Client number %d is already used.".formatted(number));
 	}
 
 	/**

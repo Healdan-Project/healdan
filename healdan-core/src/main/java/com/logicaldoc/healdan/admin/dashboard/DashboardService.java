@@ -142,7 +142,7 @@ public class DashboardService {
 	 */
 	enum Screen {
 		DASHBOARD("/admin/"),
-		MATTERS(Landing.CLASSIC),
+		MATTERS("/admin/matters"),
 		STORES(Landing.CLASSIC),
 		BACKENDS(Landing.CLASSIC),
 		USERS(Landing.CLASSIC),

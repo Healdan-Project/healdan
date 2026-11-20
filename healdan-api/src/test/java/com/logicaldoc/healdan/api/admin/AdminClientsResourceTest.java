@@ -318,6 +318,23 @@ public class AdminClientsResourceTest extends ApiTestCase {
 		assertEquals(List.of(), clientEvents());
 	}
 
+	/**
+	 * Two creates of one number at the same moment: the second, whose check came before the first committed, fails on
+	 * the unique index, and is answered as a used number (P2-R16), with nothing left of it
+	 */
+	@Test
+	public void testACreateThatLosesARaceForItsNumber() throws Exception {
+		ApiResponse response = AdminMattersResourceTest.whileAnotherHolds("""
+				insert into hd_client (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted, ld_tenantid,
+				                       hd_number, hd_name)
+				values (900001, now(), now(), 1, 0, 1, 1001, 'The first')""", "insert into hd_client",
+				post(CLIENTS).webSession(web).json(Map.of("number", 1001, "name", "The second")));
+
+		assertProblem(response, 409, "refused", "Client number 1001 is already used.");
+		assertEquals(900001L, ClientDAO.get().findByNumber(1001).getId());
+		assertEquals(List.of(), clientEvents());
+	}
+
 	@Test
 	public void testRenameChangesOnlyTheName() throws Exception {
 		Client client = fx.client(1001, "Ashcombe");
