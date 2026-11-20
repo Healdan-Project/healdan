@@ -6,8 +6,13 @@ import { createRootRoute, createRoute, createRouter, type ErrorComponentProps, t
 import { ErrorPanel, parseSearch, stringifySearch } from '@healdan/shell'
 import { ADMIN_BASE, routes } from './addresses'
 import { Frame } from './frame/Frame'
+import { ClientView, clientSearch } from './views/ClientView'
+import { ClientsView, clientsSearch } from './views/ClientsView'
 import { DashboardView } from './views/DashboardView'
 import { MattersView, mattersSearch } from './views/MattersView'
+import { MatterView, matterSearch } from './views/MatterView'
+import { TemplatesView } from './views/TemplatesView'
+import { TemplateView } from './views/TemplateView'
 import { NotFoundView } from './views/NotFoundView'
 
 // The frame holds every page, and an address no page has is said in the frame, in the app's own words. A page reads only
@@ -16,8 +21,27 @@ const rootRoute = createRootRoute({ component: Frame, notFoundComponent: NotFoun
 
 const dashboardRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.dashboard, component: DashboardView })
 
-// /matters: every matter, its order and filters in the address (MattersView). A matter's page, /matters/$id, is
-// Phase 2's next screen; until it's routed the frame says there's no such page.
+// /clients: every client, its words and order in the address (ClientsView); /clients/$id, a client's page, the order of
+// its matters in the address (ClientView), which says itself when the id names no client.
+const clientsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.clients,
+  validateSearch: clientsSearch,
+  component: function ClientsRoute() {
+    return <ClientsView search={clientsRoute.useSearch()} />
+  },
+})
+
+const clientRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.client,
+  validateSearch: clientSearch,
+  component: function ClientRoute() {
+    return <ClientView id={clientRoute.useParams().id} search={clientRoute.useSearch()} />
+  },
+})
+
+// /matters: every matter, its order and filters in the address (MattersView).
 const mattersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: routes.matters,
@@ -27,7 +51,28 @@ const mattersRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([dashboardRoute, mattersRoute])
+// /matters/$id: a matter's page, its tab in the address (MatterView); /templates, every workspace template, and
+// /templates/$id, a template's page, each saying itself when the id names nothing
+const matterRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.matter,
+  validateSearch: matterSearch,
+  component: function MatterRoute() {
+    return <MatterView id={matterRoute.useParams().id} search={matterRoute.useSearch()} />
+  },
+})
+
+const templatesRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.templates, component: TemplatesView })
+
+const templateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.template,
+  component: function TemplateRoute() {
+    return <TemplateView id={templateRoute.useParams().id} />
+  },
+})
+
+const routeTree = rootRoute.addChildren([dashboardRoute, clientsRoute, clientRoute, mattersRoute, matterRoute, templatesRoute, templateRoute])
 
 /**
  * A view that failed as it drew: the catalogue's short message and Try Again, which asks the server again for what the

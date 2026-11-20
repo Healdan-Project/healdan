@@ -39,8 +39,14 @@ export interface NavGroup {
  */
 export const NAV: readonly NavGroup[] = [
   { group: null, items: [{ label: 'admin.dashboard.title', route: routes.dashboard, icon: 'dashboard' }] },
-  // Clients and Workspace Templates join Matters in Phase 2
-  { group: 'admin.nav.firm', items: [{ label: 'admin.nav.matters', route: routes.matters, icon: 'briefcase' }] },
+  {
+    group: 'admin.nav.firm',
+    items: [
+      { label: 'admin.nav.clients', route: routes.clients, icon: 'building' },
+      { label: 'admin.nav.matters', route: routes.matters, icon: 'briefcase' },
+      { label: 'admin.nav.templates', route: routes.templates, icon: 'template' },
+    ],
+  },
   // Users and Groups, in Phase 4
   { group: 'admin.nav.people', items: [] },
   // Stores and Backends, in Phase 3

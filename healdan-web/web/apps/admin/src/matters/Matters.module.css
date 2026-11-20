@@ -27,6 +27,15 @@
   font-weight: var(--hd-weight-bold);
 }
 
+/* New Matter, at the end of the heading's line */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-self: center;
+  gap: var(--hd-space-3);
+  margin-inline-start: auto;
+}
+
 .count,
 .figures,
 .muted {

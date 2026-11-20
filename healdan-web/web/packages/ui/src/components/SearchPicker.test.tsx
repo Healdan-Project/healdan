@@ -38,11 +38,13 @@ function Example({
   onPick = () => {},
   selectedId,
   initial = [series, charter],
+  leaveOut,
 }: {
   search: (q: string) => Promise<Matter[]>
   onPick?: (matter: Matter) => void
   selectedId?: string
   initial?: Matter[]
+  leaveOut?: (matter: Matter) => boolean
 }) {
   return (
     <SearchPicker
@@ -63,6 +65,7 @@ function Example({
       )}
       onPick={onPick}
       selectedId={selectedId}
+      leaveOut={leaveOut}
     />
   )
 }
@@ -142,6 +145,28 @@ describe('SearchPicker', () => {
 
     await user.clear(field())
     expect(screen.getByRole('listbox', { name: 'Recent Matters' })).toBeTruthy()
+    expect(search).toHaveBeenCalledOnce()
+  })
+
+  it('leaves out the rows its caller says to, among the starting rows and what is found, as they change', async () => {
+    const user = userEvent.setup()
+    const { search, asked } = controlled()
+    const { rerender } = render(<Example search={search} initial={[series, charter, charity]} leaveOut={(matter) => matter === charter} />)
+    expect(names(screen.getByRole('listbox', { name: 'Recent Matters' }))).toEqual([
+      '1003.1 Series A Investment Kestrel Software Ltd',
+      '1004.3 Charity Registration Marsh Lane Community Trust',
+    ])
+    await user.type(field(), 'char')
+    await waitFor(() => expect(search).toHaveBeenCalledWith('char'))
+    await act(async () => asked[0]!.answer([charter, charity, lease]))
+    // The count is of the rows it shows
+    expect(names(await screen.findByRole('listbox', { name: '2 Results' }))).toEqual([
+      '1004.3 Charity Registration Marsh Lane Community Trust',
+      '1012.1 Lease of Unit 4 Charnwood Holdings Ltd',
+    ])
+    // A row its caller then leaves out goes from the answer it already has, without asking again
+    rerender(<Example search={search} initial={[series, charter, charity]} leaveOut={(matter) => matter === charter || matter === charity} />)
+    expect(names(screen.getByRole('listbox', { name: '1 Result' }))).toEqual(['1012.1 Lease of Unit 4 Charnwood Holdings Ltd'])
     expect(search).toHaveBeenCalledOnce()
   })
 

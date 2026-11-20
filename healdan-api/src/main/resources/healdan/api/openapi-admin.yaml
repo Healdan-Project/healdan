@@ -25,7 +25,10 @@ info:
          `not-editable`), or holds a character Healdan can't keep (NUL, or a
          lone surrogate).
       2. `404 not-found` for what the path names, when it doesn't exist or
-         isn't what the route acts on.
+         isn't what the route acts on. One query parameter is read the same
+         way: `clientId` of `GET /v1/admin/matters/next-number`, which reads
+         that client. A list's filters keep nothing for an id that names
+         nothing.
       3. `422 validation` for members that are missing, blank once the
          whitespace at either end is taken off, can't be changed, or are
          wrong in another way the route names, each in `fields` with its
@@ -248,7 +251,8 @@ paths:
           worked out at most every 15 minutes and never by a request:
           `figuresAt` says when. Until the first summary since the server
           started, they and `figuresAt` are null; a matter made since the
-          last summary counts nothing until the next.
+          last summary adds no documents and no activity to its client's
+          until the next.
         - `sort` is `number` (the default), `name` (ignoring case),
           `matters`, `documents` or `lastActivity`, and `order` `asc` (the
           default) or `desc`. Ties go by number, and a client with nothing
@@ -304,7 +308,9 @@ paths:
         - `422 validation` for `number` or `name` missing, or a name that's
           blank (`required`).
         - `409 refused` for a number below 1 or already used, and a name
-          over 255 characters.
+          over 255 characters. Of two creates of one number at the same
+          moment, the second is refused as a used number, with the same
+          sentence.
 
         Recorded as `client.created`, with its number and name.
       tags: [Matters]
@@ -457,8 +463,8 @@ paths:
           server keeps in memory for the Dashboard's Usage, worked out at
           most every 15 minutes and never by a request: `figuresAt` says
           when. Until the first summary since the server started, they and
-          `figuresAt` are null; a matter made since the last summary shows
-          none until the next.
+          `figuresAt` are null; a matter made since the last summary has
+          `documents` and `bytes` 0 and `lastActivity` null until the next.
         - `sort` is `number` (the default: by client number, then matter
           number), `name`, `client` (its name, then its number), `store`,
           `owner`, `template` (each by name), `documents`, `bytes` or
@@ -552,10 +558,13 @@ paths:
           4,000 characters; and the permission rules: a folder of the
           template that grants more than its parent (P1), or a group that
           could read the matter but can't read its Store (P2; the owner's
-          own group passes when the owner can read the Store).
+          own group passes when the owner can read the Store). Of two
+          creates of one number at the same moment, the second is refused
+          as a used number, with the same sentence.
 
         Recorded as `matter.created`, with every field it set: the client,
-        number, name, description, Store, template and owner, by name.
+        number, name, description, Store, template and owner, by name and
+        username, as `Ann Lee (alee)`.
       tags: [Matters]
       requestBody:
         required: true
@@ -727,7 +736,8 @@ paths:
           Store (P2).
 
         Recorded as `matter.updated`, with the fields whose values changed,
-        an owner by name. An edit that changes nothing isn't recorded.
+        an owner by name and username, as `Ann Lee (alee)`. An edit that
+        changes nothing isn't recorded.
       tags: [Matters]
       parameters:
         - $ref: '#/components/parameters/MatterPath'
@@ -824,7 +834,8 @@ paths:
           refuse, such as a group that can read the matter but can't read
           the new Store (P2).
 
-        Recorded as `matter.moved`, with the Store before and after.
+        Recorded as `matter.moved`, with the Store before and after, inside
+        the move's transaction.
       tags: [Matters]
       parameters:
         - $ref: '#/components/parameters/MatterPath'
@@ -2657,7 +2668,8 @@ components:
             Its live documents, not shortcuts and not in the Trash, counted
             through the client and matter stamped on them, as the summary
             last counted them; null until the summary has been worked out
-            since the server started
+            since the server started, and 0 for a matter made since the last
+            one
         bytes:
           type: [integer, 'null']
           format: int64
@@ -2700,7 +2712,7 @@ components:
       description: A matter, for its page
       additionalProperties: false
       required: [id, number, name, description, client, store, owner, template, documents, bytes, lastActivity,
-        folderId, indexFailed, previewsGivenUp]
+        figuresAt, folderId, indexFailed, previewsGivenUp]
       properties:
         id:
           type: integer
@@ -2745,6 +2757,13 @@ components:
           type: [string, 'null']
           format: date-time
           description: As in `MatterRow`, from the summary
+        figuresAt:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When the summary that gives `documents`, `bytes` and
+            `lastActivity` was worked out, as `MatterList`'s; null until it
+            has been since the server started
         folderId:
           type: integer
           format: int64
@@ -2898,8 +2917,9 @@ components:
         groupName:
           type: [string, 'null']
           description: |
-            That group's name, or that person's first and last name, for
-            **Let {group} Read the Store**; null with no `groupId`
+            That group's name, or that person's first and last name (the
+            username when both are blank), for **Let {group} Read the
+            Store**; null with no `groupId`
     MatterChange:
       type: object
       description: |

@@ -9,8 +9,9 @@ How to set Healdan up: Stores, clients and matters, workspace templates, users a
 kept.
 
 Start in [the Admin app](the-admin-app/), at `/admin/`, whose Dashboard shows what needs your attention, the server's
-health and how Healdan is used. Everything else is still done in the Classic Interface, under **Administration** and
-in the Documents tab's folder tree, and the rest of this guide describes those screens.
+health and how Healdan is used, and where [clients and matters](clients-and-matters/) are made. Everything else is
+still done in the Classic Interface, under **Administration** and in the Documents tab's folder tree, and the rest of
+this guide describes those screens.
 
 {{< cards >}}
   {{< card link="the-admin-app/" title="The Admin App" icon="presentation-chart-bar" >}}

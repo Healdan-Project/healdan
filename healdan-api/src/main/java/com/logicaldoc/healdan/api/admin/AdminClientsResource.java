@@ -16,6 +16,7 @@ import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.admin.AdminArea;
 import com.logicaldoc.healdan.admin.dashboard.MatterStats;
 import com.logicaldoc.healdan.admin.dashboard.UsageSummary;
@@ -205,7 +206,8 @@ public class AdminClientsResource {
 
 	/**
 	 * Creates a client with the number and name given; {@link ClientService#create} refuses a number that's taken
-	 * or below 1, and a name that's too long, as {@code 409 refused}.
+	 * or below 1, and a name that's too long, as {@code 409 refused}, and one that loses a race for its number to
+	 * another create is refused as a used number ({@link NumberRaces}).
 	 *
 	 * @param body the new client
 	 * @param uri the request's address, for the new client's
@@ -224,9 +226,12 @@ public class AdminClientsResource {
 		if (!fields.isEmpty())
 			throw ApiProblem.validation(fields);
 
+		User actor = Caller.current().user();
 		try {
-			// A refusal of the service's is a veto, which the ProblemMapper answers 409 refused, wrapped or not
-			Client client = ClientService.get().create(body.number(), body.name(), Caller.current().user());
+			// A refusal of the service's is a veto, which the ProblemMapper answers 409 refused, wrapped or not; so is
+			// a create that loses a race for its number to another
+			Client client = NumberRaces.create(() -> ClientService.get().create(body.number(), body.name(), actor),
+					() -> ClientService.get().checkAvailable(body.number()));
 			String location = UriBuilder.fromPath(uri.getBaseUri().getRawPath()).path("v1/admin/clients/{id}")
 					.build(client.getId()).toString();
 			return Response.status(Response.Status.CREATED).header(HttpHeaders.LOCATION, location)

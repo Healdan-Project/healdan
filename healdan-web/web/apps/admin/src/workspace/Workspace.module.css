@@ -1,0 +1,263 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The Workspace Editor, as 02-matters.html's B draws it: the folder tree in a column of its own, the chosen folder's
+   panel beside it. A narrow window puts the panel under the tree. */
+
+.editor {
+  display: grid;
+  grid-template-columns: minmax(240px, 330px) minmax(0, 1fr);
+  gap: var(--hd-space-5);
+  align-items: start;
+  padding-top: var(--hd-space-4);
+}
+
+@media (max-width: 1023px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.treePane {
+  padding: var(--hd-space-3);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-sidebar);
+}
+
+.paneHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-2);
+  margin-bottom: var(--hd-space-2);
+}
+
+.paneTitle {
+  margin: 0 auto 0 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-medium);
+}
+
+.nodeName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lock {
+  display: inline-flex;
+  flex: none;
+  color: var(--hd-text-secondary);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-5);
+  min-width: 0;
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3);
+}
+
+.folderName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  min-width: 0;
+  margin: 0 auto 0 0;
+  font-size: var(--hd-font-size-title);
+  font-weight: var(--hd-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.withIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+}
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3);
+}
+
+.sectionTitle {
+  margin: 0 auto 0 0;
+  font-size: var(--hd-font-size);
+  font-weight: var(--hd-weight-bold);
+}
+
+.note,
+.followed {
+  margin: 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.followed {
+  font-size: inherit;
+}
+
+.problem {
+  margin: 0;
+  color: var(--hd-required);
+}
+
+/* Who Can Use This Folder: a row per group or person, its access at the end */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: var(--hd-space-2) var(--hd-space-3);
+  border-bottom: 1px solid var(--hd-line);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.table thead th {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-medium);
+}
+
+.table tbody th {
+  font-weight: normal;
+}
+
+.who {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+}
+
+.who svg {
+  color: var(--hd-text-secondary);
+}
+
+.chip {
+  padding: 0 var(--hd-space-2);
+  border-radius: var(--hd-radius-small);
+  background: var(--hd-pill);
+  color: var(--hd-text);
+  font-size: var(--hd-font-size-small);
+}
+
+.removeCell {
+  width: 1%;
+  text-align: end;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3);
+}
+
+.push {
+  margin-inline-start: auto;
+}
+
+/* Show Every Permission: each row's 25 tick boxes in columns */
+.every {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-4);
+}
+
+.permissions {
+  margin: 0;
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+}
+
+.permissions legend {
+  padding: 0 var(--hd-space-2);
+  font-weight: var(--hd-weight-medium);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--hd-space-2) var(--hd-space-4);
+}
+
+.granted {
+  margin: 0;
+}
+
+/* What New Matter would refuse in a template, beside the folder's Save, which it doesn't stop */
+.warning {
+  display: flex;
+  gap: var(--hd-space-3);
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-inline-start: 3px solid var(--hd-caution-text);
+  border-radius: var(--hd-radius);
+  background: var(--hd-window);
+}
+
+.warning svg {
+  flex: none;
+  color: var(--hd-caution-text);
+}
+
+.warning p,
+.warning ul {
+  margin: 0;
+}
+
+.warning ul {
+  padding-inline-start: var(--hd-space-5);
+}
+
+/* A form's fields, one under another */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  max-width: 420px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+}
+
+/* Add Person or Group's search: drawn as the other fields are (Fields.module.css's input) */
+.search {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 26px;
+  padding: 0 var(--hd-space-3);
+  border: 1px solid var(--hd-field-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-field);
+  color: var(--hd-text);
+  font: inherit;
+}
+
+.search:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+}

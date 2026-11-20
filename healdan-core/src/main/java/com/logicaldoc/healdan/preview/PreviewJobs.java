@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -186,6 +187,26 @@ public class PreviewJobs {
 	public long countGivenUp() {
 		return jdbc.queryForObject("select count(*) from hd_preview_job where hd_attempts >= ?", Long.class,
 				MAX_ATTEMPTS);
+	}
+
+	/**
+	 * How many of a matter's previews were given up on, as {@link #countGivenUp()} counts them, narrowed to the jobs
+	 * of the live documents (not deleted, not shortcuts) stamped with the matter's client and matter numbers (the
+	 * Admin app's matter page, spec section 8.3).
+	 *
+	 * @param clientNumber the client's number
+	 * @param matterNumber the matter's number
+	 * @return how many jobs were given up on
+	 */
+	public long countGivenUpIn(long clientNumber, long matterNumber) {
+		return jdbc.queryForObject("""
+				select count(*)
+				  from hd_preview_job j
+				  join ld_document d on d.ld_id = j.hd_docid and d.ld_deleted = 0 and d.ld_docref is null
+				  join ld_document_ext c on c.ld_docid = d.ld_id and c.ld_name = ? and c.ld_stringvalue = ?
+				  join ld_document_ext m on m.ld_docid = d.ld_id and m.ld_name = ? and m.ld_stringvalue = ?
+				 where j.hd_attempts >= ?""", Long.class, HealdanConstants.ATTR_CLIENT, Long.toString(clientNumber),
+				HealdanConstants.ATTR_MATTER, Long.toString(matterNumber), MAX_ATTEMPTS);
 	}
 
 	/**

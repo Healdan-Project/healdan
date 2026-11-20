@@ -5,38 +5,195 @@ weight: 2
 
 Every matter belongs to a client, and only admins create them. A matter **is** its workspace: one folder in a
 Store, copied from a template. Your install can call matters something else, such as projects: see the matter label
-in [Healdan Settings](../healdan-settings/).
+in [Healdan Settings](../healdan-settings/). The Admin app's screens use that word too, as in **Projects** and **New
+Project**.
+
+Clients and matters are made in [the Admin app](../the-admin-app/): **Clients** and **Matters** are under **Firm** in
+its left pane.
 
 ## Clients
 
-A client has a number, a positive whole number, and a name. Client numbers are unique.
+A client has a number, a whole number from 1, and a name. Client numbers are unique. A client's number never changes
+once the client is made, only its name, and nothing deletes a client.
 
-- **Add a client** from [Healdan Settings](../healdan-settings/), or with **New client…** in the New Matter dialog.
-  Healdan suggests the highest client number plus one.
-- **Edit a client's name** in Healdan Settings.
+### The Clients List
 
-## Creating a Matter
+**Clients**, at `/admin/clients`, lists every client, with how many there are beside the title, such as "5 Clients".
 
-Right-click the Store the matter belongs in and choose **New Matter…**.
+| Column | What it shows |
+|---|---|
+| Number | the client's number |
+| Name | its name |
+| Matters | how many matters it has, not counting those deleted |
+| Documents | how many documents its matters hold, not counting shortcuts or the Trash |
+| Last Activity | the day a document in one of its matters was last filed or saved |
 
-![The New Matter dialog, filled in: client 1004 – Marsh Lane Community Trust, number 2, name Community Hall Lease, a description, Store Client Work, owner hashcombe and template Transactional](new-matter.png)
+- **Number or Name** keeps the clients whose number starts with what you type, or whose name holds it, in any case.
+  The list follows once you pause typing.
+- **Sorting:** click a column's heading to sort by it, and click it again to reverse the order. The list starts in
+  number order. Clients that tie stay in number order, and one with nothing to sort by, such as no last activity,
+  comes last either way.
+- **Documents** and **Last Activity** come from the figures Healdan works out in the background for the Dashboard's
+  [Usage](../the-admin-app/#usage), when the server starts and then 15 minutes after the last time. A line above the
+  list says when, as in "Documents and Last Activity as of" and a time. Until the first time after a start they're
+  blank, and the line says they haven't been worked out yet. A matter made since the last time adds nothing to its
+  client's until the next.
+- The list shows 100 clients, and the next 100 as you scroll down to them.
+- The page's address keeps what you typed and the order, so a reload or a copied link shows the same list, and Back
+  from a client's page comes back to it.
+- Select a client, with a click or Enter, to open its page.
+
+With no client yet it says "No client has been made yet.", and with none that matches, "No client matches the
+filter."
+
+### A Client's Page
+
+- **Clients**, above the title, goes back to the list.
+- **The title** is the client's number and name, such as "1001 – Saltmarsh Shipping Ltd", with **Rename** and **New
+  Matter** beside it. **New Matter** here starts with the client chosen, so you begin with the matter's name.
+- **Number**, **Matters**, **Documents** and **Last Activity**. Documents and Last Activity say "Not worked out yet"
+  until the figures have been worked out since the server started, and Last Activity says "None" for a client with
+  nothing filed.
+- **Its matters,** as the [Matters list](#the-matters-list) shows them, without the Client column, and sorted the same
+  way. With none, it says "No matter has been made for this client yet."
+
+An address that names no client says "Client Not Found", with **Go to Clients**.
+
+The page and the list ask Healdan again each time you come back to their window, so a change another administrator
+made shows without a reload.
+
+### New Client
+
+**New Client**, at the end of the Clients list's title, asks for:
+
+- **Number:** Healdan fills in the highest client number plus one, or 1 for the first client, and you can type over
+  it. The dialog reminds you that it can't be changed once the client is made. The suggestion reserves nothing, so
+  if another administrator makes a client with that number first, yours is refused.
+- **Name:** at most 255 characters.
+
+New Client says what Healdan would refuse before you press **Create Client**, which stays greyed out until it's put
+right:
+
+| It says | When |
+|---|---|
+| "The number has to be a whole number, 1 or more." | the number is anything else |
+| "Client number 1001 is already used, by Saltmarsh Shipping Ltd." | a client has that number already |
+| "That is too long." | the name is over 255 characters |
+
+Anything Healdan still refuses when you press it, such as a number another administrator took a moment before, shows
+in the dialog in Healdan's own words. While the client is being made, **Cancel** is greyed out and Esc does nothing,
+so you never back out of a client that's then made: once it's made, Healdan says "Created" with its number and name,
+and its page opens. If it was refused, the dialog stays, saying why.
+
+### Renaming a Client
+
+**Rename**, on the client's page, changes its name and nothing else. The dialog shows the number as text ("Its number,
+1001, can't be changed."), and **Rename** stays greyed out until the name differs from the one it has. The client's
+matters keep their folders' names, which are made of their numbers and their own names.
+
+### Clients in the Classic Interface
+
+The client list on the Classic Interface's [Healdan Settings](../healdan-settings/), with **Add client** and **Edit**,
+still works, and so does **New client…** in its New Matter dialog. Healdan records every client made and every rename,
+whichever screen it's made from, with who made it and when.
+
+## Matters
+
+### The Matters List
+
+**Matters**, at `/admin/matters`, lists every matter that isn't deleted: the one place that does, as the User app
+lists no Store's matters. Beside the title is how many there are, such as "8 Matters".
+
+| Column | What it shows |
+|---|---|
+| Matter | its number, with its client's, such as 1001.1 |
+| Name | its own name |
+| Client | its client's name |
+| Store | the Store it's in |
+| Owner | who owns it. Blank once that person's account has been deleted |
+| Template | the workspace template it was made from. Blank once that template has been deleted |
+| Documents | how many documents it holds, not counting shortcuts or the Trash |
+| Size | the size of those documents' files, the current version of each |
+| Last Activity | the day one of its documents was last filed or saved |
+
+The filters above the list all apply together:
+
+- **Number or Name** keeps the matters whose number, such as `1001.1`, starts with what you type, or whose own name
+  or client's name holds it, in any case.
+- **Client:** type a client's number or part of its name, and choose the client.
+- **Store:** a menu of the Stores, **All Stores** to begin with.
+- **Owner:** type part of a person's name or username, and choose them. People whose accounts are disabled are
+  offered too, with **Disabled** beside their username, as their matters stay theirs.
+- **Clear Filters,** which shows while a filter is set, takes them all off and keeps the order.
+
+The list sorts, pages, keeps its address and asks again when you come back to it as the Clients list does: it starts
+in number order, by client and then by matter. Documents, Size and Last Activity come from the same figures, and the
+line above the list says when they were worked out, as in "Documents, Size and Last Activity as of" and a time. A
+matter made since the last time shows 0 for Documents and Size, and no Last Activity, until the next. With no matter
+yet it says "No matter has been made yet.", and with none that matches, "No matter matches the filters."
+
+### Creating a Matter
+
+**New Matter**, at the end of the Matters list's title or on a client's page, opens New Matter. Its fields are on the
+left, and **It Will Contain**, on the right, shows the matter's own folder named as it will be, such as "1004.2 –
+Community Hall Lease", with the chosen template's folders and search folders under it.
 
 | Field | What to put |
 |---|---|
-| Client | the client, from the client list. **New client…** adds one |
-| Number | the matter's number. Healdan suggests the next one; you can change it |
+| Client | type the client's number or part of its name, and choose it. **New Client…** beside it makes one, starting with what you typed as its name, and puts it in the form |
+| Number | the matter's number. Healdan fills in the client's next free number, and says which it is under the field. You can type over it. Choosing another client takes that client's next number. See [Matter Numbers](#matter-numbers) |
+| Store | the Store it goes in, from a menu. **New Store…** beside it makes one and chooses it: see [Stores](../stores/#creating-a-store) |
 | Name, Description | the matter's name, and optionally what it's about |
-| Store | the Store it goes in. The one you right-clicked is chosen |
-| Owner | the user responsible for it |
-| Template | the workspace template to copy, from the Templates Store |
+| Owner | the person responsible for it: type part of their name or username, and choose them. Only people who can sign in are offered |
+| Template | the workspace template to copy, from a menu. With none yet, New Matter says one is needed first: see [Workspace Templates](../workspace-templates/) |
 
-When you click **Create**, Healdan:
+#### Problems Before You Create It
 
-1. copies the template into the Store as the matter's workspace, named like `1004.2 – Community Hall Lease`;
-2. stamps the workspace with its client and matter, which pass down to everything in it;
-3. gives the owner every permission on the workspace.
+New Matter checks the form as you fill it in, once you pause typing, with the rules **Create Matter** keeps, so what
+Healdan would refuse is said first, in its own words:
 
-Then adjust the workspace's permissions on its **Security** tab, if the template's aren't right for this matter.
+- **Beside the field it's about:** a client, Store, template or owner that no longer exists; a number below 1, or one
+  a matter has already, a deleted matter included, as a number is never used again; a name with `/`, `\` or markup,
+  or too long with the matter's number before it; a description over 4,000 characters; and an owner whose account is
+  disabled.
+- **Under the form:** a folder of the template that grants a group more than the folder it's in does, which a
+  matter's folders can't (see [Permissions](../permissions/#folders-narrow-never-widen)); and a group the template
+  would let into the matter, or the owner, who can't read the Store, as in "Everyone can't read the Store Regional
+  Office."
+
+**Create Matter** stays greyed out until every field but Description is filled in, the check has answered for the
+form as it is, and it found nothing.
+
+#### Letting a Group Read the Store
+
+A group, or an owner, who can't read the Store has a button that names them, such as **Let Everyone Read the
+Store**, with "Or choose another Store." beside it. The button lets them see the Store, keeping everyone who could
+see it already, then checks the form again, and Healdan says so: "Everyone can now see Regional Office." If Healdan
+refuses, the reason shows under the problem.
+
+#### When You Create It
+
+When you press **Create Matter**, Healdan does all of this, or none of it:
+
+1. copies the template into the Store as the matter's own folder, named like `1004.2 – Community Hall Lease`, with its
+   folders, their permissions and properties, and its search folders;
+2. stamps every folder with the matter's client and matter, which pass down to everything filed in it;
+3. gives the owner Full Access to the matter's folder.
+
+While it's being made, **Cancel** is greyed out and Esc does nothing. Once it's made, Healdan says "Created" with the
+matter's number and name, and the dialog closes. Anything Healdan still refuses, such as a number another
+administrator took a moment before, shows above the buttons in Healdan's own words. Healdan records the new matter,
+with every field it set and who made it.
+
+To change the workspace's permissions, if the template's aren't right for this matter, use its **Security** tab in
+the Classic Interface.
+
+#### New Matter in the Classic Interface
+
+Right-click a Store in the Classic Interface's folder tree and choose **New Matter…** to make a matter there. It has
+the same fields, the Store you right-clicked chosen, and Healdan applies the same rules when you click **Create**.
+
+![The Classic Interface's New Matter dialog, filled in: client 1004 – Marsh Lane Community Trust, number 2, name Community Hall Lease, a description, Store Client Work, owner hashcombe and template Transactional](new-matter.png)
 
 ## Matter Numbers
 
@@ -54,6 +211,8 @@ if no two clients share a matter number; otherwise Healdan lists the clashes. Ma
 two clients share one, numbering stays per client.
 
 ## Editing and Deleting a Matter
+
+These are done in the Classic Interface:
 
 - **Edit Matter…** on the workspace's right-click menu changes its name, description and owner. The workspace's name
   follows the matter's. Changing the owner gives the new owner every permission on the workspace and removes the old

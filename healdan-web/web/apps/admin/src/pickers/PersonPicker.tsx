@@ -32,10 +32,14 @@ export interface PersonPickerProps {
   onChange: (person: A['PersonBrief'] | null) => void
 }
 
-type Person = A['PersonBrief'] & { enabled: boolean }
+/** A person found, with whether their account can sign in */
+export type Person = A['PersonBrief'] & { enabled: boolean }
 
-/** The people found for the words, from the source `accounts` names; the other source is never asked */
-function usePeople(q: string, accounts: PersonAccounts): Person[] {
+/**
+ * The people found for the words (a picker's settled, trimmed text; nothing is asked for none), from the source
+ * `accounts` names; the other source is never asked. Workspace Editor's Add Person or Group asks it too.
+ */
+export function usePeople(q: string, accounts: PersonAccounts): Person[] {
   const api = useApi()
   const canOwn = useQuery({
     // The User app's key for the same question

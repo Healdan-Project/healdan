@@ -139,8 +139,8 @@ takes Esc first).
 
 `NAV`, in `frame/LeftPane.tsx`, is the left pane: the Dashboard, then the spec's groups in its order (Firm, People,
 Storage, Search and Monitoring), each a heading from the catalogue and its `NavItem`s. A group with no items isn't
-drawn, so the pane shows the Dashboard alone until a later phase adds a screen. **Classic Interface** is at the
-pane's foot, apart from `NAV`. A screen joins when its phase ships:
+drawn, so the pane shows only the groups a shipped screen is in: Firm, with Clients and Matters, so far.
+**Classic Interface** is at the pane's foot, apart from `NAV`. A screen joins when its phase ships:
 
 1. Write the view in `views/`. Take its data through `useAdminQuery` (below), and its pieces from `@healdan/ui`.
 2. Give it a route in `router.tsx`, a child of the root, at its path in `addresses.ts`' `routes`.

@@ -33,6 +33,11 @@ export interface SearchPickerProps<T> {
   onPick: (item: T) => void
   /** The row picked, which shows as picked */
   selectedId?: string
+  /**
+   * The rows to leave out, of the starting rows and of what is found, as those a list it adds to has already: asked each
+   * time it draws, so a row picked from an answer goes from it at once
+   */
+  leaveOut?: (item: T) => boolean
 }
 
 /** What the text asks the server to find, or nothing while it is too short */
@@ -86,7 +91,7 @@ type Answer<T> = { q: string; items: T[] } | { q: string; failed: true }
  * field: the arrow keys move through the rows, and Enter picks one (React Aria's Autocomplete). An answer to an older
  * question is dropped, and the last answer stays until the next, so the list doesn't blink while typing.
  */
-export function SearchPicker<T>({ label, placeholder, hint, initialHeading, initial, search, id, render, onPick, selectedId }: SearchPickerProps<T>) {
+export function SearchPicker<T>({ label, placeholder, hint, initialHeading, initial, search, id, render, onPick, selectedId, leaveOut }: SearchPickerProps<T>) {
   const [text, setText] = useState('')
   const wanted = searchable(text)
   const settled = useDebounced(wanted, SEARCH_DELAY_MS)
@@ -111,10 +116,12 @@ export function SearchPicker<T>({ label, placeholder, hint, initialHeading, init
   }, [settled])
 
   const shown = wanted === undefined ? undefined : answer
-  const rows = wanted === undefined ? initial : shown && 'items' in shown ? shown.items : []
+  const kept = (items: T[]) => (leaveOut ? items.filter((item) => !leaveOut(item)) : items)
+  const found = shown && 'items' in shown ? kept(shown.items) : []
+  const rows = wanted === undefined ? kept(initial) : found
   const query = shown?.q ?? ''
   const heading = rows.length === 0 ? undefined : wanted === undefined ? initialHeading : plural('searchPicker.results', rows.length)
-  const note = shown === undefined ? '' : 'failed' in shown ? t('problems.unknown') : shown.items.length === 0 ? t('search.empty') : ''
+  const note = shown === undefined ? '' : 'failed' in shown ? t('problems.unknown') : found.length === 0 ? t('search.empty') : ''
 
   function choose(keys: Selection) {
     if (keys === 'all') return

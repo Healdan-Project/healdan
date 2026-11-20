@@ -185,6 +185,22 @@ public final class AclMath {
 		return firstExcess(child, parent, true);
 	}
 
+	/**
+	 * @param child an ACL
+	 * @param parent another
+	 * @return the group {@link #firstExcess} is about: the lowest group id the
+	 *         child grants something the parent doesn't grant it; null if
+	 *         there is none
+	 */
+	public static Long firstExcessGroup(Map<Long, Set<Permission>> child, Map<Long, Set<Permission>> parent) {
+		for (Map.Entry<Long, Set<Permission>> entry : new TreeMap<>(child).entrySet()) {
+			Set<Permission> allowed = parent.getOrDefault(entry.getKey(), Set.of());
+			if (!allowed.containsAll(entry.getValue()))
+				return entry.getKey();
+		}
+		return null;
+	}
+
 	private static String firstExcess(Map<Long, Set<Permission>> child, Map<Long, Set<Permission>> parent,
 			boolean describe) {
 		for (Map.Entry<Long, Set<Permission>> entry : new TreeMap<>(child).entrySet()) {

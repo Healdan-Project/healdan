@@ -123,6 +123,38 @@ public class IndexCounts {
 	}
 
 	/**
+	 * How many of a matter's documents couldn't be indexed, as {@link #counts()} counts the failed, narrowed to the
+	 * documents stamped with the matter's client and matter numbers (the Admin app's matter page, spec section 8.3).
+	 *
+	 * @param clientNumber the client's number
+	 * @param matterNumber the matter's number
+	 * @return how many failed
+	 */
+	public long failedIn(long clientNumber, long matterNumber) {
+		String sql = """
+				select coalesce(sum(%s), 0)
+				  from ld_document d
+				  join ld_document_ext c
+				    on c.ld_docid = d.ld_id and c.ld_name = :clientname and c.ld_stringvalue = :client
+				  join ld_document_ext m
+				    on m.ld_docid = d.ld_id and m.ld_name = :mattername and m.ld_stringvalue = :matter
+				 where %s""".formatted(FAILED, LIVE);
+		Long failed = jdbc.queryForObject(sql, stamped(params(), clientNumber, matterNumber), Long.class);
+		return failed != null ? failed : 0;
+	}
+
+	/**
+	 * @param params a query's parameters
+	 * @return them with {@code :clientname}, {@code :client}, {@code :mattername} and {@code :matter}, the stamps of
+	 *         the matter's documents, as {@code Inheritance.fixedValues} writes them
+	 */
+	private static MapSqlParameterSource stamped(MapSqlParameterSource params, long clientNumber, long matterNumber) {
+		return params.addValue("clientname", HealdanConstants.ATTR_CLIENT)
+				.addValue("client", Long.toString(clientNumber)).addValue("mattername", HealdanConstants.ATTR_MATTER)
+				.addValue("matter", Long.toString(matterNumber));
+	}
+
+	/**
 	 * @param offset how many to skip
 	 * @param limit the most to return
 	 * @return the documents that couldn't be indexed, latest error first, each with the matter stamped on it

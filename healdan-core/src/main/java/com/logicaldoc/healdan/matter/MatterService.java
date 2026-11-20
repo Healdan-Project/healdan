@@ -87,15 +87,20 @@ public class MatterService {
 
 	static final String CANT_KEEP_DESCRIPTION = "A %s description can't contain " + StorableText.CANT_KEEP + ".";
 
-	static final String NO_CLIENT = "That client no longer exists.";
+	/** The refusal of a client that doesn't exist; New Matter's check says it too */
+	public static final String NO_CLIENT = "That client no longer exists.";
 
-	static final String NO_STORE = "That Store no longer exists.";
+	/** The refusal of a Store that doesn't exist, or isn't a Store */
+	public static final String NO_STORE = "That Store no longer exists.";
 
-	static final String NO_TEMPLATE = "That template no longer exists.";
+	/** The refusal of a template that doesn't exist, or isn't a template */
+	public static final String NO_TEMPLATE = "That template no longer exists.";
 
-	static final String NO_OWNER = "That owner no longer exists.";
+	/** The refusal of an owner who doesn't exist */
+	public static final String NO_OWNER = "That owner no longer exists.";
 
-	static final String DISABLED_OWNER = "The owner %s is disabled.";
+	/** The refusal of an owner whose account is disabled, with their username */
+	public static final String DISABLED_OWNER = "The owner %s is disabled.";
 
 	static final String NO_MATTER = "That %s no longer exists.";
 
@@ -170,8 +175,8 @@ public class MatterService {
 		String name = cleanName(req.name(), client.getNumber(), req.number());
 		String display = MatterDisplay.format(client.getNumber(), req.number(), name);
 		String description = cleanDescription(req.description());
-		Folder store = FolderDAO.get().findById(req.storeId());
-		if (store == null || locator.locate(store).kind() != Kind.STORE)
+		Folder store = liveStore(req.storeId());
+		if (store == null)
 			throw new HealdanRuleException(NO_STORE);
 		Folder template = template(req.templateFolderId());
 		if (template == null)
@@ -227,7 +232,7 @@ public class MatterService {
 			fields.put("description", setTo(description));
 		fields.put("store", setTo(store.getName()));
 		fields.put("template", setTo(template.getName()));
-		fields.put("owner", setTo(owner.getFullName()));
+		fields.put("owner", setTo(ownerName(owner.getFullName(), owner.getUsername())));
 		events.record(new AdminEvent(AdminArea.MATTERS, "matter.created", MATTER, matter.getId(), display, fields),
 				actor);
 		return matter;
@@ -238,7 +243,8 @@ public class MatterService {
 	 * owner change gives the new owner's own group every permission on the
 	 * workspace and takes the old owner's entry away. The client and the number
 	 * never change. Only the fields whose values changed are recorded, an
-	 * owner by name; an edit that changes none isn't.
+	 * owner by name and username, as {@code Ann Lee (alee)}, since two people
+	 * can share a name; an edit that changes none isn't.
 	 *
 	 * @param matterId the matter
 	 * @param name the new name; it is trimmed
@@ -306,7 +312,8 @@ public class MatterService {
 		if (!Objects.equals(cleanDescription, oldDescription))
 			changed.put("description", new Change(oldDescription, cleanDescription));
 		if (owner != null)
-			changed.put("owner", new Change(fullName(oldOwnerId), owner.getFullName()));
+			changed.put("owner",
+					new Change(ownerName(oldOwnerId), ownerName(owner.getFullName(), owner.getUsername())));
 		if (!changed.isEmpty())
 			events.record(new AdminEvent(AdminArea.MATTERS, "matter.updated", MATTER, matter.getId(), display, changed),
 					actor);
@@ -339,10 +346,23 @@ public class MatterService {
 	}
 
 	/**
+	 * @param storeId a folder's id
+	 * @return the folder, if it is a live Store: a workspace under the root but
+	 *         Default and Templates; null otherwise
+	 * @throws PersistenceException error at data layer
+	 */
+	public Folder liveStore(long storeId) throws PersistenceException {
+		Folder store = FolderDAO.get().findById(storeId);
+		return store != null && locator.locate(store).kind() == Kind.STORE ? store : null;
+	}
+
+	/**
+	 * @param templateId a folder's id
 	 * @return the template, null if it is not a live folder directly under the
 	 *         Templates Store that can be copied
+	 * @throws PersistenceException error at data layer
 	 */
-	private Folder template(long templateId) throws PersistenceException {
+	public Folder template(long templateId) throws PersistenceException {
 		Long templatesId = settings.templatesStoreId();
 		Folder template = FolderDAO.get().findById(templateId);
 		if (template == null || templatesId == null || template.getParentId() != templatesId
@@ -366,6 +386,35 @@ public class MatterService {
 	}
 
 	/**
+	 * Checks a matter's name as {@link #create} and {@link #update} do, for New
+	 * Matter's check, which may not know the numbers yet.
+	 *
+	 * @param name the name
+	 * @param clientNumber the client's number; null if it isn't known yet
+	 * @param matterNumber the matter's number; null if it isn't known yet
+	 * @return the name, trimmed
+	 * @throws HealdanRuleException with the sentence {@link #create} refuses it
+	 *         with; its length is checked only once both numbers are known, as
+	 *         the display name puts them before it
+	 */
+	public String checkName(String name, Long clientNumber, Long matterNumber) throws HealdanRuleException {
+		boolean numbered = clientNumber != null && matterNumber != null;
+		return cleanName(name, numbered ? clientNumber : 1, numbered ? matterNumber : 1, numbered);
+	}
+
+	/**
+	 * Checks a matter's description as {@link #create} and {@link #update} do.
+	 *
+	 * @param description the description, null for none
+	 * @return the description, trimmed; null for none
+	 * @throws HealdanRuleException with the sentence {@link #create} refuses it
+	 *         with
+	 */
+	public String checkDescription(String description) throws HealdanRuleException {
+		return cleanDescription(description);
+	}
+
+	/**
 	 * @return the name, trimmed
 	 * @throws HealdanRuleException if it is empty, holds '/', or makes the
 	 *         display name, the workspace folder's name, too long; if it holds
@@ -373,9 +422,18 @@ public class MatterService {
 	 *         would store the display name as another folder name
 	 */
 	private String cleanName(String name, long clientNumber, long matterNumber) throws HealdanRuleException {
+		return cleanName(name, clientNumber, matterNumber, true);
+	}
+
+	/**
+	 * @param length whether to check the display name's length, which needs
+	 *        the real numbers
+	 */
+	private String cleanName(String name, long clientNumber, long matterNumber, boolean length)
+			throws HealdanRuleException {
 		String clean = name == null ? "" : name.strip();
 		int max = MAX_DISPLAY_LENGTH - MatterDisplay.format(clientNumber, matterNumber, "").length();
-		if (clean.isEmpty() || clean.contains("/") || clean.length() > max)
+		if (clean.isEmpty() || clean.contains("/") || (length && clean.length() > max))
 			throw new HealdanRuleException(BAD_NAME.formatted(label(), max));
 		if (!StorableText.holds(clean))
 			throw new HealdanRuleException(CANT_KEEP_NAME.formatted(label()));
@@ -456,20 +514,30 @@ public class MatterService {
 	}
 
 	/**
-	 * @return the user's full name, as the matter dialog shows an owner; a
+	 * @return the user's full name, as the matter dialog shows an owner, with
+	 *         the username, as {@link #ownerName(String, String)} gives it; a
 	 *         deleted user's too, whose row CE keeps; null if there is no such
 	 *         user
 	 */
-	private String fullName(long userId) {
+	private String ownerName(long userId) {
 		List<String> names = jdbc.query("select ld_firstname, ld_name, ld_username from ld_user where ld_id = ?",
 				(rs, i) -> {
 					User user = new User();
 					user.setFirstName(rs.getString(1));
 					user.setName(rs.getString(2));
 					user.setUsername(rs.getString(3));
-					return user.getFullName();
+					return ownerName(user.getFullName(), user.getUsername());
 				}, userId);
 		return names.isEmpty() ? null : names.get(0);
+	}
+
+	/**
+	 * @return how the administration record names an owner: the full name,
+	 *         with the username, which tells two people of one name apart, such
+	 *         as {@code Ann Lee (alee)}
+	 */
+	private static String ownerName(String fullName, String username) {
+		return "%s (%s)".formatted(fullName, username);
 	}
 
 	/**
