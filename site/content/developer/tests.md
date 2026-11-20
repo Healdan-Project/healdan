@@ -509,9 +509,10 @@ PostgreSQL's log, steps 1 to 7: 62 lines read, 0 ERROR lines, 0 expected and 0 u
 - **It fails** when it can't read the log, when the log is empty or isn't PostgreSQL's (it has no `database system
   is ready to accept connections`), and when the list can't be read, so a clean log is one it read.
 - **An unexpected line doesn't fail the run yet.** It prints every one, and passes, until the list has held for five
-  consecutive runs of the switch's draft pull request's CI on each architecture, each run's `PostgreSQL's log` lines
-  reporting 0 unexpected. Then, before that pull request is marked ready, a commit of it makes the check fail on one:
-  the function's last line, `return 0`, becomes `[ "$unexpected" = 0 ]`.
+  consecutive runs of CI on each architecture, each run's `PostgreSQL's log` lines reporting 0 unexpected. The switch
+  merged with four such runs on arm64 and two on amd64, on the owner's word, so `master`'s own runs make up the rest.
+  Then a pull request of its own makes the check fail on one: the function's last line, `return 0`, becomes
+  `[ "$unexpected" = 0 ]`.
 
 The start-up tool asks whether a table exists with `to_regclass`, never by reading it, so a start leaves no `ERROR`
 line, and `test-move.sh` checks the moves left none either.
