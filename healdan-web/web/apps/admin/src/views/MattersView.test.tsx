@@ -252,7 +252,7 @@ describe('The Matters list', () => {
   })
 
   it('loads 100 rows at a time as the end of the list comes into view, to the end of what the server counted', async () => {
-    const many = Array.from({ length: 250 }, (_, i) => matterRow({ id: 1000 + i, number: `2000.${i + 1}`, name: `Matter ${String(i + 1).padStart(3, '0')}` }))
+    const many = Array.from({ length: 201 }, (_, i) => matterRow({ id: 1000 + i, number: `2000.${i + 1}`, name: `Matter ${String(i + 1).padStart(3, '0')}` }))
     const { api } = await renderApp('/matters', {
       'GET /v1/admin/matters': ({ query }: { query?: Record<string, unknown> }) => {
         const offset = Number(query?.offset ?? 0)
@@ -261,11 +261,11 @@ describe('The Matters list', () => {
     })
     const table = await grid()
     expect(await within(table).findByRole('row', { name: '2000.1 Matter 001' })).toBeTruthy()
-    expect(within(main()).getByText('250 Matters')).toBeTruthy()
+    expect(within(main()).getByText('201 Matters')).toBeTruthy()
     act(() => bringObservedIntoView())
     expect(await within(table).findByRole('row', { name: '2000.150 Matter 150' })).toBeTruthy()
     act(() => bringObservedIntoView())
-    expect(await within(table).findByRole('row', { name: '2000.250 Matter 250' })).toBeTruthy()
+    expect(await within(table).findByRole('row', { name: '2000.201 Matter 201' })).toBeTruthy()
     act(() => bringObservedIntoView())
     await new Promise((resolve) => setTimeout(resolve, 100))
     expect(api.callsTo('GET /v1/admin/matters').map((call) => [call.query?.offset, call.query?.limit])).toEqual([
