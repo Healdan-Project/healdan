@@ -10,9 +10,9 @@
 # Two can run on one machine at once, each with a project name and host ports of its own, for example:
 #   SMOKE_PROJECT=smoke-b SMOKE_PORT=28080 SMOKE_KEYCLOAK_PORT=28180 SMOKE_GARAGE_PORT=23900 docker/smoke-test.sh
 # A run that fails prints what it can of the stack's logs, then removes the stack. SMOKE_RESULTS=<folder>, empty or not
-# yet there, also keeps what can't be printed: Tomcat's whole access log and the server's whole log, and under
-# e2e-results/ each failed browser test's trace and screenshot (docker/tests/test-web.sh's WEB_RESULTS). A run that
-# passes leaves no folder. CI sets it, and uploads the folder when the job fails.
+# yet there (in a folder that is), also keeps what can't be printed: Tomcat's whole access log and the server's whole
+# log, and under e2e-results/ each failed browser test's trace and screenshot (docker/tests/test-web.sh's
+# WEB_RESULTS). A run that passes leaves no folder. CI sets it, and uploads the folder when the job fails.
 set -euo pipefail
 # Before the cd, so a relative folder is the caller's
 RESULTS=${SMOKE_RESULTS:-}
@@ -75,10 +75,14 @@ if [ "${SMOKE_BUILD:-1}" = 0 ] && [ -z "${LOGICALDOC_IMAGE:-}" ] && ! docker ima
   echo "or name the image with LOGICALDOC_IMAGE, such as logicaldoc-community:local, which docker compose build tags."
   refused=1
 fi
-# What a failed run keeps goes into a folder with nothing of another run's in it.
+# What a failed run keeps goes into a folder with nothing of another run's in it. The folder it's in has to be there,
+# so the one named is the only one a run makes, and a run that passes can take it away again.
 results_made=0
 if [ -n "$RESULTS" ]; then
-  if [ ! -e "$RESULTS" ]; then
+  if [ ! -d "$(dirname "$RESULTS")" ]; then
+    echo "SMOKE_RESULTS '$RESULTS' is in a folder that isn't there: make that folder, or name another"
+    refused=1
+  elif [ ! -e "$RESULTS" ]; then
     results_made=1
   elif [ ! -d "$RESULTS" ] || [ -n "$(ls -A "$RESULTS")" ]; then
     echo "SMOKE_RESULTS '$RESULTS' holds files already, or isn't a folder: name an empty folder, or one that isn't"
@@ -124,10 +128,13 @@ smoke_server_xml() {
   awk -v valve="$valve" '/<\/Host>/ { print "        " valve; added++ } { print } END { exit added == 1 ? 0 : 1 }' \
     "$WORK/server.image.xml" > "$SERVER_XML" \
     || { echo "  the image's server.xml hasn't one </Host> to add the valve before"; return 1; }
+  # Tomcat reads it as the image's user, whatever this shell's umask made of it
+  chmod 644 "$SERVER_XML"
 }
 # The access log's first line, which is the first request Tomcat answered
 access_log_first() { compose exec -T app head -n 1 "$ACCESS_LOG" 2>/dev/null; }
-# The time step 9 began, as the access log writes times, for a failed run to show that step's slow requests
+# The time step 9 began, as the access log writes times, once its browser tests have failed: a failed run then shows
+# that step's slow requests, and otherwise the whole run's
 WEB_FROM=
 # db_query <SQL>: the app's database, as the app's role over TCP, as the app connects; rows tab-separated, no headers
 db_query() {
@@ -221,10 +228,10 @@ show_server_log() {
     [ ! -f "$dir/run.log" ] || cp "$dir/run.log" "$RESULTS/dms.log"
   fi
 }
-# show_slow_requests <access log>: the requests Tomcat took 2 seconds or more to answer, the last 40 of them. Those
-# since step 9 began, once it has: a browser test that waited on a request finds it here, or learns that the server
-# answered it at once or not at all. Before that, the whole run's, which has slow requests of its own (a start's
-# first pages, the previews, step 5f's outage).
+# show_slow_requests <access log>: the requests Tomcat took 2 seconds or more to answer, the last 40 of them. When
+# step 9 failed, those since it began: a browser test that waited on a request finds it here, or learns that the
+# server answered it at once or not at all. When another step did, the whole run's, which has slow requests of its
+# own (a start's first pages, the previews, step 5f's outage).
 show_slow_requests() {
   local slow=$WORK/slow-requests of="the run's"
   [ -z "$WEB_FROM" ] || of="those since step 9 began, at ${WEB_FROM#* },"
@@ -820,10 +827,15 @@ check "the Indexer runs every 5 seconds for the browser's searches" fast_indexer
 # organising, the keyboard walk and the accessibility scans); then curl checks the web session's forgery refusals. Its
 # output carries its own PASS/FAIL lines.
 web_started=$SECONDS
-WEB_FROM=$(date -u '+%Y-%m-%d %H:%M:%S')
-# With SMOKE_RESULTS, each failed browser test's trace and screenshot are kept under it
-check "the User app in the browser" env BASE="$BASE" HEALDAN_INDEXER_FAST=1 \
-  WEB_RESULTS="${RESULTS:+$RESULTS/e2e-results}" bash docker/tests/test-web.sh
+web_began=$(date -u '+%Y-%m-%d %H:%M:%S')
+# With SMOKE_RESULTS, each failed browser test's trace and screenshot are kept under it, in a folder made here, as
+# test-web.sh makes only the one it's given
+[ -z "$RESULTS" ] || mkdir -p "$RESULTS"
+web_test() {
+  env BASE="$BASE" HEALDAN_INDEXER_FAST=1 WEB_RESULTS="${RESULTS:+$RESULTS/e2e-results}" bash docker/tests/test-web.sh \
+    || { WEB_FROM=$web_began; return 1; }
+}
+check "the User app in the browser" web_test
 echo "step 9 took $((SECONDS - web_started)) s"
 # The db container step 8 made: its log holds steps 8 and 9
 check "PostgreSQL's log, steps 8 and 9, read against $DB_LOG_EXPECTED (unexpected lines reported, not yet failing)" \

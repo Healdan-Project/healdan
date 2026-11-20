@@ -18,17 +18,23 @@
 # (every 30 minutes). docker/smoke-test.sh sets it to every 5 seconds before running this; for a run by hand, do the
 # same (Developer Guide, Tests) and set HEALDAN_INDEXER_FAST=1, or finding.spec waits 80 s and fails.
 # The browser container is removed when it ends, and what Playwright kept for the failed tests goes with it. To keep
-# it, set WEB_RESULTS to a folder, empty or not yet there: when a test fails, each failed test's folder is copied
-# there, with its trace (trace.zip: every action, the page before and after it, the console and each request with its
-# times), its screenshot and its error-context.md. A run that passes leaves no folder. Open a trace with
-# npx playwright show-trace <folder>/trace.zip, or at trace.playwright.dev.
+# it, set WEB_RESULTS to a folder, empty or not yet there (in a folder that is): when a test fails, each failed test's
+# folder is copied there, with its trace (trace.zip: every action, the page before and after it, the console and each
+# request with its times), its screenshot and its error-context.md. A run that passes leaves no folder. Open a trace
+# with npx playwright show-trace <folder>/trace.zip, or at trace.playwright.dev.
 set -euo pipefail
-# Before the cd, so a relative folder is the caller's. Made here: Docker would make a missing one as root.
+# Before the cd, so a relative folder is the caller's. Made here: Docker would make a missing one as root. Only the
+# folder named, not the one it's in, so a run that passes can take away all it made.
 WEB_RESULTS=${WEB_RESULTS:-}
 results_made=0
 if [ -n "$WEB_RESULTS" ]; then
-  [ -d "$WEB_RESULTS" ] || results_made=1
-  mkdir -p "$WEB_RESULTS"
+  if [ ! -d "$WEB_RESULTS" ]; then
+    if ! mkdir "$WEB_RESULTS"; then
+      echo "WEB_RESULTS '$WEB_RESULTS' can't be made: name a folder, empty or not there yet, in a folder that is there"
+      exit 1
+    fi
+    results_made=1
+  fi
   WEB_RESULTS=$(cd "$WEB_RESULTS" && pwd)
   if [ -n "$(ls -A "$WEB_RESULTS")" ]; then
     echo "WEB_RESULTS '$WEB_RESULTS' holds files already: name an empty folder, or one that isn't there yet"
@@ -74,8 +80,11 @@ browsers() {
         for f in e2e-results/*/error-context.md; do [ -f "$f" ] && { echo "== $f"; head -c 8000 "$f"; echo; }; done
         # And, with WEB_RESULTS, everything it kept for them goes to the host: each failed test has a folder there
         if [ -d /results ] && [ -d e2e-results ]; then
-          # Not the scratch folders of a run stopped at its tenth failure: they hold no finished test
-          cp -R e2e-results/. /results/ && rm -rf /results/.playwright-artifacts-* && chown -R "$RESULTS_OWNER" /results
+          # Not the scratch folders of a run stopped at its tenth failure: they hold no finished test. Whatever was
+          # copied is handed over, a copy cut short too, or the host's user couldn't remove it
+          cp -R e2e-results/. /results/
+          rm -rf /results/.playwright-artifacts-*
+          chown -R "$RESULTS_OWNER" /results
         fi
         exit $status; }; }' || status=$?
   if [ -n "$WEB_RESULTS" ]; then

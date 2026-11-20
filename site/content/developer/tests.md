@@ -537,10 +537,10 @@ at the end of the `Smoke test` step of the `Test (amd64)` or `Test (arm64)` job:
   failure.
 - **`dms.log`'s last 40 lines.**
 - **The requests Tomcat took 2 seconds or more to answer,** from [its access log](#the-access-log), the last 40 of
-  them, after a line that counts the log's requests. Once step 9 has begun, only that step's: a browser test that
+  them, after a line that counts the log's requests. When step 9 failed, only that step's: a browser test that
   waited on a request finds it there with its time, or learns that the server answered at once or not at all.
-  Before step 9, the whole run's, which has slow requests of its own (a start's first pages, the previews, step 5f's
-  outage).
+  When another step failed, the whole run's, which has slow requests of its own (a start's first pages, the
+  previews, step 5f's outage).
 
 When a browser test in step 9 fails, `docker/tests/test-web.sh` also prints the page of each failed test as Playwright
 saw it (its `error-context.md`), before the container that ran them goes. It's in the step's output, after the line
@@ -593,8 +593,9 @@ can't be printed, in that folder:
 SMOKE_RESULTS=/tmp/smoke-results docker/smoke-test.sh
 ```
 
-- **The folder is empty or not there yet.** The script refuses one that holds anything, so nothing in it is another
-  run's. A run that passes keeps nothing, and leaves no folder it made.
+- **The folder is empty or not there yet, in a folder that is there.** The script refuses one that holds anything,
+  so nothing in it is another run's, and makes only the folder named. A run that passes keeps nothing, and leaves no
+  folder it made.
 - **A trace is Playwright's record of one test:** every action with the page before and after it, the console, and
   each request the page and the spec made, with its times and its answer. Open it with
   `npx playwright show-trace <folder>/trace.zip` in `healdan-web/web`, or drop it on
@@ -605,8 +606,8 @@ SMOKE_RESULTS=/tmp/smoke-results docker/smoke-test.sh
   access log has when Tomcat began to serve it and for how long. A request in the trace with no line in the access
   log was never answered: it didn't reach Tomcat, or Tomcat was still serving it when the run ended.
 - **`docker/tests/test-web.sh` takes `WEB_RESULTS=<folder>`** for a run by hand, on the same terms: empty or not
-  there yet, each failed test's folder copied into it, and no folder left by a run that passes. The smoke test sets
-  it to `e2e-results` in its own folder.
+  there yet, in a folder that is, each failed test's folder copied into it, and no folder left by a run that passes.
+  The smoke test sets it to `e2e-results` in its own folder.
 - **In CI** the image workflow sets `SMOKE_RESULTS` and uploads the folder when the smoke test fails (see
   [The Smoke Test's Results in the Image CI](../continuous-integration/#the-smoke-tests-results-in-the-image-ci)).
 - **Everything in it is the smoke stack's:** invented documents, and accounts whose passwords are in this
