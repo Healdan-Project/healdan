@@ -107,17 +107,19 @@ and a sort on every column of every list.
 - **The cell shows the number and the name,** as the left pane's Recent Matters does: `998.1 – Healdan General Demo`
   (owner: option B). The client is in the cell's tooltip, after the whole number and name, such as
   `1002.1 – Commercial Lease · Brightwell`, so a name the column cuts short can still be read by pointing at it (changed in
-  the build, PR 1's review: the tooltip had held the client alone); the client is a column of its own too (§4.7). The
-  hover swap goes. A matter with
-  no name shows its number. A cell too narrow ends in an ellipsis, so the number and the name's start stay.
+  the build, PR 1's review: the tooltip had held the client alone); the client is a column of its own too (§4.7). As a
+  tooltip can't be reached by keyboard, the client is in the cell's text for a screen reader too, not drawn, and a
+  sighted keyboard user finds it in the details (changed in PR 1's second review). The hover swap goes. A matter with no
+  name shows its number. A cell too narrow ends in an ellipsis, so the number and the name's start stay.
 - **Matter shares the spare width** (call). Where Matter shows, it is a fraction like Title and Author, about Title `2fr`
   (at least 220 pixels), Matter `1.5fr` (at least 100) and Author `1fr`, so a wider window widens it. Matter's least
   width was 160 until the build found that, with React Aria giving every column at least 75 pixels, the list beside the
   details or Filters (684 pixels at 1,280) then scrolled sideways; at 100 the least widths come to 666 (changed in the
-  build, PR 1). The test is the
-  owner's screenshot: on a maximised 1,920-pixel window with the panes at their defaults, Recent Documents shows
-  `998.1 – Healdan General Demo` whole, and at 1,280 pixels Title keeps at least 220. Checked Out to Me's and the Folders
-  scope's Matter follow the same rule.
+  build, PR 1). The test is the owner's screenshot: on a maximised 1,920-pixel window with the panes at their defaults,
+  Recent Documents shows `998.1 – Healdan General Demo` whole, and at 1,280 pixels Title keeps at least 220. The Folders
+  scope's Matter follows the same rule, and Checked Out to Me's too, but at least 130, its old fixed width: with Computer
+  and Checked Out its least widths come to 867, wider than the list beside the details anyway, and a least width of 100
+  would only narrow Matter there (changed in PR 1's second review).
 
 ### 4.2 Every list sorts (owner)
 
@@ -154,9 +156,12 @@ and a sort on every column of every list.
 - **By keyboard:** the heading's menu (§4.4) has **Resize Column**, then Left and Right resize, and Enter, Esc or Tab
   end it; the width is announced, as React Aria does.
 - **A double-click on the edge** puts the column's default width back (call, §2).
-- **Limits:** each column has a least width (about 48 pixels; Title 160). There's no most. When the columns are wider than
-  the list, the list scrolls sideways rather than squeezing them (call), and Title doesn't stay put (call: a sticky first
-  column isn't worth its cost in a virtualised grid now).
+- **Limits:** each column's least width is the one §4.1 lays it out with, as React Aria has one `minWidth` for both: 75
+  pixels, React Aria's own, unless the list gives one (Title 220 in a search, Recent and Checked Out to Me; Matter 100,
+  or 130 in Checked Out to Me). A smaller least width for resizing alone would let the default layout squeeze Title below
+  §4.1's 220 (changed in PR 1's second review: this had said about 48, and Title 160). There's no most. When the columns
+  are wider than the list, the list scrolls sideways rather than squeezing them (call), and Title doesn't stay put (call:
+  a sticky first column isn't worth its cost in a virtualised grid now).
 - **Resizing a column fixes it, and every column to its left, at their widths in pixels then,** as React Aria 1.22.1
   does (`TableColumnLayout.resizeColumnWidth` freezes the columns to the left, and `onResizeEnd` hands back the whole
   map) (call: keeping them fractions would make the edge and the line drift from the pointer while the columns to the

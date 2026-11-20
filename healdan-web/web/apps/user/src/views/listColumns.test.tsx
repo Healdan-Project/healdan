@@ -14,16 +14,21 @@ function column(columns: ReturnType<typeof hitColumns>, id: string) {
 }
 
 describe('the Matter column', () => {
-  it('shows the number and the name, with the whole of it and the client as its tooltip', () => {
+  it('shows the number and the name, with the whole of it and the client as its tooltip and for a screen reader', () => {
     const { container } = render(<MatterCell matter={{ id: 12, display: '1002.1 – Commercial Lease', client: client({ id: 2, number: 1002, name: 'Brightwell' }) }} />)
-    expect(container.textContent).toBe('1002.1 – Commercial Lease')
+    const cell = container.firstElementChild!
+    // Drawn: the number and the name
+    expect(cell.firstChild?.textContent).toBe('1002.1 – Commercial Lease')
     // A name the column cuts short can still be read by pointing at it, as before
-    expect(container.querySelector('[title="1002.1 – Commercial Lease · Brightwell"]')).toBeTruthy()
+    expect(cell.getAttribute('title')).toBe('1002.1 – Commercial Lease · Brightwell')
+    // A tooltip can't be reached by keyboard, so a screen reader reads the client with the cell, which isn't drawn
+    expect(cell.textContent).toBe('1002.1 – Commercial Lease · Brightwell')
+    expect(cell.lastElementChild?.className).toMatch(/hidden/)
   })
 
   it('a matter with no name shows its number', () => {
     const { container } = render(<MatterCell matter={{ id: 17, display: '1001.7', client: client() }} />)
-    expect(container.textContent).toBe('1001.7')
+    expect(container.firstElementChild?.firstChild?.textContent).toBe('1001.7')
   })
 })
 
@@ -37,15 +42,17 @@ describe('the default widths (spec 4.1)', () => {
   })
 
   it('fits beside the details or Filters at 1,280 pixels, where the list is 684 wide, without scrolling sideways', () => {
-    // React Aria gives every column at least 75 pixels: a fixed width below that, or a share with no least width
+    // React Aria gives every column at least 75 pixels: a fixed width below that, or a share with no least width. This is
+    // only the sum; a11y.spec.ts checks the list doesn't scroll sideways beside Filters in a real browser at 1,280
     const least = hitColumns('documents').reduce((sum, one) => sum + Math.max(75, typeof one.width === 'number' ? one.width : (one.minWidth ?? 0)), 0)
     expect(least).toBeLessThanOrEqual(684)
   })
 
-  it("gives Checked Out to Me's and the Folders scope's Matter the same share", () => {
+  it("gives Checked Out to Me's and the Folders scope's Matter the same share, Checked Out to Me's at least its old 130", () => {
     const checkedOut = checkedOutColumns()
     expect(column(checkedOut, 'title')).toMatchObject({ width: '2fr', minWidth: 220 })
-    expect(column(checkedOut, 'matter')).toMatchObject({ width: '1.5fr', minWidth: 100 })
+    // Its list is wider than the room beside the details anyway, so Matter needn't give way below its old fixed width
+    expect(column(checkedOut, 'matter')).toMatchObject({ width: '1.5fr', minWidth: 130 })
     const folders = hitColumns('folders')
     expect(column(folders, 'title')).toMatchObject({ width: '2fr' })
     expect(column(folders, 'matter')).toMatchObject({ width: '1.5fr', minWidth: 100 })

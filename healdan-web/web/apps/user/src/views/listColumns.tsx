@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import type { components } from '@healdan/api'
-import { formatDate, formatVersion, Icon, t, type TableColumn, type TableRow } from '@healdan/ui'
+import { formatDate, formatVersion, Icon, t, VisuallyHidden, type TableColumn, type TableRow } from '@healdan/ui'
 import { computerLabel } from '../actions/checkout'
 import { HoldMarker } from '../actions/HoldMarker'
 import type { SearchScope } from '../search/scopes'
@@ -57,12 +57,14 @@ export const listColumns: TableColumn<ListRow>[] = [title, docNumber, version, a
  * "1001.1 – Charter Dispute", as the server formats it and the left pane's Recent Matters shows it (list columns spec
  * 4.1). The name is the cell's own text, so a keyboard and a screen reader reach it as a pointer does; a matter with no
  * name shows its number. The tooltip is the whole of it and the client, "1001.1 – Charter Dispute · Saltmarsh Shipping",
- * so a name the column cuts short can still be read by pointing at it.
+ * so a name the column cuts short can still be read by pointing at it. The client is in the cell's text for a screen
+ * reader too, not drawn, as a tooltip can't be reached by keyboard; a sighted keyboard user finds it in the details.
  */
 export function MatterCell({ matter }: { matter: S['MatterRef'] }) {
   return (
-    <span className={styles.matterCell} title={`${matter.display} · ${matter.client.name}`}>
+    <span className={styles.oneLine} title={`${matter.display} · ${matter.client.name}`}>
       {matter.display}
+      <VisuallyHidden>{` · ${matter.client.name}`}</VisuallyHidden>
     </span>
   )
 }
@@ -102,13 +104,13 @@ export function narrowed(columns: TableColumn<ListRow>[]): TableColumn<ListRow>[
 /**
  * "MacBook · Word": the computer, then the app muted after a dot, on one line, as a Standard row's 34 pixels have room
  * for one. Each is an element of its own, whose text is just the computer or the app; the dot is drawn only, and the
- * spaces around it keep the two apart for a screen reader. The whole text is a tooltip too, as the Matter cell's name
- * is, so an app the ellipsis cuts short can be read by pointing at it.
+ * spaces around it keep the two apart for a screen reader. The whole text is a tooltip too, as the Matter cell's whole
+ * matter is, so an app the ellipsis cuts short can be read by pointing at it.
  */
 function ComputerCell({ hold }: { hold: S['HoldView'] | null }) {
   const { computer, app } = computerLabel(hold)
   return (
-    <span className={styles.computerCell} title={app ? `${computer} · ${app}` : computer}>
+    <span className={styles.oneLine} title={app ? `${computer} · ${app}` : computer}>
       <span>{computer}</span>
       {app && (
         <>
@@ -123,13 +125,17 @@ function ComputerCell({ hold }: { hold: S['HoldView'] | null }) {
   )
 }
 
-/** Checked Out to Me: the server's order (latest check-out first), so nothing sorts, as its list takes no `onSort`. */
+/**
+ * Checked Out to Me: the server's order (latest check-out first), so nothing sorts, as its list takes no `onSort`. With
+ * Computer and Checked Out its least widths are wider than the list beside the details anyway, so Matter keeps at least
+ * its old fixed 130 there rather than give way to 100 (list columns spec 4.1).
+ */
 export function checkedOutColumns(): TableColumn<ListRow>[] {
   return [
     { ...title, width: '2fr', minWidth: 220 },
     { ...docNumber, width: 80 },
     { ...version, width: 70 },
-    matterColumn(),
+    { ...matterColumn(), minWidth: 130 },
     {
       id: 'computer',
       name: t('list.computer'),

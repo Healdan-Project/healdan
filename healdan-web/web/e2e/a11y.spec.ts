@@ -393,6 +393,9 @@ for (const scheme of ['light', 'dark'] as const) {
       })
       expect(cells.unclipped, 'cells whose text is cut with no ellipsis').toBe(0)
       expect(cells.title, "the Title column's width").toBeGreaterThanOrEqual(200)
+      // The columns' least widths fit the list beside Filters at 1,280, so it doesn't scroll sideways (list columns spec 4.1)
+      const sideways = await main().getByRole('grid').evaluate((list) => list.scrollWidth - list.clientWidth)
+      expect(sideways, 'how far the list beside Filters scrolls sideways').toBeLessThanOrEqual(1)
     })
 
     test('search results, in the Matters scope', async () => {

@@ -11,7 +11,6 @@ import { client, document, folder, matter, problem, zone, type Routes } from '..
 import { detailsRoutes } from '../test/details'
 import { bringObservedIntoView } from '../test/intersection'
 import { renderApp } from '../test/renderApp'
-import viewsCss from './views.module.css?raw'
 
 type S = components['schemas']
 
@@ -79,16 +78,11 @@ describe('SearchView', () => {
     expect(api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'documents', q: 'charter', zone, offset: 0, limit: 100 })
   })
 
-  it("shows the matter's number and name in the Matter column, with the whole of it and the client as its tooltip", async () => {
+  it("shows each hit's own matter in the Matter column", async () => {
     await renderApp('/search?scope=documents&q=charter', routes())
     const [, second] = await rows()
-    const cell = within(second!).getAllByRole('gridcell').find((one) => one.textContent?.includes('1002.1'))!
-    // The name is the cell's own text, so a keyboard and a screen reader reach it as a pointer does
-    expect(cell.textContent).toBe('1002.1 – Commercial Lease')
-    expect(cell.querySelector('[title="1002.1 – Commercial Lease · Brightwell"]')).toBeTruthy()
-    // No swap on hover or focus any more: the client is a tooltip, and a column of its own later (#234)
-    expect(cell.querySelector('[class*="matterName"], [class*="matterClient"]')).toBeNull()
-    expect(viewsCss).not.toMatch(/\.matterName/)
+    // What the cell holds, its tooltip and its text for a screen reader, is MatterCell's (listColumns.test.tsx)
+    expect(within(second!).getAllByRole('gridcell').some((one) => one.textContent?.startsWith('1002.1 – Commercial Lease'))).toBe(true)
   })
 
   it('sorts by a header, asking the server, and reverses on a second click', async () => {

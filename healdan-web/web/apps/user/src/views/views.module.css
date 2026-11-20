@@ -152,9 +152,11 @@
   min-width: 0;
 }
 
-/* A hit's matter: the number and the name, on one line that ends in an ellipsis when it doesn't fit, so the number and
-   the name's start stay. The client is its tooltip. */
-.matterCell {
+/* A cell's text on one line that ends in an ellipsis when it doesn't fit, so its start stays: a hit's matter (the number
+   and the name), and Checked Out to Me's computer, then its app, muted. Relative, so text drawn away for a screen reader
+   inside it (the matter's client) is clipped with it and never widens the list. */
+.oneLine {
+  position: relative;
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -168,15 +170,6 @@
 
 :global([aria-selected='true']) .muted {
   color: inherit;
-}
-
-/* Checked Out to Me's computer, then its app, muted, on one line that ends in an ellipsis when it doesn't fit */
-.computerCell {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* The Trash (folders and Trash spec 7.2, 7.3). Removed's lede, under the heading. */

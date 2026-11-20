@@ -103,34 +103,41 @@ Paths: `WEB` = `healdan-web/web`, `UI` = `WEB/packages/ui/src`, `SH` = `WEB/pack
 **Files:**
 - Modify: `US/views/listColumns.tsx` (`MatterCell`, `matterColumn`, `hitColumns`, `checkedOutColumns`),
   `US/views/views.module.css` (`.matterClient`, `.matterName` and their `:hover`/`:focus-within` rules, lines ~172–211;
-  keep `.matterCell` and `.muted`)
+  keep `.muted`; `.matterCell` and `.computerCell`, the same rules, become one `.oneLine`, changed in PR 1's second
+  review)
 - Create: `US/views/listColumns.test.tsx`
 - Modify: `US/views/SearchView.test.tsx` (the test at lines ~82–99 that asserts the hover swap)
 
 **Interfaces:**
-- Produces: `MatterCell({ matter }: { matter: S['MatterRef'] })` renders `matter.display` as its text and
-  `` `${matter.display} · ${matter.client.name}` `` as its `title` (changed in PR 1's review: the client alone at first); `matterColumn()` keeps its signature.
+- Produces: `MatterCell({ matter }: { matter: S['MatterRef'] })` draws `matter.display` as its text, with
+  `` ` · ${matter.client.name}` `` after it in `VisuallyHidden` for a screen reader, and has
+  `` `${matter.display} · ${matter.client.name}` `` as its `title` (changed in PR 1's reviews: the client alone at first,
+  and in the tooltip only); `matterColumn()` keeps its signature.
 
 - [ ] **Step 1: Write the failing tests**
-  - `SearchView.test.tsx`: replace the hover-swap test with "shows the matter's number and name in the Matter column,
-    with the client as its tooltip": the Matter cell's text is the fixture's `display` (`'1001.1 – Commercial Lease'` or
-    whatever that test's fixture holds), an element in it has `title` equal to the client's name (`'Brightwell'`), no
-    element in it has a class matching `/matterName|matterClient/`, and `viewsCss` doesn't match `/\.matterName/`.
+  - `SearchView.test.tsx`: replace the hover-swap test with "shows each hit's own matter in the Matter column": a hit's
+    Matter cell starts with its `display` (`'1002.1 – Commercial Lease'` in that test's fixture). What the cell holds is
+    `listColumns.test.tsx`'s to test.
   - `listColumns.test.tsx`:
-    - "a matter with no name shows its number": render `MatterCell` with `display: '1001.7'`; text is `'1001.7'`.
+    - "shows the number and the name, with the whole of it and the client as its tooltip and for a screen reader":
+      `MatterCell` with `display: '1002.1 – Commercial Lease'` and client `'Brightwell'` draws the display, its `title`
+      is `'1002.1 – Commercial Lease · Brightwell'`, and its text holds the client after the display in `VisuallyHidden`.
+    - "a matter with no name shows its number": render `MatterCell` with `display: '1001.7'`; it draws `'1001.7'`.
     - "gives Matter a share of the spare width beside Title and Author": in `hitColumns('documents')`, Title is
       `width: '2fr', minWidth: 220`, Matter `width: '1.5fr', minWidth: 100`, Author `width: '1fr'`; Doc #, Version and
       Edit Date keep numbers.
     - "gives Checked Out to Me's and the Folders scope's Matter the same share": `checkedOutColumns()`'s Matter is
-      `'1.5fr'`/100 with Title `'2fr'`/220; `hitColumns('folders')`'s Matter is `'1.5fr'`/100 beside Title `'2fr'`.
+      `'1.5fr'`/130 (its old fixed width, changed in PR 1's second review; spec §4.1) with Title `'2fr'`/220;
+      `hitColumns('folders')`'s Matter is `'1.5fr'`/100 beside Title `'2fr'`.
 
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `cd healdan-web/web && npx vitest run apps/user/src/views/listColumns.test.tsx apps/user/src/views/SearchView.test.tsx`
 Expected: FAIL on the new tests.
 
-- [ ] **Step 3: Implement.** `MatterCell` is one `span.matterCell` with the display as text and the client's name as
-  `title`. Drop the hover-swap CSS. Set the widths above (spec §4.1). The left pane's `MatterLabel` doesn't change.
+- [ ] **Step 3: Implement.** `MatterCell` is one `span.oneLine` with the display as text, the client after it in
+  `VisuallyHidden`, and the display and the client as `title`. Drop the hover-swap CSS. Set the widths above (spec
+  §4.1). The left pane's `MatterLabel` doesn't change.
 
 - [ ] **Step 4: Run the web checks**
 
@@ -269,9 +276,10 @@ title, docNumber, version, matter, author, edited; `emails` and `recentEmails` t
 resizing?: { widths: Record<string, number>; onResizeEnd: (widths: Record<string, number>) => void; onReset: (column: string) => void }
 ```
 
-  and on `TableColumn`: `minWidth` (already there) becomes each column's least width when resizing (48 by default; the
-  views give Title 160). Internally, `Table` keeps each column's `startResize` from its render props, for Task 7's
-  **Resize Column**.
+  and on `TableColumn`: `minWidth` (already there) stays each column's least width, for resizing as for the default
+  layout, which React Aria takes from the same prop: React Aria's 75 by default, and the views' own (Title 220, Matter
+  100, Checked Out to Me's Matter 130; spec §4.3, changed in PR 1's second review from 48 and Title 160). Internally,
+  `Table` keeps each column's `startResize` from its render props, for Task 7's **Resize Column**.
 
 - [ ] **Step 1: Write the failing tests** (`describe('Table resizing')`):
   - "draws no resizer without `resizing`, as before" (no `.react-aria-ColumnResizer`, no `input[type=range]` in the
