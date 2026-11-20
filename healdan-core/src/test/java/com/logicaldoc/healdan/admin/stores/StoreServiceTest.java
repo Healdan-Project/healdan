@@ -489,6 +489,20 @@ public class StoreServiceTest extends AbstractHealdanTestCase {
 		assertEquals(Map.of(clerks.getId(), READ), AclMath.rows(store.getId()));
 	}
 
+	// A plain folder left in a Store, as an older install may have, is no matter, so P2 isn't about it
+	@Test
+	public void testAFolderThatIsNoMatterIsntChecked() throws Exception {
+		Folder store = fx.store("Client Work");
+		setAcl(store, Map.of(partners.getId(), READ, clerks.getId(), READ));
+		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store);
+		// Its folder, which lets Partners and Clerks in, stays in the Store with no live matter
+		jdbc.update("update hd_matter set ld_deleted = 1 where ld_id = ?", matter.getId());
+
+		service.setAccess(store.getId(), List.of(clerks.getId()), admin);
+
+		assertEquals(Map.of(clerks.getId(), READ), AclMath.rows(store.getId()));
+	}
+
 	/** @return each record of a Store, oldest first, as its address, area, action, target and detail */
 	private List<String> events() {
 		return jdbc.query("""

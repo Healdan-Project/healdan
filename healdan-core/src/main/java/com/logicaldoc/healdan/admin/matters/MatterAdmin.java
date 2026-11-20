@@ -216,8 +216,11 @@ public class MatterAdmin {
 		Group ownGroup = owner != null ? GroupDAO.get().findByName(owner.getUserGroupName(), Tenant.DEFAULT_ID) : null;
 		if (ownGroup != null)
 			acl.put(ownGroup.getId(), EnumSet.allOf(Permission.class));
-		for (long groupId : permissionRules.p2Failures(acl, store.getId(), owner != null ? owner.getId() : null)) {
-			String name = GroupNames.of(groupId);
+		List<Long> failures = permissionRules.p2Failures(acl, store.getId(), owner != null ? owner.getId() : null);
+		// Every group named, in two queries
+		Map<Long, String> names = GroupNames.of(failures);
+		for (long groupId : failures) {
+			String name = names.get(groupId);
 			problems.add(new Problem(MatterCheck.STORE_UNREADABLE, UNREADABLE.formatted(name, store.getName()),
 					MatterCheck.GRANT_STORE_READ, store.getId(), groupId, name));
 		}

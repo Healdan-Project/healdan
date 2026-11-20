@@ -65,7 +65,8 @@ import com.logicaldoc.util.spring.Context;
  * The rules that bind are checked before anything is written, each with its sentence, so a refusal changes nothing:
  * <ul>
  * <li>everywhere, a group or person that no longer exists, and {@code guest} or a read-only person's own group given
- * anything beyond Read Only's five permissions;</li>
+ * anything beyond Read Only's five permissions that the folder didn't grant it already, so a row kept as it is, such
+ * as a read-only owner's taken over from the folder it followed, never stops a save;</li>
  * <li>on a matter's own folder, the owner's row, which keeps Full Access, whoever the owner is (a read-only owner's row
  * isn't capped, Admin app plan, P2-R20, and holds what a read-only person's row can), so the folder can't follow its
  * Store either, and P2 ({@link PermissionRules#checkP2});</li>
@@ -104,9 +105,6 @@ public class FolderAccessService {
 
 	/** The start of the name of a person's own group, {@code _user_<user id>} */
 	private static final String PERSONAL = "_user_";
-
-	/** How far up {@link #label} looks for the root */
-	private static final int MAX_DEPTH = 200;
 
 	/** Every folder below one, at every level, the Trash's included, with its security reference */
 	private static final String BELOW = """
@@ -207,7 +205,7 @@ public class FolderAccessService {
 		boolean ownFolder = position.kind() == Kind.MATTER_WORKSPACE && owner != null;
 		for (Map.Entry<Long, Set<Permission>> row : after.entrySet())
 			if (!ownFolder || !owner.equals(row.getKey()))
-				checkReadOnlyCap(row.getKey(), row.getValue());
+				checkReadOnlyCap(row.getKey(), added(row.getValue(), before.get(row.getKey())));
 		if (ownFolder && !after.getOrDefault(owner, Set.of()).containsAll(Permission.all()))
 			throw new HealdanRuleException(OWNER_ROW.formatted(matterLabel()));
 
@@ -331,7 +329,7 @@ public class FolderAccessService {
 				});
 		Map<Long, Long> people = new HashMap<>();
 		groups.forEach((id, group) -> {
-			Long userId = personOf(group.name(), group.type());
+			Long userId = GroupNames.personOf(group.name(), group.type());
 			if (userId != null)
 				people.put(id, userId);
 		});
@@ -458,7 +456,22 @@ public class FolderAccessService {
 	}
 
 	/**
+	 * @param flags what a row is to grant
+	 * @param granted what the folder grants that group now, null for nothing
+	 * @return the flags it doesn't grant now
+	 */
+	private static Set<Permission> added(Set<Permission> flags, Set<Permission> granted) {
+		Set<Permission> added = EnumSet.noneOf(Permission.class);
+		added.addAll(flags);
+		if (granted != null)
+			added.removeAll(granted);
+		return added;
+	}
+
+	/**
 	 * {@code guest}, or a read-only person's own group, can't be given anything beyond Read Only's five permissions here
+	 *
+	 * @param flags what the row is to grant that the folder doesn't grant it now
 	 */
 	private static void checkReadOnlyCap(long groupId, Set<Permission> flags) throws PersistenceException {
 		if (AccessLevel.READ_ONLY.permissions().containsAll(flags))
@@ -476,7 +489,7 @@ public class FolderAccessService {
 	 * @param followedAfter the folder it follows now, null if it has its own
 	 */
 	private void record(Folder folder, Long followedBefore, Long followedAfter, Map<Long, Set<Permission>> before,
-			Map<Long, Set<Permission>> after, User actor) {
+			Map<Long, Set<Permission>> after, User actor) throws PersistenceException {
 		Map<String, Change> changes = new HashMap<>();
 		if (!Objects.equals(followedBefore, followedAfter))
 			changes.put("follows", new Change(followedBefore != null ? label(followedBefore) : null,
@@ -514,49 +527,30 @@ public class FolderAccessService {
 	}
 
 	/**
-	 * @return how the record names a folder: its workspace's top folder (a matter's display name or a template's
-	 *         name) and the folders down to it, joined by {@code /}, as {@code Standard/Correspondence}; a folder
-	 *         above a workspace, such as a Store, by its name
+	 * @return how the record names a folder, as {@link WorkspaceAdmin#label} does: its path from the workspace's top
+	 *         folder, as {@code Standard/Correspondence}; a folder above a workspace, such as a Store, by its name
 	 */
-	private String label(long folderId) {
-		List<String> names = new ArrayList<>();
-		long current = folderId;
-		for (int i = 0; i < MAX_DEPTH; i++) {
-			List<Map<String, Object>> found = jdbc.queryForList(
-					"select ld_name, ld_parentid from ld_folder where ld_id = ?", current);
-			if (found.isEmpty())
-				break;
-			names.add(0, (String) found.get(0).get("ld_name"));
-			long parent = ((Number) found.get(0).get("ld_parentid")).longValue();
-			if (parent == current)
-				break;
-			current = parent;
-		}
-		// The root, then a Store or the Templates Store, then the workspace's top folder
-		return names.size() > 2 ? String.join("/", names.subList(2, names.size()))
-				: names.isEmpty() ? String.valueOf(folderId) : names.get(names.size() - 1);
+	private String label(long folderId) throws PersistenceException {
+		return workspaces.label(folderId);
 	}
 
-	private static Long personOf(String name, int type) {
-		if (type != Group.Type.USER.ordinal() || name == null || !name.startsWith(PERSONAL))
-			return null;
-		// A deleted person's is renamed _user_<user id>.<group id>
-		String id = name.substring(PERSONAL.length());
-		int dot = id.indexOf('.');
-		try {
-			return Long.parseLong(dot < 0 ? id : id.substring(0, dot));
-		} catch (NumberFormatException e) {
-			return null;
-		}
-	}
-
-	private static FolderAccessControlEntry entry(long groupId, Set<Permission> flags) {
+	/**
+	 * @param groupId a group
+	 * @param flags exactly what its row grants
+	 * @return the row, for a folder's or a Store's access control list
+	 */
+	public static FolderAccessControlEntry entry(long groupId, Set<Permission> flags) {
 		FolderAccessControlEntry entry = new FolderAccessControlEntry(groupId);
 		entry.grantPermissions(flags);
 		return entry;
 	}
 
-	private static FolderHistory history(User actor, FolderEvent event) {
+	/**
+	 * @param actor who makes the change
+	 * @param event what it is
+	 * @return the history of a folder's or a Store's change
+	 */
+	public static FolderHistory history(User actor, FolderEvent event) {
 		FolderHistory history = new FolderHistory();
 		history.setUser(actor);
 		history.setEvent(event);

@@ -209,12 +209,13 @@ export interface DeleteFolderDialogProps {
 }
 
 /**
- * Delete in a workspace: asks first, naming what the folder holds, counted afresh, and where it can come back from: a
- * matter's from the Trash, a template's from nowhere
+ * Delete in a workspace: asks first, naming what the folder holds, and where it can come back from: a matter's from the
+ * Trash, a template's from nowhere. A matter's folder is counted afresh; a template's, which the public route doesn't
+ * reach (it answers only under a Store) and which holds no documents, from the tree the editor has.
  */
 export function DeleteFolderDialog({ node, kind, run, onClose }: DeleteFolderDialogProps) {
-  const contents = useFolderContents(node.id)
-  const what = holdsWhat(contents.data)
+  const contents = useFolderContents(node.id, kind === 'matter')
+  const what = holdsWhat(kind === 'template' ? { folders: below(node).length, documents: 0 } : contents.data)
   return (
     <Confirm title={t('admin.deleteFolder.title', { name: node.name })} confirm={t('admin.deleteFolder.confirm')} run={run} onClose={onClose}>
       {what !== undefined && <p className={page.line}>{t('admin.deleteFolder.holds', { what })}</p>}

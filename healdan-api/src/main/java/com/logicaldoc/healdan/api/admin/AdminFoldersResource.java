@@ -134,7 +134,8 @@ public class AdminFoldersResource {
 
 	/**
 	 * Moves a folder or search folder below the workspace's top folder, and everything live in it, to the caller's
-	 * Trash, and records it once it has.
+	 * Trash, and records it once it has. The folder changes refuse a folder outside a workspace ({@code 404}) and the
+	 * workspace's top folder ({@code 409}).
 	 *
 	 * @param id the folder
 	 * @return the Trash item the delete made, with what it holds
@@ -142,12 +143,10 @@ public class AdminFoldersResource {
 	@DELETE
 	@Path("{id: [0-9]+}")
 	public DeletedFolder delete(@PathParam("id") long id) {
-		Folder folder = WorkspaceRequests.folder(id);
 		Caller caller = Caller.current();
 		try {
-			WorkspaceAdmin admins = WorkspaceAdmin.get();
-			admins.refuseTopDelete(folder);
-			String label = admins.label(id);
+			// Named for the record before it goes; a folder that isn't there is named by its id, and refused below
+			String label = WorkspaceAdmin.get().label(id);
 			TrashItem item = WorkspaceRequests.changes().deleteWorkspaceFolder(id, caller);
 			AdminEvents.get().recordAfter(new AdminEvent(AdminArea.MATTERS, "folder.deleted", FOLDER, id, label, null),
 					caller.user());

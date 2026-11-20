@@ -344,6 +344,11 @@ public class FolderAccessServiceTest extends AbstractHealdanTestCase {
 				() -> service.save(documents.getId(), List.of(person(reader, RW)), admin));
 		assertRefused("User viewer can't be given more than Read Only.", () -> service.save(workspace.getId(),
 				List.of(person(reader, FULL), group(partners, RO), person(viewer, RW)), admin));
+
+		// Set Own Permissions below it sends the owner's row as the folder followed it: kept as it is, it isn't capped
+		service.save(documents.getId(), List.of(group(readersGroup.getId(), ownersRow), group(partners, RO)), admin);
+		assertNull(securityRef(documents));
+		assertEquals(ownersRow, AclMath.effective(documents.getId()).get(readersGroup.getId()));
 	}
 
 	@Test

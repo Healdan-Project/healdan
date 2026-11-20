@@ -187,7 +187,10 @@ function AccessEditor({ node, root, parent, kind, warnings, access, headingId }:
         )}
       </div>
       {!access.ownPermissions && !settingOwn && (
-        <p className={styles.followed}>{followed ? t('admin.access.follows', { name: followed.name }) : t('admin.access.followsStore')}</p>
+        <p className={styles.followed}>
+          {/* Outside the workspace, what it follows is above its top: a matter's Store, or the Templates Store */}
+          {followed ? t('admin.access.follows', { name: followed.name }) : t(kind === 'template' ? 'admin.access.followsTemplates' : 'admin.access.followsStore')}
+        </p>
       )}
       {/* Held while a save is on its way, so nothing changed meanwhile is dropped under its Saved */}
       <fieldset disabled={busy} className={styles.hold}>

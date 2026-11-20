@@ -1174,7 +1174,9 @@ path from the workspace's top folder, as `1001.1 – Charter Dispute/Documents`.
   their own group's `groupId` included, is `422`, and so are missing or empty `permissions`. `409 refused` covers a
   group or person that no longer exists (but a deleted group the folder already grants something may stay, so a save
   needn't take away what's there); `guest`, or a read-only person's own group, given anything beyond Read Only's five
-  permissions, but for the owner's row on a matter's own folder; on a matter's own folder, its owner's row left out or
+  permissions that the folder doesn't grant it already (so a row sent back as it is, such as a read-only owner's that
+  a folder took over from the one it followed, passes), but for the owner's row on a matter's own folder; on a
+  matter's own folder, its owner's row left out or
   given less than Full Access, or the folder following its Store; and, inside a matter, a folder granting more than its
   parent, or, on the matter's own folder, a group that could read the matter but can't read its Store. In a template
   those two rules aren't checked as it's edited. The owner's row on a matter's own folder is sent with Full Access

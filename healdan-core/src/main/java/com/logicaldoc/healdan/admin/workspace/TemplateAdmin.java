@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.admin.workspace;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -311,10 +312,17 @@ public class TemplateAdmin {
 		List<Folder> stores = new ArrayList<>(matters.stores());
 		stores.sort(Comparator.comparing(Folder::getName, String.CASE_INSENSITIVE_ORDER)
 				.thenComparingLong(Folder::getId));
+		Map<Long, List<Long>> failures = new HashMap<>();
+		Set<Long> named = new HashSet<>();
 		for (Folder store : stores) {
-			List<Long> groups = new ArrayList<>(permissionRules.p2Failures(acl, store.getId(), null));
-			Map<Long, String> names = new HashMap<>();
-			groups.forEach(group -> names.put(group, GroupNames.of(group)));
+			List<Long> groups = permissionRules.p2Failures(acl, store.getId(), null);
+			failures.put(store.getId(), groups);
+			named.addAll(groups);
+		}
+		// Every group named, in two queries
+		Map<Long, String> names = GroupNames.of(named);
+		for (Folder store : stores) {
+			List<Long> groups = new ArrayList<>(failures.get(store.getId()));
 			groups.sort(Comparator.comparing(names::get, String.CASE_INSENSITIVE_ORDER));
 			for (long group : groups)
 				problems.add(new TemplateProblem(TemplateProblem.STORE_UNREADABLE,

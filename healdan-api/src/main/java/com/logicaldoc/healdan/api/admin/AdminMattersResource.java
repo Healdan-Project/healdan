@@ -3,12 +3,15 @@
 
 package com.logicaldoc.healdan.api.admin;
 
+import static com.logicaldoc.healdan.api.admin.ListOrder.date;
+import static com.logicaldoc.healdan.api.admin.ListOrder.descending;
+import static com.logicaldoc.healdan.api.admin.ListOrder.directed;
+
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -82,8 +85,10 @@ import jakarta.ws.rs.core.UriInfo;
  * <p>
  * The list and a matter are read in one query each, the matter with its client, Store, owner and template. A matter's
  * figures are the summary's that {@link UsageSummary} keeps in memory, so a request never counts documents but for a
- * matter's own page, which counts those that couldn't be indexed or previewed. Every matching matter is read, then
- * sorted and paged in Java, as a figure can't be sorted in SQL; ten thousand fit.
+ * matter's own page, which counts those that couldn't be indexed or previewed. Sorted by number, the list's own order,
+ * the database pages it, so a page reads only its own matters; sorted by anything else, every matching matter is read,
+ * then sorted and paged in Java, as a figure can't be sorted in SQL, nor a name in Java's case-folding or a person
+ * named as {@link PersonNames} names them; ten thousand fit.
  */
 @Component
 @Path("/v1/admin/matters")
@@ -222,10 +227,6 @@ public class AdminMattersResource {
 		private static String lower(String text) {
 			return text != null ? text.toLowerCase(Locale.ROOT) : null;
 		}
-
-		private static <T> Comparator<T> directed(Comparator<T> ascending, boolean descending) {
-			return descending ? ascending.reversed() : ascending;
-		}
 	}
 
 	/**
@@ -245,7 +246,9 @@ public class AdminMattersResource {
 			@QueryParam("storeId") Long storeId, @QueryParam("ownerId") Long ownerId, @QueryParam("sort") String sort,
 			@QueryParam("order") String order, @QueryParam("offset") Integer offset,
 			@QueryParam("limit") Integer limit) {
-		Comparator<Listed> comparator = Sort.of(sort).order(descending(order));
+		Sort column = Sort.of(sort);
+		boolean descending = descending(order);
+		Comparator<Listed> comparator = column.order(descending);
 		Paging paging = Paging.of(offset, limit);
 
 		StringBuilder where = new StringBuilder();
@@ -270,11 +273,24 @@ public class AdminMattersResource {
 
 		UsageSummary summary = UsageSummary.get();
 		Instant figuresAt = summary.current().computedAt();
-		List<Listed> matters = new ArrayList<>();
-		for (Found found : find(where.toString(), params))
-			matters.add(new Listed(found, figuresAt != null ? summary.forMatter(found.id()) : null));
-		matters.sort(comparator);
-		Page<Listed> page = paging.slice(matters);
+		Page<Listed> page;
+		if (column == Sort.NUMBER) {
+			// A client's number and a matter's are unique together, and sort in SQL as in Java: only this page is read
+			String direction = descending ? " desc" : "";
+			long total = count(where.toString(), params);
+			params.addValue("limit", paging.limit()).addValue("offset", paging.offset());
+			List<Listed> matters = new ArrayList<>();
+			for (Found found : find(where + " order by c.hd_number%1$s, m.hd_number%1$s".formatted(direction)
+					+ ListingSql.PAGE, params))
+				matters.add(new Listed(found, figuresAt != null ? summary.forMatter(found.id()) : null));
+			page = new Page<>(matters, paging.offset(), paging.limit(), total);
+		} else {
+			List<Listed> matters = new ArrayList<>();
+			for (Found found : find(where.toString(), params))
+				matters.add(new Listed(found, figuresAt != null ? summary.forMatter(found.id()) : null));
+			matters.sort(comparator);
+			page = paging.slice(matters);
+		}
 		return new MatterList(page.items().stream().map(AdminMattersResource::row).toList(), page.offset(),
 				page.limit(), page.total(), date(figuresAt));
 	}
@@ -476,11 +492,29 @@ public class AdminMattersResource {
 	 * @return the live matters it keeps, in no particular order
 	 */
 	private static List<Found> find(String where, MapSqlParameterSource params) {
+		return new NamedParameterJdbcTemplate(Context.get(DataSource.class)).query(LIVE + where, withTemplates(params),
+				(rs, i) -> found(rs));
+	}
+
+	/**
+	 * @param where what keeps a matter, as {@link #find} takes it
+	 * @param params its parameters
+	 * @return how many live matters it keeps
+	 */
+	private static long count(String where, MapSqlParameterSource params) {
+		Long total = new NamedParameterJdbcTemplate(Context.get(DataSource.class))
+				.queryForObject("select count(*) from (" + LIVE + where + ") live", withTemplates(params), Long.class);
+		return total != null ? total : 0;
+	}
+
+	/**
+	 * @return the parameters with {@code :templates}, the Templates Store, whose live folders {@link #LIVE} takes as
+	 *         templates
+	 */
+	private static MapSqlParameterSource withTemplates(MapSqlParameterSource params) {
 		Long templates = HealdanSettings.get().templatesStoreId();
 		// No folder has the id -1, so with no Templates Store no matter has a template
-		params.addValue("templates", templates != null ? templates : -1L);
-		return new NamedParameterJdbcTemplate(Context.get(DataSource.class)).query(LIVE + where, params,
-				(rs, i) -> found(rs));
+		return params.addValue("templates", templates != null ? templates : -1L);
 	}
 
 	private static Found found(ResultSet rs) throws SQLException {
@@ -529,22 +563,6 @@ public class AdminMattersResource {
 	private static void notEditable(List<FieldError> fields, String field, JsonNode value, String detail) {
 		if (value != null)
 			fields.add(new FieldError(field, "not-editable", detail));
-	}
-
-	/**
-	 * @return whether the {@code order} query parameter asks for the highest first
-	 * @throws ApiProblem {@code 400 bad-request} for anything but {@code asc}, {@code desc} or nothing
-	 */
-	private static boolean descending(String order) {
-		if (order == null || order.equals("asc"))
-			return false;
-		if (order.equals("desc"))
-			return true;
-		throw ApiProblem.badRequest("Give the order as asc or desc.");
-	}
-
-	private static Date date(Instant instant) {
-		return instant != null ? Date.from(instant) : null;
 	}
 
 }

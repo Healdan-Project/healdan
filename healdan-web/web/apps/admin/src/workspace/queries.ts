@@ -72,12 +72,16 @@ export function useSearchFolder(id: number) {
   return useRead<A['SearchFolder']>(workspaceKeys.searchFolder(id), apiPath`/v1/admin/search-folders/${id}`)
 }
 
-/** What a folder holds, counted afresh each time a question asks (an administrator's counts take everything) */
-export function useFolderContents(id: number) {
+/**
+ * What a folder holds, counted afresh each time a question asks (an administrator's counts take everything), through the
+ * public route, which answers only for a folder under a Store; nothing is asked while `enabled` is false
+ */
+export function useFolderContents(id: number, enabled = true) {
   const api = useApi()
   return useQuery({
     queryKey: workspaceKeys.contents(id),
     queryFn: ({ signal }) => api.get<components['schemas']['TrashContents']>(apiPath`/v1/folders/${id}/contents`, undefined, { signal }),
+    enabled,
     staleTime: 0,
     gcTime: 0,
   })

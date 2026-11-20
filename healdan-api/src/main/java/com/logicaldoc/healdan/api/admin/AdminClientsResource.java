@@ -3,6 +3,10 @@
 
 package com.logicaldoc.healdan.api.admin;
 
+import static com.logicaldoc.healdan.api.admin.ListOrder.date;
+import static com.logicaldoc.healdan.api.admin.ListOrder.descending;
+import static com.logicaldoc.healdan.api.admin.ListOrder.directed;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -138,10 +142,6 @@ public class AdminClientsResource {
 					Comparator.nullsLast(directed(Comparator.<Date>naturalOrder(), descending)));
 			};
 			return column.thenComparingLong(ClientView::number);
-		}
-
-		private static <T> Comparator<T> directed(Comparator<T> ascending, boolean descending) {
-			return descending ? ascending.reversed() : ascending;
 		}
 	}
 
@@ -331,21 +331,5 @@ public class AdminClientsResource {
 					date(lastActivity)));
 		}
 		return views;
-	}
-
-	/**
-	 * @return whether the {@code order} query parameter asks for the highest first
-	 * @throws ApiProblem {@code 400 bad-request} for anything but {@code asc}, {@code desc} or nothing
-	 */
-	private static boolean descending(String order) {
-		if (order == null || order.equals("asc"))
-			return false;
-		if (order.equals("desc"))
-			return true;
-		throw ApiProblem.badRequest("Give the order as asc or desc.");
-	}
-
-	private static Date date(Instant instant) {
-		return instant != null ? Date.from(instant) : null;
 	}
 }

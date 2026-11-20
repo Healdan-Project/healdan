@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
-import { deletedFolder, litigationAccess, problem, templateInfos, workspaceRoutes, type Routes } from '../test/fakeApi'
+import { deletedFolder, folderAccess, litigationAccess, problem, templateInfos, templateTrees, workspaceRoutes, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { permissionsOf } from '../workspace/levels'
 
@@ -117,6 +117,12 @@ describe("A template's page", () => {
     await expectNoAxeViolations(view.container)
   })
 
+  it('says a folder that follows from outside the template follows the Templates Store, which is no Store', async () => {
+    await openTemplate({ 'GET /v1/admin/folders/202/access': folderAccess(202, [], { ownPermissions: false, followsFolderId: 4 }) })
+    expect(await within(main()).findByText("It follows the Templates Store's permissions.")).toBeTruthy()
+    expect(within(main()).queryByText("It follows its Store's permissions.")).toBeNull()
+  })
+
   it("warns of a folder's problems beside its Save, which still saves, and the problems are asked again after", async () => {
     let problems: A['TemplateProblem'][] | undefined
     const { api } = await openTemplate({
@@ -196,9 +202,18 @@ describe("A template's page", () => {
     expect(within(await toastOf('Moved the template Litigation to the Trash')).queryByRole('button', { name: 'Undo' })).toBeNull()
   })
 
+  it("names what a folder of the template holds from its tree, as the public route answers only under a Store", async () => {
+    // Its Evidence holds Witness Statements
+    const { api } = await openTemplate({ 'GET /v1/admin/workspaces/202/tree': templateTrees[202]! })
+    const tree = within(main()).getByRole('treegrid', { name: 'Folders of Litigation' })
+    fireEvent.keyDown(within(tree).getByRole('row', { name: /^Evidence/ }), { key: 'Delete' })
+    const dialog = await screen.findByRole('alertdialog', { name: 'Move Evidence to the Trash?' })
+    expect(within(dialog).getByText('It holds 1 folder, which go with it.')).toBeTruthy()
+    expect(api.callsTo('GET /v1/folders/*/contents')).toEqual([])
+  })
+
   it("deletes a folder of the template with no Undo, as the Trash can't put it back", async () => {
     const { api } = await openTemplate({
-      'GET /v1/folders/2021/contents': { folders: 0, documents: 0 },
       'DELETE /v1/admin/folders/2021': deletedFolder({ trashItemId: 908 }),
     })
     const tree = within(main()).getByRole('treegrid', { name: 'Folders of Litigation' })

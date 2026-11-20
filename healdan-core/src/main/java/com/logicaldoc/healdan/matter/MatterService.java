@@ -532,10 +532,11 @@ public class MatterService {
 	 * @param username the owner's username
 	 * @return how the administration record names an owner: the name, with
 	 *         the username, which tells two people of one name apart, such as
-	 *         {@code Ann Lee (alee)}
+	 *         {@code Ann Lee (alee)}; the username alone when the name is it,
+	 *         as for someone whose first and last names are blank
 	 */
 	private static String ownerName(String name, String username) {
-		return "%s (%s)".formatted(name, username);
+		return name == null || name.equals(username) ? username : "%s (%s)".formatted(name, username);
 	}
 
 	/**

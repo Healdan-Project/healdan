@@ -322,6 +322,8 @@ export const adminEnUS = {
   'admin.access.none': 'Nobody but administrators can use this folder.',
   'admin.access.follows': 'It follows the permissions of {name}.',
   'admin.access.followsStore': "It follows its Store's permissions.",
+  // A template's folder that follows the Templates Store, which isn't a Store
+  'admin.access.followsTemplates': "It follows the Templates Store's permissions.",
   'admin.access.setOwn': 'Set Own Permissions',
   'admin.access.followParent': 'Follow Parent',
   'admin.access.followTitle': 'Follow the Permissions of {parent}?',

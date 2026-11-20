@@ -12,7 +12,7 @@ Only admins create Stores. In the Admin app, **New Store…**, beside the Store 
 [New Matter](../clients-and-matters/#creating-a-matter), makes one, and New Matter then chooses it:
 
 - **Name:** at most 255 characters, with no `/` or `\`. New Store says so before **Create Store** when it's too long
-  ("That is too long.") or has one of them ("That name isn't allowed.").
+  ("That is too long.") or has one of them ("A name can't have / or \ in it.", as every folder name's check says).
 - **Who Can See It:** the groups that can see the Store. **Add a Group** lists the first 50 groups by name, and finds
   the others as you type two characters or more. A group added leaves that list, and the Remove button (an ×) beside it
   takes it off again, the focus moving to the next group's Remove, or to **Add a Group** after the last. With none

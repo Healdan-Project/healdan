@@ -138,7 +138,8 @@ describe('New Store', () => {
     renderDialog()
     for (const typed of ['North/South', 'North\\South']) {
       fireEvent.change(name(), { target: { value: typed } })
-      expect(within(dialog()).getByText("That name isn't allowed.")).toBeTruthy()
+      // In the words every folder name's check uses
+      expect(within(dialog()).getByText("A name can't have / or \\ in it.")).toBeTruthy()
       expect(isDisabled(create())).toBe(true)
     }
     fireEvent.change(name(), { target: { value: 'x'.repeat(256) } })

@@ -183,7 +183,9 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     [The API's Tests](../tests/#the-apis-tests)).
   - **Clients, matters and folder access** are `AdminClientsResource`, `AdminMattersResource` and
     `AdminFolderAccessResource`, over `healdan-core`'s services (see the Admin app's records, below). Their lists
-    read every matching row in one query, then sort and page in Java, with the figures from `UsageSummary`. A create
+    read every matching row in one query, then sort and page in Java, with the figures from `UsageSummary`, but for
+    the Matters list sorted by number, its own order, which the database pages, so a page reads only its own
+    matters. A create
     whose insert a unique index refuses (PostgreSQL's SQLState `23505`), as the second of two creates of one number
     at the same moment is, goes through `NumberRaces`, which asks the number's check again once the first has
     committed, so the answer is the used number's `409 refused`. A matter's move and delete are `FolderChanges`'
@@ -449,7 +451,7 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `client.renamed`, `matter.created` and `matter.updated` inside them, so the Classic Interface's client and matter
     changes are recorded too, and so are the clients and matters setup steps make, such as the smoke stack's. A
     create records every field it set, and an edit only those whose values changed, an owner by name and username, as
-    `Ann Lee (alee)`, the name by `PersonNames`, so `dave (dave)` for an owner with no first or last name (a deleted
+    `Ann Lee (alee)`, the name by `PersonNames`, so `dave` alone for an owner with no first or last name (a deleted
     owner by the username LogicalDOC gave the account when it was deleted). A rename or an edit that changes nothing
     isn't recorded.
   - **The admin routes record the rest.** A matter's move records `matter.moved`, with the Store before and after,
@@ -487,7 +489,8 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     their own, refuses what the admin route refuses, and checks the matter's rules (P1 inside a matter, P2 on its own
     folder) with `PermissionRules`' own methods before it writes, as `HibernateFolderDAO.store` logs a listener's
     refusal at error level, which the error capture would count as a fault. The cap on `guest` and read-only people
-    binds every row but the owner's on a matter's own folder, which must hold all 25 permissions whoever owns the
+    binds what each row adds to what the folder grants that group now, so a row kept as it is passes, and every row
+    but the owner's on a matter's own folder, which must hold all 25 permissions whoever owns the
     matter: a read-only owner's row is then stored as what a read-only person's row holds, Read, Download, Preview,
     Print, Email, Subscription and Store, which `read` gives as Custom, and the record has each row as it's stored. It
     then stores through `FolderDAO.store` with `FolderEvent.PERMISSION`, so `PermissionsFolderListener` applies the
@@ -522,7 +525,7 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     while the owner could read the Store. It refuses only what the change breaks: a group counts only where P2 holds
     against the Store's rows now and fails against the new ones, so a matter that already let in a group the Store
     didn't blocks no other change, and the change that puts it right goes through. A matter in the Trash is checked
-    when it's restored (`checkRestore`).
+    when it's restored (`checkRestore`), and a plain folder left in a Store, with no live matter, isn't checked.
   - **A workspace's folders** are `WorkspaceAdmin` (`com.logicaldoc.healdan.admin.workspace`), whose `workspaceFolder`
     is the admin routes' one scope, which `FolderAccessService` and the routes' `WorkspaceRequests.folder` take. `tree`
     reads the workspace's folders once (`StoredRows`), aliases left out and hidden ones kept, into `WorkspaceNode`s.

@@ -340,11 +340,12 @@ public class PermissionRules {
 		}
 		record Workspace(String name, long source, Long ownerId, Long ownersGroup) {
 		}
-		// The live matters' folders in the Store, each with its owner and the owner's own group
+		// The live matters' folders in the Store, each with its owner and the owner's own group; a plain folder left in
+		// a Store is no matter, so P2 isn't about it
 		List<Row> rows = jdbc.query("""
 				select f.ld_id, f.ld_name, f.ld_securityref, m.hd_ownerid, g.ld_id
 				  from ld_folder f
-				  left join hd_matter m on m.hd_folderid = f.ld_id and m.ld_deleted = 0
+				  join hd_matter m on m.hd_folderid = f.ld_id and m.ld_deleted = 0
 				  left join ld_group g on g.ld_name = concat('_user_', cast(m.hd_ownerid as varchar(20)))
 				   and g.ld_tenantid = ?
 				 where f.ld_parentid = ? and not f.ld_id = f.ld_parentid and f.ld_deleted = 0

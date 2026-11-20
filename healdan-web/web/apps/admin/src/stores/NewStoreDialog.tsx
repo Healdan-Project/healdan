@@ -9,24 +9,17 @@ import { Button, Dialog, Highlight, Icon, SearchPicker, TextField, toast } from 
 import { adminKey, adminKeys, useAdminQuery } from '../queries'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
+// A Store's name is a folder's: the same rule, and the same words, as every other folder name the app takes
+import { nameProblem } from '../workspace/text'
 import formStyles from '../forms/Form.module.css'
 import styles from './Stores.module.css'
 
 type A = adminComponents['schemas']
 
-/** The longest name a folder takes (`FolderName`'s `too-long`), in UTF-16 units as Java counts them */
-const NAME_MAX = 255
 /** The groups offered while nothing is typed, the first by name: enough for most firms' every group */
 const GROUPS_SHOWN = 50
 /** The groups offered for what is typed */
 const GROUPS_FOUND = 20
-
-/** What the form can see is wrong with a Store's name, in the words `FolderName`'s 422 would get, or undefined */
-function nameProblem(trimmed: string): string | undefined {
-  if (trimmed.length > NAME_MAX) return t('fields.too-long')
-  if (/[/\\]/.test(trimmed)) return t('fields.invalid')
-  return undefined
-}
 
 /** Stores as the menus list them, by name, in any case */
 function byName(one: A['Store'], other: A['Store']): number {

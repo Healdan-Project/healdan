@@ -59,7 +59,7 @@ A folder either follows another folder's permissions, usually those of the folde
 tree marks with a lock.
 
 - **A folder that follows** says whose, as in "It follows the permissions of Documents." or "It follows its Store's
-  permissions.", and its rows can't be changed. **Set Own Permissions** makes them the folder's own, to change and
+  permissions." (in a template, "It follows the Templates Store's permissions."), and its rows can't be changed. **Set Own Permissions** makes them the folder's own, to change and
   save.
 - **A folder with its own** has **Add Person or Group**, a menu of levels on each row, and a Remove button (an ×)
   beside each, but for the owner's row on a matter's own folder (see [The Rules It Keeps](#the-rules-it-keeps)).
@@ -103,7 +103,9 @@ In a matter, Healdan checks each save against the rules on this page, and refuse
   restricted folder may keep anyone out.
 
 In a matter or a template, the `guest` group and people whose accounts are read-only can't be given more than Read
-Only: Healdan refuses the save. The owner's row on a matter's own folder is the one exception, above.
+Only: Healdan refuses the save. The owner's row on a matter's own folder is one exception, above. A row kept as the
+folder already grants it is the other: so **Set Own Permissions** below a matter's own folder keeps a read-only
+owner's row, as it was there, and saves.
 
 In a template, the first two rules aren't checked as you change it: the save works, and the template's page lists
 what New Matter would refuse in a matter made from it, as warnings, with each folder's own beside its **Save**, under

@@ -23,11 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderEvent;
-import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
@@ -194,7 +192,7 @@ public class StoreService {
 		vo.setType(Folder.TYPE_WORKSPACE);
 		vo.setTenantId(root.getTenantId());
 		// Its own permissions: for an administrator, LogicalDOC adds no row
-		Folder store = FolderDAO.get().create(root, vo, false, history(actor, FolderEvent.CREATED));
+		Folder store = FolderDAO.get().create(root, vo, false, FolderAccessService.history(actor, FolderEvent.CREATED));
 		// LogicalDOC's cache keeps what it loaded, even if the transaction rolls back
 		evictor.evictFoldersOnRollback(List.of(store.getId()));
 		// LogicalDOC makes the name unique with a number when another create has taken it meanwhile
@@ -206,8 +204,8 @@ public class StoreService {
 			stored.setSecurityRef(null);
 			stored.getAccessControlList().clear();
 			for (long group : groups)
-				stored.addAccessControlEntry(entry(group, EnumSet.of(Permission.READ)));
-			FolderDAO.get().store(stored, history(actor, FolderEvent.PERMISSION));
+				stored.addAccessControlEntry(FolderAccessService.entry(group, EnumSet.of(Permission.READ)));
+			FolderDAO.get().store(stored, FolderAccessService.history(actor, FolderEvent.PERMISSION));
 		}
 
 		Map<String, Change> changes = new HashMap<>();
@@ -258,10 +256,10 @@ public class StoreService {
 		Folder stored = FolderDAO.get().findById(storeId, true);
 		stored.setSecurityRef(null);
 		stored.getAccessControlList().clear();
-		after.forEach((group, flags) -> stored.addAccessControlEntry(entry(group, flags)));
+		after.forEach((group, flags) -> stored.addAccessControlEntry(FolderAccessService.entry(group, flags)));
 		// The cache isn't transactional: a rollback, such as a record that fails, mustn't leave the new rows cached
 		evictor.evictFoldersOnRollback(List.of(storeId));
-		FolderDAO.get().store(stored, history(actor, FolderEvent.PERMISSION));
+		FolderDAO.get().store(stored, FolderAccessService.history(actor, FolderEvent.PERMISSION));
 
 		// What the Store grants now, as stored
 		Map<Long, Set<Permission>> now = AclMath.effective(storeId);
@@ -381,16 +379,4 @@ public class StoreService {
 			throw new HealdanRuleException(ONLY_ADMINS);
 	}
 
-	private static FolderAccessControlEntry entry(long groupId, Set<Permission> flags) {
-		FolderAccessControlEntry entry = new FolderAccessControlEntry(groupId);
-		entry.grantPermissions(flags);
-		return entry;
-	}
-
-	private static FolderHistory history(User actor, FolderEvent event) {
-		FolderHistory history = new FolderHistory();
-		history.setUser(actor);
-		history.setEvent(event);
-		return history;
-	}
 }
