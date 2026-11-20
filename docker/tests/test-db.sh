@@ -5,7 +5,9 @@
 # The PostgreSQL Healdan's Java tests run on: postgres:18 in the container healdan-test-db, on the Docker network
 # healdan-test, published on 127.0.0.1 only. Each test makes a database of its own on it (TestDatabase), with the
 # encoding and locale a real install has, so the server's own default doesn't matter; initdb gets them anyway. Its data
-# lives on a tmpfs, and it runs without fsync, as nothing on it needs to outlive the container.
+# lives on a tmpfs, and it runs without fsync, as nothing on it needs to outlive the container. Its password is hashed
+# with one SCRAM iteration, not PostgreSQL's 4,096: every test opens some 40 connections (LogicalDOC reads each setting
+# of its context on a connection of its own), and the hashing was most of what a connection cost.
 # Usage: docker/tests/test-db.sh start|stop
 #        HEALDAN_TEST_DB_PORT publishes another host port than 5432
 set -euo pipefail
@@ -51,11 +53,13 @@ start() {
   esac
   docker network inspect "$NETWORK" >/dev/null 2>&1 || docker network create "$NETWORK" >/dev/null
 
-  # The image's volume is /var/lib/postgresql, which holds PGDATA
+  # The image's volume is /var/lib/postgresql, which holds PGDATA. scram_iterations goes to initdb, which hashes the
+  # user's password: as a server setting it would come too late
+  local initdb="--encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C -c scram_iterations=1"
   docker run -d --name "$NAME" --network "$NETWORK" -p "127.0.0.1:$PORT:5432" \
     --tmpfs /var/lib/postgresql \
     -e POSTGRES_USER=healdan -e POSTGRES_PASSWORD=healdan-test \
-    -e POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C" \
+    -e POSTGRES_INITDB_ARGS="$initdb" \
     postgres:18 \
     -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=300 >/dev/null
 
