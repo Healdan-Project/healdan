@@ -256,9 +256,9 @@ uploads the folder (see [What a Failed Run Keeps](../tests/#what-a-failed-run-ke
 - **Only a failed smoke test uploads.** A run that passes keeps no folder and uploads nothing, and a failure in
   another step uploads nothing either. A smoke test that failed before its stack was up has nothing to upload,
   which the step lets pass.
-- **The attempt is in the name** because a failed job run again can't upload under a name its first attempt used.
-  When the second attempt passes, the first attempt's artifact is the only record of the failure.
-- **It costs a run that passes nothing** but Tomcat writing a line for each request, about 20,000 in a run.
+- **The attempt is in the name,** so a failed job run again uploads beside its first attempt's artifact, never in
+  its place. When the second attempt passes, the first attempt's artifact is the only record of the failure.
+- **It costs a run that passes nothing** but Tomcat writing a line for each request, about 9,000 in a run.
 - **Artifacts aren't Actions caches,** so they take none of the 10 GB under [Room for the Caches](#room-for-the-caches).
 - **Read it** with `npx playwright show-trace <test's folder>/trace.zip`, and find the request the page waited on in
   `access.log` by its time and path ([The Access Log](../tests/#the-access-log) has the line's form).
