@@ -59,7 +59,11 @@ Healdan has no list of all clients: a client shows here only through a matter yo
   [Copying, Moving and Deleting](../../documents/copying-moving-and-deleting/).
 - **Open a folder** with a click or Enter: it opens as it does anywhere.
 - **Open a client** and Healdan searches the **Clients** scope for it, which lists that client's matters.
-- **The lists keep the server's order,** so no column header sorts them. Your administrator can change the 30 days.
+- **Sort a list** by clicking a column's heading, as in any list (see
+  [The List's Columns](../../getting-started/getting-around/#the-lists-columns)). **Documents**, **Emails** and
+  **Folders** show **Last Used**, when you last worked on each, and start sorted by it, newest first; **Clients** starts
+  by name. Opening an entry from the left pane starts its list in that order again.
+- **Your administrator** can change the 30 days.
 
 ## Recent Matters
 

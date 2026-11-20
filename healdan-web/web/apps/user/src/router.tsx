@@ -13,12 +13,14 @@ import { DocResult } from './views/DocResult'
 import { FolderView } from './views/FolderView'
 import { NotFound } from './views/NotFound'
 import { CheckedOutView } from './views/CheckedOutView'
-import { RecentView } from './views/RecentView'
+import { RECENT_SORTS, RecentView } from './views/RecentView'
 import { SearchView } from './views/SearchView'
 import { TrashView } from './views/TrashView'
 import { isTrashSort, isTrashView, type TrashSort, type TrashViewName } from './actions/trash'
 import { isSearchScope } from './search/scopes'
 import { isSortColumn, type ListingOrder, type SortColumn } from './views/useListing'
+import { offeredFor } from './views/listColumns'
+import { sortSearch, type AddressSort } from './views/useListColumns'
 
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined)
 
@@ -31,17 +33,38 @@ const rootRoute = createRootRoute({
   }),
 })
 
-const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <RecentView kind="documents" /> })
+// The lists the server sends whole keep the sort the browser gives them in the address too (list columns spec 4.2): only by
+// a column the list has, and none while it's in its own order.
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+  validateSearch: (search: Record<string, unknown>): AddressSort => sortSearch(search, offeredFor('recentDocuments')),
+  component: function IndexRoute() {
+    const { sort, order } = indexRoute.useSearch()
+    return <RecentView kind="documents" sort={sort} order={order} />
+  },
+})
 
 const recentRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: 'recent/$kind',
+  // The kind's own list leaves out a column another Recent list has
+  validateSearch: (search: Record<string, unknown>): AddressSort => sortSearch(search, RECENT_SORTS),
   component: function RecentRoute() {
-    return <RecentView kind={recentRoute.useParams().kind} />
+    const { sort, order } = recentRoute.useSearch()
+    return <RecentView kind={recentRoute.useParams().kind} sort={sort} order={order} />
   },
 })
 
-const checkedOutRoute = createRoute({ getParentRoute: () => rootRoute, path: 'checked-out', component: CheckedOutView })
+const checkedOutRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'checked-out',
+  validateSearch: (search: Record<string, unknown>): AddressSort => sortSearch(search, offeredFor('checkedOut')),
+  component: function CheckedOutRoute() {
+    const { sort, order } = checkedOutRoute.useSearch()
+    return <CheckedOutView sort={sort} order={order} />
+  },
+})
 
 // A folder keeps its sort in the address, as Back and a pasted link should show it the same way.
 const foldersRoute = createRoute({

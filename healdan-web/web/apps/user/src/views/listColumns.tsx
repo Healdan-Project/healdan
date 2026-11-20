@@ -145,14 +145,21 @@ export const documentColumns: Record<string, TableColumn<ListRow>> = {
   checkedOut: { id: 'checkedOut', name: t('list.checkedOut'), allowsSorting: true, newestFirst: true, width: 116, cell: ({ item }) => item.type === 'document' && item.hold?.since ? formatDate(item.hold.since) : null },
 }
 
-const COMMON = ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type']
 // Spec 4.7's table order: the columns every list offers, then Last Used (Recent) or Computer and Checked Out (Checked Out to Me)
 const OFFERED_ORDER = ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'lastUsed', 'computer', 'checkedOut']
+/** The columns only some lists offer, and those lists; every other column of OFFERED_ORDER is every list's */
+const OFFERED_BY: Record<string, readonly DocumentListKind[]> = {
+  lastUsed: ['recentDocuments', 'recentEmails'],
+  computer: ['checkedOut'],
+  checkedOut: ['checkedOut'],
+}
 
-/** The columns a list of documents offers, in spec 4.7's order. The kind is the list's own, never the layout beside the reading pane, which only picks among them. */
+/**
+ * The columns a list of documents offers, in spec 4.7's order. The kind is the list's own, never the layout beside the
+ * reading pane, which only picks among them: `beside` itself offers only the columns every list offers.
+ */
 export function offeredFor(kind: DocumentListKind): string[] {
-  if (kind === 'beside') return [...COMMON]
-  return OFFERED_ORDER.filter((id) => COMMON.includes(id) || (id === 'lastUsed' && (kind === 'recentDocuments' || kind === 'recentEmails')) || ((id === 'computer' || id === 'checkedOut') && kind === 'checkedOut'))
+  return OFFERED_ORDER.filter((id) => !Object.hasOwn(OFFERED_BY, id) || OFFERED_BY[id]!.includes(kind))
 }
 
 /** What the server can sort a paged list by yet (spec 6); the other columns sort only a list the browser holds whole */
@@ -204,6 +211,8 @@ export const listColumns: TableColumn<ListRow>[] = columnsFor('folder', ['title'
 /** The columns a list of search hits or recent items has: the scope decides which. */
 export function hitColumns(scope: SearchScope): TableColumn<ListRow>[] {
   if (scope === 'matters' || scope === 'clients') {
+    // A Client column of their own: the documents' Client shows the client of the matter a document or folder is in, and
+    // leaves a matter's own row blank, where this one shows the matter's client
     return [
       { ...title, name: t('list.matter'), allowsSorting: false },
       { id: 'client', name: t('list.client'), width: '1fr', cell: ({ item }) => item.type === 'matter' && item.client.name },
@@ -218,13 +227,4 @@ export function hitColumns(scope: SearchScope): TableColumn<ListRow>[] {
 /** What a list keeps while the reading pane is open and the list is narrow (spec section 6.4): Title, Doc # and Edit Date. */
 export function narrowed(columns: TableColumn<ListRow>[]): TableColumn<ListRow>[] {
   return columns.filter((column) => column.id === 'title' || column.id === 'docNumber' || column.id === 'edited')
-}
-
-/**
- * Checked Out to Me: the server's order (latest check-out first), so nothing sorts, as its list takes no `onSort`. With
- * Computer and Checked Out its least widths are wider than the list beside the details anyway, so Matter keeps at least
- * its old fixed 130 there rather than give way to 100 (list columns spec 4.1).
- */
-export function checkedOutColumns(): TableColumn<ListRow>[] {
-  return columnsFor('checkedOut', ['title', 'docNumber', 'version', 'matter', 'computer', 'checkedOut', 'edited'], true)
 }

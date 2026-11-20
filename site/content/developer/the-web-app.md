@@ -258,6 +258,17 @@ minor, rows with no value last either way, ties in the list's own order). A page
 sorts on the server, and a column the server doesn't sort yet (`SERVER_SORTS` in `views/listColumns.tsx`) doesn't offer
 sorting there.
 
+A view takes its columns from `views/useListColumns.tsx`. `useDocumentListColumns(kind, { beside, serverSorted })` gives
+a list of documents its `columns` and the Table's `resizing`, `choice` (with the `ColumnsPanel`) and `onResetColumns`,
+from its kind's layout, or from `beside`'s while `beside` is true (`useRegionKind(…) === 'preview'`), so a change made
+beside the reading pane changes only that layout. `useListWidths(kind, columns)` gives a list that isn't of documents
+its `resizing` and `onResetColumns`. Each keeps the props it hands the Table the same objects while nothing in them
+changes, so a refetch (a return to the window) leaves the Columns panel open with its focus. A list the browser sorts
+starts in its own order, which is a column (Last Used, newest first, for Recent's documents, emails and folders; Checked
+Out for Checked Out to Me; Client for Recent Clients), and keeps another in the address: `useBrowserSort(ids, own,
+address)` reads it and writes it with `replace`, leaving the address without one when the list's own order is chosen
+again, and the routes' `validateSearch` keep only a column the list has (`sortSearch`).
+
 ## Keeping the Page Up to Date
 
 The app has no push updates yet (M6's spec §16). Instead it asks again for what's on screen each time the person comes
@@ -604,8 +615,9 @@ answer's `total` is reached, or, when it's `null`, when it's shorter than the 10
 `views/RecentView.tsx` is the start page and `/recent/<kind>`, a Table each, with `useRowSelection` (the selection of
 document and folder rows, shared with search) putting a document in `?sel=` and its details in the region; a recent client opens
 a Clients search. `views/CheckedOutView.tsx` is `/checked-out`, the same list page as Recent's documents
-(`views/DocumentListPage.tsx`) over `GET /v1/me/checkouts` (`useCheckouts`), with its own columns (`checkedOutColumns`,
-none sorting, as the server's order is the latest check-out first). The left pane's entry (`CheckedOutEntry` in
+(`views/DocumentListPage.tsx`) over `GET /v1/me/checkouts` (`useCheckouts`), with its own kind of list, `checkedOut`,
+which adds Computer and Checked Out and starts sorted by Checked Out, newest first, the server's order. The left pane's
+entry (`CheckedOutEntry` in
 `frame/LeftPane.tsx`) reads the same query's `total` for its count.
 
 ## Previews

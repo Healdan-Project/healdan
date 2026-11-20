@@ -7,7 +7,7 @@ import { client } from '../test/fakeApi'
 import type { components } from '@healdan/api'
 import { formatDate, formatDateTime } from '@healdan/ui'
 import { DEFAULT_SHOWN, type DocumentListKind } from './columnLayouts'
-import { checkedOutColumns, columnsFor, hitColumns, MatterCell, offeredFor, rowOf, SERVER_SORTS, type ListRow } from './listColumns'
+import { columnsFor, hitColumns, MatterCell, offeredFor, rowOf, SERVER_SORTS, type ListRow } from './listColumns'
 
 type S = components['schemas']
 
@@ -54,7 +54,7 @@ describe('the default widths (spec 4.1)', () => {
   })
 
   it("gives Checked Out to Me's and the Folders scope's Matter the same share, Checked Out to Me's at least its old 130", () => {
-    const checkedOut = checkedOutColumns()
+    const checkedOut = columnsFor('checkedOut', DEFAULT_SHOWN.checkedOut, false)
     expect(column(checkedOut, 'title')).toMatchObject({ width: '2fr', minWidth: 220 })
     // Its list is wider than the room beside the details anyway, so Matter needn't give way below its old fixed width
     expect(column(checkedOut, 'matter')).toMatchObject({ width: '1.5fr', minWidth: 130 })
