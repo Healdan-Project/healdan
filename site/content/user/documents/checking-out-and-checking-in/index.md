@@ -69,8 +69,9 @@ check in. Beside it, a count says how many there are, once there's at least one.
 
 The latest check-out comes first, as the list starts sorted by **Checked Out**, newest first; click any column's heading
 to sort by it, as in any list (see [The List's Columns](../../getting-started/getting-around/#the-lists-columns)). A
-document leaves the list once it's checked in or released. Select, preview, open and right-click its documents as in any list, and release them from it: see
-[Giving Up a Check-Out](#giving-up-a-check-out) and [Your Check-Out on Another Computer](#your-check-out-on-another-computer).
+document leaves the list once it's checked in or released. Select, preview, open and right-click its documents as in
+any list, and release them from it: see [Giving Up a Check-Out](#giving-up-a-check-out) and
+[Your Check-Out on Another Computer](#your-check-out-on-another-computer).
 
 It lists check-outs only. A document locked with the Classic Interface's **Lock** isn't in it (see
 [Locking a Document](../locking-a-document/)), and nor is one you can no longer read.

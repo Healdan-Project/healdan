@@ -39,7 +39,9 @@ Holding Space down doesn't open and close Quick Look over and over.
   Filters.
 - **The list beside the pane has columns of its own,** **Title**, **Doc #** and **Edit Date** at first, so it fits.
   Choose others as in any list (see [The List's Columns](../../getting-started/getting-around/#the-lists-columns)):
-  every list beside the pane shows the ones you choose. The list's usual columns come back when you close it.
+  every list beside the pane shows the ones you choose, except a column it doesn't have, which it leaves out: **Last
+  Used** is only in Recent's lists, and **Computer** only in **Checked Out to Me**. The list's usual columns come back
+  when you close it.
 - **With no document selected,** the pane waits for you to select one.
 
 ## What's Shown

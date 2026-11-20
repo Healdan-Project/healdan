@@ -267,13 +267,14 @@ changes, so a refetch (a return to the window) leaves the Columns panel open wit
 starts in its own order, which is a column (Last Used, newest first, for Recent's documents, emails and folders; Checked
 Out for Checked Out to Me; Client for Recent Clients), and keeps another in the address: `useBrowserSort(ids, own,
 address)` reads it and writes it with `replace`, leaving the address without one when the list's own order is chosen
-again, and the routes' `validateSearch` keep only a column the list has (`sortSearch`).
+again, and the routes' `validateSearch` keep only a column one of the route's lists has (`sortSearch`; `/recent/$kind`
+takes any of `RECENT_SORTS`, and a list ignores a sort by a column it doesn't have).
 
 A folder (`folder`, a search folder too) and a search keep their sort in the address too, a column the server sorts by
-(`isSortColumn`), and take their columns with `serverSorted: true`. Each document scope of a search is a kind of its own (`documents`, `all`,
-`emails`), and its Folders, Matters and Clients scopes take `hitColumns(scope)` through `useListWidths`, unsorted.
-A sorted document search passes the Table `relevance`, whose **Sort by Relevance** replaces the address with one
-without `sort` and `order`.
+(`isSortColumn`), and take their columns with `serverSorted: true`. Each document scope of a search is a kind of its own
+(`documents`, `all`, `emails`), and its Folders, Matters and Clients scopes take `hitColumns(scope)` through
+`useListWidths`, unsorted. A sorted document search passes the Table `relevance`, whose **Sort by Relevance** replaces
+the address with one without `sort` and `order`.
 
 ## Keeping the Page Up to Date
 

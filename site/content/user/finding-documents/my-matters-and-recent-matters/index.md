@@ -39,8 +39,7 @@ and removing that bookmark there removes it from My Matters.
 ## Recent
 
 Near the top of the left pane, under **Checked Out to Me**, **Recent** has four entries. Each opens a list of what you
-worked on lately, newest first, and sets the scope picker beside the search box to its scope, so your next search
-looks there.
+worked on lately and sets the scope picker beside the search box to its scope, so your next search looks there.
 
 | Entry | Lists |
 |---|---|
@@ -63,7 +62,8 @@ Healdan has no list of all clients: a client shows here only through a matter yo
   [The List's Columns](../../getting-started/getting-around/#the-lists-columns)). **Documents**, **Emails** and
   **Folders** show **Last Used**, when you last worked on each, and start sorted by it, newest first; **Clients** starts
   by name. Opening an entry from the left pane starts its list in that order again.
-- **Your administrator** can change the 30 days.
+
+Your administrator can change the 30 days.
 
 ## Recent Matters
 
