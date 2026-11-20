@@ -707,7 +707,8 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     with **Undo**, the move picker for a folder with its greyed choices, the question before a folder leaves its matter, the Trash
     with an item and with it selected, its **Remove** and **Empty Trash** questions and the empty Trash, search results for a word with their Filters (Title keeps 200
     pixels, and text that doesn't fit ends in an ellipsis), the search box's suggestions for the smoke fixture's matter
-    with the whole page around them, a document's page, Quick Look on a PDF and on an email, the
+    with the whole page around them (and that their layer covers the window and the list starts under the field,
+    `expectListUnder`), a document's page, Quick Look on a PDF and on an email, the
     reading pane, New Folder, More and Move To… (a matter's client starts clear of it, drawn smaller), the person menu,
     Signed-in Devices (whole in its dialog, with no sideways scroll, every Revoke inside it and a name of at most two
     lines at 1280, and again at 768) with the Revoke question and its refusal (and a real revoke, whose focus must stay
@@ -735,7 +736,9 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     contrast is checked. The find's list is checked with the whole page around it, as the User app's search box's
     is: `@healdan/ui`'s `ComboBox` draws the list right after the box, inside the find's search landmark, and keeps
     the page around it shown to a screen reader while it's open (The Web App page's The Search Box and Search
-    Results), so nothing hidden holds a link (axe's `aria-hidden-focus`).
+    Results), so nothing hidden holds a link (axe's `aria-hidden-focus`). `e2e/helpers.ts`'s `expectListUnder` then
+    checks that the list's layer covers the window and the list starts at the find's left edge, 4 pixels below it, as
+    wide as the box, though the find's field is positioned and padded.
   - `resizing.spec.ts` files a document into a folder of its own inside `E2E`, and through the page drags the left
     pane's divider with the mouse and checks the pane's width, its value and that the list's Title column narrowed (the
     virtualiser measured the narrower list); reloads and finds the width kept; moves it by keys; checks that a window

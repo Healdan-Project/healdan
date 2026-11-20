@@ -3,7 +3,7 @@
 
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import { expectNoViolations } from './axe'
-import { ADMIN_PASSWORD, ADMIN_USERNAME, signIn } from './helpers'
+import { ADMIN_PASSWORD, ADMIN_USERNAME, expectListUnder, signIn } from './helpers'
 
 // An axe pass on Healdan Admin's Dashboard (admin spec 8.1 and 17.1), with its frame's find, Help and person menus, in the
 // light theme and in the dark one, which Playwright's `colorScheme` switches as the system's setting would, and in a
@@ -68,6 +68,8 @@ for (const scheme of ['light', 'dark'] as const) {
       // (aria-hidden-focus) and the page keeps its main landmark and heading. Its options, their headings and their colours
       // are checked with it.
       await check("the find's list")
+      // Drawn over the window, under the find's field, though the field is positioned and padded
+      await expectListUnder(banner().getByRole('search'))
       await page.keyboard.press('Escape')
       await find.fill('')
       await expect(found).toBeHidden()

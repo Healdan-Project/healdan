@@ -521,11 +521,17 @@ kinds, which are scopes too) joined to `@healdan/ui`'s `ComboBox`, React Aria's,
 named sections and not filtered by it. Focus stays in the box and the arrow keys move through the options. The list
 comes right after the box in the page, in the top bar's search landmark, drawn in a layer fixed over the window
 (`.layer` in `ComboBox.module.css`, so an element round the box that clips or is positioned can't cut it off or move
-it), where React Aria would draw it at the end of `<body>`. React Aria's combo box hides everything outside the box and
-its list from screen readers while the list is open (`aria-hidden`), because a list at the end of `<body>` is far from
-the box in reading order; with the list beside the box there's nothing to hide, and `ComboBox`'s `PageStaysShown`
-keeps React Aria from hiding it, as React Aria has no switch for it yet
-([adobe/react-spectrum#4937](https://github.com/adobe/react-spectrum/issues/4937)). `ComboBox.test.tsx` runs axe on a
+it), where React Aria would draw it at the end of `<body>`. That holds while nothing round the box holds what is fixed
+inside it: a transform, a filter or `backdrop-filter`, a perspective, or containment (`contain: layout` or `paint`,
+`container-type`) would shrink the layer to that element and let it cut the list off, so a combo box never goes inside
+one, and the a11y specs check that the layer covers the window and the list starts under the field (`e2e/helpers.ts`'s
+`expectListUnder`). React Aria's combo box hides everything outside the box and its list from screen readers while the
+list is open (`aria-hidden`), because a list at the end of `<body>` is far from the box in reading order; with the list
+beside the box there's nothing to hide, and `ComboBox.tsx`'s `PageStaysShown` keeps React Aria from hiding anything, as
+React Aria has no switch for it yet ([adobe/react-spectrum#4937](https://github.com/adobe/react-spectrum/issues/4937)).
+`PickField` draws its list the same way, with the same `useListLayer` and `ListPopover`. What scrolls when the options
+don't fit is an element of its own with a `tabindex` of -1, as Firefox and Chromium otherwise stop Tab on a scroller
+with nothing focusable in it (the options have none, as the focus stays in the box). `ComboBox.test.tsx` runs axe on a
 whole page with the list open, and fails if React Aria hides anything again. Enter with
 none under the arrow keys is `onSubmit`, which React Aria itself never reports (it only commits a custom value), so the
 wrapper reads the focused option from the combobox state. The scope follows the address (the start page and Recent's

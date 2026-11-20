@@ -90,39 +90,70 @@ const SHOWN_LAYER = 'data-react-aria-top-layer'
  * have it, so there's nothing to hide: the page stays readable while the list is open, a screen reader's cursor can move on
  * from the list to what comes next, and nothing hidden holds a link a keyboard reaches (axe's aria-hidden-focus). React
  * Aria has no switch for its hiding yet (adobe/react-spectrum#4937, where its team means to add one to `useComboBox` for a
- * list that isn't drawn at the end of <body>), so while it looks, the page's layer (the element of <body> that holds the
- * box) carries the mark React Aria leaves shown, and it's taken off straight after.
+ * list that isn't drawn at the end of <body>), so while it looks, every element of <body> carries the mark React Aria
+ * leaves shown, and it's taken off straight after. Every one, not just the one holding the box, so a combo box in an
+ * overlay of its own at <body> (the Tray, a popover) leaves the page shown too. The mark only keeps React Aria from hiding
+ * more: what a dialog has already hidden stays hidden.
  *
  * React Aria looks once, in an effect of its combo box, as the list opens: what is added to the page later it hides only
  * outside what it left shown then. This runs in an effect of a child of that combo box, which runs first, as a child's
  * effects run before its parent's, and the mark comes off in a microtask, once the pass that runs both effects has ended.
  */
-function PageStaysShown({ near }: { near: HTMLElement | null }) {
+function PageStaysShown() {
   const isOpen = useContext(ComboBoxStateContext)?.isOpen ?? false
   useEffect(() => {
-    if (!isOpen || near === null) return
-    let layer: HTMLElement = near
-    while (layer.parentElement !== null && layer.parentElement !== near.ownerDocument.body) layer = layer.parentElement
-    if (layer.parentElement === null || layer.hasAttribute(SHOWN_LAYER)) return
-    layer.setAttribute(SHOWN_LAYER, '')
-    queueMicrotask(() => layer.removeAttribute(SHOWN_LAYER))
-  }, [isOpen, near])
+    if (!isOpen) return
+    // Those already marked are another's, such as the toasts' region, and keep their mark
+    const marked = [...document.body.children].filter((element) => !element.hasAttribute(SHOWN_LAYER))
+    for (const element of marked) element.setAttribute(SHOWN_LAYER, '')
+    queueMicrotask(() => {
+      for (const element of marked) element.removeAttribute(SHOWN_LAYER)
+    })
+  }, [isOpen])
   return null
+}
+
+/**
+ * The layer a combo box's list is drawn in (`.layer` in ComboBox.module.css): the element to draw right after React Aria's
+ * combo box, and that element once it's drawn, for ListPopover. After the combo box rather than in it, as React Aria draws
+ * its children twice (once in a hidden copy that works out the options).
+ */
+export function useListLayer(): [HTMLDivElement | null, ReactNode] {
+  const [layer, setLayer] = useState<HTMLDivElement | null>(null)
+  return [layer, <div ref={setLayer} className={styles.layer} />]
+}
+
+/**
+ * A combo box's list (its ListBox is the child), drawn in the layer from useListLayer, so it comes right after the box in
+ * the page, and with the page around it left shown to a screen reader while it's open (PageStaysShown). What scrolls when
+ * the options don't fit is an element of its own, out of the Tab order: Firefox and Chromium otherwise stop Tab on a
+ * scroller with nothing focusable in it, and the options have no tabindex, as the focus stays in the box. A press anywhere
+ * in the list leaves the focus there, as a press on an option does.
+ */
+export function ListPopover({ layer, triggerRef, children }: { layer: HTMLElement | null; triggerRef?: RefObject<Element | null>; children: ReactNode }) {
+  return (
+    <>
+      <PageStaysShown />
+      <Popover className={styles.popover} triggerRef={triggerRef} placement="bottom start" offset={4} UNSTABLE_portalContainer={layer ?? undefined}>
+        <div className={styles.scroller} tabIndex={-1} onMouseDown={(event) => event.preventDefault()}>
+          {children}
+        </div>
+      </Popover>
+    </>
+  )
 }
 
 /**
  * A text box that offers options as it is typed in (a React Aria ComboBox). The options are the caller's, grouped in
  * named sections, and aren't filtered here: the caller decides what the text matches. Focus stays in the box, and the
  * arrow keys move through the options. The list comes right after the box in the page, so it is in the caller's landmark,
- * and the page around it stays shown to a screen reader while it's open (see PageStaysShown). It is drawn in a layer fixed
+ * and the page around it stays shown to a screen reader while it's open (see ListPopover). It is drawn in a layer fixed
  * over the window (`.layer`), so nothing round the box can cut it off or move it, as at the end of <body>, where React Aria
- * would draw it.
+ * would draw it, as long as nothing round the box holds what is fixed inside it (see `.layer`).
  */
 export function ComboBox({ value, onValueChange, sections, onSelect, onSubmit, inputRef, anchorRef, className, inputClassName, placeholder, ...labels }: ComboBoxProps) {
   const closerRef = useRef<(() => void) | null>(null)
-  // The list's layer, after React Aria's combo box rather than in it, as React Aria draws its children twice (once in a
-  // hidden copy that works out the options)
-  const [layer, setLayer] = useState<HTMLDivElement | null>(null)
+  const [layer, layerElement] = useListLayer()
   return (
     <>
       <AriaComboBox
@@ -144,8 +175,7 @@ export function ComboBox({ value, onValueChange, sections, onSelect, onSubmit, i
         menuTrigger="input"
       >
         <SubmitInput ref={inputRef} className={inputClassName} placeholder={placeholder} onSubmit={onSubmit} value={value} hasOptions={sections.length > 0} closerRef={closerRef} />
-        <PageStaysShown near={layer} />
-        <Popover className={styles.popover} triggerRef={anchorRef} placement="bottom start" offset={4} UNSTABLE_portalContainer={layer ?? undefined}>
+        <ListPopover layer={layer} triggerRef={anchorRef}>
           <ListBox className={styles.list}>
             {(section: ComboBoxSection) => (
               <ListBoxSection id={section.id} className={styles.section} aria-label={section.title}>
@@ -162,9 +192,9 @@ export function ComboBox({ value, onValueChange, sections, onSelect, onSubmit, i
               </ListBoxSection>
             )}
           </ListBox>
-        </Popover>
+        </ListPopover>
       </AriaComboBox>
-      <div ref={setLayer} className={styles.layer} />
+      {layerElement}
     </>
   )
 }

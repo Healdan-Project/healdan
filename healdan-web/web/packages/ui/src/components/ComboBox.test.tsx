@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import axe from 'axe-core'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import '../tokens.css'
@@ -139,20 +139,22 @@ describe('ComboBox', () => {
   // What carries aria-hidden, to say so when anything does
   const hiddenOnes = () => [...document.querySelectorAll('[aria-hidden="true"]')].map((element) => element.outerHTML.slice(0, 80))
 
-  // A page as the apps' top bars have it: the box in a search landmark between links and buttons, and a main area
-  function Page() {
+  // A page as the apps' top bars have it: the box in a search landmark between links and buttons, and a main area, with a
+  // link that comes in later (`late`)
+  function Page({ shown = sections, late = false }: { shown?: ComboBoxSection[]; late?: boolean }) {
     return (
       <>
         <header>
           <a href="/app/">Home</a>
           <form role="search">
-            <Example />
+            <Example shown={shown} />
           </form>
           <button type="button">Help</button>
         </header>
         <main>
           <h1>Recent Documents</h1>
           <a href="/app/doc/10392">Charter.docx</a>
+          {late && <a href="/app/doc/10393">Reply.docx</a>}
         </main>
       </>
     )
@@ -174,12 +176,12 @@ describe('ComboBox', () => {
     // The whole page, every rule but colour contrast (jsdom has no colours): nothing hidden holds a link (aria-hidden-focus),
     // the page keeps its main landmark and heading, and the list is inside a landmark (region). jsdom's page has no title
     // or language of its own, which the apps' index.html give theirs.
-    const { title, lang } = { title: document.title, lang: document.documentElement.lang }
+    const title = document.title
+    const lang = document.documentElement.lang
     document.title = 'Recent Documents'
     document.documentElement.lang = 'en-US'
     try {
-      const result = await axe.run(document, { rules: { 'color-contrast': { enabled: false } } })
-      expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`)).toEqual([])
+      await expectNoAxeViolations(document)
     } finally {
       document.title = title
       document.documentElement.lang = lang
@@ -188,13 +190,48 @@ describe('ComboBox', () => {
     expect(document.querySelector('[data-react-aria-top-layer]')).toBeNull()
   })
 
-  it('draws its list in a layer fixed over the window, which an element round the box that clips or is positioned leaves alone', async () => {
+  it('leaves the page shown when the box is in an overlay of its own at <body>, as the Tray is', async () => {
+    render(
+      <>
+        <main>
+          <h1>Recent Documents</h1>
+          <a href="/app/doc/10392">Charter.docx</a>
+        </main>
+        {createPortal(
+          <div>
+            <Example />
+          </div>,
+          document.body,
+        )}
+      </>,
+    )
+    type('ch')
+    await screen.findByRole('listbox')
+    expect(screen.getByRole('link', { name: 'Charter.docx' })).toBeTruthy()
+    expect(hiddenOnes()).toEqual([])
+  })
+
+  it('leaves what comes into the page and the list once the list is open shown too', async () => {
+    // At first only the search itself, then the matters and documents, as the User app's suggestions come
+    const { rerender } = render(<Page shown={sections.filter((section) => section.id === 'footer')} />)
+    type('ch')
+    const list = await screen.findByRole('listbox')
+    expect(within(list).getAllByRole('option')).toHaveLength(1)
+    rerender(<Page shown={sections} late />)
+    expect(await screen.findByRole('option', { name: /Charter Dispute/ })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Reply.docx' })).toBeTruthy()
+    expect(hiddenOnes()).toEqual([])
+  })
+
+  // Where the layer lands in a real browser (over the whole window, the list under the field) is checked by the a11y specs
+  // (e2e/helpers.ts's expectListUnder): jsdom has no layout.
+  it('draws its list in a layer of its own after the box, fixed and taking no clicks, and draws no layer while the list is closed', async () => {
     render(
       <div style={{ position: 'relative', overflow: 'hidden' }}>
         <Example />
       </div>,
     )
-    type('ch')
+    const box = type('ch')
     const list = await screen.findByRole('listbox')
     let layer = list.parentElement
     while (layer !== null && getComputedStyle(layer).position !== 'fixed') layer = layer.parentElement
@@ -202,7 +239,31 @@ describe('ComboBox', () => {
     // The layer's last ancestor before the page is the caller's, not <body>: the list is right after the box
     expect(layer!.parentElement).not.toBe(document.body)
     expect(getComputedStyle(layer!).pointerEvents).toBe('none')
+    expect(getComputedStyle(layer!).display).not.toBe('none')
     expect(getComputedStyle(list.closest('[data-trigger="ComboBox"]')!).pointerEvents).toBe('auto')
+    fireEvent.keyDown(box, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    expect(layer!.childElementCount).toBe(0)
+    expect(getComputedStyle(layer!).display).toBe('none')
+  })
+
+  it("keeps its list's scroller out of the Tab order, and the focus in the box when the list is pressed", async () => {
+    const user = userEvent.setup()
+    render(<Page />)
+    const box = screen.getByRole('combobox', { name: 'Search' })
+    await user.click(box)
+    await user.keyboard('ch')
+    const list = await screen.findByRole('listbox')
+    // What scrolls when the options don't fit is the element between the popover and the list, which Firefox and Chromium
+    // would otherwise stop Tab on, as nothing in it can take the focus; the popover itself doesn't scroll
+    const scroller = list.parentElement!
+    expect(getComputedStyle(scroller).overflow).toBe('auto')
+    expect(scroller.tabIndex).toBe(-1)
+    expect(getComputedStyle(list.closest('[data-trigger="ComboBox"]')!).overflow).not.toBe('auto')
+    // A press on a section's heading, between options, leaves the focus in the box and the list open
+    await user.click(within(list).getByText('Matters'))
+    expect(document.activeElement).toBe(box)
+    expect(screen.getByRole('listbox')).toBe(list)
   })
 
   it('still keeps the page shown when the list opens again, and leaves nothing hidden once it closes', async () => {
