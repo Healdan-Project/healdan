@@ -27,6 +27,7 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
+import com.logicaldoc.healdan.matter.ClientDAO;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.spring.Context;
@@ -187,6 +188,39 @@ public class IndexCountsTest extends AbstractHealdanTestCase {
 		assertEquals(List.of(unstamped.getId()),
 				IndexCounts.get().failed(1, 1).stream().map(FailedDocument::id).toList());
 		assertEquals(List.of(), IndexCounts.get().failed(3, 10));
+		assertEquals(3, IndexCounts.get().counts().failed());
+	}
+
+	// A matter's own count, for its page: its documents' stamps
+	@Test
+	public void testFailedInAMatter() throws Exception {
+		Document failed = document("failed.txt", IndexingStatus.TO_INDEX);
+		event(failed, DocumentEvent.INDEXED_ERROR, "Timed out", base);
+		Document waiting = document("waiting.txt", IndexingStatus.TO_INDEX);
+		Document deleted = document("deleted.txt", IndexingStatus.TO_INDEX);
+		event(deleted, DocumentEvent.INDEXED_ERROR, "Gone", base);
+		jdbc.update("update ld_document set ld_deleted = 1 where ld_id = ?", deleted.getId());
+		// Another matter's, of the same client, and the same matter number of another client's
+		Folder store = FolderDAO.get().findById(FolderDAO.get().findById(matter.getFolderId()).getParentId());
+		Matter second = fx.matter(ClientDAO.get().findById(matter.getClientId()), 2, "Second", store, "Documents");
+		Matter other = fx.matter(fx.client(1002, "Beech"), 1, "Other", store, "Documents");
+		for (Matter elsewhere : List.of(second, other)) {
+			Folder documents = FolderDAO.get().findByName(FolderDAO.get().findById(elsewhere.getFolderId()),
+					"Documents", Tenant.DEFAULT_ID, true).get(0);
+			Document there = fx.upload(documents, "there.txt", "text", fx.admin());
+			HealdanFixtures.awaitVersionSaves();
+			jdbc.update("update ld_document set ld_indexed = ? where ld_id = ?", IndexingStatus.TO_INDEX.ordinal(),
+					there.getId());
+			event(there, DocumentEvent.INDEXED_ERROR, "Timed out", base);
+		}
+		// Its error indexed since
+		event(waiting, DocumentEvent.INDEXED_ERROR, "Timed out", base);
+		event(waiting, DocumentEvent.INDEXED, null, base.plusSeconds(60));
+
+		assertEquals(1, IndexCounts.get().failedIn(1001, 1));
+		assertEquals(1, IndexCounts.get().failedIn(1001, 2));
+		assertEquals(1, IndexCounts.get().failedIn(1002, 1));
+		assertEquals(0, IndexCounts.get().failedIn(1002, 2));
 		assertEquals(3, IndexCounts.get().counts().failed());
 	}
 }

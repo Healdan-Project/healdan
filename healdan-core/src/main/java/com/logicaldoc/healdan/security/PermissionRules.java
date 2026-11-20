@@ -258,8 +258,26 @@ public class PermissionRules {
 	 */
 	public void checkP2(Map<Long, Set<Permission>> workspaceAcl, long storeId, Long ownerUserId, long workspaceId)
 			throws HealdanRuleException {
+		List<Long> unreadable = p2Failures(workspaceAcl, storeId, ownerUserId);
+		if (!unreadable.isEmpty())
+			throw refuse(P2.formatted(capitalize(AclMath.describe(unreadable.get(0))), label()), workspaceId, storeId);
+	}
+
+	/**
+	 * P2's findings, every one, for New Matter's check, which says them all
+	 * where {@link #checkP2} refuses on the first
+	 *
+	 * @param workspaceAcl what the workspace grants, or would
+	 * @param storeId the Store it is, or goes, in
+	 * @param ownerUserId the matter's owner, null if there is none yet
+	 * @return the groups that can read the workspace and not the Store, lowest
+	 *         id first; the owner's own group passes if the owner can read the
+	 *         Store
+	 */
+	public List<Long> p2Failures(Map<Long, Set<Permission>> workspaceAcl, long storeId, Long ownerUserId) {
 		Map<Long, Set<Permission>> storeAcl = AclMath.effective(storeId);
 		Long ownersGroup = ownerUserId != null ? personalGroup(ownerUserId) : null;
+		List<Long> unreadable = new ArrayList<>();
 		for (Map.Entry<Long, Set<Permission>> entry : new TreeMap<>(workspaceAcl).entrySet()) {
 			long group = entry.getKey();
 			if (!entry.getValue().contains(Permission.READ)
@@ -267,8 +285,9 @@ public class PermissionRules {
 				continue;
 			if (ownersGroup != null && ownersGroup == group && canRead(ownerUserId, storeAcl))
 				continue;
-			throw refuse(P2.formatted(capitalize(AclMath.describe(group)), label()), workspaceId, storeId);
+			unreadable.add(group);
 		}
+		return unreadable;
 	}
 
 	/**

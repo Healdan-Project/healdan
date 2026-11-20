@@ -21,7 +21,13 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
+import com.logicaldoc.healdan.matter.Client;
+import com.logicaldoc.healdan.matter.Matter;
+import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.spring.Context;
 
 public class PreviewJobsTest extends AbstractHealdanTestCase {
@@ -242,6 +248,43 @@ public class PreviewJobsTest extends AbstractHealdanTestCase {
 		jobs.requeue(3, "1.0", T);
 		assertEquals(3, jobs.countWaiting());
 		assertEquals(0, jobs.countGivenUp());
+	}
+
+	// A matter's own count, for its page: the jobs of its live documents, by their stamps
+	@Test
+	public void testCountGivenUpInAMatter() throws Exception {
+		HealdanFixtures fx = new HealdanFixtures();
+		Folder store = fx.store("Client Work");
+		Client client = fx.client(1001, "Ashcombe");
+		Folder first = documents(fx.matter(client, 1, "First", store, "Documents"));
+		Folder second = documents(fx.matter(client, 2, "Second", store, "Documents"));
+		long a = fx.upload(first, "a.txt", "a", fx.admin()).getId();
+		long b = fx.upload(first, "b.txt", "b", fx.admin()).getId();
+		long gone = fx.upload(first, "gone.txt", "gone", fx.admin()).getId();
+		long c = fx.upload(second, "c.txt", "c", fx.admin()).getId();
+		HealdanFixtures.awaitVersionSaves();
+		PreviewJobs jobs = PreviewJobs.get();
+		for (long docId : List.of(a, b, gone, c))
+			jobs.add(docId, "1.0", T);
+		jobs.add(a, "1.1", T);
+		for (long docId : List.of(a, gone, c))
+			giveUp(jobs, docId, "boom");
+		for (int i = 0; i < PreviewJobs.MAX_ATTEMPTS; i++)
+			jobs.failed(a, "1.1", "boom", T);
+		// In the Trash: not counted
+		new JdbcTemplate(Context.get(DataSource.class)).update("update ld_document set ld_deleted = 1 where ld_id = ?",
+				gone);
+
+		// Each given-up job, as the Dashboard counts them
+		assertEquals(2, jobs.countGivenUpIn(1001, 1));
+		assertEquals(1, jobs.countGivenUpIn(1001, 2));
+		assertEquals(0, jobs.countGivenUpIn(1002, 1));
+		assertEquals(4, jobs.countGivenUp());
+	}
+
+	private static Folder documents(Matter matter) throws Exception {
+		return FolderDAO.get().findByName(FolderDAO.get().findById(matter.getFolderId()), "Documents",
+				Tenant.DEFAULT_ID, true).get(0);
 	}
 
 	@Test
