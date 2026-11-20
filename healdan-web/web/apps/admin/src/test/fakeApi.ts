@@ -449,9 +449,43 @@ export const litigationAccess: Record<number, A['FolderAccess']> = {
 
 /** What New Matter would refuse in a matter made from Litigation */
 export const litigationProblems: A['TemplateProblem'][] = [
-  { code: 'wider-than-parent', message: 'Privileged grants more than its parent (group Trainees: WRITE).', folderId: 2024, storeId: null, groupId: 21 },
-  { code: 'store-unreadable', message: "Trainees could read a matter made from it, but can't read the Store Firm.", folderId: null, storeId: 3, groupId: 21 },
+  { code: 'wider-than-parent', message: 'Privileged grants more than its parent (group Trainees: WRITE).', folderId: 2024, storeId: null, groupId: 21, groupName: wsTrainees.name },
+  { code: 'store-unreadable', message: "Trainees could read a matter made from it, but can't read the Store Firm.", folderId: null, storeId: 3, groupId: 21, groupName: wsTrainees.name },
 ]
+
+/**
+ * What a workspace folder's or a template's delete answers: the Trash item it made, which restores a matter's folder
+ * (`POST /v1/trash/{id}/restore`) and answers a template's, or a folder of one, `409 place-gone`
+ */
+export function deletedFolder(over: Partial<A['DeletedFolder']> = {}): A['DeletedFolder'] {
+  return { trashItemId: 901, folders: 0, documents: 0, ...over }
+}
+
+/** What `POST /v1/trash/{id}/restore` (the shared contract's) answers for a folder of 1001.1 put back in the matter's own folder */
+export function restoredFolder(trashItemId: number, name: string): S['RestoredItem'] {
+  const matter: S['MatterRef'] = { id: 11, display: '1001.1 – Charter Dispute – MV Northern Star', client: saltmarsh }
+  const store: S['FolderRef'] = { id: clientWork.id, name: clientWork.name, kind: 'store' }
+  const top: S['FolderRef'] = { id: 110, name: charterTree.name, kind: 'matter' }
+  return {
+    place: { type: 'folder', id: top.id, name: top.name, kind: 'matter', matter, store: clientWork, path: [store, top], canFile: true, canRename: false, canMove: false, canDelete: false },
+    item: {
+      id: trashItemId,
+      type: 'folder',
+      name,
+      docNumber: null,
+      kind: 'folder',
+      size: null,
+      contents: { folders: 0, documents: 0 },
+      deletedFrom: { folder: top, path: [store.name, top.name] },
+      matter,
+      deletedBy: { id: me.id, name: me.name },
+      deletedAt: '2026-11-20T10:00:00Z',
+      removedBy: null,
+      removedAt: null,
+      destroyAfter: null,
+    },
+  }
+}
 
 const notFound = () => problem(404, 'not-found')
 

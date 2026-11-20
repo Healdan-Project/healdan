@@ -3,11 +3,12 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useId, useRef, useState } from 'react'
-import { apiPath, type adminComponents } from '@healdan/api'
+import { ApiError, apiPath, type adminComponents, type components } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
-import { Button, Icon, toast } from '@healdan/ui'
+import { Button, Icon, toast, toastWithAction, type ToastAction } from '@healdan/ui'
 import { Confirm } from '../dialogs/Confirm'
 import { t } from '../strings'
+import { useRefusalFor } from '../strings/refusals'
 import { AccessPanel } from './AccessPanel'
 import { EditsContext, type EditState } from './edits'
 import { DeleteFolderDialog, FolderNameDialog, MoveFolderDialog, namesBeside } from './FolderDialogs'
@@ -20,6 +21,7 @@ import page from '../matters/MatterPage.module.css'
 import styles from './Workspace.module.css'
 
 type A = adminComponents['schemas']
+type S = components['schemas']
 
 export interface WorkspaceEditorProps {
   /** The workspace's top folder: a matter's own (its `folderId`), or a template's (its id) */
@@ -32,7 +34,8 @@ export interface WorkspaceEditorProps {
  * tree on the left, with its search folders and a lock on each folder with permissions of its own, and the chosen
  * folder on the right, with who can use it and the values it sets, or a search folder's rule. New Folder, New Search
  * Folder, Rename, Move To… and Delete work on every folder below the top. In a template, what New Matter would refuse
- * is said as warnings beside the folder's Save, which still saves.
+ * is said as warnings beside the folder's Save, which still saves. A matter's folder deleted here has Undo; a template's
+ * hasn't, as the Trash can't put it back.
  */
 export function WorkspaceEditor({ rootFolderId, kind }: WorkspaceEditorProps) {
   const tree = useWorkspaceTree(rootFolderId)
@@ -48,6 +51,7 @@ type Open = { action: FolderAction; node: WorkspaceNode; parent: WorkspaceNode |
 function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' | 'template'; problems: readonly A['TemplateProblem'][] }) {
   const api = useApi()
   const queryClient = useQueryClient()
+  const refusalFor = useRefusalFor()
   const foldersId = useId()
   const [selected, setSelected] = useState(root.id)
   const [expanded, setExpanded] = useState(() => holding(root))
@@ -133,14 +137,52 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
   }
 
   async function remove(on: WorkspaceNode, from: WorkspaceNode | undefined) {
-    await api.send('DELETE', apiPath`/v1/admin/folders/${on.id}`)
+    const deleted = await api.send<A['DeletedFolder']>('DELETE', apiPath`/v1/admin/folders/${on.id}`)
     changed()
     // Only a chosen folder that went with it gives way, to the folder it was in
     if (on.id === node.id || below(on).some((one) => one.id === node.id)) {
       parts.current.clear()
       setSelected((from ?? root).id)
     }
-    toast(t('admin.deleteFolder.done', { name: on.name }))
+    const done = t('admin.deleteFolder.done', { name: on.name })
+    // A matter's folder comes back from the delete's Trash item; a template's, or one of its folders, doesn't: the Trash
+    // restores into a Store only, and answers it 409 place-gone
+    if (kind === 'matter') toastWithAction(done, undo(deleted.trashItemId, on.name))
+    else toast(done)
+  }
+
+  /**
+   * The toast's Undo for a delete: restores its Trash item back where it was, once, however often it's pressed, as the
+   * User app's Undo does. What happened since can refuse it: an item no longer in the Trash, a place gone, a rule.
+   */
+  function undo(trashItemId: number, name: string): ToastAction {
+    let used = false
+    return {
+      label: t('undo.label'),
+      onAction: () => {
+        if (used) return
+        used = true
+        void restore(trashItemId, name)
+      },
+    }
+  }
+
+  async function restore(trashItemId: number, name: string) {
+    try {
+      await api.send<S['RestoredItem']>('POST', apiPath`/v1/trash/${trashItemId}/restore`)
+    } catch (error) {
+      toast(t('admin.deleteFolder.undoRefused', { name, reason: undoRefusal(error) }))
+      return
+    }
+    changed()
+    toast(t('undo.done', { name }))
+  }
+
+  /** Why Undo didn't restore it: restored already or removed (404), its place gone, or the rule's own words */
+  function undoRefusal(error: unknown): string {
+    if (error instanceof ApiError && error.status === 404) return t('undo.alreadyRestored')
+    if (error instanceof ApiError && error.code === 'place-gone') return t('undo.placeGone')
+    return refusalFor(error)
   }
 
   return (

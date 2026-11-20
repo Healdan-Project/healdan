@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
-import { charterAccess, charterTree, folderNode, problem, workspaceRoutes, type FakeApi, type Routes } from '../test/fakeApi'
+import { charterAccess, charterTree, deletedFolder, folderNode, problem, restoredFolder, workspaceRoutes, type FakeApi, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { PERMISSIONS, permissionsOf } from './levels'
 
@@ -46,6 +46,9 @@ async function choose(name: string) {
 }
 
 const putsTo = (api: FakeApi, id: number) => api.callsTo(`PUT /v1/admin/folders/${id}/access`).map((call) => call.body)
+
+/** A toast, by its message: an alert dialog of the toast region */
+const toastOf = async (text: string) => (await screen.findByText(text)).closest('[role="alertdialog"]') as HTMLElement
 
 /** Presses Tab until the element has the focus, as a person with no mouse would, 40 presses at most */
 async function tabTo(element: Element) {
@@ -398,7 +401,7 @@ describe("The Workspace Editor's folders", () => {
   it('asks before a delete, naming what the folder holds, and chooses its parent after', async () => {
     const { api } = await openWorkspace({
       'GET /v1/folders/115/contents': { folders: 1, documents: 3 },
-      'DELETE /v1/admin/folders/115': undefined,
+      'DELETE /v1/admin/folders/115': deletedFolder({ trashItemId: 905, folders: 1, documents: 3 }),
     })
     await choose('Privileged')
     fireEvent.keyDown(row(/^Privileged/), { key: 'Delete' })
@@ -410,6 +413,56 @@ describe("The Workspace Editor's folders", () => {
     await waitFor(() => expect(api.callsTo('DELETE /v1/admin/folders/115')).toHaveLength(1))
     expect(await screen.findByText('Moved Privileged to the Trash')).toBeTruthy()
     await waitFor(() => expect(within(panel()).getByRole('heading', { level: 2 }).textContent).toBe(LABEL))
+  })
+
+  it("offers Undo on a matter's folder's delete, which restores the delete's Trash item back where it was, once", async () => {
+    let trees = 0
+    const { api } = await openWorkspace({
+      'GET /v1/admin/workspaces/110/tree': () => {
+        trees++
+        return charterTree
+      },
+      'GET /v1/folders/115/contents': { folders: 1, documents: 3 },
+      'DELETE /v1/admin/folders/115': deletedFolder({ trashItemId: 905, folders: 1, documents: 3 }),
+      'POST /v1/trash/905/restore': restoredFolder(905, 'Privileged'),
+    })
+    fireEvent.keyDown(row(/^Privileged/), { key: 'Delete' })
+    const dialog = await screen.findByRole('alertdialog', { name: 'Move Privileged to the Trash?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }))
+    const done = await toastOf('Moved Privileged to the Trash')
+    const undo = within(done).getByRole('button', { name: 'Undo' })
+    await expectNoAxeViolations(done)
+    const before = trees
+    // Both presses before the toast has gone
+    fireEvent.click(undo)
+    fireEvent.click(undo)
+    expect(await screen.findByText('Restored "Privileged"')).toBeTruthy()
+    // No folderId: back where it was
+    expect(api.callsTo('POST /v1/trash/*/restore').map((call) => [call.path, call.body])).toEqual([['/v1/trash/905/restore', undefined]])
+    // The tree is asked again, so the folder shows
+    await waitFor(() => expect(trees).toBeGreaterThan(before))
+  })
+
+  it.each([
+    ['restored already', problem(404, 'not-found'), "Couldn't restore Drafts: It's already been restored, or it's no longer in the Trash."],
+    [
+      'its place gone',
+      problem(409, 'place-gone'),
+      "Couldn't restore Drafts: The folder it was deleted from is gone, or you can't restore into it. Restore it from the Trash to choose another place.",
+    ],
+    ["the rule's own words", problem(409, 'refused', 'Another folder in it is called Drafts.'), "Couldn't restore Drafts: Another folder in it is called Drafts."],
+  ])("says why Undo didn't restore the folder: %s", async (_why, refusal, said) => {
+    const { api } = await openWorkspace({
+      'GET /v1/folders/112/contents': { folders: 0, documents: 0 },
+      'DELETE /v1/admin/folders/112': deletedFolder({ trashItemId: 906 }),
+      'POST /v1/trash/906/restore': refusal,
+    })
+    fireEvent.keyDown(row(/^Drafts/), { key: 'Delete' })
+    await userEvent.click(within(await screen.findByRole('alertdialog', { name: 'Move Drafts to the Trash?' })).getByRole('button', { name: 'Move to Trash' }))
+    await userEvent.click(within(await toastOf('Moved Drafts to the Trash')).getByRole('button', { name: 'Undo' }))
+    expect(await screen.findByText(said)).toBeTruthy()
+    expect(api.callsTo('POST /v1/trash/906/restore')).toHaveLength(1)
+    expect(screen.queryByText(/^Restored/)).toBeNull()
   })
 })
 
@@ -649,7 +702,7 @@ describe("The Workspace Editor keeps what's being edited", () => {
   it('keeps the folder chosen, change and all, when a folder is made, or another deleted from its row', async () => {
     const { api } = await openWorkspace({
       'POST /v1/admin/folders/110/children': folderNode(120, 'Exhibits'),
-      'DELETE /v1/admin/folders/112': undefined,
+      'DELETE /v1/admin/folders/112': deletedFolder(),
       'GET /v1/folders/112/contents': { folders: 0, documents: 0 },
     })
     await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')

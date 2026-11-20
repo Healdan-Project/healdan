@@ -424,6 +424,7 @@ export const adminEnUS = {
   'admin.deleteFolder.template': '{matters} already made from this template keep their own copy of it.',
   'admin.deleteFolder.confirm': 'Move to Trash',
   'admin.deleteFolder.done': 'Moved {name} to the Trash',
+  'admin.deleteFolder.undoRefused': "Couldn't restore {name}: {reason}",
 
   // Workspace Templates (spec 8.5)
   'admin.nav.templates': 'Workspace Templates',

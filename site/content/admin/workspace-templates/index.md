@@ -59,7 +59,8 @@ Templates**.
   the new one.
 - **Delete** asks first, as in "Move the Template Litigation to the Trash?" It says the template's folders go with it,
   and that matters already made from it are unchanged and New Matter won't offer it any more. **Move to Trash** deletes
-  it, and the list opens. The matters made from it then show no template in the Matters list.
+  it, and the list opens. The matters made from it then show no template in the Matters list. The Trash lists the
+  deleted template, but can't put it back, so there's no **Undo**.
 
 ### What New Matter Would Refuse
 

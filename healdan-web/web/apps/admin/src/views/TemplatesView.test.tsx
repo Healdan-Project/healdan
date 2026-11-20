@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
-import { litigationAccess, problem, templateInfos, workspaceRoutes, type Routes } from '../test/fakeApi'
+import { deletedFolder, litigationAccess, problem, templateInfos, workspaceRoutes, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { permissionsOf } from '../workspace/levels'
 
@@ -16,6 +16,8 @@ const main = () => screen.getByRole('main')
 const pane = () => screen.getByRole('navigation', { name: 'Navigation' })
 const grid = () => within(main()).findByRole('grid', { name: 'Workspace Templates' })
 const cellsOf = (row: HTMLElement) => Array.from(row.querySelectorAll('[role="rowheader"], [role="gridcell"]'), (cell) => cell.textContent)
+/** A toast, by its message: an alert dialog of the toast region */
+const toastOf = async (text: string) => (await screen.findByText(text)).closest('[role="alertdialog"]') as HTMLElement
 
 async function openList(routes: Routes = {}) {
   const rendered = await renderApp('/templates', { ...workspaceRoutes(), ...routes })
@@ -162,8 +164,8 @@ describe("A template's page", () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Disputes' })).toBeTruthy()
   })
 
-  it('asks before a delete, saying matters made from it are unchanged, then goes to the list', async () => {
-    const { api, router } = await openTemplate({ 'DELETE /v1/admin/templates/202': undefined })
+  it('asks before a delete, saying matters made from it are unchanged, then goes to the list, with no Undo', async () => {
+    const { api, router } = await openTemplate({ 'DELETE /v1/admin/templates/202': deletedFolder({ trashItemId: 907, folders: 5 }) })
     await userEvent.click(within(main()).getByRole('button', { name: 'Delete' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Move the Template Litigation to the Trash?' })
     expect(within(dialog).getByText('Its 5 folders go with it.')).toBeTruthy()
@@ -172,7 +174,24 @@ describe("A template's page", () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/templates'))
     expect(api.callsTo('DELETE /v1/admin/templates/202')).toHaveLength(1)
-    expect(await screen.findByText('Moved the template Litigation to the Trash')).toBeTruthy()
+    // The Trash can't put a template back (409 place-gone), so the toast offers nothing to press
+    expect(within(await toastOf('Moved the template Litigation to the Trash')).queryByRole('button', { name: 'Undo' })).toBeNull()
+  })
+
+  it("deletes a folder of the template with no Undo, as the Trash can't put it back", async () => {
+    const { api } = await openTemplate({
+      'GET /v1/folders/2021/contents': { folders: 0, documents: 0 },
+      'DELETE /v1/admin/folders/2021': deletedFolder({ trashItemId: 908 }),
+    })
+    const tree = within(main()).getByRole('treegrid', { name: 'Folders of Litigation' })
+    fireEvent.keyDown(within(tree).getByRole('row', { name: /^Correspondence/ }), { key: 'Delete' })
+    const dialog = await screen.findByRole('alertdialog', { name: 'Move Correspondence to the Trash?' })
+    expect(within(dialog).getByText('Matters already made from this template keep their own copy of it.')).toBeTruthy()
+    expect(within(dialog).queryByText(/restore/)).toBeNull()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }))
+    await waitFor(() => expect(api.callsTo('DELETE /v1/admin/folders/2021')).toHaveLength(1))
+    expect(within(await toastOf('Moved Correspondence to the Trash')).queryByRole('button', { name: 'Undo' })).toBeNull()
+    expect(api.callsTo('POST /v1/trash/*/restore')).toEqual([])
   })
 
   it("shows the rule's refusal of a delete in the dialog", async () => {

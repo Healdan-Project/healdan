@@ -60,7 +60,8 @@ function Template({ template }: { template: A['TemplateInfo'] }) {
   const [dialog, setDialog] = useState<'rename' | 'delete' | null>(null)
 
   async function remove() {
-    await api.send('DELETE', apiPath`/v1/admin/templates/${template.id}`)
+    // Its Trash item isn't offered back: the Trash restores into a Store only, and answers a template 409 place-gone
+    await api.send<A['DeletedFolder']>('DELETE', apiPath`/v1/admin/templates/${template.id}`)
     toast(t('admin.deleteTemplate.done', { name: template.name }))
     // Off its page first, so nothing asks for it again
     await navigate({ to: routes.templates })

@@ -68,7 +68,9 @@ search folder's rule.
   "It holds 2 folders and 14 documents, which go with it." In a matter it says that an administrator can restore the
   folder from the Trash in Healdan, and in a template that matters already made from the template keep their own
   copy of it. **Move to Trash** deletes it, and if it was the folder chosen, or held it, the folder it was in is
-  chosen instead.
+  chosen instead. In a matter, "Moved Drafts to the Trash" comes with **Undo**, which puts the folder back where it
+  was, with what the delete took, and says why when it can't, such as when it has been restored already. A template's
+  folder has no Undo: the Trash lists it, but can't put it back in a template.
 
 Anything Healdan refuses shows in the dialog, in Healdan's own words, and while a change is on its way the dialog's
 **Cancel** is greyed out and Esc does nothing.
