@@ -195,8 +195,8 @@ weight: 13
   and matters with a page for each, each matter's workspace and the workspace templates, and makes a Store with New
   Store. The rest of the Stores' screens, users and groups, the permissions of Stores and documents, Healdan Settings,
   storage backends, scheduled tasks, search and indexing and the server's log are all in the Classic Interface, which
-  the Admin app's left pane and its links open. Its find opens the Classic Interface too, not the client, matter or
-  person it found. See [The Admin App](../../admin/the-admin-app/).
+  the Admin app's left pane and its links open. Its find opens a client's or a matter's page in the Admin app, but
+  the Classic Interface for a person, not the person it found. See [The Admin App](../../admin/the-admin-app/).
 - **For the `admin` group only.** A group given Administration screens through the Classic Interface's menus doesn't
   get the Admin app, and keeps using those screens there.
 - **As the User app,** it needs a [secure address](#the-user-app) and a host name of its own, is made for current

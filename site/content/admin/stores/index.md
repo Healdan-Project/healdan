@@ -29,7 +29,8 @@ Store the same way, with **Rename**.
 
 A Store's permissions decide who can see it, and they limit who can see the matters in it. A Store made in the Admin
 app starts with the groups its **Who Can See It** named, and New Matter's button that lets a group read the Store,
-such as **Let Everyone Read the Store**, adds that group, keeping everyone who could see it already, as below.
+such as **Let Everyone Read the Store**, adds that group, as below. It keeps everyone who could see the Store already,
+with whatever else their rows give them, and takes away a row that doesn't give Read, which lets nobody see a Store.
 Otherwise, change them on the Store's **Security** tab in the Classic Interface.
 
 **Before creating matters, let the groups your templates use read the Store.** A Store made in the Classic Interface

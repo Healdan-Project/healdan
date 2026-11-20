@@ -228,10 +228,10 @@ and `ResourceServiceImplTest#testMoveFolder` (WebDAV's move). `RpcPermissionGaps
 ### The Admin App's Server Tests
 
 The administration record's, the error capture's, the job status's, the Dashboard's, and the clients', matters',
-folder access's and Stores' tests are in `healdan-core` (`com.logicaldoc.healdan.admin` and the packages under it),
-`healdan-api` and `healdan-storage`. No test makes a real start, so they call `ErrorWriter.drainOnce()` and
-`UsageSummary.refreshNow()` themselves, and the tests of the threads start them; `DashboardServiceTest` calls
-`forget()`, which drops what the Dashboard keeps, before it reads again.
+folder access's, Stores', workspaces' and templates' tests are in `healdan-core` (`com.logicaldoc.healdan.admin` and
+the packages under it), `healdan-api` and `healdan-storage`. No test makes a real start, so they call
+`ErrorWriter.drainOnce()` and `UsageSummary.refreshNow()` themselves, and the tests of the threads start them;
+`DashboardServiceTest` calls `forget()`, which drops what the Dashboard keeps, before it reads again.
 
 - **`AdminEventsTest`** checks the record: who, what, when and from where, the detail's fields in the order of their
   names, no address outside an admin request, the record rolled back with its change and committed with it, a failed
@@ -315,6 +315,24 @@ folder access's and Stores' tests are in `healdan-core` (`com.logicaldoc.healdan
   `AdminStoresResourceTest`, in `healdan-api`, checks the Stores' routes, their check order and refusals, P2's among
   them, and `AdminGroupsResourceTest` the groups' list: by name, without people's own or deleted groups, `q` and
   paging. Each also checks the refusals of a non-administrator and of a device token.
+- **`WorkspaceAdminTest`**, in `healdan-core`, checks a workspace's folders: what's in scope, a search folder directly
+  in the Templates Store among what isn't; a matter's tree and a template's, in order, hidden folders kept and aliases
+  and deleted ones left out, search folders last; New Folder at a matter's top level, deeper and in a template, taking
+  its parent's permissions and the matter's stamps, and its refusals, a name a hidden folder or a search folder has
+  among them; renames, a change of case and the folder's own name, and their refusals; moves, a folder narrowed to fit
+  its new parent inside a matter, and the refusals (the top folders, another matter, a template into a matter, a Store,
+  into itself, a name taken, a document checked out); the values a folder sets, local, inherited and the default,
+  and setting them, passed down to a folder and a document, back to inheriting, and Client refused; and search folders,
+  their rule's round trip, a change recording only what changed, and their refusals. Each refusal writes nothing.
+  `TemplateAdminTest` checks the list's counts, an empty template following the Templates Store, a copy (its folders,
+  permissions of their own and followed, values, a search folder's rule, the template it copies unchanged), the
+  create's refusals, the rename, and the problems: none for a clean template, a folder wider than its parent, a folder
+  that keeps following a folder above its parent, and a group that can't read a Store, the template still renamed and
+  added to and New Matter refusing it. `AdminWorkspaceResourceTest` and `AdminTemplatesResourceTest`, in
+  `healdan-api`, check each route's answer, its check order and refusals, the records, the deletes' Trash items and
+  their restore (a matter's folder comes back; a template's, and a template's folder, are `409 place-gone`), a matter
+  made from a deleted template unchanged but for its template, and the refusals of a non-administrator and of a
+  device token.
 
 ### The Storage Tests
 
@@ -851,11 +869,19 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     script, asked with `webuser`'s own session (`page.request`), a `403`, `no-store`, without the file's bytes; and
     that a request for it with no session isn't `200`, and holds none of its bytes either. It changes nothing on the
     stack.
+  - `admin-matters.spec.ts` takes a matter from nothing to the User app (Admin app spec §17.1). As `admin`, with names
+    of its own run, it makes a Store that Everyone can see, a workspace template with a folder and a restricted
+    subfolder, a client, and a matter from the template; edits the matter; and changes a folder's access in the
+    Workspace Editor. Then it signs in as `webuser` and checks in the User app that the matter's restricted folder
+    isn't visible and the other folder is. Like every admin spec, it changes nothing global: it makes its own clients,
+    matters, Stores and templates, and changes neither `webuser`, Everyone nor `Smoke Garage`.
   - `admin-a11y.spec.ts` runs axe on the Admin app as `admin`, in the light theme and again in the dark one, as
     `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart,
     so a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
     person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes
-    it, and the focus goes back to **☰**), and last the signed-out screen. This is where the Dashboard's colour
+    it, and the focus goes back to **☰**), Phase 2's screens (the Clients list, the Matters list, a matter's page on
+    its Overview and Workspace tabs, and Workspace Templates, with a client and a matter of its own where a screen
+    needs one, so nothing global changes), and last the signed-out screen. This is where the Dashboard's colour
     contrast is checked. The find's list is checked with the whole page around it, as the User app's search box's
     is: `@healdan/ui`'s `ComboBox` draws the list right after the box, inside the find's search landmark, and keeps
     the page around it shown to a screen reader while it's open (The Web App page's The Search Box and Search

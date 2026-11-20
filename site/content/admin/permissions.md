@@ -20,8 +20,9 @@ but no folder can let in someone its parent doesn't.
   from the restricted folders inside it too.
 - **Moving, copying or restoring a folder** into a more restricted folder narrows it to fit, without asking.
 - **Apply to Subfolders opens up a restricted folder.** LogicalDOC's option replaces every subfolder's permissions
-  with the parent's, which widens a restricted folder below. So inside Stores, Healdan allows it only to someone with
-  the Security permission on every restricted folder below, or to an admin. See
+  with the parent's, which widens a restricted folder below. So in a Store, its matters included, in the Templates Store
+  and its templates, and from the root above them, Healdan allows it only to an admin, or to someone with the Security
+  permission on every folder below with permissions of its own, those in the Trash included. See
   [Apply to Subfolders](#apply-to-subfolders).
 
 ## A Matter and Its Store
@@ -95,8 +96,8 @@ In a matter, Healdan checks each save against the rules on this page, and refuse
   says, and a save that gives it less is refused. Below that folder, the owner's row may go, as a restricted folder may
   keep anyone out.
 
-In a matter or a template, the `guest` group and read-only people can't be given more than Read Only: Healdan refuses
-the save.
+In a matter or a template, the `guest` group and people whose accounts are read-only can't be given more than Read
+Only: Healdan refuses the save.
 
 In a template, the first two rules aren't checked as you change it: the save works, and the template's page lists
 what New Matter would refuse in a matter made from it, as warnings, with each folder's own beside its **Save**, under

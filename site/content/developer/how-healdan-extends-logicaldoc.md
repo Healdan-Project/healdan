@@ -197,6 +197,19 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     of the caller's tenant, LogicalDOC's ordinary groups only, without the `_user_` group each person has. A new
     Store's name is checked by `FolderRenames.name`, the folder routes' rule, whose form overload adds its errors to
     the other fields' so one `422` names them all.
+  - **A workspace's folders and the templates** are four classes, all `MATTERS`, each rooted at its own exact path for
+    the same reason: `AdminWorkspaceResource` (`/v1/admin/workspaces`, the tree), `AdminFoldersResource`
+    (`/v1/admin/folders`, beside `AdminFolderAccessResource`: New Folder, rename, move, delete, the values and New
+    Search Folder), `AdminSearchFoldersResource` (`/v1/admin/search-folders`, a search folder's rule) and
+    `AdminTemplatesResource` (`/v1/admin/templates`), over `healdan-core`'s `WorkspaceAdmin` and `TemplateAdmin`. Names
+    go through `FolderRenames.name`, search folders' too, so CE's folder store never strips a character it would have
+    refused. A change that gives a folder a name holds the lock of the folder the name goes into, through
+    `FolderChanges.withFolderLocks`, the public folder routes' locks: a rename its parent's, New Folder and New Search
+    Folder the folder they're made in, a move both parents', in id order, and a template's create or rename the
+    Templates Store's, and a rename or move checks, once it holds them, that the folder is still where it was. So two
+    changes can't give one name twice in a folder, which LogicalDOC's folder table has no unique key to stop. A folder's and a template's delete go to the Trash through
+    `FolderChanges.deleteWorkspaceFolder`, `deleteMatter`'s checks and delete without the matter's own folder, and
+    answer the Trash item.
 - **`healdan-storage`** keeps documents' files on [storage backends](../../admin/storage-backends/), and is a plugin
   of its own that requires `healdan-core`. Its code is under `com.logicaldoc.healdan.storage`, where `healdan-core`'s
   Spring scan finds its beans.
@@ -444,7 +457,13 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `1001.1 – Charter Dispute/Documents`. A Store's changes are the `STORES` area's: `store.created`, with its name and
     a change for each row it was given, and `store.access-changed`, with `follows` when it followed another folder's
     permissions and a change for each row that changed, both inside their transaction and named as a folder's rows
-    are.
+    are. A workspace's folders and the templates record inside their transactions `folder.created` (its name and the
+    folder it's in), `folder.renamed`, `folder.moved` (the folder it was in, before and after),
+    `folder.properties-changed` (each value the folder sets of its own that changed, by the property's name, null for
+    one it inherits), `search-folder.created` (its name, the folder it's in and its rule), `search-folder.rule-changed`
+    (the rule's members that changed), `template.created` (its name, and the template it copies) and
+    `template.renamed`, and after the delete `folder.deleted` and `template.deleted`. A folder is named by its path,
+    and a template by its name.
   - **New Matter's check** is `MatterAdmin.check` (`com.logicaldoc.healdan.admin.matters`), which takes a
     `MatterAdmin.Draft`, every member of which may be null, and answers a `MatterCheck`. It looks for each problem
     only once the draft has what it needs, with `MatterService`'s own checks and sentences and `MatterNumbering`'s,
@@ -467,12 +486,15 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     below. A save that changes nothing writes nothing. **Follow Parent** is `FolderDAO.updateSecurityRef`, and
     **Apply to Subfolders** LogicalDOC's `applySecurityToTree`. The service doesn't check that its caller is an
     administrator: only the admin route, behind `AdminFilter`, calls it.
-  - **What `applySecurityToTree` does.** Healdan's hook runs first: `PermissionRules.checkApplyToTree`, which inside
-    Stores, matters and templates needs the Security permission on every folder below that has permissions of its
-    own. Then every folder and search folder below, at every level, those in the Trash included, loses its own rows and
-    follows what the folder follows. Nothing is moved or deleted, and the folder itself doesn't change. So a restricted
-    folder below is opened up: it grants exactly what the folder grants, and one in the Trash comes back so if it's
-    restored (`FolderAccessServiceTest#testApplyToSubfoldersOpensUpARestrictedFolderBelow`).
+  - **What `applySecurityToTree` does.** Healdan's hook runs first: `PermissionRules.checkApplyToTree`, which in a
+    Store, its matters included, in the Templates Store and its templates, and from the root, lets an administrator
+    through and needs anyone else to have the Security permission on every folder below that has permissions of its
+    own, those in the Trash included. Only administrators reach the admin route, so there it always passes, and
+    `canApplyToSubfolders` comes down to a live folder below. Then every folder and search folder below, at every
+    level, those in the Trash included, loses its own rows and follows what the folder follows. Nothing is moved or
+    deleted, and the folder itself doesn't change. So a restricted folder below is opened up: it grants exactly what
+    the folder grants, and one in the Trash comes back so if it's restored
+    (`FolderAccessServiceTest#testApplyToSubfoldersOpensUpARestrictedFolderBelow`).
   - **A Store and who can see it** are `StoreService` (`com.logicaldoc.healdan.admin.stores`). `stores()` and
     `store(id)` read the live Stores, `MatterLocator` deciding what's a Store, and `access(id)` gives a Store's rows
     with `AccessLevel.CAN_SEE` for Read alone and `CUSTOM` for any other set. `create` makes the workspace under the
@@ -490,6 +512,28 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     against the Store's rows now and fails against the new ones, so a matter that already let in a group the Store
     didn't blocks no other change, and the change that puts it right goes through. A matter in the Trash is checked
     when it's restored (`checkRestore`).
+  - **A workspace's folders** are `WorkspaceAdmin` (`com.logicaldoc.healdan.admin.workspace`), whose `workspaceFolder`
+    takes the same folders as `FolderAccessService`'s. `tree` reads the workspace's folders once (`StoredRows`), aliases
+    left out and hidden ones kept, into `WorkspaceNode`s. `createFolder`, `rename` and `move` check first what people
+    meet, each with its sentence, so a refusal writes nothing: the workspace's top folder; a name another live folder
+    in the folder has, ignoring case, a hidden one, an alias or a search folder too, as LogicalDOC would otherwise
+    give the folder a name of its own making; a move out of its workspace, into a search folder or into its own tree;
+    and a document checked out in a folder that moves. Then they go through LogicalDOC's folder DAO, so the filing
+    rules, P1's narrowing inside a matter and the values passed down decide as on every route, and they refuse a
+    name LogicalDOC changed anyway. `properties` is `ProfileView.forFolder`, walking up to the workspace's top folder,
+    Client and Matter left out; `setProperties` stores with `FolderEvent.CHANGED`, so the profile's rules mark each
+    value local or inheriting and pass it down, and stores nothing that wouldn't change the folder's own values. A
+    search folder is made and its rule changed through `SearchFolderService`, its name checked first as a folder's.
+    Only administrators make the changes, and each is recorded inside its transaction.
+  - **The templates** are `TemplateAdmin`. `list` and `info` count each template's live folders, aliases left out,
+    and its live matters in one grouped query. `create` makes an empty template following the Templates Store, or
+    copies one with New Matter's `TemplateCopier`, in the create's transaction, as a search-folder operation so it may
+    make search folders; then a copy's top folder, which the copier gives permissions of its own, follows what the
+    other's follows, if it does. `create` and `rename` refuse a name another folder in the Templates Store has,
+    ignoring case. `problems` is `wider-than-parent` for each folder or search folder of the tree whose
+    `AclMath.effective` grants more than its parent's, and `store-unreadable` for each live Store and each group
+    `PermissionRules.p2Failures` finds for the template's permissions, the owner left aside, by Store name and then
+    group name. A group is named as `MatterCheck` names it (`GroupNames`).
   - **`hd_error` and `hd_error_hour`** (`V12__admin.sql` too) hold the errors the server logged, by fault. `hd_error`
     has a row for each fingerprint: the level, the area, the logger, the latest message, its stack and the documents
     it names (the ids a message names as `doc 10412` or `document id 10412`), how many times it was seen, when first

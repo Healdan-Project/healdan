@@ -58,6 +58,9 @@ with it. Every document that comes back is queued for indexing, so search finds 
 - **Filing rules still apply.** A restore into another matter gives the documents that matter's Client and Matter,
   and a matter that already holds a copy of an email refuses a second one.
 - **A Store deleted in the Classic Interface is restored there,** not through the API.
+- **A workspace template, or a folder deleted from one,** is listed like any other item, but the API restores only
+  into Stores, so it can't put either back in the Templates Store: see
+  [Workspace Templates](../workspace-templates/#renaming-and-deleting-a-template).
 
 ### In the Classic Interface
 

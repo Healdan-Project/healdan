@@ -56,10 +56,12 @@ search folder's rule.
 - **New Folder** asks for a name, and **Create** makes the folder in the folder chosen. **New Search Folder** asks for
   its [rule](#a-search-folders-rule) too. Once it's made, Healdan says "Created" with its name, and the new folder is
   chosen, unless the folder chosen has changes that aren't saved.
-- **Rename** changes a folder's or a search folder's name.
+- **Rename** changes a folder's or a search folder's name. A search folder's name follows a folder's rules, below.
 - **Before the button,** each of them says when the name has a `/` or `\` in it ("A name can't have / or \ in it."), is
   over 255 characters ("That is too long."), or is the name of another folder or search folder beside it, in any case
-  ("There's already a folder called Drafts here."). Changing only the case of a folder's own name works.
+  ("There's already a folder called Drafts here."). Changing only the case of a folder's own name works. Healdan also
+  refuses a name with an HTML tag, a control character or a character that turns the text round, rather than change
+  it.
 - **Move To…** moves a folder within the workspace. **Into** lists the workspace's folders by their path, leaving out
   the folder itself, the folders inside it and the search folders, and says "It's in that folder already." for the
   one it's in, and when the folder you chose has one with its name. **Move** moves it. A folder moves into another
@@ -73,7 +75,19 @@ search folder's rule.
   folder has no Undo: the Trash lists it, but can't put it back in a template.
 
 Anything Healdan refuses shows in the dialog, in Healdan's own words, and while a change is on its way the dialog's
-**Cancel** is greyed out and Esc does nothing.
+**Cancel** is greyed out and Esc does nothing. Healdan refuses, for administrators too:
+
+- **the workspace's own folder,** which is renamed, moved and deleted with its matter or its template;
+- **a name another folder or search folder in the same folder has,** in any case, hidden ones included, such as one
+  another administrator gave a folder there a moment before;
+- **a move into another workspace,** into a search folder, or into the folder itself or a folder inside it;
+- **a move or a delete while a document in the folder is checked out,** by anyone, you included, and a delete while it
+  holds an immutable document.
+
+Inside a matter, a folder moved into a folder more restricted than itself is narrowed to fit, as on every route (see
+[Folders Narrow, Never Widen](../permissions/#folders-narrow-never-widen)). Healdan records each folder made, renamed,
+moved and deleted, and each search folder made, with who did it, naming the folder by its path in the workspace, as
+`1001.1 – Charter Dispute/Documents`.
 
 ### The Values a Folder Sets
 
@@ -89,8 +103,10 @@ Subclass (see [Properties](../../user/working-with-matters/properties/)):
 - **A Subclass** is offered only within the Class the folder sets, or the one it takes from above.
 - **Save Values** saves them all, and a property set to **Not Set Here** goes back to taking its value from above.
 
-With no such property, it says "No property passes down from folders." In a template, it says that new matters made
-from the template take them.
+Client and Matter aren't among them: they come from the matter. A value set to what the folder would take from above
+anyway sets nothing of its own. In a matter, the folders and documents below that don't set their own take a change at
+once. With no such property, it says "No property passes down from folders." In a template, it says that new matters
+made from the template take them. Healdan records each value a save changes, with what it was before.
 
 ### A Search Folder's Rule
 
@@ -106,8 +122,9 @@ A search folder shows its **Rule** in place of values, as New Search Folder asks
 
 **Save Rule** saves it. A new search folder starts at 30 days, anyone's changes, everything and any Class. In a matter,
 the search folder lists its matter's documents changed within the window that whoever opens it can read, newest
-first. A template's is copied, with its rule, into each new matter made from the template. See
-[Search Folders](../../user/finding-documents/search-folders/) in the User Guide.
+first. A template's is copied, with its rule, into each new matter made from the template, and a change to its rule
+reaches only matters made afterwards. Healdan records each new search folder with its rule, and each change to a rule
+with what it was before. See [Search Folders](../../user/finding-documents/search-folders/) in the User Guide.
 
 ### Unsaved Changes
 
