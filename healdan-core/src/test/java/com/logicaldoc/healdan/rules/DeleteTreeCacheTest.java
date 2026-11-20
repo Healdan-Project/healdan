@@ -110,7 +110,7 @@ public class DeleteTreeCacheTest extends AbstractRulesTestCase {
 
 	@Test
 	public void testRestoringALiveFolderIsSeenByTheDaos() throws Exception {
-		// CE's restore doesn't check that the folder is deleted, so on a live one it moves it, with JDBC
+		// Restoring a live folder moves it, with JDBC
 		Folder deep = fx.folder(correspondence, "Deep");
 		Document inside = upload(deep, "inside.txt", alice);
 		awaitAsyncWork();

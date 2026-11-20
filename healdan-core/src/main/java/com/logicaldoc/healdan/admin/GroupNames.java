@@ -27,8 +27,9 @@ public final class GroupNames {
 	/**
 	 * @param groupId a group
 	 * @return the group's name, or for a person's own group the person's first and last name (the username when both
-	 *         are blank); a deleted group's or person's too, as a deleted group that still has members still lets them
-	 *         in; {@code Group <id>} for one that doesn't exist
+	 *         are blank); a deleted group's or person's too, as a folder's row for a deleted group may stay, and
+	 *         Healdan's rules count a deleted group that still has members; {@code Group <id>} for one that doesn't
+	 *         exist
 	 */
 	public static String of(long groupId) {
 		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));

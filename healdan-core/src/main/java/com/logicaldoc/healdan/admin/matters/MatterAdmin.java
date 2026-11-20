@@ -11,10 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
-import javax.sql.DataSource;
-
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
@@ -27,7 +24,7 @@ import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanRuleException;
-import com.logicaldoc.healdan.admin.PersonNames;
+import com.logicaldoc.healdan.admin.GroupNames;
 import com.logicaldoc.healdan.admin.matters.MatterCheck.Problem;
 import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.ClientDAO;
@@ -57,9 +54,6 @@ public class MatterAdmin {
 	/** A group, or a person, who could read the matter and can't read its Store, with the Store's name */
 	static final String UNREADABLE = "%s can't read the Store %s.";
 
-	/** What a person's own group is named, with the user's id after it */
-	private static final String OWN_GROUP = "_user_";
-
 	private final MatterService matters;
 
 	private final MatterNumbering numbering;
@@ -70,17 +64,14 @@ public class MatterAdmin {
 
 	private final HealdanSettings settings;
 
-	private final JdbcTemplate jdbc;
-
 	@Autowired
 	public MatterAdmin(MatterService matters, MatterNumbering numbering, PermissionRules permissionRules,
-			FilingRules filingRules, HealdanSettings settings, DataSource dataSource) {
+			FilingRules filingRules, HealdanSettings settings) {
 		this.matters = matters;
 		this.numbering = numbering;
 		this.permissionRules = permissionRules;
 		this.filingRules = filingRules;
 		this.settings = settings;
-		this.jdbc = new JdbcTemplate(dataSource);
 	}
 
 	/**
@@ -208,7 +199,7 @@ public class MatterAdmin {
 			if (excess != null) {
 				long groupId = AclMath.firstExcessGroup(acl, parentAcl);
 				problems.add(new Problem(MatterCheck.WIDER_THAN_PARENT, WIDER.formatted(childPath, excess), null, null,
-						groupId, groupName(groupId)));
+						groupId, GroupNames.of(groupId)));
 			}
 			checkTemplate(child, childPath, problems);
 		}
@@ -226,39 +217,10 @@ public class MatterAdmin {
 		if (ownGroup != null)
 			acl.put(ownGroup.getId(), EnumSet.allOf(Permission.class));
 		for (long groupId : permissionRules.p2Failures(acl, store.getId(), owner != null ? owner.getId() : null)) {
-			String name = groupName(groupId);
+			String name = GroupNames.of(groupId);
 			problems.add(new Problem(MatterCheck.STORE_UNREADABLE, UNREADABLE.formatted(name, store.getName()),
 					MatterCheck.GRANT_STORE_READ, store.getId(), groupId, name));
 		}
 	}
 
-	/**
-	 * @return the group's name, or for a person's own group the person's name, as {@link PersonNames} gives it; a
-	 *         deleted group's or person's too, as a deleted group that still has members still lets them in
-	 */
-	private String groupName(long groupId) {
-		List<String[]> groups = jdbc.query("select ld_name, ld_type from ld_group where ld_id = ?",
-				(rs, i) -> new String[] { rs.getString(1), Integer.toString(rs.getInt(2)) }, groupId);
-		if (groups.isEmpty())
-			return "Group " + groupId;
-		String name = groups.get(0)[0];
-		boolean personal = Integer.parseInt(groups.get(0)[1]) == Group.Type.USER.ordinal() && name != null
-				&& name.startsWith(OWN_GROUP);
-		if (personal) {
-			// CE renames a deleted person's group _user_<user id>.<group id>
-			String id = name.substring(OWN_GROUP.length());
-			int dot = id.indexOf('.');
-			try {
-				List<String> people = jdbc.query(
-						"select ld_firstname, ld_name, ld_username from ld_user where ld_id = ?",
-						(rs, i) -> PersonNames.of(rs.getString(1), rs.getString(2), rs.getString(3)),
-						Long.parseLong(dot < 0 ? id : id.substring(0, dot)));
-				if (!people.isEmpty() && people.get(0) != null)
-					return people.get(0);
-			} catch (NumberFormatException e) {
-				// Not a user's id: named as a group
-			}
-		}
-		return name;
-	}
 }

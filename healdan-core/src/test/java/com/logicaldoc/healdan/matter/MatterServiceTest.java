@@ -505,6 +505,24 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testAnOwnerWithBlankNamesIsRecordedByTheirUsername() throws Exception {
+		User dave = fx.user("dave", lawyers.getName());
+		jdbc.update("update ld_user set ld_firstname = ?, ld_name = ? where ld_id = ?", " ", "", dave.getId());
+		UserDAO.get().evict(User.class, dave.getId());
+		int layout = AdminRecord.events().size();
+
+		Matter created = create(2, "Demo", dave, demo);
+		service.update(created.getId(), "Demo", null, bob.getId(), admin);
+
+		// The name as the Admin app gives a person's, the username when both names are blank, then the username
+		List<String> recorded = AdminRecord.eventsSince(layout);
+		assertEquals(2, recorded.size());
+		assertTrue(recorded.get(0), recorded.get(0).contains("\"owner\":{\"before\":null,\"after\":\"dave (dave)\"}"));
+		assertTrue(recorded.get(1),
+				recorded.get(1).endsWith(" {\"owner\":{\"before\":\"dave (dave)\",\"after\":\"bob bob (bob)\"}}"));
+	}
+
+	@Test
 	public void testCreateAndEditRollBackWithAFailedRecord() throws Exception {
 		Matter created = create(2, "Demo", alice, demo);
 		int recorded = AdminRecord.events().size();

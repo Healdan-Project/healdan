@@ -7,6 +7,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,8 +34,11 @@ import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.api.ApiCall;
+import com.logicaldoc.healdan.api.ApiProblem;
 import com.logicaldoc.healdan.api.ApiResponse;
 import com.logicaldoc.healdan.api.ApiTestCase;
+import com.logicaldoc.healdan.api.Caller;
+import com.logicaldoc.healdan.api.FolderChanges;
 import com.logicaldoc.healdan.api.admin.AdminMattersResourceTest.Body;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.searchfolder.SearchFolderRule;
@@ -286,6 +290,9 @@ public class AdminWorkspaceResourceTest extends ApiTestCase {
 				"There's no folder 99999 in a workspace to move it into.");
 		assertProblem(post(uri).webSession(web).json(new Body().with("folderId", letters.getId())).send(), 409,
 				"refused", "A folder moves only within its workspace. Move it to another matter in the User app.");
+		assertProblem(post(FOLDERS + letters.getId() + "/move").webSession(web)
+				.json(new Body().with("folderId", documents.getId())).send(), 409, "refused",
+				"A folder in a template moves only within that template.");
 		assertProblem(post(FOLDERS + workspace.getId() + "/move").webSession(web)
 				.json(new Body().with("folderId", documents.getId())).send(), 409, "refused",
 				"The matter's own folder moves with the matter, to another Store.");
@@ -359,6 +366,36 @@ public class AdminWorkspaceResourceTest extends ApiTestCase {
 		assertEquals(List.of(), events("folder."));
 	}
 
+	/**
+	 * The folder changes' delete for the workspace and template routes takes only what those routes delete, whoever
+	 * calls it: a workspace's folder below its top, or a template
+	 */
+	@Test
+	public void testTheAdminDeletesTakeOnlyAWorkspacesFolders() throws Exception {
+		FolderChanges changes = WorkspaceRequests.changes();
+		Caller caller = new Caller(boss, null, null);
+		Folder root = FolderDAO.get().findRoot(Tenant.DEFAULT_ID);
+		Folder trashed = fx.folder(documents, "Trashed");
+		FolderDAO.get().delete(trashed.getId(), fx.folderHistory(boss));
+		int folders = count();
+
+		for (Folder outside : List.of(store, templates, root, trashed))
+			assertProblem(outside.getName(), () -> changes.deleteWorkspaceFolder(outside.getId(), caller), 404,
+					"not-found", "There's no folder %d in a workspace.".formatted(outside.getId()));
+		assertProblem("matter", () -> changes.deleteWorkspaceFolder(workspace.getId(), caller), 409, "refused",
+				"The matter's own folder is deleted with the matter.");
+		assertProblem("template", () -> changes.deleteWorkspaceFolder(standard.getId(), caller), 409, "refused",
+				"The template's own folder is deleted with the template.");
+		for (Folder notATemplate : List.of(store, templates, workspace, documents, letters, mine))
+			assertProblem(notATemplate.getName(), () -> changes.deleteTemplate(notATemplate.getId(), caller), 404,
+					"not-found", "There's no template %d.".formatted(notATemplate.getId()));
+
+		assertEquals(folders, count());
+		for (Folder kept : List.of(store, templates, root, workspace, documents, standard, letters, mine))
+			assertEquals(kept.getName(), 0, (int) jdbc().queryForObject(
+					"select ld_deleted from ld_folder where ld_id = ?", Integer.class, kept.getId()));
+	}
+
 	// The values a folder sets
 
 	@Test
@@ -410,10 +447,15 @@ public class AdminWorkspaceResourceTest extends ApiTestCase {
 		options();
 		String uri = FOLDERS + correspondence.getId() + "/properties";
 
-		assertProblem(put(uri).webSession(web).json(new Body()).send(), 400, "bad-request");
+		assertProblem(put(uri).webSession(web).json("[]").send(), 400, "bad-request");
 		assertProblem(put(uri).webSession(web).json(new Body().with("values", List.of())).send(), 400, "bad-request");
 		assertProblem(put(FOLDERS + store.getId() + "/properties").webSession(web)
 				.json(new Body().with("values", Map.of())).send(), 404, "not-found");
+		// A missing values is a field missing, after the folder is found
+		assertProblem(put(FOLDERS + store.getId() + "/properties").webSession(web).json(new Body()).send(), 404,
+				"not-found");
+		assertFields(put(uri).webSession(web).json(new Body()).send(), "values:required");
+		assertFields(put(uri).webSession(web).json(new Body().with("values", null)).send(), "values:required");
 		assertProblem(get(FOLDERS + templates.getId() + "/properties").webSession(web).send(), 404, "not-found");
 		assertFields(put(uri).webSession(web).json(new Body().with("values", Map.of(HealdanConstants.ATTR_CLIENT,
 				"1002"))).send(), "client:read-only");
@@ -600,6 +642,18 @@ public class AdminWorkspaceResourceTest extends ApiTestCase {
 
 	private static void assertProblem(ApiResponse response, int status, String code, String detail) {
 		AdminMattersResourceTest.assertProblem(response, status, code, detail);
+	}
+
+	/** Asserts the work is refused with this problem */
+	private static void assertProblem(String what, Runnable work, int status, String code, String detail) {
+		try {
+			work.run();
+			fail(what + ": not refused");
+		} catch (ApiProblem problem) {
+			assertEquals(what, status, problem.status());
+			assertEquals(what, code, problem.code());
+			assertEquals(what, detail, problem.detail());
+		}
 	}
 
 	/** Asserts a 422 whose fields are these, each as {@code field:code}, in order */

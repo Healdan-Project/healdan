@@ -566,7 +566,7 @@ public class SignInAdminTest extends AbstractHealdanTestCase {
 	 */
 	@Test
 	public void testUnlinkDeletesApiKeys() throws Exception {
-		// The web page still lets a provider account make a key, which never signs in
+		// A key a provider account makes never signs it in
 		String made = key(jane, "Made while linked");
 		assertThrows(AuthenticationException.class, () -> SessionManager.get().newSession(made, client));
 		// A session a key of hers has open however it got there: opened while the account read as a password one

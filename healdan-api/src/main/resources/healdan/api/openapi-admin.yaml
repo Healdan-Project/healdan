@@ -1066,8 +1066,9 @@ paths:
         - `422 validation` for a missing `folderId` (`required`).
         - `409 refused` for the workspace's top folder; for a `folderId`
           that isn't a live folder of a workspace, as the body names it (the
-          check order's step 4); into another workspace (a folder moves to
-          another matter in the User app); into a search folder, the folder
+          check order's step 4); into another workspace (a matter's folder
+          moves to another matter in the User app, and a template's stays in
+          its template); into a search folder, the folder
           itself or a folder inside it; while a document in it is checked
           out, by anyone; for a name another folder or search folder there
           has, compared without regard to case; and for what Healdan's rules
@@ -1163,12 +1164,13 @@ paths:
           `groupId` being the same; and a row's missing or empty
           `permissions` (`rows[2].permissions`, `required`).
         - `409 refused`, with the rule's sentence, for a group or person that
-          no longer exists (but for a deleted group the folder grants
-          something now, as LogicalDOC still lets its members in); for
-          `guest`, or a read-only person's own group, given anything beyond
-          Read Only's five permissions, which LogicalDOC doesn't check when a
-          folder's permissions are saved (it quietly drops some of them but
-          keeps Subscription and Store); on a matter's own folder, for leaving
+          no longer exists (but for a deleted group the folder already grants
+          something, which may stay, so a save needn't take away what's
+          there); for `guest`, or a read-only person's own group, given
+          anything beyond Read Only's five permissions, but for the owner's
+          row on a matter's own folder, which is sent with Full Access
+          whoever owns the matter (a read-only owner's row then holds what a
+          read-only person's row can); on a matter's own folder, for leaving
           out its owner's row or giving it less than Full Access, or making
           that folder follow its Store; and, inside a matter, for a folder
           that would grant more than its parent (P1) or, on its own folder, a
@@ -1182,8 +1184,8 @@ paths:
         before and follows after (`follows`, by its path from its workspace's
         top folder; null with its own), and each row that changed, named as
         `group Partners` or `user jdoe`, with its permissions before and
-        after (null for no row). A save or Follow Parent that would change
-        nothing is neither written nor recorded.
+        after as stored (null for no row). A save or Follow Parent that would
+        change nothing is neither written nor recorded.
       tags: [Matters]
       parameters:
         - $ref: '#/components/parameters/FolderPath'
@@ -1312,8 +1314,9 @@ paths:
         a template, the matters made from it afterwards do.
 
         - `404 not-found` for a folder outside a workspace.
-        - `422 validation`, every value that's wrong before anything is
-          saved, by the property's name, with the codes
+        - `422 validation` for a missing or null `values` (`required`); and
+          every value that's wrong before anything is saved, by the
+          property's name, with the codes
           `setProperties` in `openapi.yaml` uses: `unknown` for a
           property the list doesn't have, or a user, folder or document that
           doesn't exist; `read-only` for Client and Matter; `type` for a
@@ -1864,10 +1867,10 @@ paths:
         - `404 not-found` as `adminGetStoreAccess` answers.
         - `422 validation` for a missing `groupIds` (`required`).
         - `409 refused` for a group that no longer exists (a deleted group
-          the Store grants something now may stay, as LogicalDOC still lets
-          its members in); for a change that would leave a matter in the
-          Store letting in a group the Store wouldn't (P2: whoever can read a
-          matter can read its Store), checked before anything is written,
+          the Store already grants something may stay, so a change needn't
+          take away what's there); for a change that would leave a matter in
+          the Store letting in a group the Store wouldn't (P2: whoever can
+          read a matter can read its Store), checked before anything is written,
           the matter's owner's own group passing while the owner could read
           the Store, with a sentence that names the first such group and its
           matter, or how many of the Store's matters it can read and the
@@ -3451,7 +3454,7 @@ components:
         message:
           type: string
           description: An English sentence that says what's wrong, which the app can show as it is
-          examples: ['Privileged grants more than its parent (group Partners: WRITE).']
+          examples: ["Privileged grants more than the folder it's in (group Partners: WRITE)."]
         folderId:
           type: [integer, 'null']
           format: int64

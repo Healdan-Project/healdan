@@ -147,7 +147,7 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 
 	@Test
 	public void testDeletedGroupWithMembersStillGrants() throws Exception {
-		// CE's GroupDAO.delete, which SOAP's deleteGroup calls, keeps the members, and CE still lets them in (R31)
+		// A group deleted with members left counts as live, so its rows are checked as any group's (R31)
 		Group former = fx.group("Former");
 		fx.user("frank", former.getName());
 		GroupDAO.get().delete(former.getId());

@@ -893,6 +893,33 @@ public class AdminMattersResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testAMoveWhoseRecordFailsLeavesTheMatterWhereItWas() throws Exception {
+		firm();
+		String uri = MATTERS + "/" + charter.getId() + "/move";
+		int recorded = matterEvents().size();
+		// Read through the DAO first, so the cache holds the folder as it is
+		assertEquals(clientWork.getId(), FolderDAO.get().findById(charter.getFolderId(), true).getParentId());
+
+		// The record's insert fails inside the move's transaction, after the folder has moved
+		jdbc().execute("alter table hd_admin_event rename to hd_admin_event_away");
+		ApiResponse failed;
+		try {
+			failed = post(uri).webSession(web).json(new Body().with("storeId", regional.getId())).send();
+		} finally {
+			jdbc().execute("alter table hd_admin_event_away rename to hd_admin_event");
+		}
+
+		assertProblem(failed, 500, "server-error", null);
+		// The move went with it, as the DAO reads the folder too
+		assertEquals(clientWork.getId(), FolderDAO.get().findById(charter.getFolderId(), true).getParentId());
+		assertEquals(clientWork.getId(), (long) jdbc().queryForObject(
+				"select ld_parentid from ld_folder where ld_id = ?", Long.class, charter.getFolderId()));
+		ApiResponse read = get(MATTERS + "/" + charter.getId()).webSession(web).send();
+		assertEquals(read.toString(), clientWork.getId(), read.json().path("store").path("id").asLong());
+		assertEquals(recorded, matterEvents().size());
+	}
+
+	@Test
 	public void testMoveRefusals() throws Exception {
 		firm();
 		String uri = MATTERS + "/" + charter.getId() + "/move";

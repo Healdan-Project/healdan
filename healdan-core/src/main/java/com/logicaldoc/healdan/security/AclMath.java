@@ -30,8 +30,8 @@ import com.logicaldoc.util.spring.Context;
  * its rows when it deletes a group (or a user, with the user's own group), but
  * then it grants nobody anything (plan, R30), so the permission rules and
  * narrowing neither count nor touch its rows. A deleted group that still has
- * members, as {@code GroupDAO.delete} leaves one (SOAP's {@code deleteGroup}
- * calls it), still lets them in, so it counts as live (R31). The ACLs are read
+ * members, as {@code GroupDAO.delete} leaves one, counts as live: its rows are
+ * checked and narrowed as any group's (R31). The ACLs are read
  * from {@code ld_folder_acl} with
  * JDBC on CE's data source, so the reads join the caller's transaction and see
  * what it has flushed.
