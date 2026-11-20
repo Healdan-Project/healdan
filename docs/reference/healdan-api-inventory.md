@@ -4,7 +4,7 @@
 - **Written:** 2026-10-23, for the [M2 design](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) (§12), from the code at `808d5395b`.
 - **Kept current:** each milestone that adds endpoints updates its entries' tags and endpoints in the same pull request.
 - **After M6**, the User app's later phases add their endpoints to §0.3, each marked "built after M6", and their old calls move from `Later` to `M6`: a favourite's name and renaming folders (2026-11-14), and moving and deleting folders and the Trash (2026-11-17, the [folders and Trash spec](../superpowers/specs/2026-11-16-folders-and-trash-design.md) §6).
-- **The Admin app's Phase 1 built** its endpoints on 2026-11-19 (§0.5), in pull request `Admin app: the foundation and the Dashboard` ([Admin app spec](../superpowers/specs/2026-11-18-admin-app-design.md) §10). Its later phases add theirs to §0.5. The corrections the spec's §10 names, Healdan's storage service and the sign-in methods M4 added to `HealdanSettingsService`, which this file doesn't list yet, wait for the phases that replace them: Phase 3 and Stage 2.
+- **The Admin app's Phase 1 built** its endpoints on 2026-11-19 (§0.5), in pull request `Admin app: the foundation and the Dashboard` ([Admin app spec](../superpowers/specs/2026-11-18-admin-app-design.md) §10). Its later phases add theirs to §0.5: Phase 2 its clients', matters' and folder access's on 2026-11-20, for pull request `Admin app: clients, matters and workspaces`. The corrections the spec's §10 names, Healdan's storage service and the sign-in methods M4 added to `HealdanSettingsService`, which this file doesn't list yet, wait for the phases that replace them: Phase 3 and Stage 2.
 - **M6 built** its endpoints on 2026-11-10 to 2026-11-12 (§0.3), and its design left the rest of the old calls it weighed to later phases of the User app (`Later`) or to none (M6 spec §4, §16).
 - **M3 built** its endpoints on 2026-10-24 (§0.2): the bookmarks, `FolderService.create` and `/thumbnail` moved from M6 to M3, and the rest of M3's additions have no old call behind them.
 - **M2 built** every `M2` endpoint named here on 2026-10-23 and 2026-10-24 (§0.1). Its `openapi.yaml` (`healdan-api/src/main/resources/healdan/api/openapi.yaml`) is the reference for what they do; this file only maps the old calls to them.
@@ -171,15 +171,29 @@ M6 built every endpoint in this table, for the User app ([M6 spec](../superpower
 | SetupService | 2 |  |  |  |  |  |  |  | 2 |
 | DropboxService | 6 |  |  |  |  |  |  |  | 6 |
 
-### 0.5 What the Admin app adds (Phase 1 built)
+### 0.5 What the Admin app adds (Phases 1 and 2 built)
 
-Phase 1 built every endpoint in this table, for the Admin app's Dashboard and its find (Admin app spec §8.1, §10). They're under `/api/v1/admin`, described in `openapi-admin.yaml`, not `openapi.yaml`, and answer administrators' web sessions only. The rows marked "(none: …)" have no old call behind them.
+Phase 1 built the first three endpoints in this table, for the Admin app's Dashboard and its find (Admin app spec §8.1, §10), and Phase 2 the rest so far, for its clients, its matters and the access of a workspace's folders (§8.2 to §8.4). They're under `/api/v1/admin`, described in `openapi-admin.yaml`, not `openapi.yaml`, and answer administrators' web sessions only. The rows marked "(none: …)" have no old call behind them.
 
 | Old call | Admin endpoint |
 |---|---|
 | `SystemService.getStatistics` | `GET /admin/dashboard/usage`, whose signed-in count is what Phase 1 replaces of the Sessions screen; its list, `/data/sessions.xml`, is Stage 2's (spec §11) |
 | (none: Needs Attention and Server Health are new) | `GET /admin/dashboard` |
 | (none: one find of clients, matters and people is new) | `GET /admin/find?q=` |
+| `HealdanSettingsService.listClients` | `GET /admin/clients`, with each client's matters and figures, and `GET /admin/clients/{id}` |
+| `HealdanSettingsService.saveClient` | `POST /admin/clients` to create, `PATCH /admin/clients/{id}` to rename |
+| `HealdanSettingsService.suggestClientNumber` | `GET /admin/clients/next-number` |
+| (none: no old call lists every matter) | `GET /admin/matters` |
+| `HealdanMatterService.suggestMatterNumber` | `GET /admin/matters/next-number?clientId=` |
+| (none: New Matter's check as the form changes is new) | `POST /admin/matters/check` |
+| `HealdanMatterService.create` | `POST /admin/matters` |
+| `HealdanMatterService.getByFolder` | `GET /admin/matters/{id}`, by the matter's id |
+| `HealdanMatterService.update` | `PATCH /admin/matters/{id}` |
+| `FolderService.move` of a matter's own folder into another Store | `POST /admin/matters/{id}/move` |
+| `FolderService.delete` of a matter's own folder | `DELETE /admin/matters/{id}`, answering its Trash item |
+| `FolderService.getFolder`'s permissions, for a workspace's folder | `GET /admin/folders/{id}/access` |
+| `FolderService.saveACL`, `inheritACL`, for a workspace's folder | `PUT /admin/folders/{id}/access`, with `rows` or `followParent: true` |
+| `FolderService.saveACL` with its subfolders, for a workspace's folder | `POST /admin/folders/{id}/apply-access` |
 
 ## 1. GWT-RPC services
 
@@ -249,7 +263,7 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 | `resolve` | Matter-number lookup: `998.1` or a bare number -> matters (max 100). | M2 |
 | `addToMyMatters`, `removeFromMyMatters` | Edit My Matters (folder bookmarks). Built as `PUT` and `DELETE /me/matters/{folderId}`. | M6 |
 | `listStores` | The Stores to choose from. Admin-only, and the API keeps it admin-only (`GET /stores`). | M2 |
-| `create`, `update`, `getByFolder`, `suggestMatterNumber`, `listTemplates` | Matter admin: create from template (all-or-nothing), edit, read by workspace, suggest number, templates to choose from. All admin-only. | Admin |
+| `create`, `update`, `getByFolder`, `suggestMatterNumber`, `listTemplates` | Matter admin: create from template (all-or-nothing), edit, read by workspace, suggest number, templates to choose from. All admin-only. | Admin (`/admin/matters` but `listTemplates`, §0.5) |
 
 ### HealdanSearchFolderService
 
@@ -275,7 +289,7 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 |---|---|---|
 | `labels` | Matter label singular/plural (any user). | M2 |
 | `load`, `save` | Healdan settings (admin). | Admin |
-| `listClients`, `saveClient`, `suggestClientNumber` | Client list/create/rename, next client number. | Admin |
+| `listClients`, `saveClient`, `suggestClientNumber` | Client list/create/rename, next client number. | Admin (`/admin/clients`, §0.5) |
 
 ### AttributeSetService
 
@@ -470,7 +484,7 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 | `paste` | Paste documents (copy/cut, links, notes, security options). A cut's move is built as `POST /documents/{docNumber}/move`; copying waits for its phase. | M6 |
 | `move` | Move a folder. Built as `POST /folders/{id}/move` (after M6: the folders and Trash spec, 2026-11-17). | M6 |
 | `merge`, `copyFolders`, `pasteAsAlias` | Merge/copy folders; paste documents as aliases. | Later |
-| `saveACL`, `inheritACL` | Edit folder ACL (optionally to subfolders); inherit from another folder. | Later |
+| `saveACL`, `inheritACL` | Edit folder ACL (optionally to subfolders); inherit from another folder. | Later (a workspace's folder: `/admin/folders/{id}/access` and `/apply-access`, §0.5) |
 | `applyTemplate` | Apply a folder template (structure) to a folder. | Later |
 | `setFolderPagination` | Per-folder list paging preference. The User app loads every list 100 rows at a time (M6 spec §10.2). | none |
 | `applyGridLayout` | Per-folder grid layout preference: choosing columns waits for its phase. | Later |

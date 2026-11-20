@@ -227,8 +227,9 @@ and `ResourceServiceImplTest#testMoveFolder` (WebDAV's move). `RpcPermissionGaps
 
 ### The Admin App's Server Tests
 
-The administration record's, the error capture's, the job status's and the Dashboard's tests are in `healdan-core`
-(`com.logicaldoc.healdan.admin` and the packages under it), `healdan-api` and `healdan-storage`. No test makes a real
+The administration record's, the error capture's, the job status's, the Dashboard's, and the clients', matters' and
+folder access's tests are in `healdan-core` (`com.logicaldoc.healdan.admin` and the packages under it), `healdan-api`
+and `healdan-storage`. No test makes a real
 start, so they call `ErrorWriter.drainOnce()` and `UsageSummary.refreshNow()` themselves, and the tests of the threads
 start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashboard keeps, before it reads again.
 
@@ -278,8 +279,33 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   written; and the failed list's order, matters and paging.
 - **`AdminDashboardResourceTest` and `AdminFindResourceTest`**, in `healdan-api`, check the Dashboard's route, the
   usage route, before the first summary and after a failed refresh too, the find's clients, live matters and people,
-  at most five of each, wildcards taken as they are, a blank query `422`, and the refusals of a non-administrator and
-  of a device token, each answer against `openapi-admin.yaml`.
+  at most five of each, wildcards and the escape character `!` taken as they are, a blank query `422`, and the
+  refusals of a non-administrator and of a device token, each answer against `openapi-admin.yaml`. `ListingSqlTest`
+  checks the `like` patterns the lists and searches share.
+- **`AdminClientsResourceTest`** checks the clients' routes: the list's columns before and after the summary, `q` by
+  a number's start and a name's part, each sort both ways with ties by number and blanks last, paging, the next
+  number, a create and its record, a rename that changes only the name and records nothing when the name is the same,
+  each refusal changing and recording nothing, in the check order, a create that loses a race for its number answered
+  as a used one, no delete, and the refusals of a non-administrator and of a device token.
+- **`AdminMattersResourceTest`** checks the matters' routes the same way: the list's columns, a matter made since the
+  summary, a deleted owner and template, `q` and each filter, alone and together, each sort, paging, and 10,000
+  matters paged, sorted and searched; the next number, which a matter in the Trash keeps taken; a matter's page with
+  its counts of documents that failed to index and previews given up on; the create, its refusals, the permission
+  rules among them, and its race; the check; the edit, with `not-editable` members and a description cleared; the
+  move, into the same Store, onto a name taken in another case, and with a document checked out; and the delete, its
+  Trash item and counts, a restore that brings the matter back to its Store, and its refusals. `MatterCheckTest`, in
+  `healdan-core`, checks each problem code and when it's looked for, their order, that the create refuses what the
+  check reports, that the check writes nothing, and that only an administrator may ask. `MatterServiceTest` checks
+  that a create or edit whose record fails is rolled back, and `IndexCountsTest` and `PreviewJobsTest` the counts for
+  one matter.
+- **`FolderAccessServiceTest`**, in `healdan-core`, checks a workspace's folder access: rows from its own permissions
+  and from the folder it follows, rows that grant nothing left out, the owner's row, exact flags saved, P1 and P2
+  refused inside a matter and saved in a template, the owner's row kept on the matter's folder, the cap on `guest` and
+  read-only people, groups and people that no longer exist, a person named by id or by their own group, an empty
+  list, Follow Parent, what's in scope, the records, and a refused save changing and recording nothing. Its
+  `testApplyToSubfoldersOpensUpARestrictedFolderBelow` pins what LogicalDOC's `applySecurityToTree` does to a
+  restricted folder below, a search folder and a folder in the Trash. `AccessLevelTest` checks the levels' exact
+  matches, and `AdminFolderAccessResourceTest`, in `healdan-api`, the routes, their check order and their refusals.
 
 ### The Storage Tests
 

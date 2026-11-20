@@ -8,17 +8,35 @@ screens a Store is a *workspace*, and they show at the top of the Documents tab'
 
 ## Creating a Store
 
-Only admins create Stores. Right-click a Store in the folder tree and choose **New workspace**, then name it. Rename
-a Store the same way, with **Rename**.
+Only admins create Stores. In the Admin app, **New Store…**, beside the Store in
+[New Matter](../clients-and-matters/#creating-a-matter), makes one, and New Matter then chooses it:
+
+- **Name:** at most 255 characters, with no `/` or `\`. New Store says so before **Create Store** when it's too long
+  ("That is too long.") or has one of them ("That name isn't allowed.").
+- **Who Can See It:** the groups that can see the Store. **Add a Group** lists the first 50 groups by name, and finds
+  the others as you type two characters or more. A group added leaves that list, and the **×** beside it takes it off
+  again. With none added, New Store says only administrators can see the Store.
+
+A new Store keeps its files on Original, the server's own storage, as New Store says, until you give it another
+storage backend (see [Where Files Are Kept](#where-files-are-kept)). Anything Healdan refuses when you press **Create
+Store** shows in the dialog, in Healdan's own words. While the Store is being made, **Cancel** is greyed out and Esc
+does nothing; once it's made, Healdan says "Created" with its name.
+
+In the Classic Interface, right-click a Store in the folder tree and choose **New workspace**, then name it. Rename a
+Store the same way, with **Rename**.
 
 ## Who Can See a Store
 
-A Store's permissions decide who can see it, and they limit who can see the matters in it. Set them on the Store's
-**Security** tab.
+A Store's permissions decide who can see it, and they limit who can see the matters in it. A Store made in the Admin
+app starts with the groups its **Who Can See It** named. Change them on the Store's **Security** tab in the Classic
+Interface.
 
-**Before creating matters, let the groups your templates use read the Store.** A new Store usually lets in only the
-admin who created it, and New Matter refuses a matter that a group can read when the Store doesn't let that group
-in: "Everyone can read this matter but not its Store".
+**Before creating matters, let the groups your templates use read the Store.** A Store made in the Classic Interface
+usually lets in only the admin who created it, and a matter that a group can read is refused when the Store doesn't
+let that group in. The Admin app's New Matter says so before you create the matter, as in "Everyone can't read the
+Store Regional Office.", with a button that lets the group in there and then: see
+[Letting a Group Read the Store](../clients-and-matters/#letting-a-group-read-the-store). The Classic Interface's New
+Matter refuses it when you click **Create**: "Everyone can read this matter but not its Store".
 
 - **A matter needs its Store.** Every group a matter lets read the matter must also be able to read its Store.
   Healdan checks this when a matter is created, when its permissions change and when it moves to another Store, so

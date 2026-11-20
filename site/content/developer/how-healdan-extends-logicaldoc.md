@@ -181,6 +181,17 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     doesn't serve. `$ref` can't reach across two files, so it repeats `Page`, `FieldError` and the `Problem`
     response, and `Problem` with fewer members, and `OpenApiFileTest` keeps the copies the same (see
     [The API's Tests](../tests/#the-apis-tests)).
+  - **Clients, matters and folder access** are `AdminClientsResource`, `AdminMattersResource` and
+    `AdminFolderAccessResource`, over `healdan-core`'s services (see the Admin app's records, below). Their lists
+    read every matching row in one query, then sort and page in Java, with the figures from `UsageSummary`. A create
+    whose insert a unique index refuses (PostgreSQL's SQLState `23505`), as the second of two creates of one number
+    at the same moment is, goes through `NumberRaces`, which asks the number's check again once the first has
+    committed, so the answer is the used number's `409 refused`. A matter's move and delete are `FolderChanges`'
+    `moveMatter` and `deleteMatter`, the public folder routes' move and delete with the same locks and checks, but
+    for the refusal of a matter's own folder, and with their refusals answered as `409 refused`, the same sentence
+    and no `holds`. `AdminFolderAccessResource` is rooted at exactly `@Path("/v1/admin/folders")`, with the id in its
+    methods' paths: CXF looks for a method only in the root classes whose path is the best match's, so every route
+    under `/v1/admin/folders/{id}` has to be in a class with that same root, or another class's would answer `405`.
 - **`healdan-storage`** keeps documents' files on [storage backends](../../admin/storage-backends/), and is a plugin
   of its own that requires `healdan-core`. Its code is under `com.logicaldoc.healdan.storage`, where `healdan-core`'s
   Spring scan finds its beans.
@@ -415,8 +426,48 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `MatterService`'s create and edit are transactions (`@Transactional`) that record `client.created`,
     `client.renamed`, `matter.created` and `matter.updated` inside them, so the Classic Interface's client and matter
     changes are recorded too, and so are the clients and matters setup steps make, such as the smoke stack's. A
-    create records every field it set, and an edit only those whose values changed, an owner by full name. A rename
-    or an edit that changes nothing isn't recorded.
+    create records every field it set, and an edit only those whose values changed, an owner by name and username, as
+    `Ann Lee (alee)` (a deleted owner by the username LogicalDOC gave the account when it was deleted). A rename or an
+    edit that changes nothing isn't recorded.
+  - **The admin routes record the rest.** A matter's move records `matter.moved`, with the Store before and after,
+    inside the move's transaction, and its delete `matter.deleted`, after it. Saving a folder's access, or making it
+    follow its parent, records `folder.access-changed` inside its transaction: `follows`, the folder it followed
+    before and after by its path from its workspace's top folder (null with its own), and a change for each row that
+    changed, named as `group Partners` or `user jdoe`, with its permissions before and after (null for no row). Apply
+    to Subfolders records `folder.access-applied` after it's done, with how many folders below, the Trash's included,
+    had their own permissions and how many followed, before and after. Each names its folder by that path, as
+    `1001.1 – Charter Dispute/Documents`.
+  - **New Matter's check** is `MatterAdmin.check` (`com.logicaldoc.healdan.admin.matters`), which takes a
+    `MatterAdmin.Draft`, every member of which may be null, and answers a `MatterCheck`. It looks for each problem
+    only once the draft has what it needs, with `MatterService`'s own checks and sentences and `MatterNumbering`'s,
+    and the permission rules as the create applies them: each folder of the template, top down and aliases left out,
+    its prospective permissions (`PermissionRules.prospective`) against its parent's (`AclMath.effective`), and the
+    workspace's permissions as the create would make them, the template's with the owner's own group given every
+    permission, against the Store (`PermissionRules.p2Failures`, which `checkP2` uses too). It writes nothing. A
+    problem about a group names it, or a person by `PersonNames` (first and last name, or the username when both are
+    blank).
+  - **A workspace's folder access** is `FolderAccessService` (`com.logicaldoc.healdan.admin.access`), with
+    `AccessLevel`, the exact match of a row's permissions to Read Only, Read/Write, Full Access, Can See or Custom.
+    `workspaceFolder(id)` is the scope: a live matter's own folder and anything in it, or a template's top folder and
+    anything in it; anything else, an alias and a folder in the Trash included, is none. `read` takes its rows from
+    `AclMath.effective`, so a row that grants nothing isn't listed, and whether Apply to Subfolders is offered from a
+    live folder below and `PermissionRules.checkApplyToTree`. `save` resolves each row to a group, a person to their
+    own, refuses what the admin route refuses, and checks the matter's rules (P1 inside a matter, P2 on its own
+    folder) with `PermissionRules`' own methods before it writes, as `HibernateFolderDAO.store` logs a listener's
+    refusal at error level, which the error capture would count as a fault. It then stores through `FolderDAO.store`
+    with `FolderEvent.PERMISSION`, so `PermissionsFolderListener` applies the rules again and narrows the folders
+    below. A save that changes nothing writes nothing. **Follow Parent** is `FolderDAO.updateSecurityRef`, and
+    **Apply to Subfolders** LogicalDOC's `applySecurityToTree`. The service doesn't check that its caller is an
+    administrator: only the admin route, behind `AdminFilter`, calls it.
+  - **What `applySecurityToTree` does.** Healdan's hook runs first: `checkApplyToTree`, which needs the Security
+    permission on every folder below that has its own rows, and always lets an administrator through, then
+    `afterApplySecurityToTree`, which narrows only when it's applied from a Store or the root. The call needs a session
+    id for its history. Every folder `findFolderIdInTree(folder, true)` names but the folder itself, at every level,
+    deleted folders, search folders and aliases included, then gets `ld_securityref` set by JDBC, to the folder's id
+    or, when it follows, to what it follows, and loses every `ld_folder_acl` row; the folder caches are evicted.
+    Nothing is moved or deleted, and the folder itself doesn't change. So a restricted folder below is opened up: it
+    grants exactly what the folder grants, and one in the Trash comes back so if it's restored
+    (`FolderAccessServiceTest#testApplyToSubfoldersOpensUpARestrictedFolderBelow`).
   - **`hd_error` and `hd_error_hour`** (`V12__admin.sql` too) hold the errors the server logged, by fault. `hd_error`
     has a row for each fingerprint: the level, the area, the logger, the latest message, its stack and the documents
     it names (the ids a message names as `doc 10412` or `document id 10412`), how many times it was seen, when first
