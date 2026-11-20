@@ -578,7 +578,7 @@ public class DocumentResource {
 
 			DocumentHistoryDAO histories = DocumentHistoryDAO.get();
 			// The session's latest download alone: a device token's session can live for days. A missing date last,
-			// where MariaDB puts it; PostgreSQL would put it first
+			// where PostgreSQL would put it first in a descending sort
 			List<DocumentHistory> latest = histories.findByWhere(
 					"_entity.userId = :userId and _entity.event = :event and _entity.sessionId = :sessionId",
 					Map.of("userId", user.getId(), "event", history.getEvent(), "sessionId", session.getSid()),

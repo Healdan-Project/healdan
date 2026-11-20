@@ -21,7 +21,7 @@ weight: 4
 | Check | Workflow | What it does |
 |---|---|---|
 | `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts and on upstream's retired ones (`check-maven-repositories.py`), for Oracle's and SQL Server's drivers (`check-database-drivers.py`) and for the licences of the User app's npm packages (`check-web-licences.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards, each with a PostgreSQL of its own (see below) |
-| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, `WarParsersTest`, `WarStorageTest` and `WarHibernateTest`, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`), the helper's open-save-close cycle (its stack test), provider sign-in through a stand-in Keycloak (`test-signin.sh`) and storage backends against a stand-in Garage (`test-storage.sh`) included |
+| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, `WarParsersTest`, `WarStorageTest` and `WarHibernateTest`, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`), the helper's open-save-close cycle (its stack test), provider sign-in through a stand-in Keycloak (`test-signin.sh`) and storage backends against a stand-in Garage (`test-storage.sh`) included, all on PostgreSQL 18, then on amd64 the move from MariaDB (`test-move.sh`) |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
 | `Web` | `web.yml` | Builds and tests the User app and the Admin app in `healdan-web/web`: generates the APIs' types, typechecks, lints, runs the tests and builds (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
@@ -240,6 +240,17 @@ The smoke stack runs a throwaway Garage as a stand-in S3 server, and its step 5f
   of them are the first read to meet the outage it makes, which waits for the S3 client to give up, as the first
   read would on a server; the rest is the script's polls for the mover's work. Step 8 runs the script again after
   the restart.
+
+### The Move's Test in the Image CI
+
+After the smoke test, the amd64 job's `Move test (amd64)` step runs `docker/tests/test-move.sh` with the image the
+smoke test ran, which moves a frozen MariaDB install to PostgreSQL with `move-from-mariadb` and starts the app on the
+result (see [The Move's Test](../tests/#the-moves-test)).
+
+- **One architecture is enough.** The command is Java, and the fixture is the same on both.
+- **It takes about a minute,** and pulls `mariadb:11.4` for the fixture's database. A 15-minute limit stops a stack
+  that never comes up there, not at the job's limit.
+- **It runs while the command exists,** and goes with it.
 
 ### Disk Space on the amd64 Runner
 

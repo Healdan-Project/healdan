@@ -22,7 +22,6 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import com.logicaldoc.healdan.util.Savepoints;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -85,29 +84,17 @@ public class EmailIndex {
 	 */
 	public void put(long docId, String messageId) {
 		if (!isKept(messageId)) {
-			/*
-			 * Only a row that is there: on MariaDB a delete that matches nothing
-			 * takes a gap lock, as an update does, and a check-in of an email with
-			 * no Message-ID, which had no row, would take one. The read takes none
-			 */
+			// Only a row that is there: a check-in of an email with no Message-ID, which had no row, needs no delete
 			if (messageIdOf(docId) != null)
 				jdbc.update("delete from hd_email where hd_docid = ?", docId);
 			return;
 		}
 
 		String hash = MessageIds.hash(messageId);
-		/*
-		 * Insert first: nearly every call adds a new document's row. On MariaDB an
-		 * update that matches nothing takes a gap lock, which two wide transactions
-		 * can deadlock on. The insert that finds a row fails inside a savepoint, so
-		 * a transaction it joins goes on to the update
-		 */
-		if (!Savepoints.insertIfAbsent(jdbc,
-				"insert into hd_email (hd_docid, hd_messageid, hd_messageidhash) values (?, ?, ?)", docId, messageId,
-				hash))
-			// The document has a row already: the index worker's, or an earlier one
-			jdbc.update("update hd_email set hd_messageid = ?, hd_messageidhash = ? where hd_docid = ?", messageId,
-					hash, docId);
+		// A document that has a row already, the index worker's or an earlier one, takes the new Message-ID
+		jdbc.update("insert into hd_email (hd_docid, hd_messageid, hd_messageidhash) values (?, ?, ?) "
+				+ "on conflict (hd_docid) do update set hd_messageid = excluded.hd_messageid, "
+				+ "hd_messageidhash = excluded.hd_messageidhash", docId, messageId, hash);
 	}
 
 	/**

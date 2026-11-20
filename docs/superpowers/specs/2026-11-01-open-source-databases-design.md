@@ -3,7 +3,10 @@
 - **Tracking issue:** [Healdan-Project/healdan#110](https://github.com/Healdan-Project/healdan/issues/110)
 - **Date:** 2026-11-01
 - **Status:** the owner's decision on the issue (2026-10-29 and 2026-10-30), and their calls on what stays
-  (2026-11-01). Built in Healdan-Project/healdan#148.
+  (2026-11-01). Built in Healdan-Project/healdan#148. Carried forward, and in part replaced, by the
+  [PostgreSQL spec](2026-11-18-postgresql-design.md) of 2026-11-18, whose switch makes PostgreSQL Healdan's only
+  database: MariaDB is no longer kept, and the wizard starts on PostgreSQL. What this spec decided for MySQL, Oracle
+  and SQL Server stands.
 
 As in the roadmap, **(owner)** marks what the owner decided or described, and **(call)** marks Claude's proposal.
 

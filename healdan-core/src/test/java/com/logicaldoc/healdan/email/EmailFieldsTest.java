@@ -9,19 +9,25 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
 
 import org.junit.Test;
 
 import com.auxilii.msgparser.MsgParser;
 import com.logicaldoc.healdan.support.LogCapture;
 
+import jakarta.mail.Session;
+import jakarta.mail.internet.MimeMessage;
+
 /**
- * Spec §6.1: the Message-ID is read from an {@code eml}'s header and from a
+ * Spec \u00a76.1: the Message-ID is read from an {@code eml}'s header and from a
  * {@code msg}'s properties, and an unreadable file costs nothing else.
  */
 public class EmailFieldsTest {
@@ -36,6 +42,24 @@ public class EmailFieldsTest {
 		assertTrue(fields.isPresent());
 		assertEquals("1@example.com", fields.get().messageId());
 		assertEquals("Ann Smith <ann@example.com>", fields.get().from());
+	}
+
+	/** PostgreSQL spec section 7.5: an emoji is kept, a NUL is a space, and the cut to the column keeps pairs whole */
+	@Test
+	public void testTextHealdanKeeps() throws Exception {
+		String party = new String(Character.toChars(0x1F389));
+		assertEquals("Re " + party + " Sale", subject("Re\u0000" + party + " Sale"));
+		assertEquals("x".repeat(3999), subject("x".repeat(3999) + party));
+		assertEquals("x".repeat(3998) + party, subject("x".repeat(3998) + party + "y"));
+	}
+
+	/** The subject a message with this one, encoded as an emoji is, comes out with */
+	private static String subject(String subject) throws Exception {
+		String eml = "From: ann@example.com\r\nSubject: =?UTF-8?B?"
+				+ Base64.getEncoder().encodeToString(subject.getBytes(StandardCharsets.UTF_8))
+				+ "?=\r\nMIME-Version: 1.0\r\nContent-Type: text/plain\r\n\r\nHello.\r\n";
+		return EmailFields.fromEml(new MimeMessage(Session.getInstance(new Properties()),
+				new ByteArrayInputStream(eml.getBytes(StandardCharsets.US_ASCII)))).subject();
 	}
 
 	@Test

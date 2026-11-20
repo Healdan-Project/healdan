@@ -69,8 +69,7 @@ fi
 api() { curl -fsS -u admin:admin "$@"; }
 app() { docker exec "$APP_CONTAINER" "$@"; }
 db_query() {
-  docker exec "$DB_CONTAINER" sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "$1"' \
-    sh "$1"
+  docker exec "$DB_CONTAINER" sh -c 'PGPASSWORD="$HEALDAN_DB_PASSWORD" psql -X -q -At -F "$(printf "\t")" -h 127.0.0.1 -U "$HEALDAN_DB_USER" -d "$HEALDAN_DB_NAME" -c "$1"' sh "$1"
 }
 # s3 <path and query> [curl args...]: a request to Garage signed with the overlay's key
 s3() { local path=$1; shift; curl -sS --aws-sigv4 "aws:amz:garage:s3" --user "$S3_KEY:$S3_SECRET" "$@" "$S3/$path"; }

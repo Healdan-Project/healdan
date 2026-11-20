@@ -5,7 +5,8 @@ weight: 1
 cascade:
   type: docs
 ---
-How to run Healdan on your own server. Healdan runs as a Docker Compose stack: a MariaDB database and the Healdan app.
+How to run Healdan on your own server. Healdan runs as a Docker Compose stack: a PostgreSQL database and the Healdan
+app.
 
 {{< callout type="warning" >}}
 **Healdan is experimental and in early development,** as it grows from LogicalDOC Community Edition into a product
@@ -29,6 +30,7 @@ which Healdan's licence incorporates, set this out. You use Healdan at your own 
   {{< card link="cloud-storage/" title="Cloud Storage" icon="cloud" >}}
   {{< card link="backup-and-restore/" title="Backup and Restore" icon="archive" >}}
   {{< card link="upgrading/" title="Upgrading" icon="arrow-up" >}}
+  {{< card link="moving-from-mariadb/" title="Moving from MariaDB to PostgreSQL" icon="database" >}}
   {{< card link="host-folders/" title="Host Folders Instead of Volumes" icon="folder" >}}
   {{< card link="troubleshooting/" title="Troubleshooting" icon="support" >}}
   {{< card link="known-limitations/" title="Known Limitations" icon="information-circle" >}}

@@ -508,9 +508,10 @@ public class StorageDataTest extends AbstractStorageTestCase {
 	}
 
 	/**
-	 * Inside CE's transaction, the storage rows' JDBC shares its connection, and a statement that fails rolls back only
-	 * to its savepoint: what ran before it stands and the transaction commits, which PostgreSQL wouldn't allow without
-	 * the savepoint. A taken key in {@code recordWrite} is such a statement.
+	 * Inside CE's transaction, the storage rows' JDBC shares its connection, and work that fails in {@code Savepoints.run}
+	 * rolls back only to its savepoint: what ran before it stands and the transaction commits, which PostgreSQL
+	 * wouldn't allow without the savepoint. A taken key in {@code recordWrite} no longer fails: its insert does
+	 * nothing, on conflict, and the update that follows keeps the transaction going.
 	 */
 	@Test
 	public void testSavepointsKeepTheTransaction() {
@@ -527,7 +528,7 @@ public class StorageDataTest extends AbstractStorageTestCase {
 			assertTrue(files().find(200L, "1.1").isEmpty());
 			assertTrue(files().find(200L, "1.0").isPresent());
 
-			// The key taken, as by another transaction since the read: the insert fails in its savepoint, then updates
+			// The key taken, as by another transaction since the read: the insert does nothing, on conflict, then updates
 			files().recordWrite(200L, "1.0", 0L, null, 6L, false, false);
 		});
 		assertEquals(6L, files().find(200L, "1.0").orElseThrow().size());

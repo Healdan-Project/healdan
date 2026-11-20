@@ -295,8 +295,8 @@ public class Favorites {
 		String kept = fileType(fileType);
 		for (Bookmark bookmark : bookmarks.findByWhere(
 				"_entity.targetId = %d and _entity.type = %d".formatted(targetId, type.ordinal()), null, null)) {
-			// Compared here, not in the query: MariaDB's = ignores case and trailing spaces, and a name of the
-			// person's own that differs from the old one only so must stay
+			// Compared here, exactly, as Java compares text, not by whatever collation the query would use: a name of
+			// the person's own that differs from the old one only by case or trailing spaces must stay
 			boolean unrenamed = oldName.equals(bookmark.getTitle());
 			boolean retyped = type == Bookmark.Type.DOCUMENT && !Objects.equals(kept, bookmark.getFileType());
 			if (!unrenamed && !retyped)

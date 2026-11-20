@@ -50,18 +50,16 @@ learn from.
   answer a request with a 500. LogicalDOC's template for transactional proxies in the webapp's `context.xml`,
   `applicationBaseTransactionProxy`, has no target, so Healdan makes it abstract, an upstream edit.
 
-## MariaDB and PostgreSQL
+## PostgreSQL
 
-The stack runs on MariaDB, and Healdan's Java tests on PostgreSQL 18 (see
-[The Test Database](../tests/#the-test-database)). So until the stack moves to PostgreSQL, Healdan's code, and
-LogicalDOC's under it, works on both, and Healdan's SQL is written once, in a form both databases take, but for its
-Flyway migrations, which have a folder for each until then (see [Healdan's Code](#healdans-code)). These make
-LogicalDOC's code, and Healdan's, work on PostgreSQL:
+Healdan runs on PostgreSQL 18 only, and its Java tests run there too (see
+[The Test Database](../tests/#the-test-database)). LogicalDOC ships no PostgreSQL variant of its schema scripts, so
+its tables are made by its generic ones. These make LogicalDOC's code, and Healdan's, work on PostgreSQL:
 
 - **Booleans are bound as integers.** LogicalDOC maps Java `boolean` fields onto `int` columns, and PostgreSQL
   refuses a boolean for an `int` column. `healdan-core`'s `hibernate.properties`, at its class path's root, sets
   `hibernate.type.preferred_boolean_jdbc_type=INTEGER`. Hibernate reads it when it starts, with no upstream edit, and
-  binds every Java `boolean` as an integer, on either database. `BooleanBindingTest` checks the setting is in force,
+  binds every Java `boolean` as an integer. `BooleanBindingTest` checks the setting is in force,
   and so does every Healdan test as it starts (see [Java Tests](../tests/#java-tests)). Hibernate reads only the
   first `hibernate.properties` on the class path, so `WarHibernateTest` checks the WAR holds only Healdan's (see
   [Tests](../tests/#docker-tests)). A flag in Healdan's own tables is an `int` column too, never a `boolean` one.
@@ -74,24 +72,74 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
   already of the type comes back as it is. A number held exactly, an integer, a `BigInteger` or a `BigDecimal`, it
   converts in Java: to a `Long` or an `Integer` when that holds it exactly, and to a `Double`, a `Float`, a
   `BigDecimal` or text in plain notation. Anything else, such as a fraction asked for as a `Long`, a value that is a
-  `Double`, or text, goes to the driver, and on MariaDB a read gives what its driver would. `HealdanTypedReadsTest`
-  checks it, in `UPSTREAM_TESTS`, and `TypedReadsOnPostgresTest` that an edit of a user is kept.
-- **A statement that may fail runs inside a savepoint.** On PostgreSQL a statement that fails ends its transaction,
-  whatever the Java around it catches, where MariaDB fails only the statement. So no statement of Healdan's is
-  expected to fail inside a transaction, and one that may fail without failing its caller runs inside a savepoint,
-  through `healdan-core`'s `Savepoints` (`com.logicaldoc.healdan.util`). A failure, whatever it is, rolls back to the
-  savepoint, and the caller's transaction goes on; outside a transaction the work runs as it is.
-  - `insertIfAbsent` inserts a row unless its key is taken, as by another transaction since the caller's read:
-    `PreviewJobs.add`, `EmailIndex.put` (which then updates the row), and `healdan-storage`'s
-    `StoredFiles.recordWrite` and `HeldCopies.hold`.
+  `Double`, or text, goes to the driver, as it did before. `HealdanTypedReadsTest` checks it, in `UPSTREAM_TESTS`,
+  and `TypedReadsOnPostgresTest` that an edit of a user is kept.
+- **No statement is expected to fail inside a transaction.** On PostgreSQL a statement that fails ends its
+  transaction, whatever the Java around it catches.
+  - An insert that may find its key taken, as by another transaction since the caller's read, says `on conflict`
+    with the key it means, so it fails nowhere and PostgreSQL's log has no error for it: `PreviewJobs.add` and
+    `healdan-storage`'s `StoredFiles.recordWrite` and `HeldCopies.hold` then do nothing, and `EmailIndex.put` updates
+    the row. A unique index added later on other columns still fails such an insert, rather than being taken for a
+    duplicate.
+  - Work that isn't expected to fail, but mustn't fail its caller if it does, runs inside a savepoint, through
+    `healdan-core`'s `Savepoints` (`com.logicaldoc.healdan.util`). A failure, whatever it is, an `Error` included,
+    rolls back to the savepoint, and the caller's transaction goes on; outside a transaction the work runs as it is.
+    `Savepoints.inTransaction` says which it is.
   - The listeners that log and swallow a failure inside LogicalDOC's save run their statements inside one, so the
-    save is kept, as it is on MariaDB: `EmailDocumentListener` and `PreviewDocumentListener`. `PreviewDocumentListener`
-    keeps its check of the event and the file name, which is Java alone, outside, as a savepoint costs two round trips
-    to the database and its methods run on every save. `EmailDocumentListener` puts the whole of its `try` inside.
-    The two favourite-names listeners need none: by their `afterStore` the row before the store is in the store's
-    dictionary or the session's map, so they don't reach the database there.
+    save is kept: `EmailDocumentListener` and `PreviewDocumentListener`. `PreviewDocumentListener` keeps its check of
+    the event and the file name, which is Java alone, outside, as a savepoint costs two round trips to the database
+    and its methods run on every save. `EmailDocumentListener` puts the whole of its `try` inside. The two
+    favourite-names listeners need none: by their `afterStore` the row before the store is in the store's dictionary
+    or the session's map, so they don't reach the database there.
+- **A lock waits 50 seconds at most.** The app's role has `lock_timeout` set to `50s` in its database, so every
+  connection it opens, Tomcat's pool and Flyway's included, gives up a lock it has waited that long for, and the
+  statement's transaction fails. A lock cycle that nothing else ends, such as the one `healdan-storage`'s `FileLocks`
+  describes, ends that way, and its callers retry or mend it.
+- **Messages don't quote rows.** PostgreSQL's driver puts the server's detail into each `SQLException`'s message, and
+  for a failed check or a duplicate key the detail holds the row's values. The stack's JDBC URL ends
+  `?logServerErrorDetail=false`, which keeps them out, as Healdan's log never holds file names, subjects or comments.
+  PostgreSQL's own log still has the detail.
+- **Text keeps everything but NUL.** PostgreSQL stores any character but NUL, emoji included, and a lone surrogate
+  isn't a character at all. `healdan-core`'s `StorableText` checks for those two (`holds`). Where a person types the
+  text, such as a matter's or a device's name, Healdan refuses it, saying it has characters Healdan can't keep, and
+  the API answers `400 bad-request` for it in a query parameter or anywhere in a JSON body (see the
+  [API](../api/#errors)). Where Healdan takes the text from a file or a sign-in provider, such as an email's headers
+  or a person's name, `clean` puts a space for a NUL and U+FFFD for a lone surrogate, and `cut` shortens text to a
+  column's length without splitting a surrogate pair. A Message-ID keeps its own rule (see
+  [Desktop Clients](../desktop-clients/)).
+- **Eight of LogicalDOC's columns are widened.** LogicalDOC's generic script gives eight text columns a `varchar`
+  that PostgreSQL enforces, where its MariaDB script has `mediumtext`, so an avatar over 4,000 characters wouldn't
+  save. Healdan's migration `V13__widen_logicaldoc_text.sql` makes them `text`: `ld_user.ld_avatar`,
+  `ld_systemmessage.ld_messagetext`, `ld_filler.ld_automation` and `ld_automationbefore`, `ld_folder.ld_tile`,
+  `ld_menu.ld_automation`, `ld_generic.ld_text1` and `ld_legal.ld_content`. It's the one change Healdan makes to the
+  structure of LogicalDOC's tables.
 - **SQL given to LogicalDOC's DAO helpers never uses `::`,** which its `NamedParameterStatement` reads as a
   parameter. Write `cast(x as text)`.
+
+### The Start-Up Tool
+
+In the image, `docker/tools`' `DockerInit` runs before Tomcat on every start. Before it writes anything, to the conf
+volume or to the database, it stops, changing nothing, when an install would start empty beside its own data
+(`StartGuard`): its conf volume names MariaDB and PostgreSQL holds no move from it, or doesn't answer within 15
+seconds; the database holds a move that didn't finish, whatever the conf volume names; or the database is empty and
+Original's folder already holds an install's files. Then it:
+
+- sets the database settings in `context.properties` on every start: `jdbc.url`, from `DB_HOST`, `DB_PORT` and
+  `DB_NAME`, with `?logServerErrorDetail=false`, and `jdbc.driver`, `jdbc.dbms` (`postgresql`, as LogicalDOC's code
+  spells it) and `hibernate.dialect`, which it reads back, so a conf volume a MariaDB install wrote is put right at
+  its first start after the move;
+- checks the server and the database (`DbChecks`): it refuses a PostgreSQL older than 18, a database that isn't
+  UTF-8 and a role that can't create tables in its schema, and warns of a newer major than 18 and of a collation
+  that doesn't sort by code point;
+- gives the app's role its lock timeout in the database, `alter role … in database … set lock_timeout = '50s'`, and
+  reads it back on a new connection;
+- makes the schema on a fresh database, or checks LogicalDOC's tables on an existing one.
+
+It asks whether a table exists with `to_regclass`, never by reading it, so a start leaves no `ERROR` line in
+PostgreSQL's log. The move from MariaDB, `MoveFromMariaDb` beside it, shares its checks of the server and the
+database (see [The Move's Test](../tests/#the-moves-test)). The Install manual's
+[Troubleshooting](../../install/troubleshooting/) has its messages. An install run outside Docker gets none of this:
+see [Building from Source](../building-from-source/#running-the-war-outside-docker).
 
 ## Healdan's Code
 
@@ -244,14 +292,19 @@ LogicalDOC's code, and Healdan's, work on PostgreSQL:
   - An `artifactItem` in `logicaldoc-webapp/pom.xml` puts its zip in the WAR. That and the root `pom.xml`'s
     `<module>` are the only upstream files it edits.
 - **Its own tables.** Flyway owns the tables whose names start `hd_`, and only those. A change ships as a new
-  script under `healdan-core/src/main/resources/healdan/db/migration/`, never as an edit to one that has shipped.
-  Healdan never changes the structure of LogicalDOC's `ld_` tables.
-  - **A folder of scripts for each database.** `HealdanMigrator` reads which database it's on from the connection and
-    runs the scripts in `mariadb/`, the stack's, or in `postgresql/`, the tests'. It refuses any other database, MySQL
-    included, with `Healdan's tables support MariaDB and PostgreSQL only; found …`. The `postgresql/` scripts are
-    `mariadb/`'s translated one for one, with the same versions and names, so a version means the same on both. Until
-    the stack moves to PostgreSQL, when `mariadb/` goes, a new migration goes into both folders. The history table,
-    `hd_schema_history`, starts with Flyway's version `0` baseline, as LogicalDOC's tables are there first.
+  script under `healdan-core/src/main/resources/healdan/db/migration/postgresql/`, never as an edit to one that has
+  shipped. Healdan never changes the structure of LogicalDOC's `ld_` tables, with one exception: V13 widens eight of
+  their text columns to `text` (see [PostgreSQL](#postgresql)). That list is fixed, a column is only widened, and
+  nothing of LogicalDOC's is added, renamed or dropped.
+  - **One folder of scripts.** `HealdanMigrator` reads which database it's on from the connection and runs the
+    scripts in `postgresql/`. It refuses MariaDB with a message that names the Install manual's
+    [Moving from MariaDB to PostgreSQL](../../install/moving-from-mariadb/), and any other database, MySQL and HSQLDB
+    included, with `Healdan's tables support PostgreSQL only; found …`. V1 to V12 are the scripts Healdan ran on
+    MariaDB, translated one for one, with the same versions and names, so a version means the same on both sides of a
+    move. The move makes them at V13, the version that goes with a MariaDB install's 12, and no later one
+    (`HealdanMigrator.migrateTo`), so the app's first start applies any later script to the moved rows, as on any
+    upgrade. PostgreSQL rolls a failed script back whole, and the start stops. The history table, `hd_schema_history`,
+    starts with Flyway's version `0` baseline, as LogicalDOC's tables are there first.
   - `hd_email` indexes email: a row for each email document, with its Message-ID and the SHA-256 of it that
     lookups search by. `EmailDocumentListener` adds the row when an email is filed, from the Message-ID it read
     from the file, or from the Message-ID property the document came with when the file gives none (an `.eml` or

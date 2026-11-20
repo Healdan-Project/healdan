@@ -66,14 +66,14 @@ public class DbInitPlanTest {
     }
 
     /**
-     * What the WAR's own DbInit scripts create: the plan DockerInit works out for a fresh MariaDB from the plugin.xml
-     * files on this classpath, read as DockerInit reads it.
+     * What the WAR's own DbInit scripts create: the plan DockerInit works out for a fresh PostgreSQL from the
+     * plugin.xml files on this classpath, read as DockerInit reads it.
      */
     private static Map<String, List<String>> real() {
         if (real == null) {
             ClassLoader cl = DbInitPlanTest.class.getClassLoader();
             try {
-                real = DockerInit.createdColumns(cl, DockerInit.plannedScripts(cl, true));
+                real = DockerInit.createdColumns(cl, DockerInit.plannedScripts(cl, true, DockerInit.DBMS));
             } catch (Exception e) {
                 throw new IllegalStateException("can't read the WAR's DbInit scripts", e);
             }
@@ -282,7 +282,7 @@ public class DbInitPlanTest {
         var core = new DbInitPlan.Entry("logicaldoc-core", 1, "sql/logicaldoc-core.sql");
         Set<String> present = Set.of("sql/logicaldoc-core.sql", "sql/logicaldoc-core.sql.mariadb");
         Check.eq("sql/logicaldoc-core.sql.mariadb", DbInitPlan.resolve(core, "MariaDB", present::contains),
-                "variant preferred, dbms lower-cased");
+                "variant preferred, dbms lower-cased, as for a move's source");
     }
 
     private static void fallsBackToGenericScript() {
@@ -290,6 +290,11 @@ public class DbInitPlanTest {
         Check.eq("sql/logicaldoc-dropbox.sql",
                 DbInitPlan.resolve(dropbox, "mariadb", Set.of("sql/logicaldoc-dropbox.sql")::contains),
                 "generic script when there is no variant");
+        Check.eq("postgresql", DockerInit.DBMS, "the app's database is PostgreSQL");
+        var core = new DbInitPlan.Entry("logicaldoc-core", 1, "sql/logicaldoc-core.sql");
+        Set<String> present = Set.of("sql/logicaldoc-core.sql", "sql/logicaldoc-core.sql.mariadb");
+        Check.eq("sql/logicaldoc-core.sql", DbInitPlan.resolve(core, DockerInit.DBMS, present::contains),
+                "PostgreSQL has no variant, so core's generic script, whatever other variants there are");
     }
 
     private static void failsWhenScriptMissing() {

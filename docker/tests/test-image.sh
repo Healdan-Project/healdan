@@ -2,34 +2,42 @@
 # SPDX-FileCopyrightText: 2026 The Healdan Project
 # SPDX-License-Identifier: LGPL-3.0-only
 
-# Image-level checks with plain docker (spec §4, §6, §9): entrypoint guard, prompt stop during init, ownership
-# repair, uid, /setup block, Admin > Restart, settings persistence and config-loss handling.
+# Image-level checks with plain docker (spec §4, §6, §9): entrypoint guard, the move-from-mariadb command before
+# anything else, prompt stop during init, ownership repair, uid, /setup block, Admin > Restart, settings persistence
+# and config-loss handling. TEST_IMAGE names the image it builds (logicaldoc-community:test), and TEST_IMAGE_PREFIX its
+# network, containers and volumes (ldtest-image, so ldtest-image-db, ldtest-image-app and so on), so that two runs can
+# share a machine. Usage: docker/tests/test-image.sh
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 . docker/tests/lib.sh
 
-IMAGE=logicaldoc-community:test
-NET=ldtest-image
-DB=ldtest-image-db
-APP=ldtest-image-app
-CONF=ldtest-image-conf
-REPO=ldtest-image-repo
-CACHE=ldtest-image-cache
-NAS=ldtest-image-nas
+IMAGE=${TEST_IMAGE:-logicaldoc-community:test}
+NET=${TEST_IMAGE_PREFIX:-ldtest-image}
+DB=$NET-db
+APP=$NET-app
+CONF=$NET-conf
+REPO=$NET-repo
+CACHE=$NET-cache
+NAS=$NET-nas
+FRESH=$NET-fresh
 PW='image test pw'
 
 cleanup() {
   docker rm -fv "$APP" "$DB" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
-  docker volume rm -f "$CONF" "$REPO" "$CACHE" "$NAS" >/dev/null 2>&1 || true
+  docker volume rm -f "$CONF" "$REPO" "$CACHE" "$NAS" "$FRESH-conf" "$FRESH-repo" "$FRESH-cache" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 cleanup
 
 docker build -t "$IMAGE" .
 docker network create "$NET" >/dev/null
-docker run -d --name "$DB" --network "$NET" -e MARIADB_DATABASE=logicaldoc -e MARIADB_USER=logicaldoc \
-  -e MARIADB_PASSWORD="$PW" -e MARIADB_RANDOM_ROOT_PASSWORD=1 mariadb:11.4 >/dev/null
+# As compose.yaml's db service: the built-in C.UTF-8 locale, passwords over TCP, and the role script, which makes the
+# app's role and its database
+docker run -d --name "$DB" --network "$NET" -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD="$PW" -e POSTGRES_DB=postgres \
+  -e POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C --auth-host=scram-sha-256 --auth-local=trust" \
+  -e HEALDAN_DB_NAME=logicaldoc -e HEALDAN_DB_USER=logicaldoc -e HEALDAN_DB_PASSWORD="$PW" -e TZ=UTC \
+  -v "$PWD/docker/postgres/10-healdan-role.sh:/docker-entrypoint-initdb.d/10-healdan-role.sh:ro" postgres:18 >/dev/null
 
 # start_app [repository volume] [extra docker run options...]
 start_app() {
@@ -49,13 +57,28 @@ out=$(docker run --rm "$IMAGE" 2>&1) && rc=0 || rc=$?
 check "exits 1" test "$rc" = 1
 check "explains why" grep -q 'DB_PASSWORD is not set' <<<"$out"
 
+echo "== move-from-mariadb runs before the entrypoint touches a volume (PostgreSQL spec §9.1)"
+# With no MariaDB to read, the command stops with its own error. The image's folders are empty, so fresh volumes stay
+# empty unless something writes to them: the entrypoint's ownership repair, conf seeding or repository folders.
+for v in conf repo cache; do docker volume create "$FRESH-$v" >/dev/null; done
+out=$(docker run --rm --network "$NET" -e DB_HOST="$DB" -e DB_PASSWORD="$PW" -e MOVE_SOURCE_HOST="$NET-nowhere" \
+  -v "$FRESH-conf:/opt/logicaldoc/conf" -v "$FRESH-repo:/opt/logicaldoc/repository" \
+  -v "$FRESH-cache:/opt/logicaldoc/cache" "$IMAGE" move-from-mariadb 2>&1) && rc=0 || rc=$?
+check "exits 1" test "$rc" = 1
+check "with the command's own error" grep -q "^\[move\] ERROR: can't connect to the source" <<<"$out"
+check "nothing of the entrypoint's start or the start-up tool's ran" lacks '^\[entrypoint\]\|^\[docker-init\]' "$out"
+check "the volumes are still empty" docker run --rm -v "$FRESH-conf:/c" -v "$FRESH-repo:/r" -v "$FRESH-cache:/k" busybox \
+  sh -c 'test -z "$(find /c /r /k -mindepth 1)"'
+[ "$FAILED" = 0 ] || echo "$out"
+docker volume rm -f "$FRESH-conf" "$FRESH-repo" "$FRESH-cache" >/dev/null
+
 echo "== the app user cannot change what root runs at container start"
 ep=$(docker inspect -f '{{index .Config.Entrypoint 0}}' "$IMAGE")
 check "entrypoint and its directory not writable by uid 1000" \
   docker run --rm --entrypoint sh -u 1000 "$IMAGE" -c "test ! -w '$ep' && test ! -w \"\$(dirname '$ep')\""
 
 echo "== stopping the container while it waits for the database is prompt"
-docker run -d --name "$APP" --network "$NET" -e DB_HOST=ldtest-nowhere -e DB_PASSWORD="$PW" \
+docker run -d --name "$APP" --network "$NET" -e DB_HOST="$NET-nowhere" -e DB_PASSWORD="$PW" \
   -e DB_WAIT_SECONDS=600 "$IMAGE" >/dev/null
 deadline=$((SECONDS + 60))
 until app_logs_have 'waiting for database' || [ "$SECONDS" -ge "$deadline" ]; do sleep 1; done

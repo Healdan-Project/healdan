@@ -219,7 +219,12 @@ public class FolderRenameTest extends ApiTestCase {
 		assertField(rename(letters, "Smith/Jones", clerk), "invalid");
 		assertField(rename(letters, "Smith\\Jones", clerk), "invalid");
 		assertField(rename(letters, "Tab\there", clerk), "invalid");
-		assertField(rename(letters, "Party \uD83C\uDF89", clerk), "invalid");
+		// PostgreSQL stores no NUL, and a lone surrogate isn't a character: refused as the body is read (spec 7.5)
+		for (String unkept : List.of("Party\u0000", "Party \uD83C")) {
+			ApiResponse response = rename(letters, unkept, clerk);
+			assertProblem(response, 400, "bad-request");
+			assertEquals("The field name has a character Healdan can't keep.", response.json().path("detail").textValue());
+		}
 		// CE's folder DAO would take the tags out, so the name stored wouldn't be the name typed
 		assertField(rename(letters, "Draft <v2>", clerk), "invalid");
 		assertField(rename(letters, "<script>alert(1)</script>Notes", clerk), "invalid");
@@ -241,8 +246,9 @@ public class FolderRenameTest extends ApiTestCase {
 	@Test
 	public void testNamesThatAreKeptAsTyped() throws Exception {
 		// A zero-width non-joiner is part of Persian words, and stays
+		// and an emoji too (PostgreSQL spec section 7.5)
 		for (String name : List.of("Smith & Co", "Q&A 2026", "Notes (old)", "Lease \u2013 Draft", "x".repeat(255),
-				"\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645")) {
+				"\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645", "Party \uD83C\uDF89")) {
 			ApiResponse response = rename(letters, name, clerk);
 			assertEquals(name + ": " + response, 200, response.status());
 			assertEquals(name, FolderDAO.get().findById(letters.getId()).getName());

@@ -17,8 +17,10 @@ docker compose up -d --build
 - **Starts Tomcat with a Java debugger on `127.0.0.1:5005`.** Attach with IntelliJ (Run → Edit Configurations →
   Remote JVM Debug, `localhost:5005`) or with `jdb -attach localhost:5005`. To debug from another machine, set
   `JDWP_BIND=0.0.0.0`, but anyone who can reach the port can run code in the JVM.
-- **Publishes MariaDB on `127.0.0.1:3306`,** or on `DEV_DB_PORT` if that port is busy, with the credentials in
-  `.env`.
+- **Publishes PostgreSQL on `127.0.0.1:5432`,** or on `DEV_DB_PORT` if that port is busy. Sign in as the app's role,
+  `DB_USER` with `DB_PASSWORD` from `.env`, to the database `DB_NAME`: PostgreSQL's superuser has no password, so it
+  signs in only inside the container, with `docker compose exec db psql -U postgres`. The tests' own PostgreSQL,
+  `docker/tests/test-db.sh`, takes 5432 too, so to run both set `DEV_DB_PORT` or `HEALDAN_TEST_DB_PORT`.
 
 ## Rebuilding and Starting Over
 

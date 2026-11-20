@@ -226,7 +226,7 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 
 | Status | `code` | When |
 |---|---|---|
-| 400 | `bad-request` | The request is malformed: bad JSON, a field the server doesn't know, a bad `offset` or `limit` |
+| 400 | `bad-request` | The request is malformed: bad JSON, a field the server doesn't know, a bad `offset` or `limit`, or a NUL or a lone surrogate in a query parameter or in a JSON body's text |
 | 401 | `unauthenticated` | No token and no web session the API lets in, or a token that no longer works |
 | 401 | `sign-in-failed` | A wrong username or password, or an account that can't sign in |
 | 401 | `password-expired` | The password has to be changed in the web page first |
@@ -302,6 +302,11 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
   the search results read their page's Authors in one query.
 - **Field names are camelCase.** A field with no value is `null`, never left out, but for a list's `facets`,
   which is there only when asked for, and a search's `totalAtLeast`, there only when `total` isn't. Timestamps are ISO 8601 in UTC, such as `2026-10-23T14:05:00Z`.
+- **Text can hold any character but NUL,** emoji included, and a lone surrogate isn't a character. A query
+  parameter, or a text value anywhere in a JSON body, a property's value or a favourite's name included, that holds
+  either is `400 bad-request`. For a body, `detail` names the field where it can, as in "The field name has a
+  character Healdan can't keep." A query parameter is checked before the token, so a request that isn't signed in
+  gets the `400` too.
 - **A doc ID is `#<doc #> v<version>`,** the form of the title bar and the filed files: `#1234 v2.1`.
 - **Nothing caches the answers:** Healdan sends them with `no-store` in `Cache-Control`.
 
@@ -466,9 +471,9 @@ refused` for an immutable document, unless the caller is an administrator, as CE
 - **`PATCH /documents/{docNumber}`** with `{"name": "Lease"}` answers `200` with the document. A name that doesn't
   end in the document's extension keeps it, so `Lease` is `Lease.docx` and `Lease v1.2` is `Lease v1.2.docx`; one that
   ends in another extension (`Lease.pdf`) is `422 validation` with `extension` for `name`, as a save's name is. A name
-  with a `/`, a `\`, a control character or a character the database can't store, such as an emoji, is `invalid`, checked
-  first; one over 255 characters, with the extension it keeps, is `too-long`, and a blank one `required`. The same name
-  changes nothing and makes no version. Once a deleted document is in the trash the answer is `204`, and a shortcut that
+  with a `/`, a `\` or a control character is `invalid`, checked first, and an emoji is kept; one over 255
+  characters, with the extension it keeps, is `too-long`, and a blank one `required`. The same name changes nothing
+  and makes no version. Once a deleted document is in the trash the answer is `204`, and a shortcut that
   can't follow it is left and logged.
 - **`POST /documents/{docNumber}/move`** with `{"folderId": 1234}` answers `200` with the document. Into another matter
   it takes that matter's Client and Matter and the values its folders pass down; a matter that holds the same email
@@ -484,10 +489,10 @@ this order: `400 bad-request` for a body that isn't the JSON expected; `404` for
 not-renamable` for a Store or a matter's own folder, which takes the matter's name through Edit Matter; `403 forbidden`
 without the Rename permission; `403 admins-only` for a folder directly in a matter's workspace, search folders
 included, unless you're an administrator; `422 validation` for the name (`required`, also for a name of characters that
-show nothing, such as U+200B; `too-long`; `invalid`: `/`, `\`, a control character, an emoji or another character the
-database can't store, a character that changes the text's direction, HTML tags, or a character reference such as
-`&amp;`); `409 name-taken` when another folder beside it that you can see has the name, without regard to case (a hidden
-folder, or one you can't read, doesn't count); and `409 refused` when one of Healdan's rules refuses, or when the folder
+show nothing, such as U+200B; `too-long`; `invalid`: `/`, `\`, a control character, a character that changes the
+text's direction, HTML tags, or a character reference such as `&amp;`; an emoji is fine); `409 name-taken` when
+another folder beside it that you can see has the name, without regard to case (a hidden folder, or one you can't
+read, doesn't count); and `409 refused` when one of Healdan's rules refuses, or when the folder
 moved to another folder while it was being renamed (try again). The folder's own name, sent back, changes nothing and
 answers `200`, even one a new name couldn't have.
 Every folder carries `canRename`, which says whether the call would rename it for you.
@@ -592,8 +597,8 @@ and what the user can't read is `404`.
 - **`PATCH /me/favorites/{id}`** with `{ "name": "Smith Real Estate Docs" }` gives it one and answers `200` with the
   favourite. A `name` that is `null`, empty or only spaces puts back the item's own name; a body without `name` is
   `400`. Another user's favourite, one that doesn't exist and one whose item the user can no longer read are `404`.
-  A name over 255 characters is `422 validation` with `too-long`, and one with a control character, or a character
-  the database can't store such as an emoji, is `invalid`. A `/` is fine: it's a label, not a file name.
+  A name over 255 characters is `422 validation` with `too-long`, and one with a control character is `invalid`. A
+  `/` is fine: it's a label, not a file name, and so is an emoji.
 - **Renames follow.** A favourite whose name is still its item's takes the item's new name when the folder or
   document is renamed, by any route: the API, the Classic Interface, a check-in under another file name, WebDAV, CMIS
   or REST. Every one of them stores the folder or document through LogicalDOC's DAO, whose listeners

@@ -60,7 +60,8 @@ public class MessageIdsTest {
 
 	@Test
 	public void testACharacterBeyondTheBasicPlaneBecomesTheReplacementCharacter() {
-		// MariaDB's utf8 tables hold none (R33)
+		// The rule stays, though PostgreSQL stores them: the Helper's MessageIds.cs does the same and hd_email is
+		// indexed by the result, so the two have to agree (PostgreSQL spec section 7.5)
 		String emoji = new String(Character.toChars(0x1F389));
 		assertEquals("a\ufffdb@example.com", MessageIds.normalize("<a" + emoji + "b@example.com>"));
 		assertEquals("a b@example.com", MessageIds.normalize("<a\u0000b@example.com>"));

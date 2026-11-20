@@ -58,7 +58,7 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testMigratesFreshCeSchema() {
-		assertEquals(MigrationVersion.fromVersion("12"), migrator.currentVersion());
+		assertEquals(MigrationVersion.fromVersion("13"), migrator.currentVersion());
 		for (String t : List.of("hd_setting", "hd_counter", "hd_client", "hd_matter", "hd_searchfolder", "hd_local_value", "hd_api_token", "hd_hold_device",
 				"hd_signin_identity", "hd_signin_group", "hd_email", "hd_storage_backend", "hd_storage_store",
 				"hd_storage_file", "hd_storage_held", "hd_storage_event", "hd_trash", "hd_trash_member",
@@ -85,15 +85,38 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 		HealdanStartupException e = assertThrows(HealdanStartupException.class, () -> migrator
 				.migrate("classpath:healdan/db/migration/{vendor}", "classpath:healdan/db/failing/{vendor}"));
 
-		// The message says how to recover
-		// PostgreSQL's: it rolled the script back, and its success column is a boolean
-		assertTrue(e.getMessage(), e.getMessage().endsWith(HealdanMigrator.RECOVERY_POSTGRESQL));
+		// The message says how to recover: PostgreSQL rolled the script back, and its success column is a boolean
+		assertTrue(e.getMessage(), e.getMessage().endsWith(HealdanMigrator.RECOVERY));
 		assertFalse(e.getMessage(), e.getMessage().contains("success = 0"));
 		// The script ran, past its create table, rather than Flyway refusing it before it began
 		assertEquals(e.getMessage(), "42601", sqlState(e));
 		// PostgreSQL rolled the script back whole: no table and no history row is left behind
 		assertFalse(tableExists(jdbc, "hd_broken"));
 		assertEquals(rows, historyRows());
+	}
+
+	/**
+	 * migrateTo stops at its version, as the move from MariaDB needs: a later
+	 * script is left for the next migrate, and isn't run or recorded
+	 */
+	@Test
+	public void testMigrateToRunsNothingAfterItsVersion() {
+		DataSource ds = freshCeDatabase();
+		JdbcTemplate fresh = new JdbcTemplate(ds);
+		HealdanMigrator target = new HealdanMigrator(ds);
+		String[] withLater = { "classpath:healdan/db/migration/{vendor}", "classpath:healdan/db/failing/{vendor}" };
+
+		// V9999__broken.sql comes after every real script and fails: migrating to 13 doesn't reach it
+		assertEquals(Status.MIGRATED, target.migrateTo("13", withLater));
+
+		assertEquals(MigrationVersion.fromVersion("13"), target.currentVersion());
+		assertEquals(Integer.valueOf(0), fresh.queryForObject(
+				"select count(*) from hd_schema_history where version = '9999'", Integer.class));
+		assertFalse(tableExists(fresh, "hd_broken"));
+
+		// Without a target the same locations run it, and fail on it as before
+		assertThrows(HealdanStartupException.class, () -> target.migrate(withLater));
+		assertEquals(MigrationVersion.fromVersion("13"), target.currentVersion());
 	}
 
 	@Test
@@ -105,13 +128,12 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testMigrationOutcomeIsLogged() {
-		DataSource ds = freshDatabase();
-		new JdbcTemplate(ds).execute("create table ld_user (ld_id bigint)");
+		DataSource ds = freshCeDatabase();
 
 		try (LogCapture log = LogCapture.of(HealdanMigrator.class)) {
 			assertEquals(Status.MIGRATED, new HealdanMigrator(ds).migrate());
 			assertTrue(log.lines().toString(),
-					log.lines().contains("INFO Healdan's tables: 12 migrations applied, schema version 12"));
+					log.lines().contains("INFO Healdan's tables: 13 migrations applied, schema version 13"));
 		}
 	}
 
@@ -121,9 +143,8 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 	 */
 	@Test
 	public void testV7WidensTheRefreshTokenAndClearsRevokedOnes() {
-		DataSource ds = freshDatabase();
+		DataSource ds = freshCeDatabase();
 		JdbcTemplate fresh = new JdbcTemplate(ds);
-		fresh.execute("create table ld_user (ld_id bigint)");
 		MigrationTestSupport.migrateTo(ds, "6");
 		String insert = "insert into hd_api_token (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted, "
 				+ "ld_tenantid, hd_userid, hd_hash, hd_name, hd_lastused, hd_expires, hd_provider, hd_refresh) values "
@@ -152,9 +173,8 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testUpgradePatternKeepsData() {
-		DataSource ds = freshDatabase();
+		DataSource ds = freshCeDatabase();
 		JdbcTemplate fresh = new JdbcTemplate(ds);
-		fresh.execute("create table ld_user (ld_id bigint)");
 		MigrationTestSupport.migrateTo(ds, "1");
 		fresh.update("insert into hd_client (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted, ld_tenantid, hd_number, hd_name) "
 				+ "values (1, current_timestamp, current_timestamp, 1, 0, 1, 998, 'Demo')");
@@ -170,7 +190,7 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 			HealdanStartupException e = assertThrows(product, HealdanStartupException.class,
 					() -> HealdanMigrator.defaultLocation(metaData(product, "8.0.36")));
 			assertTrue(e.getMessage(),
-					e.getMessage().contains("MariaDB and PostgreSQL only; found " + product + " 8.0.36"));
+					e.getMessage().contains("PostgreSQL only; found " + product + " 8.0.36"));
 		}
 	}
 
@@ -183,21 +203,22 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 		HealdanStartupException e = assertThrows(HealdanStartupException.class,
 				() -> new HealdanMigrator(posingAs(real, "MySQL", "8.0.36", statements)).migrate());
 
-		assertTrue(e.getMessage(), e.getMessage().contains("MariaDB and PostgreSQL only; found MySQL 8.0.36"));
+		assertTrue(e.getMessage(), e.getMessage().contains("PostgreSQL only; found MySQL 8.0.36"));
 		assertEquals(List.of(), statements);
 		assertFalse(tableExists(new JdbcTemplate(real), "hd_schema_history"));
 		assertFalse(tableExists(new JdbcTemplate(real), "hd_setting"));
 	}
 
 	@Test
-	public void testAcceptsMariadbThroughTheMysqlDriver() {
+	public void testRefusesMariadbAndNamesTheMove() {
 		// MySQL Connector/J reports MariaDB as product "MySQL" with a version naming MariaDB
-		assertEquals("classpath:healdan/db/migration/mariadb",
-				HealdanMigrator.defaultLocation(metaData("MySQL", "5.5.5-10.11.6-MariaDB")));
-		assertEquals("classpath:healdan/db/migration/mariadb",
-				HealdanMigrator.defaultLocation(metaData("MySQL", "11.4.2-MariaDB-ubu2404")));
-		assertEquals("classpath:healdan/db/migration/mariadb",
-				HealdanMigrator.defaultLocation(metaData("MariaDB", "11.4.2-MariaDB-ubu2404")));
+		for (DatabaseMetaData meta : List.of(metaData("MariaDB", "11.4.2-MariaDB-ubu2404"),
+				metaData("MySQL", "5.5.5-10.11.6-MariaDB"), metaData("MySQL", "11.4.2-MariaDB-ubu2404"))) {
+			HealdanStartupException e = assertThrows(HealdanStartupException.class,
+					() -> HealdanMigrator.defaultLocation(meta));
+			assertTrue(e.getMessage(), e.getMessage().contains(HealdanMigrator.MOVE_PAGE));
+			assertTrue(e.getMessage(), e.getMessage().startsWith("Healdan runs on PostgreSQL, and this database is MariaDB."));
+		}
 		assertEquals("classpath:healdan/db/migration/postgresql",
 				HealdanMigrator.defaultLocation(metaData("PostgreSQL", "18.4")));
 	}
@@ -230,6 +251,19 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 		String name = TestDatabase.create();
 		freshDatabases.add(name);
 		return TestDatabase.dataSource(name);
+	}
+
+	/**
+	 * @return a database of its own with LogicalDOC's schema, which V13 alters, dropped after the test
+	 */
+	private DataSource freshCeDatabase() {
+		DataSource ds = freshDatabase();
+		try (Connection con = ds.getConnection()) {
+			TestDatabase.load(con, List.of("sql/logicaldoc-core.sql"));
+		} catch (SQLException | IOException e) {
+			throw new IllegalStateException(e);
+		}
+		return ds;
 	}
 
 	private static DatabaseMetaData metaData(String product, String version) {

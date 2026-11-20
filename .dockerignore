@@ -20,6 +20,13 @@ site
 .env
 .env.*
 compose*.yaml
+# What the Install manual's Backup and Restore writes beside compose.yaml: the backup's two files (and the .sql of a
+# backup taken before the move from MariaDB), restic's settings, with their keys, and the folder restic restores into.
+# A backup lying in the checkout would otherwise go to the builder and into a layer, and run Maven again.
+/logicaldoc-db.*
+/logicaldoc-files.tgz
+/restic.env
+/backup
 # The demo stack's sources and files: the overlay mounts them, and the image doesn't need them
 docker/demo
 # The desktop clients no module builds, so a change to one doesn't re-run Maven. clients/office/ stays: healdan-api

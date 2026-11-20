@@ -27,7 +27,7 @@ The tests use JUnit 4. [Building from Source](../building-from-source/) has the 
   copied an edited `context.properties` in since.
 - **Booleans first.** Once the context has started, and before it loads the schema, the base class checks that
   Hibernate binds Java booleans as integers (see
-  [MariaDB and PostgreSQL](../how-healdan-extends-logicaldoc/#mariadb-and-postgresql)), and fails naming
+  [PostgreSQL](../how-healdan-extends-logicaldoc/#postgresql)), and fails naming
   `healdan-core`'s `hibernate.properties` if it doesn't. Without the setting, every test would fail in its first
   setup step, with an error that doesn't name the cause.
 - **Plugin manifests.** Some tests load them from fixture jars in `src/test/resources` through
@@ -371,9 +371,10 @@ build out (see [Building from Source](../building-from-source/#commands)).
 | Command | What it checks |
 |---|---|
 | `docker build --target tools .` | the init tool's unit tests, among them `DbInitPlanTest`, which reads the tables and columns of the WAR's own DbInit scripts, `ld_tenant`'s 14 quota thresholds among them, and `PluginInstallTest`, which installs LogicalDOC's plugins as the init tool does, checks that each one started and that the installs edited a copy of `web.xml`, which the image then ships, then starts them again as Tomcat does after it, which must find them all installed and ask for no restart. Then three checks on the WAR's own libraries, which Maven's tests can't do: a module's tests have every library's dependencies but only that module's libraries, and the WAR has only what the plugin zips ship, from every plugin. `WarParsersTest` parses a `.pptx`, an `.xlsx` in Excel's Accounting format and an `.xls` with the server's parsers. `WarStorageTest` sends one request to a closed loopback port with the S3 client, and puts 3 MiB through Tink's streaming AEAD. `WarHibernateTest` checks that the libraries hold one `hibernate.properties`, `healdan-core`'s, with `hibernate.type.preferred_boolean_jdbc_type=INTEGER`: Hibernate reads the first it finds, so a jar that brought its own would drop the setting |
-| `docker/tests/test-init.sh` | the init tool against a throwaway MariaDB, LogicalDOC's plugins installed on the first run and not again, and a start refused while LogicalDOC's tables lack what the scripts create: `ld_tenant` without the 14 quota thresholds upstream sync #215 brought, then with them added by Upgrading's own SQL, read from its page, and `ld_webservicecall` renamed away |
-| `docker/tests/test-image.sh` | the image: a prompt stop during init, file ownership, the `/setup` block, Admin > Restart, settings that persist |
-| `docker/tests/test-overlays.sh` | the dev and proxy overlays |
+| `docker/tests/test-init.sh` | run by hand: the init tool against a throwaway PostgreSQL, started as `compose.yaml`'s `db` service is, its role script included. The checks of the server and the database, the role's 50-second `lock_timeout` set and read back on a new connection, LogicalDOC's plugins installed on the first run and not again, and a start refused while LogicalDOC's tables lack what the scripts create: `ld_tenant` without the 14 quota thresholds upstream sync #215 brought, then with them put back and the SQL of each change Upgrading's [Changes to LogicalDOC's Tables](../../install/upgrading/#changes-to-logicaldocs-tables) lists run as the page gives it (none yet, so it says it skipped that), and `ld_webservicecall` renamed away. Section 7 refuses a database that isn't UTF-8 and a role that can't create tables, making nothing in either, and starts one that doesn't sort by code point, with a warning. Section 8 is the guard against starting an install empty: a conf volume that names MariaDB, with PostgreSQL not answering (it gives up after 15 seconds, whatever `DB_WAIT_SECONDS` says) or answering with no move; a move that didn't finish; a finished one, where the start goes on and puts the conf volume's database settings right; and an empty database beside a repository that holds an install's files. Each refusal leaves the conf file as it was, byte for byte, and the database's tables and the role's settings too. `TEST_INIT_TOOLS` names the tools image it builds, and `TEST_INIT_PREFIX` its network, container and volumes, so two runs can share a machine |
+| `docker/tests/test-image.sh` | run by hand: the image. `move-from-mariadb` runs before the entrypoint touches a volume, and leaves all three empty; then a prompt stop during init, file ownership, the `/setup` block, Admin > Restart, settings that persist. `TEST_IMAGE` names the image it builds, and `TEST_IMAGE_PREFIX` its network, containers and volumes |
+| `docker/tests/test-overlays.sh` | run by hand: the dev and proxy overlays, the dev overlay's PostgreSQL port answering as PostgreSQL does before any sign-in. `OVERLAYS_PROJECT`, `OVERLAYS_NETWORK`, `OVERLAYS_PORT` and `OVERLAYS_DB_PORT` name its project, the proxy's network and the two ports, and `LOGICALDOC_IMAGE` the image it builds |
+| `docker/tests/test-move.sh` | the move from MariaDB (see [The Move's Test](#the-moves-test)): the frozen fixture moved with `move-from-mariadb` in each way that matters, then the app started on the result. CI runs it on amd64 after the smoke test: `docker/tests/test-move.sh`, with `LOGICALDOC_IMAGE` naming a built image |
 | `docker/tests/test-fulltext.sh` | full-text search: a `.docx` and an `.eml` are indexed and found by their words |
 | `docker/tests/test-previews.sh` | Office and drawing previews: converted ahead of time, text, markup and thumbnails, no fetching or macros while converting, a broken file failing cleanly, leftover processes cleaned up |
 | `docker/tests/test-proxies.sh` | which forwarded addresses Tomcat believes with `LOGICALDOC_TRUSTED_PROXIES` unset: a header from the Docker host, but not a private address in the chain or a header sent from inside the app's container. It reads the sign-in throttle's per-address counters, so it needs a running stack: `BASE=http://127.0.0.1:8080 APP_CONTAINER=<id> DB_CONTAINER=<id> docker/tests/test-proxies.sh` |
@@ -381,7 +382,7 @@ build out (see [Building from Source](../building-from-source/#commands)).
 | `docker/tests/test-web.sh` | the User app and the Admin app in a browser, against a stack with the smoke overlay (see [The Web Apps' Tests](#the-web-apps-tests)): Playwright's specs in Chromium and WebKit, then `curl` checks of the web session's forgery refusals and the Admin app's refusals. Needs Docker, curl and Python 3: `BASE=http://127.0.0.1:18080 docker/tests/test-web.sh`, which `docker/smoke-test.sh` runs as step 9, the last. It needs the Indexer set to every few seconds (see [The Web Apps' Tests](#the-web-apps-tests)) |
 | `docker/tests/test-signin.sh` | provider sign-in through the stand-in Keycloak (see below), with `curl` and a cookie jar: the web page's sign-in ending at the User app, signed in, a local account linked by email losing its password and its device token, the gate refusing someone in none of the mapped groups, the helper's sign-in handing a code to a pretend loopback address and the code exchanged for a device token, and a person disabled at Keycloak losing that token at its next re-check. Run it against a fresh stack with the sign-in overlay: `BASE=http://127.0.0.1:8080 KEYCLOAK=127.0.0.1:18180 docker/tests/test-signin.sh` |
 | `docker/tests/test-storage.sh` | storage backends against the stand-in Garage (see below): a file filed in Smoke Cloud reaching Garage encrypted, files moved in from Smoke moving up and not cached, reads through Garage and from the read cache, then with Garage stopped a save waiting in staging, an uncached file answering `503` through the API, `/download` and a shared link, and `/convertpdf` of an uncached PDF serving LogicalDOC's placeholder, and a matter moved to Smoke bringing its files home while Garage keeps them held. With `after-restart` it checks the same rows after a restart, a first read through Garage, and a read from the cache rebuilt from its folder with Garage stopped. It stops and starts Garage itself, and needs curl 8.0.0 or later, jq, sha256sum and docker: `docker/smoke-test.sh` runs it, passing it the stack's containers, as step 5f and again in step 8 |
-| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache`, a Content-Security-Policy with `object-src 'none'` and Tomcat's JVM having its Base64 intrinsics off, though the stack's `CATALINA_OPTS` asks for them (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the stack running on Healdan's storage (its setup steps recorded and Original's marker written, step 5), M2's client flow through the API (`test-api.sh`, step 5c), the User app in Chromium and WebKit (`test-web.sh`, step 9, the last), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), storage backends against a stand-in S3 server, Garage (`test-storage.sh`, step 5f, and again after step 8's restart), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which checks LogicalDOC's tables, replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one. Two can run on one machine at once (see [Two Smoke Tests at Once](#two-smoke-tests-at-once)) |
+| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache`, a Content-Security-Policy with `object-src 'none'` and Tomcat's JVM having its Base64 intrinsics off, though the stack's `CATALINA_OPTS` asks for them (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the stack running on Healdan's storage (its setup steps recorded and Original's marker written, step 5), PostgreSQL itself in step 5 (the app's role waiting 50 seconds for a lock; an email's subject and file name, a new matter's name and a document's name keeping their emoji, the matter made through the Classic Interface's New Matter service as client 1's next free number, 1.5 on today's stack, which stays for the later steps; a NUL in a query parameter answered `400 bad-request`; and `apiuser` disabled and enabled again through the Classic Interface's service, each edit read back from the database and the API, as LogicalDOC's typed reads lost such an edit on PostgreSQL without Healdan's fix), PostgreSQL's own log after steps 7 and 9 (see [PostgreSQL's Log](#postgresqls-log)), M2's client flow through the API (`test-api.sh`, step 5c), the User app in Chromium and WebKit (`test-web.sh`, step 9, the last), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), storage backends against a stand-in S3 server, Garage (`test-storage.sh`, step 5f, and again after step 8's restart), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which checks LogicalDOC's tables, replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one. Two can run on one machine at once (see [Two Smoke Tests at Once](#two-smoke-tests-at-once)) |
 
 `docker/tests/bulk-documents.sh` isn't a test: it fills a folder on a throwaway stack with generated `.docx`, `.pdf`,
 `.xlsx`, `.eml` and `.odt` files, five uploads at a time, to measure big folders and searches. Give it the stack's
@@ -488,6 +489,33 @@ SMOKE_PROJECT=smoke-b SMOKE_PORT=28080 SMOKE_KEYCLOAK_PORT=28180 SMOKE_GARAGE_PO
 In two runs side by side on a Mac, each stack used up to about 2 GB of Docker's memory, besides step 9's browser
 container.
 
+### PostgreSQL's Log
+
+A statement PostgreSQL refuses is an `ERROR` line in its own log, whatever the Java around it caught, and some of
+LogicalDOC's code catches failures and says nothing. So after step 7, and again after step 9, `docker/smoke-test.sh`
+reads the `db` service's whole log (`check_db_log`) and compares each `ERROR` line, with the first line of the
+statement PostgreSQL logged after it, to the patterns in `docker/tests/db-log-expected.txt`:
+
+```text
+PostgreSQL's log, steps 1 to 7: 62 lines read, 0 ERROR lines, 0 expected and 0 unexpected
+```
+
+- **The list** holds what may appear, each pattern with its reason: today only LogicalDOC's `StatsCollector`, which
+  30 minutes after a start, then every 12 hours, counts twelve tables this edition doesn't have, each count failing
+  and then asked again twice in the transaction it ended. A run meets them only if its app has been up that long,
+  and the patterns were taken from a stack with the task's delay shortened. Nothing
+  Healdan does in the ordinary way may be on the list: a line no pattern matches is a finding, not a pattern to add.
+  A line's `DETAIL`, which can quote a row's values, is left out.
+- **It fails** when it can't read the log, when the log is empty or isn't PostgreSQL's (it has no `database system
+  is ready to accept connections`), and when the list can't be read, so a clean log is one it read.
+- **An unexpected line doesn't fail the run yet.** It prints every one, and passes, until the list has held for five
+  consecutive runs of the switch's draft pull request's CI on each architecture, each run's `PostgreSQL's log` lines
+  reporting 0 unexpected. Then, before that pull request is marked ready, a commit of it makes the check fail on one:
+  the function's last line, `return 0`, becomes `[ "$unexpected" = 0 ]`.
+
+The start-up tool asks whether a table exists with `to_regclass`, never by reading it, so a start leaves no `ERROR`
+line, and `test-move.sh` checks the moves left none either.
+
 ### When a Smoke Check Fails
 
 The server's warnings go to its own log, `repository/logs/dms.log` in the repository volume, not to the container's
@@ -498,6 +526,7 @@ at the end of the `Smoke test` step of the `Test (amd64)` or `Test (arm64)` job:
 - **The app container's last 150 lines of output:** the entrypoint, the init tool and Tomcat's start.
 - **Keycloak's last 40 lines of output,** for the stand-in sign-in provider.
 - **Garage's last 40 lines of output, and its setup's,** for the stand-in S3 server.
+- **PostgreSQL's last 100 lines of output,** the `db` service's log.
 - **The run's warnings and errors from `dms.log`,** the last 200 lines of them. Each keeps its exception's message
   and `Caused by` lines, without the stack frames.
 - **The last three API requests that failed with a `500`,** with their stack frames (80 lines each at most), which say
@@ -513,6 +542,51 @@ that names the failed tests.
 `dms.log` covers the whole run. Step 8 replaces the container but keeps the volume, so its restart doesn't lose the
 earlier steps' lines. Every `FAIL` line ends with its time in UTC, and the smoke stack logs in UTC, so the log's
 lines from around a failure are easy to find.
+
+### The Move's Test
+
+`docker/tests/test-move.sh` tests `move-from-mariadb`, the command in the image that carries an install's data from
+MariaDB to PostgreSQL, as the Install manual's [Moving from MariaDB to
+PostgreSQL](../../install/moving-from-mariadb/) gives it: `docker compose run` with `compose.move.yaml`'s MariaDB. It
+moves a frozen install, the fixture in `docker/tests/move-fixture/`.
+
+- **The fixture** is a MariaDB-era install: its database's dump (`mariadb.sql.gz`), its conf and repository volumes
+  (`volumes.tgz`) and what the test expects of them (`expected.env`), about 55 KB in all. `make.sh` made it from
+  `3390247e0`, `master`'s tip then, which runs on MariaDB at schema version 12, with that commit's own image, and
+  added rows that try the move: an avatar of 6,000 characters, dates at fractions of a second, an accented matter in
+  a Store on an encrypted local storage backend with a file on it, a sealed sign-in secret, a Trash item, an error in
+  the Admin app's tables beside the app's own rows there, and counters past their first values. Its `README.md` says
+  what's in it and when it's made again. It holds only invented data and the smoke
+  stack's published test passwords, and `make.sh` checks it names no address but loopback's and LogicalDOC's own
+  multicast default, `228.8.8.8`.
+- **The cases,** in the order a move would meet them: the app started on the fixture before any move, which the
+  start-up tool refuses, as its conf volume names MariaDB, changing neither the conf file nor the empty database; a
+  source at an older schema version, refused before anything is written; a zero date, which stops the move part-way,
+  and the app refusing to start on what it left; a NUL, which stops it unless `--replace-nul` is given; a value a
+  test-only trigger changes on the target, which only the move's own comparison sees, so it refuses and leaves the
+  target unfinished; and a run with `--replace-nul`, which starts over and finishes. Each run's output must hold the
+  command's own lines and nothing else, so a stack trace fails it.
+- **Then the result:** the report; every table's rows counted on both sides, by one query a side made from each
+  database's catalogue, and the two lists compared; the rows read back with `psql` (the avatar whole, the dates to the
+  millisecond, the NUL a space, the accented name, the Admin app's error with its counts for each hour, the documents'
+  sequence going on from MariaDB's and the Admin app's identity columns past the ids moved); MariaDB untouched
+  by every run, its sequences included; PostgreSQL's log with no `ERROR` line; and the app on the moved database,
+  where `apiuser` signs in, a file reads back from Original's folder and one through the encrypted backend's key and
+  marker, the sign-in provider's sealed secret opens, a new document takes the next doc # and ids after the fixture's,
+  and its delete makes a Trash item after the fixture's.
+- **Its settings:** `LOGICALDOC_IMAGE` names the image (`logicaldoc-community:local`, which `docker compose build`
+  tags), `MOVE_PROJECT` the Compose project (`healdan-move`) and `MOVE_PORT` the app's port on `127.0.0.1` (18090). It
+  claims its project as the smoke test does, refuses one that's in use, and removes everything it made. A run takes
+  about a minute. CI runs it on amd64 only, after the smoke test (see
+  [Continuous Integration](../continuous-integration/#the-moves-test-in-the-image-ci)).
+
+The command and its test are kept for a while after the switch to PostgreSQL, and then removed. While they're here,
+an upstream sync that adds, drops or renames a table or a column in LogicalDOC's scripts fails this test: the move
+makes LogicalDOC's tables with the new scripts and refuses a table or column that its MariaDB source lacks, and the
+report's last lines, which the test checks, list one only the source has. Hold such a sync, and ask the owner.
+Healdan's own migrations don't trip it: the move takes Healdan's tables to version 13, the one that goes with its
+source's 12, and no further, and the app's first start applies any later one to the moved rows, as on every upgrade,
+which this test's start of the app checks.
 
 ## The Web Apps' Tests
 

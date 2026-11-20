@@ -33,7 +33,7 @@ import com.logicaldoc.core.security.authentication.AuthenticationException;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.setting.HealdanSettings;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.util.StorableText;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -49,8 +49,9 @@ public class ApiTokens {
 	public static final String UNNAMED = "Unnamed device";
 
 	/**
-	 * The longest sealed refresh token a token row holds: {@code hd_refresh}'s
-	 * width since V7 (ruling R35), {@code text} on MariaDB. Sealed, that's a
+	 * The longest sealed refresh token a token row takes, the limit V7 set
+	 * (ruling R35). {@code hd_refresh} is {@code text}, which on PostgreSQL has
+	 * no limit of its own, so the limit is this alone. Sealed, that's a
 	 * provider's refresh token of up to 49,121 characters.
 	 */
 	public static final int MAX_REFRESH = 65_535;
@@ -132,7 +133,7 @@ public class ApiTokens {
 	 * @return the token and its row
 	 * @throws PersistenceException error at data layer
 	 * @throws HealdanRuleException if the name is too long or holds characters
-	 *         the database can't store
+	 *         Healdan can't keep
 	 */
 	public Issued issue(User user, String name, String sid) throws PersistenceException {
 		return issue(user, name, null, sid, null, null);
@@ -154,7 +155,7 @@ public class ApiTokens {
 	 * @return the token and its row
 	 * @throws PersistenceException error at data layer
 	 * @throws HealdanRuleException if the name is too long or holds characters
-	 *         the database can't store, or the device id isn't one
+	 *         Healdan can't keep, or the device id isn't one
 	 */
 	public Issued issue(User user, String name, String device, String sid, String provider, String refresh)
 			throws PersistenceException {
@@ -508,7 +509,7 @@ public class ApiTokens {
 	 * @param name what the device is called, possibly null
 	 * @return the name stripped, or "Unnamed device" if it is blank
 	 * @throws HealdanRuleException if the name is too long or holds characters
-	 *         the database can't store
+	 *         Healdan can't keep ({@link StorableText})
 	 */
 	public static String checkName(String name) throws HealdanRuleException {
 		String clean = name == null ? "" : name.strip();
@@ -517,9 +518,8 @@ public class ApiTokens {
 		if (nameTooLong(clean))
 			throw new HealdanRuleException(
 					"A device name can't be longer than %d characters.".formatted(MAX_NAME_LENGTH));
-		if (!BasicPlane.holds(clean))
-			throw new HealdanRuleException(
-					"A device name can't contain emoji or other characters the database can't store.");
+		if (!StorableText.holds(clean))
+			throw new HealdanRuleException("A device name can't contain " + StorableText.CANT_KEEP + ".");
 		return clean;
 	}
 

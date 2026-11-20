@@ -17,7 +17,7 @@ import com.logicaldoc.healdan.admin.AdminEvent;
 import com.logicaldoc.healdan.admin.AdminEvent.Change;
 import com.logicaldoc.healdan.admin.AdminEvents;
 import com.logicaldoc.healdan.rules.FilingRules;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.util.StorableText;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -57,7 +57,7 @@ public class ClientService {
 	 * @return the new client
 	 * @throws HealdanRuleException if the actor isn't an admin, the number is not
 	 *         positive or is taken, or the name is empty, too long or holds a
-	 *         character the database can't store
+	 *         character Healdan can't keep
 	 * @throws PersistenceException error at data layer
 	 */
 	@Transactional(rollbackFor = Exception.class)
@@ -89,7 +89,7 @@ public class ClientService {
 	 * @return the client
 	 * @throws HealdanRuleException if the actor isn't an admin, the client
 	 *         doesn't exist, or the name is empty, too long or holds a character
-	 *         the database can't store
+	 *         Healdan can't keep
 	 * @throws PersistenceException error at data layer
 	 */
 	@Transactional(rollbackFor = Exception.class)
@@ -127,9 +127,8 @@ public class ClientService {
 	}
 
 	/*
-	 * A client name may contain '/': it never becomes a folder name. A character
-	 * beyond the Basic Multilingual Plane, such as an emoji, would fail the
-	 * insert on MariaDB (R33)
+	 * A client name may contain '/': it never becomes a folder name. A NUL would
+	 * fail the insert, and a lone surrogate isn't a character (StorableText)
 	 */
 	private static String cleanName(String name) throws HealdanRuleException {
 		String clean = name == null ? "" : name.strip();
@@ -138,9 +137,8 @@ public class ClientService {
 		if (clean.length() > MAX_NAME_LENGTH)
 			throw new HealdanRuleException(
 					"The client name cannot be longer than %d characters.".formatted(MAX_NAME_LENGTH));
-		if (!BasicPlane.holds(clean))
-			throw new HealdanRuleException(
-					"The client name cannot contain emoji or other characters the database can't store.");
+		if (!StorableText.holds(clean))
+			throw new HealdanRuleException("The client name cannot contain " + StorableText.CANT_KEEP + ".");
 		return clean;
 	}
 }

@@ -16,8 +16,7 @@ cd "$(dirname "$0")/../.."
 : "${BASE:?}" "${APP_CONTAINER:?}" "${DB_CONTAINER:?}"
 
 db_query() {
-  docker exec "$DB_CONTAINER" sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "$1"' \
-    sh "$1"
+  docker exec "$DB_CONTAINER" sh -c 'PGPASSWORD="$HEALDAN_DB_PASSWORD" psql -X -q -At -F "$(printf "\t")" -h 127.0.0.1 -U "$HEALDAN_DB_USER" -d "$HEALDAN_DB_NAME" -c "$1"' sh "$1"
 }
 # fail_signin <base> <X-Forwarded-For> [docker exec prefix...]: one wrong password for an unknown user; prints the status.
 fail_signin() {

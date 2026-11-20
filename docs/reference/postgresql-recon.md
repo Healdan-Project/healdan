@@ -666,6 +666,11 @@ databases (75 tables and 41 sequences, the identity's among them):
 docker compose exec db sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > logicaldoc-db.dump
 ```
 
+(Corrected after the build, 2026-11-19: on the stack as built, `$POSTGRES_DB` is `postgres`, the empty maintenance
+database, and Healdan's database is `$HEALDAN_DB_NAME`, owned by the app's role. The Install manual's
+[Backup and Restore](../../site/content/install/backup-and-restore.md) has the commands that were run: a dump of
+`$HEALDAN_DB_NAME`, and a restore as the app's role.)
+
 ```bash
 docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error' < logicaldoc-db.dump
 ```

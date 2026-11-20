@@ -4,6 +4,7 @@
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Decides which context.properties keys the container manages. Pure logic over an environment map; DockerInit
@@ -42,14 +43,33 @@ public final class ConfigPlan {
     public static final List<String> PLAIN_SPACE_KEYS = List.of("security.csp");
 
     /**
-     * Keys Healdan owns, set on every boot whatever the file holds (S3 storage spec section 12). store names the class of
-     * LogicalDOC's store bean (context-core.xml's {@code <bean id="store" class="${store}"/>}): healdan-storage's
-     * HealdanStorage, which keeps LogicalDOC's layout in Original's folder, store.1.dir, so the files stay where they
-     * are. Setting it here leaves the image's defaults, which are upstream's, holding FSStore, and moves an existing
-     * install over on its first boot on this image.
+     * Keys Healdan owns, set on every boot whatever the file holds, and read back: the store bean, and the database the
+     * app runs on.
+     * <p>
+     * store names the class of LogicalDOC's store bean (context-core.xml's {@code <bean id="store" class="${store}"/>};
+     * S3 storage spec section 12): healdan-storage's HealdanStorage, which keeps LogicalDOC's layout in Original's
+     * folder, store.1.dir, so the files stay where they are. Setting it here leaves the image's defaults, which are
+     * upstream's, holding FSStore, and moves an existing install over on its first boot on this image.
+     * <p>
+     * jdbc.driver, jdbc.dbms and hibernate.dialect are PostgreSQL's, the only database Healdan runs on (PostgreSQL spec
+     * section 8.2), so a conf volume a MariaDB install wrote is put right at its first start after the move. jdbc.dbms
+     * is spelt as CE's isPostgreSQL() and StatsCollector expect it.
      */
-    public static final Map<String, String> HEALDAN_KEYS = Map.of("store",
-            "com.logicaldoc.healdan.storage.HealdanStorage");
+    public static final Map<String, String> HEALDAN_KEYS = Map.of(
+            "store", "com.logicaldoc.healdan.storage.HealdanStorage",
+            "jdbc.driver", "org.postgresql.Driver",
+            "jdbc.dbms", "postgresql",
+            "hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
+
+    /**
+     * A database server's host as a JDBC URL may hold it: a name or an IPv4 address, or an IPv6 address in brackets.
+     * Nothing that ends the host part (a slash, ?, #) or that the driver decodes (%), and no spaces. The app's DB_HOST
+     * and the move's MOVE_SOURCE_HOST take this rule alike.
+     */
+    static final Pattern HOST = Pattern.compile("[A-Za-z0-9._-]{1,253}|\\[[0-9A-Fa-f:.]{2,45}\\]");
+
+    /** A database's name as a JDBC URL may hold it, by the same rule: the app's DB_NAME and MOVE_SOURCE_NAME */
+    static final Pattern DATABASE = Pattern.compile("[A-Za-z0-9_$-]{1,64}");
 
     private ConfigPlan() {
     }
@@ -66,9 +86,6 @@ public final class ConfigPlan {
         keys.put("conf.logdir", REPO + "/logs/");
         keys.put("conf.dbdir", REPO + "/db/");
         keys.put("LDOCHOME", HOME);
-        keys.put("jdbc.driver", "org.mariadb.jdbc.Driver");
-        keys.put("jdbc.dbms", "mariadb");
-        keys.put("hibernate.dialect", "org.hibernate.dialect.MariaDBDialect");
         keys.put("jdbc.validationQuery", "SELECT 1");
         keys.put("initialized", "true");
         // Pre-set so the core plugin's install marker is stable from the first boot.
@@ -107,11 +124,24 @@ public final class ConfigPlan {
         return Integer.parseInt(raw);
     }
 
+    /**
+     * PostgreSQL's URL. logServerErrorDetail=false keeps the server's detail out of each SQLException's message, which
+     * pgjdbc otherwise puts there with the row's values ("Failing row contains (...)", "Key (...)=(...) already
+     * exists"), and no log line prints a row's values. The SQLSTATE and the constraint's name are kept. So the host
+     * and the name must be ones that can't end or change the URL before it (HOST, DATABASE).
+     */
     private static String jdbcUrl(Map<String, String> env) {
-        String port = value(env, "DB_PORT", "3306");
+        String host = value(env, "DB_HOST", "db");
+        if (!HOST.matcher(host).matches())
+            throw new IllegalArgumentException("DB_HOST must be a host name or an address, got '" + host + "'");
+        String port = value(env, "DB_PORT", "5432");
         if (!port.matches("\\d{1,5}"))
             throw new IllegalArgumentException("DB_PORT must be a port number, got '" + port + "'");
-        return "jdbc:mariadb://" + value(env, "DB_HOST", "db") + ":" + port + "/" + value(env, "DB_NAME", "logicaldoc");
+        String name = value(env, "DB_NAME", "logicaldoc");
+        if (!DATABASE.matcher(name).matches())
+            throw new IllegalArgumentException("DB_NAME must be a database name of letters, digits, _, $ and -, got '"
+                    + name + "'");
+        return "jdbc:postgresql://" + host + ":" + port + "/" + name + "?logServerErrorDetail=false";
     }
 
     private static String password(Map<String, String> env) {
