@@ -287,6 +287,19 @@ export const enUS = {
   'columns.hide': 'Hide {column}',
   'columns.choose': 'Choose Columns…',
   'columns.reset': 'Reset Columns',
+  // The Columns panel (spec 4.5), and the button at the heading row's end that opens it
+  'columns.button': 'Columns',
+  'columns.title': 'Columns',
+  // Under the panel's title: "For Recent Documents"
+  'columns.for': 'For {list}',
+  'columns.shown': 'Shown',
+  'columns.more': 'More Columns',
+  'columns.alwaysShown': 'Always Shown',
+  // A shown column's place among the shown ones, which a screen reader says after its name: "2 of 5"
+  'columns.position': '{n} of {total}',
+  'columns.moveUp': 'Move Up',
+  'columns.moveDown': 'Move Down',
+  'columns.resetToDefault': 'Reset to Default',
   'help.menu': 'Help',
   'help.guide': 'User Guide',
   'help.notices': 'Open-Source Notices',

@@ -9,6 +9,7 @@ export { ContextMenu, ItemContextMenu, type ContextMenuProps, type ItemMenu } fr
 export { Tree, type TreeNode, type TreeProps } from './components/Tree'
 export { Table, type TableColumn, type TableColumnChoice, type TableProps, type TableResizing, type TableRow, type TableSort } from './components/Table'
 export { CheckGroup, type Choice, type CheckGroupProps } from './components/CheckGroup'
+export { ColumnsPanel, type ColumnsPanelProps } from './components/ColumnsPanel'
 export { RadioChoices, type RadioChoicesProps } from './components/RadioChoices'
 export { DatePicker, type DatePickerProps } from './components/DatePicker'
 export { CheckField, SelectField, TextField, type CheckFieldProps, type SelectFieldProps, type TextFieldProps } from './components/Fields'
