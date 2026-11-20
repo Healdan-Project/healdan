@@ -66,7 +66,7 @@ export interface TableSort {
   direction: 'ascending' | 'descending'
 }
 
-export interface TableProps<T extends TableRow> {
+interface TableBaseProps<T extends TableRow> {
   'aria-label'?: string
   'aria-labelledby'?: string
   columns: TableColumn<T>[]
@@ -74,10 +74,7 @@ export interface TableProps<T extends TableRow> {
   sort?: TableSort
   /** A header was clicked: sort by it, ascending, or the other way if it already sorts */
   onSort?: (sort: TableSort) => void
-  selectionMode?: 'single' | 'multiple'
-  selection: Set<string>
-  onSelectionChange: (keys: Set<string>) => void
-  /** Enter or a double-click; a click on a row that can't be selected, or that opens on a click */
+  /** Enter or a double-click; a click on a row that can't be selected, or that opens on a click, and any click when nothing selects */
   onOpen?: (key: string) => void
   /** Space */
   onPreview?: (key: string) => void
@@ -117,6 +114,19 @@ export interface TableProps<T extends TableRow> {
   contextMenu?: ItemMenu
 }
 
+/**
+ * The rows the person selects, which the caller keeps; or none, for a list that leads to a page, where a click or Enter
+ * opens a row (`onOpen`) and nothing draws as selected.
+ */
+type TableSelection =
+  | { selectionMode?: 'single' | 'multiple'; selection: Set<string>; onSelectionChange: (keys: Set<string>) => void }
+  | { selectionMode: 'none'; selection?: Set<string>; onSelectionChange?: (keys: Set<string>) => void }
+
+export type TableProps<T extends TableRow> = TableBaseProps<T> & TableSelection
+
+/** The selection of a Table that selects nothing, which nothing here ever changes */
+const NOTHING = new Set<string>()
+
 function same(keys: Set<Key>, selection: Set<string>): boolean {
   return keys.size === selection.size && [...keys].every((key) => selection.has(String(key)))
 }
@@ -135,7 +145,7 @@ export function Table<T extends TableRow>({
   sort,
   onSort,
   selectionMode = 'single',
-  selection,
+  selection = NOTHING,
   onSelectionChange,
   onOpen,
   onPreview,
@@ -265,7 +275,7 @@ export function Table<T extends TableRow>({
   function changeSelection(keys: Selection) {
     setGiven(keys)
     const all = rows.filter((row) => row.selectable !== false).map((row) => row.id)
-    onSelectionChange(keys === 'all' ? new Set(all) : new Set([...keys].map(String)))
+    onSelectionChange?.(keys === 'all' ? new Set(all) : new Set([...keys].map(String)))
   }
 
   const sortDescriptor: SortDescriptor | undefined = sort && { column: sort.column, direction: sort.direction }

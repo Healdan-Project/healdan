@@ -4,11 +4,17 @@
 package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 import org.junit.Test;
 import org.springframework.util.ClassUtils;
@@ -16,21 +22,66 @@ import org.springframework.util.ClassUtils;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 
 import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.Operation;
+import io.swagger.v3.oas.models.PathItem;
+import io.swagger.v3.oas.models.Paths;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.Path;
 
 /**
  * The server implements exactly the {@code /v1} operations that
- * {@code openapi.yaml} describes (spec section 4.6), and the file says which
- * of them need no token. Only the docs page, {@code /docs} and {@code /docs/{file}}, the Office add-in's
+ * {@code openapi.yaml} and {@code openapi-admin.yaml} describe (spec section
+ * 4.6, Admin app spec section 9.2), the admin API's in its own file only, and
+ * the files say which of them need no token. Only the docs page, {@code /docs} and {@code /docs/{file}}, the Office add-in's
  * files, {@code /addin/...}, and the sign-in pages, {@code /signin/...}, aren't described: a resource anywhere
- * else, such as {@code /v2} or a mistyped {@code /vl}, fails.
+ * else, such as {@code /v2} or a mistyped {@code /vl}, fails. The other way round, only {@link #DESCRIBED_AHEAD}
+ * is described and not implemented.
  */
 public class RouteCoverageTest extends AbstractHealdanTestCase {
 
+	/**
+	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them; none
+	 * now. Each must be described and not implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and
+	 * leaves the list once it's implemented.
+	 */
+	static final Set<String> DESCRIBED_AHEAD = Set.of();
+
 	@Test
 	public void testEveryRouteIsDescribed() {
-		assertEquals(described().keySet(), implemented().keySet());
+		Set<String> described = new TreeSet<>(described().keySet());
+		described.removeAll(DESCRIBED_AHEAD);
+		assertEquals(described, implemented().keySet());
+	}
+
+	// Once one is implemented, it leaves the list, so the list never hides a route that's missing
+	@Test
+	public void testRoutesDescribedAheadAreNotImplementedYet() {
+		Map<String, Boolean> described = described();
+		Map<String, Boolean> implemented = implemented();
+		for (String route : DESCRIBED_AHEAD) {
+			assertTrue(route + " isn't described", described.containsKey(route));
+			assertFalse(route + " is implemented now: take it out of DESCRIBED_AHEAD", implemented.containsKey(route));
+		}
+	}
+
+	// The public file doesn't list the admin routes, nor the admin file the others (Admin app spec section 9.2)
+	@Test
+	public void testAdminRoutesAreDescribedInTheAdminFileOnly() {
+		OpenAPI first = OpenApiFileTest.parse().getOpenAPI();
+		OpenAPI admin = OpenApiFileTest.parseAdmin().getOpenAPI();
+		assertEquals(List.of(), misplaced(first, admin));
+
+		// An admin route described in openapi.yaml fails, as does another route in openapi-admin.yaml
+		Paths paths = new Paths();
+		if (first.getPaths() != null)
+			paths.putAll(first.getPaths());
+		paths.addPathItem("/v1/admin/dashboard", new PathItem().get(new Operation()));
+		first.setPaths(paths);
+		if (admin.getPaths() == null)
+			admin.setPaths(new Paths());
+		admin.getPaths().addPathItem("/v1/administrators", new PathItem().get(new Operation()));
+		assertEquals(List.of("/v1/admin/dashboard is in openapi.yaml", "/v1/administrators is in openapi-admin.yaml"),
+				misplaced(first, admin));
 	}
 
 	@Test
@@ -57,7 +108,7 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 				if (verb == null)
 					continue;
 				Path methodPath = method.getAnnotation(Path.class);
-				String path = normalize(classPath + "/" + (methodPath != null ? methodPath.value() : ""));
+				String path = RoutePaths.normalize(classPath + "/" + (methodPath != null ? methodPath.value() : ""));
 				// The docs page, the Office add-in's files (AddinResource) and the sign-in pages (SignInResource) are
 				// web pages, not JSON API
 				if (!path.equals("/docs") && !path.equals("/docs/{file}") && !path.startsWith("/addin/")
@@ -69,59 +120,41 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 	}
 
 	/**
-	 * @return "METHOD /v1/path" of each operation in the file, and whether it
-	 *         says {@code security: []}
+	 * @return "METHOD /v1/path" of each operation in either file, and whether
+	 *         it says {@code security: []}
 	 */
 	private static Map<String, Boolean> described() {
-		OpenAPI api = OpenApiFileTest.parse().getOpenAPI();
 		Map<String, Boolean> routes = new TreeMap<>();
-		api.getPaths().forEach((path, item) -> item.readOperationsMap().forEach((verb, operation) -> routes
-				.put(verb.name() + " " + path, operation.getSecurity() != null && operation.getSecurity().isEmpty())));
+		for (OpenAPI api : List.of(OpenApiFileTest.parse().getOpenAPI(), OpenApiFileTest.parseAdmin().getOpenAPI()))
+			OpenApiFileTest.operations(api).forEach((route, operation) -> routes.put(route,
+					operation.getSecurity() != null && operation.getSecurity().isEmpty()));
 		return routes;
 	}
 
-	private static String httpMethod(Method method) {
+	/**
+	 * @return each path in the wrong file: one under {@code /v1/admin} in
+	 *         {@code openapi.yaml}, or another in {@code openapi-admin.yaml}
+	 */
+	private static List<String> misplaced(OpenAPI first, OpenAPI admin) {
+		List<String> misplaced = new ArrayList<>();
+		if (first.getPaths() != null)
+			first.getPaths().keySet().stream().filter(RoutePaths::admin)
+					.forEach(path -> misplaced.add(path + " is in openapi.yaml"));
+		if (admin.getPaths() != null)
+			admin.getPaths().keySet().stream().filter(path -> !RoutePaths.admin(path))
+					.forEach(path -> misplaced.add(path + " is in openapi-admin.yaml"));
+		return misplaced;
+	}
+
+	/**
+	 * @return the HTTP method a resource method answers, or null for none
+	 */
+	public static String httpMethod(Method method) {
 		for (Annotation annotation : method.getAnnotations()) {
 			HttpMethod verb = annotation.annotationType().getAnnotation(HttpMethod.class);
 			if (verb != null)
 				return verb.value();
 		}
 		return null;
-	}
-
-	/**
-	 * Joins slashes, drops a final slash and writes each template as
-	 * {@code {name}}, without its regular expression.
-	 */
-	static String normalize(String path) {
-		StringBuilder normalized = new StringBuilder();
-		int i = 0;
-		while (i < path.length()) {
-			char c = path.charAt(i);
-			if (c == '{') {
-				int depth = 1;
-				int end = i + 1;
-				while (end < path.length() && depth > 0) {
-					if (path.charAt(end) == '{')
-						depth++;
-					else if (path.charAt(end) == '}')
-						depth--;
-					end++;
-				}
-				String template = path.substring(i + 1, end - 1);
-				int colon = template.indexOf(':');
-				normalized.append('{').append((colon < 0 ? template : template.substring(0, colon)).trim()).append('}');
-				i = end;
-			} else {
-				if (c != '/' || normalized.isEmpty() || normalized.charAt(normalized.length() - 1) != '/')
-					normalized.append(c);
-				i++;
-			}
-		}
-		if (normalized.length() > 1 && normalized.charAt(normalized.length() - 1) == '/')
-			normalized.setLength(normalized.length() - 1);
-		if (normalized.isEmpty() || normalized.charAt(0) != '/')
-			normalized.insert(0, '/');
-		return normalized.toString();
 	}
 }

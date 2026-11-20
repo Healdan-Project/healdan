@@ -15,6 +15,8 @@ export default defineConfig(({ mode }) => {
   const toStack: ProxyOptions = { target, changeOrigin: true, headers: { Origin: target } }
   return {
     base: '/app/',
+    // pressable.css, which both apps' pages link, is @healdan/ui's
+    publicDir: '../../packages/ui/public',
     plugins: [react(), pdfjsData()],
     // errors.test.ts reads the contract (healdan-api's openapi.yaml), which is outside this app.
     server: {

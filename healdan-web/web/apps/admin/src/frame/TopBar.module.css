@@ -1,0 +1,83 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* As the User app's top bar (its TopBar.module.css) */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-5);
+  padding: 0 var(--hd-space-5);
+  border-bottom: 1px solid var(--hd-line);
+  background: var(--hd-window);
+}
+
+/* As wide as the left pane, less the bar's padding and the gap after it, so the find starts where the main area does */
+.brand {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--hd-space-3);
+  width: calc(var(--admin-left-width) - 2 * var(--hd-space-5));
+  color: var(--hd-text);
+  font-size: 15px;
+  font-weight: var(--hd-weight-bold);
+  text-decoration: none;
+}
+
+.brand:focus-visible,
+.open:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}
+
+/* The Admin tag: the accent's words in its outline, on the bar's own surface, which they reach AA on */
+.tag {
+  padding: 0 var(--hd-space-2);
+  border: 1px solid var(--hd-accent-text);
+  border-radius: var(--hd-radius-small);
+  background: var(--hd-window);
+  color: var(--hd-accent-text);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-medium);
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-4);
+  margin-inline-start: auto;
+}
+
+/* Open Healdan: a link, in the quiet button's place among the bar's controls */
+.open {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  padding: var(--hd-space-2) var(--hd-space-3);
+  border-radius: var(--hd-radius);
+  color: var(--hd-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.open:hover {
+  background: var(--hd-line);
+  color: var(--hd-text);
+}
+
+/* A narrow window: the brand takes only what it needs, so the find keeps room beside the pane's button */
+@media (max-width: 1023px) {
+  .bar {
+    gap: var(--hd-space-3);
+    padding: 0 var(--hd-space-3);
+  }
+
+  .brand {
+    width: auto;
+  }
+
+  .right {
+    gap: var(--hd-space-2);
+  }
+}

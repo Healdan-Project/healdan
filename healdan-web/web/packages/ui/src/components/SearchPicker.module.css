@@ -1,0 +1,89 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  min-width: 0;
+}
+
+.hint {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+/* As the Move To… picker's headings */
+.heading {
+  margin: 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+  max-height: 30dvh;
+  padding: var(--hd-space-1);
+  overflow: auto;
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  outline: none;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-3);
+  min-height: 28px;
+  padding: var(--hd-space-1) var(--hd-space-3);
+  border-radius: var(--hd-radius-small);
+  color: var(--hd-text);
+  outline: none;
+  cursor: default;
+}
+
+.option[data-hovered] {
+  background: var(--hd-row-alt);
+}
+
+/* The row picked: Inactive selection holds --hd-text only (tokens.css) */
+.option[data-selected] {
+  background: var(--hd-selection-inactive);
+  color: var(--hd-text);
+}
+
+/* The arrow keys' row, as ComboBox's: a filled bar, with a kind's icon in the bar's own colour (icons.module.css) */
+.option[data-focused] {
+  background: var(--hd-accent-fill);
+  color: var(--hd-accent-on-fill);
+  --hd-icon-on-fill: currentColor;
+}
+
+/* A row draws its own muted text, which fails AA on both fills, so on them all of it takes the row's colour: the marks keep
+   the text colour their tint holds at AA (tokens.test.ts) */
+.option:is([data-focused], [data-selected]) :not(.mark) {
+  color: inherit;
+}
+
+/* Rows sit in a box that scrolls, where an outline set off outside would be cut off, so the ring is the inset one (tokens.css) */
+.option[data-focus-visible] {
+  box-shadow: var(--hd-focus-inset);
+}
+
+.check {
+  margin-inline-start: auto;
+}
+
+.mark {
+  border-radius: 2px;
+  background: var(--hd-mark);
+  color: var(--hd-text);
+}
+
+.note {
+  margin: 0;
+  color: var(--hd-text-secondary);
+}

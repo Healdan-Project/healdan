@@ -4,6 +4,7 @@
 - **Written:** 2026-10-23, for the [M2 design](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) (§12), from the code at `808d5395b`.
 - **Kept current:** each milestone that adds endpoints updates its entries' tags and endpoints in the same pull request.
 - **After M6**, the User app's later phases add their endpoints to §0.3, each marked "built after M6", and their old calls move from `Later` to `M6`: a favourite's name and renaming folders (2026-11-14), and moving and deleting folders and the Trash (2026-11-17, the [folders and Trash spec](../superpowers/specs/2026-11-16-folders-and-trash-design.md) §6).
+- **The Admin app's Phase 1 built** its endpoints on 2026-11-19 (§0.5), in pull request `Admin app: the foundation and the Dashboard` ([Admin app spec](../superpowers/specs/2026-11-18-admin-app-design.md) §10). Its later phases add theirs to §0.5. The corrections the spec's §10 names, Healdan's storage service and the sign-in methods M4 added to `HealdanSettingsService`, which this file doesn't list yet, wait for the phases that replace them: Phase 3 and Stage 2.
 - **M6 built** its endpoints on 2026-11-10 to 2026-11-12 (§0.3), and its design left the rest of the old calls it weighed to later phases of the User app (`Later`) or to none (M6 spec §4, §16).
 - **M3 built** its endpoints on 2026-10-24 (§0.2): the bookmarks, `FolderService.create` and `/thumbnail` moved from M6 to M3, and the rest of M3's additions have no old call behind them.
 - **M2 built** every `M2` endpoint named here on 2026-10-23 and 2026-10-24 (§0.1). Its `openapi.yaml` (`healdan-api/src/main/resources/healdan/api/openapi.yaml`) is the reference for what they do; this file only maps the old calls to them.
@@ -169,6 +170,16 @@ M6 built every endpoint in this table, for the User app ([M6 spec](../superpower
 | TfaService | 1 |  |  |  |  |  |  |  | 1 |
 | SetupService | 2 |  |  |  |  |  |  |  | 2 |
 | DropboxService | 6 |  |  |  |  |  |  |  | 6 |
+
+### 0.5 What the Admin app adds (Phase 1 built)
+
+Phase 1 built every endpoint in this table, for the Admin app's Dashboard and its find (Admin app spec §8.1, §10). They're under `/api/v1/admin`, described in `openapi-admin.yaml`, not `openapi.yaml`, and answer administrators' web sessions only. The rows marked "(none: …)" have no old call behind them.
+
+| Old call | Admin endpoint |
+|---|---|
+| `SystemService.getStatistics` | `GET /admin/dashboard/usage`, whose signed-in count is what Phase 1 replaces of the Sessions screen; its list, `/data/sessions.xml`, is Stage 2's (spec §11) |
+| (none: Needs Attention and Server Health are new) | `GET /admin/dashboard` |
+| (none: one find of clients, matters and people is new) | `GET /admin/find?q=` |
 
 ## 1. GWT-RPC services
 
@@ -669,7 +680,7 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
-| `getStatistics` | Server statistics for the system screen. | Admin |
+| `getStatistics` | Server statistics for the system screen. | Admin (`GET /admin/dashboard/usage`, §0.5) |
 | `loadTasks`, `getTaskByName`, `startTask`, `stopTask`, `enableTask`, `disableTask`, `saveTask`, `unscheduleJobs` | Scheduled tasks: list, run, stop, enable, schedule. | Admin |
 | `setGUILanguageStatus`, `getPlugins`, `confirmUpdate`, `restart` | Language toggle, installed plugins, restart. | Admin |
 | `saveLogger`, `removeLogger` | Log4j logger levels. | Admin |

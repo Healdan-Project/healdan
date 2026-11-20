@@ -178,6 +178,32 @@ public class PreviewJobsTest extends AbstractHealdanTestCase {
 		assertEquals("x".repeat(4000), jobs.find(7, "1.0").orElseThrow().lastError());
 	}
 
+	// The Dashboard's Previews: waiting, backing off included, and given up (Admin app spec section 8.1)
+	@Test
+	public void testCountWaitingAndGivenUp() {
+		PreviewJobs jobs = PreviewJobs.get();
+		assertEquals(0, jobs.countWaiting());
+		assertEquals(0, jobs.countGivenUp());
+
+		jobs.add(1, "1.0", T);
+		jobs.add(2, "1.0", T);
+		jobs.add(2, "1.1", T);
+		jobs.add(3, "1.0", T);
+		// Failed once and waiting for its next try: still waiting
+		jobs.failed(2, "1.0", "boom", T);
+		// Given up after its last try
+		for (int i = 0; i < PreviewJobs.MAX_ATTEMPTS; i++)
+			jobs.failed(3, "1.0", "boom", T);
+
+		assertEquals(3, jobs.countWaiting());
+		assertEquals(1, jobs.countGivenUp());
+
+		jobs.done(1, "1.0");
+		jobs.requeue(3, "1.0", T);
+		assertEquals(3, jobs.countWaiting());
+		assertEquals(0, jobs.countGivenUp());
+	}
+
 	@Test
 	public void testMigrationRecorded() {
 		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));

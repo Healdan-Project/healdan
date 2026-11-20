@@ -15,9 +15,10 @@ server you're talking to.
 
 ## The Description File and the Docs Page
 
-- **`/api/v1/openapi.yaml`** describes every endpoint, in OpenAPI 3.1. It's the contract: Healdan's tests check
-  every answer an endpoint gives them against it, and fail on an endpoint it leaves out. Generate your client's
-  types from it. Its paths start at `/api`, so `/v1/server` in the file is `/api/v1/server`.
+- **`/api/v1/openapi.yaml`** describes every endpoint, in OpenAPI 3.1, but the Admin app's (see
+  [The Admin App's Routes](#the-admin-apps-routes)). It's the contract: Healdan's tests check every answer an
+  endpoint gives them against it, and fail on an endpoint it leaves out. Generate your client's types from it. Its
+  paths start at `/api`, so `/v1/server` in the file is `/api/v1/server`.
 - **`/api/docs/`** shows the file as a page you can browse, with **Try it out** on each endpoint. Healdan serves the
   page itself, so it loads nothing from the internet. To call an endpoint that needs a sign-in, sign in with
   `POST /v1/auth/tokens` first, then paste the token into **Authorize**.
@@ -231,8 +232,8 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 401 | `password-expired` | The password has to be changed in the web page first |
 | 403 | `forbidden` | You can see the object, but may not do this to it |
 | 403 | `token-only` | `DELETE /auth/tokens/current` on the web session, which has no token |
-| 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current` |
-| 403 | `admins-only` | Only an administrator may do this: a folder directly in a matter's workspace, search folders included, or anything in the Templates Store, to rename, move or delete, or into a matter's top level; `GET /trash` with `view=everyone` or `view=removed` |
+| 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current`; a token on an `/admin` route (see [The Admin App's Routes](#the-admin-apps-routes)) |
+| 403 | `admins-only` | Only an administrator may do this: a folder directly in a matter's workspace, search folders included, or anything in the Templates Store, to rename, move or delete, or into a matter's top level; `GET /trash` with `view=everyone` or `view=removed`; an `/admin` route |
 | 403 | `items-not-allowed` | A folder delete or move that needs a permission on something inside that you lack, hidden or not. The detail names nothing |
 | 403 | `web-session-refused` | A same-origin request on the web session that breaks one of its rules, such as a change without `X-Healdan-Client: web` (see [Two Ways In](#two-ways-in)). Signing in again doesn't mend it |
 | 404 | `not-found` | It doesn't exist, **or you can't read it**: the two get the same answer |
@@ -985,6 +986,49 @@ comes to another host name than `LOGICALDOC_PUBLIC_URL`'s, such as the server's 
 sent to the same path and query at the public address first, with nothing kept and no cookie set: the cookie
 belongs to the name the browser asked for, and the provider sends the browser back to the public address. Only
 the host name is compared, as a cookie ignores the scheme and port.
+
+## The Admin App's Routes
+
+The routes under `/api/v1/admin` are the [Admin app's](../the-web-app/#the-admin-app), and aren't for other clients.
+`openapi.yaml` doesn't list them: they're described in a file of their own, `openapi-admin.yaml`, beside it in
+`healdan-api`'s source, which the server doesn't serve. Healdan's tests check every answer under `/api/v1/admin`
+against it, as they check the others against `openapi.yaml`.
+
+- **Only the browser's web session signs in there.** A device token is `403 web-session-only`, so a stolen token
+  can't administer anything. No session is `401 unauthenticated`.
+- **Only members of the `admin` group get in.** Anyone else is `403 admins-only`, asked again at every request, so
+  someone taken out of `admin` is refused at their next one.
+
+The server answers three routes there:
+
+- **`GET /v1/admin/dashboard`** is the Dashboard's Needs Attention and Server Health: `attention`, what an
+  administrator should act on, each with its `code`, a `count`, a `detail` line and a `link`; `unchecked`, the codes
+  whose source couldn't be read this time; and `health`, the ten tiles, each `ok`, `attention` or `off`, with a
+  `detail` line, `used` and `total` bytes for the disk and the memory (`used` alone, the size, for the database),
+  its `link`, and `problem` in place of the detail when its source couldn't be read; and `readAt`, when the oldest
+  answer it gives was read. Each link is the Admin app's
+  screen once it has shipped, and `/frontend.jsp` until then. The server keeps each source's answer for a minute
+  (the database's for five), so asking again within that costs almost nothing, and a source with no recent answer
+  makes the request wait for it, 5 seconds at most, after which its codes are `unchecked` and its tiles say it's
+  still being worked out. A read of a source still running after its minute isn't waited for: its tiles say it
+  couldn't be read (see
+  [How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/#healdans-code)).
+- **`GET /v1/admin/dashboard/usage`** is the Dashboard's Usage, from one summary the server keeps in memory and works
+  out on a thread of its own, at the start and then 15 minutes after the last one ended, never for a request (see
+  [How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/#healdans-code)). It has the documents, their
+  storage, the matters, the clients and the people, each as a total with how much of it came in the last 7 and 30
+  days, how many people are signed in now, the documents filed on each of the last 30 days, each Store but Default
+  and Templates with its documents, bytes and backend, and up to five matters most documents were filed in in the last
+  7 days. Its days start at midnight in `zone`, the browser's IANA time zone, as the User app's do (the server's
+  without it; one it doesn't know is `400 bad-request`). The server keeps a summary for its own zone and the four
+  asked for most recently, and a zone asked for the first time gets the empty one while its own is worked out.
+  `computedAt` says when it was worked out, and is null, with the totals, until the first summary after a
+  start. `failedAt` says when the last try failed, until a try works again: beside the last summary that worked, or,
+  with `computedAt` null, when no try has worked since the start. The error itself is only in the server's log.
+- **`GET /v1/admin/find?q=`** is the top bar's find: at most five each of clients (by name or number), live matters
+  (by name, by a number such as `1001.1`, or all of a client's for a bare client number) and people (by username or
+  name, disabled ones too, never a system account). `%` and `_` in `q` are taken as they are, and a blank `q` is
+  `422 validation`.
 
 ## Healdan's Own Client
 

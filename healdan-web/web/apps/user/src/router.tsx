@@ -3,6 +3,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { createRootRoute, createRoute, createRouter, type ErrorComponentProps, type RouterHistory } from '@tanstack/react-router'
+import { parseSearch, stringifySearch } from '@healdan/shell'
 import { APP_BASE } from './addresses'
 import { ErrorPanel } from './frame/ErrorPanel'
 import { Frame } from './frame/Frame'
@@ -18,26 +19,6 @@ import { TrashView } from './views/TrashView'
 import { isTrashSort, isTrashView, type TrashSort, type TrashViewName } from './actions/trash'
 import { isSearchScope } from './search/scopes'
 import { isSortColumn, type ListingOrder, type SortColumn } from './views/useListing'
-
-// Addresses carry plain strings (?sel=10388, not ?sel="10388"), which the default JSON-aware search handling would quote.
-// A filter can repeat (?type=pdf&type=word), so those come as lists; anything else repeated keeps its last value.
-function parseSearch(search: string): Record<string, string | string[]> {
-  const params = new URLSearchParams(search)
-  const parsed: Record<string, string | string[]> = Object.fromEntries(params)
-  for (const name of multiFilters) if (params.has(name)) parsed[name] = params.getAll(name)
-  return parsed
-}
-
-function stringifySearch(search: Record<string, unknown>): string {
-  const params = new URLSearchParams()
-  for (const [name, value] of Object.entries(search)) {
-    for (const one of Array.isArray(value) ? value : [value]) {
-      if (one !== undefined && one !== null && one !== '') params.append(name, String(one))
-    }
-  }
-  const text = params.toString()
-  return text ? `?${text}` : ''
-}
 
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined)
 
@@ -148,9 +129,17 @@ export function RouteError({ error, reset }: ErrorComponentProps) {
   )
 }
 
-// The app lives under /app (APP_BASE), served by AppServlet. Only the root context is supported in M6.
+// The app lives under /app (APP_BASE), served by AppServlet. Only the root context is supported in M6. Addresses carry
+// plain strings (@healdan/shell's parseSearch), and a filter can repeat (?type=pdf&type=word), so those come as lists.
 export function createAppRouter(history?: RouterHistory) {
-  return createRouter({ routeTree, basepath: APP_BASE, history, parseSearch, stringifySearch, defaultErrorComponent: RouteError })
+  return createRouter({
+    routeTree,
+    basepath: APP_BASE,
+    history,
+    parseSearch: (search) => parseSearch(search, multiFilters),
+    stringifySearch,
+    defaultErrorComponent: RouteError,
+  })
 }
 
 // Links, navigate() and the search hooks are typed from the routes above.

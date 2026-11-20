@@ -24,7 +24,8 @@ and any other kind of file, such as a drawing, has the plain document icon in th
 - **Your menu**, under your initials, shows your name and has Signed-in Devices, Classic Interface and Sign Out.
   Signed-in Devices lists where your account is signed in besides this page, and ends any of them: see
   [Signed-in Devices](../signed-in-devices/). Classic Interface opens the older web page, on the same sign-in. Sign Out
-  ends your session.
+  ends your session. An administrator's menu also has **Admin**, just above Classic Interface: it opens the Admin app,
+  where they run Healdan. See the Admin Guide's [The Admin App](../../../admin/the-admin-app/).
 
 ![Priya Nair's menu open under the PN button at the right of the top bar, showing her name, Signed-in Devices, Classic Interface and Sign Out](your-menu.png)
 

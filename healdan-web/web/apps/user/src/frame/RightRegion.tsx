@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
+import { focusInto, isInnermost, openLayer, useNarrow } from '@healdan/shell'
 import { t } from '@healdan/ui'
 import { useSelection } from '../selection'
-import { focusInto, isInnermost, openLayer, useNarrow } from './narrow'
 import { PaneSplitter } from './PaneWidths'
 import styles from './RightRegion.module.css'
 

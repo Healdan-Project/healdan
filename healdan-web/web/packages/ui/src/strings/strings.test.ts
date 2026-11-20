@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { plural, setLabels, t } from './index'
+import { createCatalogue, plural, setLabels, t } from './index'
 
 afterEach(() => setLabels({ matter: 'Matter', matters: 'Matters' }))
 
@@ -58,5 +58,51 @@ describe('plural', () => {
     setLabels({ matter: 'Project', matters: 'Projects' })
     expect(plural('matters', 1)).toBe('1 Project')
     expect(plural('matters', 3)).toBe('3 Projects')
+  })
+})
+
+describe('createCatalogue', () => {
+  const admin = createCatalogue(
+    { 'admin.dashboard.title': 'Dashboard', 'admin.matters.new': 'New {matter}', 'admin.matters.of': '{matters} of {client}', 'common.cancel': 'Close' },
+    { 'admin.errors': { one: '{n} error', other: '{n} errors' } },
+  )
+
+  it('resolves its own keys, filling their variables', () => {
+    expect(admin.t('admin.dashboard.title')).toBe('Dashboard')
+    expect(admin.t('admin.matters.of', { client: 'Saltmarsh' })).toBe('Matters of Saltmarsh')
+  })
+
+  it('resolves the shared catalogue\'s keys, its own first', () => {
+    expect(admin.t('doc.heading', { n: 2 })).toBe('Document # 2')
+    expect(admin.t('common.cancel')).toBe('Close')
+    // The shared catalogue itself is left as it was
+    expect(t('common.cancel')).toBe('Cancel')
+  })
+
+  it('still fills {matter} and {matters} from setLabels, in its own keys and the shared ones', () => {
+    setLabels({ matter: 'Project', matters: 'Projects' })
+    expect(admin.t('admin.matters.new')).toBe('New Project')
+    expect(admin.t('matters.title')).toBe('Projects')
+    expect(admin.plural('matters', 3)).toBe('3 Projects')
+  })
+
+  it('picks the form for the count of its own plurals and the shared ones, grouping the numbers', () => {
+    expect(admin.plural('admin.errors', 1)).toBe('1 error')
+    expect(admin.plural('admin.errors', 1234)).toBe('1,234 errors')
+    expect(admin.plural('documents', 7)).toBe('7 documents')
+  })
+
+  it('says whether it or the shared catalogue holds a key', () => {
+    expect(admin.has('admin.dashboard.title')).toBe(true)
+    expect(admin.has('problems.not-found')).toBe(true)
+    expect(admin.has('problems.no-such-code')).toBe(false)
+    expect(admin.has('toString')).toBe(false)
+  })
+
+  it('rejects a key neither holds at type-check time', () => {
+    // @ts-expect-error not a key of either catalogue
+    expect(() => admin.t('no.such.key')).toThrow()
+    // @ts-expect-error not a plural of either catalogue
+    expect(() => admin.plural('no.such.plural', 2)).toThrow()
   })
 })

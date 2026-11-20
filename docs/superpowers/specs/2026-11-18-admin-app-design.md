@@ -1,7 +1,7 @@
 # The Admin App: design
 
 - **Date:** 2026-11-18
-- **Status:** designed with the owner on 2026-11-18, question by question and through mockups in the browser ([`2026-11-18-admin-app-mockups/`](2026-11-18-admin-app-mockups/README.md)). The owner approved this written spec the same day. Implementation plan: [`docs/superpowers/plans/2026-11-18-admin-app.md`](../plans/2026-11-18-admin-app.md), approved the same day, for subagent-driven building. Not built: the work waits for the PostgreSQL work's PR A (§9.9, §14).
+- **Status:** designed with the owner on 2026-11-18, question by question and through mockups in the browser ([`2026-11-18-admin-app-mockups/`](2026-11-18-admin-app-mockups/README.md)). The owner approved this written spec the same day. Implementation plan: [`docs/superpowers/plans/2026-11-18-admin-app.md`](../plans/2026-11-18-admin-app.md), approved the same day, for subagent-driven building. Phase 1 built on 2026-11-19 (see the plan's decision log); Phases 2 to 6 not built.
 - **Roadmap:** the backlog row "Admin app, then retiring the old GWT UI" in [`docs/ROADMAP.md`](../../ROADMAP.md).
 - **Inputs:**
   - the roadmap's glossary and its M6 decisions "Three separate units" and "Hosting";
@@ -149,7 +149,7 @@ Each screen is drawn in the mockups, which the owner reviewed. Where they differ
 
 ### 8.1 Dashboard (`01-frame-and-dashboard.html`)
 
-- **Needs Attention** comes first (owner), listing what an administrator should act on, each with a link to where it's fixed: stuck files; a backend that can't be reached; documents that couldn't be indexed; unresolved errors in the last 24 hours; previews that gave up; a background job that failed or is overdue; a disk above 85% full (a setting for the builder to name). With nothing to report, the box says so in one line.
+- **Needs Attention** comes first (owner), listing what an administrator should act on, each with a link to where it's fixed: stuck files; a backend that can't be reached; documents that couldn't be indexed; unresolved errors in the last 24 hours; previews that gave up; a background job that failed or is overdue; a disk above 85% full (a setting for the builder to name). (changed in the build: the 85% is fixed, `DashboardService.DISK_LOW_PERCENT`, not a setting; the plan's decision log has why.) With nothing to report, the box says so in one line.
 - **Server Health,** ten tiles, each with a status and a line of detail, each opening the screen behind it:
 
 | Tile | Shows | From |
@@ -163,9 +163,9 @@ Each screen is drawn in the mockups, which the owner reviewed. Where they differ
 | Search Index | Waiting and failed | §9.6 |
 | Previews | Waiting and given up | `hd_preview_job`, with a new count method |
 | Background Jobs | On schedule, or which aren't | §9.5 |
-| Outgoing Email | Set up, and the last send's result | `OutgoingEmail` and the captured errors |
+| Outgoing Email | Set up, and the last send's result (changed in the build: whether it's set up, and whether a send failed in the last 24 hours, as LogicalDOC logs no send that succeeds; the plan's decision log has why) | `OutgoingEmail` and the captured errors |
 
-- **Usage:** totals for documents, storage, matters, clients and people, each with its recent change; **Documents Filed, Last 30 Days**, as a plain SVG bar chart with a text alternative; **Storage by Store**; **Busiest Matters This Week**; who's signed in now, as a count. These come from one in-memory summary that a background task rebuilds at most every 15 minutes (call), so opening the Dashboard costs almost nothing. The page says when each was last worked out.
+- **Usage:** totals for documents, storage, matters, clients and people, each with its recent change; **Documents Filed, Last 30 Days**, as a plain SVG bar chart with a text alternative; **Storage by Store**; **Busiest Matters This Week**; who's signed in now, as a count. These come from one in-memory summary that a background task rebuilds at most every 15 minutes (call), so opening the Dashboard costs almost nothing. The page says when each was last worked out. (Changed in the build: the days are the reader's, starting at midnight in the browser's time zone, as the User app's do; the plan's decision log has why.)
 - A part that fails to load shows its own error; the rest of the page still works.
 - Until a tile's or row's screen has shipped, it links to the Classic Interface (call).
 
@@ -274,7 +274,7 @@ A view is recorded once per person, per document, per half hour (owner), so arro
 
 - **A second file,** `healdan-api/src/main/resources/healdan/api/openapi-admin.yaml`, holds every `/v1/admin` route. The public `/api/v1/openapi.yaml` doesn't list them, the Healdan Helper's CI isn't triggered by them, and the User app's generated types don't grow.
 - `Contract` picks the validator by the `/api/v1/admin/` prefix; `RouteCoverageTest` compares the routes with both files; `OpenApiFileTest` covers both. `code-changed.sh` counts the new file as `web`, not `clients`.
-- `$ref` can't cross the two files, so `Problem`, `Page` and a few others are repeated. A test checks the copies are the same.
+- `$ref` can't cross the two files, so `Problem`, `Page` and a few others are repeated. A test checks the copies are the same. (changed in the build: only `Problem`, `FieldError`, `Page` and the `Problem` response are repeated. Their descriptions and examples may differ, and the admin `Problem` declares fewer members than the first file's, each the same; the plan's decision log has why.)
 - `npm run generate` writes a second types file, exported from `@healdan/api` under its own entry.
 
 ### 9.3 The administration record (call)
@@ -291,13 +291,13 @@ A view is recorded once per person, per document, per half hour (owner), so arro
 - **A Log4j2 appender** is attached in code at `HealdanStartup`, for level `ERROR` and above, with no edit of `log.xml`. It's attached to the root logger **and to every logger with `additivity="false"`** (36 of them, the Indexer's among them), or their errors would be missed.
 - **It never logs and never touches the database itself.** It puts a copy on a bounded in-memory queue, counting what it drops. One writer thread drains the queue, so a database outage or a storm of errors can't stall a request.
 - **If the logging configuration is reloaded,** a `PROPERTY_CONFIG` listener attaches a new instance, only if the root logger lacks one. (Re-attaching unconditionally loops, and an old instance can't be reused.)
-- **Grouping:** a fingerprint of the exception's class, the logging class and line, and the message with its numbers and quoted names taken out. **`hd_error`** has a row per fingerprint: level, area (from the logger's package), latest message, stack and documents named, each capped in size, the total, first and last seen, and whether and by whom it's resolved. **`hd_error_hour`** has a count per fingerprint and hour, which gives the screen's time windows and is pruned after 31 days. Resolved faults unseen for 90 days are deleted.
+- **Grouping:** a fingerprint of the exception's class, the logging class and line, and the message with its numbers and quoted names taken out. (changed in the build: also the logger's name, when the logging class isn't the logger's, so each of CE's tasks, which `Task.run` logs for from one place, is a fault of its own.) **`hd_error`** has a row per fingerprint: level, area (from the logger's package), latest message, stack and documents named, each capped in size, the total, first and last seen, and whether and by whom it's resolved. **`hd_error_hour`** has a count per fingerprint and hour, which gives the screen's time windows and is pruned after 31 days. Resolved faults unseen for 90 days are deleted.
 - **One writer means no concurrent inserts,** so it updates first and inserts when no row changed, with no statement expected to fail.
 - Log messages already follow the rule that subjects, addresses and attachment names stay out of info and above (M5).
 
 ### 9.5 Job status (call)
 
-- **`JobStatus`** in `healdan-core` keeps each job's last start, end, result, error and next run, in memory, and a `HealdanJob` registers its name and what it allows. The preview worker, email index worker and Trash destroyer report directly. `healdan-storage`'s mover, retests, purge, alert and nightly check report through the same interface.
+- **`JobStatus`** in `healdan-core` keeps each job's last start, end, result, error and next run, in memory, and a `HealdanJob` registers its name and what it allows. The preview worker, email index worker and Trash destroyer report directly. `healdan-storage`'s mover, retests, purge, alert and nightly check report through the same interface. (changed in the build: the Trash destroyer and the storage jobs but the mover report from their schedulers, so a direct run of one reports nothing, and Phase 5's Run Now must report.)
 - **CE's tasks** are read from `TaskManager` and `TaskScheduling`. Their last error isn't exposed (`Task.lastRunError` has no getter), so it's taken from the captured errors for that task's logger.
 - Status restarts with the server. Last-run times worth keeping across a restart go in `hd_setting`, as the email worker's already do.
 

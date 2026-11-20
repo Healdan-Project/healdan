@@ -58,10 +58,11 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testMigratesFreshCeSchema() {
-		assertEquals(MigrationVersion.fromVersion("11"), migrator.currentVersion());
+		assertEquals(MigrationVersion.fromVersion("12"), migrator.currentVersion());
 		for (String t : List.of("hd_setting", "hd_counter", "hd_client", "hd_matter", "hd_searchfolder", "hd_local_value", "hd_api_token", "hd_hold_device",
 				"hd_signin_identity", "hd_signin_group", "hd_email", "hd_storage_backend", "hd_storage_store",
-				"hd_storage_file", "hd_storage_held", "hd_storage_event"))
+				"hd_storage_file", "hd_storage_held", "hd_storage_event", "hd_trash", "hd_trash_member",
+				"hd_admin_event", "hd_error", "hd_error_hour"))
 			assertTrue(t, tableExists(jdbc, t));
 		assertEquals(1L, jdbc.queryForObject("select next_value from hd_counter where name='docnumber'", Long.class).longValue());
 		// V9 makes backend 1, Original, CE's own store folder
@@ -110,7 +111,7 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 		try (LogCapture log = LogCapture.of(HealdanMigrator.class)) {
 			assertEquals(Status.MIGRATED, new HealdanMigrator(ds).migrate());
 			assertTrue(log.lines().toString(),
-					log.lines().contains("INFO Healdan's tables: 11 migrations applied, schema version 11"));
+					log.lines().contains("INFO Healdan's tables: 12 migrations applied, schema version 12"));
 		}
 	}
 

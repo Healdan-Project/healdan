@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.sql.Types;
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -24,6 +25,8 @@ import org.springframework.stereotype.Component;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.admin.jobs.HealdanJob;
+import com.logicaldoc.healdan.admin.jobs.JobStatus;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.util.CacheEvictor;
 
@@ -52,9 +55,16 @@ import jakarta.annotation.PreDestroy;
  * be read, or has no Message-ID, gets nothing. A failure on one document is
  * logged with its id only, never with what the email holds, and the worker goes
  * on.
+ * <p>
+ * Each run reports to {@link JobStatus} as the {@value #JOB} job (Admin app
+ * spec section 9.5); one that fails gives its exception's class alone, as it is
+ * logged.
  */
 @Component
-public class EmailIndexWorker {
+public class EmailIndexWorker implements HealdanJob {
+
+	/** Its name among the background jobs */
+	public static final String JOB = "email-index";
 
 	private static final Logger log = LoggerFactory.getLogger(EmailIndexWorker.class);
 
@@ -102,6 +112,9 @@ public class EmailIndexWorker {
 	/** The emails read by this instance, for the log */
 	private long read;
 
+	/** How many rounds in a row failed as a whole; the worker thread's, which a test's run leaves at 0 */
+	private int failures;
+
 	@Autowired
 	public EmailIndexWorker(DataSource dataSource, HealdanSettings settings, EmailIndex index, CacheEvictor evictor) {
 		this.jdbc = new JdbcTemplate(dataSource);
@@ -142,10 +155,29 @@ public class EmailIndexWorker {
 		thread = null;
 	}
 
+	@Override
+	public String name() {
+		return JOB;
+	}
+
+	@Override
+	public String label() {
+		return "Email Index";
+	}
+
+	/**
+	 * @return whether the first pass over every email has ended, as
+	 *         {@code email.index} in {@code hd_setting} records across restarts
+	 */
+	public boolean firstPassDone() {
+		return FINISHED.equals(settings.get(DONE));
+	}
+
 	private void loop() {
 		try {
+			JobStatus.get().scheduled(JOB, Instant.now().plusMillis(STARTUP_DELAY_MS));
 			Thread.sleep(STARTUP_DELAY_MS);
-			int failures = 0;
+			failures = 0;
 			boolean more = true;
 			while (more && !Thread.currentThread().isInterrupted()) {
 				try {
@@ -172,12 +204,31 @@ public class EmailIndexWorker {
 	}
 
 	/**
-	 * Reads the next {@link #BATCH} emails after the cursor.
+	 * Reads the next {@link #BATCH} emails after the cursor, and reports the
+	 * run to {@link JobStatus}: the loop goes on a second later while there may
+	 * be more, and 30 seconds after one that failed, unless it gives up.
 	 *
 	 * @return true while there may be more; false when a batch came short, or
 	 *         when the thread was interrupted
 	 */
 	boolean runOnce() {
+		JobStatus status = JobStatus.get();
+		status.started(JOB);
+		boolean more;
+		try {
+			more = nextBatch();
+		} catch (RuntimeException | Error e) {
+			// The loop logs it, by its class alone: a driver's message can hold values
+			status.failed(JOB, e.getClass().getName(),
+					failures + 1 < MAX_FAILURES ? Instant.now().plusMillis(RETRY_MS) : null);
+			throw e;
+		}
+		status.finished(JOB, more ? Instant.now().plusMillis(PAUSE_MS) : null);
+		return more;
+	}
+
+	/** {@link #runOnce}'s work, which reports nothing */
+	private boolean nextBatch() {
 		long cursor = cursor();
 		List<Row> batch = jdbc.query(batchSelect,
 				(rs, i) -> new Row(rs.getLong(1), rs.getString(2), rs.getString(3)), cursor, BATCH);
