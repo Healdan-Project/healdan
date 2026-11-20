@@ -43,12 +43,17 @@ import com.logicaldoc.healdan.admin.AdminArea;
 import com.logicaldoc.healdan.admin.AdminEvent;
 import com.logicaldoc.healdan.admin.AdminEvent.Change;
 import com.logicaldoc.healdan.admin.AdminEvents;
+import com.logicaldoc.healdan.admin.GroupNames;
+import com.logicaldoc.healdan.admin.PersonNames;
+import com.logicaldoc.healdan.admin.workspace.WorkspaceAdmin;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.FolderPosition.Kind;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.security.AclMath;
 import com.logicaldoc.healdan.security.PermissionRules;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -60,20 +65,20 @@ import com.logicaldoc.util.spring.Context;
  * The rules that bind are checked before anything is written, each with its sentence, so a refusal changes nothing:
  * <ul>
  * <li>everywhere, a group or person that no longer exists, and {@code guest} or a read-only person's own group given
- * anything beyond Read Only, which LogicalDOC doesn't check when a folder's permissions are saved (it quietly drops
- * some of the flags);</li>
- * <li>on a matter's own folder, the owner's row, which keeps Full Access, so the folder can't follow its Store
- * either, and P2 ({@link PermissionRules#checkP2});</li>
+ * anything beyond Read Only's five permissions;</li>
+ * <li>on a matter's own folder, the owner's row, which keeps Full Access, whoever the owner is (a read-only owner's row
+ * isn't capped, Admin app plan, P2-R20, and holds what a read-only person's row can), so the folder can't follow its
+ * Store either, and P2 ({@link PermissionRules#checkP2});</li>
  * <li>below it, P1 ({@link PermissionRules#checkP1}).</li>
  * </ul>
  * In a template neither P1 nor P2 is checked as it's edited (Admin app plan, P2-R7): its problems list what New
  * Matter would refuse. The stores go through {@link FolderDAO} with the event {@code PERMISSION}, so Healdan's
- * listeners still check P1 and P2 and narrow the folders below. Callers say who may: the admin API lets in
- * administrators only.
+ * listeners still check P1 and P2 and narrow the folders below. Only administrators make the changes.
  * <p>
  * Each change is recorded in the administration record, a save and Follow Parent inside their transaction and Apply
- * to Subfolders, which is LogicalDOC's own transaction, straight after it. A change that changes nothing isn't
- * recorded.
+ * to Subfolders, which is LogicalDOC's own transaction, straight after it, each with the rows as they're stored. A
+ * change that changes nothing isn't recorded. The second-level cache isn't transactional, so a save and Follow Parent
+ * evict the folder if their transaction rolls back.
  */
 @Service
 public class FolderAccessService {
@@ -91,6 +96,8 @@ public class FolderAccessService {
 	static final String OWNER_FOLLOWS = "A %s's folder can't follow its Store: its owner would lose Full Access.";
 
 	static final String NOTHING_BELOW = "This folder has no folders below it.";
+
+	static final String ONLY_ADMINS = "Only an administrator can change who can use a workspace's folder.";
 
 	/** What the administration record calls a folder */
 	private static final String FOLDER = "folder";
@@ -118,17 +125,23 @@ public class FolderAccessService {
 
 	private final AdminEvents events;
 
+	private final CacheEvictor evictor;
+
+	private final WorkspaceAdmin workspaces;
+
 	private final JdbcTemplate jdbc;
 
 	private final NamedParameterJdbcTemplate named;
 
 	@Autowired
 	public FolderAccessService(MatterLocator locator, PermissionRules rules, HealdanSettings settings,
-			AdminEvents events, DataSource dataSource) {
+			AdminEvents events, CacheEvictor evictor, WorkspaceAdmin workspaces, DataSource dataSource) {
 		this.locator = locator;
 		this.rules = rules;
 		this.settings = settings;
 		this.events = events;
+		this.evictor = evictor;
+		this.workspaces = workspaces;
 		this.jdbc = new JdbcTemplate(dataSource);
 		this.named = new NamedParameterJdbcTemplate(jdbc);
 	}
@@ -142,25 +155,12 @@ public class FolderAccessService {
 
 	/**
 	 * @param folderId a folder
-	 * @return the folder, if it's a workspace's: a live matter's own folder or a folder or search folder in it, or a
-	 *         template's top folder or a folder or search folder in it; null for anything else, such as a Store, the
-	 *         Templates Store, the root, LogicalDOC's Default workspace, a search folder directly in the Templates
-	 *         Store, an alias, a folder in the Trash or one that doesn't exist
+	 * @return the folder, if it's a workspace's, as {@link WorkspaceAdmin#workspaceFolder} takes it, which decides for
+	 *         every admin route on a workspace's folders; null for anything else
 	 * @throws PersistenceException error at data layer
 	 */
 	public Folder workspaceFolder(long folderId) throws PersistenceException {
-		Folder folder = FolderDAO.get().findById(folderId);
-		if (folder == null || folder.getDeleted() != 0 || folder.getType() == Folder.TYPE_ALIAS
-				|| folder.getFoldRef() != null)
-			return null;
-		FolderPosition position = locator.locate(folder);
-		return switch (position.kind()) {
-		case MATTER_WORKSPACE, IN_MATTER -> position.matter() != null ? folder : null;
-		// A template is a folder: a search folder directly in the Templates Store is no template's
-		case IN_TEMPLATES -> position.searchFolder()
-				&& Long.valueOf(folder.getParentId()).equals(settings.templatesStoreId()) ? null : folder;
-		default -> null;
-		};
+		return workspaces.workspaceFolder(folderId);
 	}
 
 	/**
@@ -188,25 +188,27 @@ public class FolderAccessService {
 	 * @param grants its rows, each group or person once
 	 * @param actor who saves it
 	 * @return who can use it now
-	 * @throws PersistenceException a refusal, a {@link HealdanRuleException} with its sentence; or an error at data
-	 *         layer
+	 * @throws PersistenceException a refusal, a {@link HealdanRuleException} with its sentence: the actor isn't an
+	 *         administrator, or a rule refuses the rows; or an error at data layer
 	 * @throws IllegalArgumentException for a grant that names neither a group nor a person, or both, or a group or
 	 *         person an earlier grant named
 	 */
 	@Transactional(rollbackFor = Exception.class)
 	public FolderAccess save(long folderId, List<AccessGrant> grants, User actor) throws PersistenceException {
-		Objects.requireNonNull(actor, "actor");
+		requireAdmin(actor);
 		Folder folder = existing(folderId);
 		FolderPosition position = locator.locate(folder);
 		long sourceBefore = AclMath.source(folderId);
 		Map<Long, Set<Permission>> before = AclMath.effective(folderId);
 		Map<Long, Set<Permission>> after = resolve(grants, before);
 
-		for (Map.Entry<Long, Set<Permission>> row : after.entrySet())
-			checkReadOnlyCap(row.getKey(), row.getValue());
+		// The owner's row on a matter's own folder keeps Full Access, whoever owns it (P2-R20)
 		Long owner = ownersGroup(position);
-		if (position.kind() == Kind.MATTER_WORKSPACE && owner != null
-				&& !after.getOrDefault(owner, Set.of()).containsAll(Permission.all()))
+		boolean ownFolder = position.kind() == Kind.MATTER_WORKSPACE && owner != null;
+		for (Map.Entry<Long, Set<Permission>> row : after.entrySet())
+			if (!ownFolder || !owner.equals(row.getKey()))
+				checkReadOnlyCap(row.getKey(), row.getValue());
+		if (ownFolder && !after.getOrDefault(owner, Set.of()).containsAll(Permission.all()))
 			throw new HealdanRuleException(OWNER_ROW.formatted(matterLabel()));
 
 		boolean ownBefore = sourceBefore == folderId;
@@ -224,8 +226,11 @@ public class FolderAccessService {
 		else if (position.kind() == Kind.MATTER_WORKSPACE)
 			rules.checkP2(after, stored.getParentId(), position.matter().getOwnerId(), folderId);
 
+		// The cache isn't transactional: a rollback, such as a record that fails, mustn't leave the new rows cached
+		evictor.evictFoldersOnRollback(List.of(folderId));
 		FolderDAO.get().store(stored, history(actor, FolderEvent.PERMISSION));
-		record(folder, ownBefore ? null : sourceBefore, null, before, after, actor);
+		// As stored: a read-only owner's row holds what a read-only person's row can
+		record(folder, ownBefore ? null : sourceBefore, null, before, AclMath.effective(folderId), actor);
 		return read(folderId, actor);
 	}
 
@@ -237,12 +242,12 @@ public class FolderAccessService {
 	 * @param folderId a workspace's folder
 	 * @param actor who changes it
 	 * @return who can use it now
-	 * @throws PersistenceException a refusal, a {@link HealdanRuleException} with its sentence; or an error at data
-	 *         layer
+	 * @throws PersistenceException a refusal, a {@link HealdanRuleException} with its sentence: the actor isn't an
+	 *         administrator, or it's a matter's own folder; or an error at data layer
 	 */
 	@Transactional(rollbackFor = Exception.class)
 	public FolderAccess followParent(long folderId, User actor) throws PersistenceException {
-		Objects.requireNonNull(actor, "actor");
+		requireAdmin(actor);
 		Folder folder = existing(folderId);
 		if (locator.locate(folder).kind() == Kind.MATTER_WORKSPACE)
 			throw new HealdanRuleException(OWNER_FOLLOWS.formatted(matterLabel()));
@@ -253,6 +258,8 @@ public class FolderAccessService {
 			return read(folderId, actor);
 
 		Map<Long, Set<Permission>> before = AclMath.effective(folderId);
+		// LogicalDOC's updateSecurityRef stores the folder, then writes the folders that followed it with a query
+		evictor.evictFoldersOnRollback(List.of(folderId));
 		FolderDAO.get().updateSecurityRef(folderId, folder.getParentId(), history(actor, FolderEvent.PERMISSION));
 		Map<Long, Set<Permission>> after = AclMath.effective(folderId);
 		record(folder, sourceBefore == folderId ? null : sourceBefore, AclMath.source(folderId), before, after, actor);
@@ -270,11 +277,11 @@ public class FolderAccessService {
 	 * @param folderId a workspace's folder
 	 * @param actor who applies it
 	 * @param sessionId the actor's session, which LogicalDOC asks for
-	 * @throws PersistenceException a refusal, a {@link HealdanRuleException} with its sentence; or an error at data
-	 *         layer
+	 * @throws PersistenceException a refusal, a {@link HealdanRuleException} with its sentence: the actor isn't an
+	 *         administrator, there's no folder below, or Healdan's rules don't allow it; or an error at data layer
 	 */
 	public void applyToSubfolders(long folderId, User actor, String sessionId) throws PersistenceException {
-		Objects.requireNonNull(actor, "actor");
+		requireAdmin(actor);
 		existing(folderId);
 		if (!hasFolderBelow(folderId))
 			throw new HealdanRuleException(NOTHING_BELOW);
@@ -332,9 +339,7 @@ public class FolderAccessService {
 		if (!people.isEmpty())
 			named.query("select ld_id, ld_firstname, ld_name, ld_username from ld_user where ld_id in (:ids)",
 					new MapSqlParameterSource("ids", new TreeSet<>(people.values())), rs -> {
-						String full = ((rs.getString(2) != null ? rs.getString(2) : "") + " "
-								+ (rs.getString(3) != null ? rs.getString(3) : "")).strip();
-						names.put(rs.getLong(1), full.isEmpty() ? rs.getString(4) : full);
+						names.put(rs.getLong(1), PersonNames.of(rs.getString(2), rs.getString(3), rs.getString(4)));
 					});
 
 		List<AccessRow> rows = new ArrayList<>();
@@ -345,7 +350,8 @@ public class FolderAccessService {
 			if (userId != null && names.get(userId) != null)
 				name = names.get(userId);
 			else
-				name = group != null ? group.name() : "group " + groupId;
+				// A group with no row in ld_group, as GroupNames names it
+				name = group != null ? group.name() : GroupNames.of(groupId);
 			Set<Permission> granted = EnumSet.noneOf(Permission.class);
 			granted.addAll(flags);
 			rows.add(new AccessRow(groupId, name, userId != null, userId, AccessLevel.of(granted),
@@ -366,6 +372,15 @@ public class FolderAccessService {
 				 where G.ld_name = ? and G.ld_tenantid = ? and G.ld_deleted = 0 and U.ld_id = ? and U.ld_deleted = 0""",
 				Long.class, PERSONAL + userId, Tenant.DEFAULT_ID, userId);
 		return ids.isEmpty() ? null : ids.get(0);
+	}
+
+	/*
+	 * FilingRules reloads the user's groups, which are transient
+	 */
+	private static void requireAdmin(User actor) throws PersistenceException {
+		Objects.requireNonNull(actor, "actor");
+		if (!FilingRules.get().isAdmin(actor))
+			throw new HealdanRuleException(ONLY_ADMINS);
 	}
 
 	/**
@@ -413,8 +428,8 @@ public class FolderAccessService {
 	 * @param grants a folder's new rows
 	 * @param current what the folder grants now
 	 * @return the groups the grants name, each with its flags, those granting nothing left out
-	 * @throws HealdanRuleException for a group or person that no longer exists; a deleted group the folder grants
-	 *         something now, as LogicalDOC lets a deleted group's members in, may be kept
+	 * @throws HealdanRuleException for a group or person that no longer exists; a deleted group the folder already
+	 *         grants something may stay, so a save needn't take away what's there
 	 */
 	private Map<Long, Set<Permission>> resolve(List<AccessGrant> grants, Map<Long, Set<Permission>> current)
 			throws PersistenceException {
@@ -443,8 +458,7 @@ public class FolderAccessService {
 	}
 
 	/**
-	 * {@code guest} and a read-only person's own group get Read Only at most, which LogicalDOC doesn't check when a
-	 * folder's permissions are saved
+	 * {@code guest}, or a read-only person's own group, can't be given anything beyond Read Only's five permissions here
 	 */
 	private static void checkReadOnlyCap(long groupId, Set<Permission> flags) throws PersistenceException {
 		if (AccessLevel.READ_ONLY.permissions().containsAll(flags))

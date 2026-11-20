@@ -79,9 +79,12 @@ public class WorkspaceAdmin {
 
 	public static final String ONLY_ADMINS = "Only an administrator can change a workspace or a template.";
 
-	/** A move into another workspace, with the matter's label */
+	/** A matter's folder's move into another workspace, with the matter's label */
 	public static final String OTHER_WORKSPACE = "A folder moves only within its workspace. "
 			+ "Move it to another %s in the User app.";
+
+	/** A template's folder's move into another workspace */
+	public static final String OTHER_TEMPLATE = "A folder in a template moves only within that template.";
 
 	static final String NO_FOLDERS_IN_SEARCH = "A search folder can't hold folders.";
 
@@ -154,7 +157,8 @@ public class WorkspaceAdmin {
 	}
 
 	/**
-	 * The folders the admin routes act on, as {@code FolderAccessService.workspaceFolder} takes them.
+	 * The folders the admin routes on a workspace act on, the one scope every {@code /v1/admin/folders/{id}} route
+	 * asks, through {@code FolderAccessService.workspaceFolder} too.
 	 *
 	 * @param folderId a folder
 	 * @return the folder, if it's a workspace's: a live matter's own folder or a folder or search folder in it, or a
@@ -384,7 +388,8 @@ public class WorkspaceAdmin {
 		if (target == null)
 			throw new HealdanRuleException(NO_TARGET.formatted(targetId));
 		if (topOf(targetId) != topOf(folderId))
-			throw new HealdanRuleException(OTHER_WORKSPACE.formatted(matterLabel()));
+			throw new HealdanRuleException(locator.locate(folder).kind() == FolderPosition.Kind.IN_TEMPLATES
+					? OTHER_TEMPLATE : OTHER_WORKSPACE.formatted(matterLabel()));
 		if (search(target))
 			throw new HealdanRuleException(NO_FOLDERS_IN_SEARCH);
 		FolderDAO folders = FolderDAO.get();

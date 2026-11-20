@@ -228,11 +228,11 @@ public class StoreService {
 	 *        alone
 	 * @param actor who changes it
 	 * @throws PersistenceException a refusal, a {@link HealdanRuleException} with its sentence: the actor isn't an
-	 *         administrator, the folder isn't a Store, a group no longer exists (a deleted group the Store grants
-	 *         something now may stay, as LogicalDOC still lets its members in), or a group the change would shut out
-	 *         of the Store can read one of its live matters, the owner's own group passing while the owner could
-	 *         read the Store (P2; a matter that already let in a group the Store didn't stops no other change). Or an
-	 *         error at data layer
+	 *         administrator, the folder isn't a Store, a group no longer exists (a deleted group the Store already
+	 *         grants something may stay, so a change needn't take away what's there), or a group the change would
+	 *         shut out of the Store can read one of its live matters, the owner's own group passing while the owner
+	 *         could read the Store (P2; a matter that already let in a group the Store didn't stops no other change).
+	 *         Or an error at data layer
 	 * @throws IllegalArgumentException for a group listed twice, or a null one
 	 */
 	@Transactional(rollbackFor = Exception.class)
@@ -259,6 +259,8 @@ public class StoreService {
 		stored.setSecurityRef(null);
 		stored.getAccessControlList().clear();
 		after.forEach((group, flags) -> stored.addAccessControlEntry(entry(group, flags)));
+		// The cache isn't transactional: a rollback, such as a record that fails, mustn't leave the new rows cached
+		evictor.evictFoldersOnRollback(List.of(storeId));
 		FolderDAO.get().store(stored, history(actor, FolderEvent.PERMISSION));
 
 		// What the Store grants now, as stored

@@ -36,6 +36,7 @@ import com.logicaldoc.healdan.admin.AdminArea;
 import com.logicaldoc.healdan.admin.AdminEvent;
 import com.logicaldoc.healdan.admin.AdminEvent.Change;
 import com.logicaldoc.healdan.admin.AdminEvents;
+import com.logicaldoc.healdan.admin.PersonNames;
 import com.logicaldoc.healdan.matter.FolderPosition.Kind;
 import com.logicaldoc.healdan.profile.Inheritance;
 import com.logicaldoc.healdan.profile.LocalValueDAO;
@@ -232,7 +233,7 @@ public class MatterService {
 			fields.put("description", setTo(description));
 		fields.put("store", setTo(store.getName()));
 		fields.put("template", setTo(template.getName()));
-		fields.put("owner", setTo(ownerName(owner.getFullName(), owner.getUsername())));
+		fields.put("owner", setTo(ownerName(PersonNames.of(owner), owner.getUsername())));
 		events.record(new AdminEvent(AdminArea.MATTERS, "matter.created", MATTER, matter.getId(), display, fields),
 				actor);
 		return matter;
@@ -313,7 +314,7 @@ public class MatterService {
 			changed.put("description", new Change(oldDescription, cleanDescription));
 		if (owner != null)
 			changed.put("owner",
-					new Change(ownerName(oldOwnerId), ownerName(owner.getFullName(), owner.getUsername())));
+					new Change(ownerName(oldOwnerId), ownerName(PersonNames.of(owner), owner.getUsername())));
 		if (!changed.isEmpty())
 			events.record(new AdminEvent(AdminArea.MATTERS, "matter.updated", MATTER, matter.getId(), display, changed),
 					actor);
@@ -514,30 +515,27 @@ public class MatterService {
 	}
 
 	/**
-	 * @return the user's full name, as the matter dialog shows an owner, with
-	 *         the username, as {@link #ownerName(String, String)} gives it; a
-	 *         deleted user's too, whose row CE keeps; null if there is no such
-	 *         user
+	 * @return the user's name, as {@link #ownerName(String, String)} gives
+	 *         it; a deleted user's too, whose row CE keeps; null if there is no
+	 *         such user
 	 */
 	private String ownerName(long userId) {
 		List<String> names = jdbc.query("select ld_firstname, ld_name, ld_username from ld_user where ld_id = ?",
-				(rs, i) -> {
-					User user = new User();
-					user.setFirstName(rs.getString(1));
-					user.setName(rs.getString(2));
-					user.setUsername(rs.getString(3));
-					return ownerName(user.getFullName(), user.getUsername());
-				}, userId);
+				(rs, i) -> ownerName(PersonNames.of(rs.getString(1), rs.getString(2), rs.getString(3)),
+						rs.getString(3)),
+				userId);
 		return names.isEmpty() ? null : names.get(0);
 	}
 
 	/**
-	 * @return how the administration record names an owner: the full name,
-	 *         with the username, which tells two people of one name apart, such
-	 *         as {@code Ann Lee (alee)}
+	 * @param name the owner's name, as {@link PersonNames} gives it
+	 * @param username the owner's username
+	 * @return how the administration record names an owner: the name, with
+	 *         the username, which tells two people of one name apart, such as
+	 *         {@code Ann Lee (alee)}
 	 */
-	private static String ownerName(String fullName, String username) {
-		return "%s (%s)".formatted(fullName, username);
+	private static String ownerName(String name, String username) {
+		return "%s (%s)".formatted(name, username);
 	}
 
 	/**

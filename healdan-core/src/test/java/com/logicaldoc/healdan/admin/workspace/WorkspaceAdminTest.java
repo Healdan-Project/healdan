@@ -315,9 +315,14 @@ public class WorkspaceAdminTest extends AbstractRulesTestCase {
 				"The matter's own folder moves with the matter, to another Store.");
 		refused(() -> admins.move(template.getId(), templates.getId(), admin, null),
 				"A template's own folder can't be moved.");
-		String otherWorkspace = WorkspaceAdmin.OTHER_WORKSPACE.formatted("matter");
+		// A matter's folder moves to another matter in the User app; a template's stays in its template
+		String otherWorkspace = "A folder moves only within its workspace. Move it to another matter in the User app.";
 		refused(() -> admins.move(correspondence.getId(), files.getId(), admin, null), otherWorkspace);
-		refused(() -> admins.move(letters.getId(), documents.getId(), admin, null), otherWorkspace);
+		refused(() -> admins.move(correspondence.getId(), letters.getId(), admin, null), otherWorkspace);
+		String otherTemplate = "A folder in a template moves only within that template.";
+		refused(() -> admins.move(letters.getId(), documents.getId(), admin, null), otherTemplate);
+		Folder second = fx.folder(templates, "Second");
+		refused(() -> admins.move(letters.getId(), second.getId(), admin, null), otherTemplate);
 		refused(() -> admins.move(correspondence.getId(), store.getId(), admin, null),
 				"There's no folder %d in a workspace to move it into.".formatted(store.getId()));
 		refused(() -> admins.move(correspondence.getId(), 99999L, admin, null),

@@ -291,6 +291,30 @@ public class StoreServiceTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testAFailedRecordLeavesWhoCanSeeTheStoreAsItWas() throws Exception {
+		Folder store = fx.store("Client Work");
+		setAcl(store, Map.of(partners.getId(), RO));
+		// Read through the DAO first, so the cache holds the Store as it is
+		Folder before = FolderDAO.get().findById(store.getId(), true);
+		Map<Long, Set<Permission>> rowsBefore = daoRows(before);
+
+		// The record's insert fails, after the Store's rows are written, inside the change's transaction
+		jdbc.execute("alter table hd_admin_event rename to hd_admin_event_away");
+		try {
+			assertThrows(DataAccessException.class,
+					() -> service.setAccess(store.getId(), List.of(clerks.getId()), admin));
+		} finally {
+			jdbc.execute("alter table hd_admin_event_away rename to hd_admin_event");
+		}
+
+		Folder after = FolderDAO.get().findById(store.getId(), true);
+		assertNull(after.getSecurityRef());
+		assertEquals(rowsBefore, daoRows(after));
+		assertEquals(Map.of(partners.getId(), RO), AclMath.rows(store.getId()));
+		assertEquals(List.of(), events());
+	}
+
+	@Test
 	public void testAStoreThatFollowedGetsItsOwnRows() throws Exception {
 		// LogicalDOC can make a workspace that follows the root's permissions
 		Folder vo = new Folder("Inherited");
@@ -348,7 +372,7 @@ public class StoreServiceTest extends AbstractHealdanTestCase {
 		Folder store = fx.store("Client Work");
 		Group gone = fx.group("Gone");
 		GroupDAO.get().delete(gone.getId());
-		// A deleted group with a member still lets that member in, as LogicalDOC does
+		// A deleted group the Store grants something now may stay, so a change needn't take away what's there
 		Group oldTeam = fx.group("Old Team");
 		fx.user("olly", "Old Team");
 		setAcl(store, Map.of(partners.getId(), READ, oldTeam.getId(), READ));
@@ -489,6 +513,14 @@ public class StoreServiceTest extends AbstractHealdanTestCase {
 				values (?, ?, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)""", folderId,
 				groupId);
 		CacheEvictor.get().evictFolders(List.of(folderId));
+	}
+
+	/** @return the Store's own rows, as the DAO read it */
+	private static Map<Long, Set<Permission>> daoRows(Folder folder) {
+		Map<Long, Set<Permission>> rows = new TreeMap<>();
+		for (FolderAccessControlEntry entry : folder.getAccessControlList())
+			rows.put(entry.getGroupId(), entry.grantedPermissions());
+		return rows;
 	}
 
 	private long recordVersion(Folder folder) {

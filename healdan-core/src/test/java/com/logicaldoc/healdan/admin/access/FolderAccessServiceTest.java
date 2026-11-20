@@ -8,6 +8,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
@@ -26,8 +28,10 @@ import javax.sql.DataSource;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
@@ -65,7 +69,7 @@ public class FolderAccessServiceTest extends AbstractHealdanTestCase {
 
 	private static final String P2 = "%s can read this matter but not its Store.";
 
-	private static final String APPLY_TO_TREE = "You can't apply these permissions to subfolders that you can't manage.";
+	private static final String ONLY_ADMINS = "Only an administrator can change who can use a workspace's folder.";
 
 	private static final Set<Permission> RO = AccessLevel.READ_ONLY.permissions();
 
@@ -297,7 +301,7 @@ public class FolderAccessServiceTest extends AbstractHealdanTestCase {
 		// In a template, where P1 isn't checked, and inside a matter before P1 is
 		assertRefused(guestCap, () -> service.save(correspondence.getId(), List.of(group(guest, RW)), admin));
 		assertRefused(guestCap, () -> service.save(documents.getId(), List.of(group(guest, RW)), admin));
-		// LogicalDOC would keep Subscription for a guest, which isn't Read Only's
+		// Subscription is beyond Read Only's five permissions, so a guest isn't given it either
 		assertRefused(guestCap,
 				() -> service.save(correspondence.getId(), List.of(group(guest, withSubscription)), admin));
 		assertRefused(readerCap, () -> service.save(correspondence.getId(), List.of(person(reader, RW)), admin));
@@ -308,6 +312,103 @@ public class FolderAccessServiceTest extends AbstractHealdanTestCase {
 				List.of(group(guest, RO), person(reader, SEE), group(partners, RW)), admin);
 		assertEquals(List.of("guest read-only group", "Partners read-write group", "reader reader can-see person"),
 				rows(access));
+	}
+
+	/**
+	 * The owner's row on a matter's own folder, which the matter gives its owner, isn't capped, so a matter whose owner
+	 * is a read-only person can still be saved (Admin app plan, P2-R20). It keeps what a read-only person's row holds,
+	 * and is recorded as it's stored.
+	 */
+	@Test
+	public void testAReadOnlyOwnersRowOnTheMattersFolderIsntCapped() throws Exception {
+		User reader = readOnly("reader");
+		Group readersGroup = GroupDAO.get().findByName(reader.getUserGroupName(), Tenant.DEFAULT_ID);
+		fx.grant(FolderDAO.get().findById(workspace.getParentId()), readersGroup, Permission.READ);
+		MatterService.get().update(matter.getId(), matter.getName(), null, reader.getId(), admin);
+		Set<Permission> ownersRow = AclMath.effective(workspace.getId()).get(readersGroup.getId());
+		assertNotNull(ownersRow);
+		AdminContext.set("192.0.2.7");
+
+		FolderAccess access = service.save(workspace.getId(),
+				List.of(person(reader, FULL), group(partners, RO), group(clerks, RO)), admin);
+
+		assertEquals(List.of("Clerks read-only group", "Partners read-only group", "reader reader custom owner"),
+				rows(access));
+		assertEquals(ownersRow, AclMath.effective(workspace.getId()).get(readersGroup.getId()));
+		assertEquals(List.of("192.0.2.7 MATTERS folder.access-changed folder %d %s %s".formatted(workspace.getId(),
+				workspace.getName(), detail("group Partners", flags(RW), flags(RO)))), events());
+
+		// Below the matter's own folder the owner is capped, and on it anyone else
+		User viewer = readOnly("viewer");
+		assertRefused("User reader can't be given more than Read Only.",
+				() -> service.save(documents.getId(), List.of(person(reader, RW)), admin));
+		assertRefused("User viewer can't be given more than Read Only.", () -> service.save(workspace.getId(),
+				List.of(person(reader, FULL), group(partners, RO), person(viewer, RW)), admin));
+	}
+
+	@Test
+	public void testRowsNameAPersonAndAGroupAsTheAdminAppDoes() throws Exception {
+		User ann = fx.user("alee");
+		jdbc.update("update ld_user set ld_firstname = ?, ld_name = ? where ld_id = ?", " Ann ", "Lee ", ann.getId());
+		long annsGroup = GroupDAO.get().findByName(ann.getUserGroupName(), Tenant.DEFAULT_ID).getId();
+
+		List<AccessRow> rows = service.rows(Map.of(annsGroup, RO, 999999L, SEE), null);
+
+		// As PersonNames and GroupNames name them
+		assertEquals(List.of("Group 999999", "Ann Lee"), rows.stream().map(AccessRow::name).toList());
+	}
+
+	@Test
+	public void testOnlyAdministratorsChangeWhoCanUseAFolder() throws Exception {
+		User alice = fx.user("alice", partners.getName());
+		setAcl(correspondence, Map.of(clerks.getId(), RO));
+		fx.folder(documents, "Letters");
+		DbSnapshot db = fx.snapshot();
+
+		assertRefused(ONLY_ADMINS,
+				() -> service.save(correspondence.getId(), List.of(group(partners, RO)), alice));
+		assertRefused(ONLY_ADMINS, () -> service.followParent(correspondence.getId(), alice));
+		assertRefused(ONLY_ADMINS, () -> service.applyToSubfolders(documents.getId(), alice, "a-session"));
+
+		db.assertUnchanged();
+	}
+
+	@Test
+	public void testAFailedRecordLeavesASaveUnmade() throws Exception {
+		DaoView before = daoView(documents);
+
+		// The record's insert fails, after the folder's rows are written, inside the save's transaction
+		jdbc.execute("alter table hd_admin_event rename to hd_admin_event_away");
+		try {
+			assertThrows(DataAccessException.class,
+					() -> service.save(documents.getId(), List.of(group(partners, RO)), admin));
+		} finally {
+			jdbc.execute("alter table hd_admin_event_away rename to hd_admin_event");
+		}
+
+		// Read through the DAO, so a folder the rollback left in the cache would show
+		assertEquals(before, daoView(documents));
+		assertEquals(Long.valueOf(workspace.getId()), securityRef(documents));
+		assertEquals(Map.of(), AclMath.rows(documents.getId()));
+		assertEquals(List.of(), events());
+	}
+
+	@Test
+	public void testAFailedRecordLeavesFollowParentUndone() throws Exception {
+		setAcl(correspondence, Map.of(clerks.getId(), RO));
+		DaoView before = daoView(correspondence);
+
+		jdbc.execute("alter table hd_admin_event rename to hd_admin_event_away");
+		try {
+			assertThrows(DataAccessException.class, () -> service.followParent(correspondence.getId(), admin));
+		} finally {
+			jdbc.execute("alter table hd_admin_event_away rename to hd_admin_event");
+		}
+
+		assertEquals(before, daoView(correspondence));
+		assertNull(securityRef(correspondence));
+		assertEquals(Map.of(clerks.getId(), RO), AclMath.rows(correspondence.getId()));
+		assertEquals(List.of(), events());
 	}
 
 	@Test
@@ -426,7 +527,8 @@ public class FolderAccessServiceTest extends AbstractHealdanTestCase {
 		User alice = fx.user("alice", partners.getName());
 		assertTrue(service.read(documents.getId(), admin).canApplyToSubfolders());
 		assertFalse(service.read(documents.getId(), alice).canApplyToSubfolders());
-		assertRefused(APPLY_TO_TREE, () -> service.applyToSubfolders(documents.getId(), alice, "a-session"));
+		// And only an administrator applies it
+		assertRefused(ONLY_ADMINS, () -> service.applyToSubfolders(documents.getId(), alice, "a-session"));
 		assertEquals(Map.of(partners.getId(), RO), AclMath.rows(privileged.getId()));
 	}
 
@@ -556,6 +658,26 @@ public class FolderAccessServiceTest extends AbstractHealdanTestCase {
 					row.owner() ? "owner" : row.person() ? "person" : "group"));
 		}
 		return rows;
+	}
+
+	/** A folder as the DAO reads it: whom it follows and its own rows */
+	private record DaoView(Long securityRef, Map<Long, Set<Permission>> rows) {
+	}
+
+	private static DaoView daoView(Folder folder) throws PersistenceException {
+		Folder read = FolderDAO.get().findById(folder.getId(), true);
+		Map<Long, Set<Permission>> rows = new TreeMap<>();
+		for (FolderAccessControlEntry entry : read.getAccessControlList())
+			rows.put(entry.getGroupId(), entry.grantedPermissions());
+		return new DaoView(read.getSecurityRef(), rows);
+	}
+
+	/** @return a read-only person, whom LogicalDOC puts in their own group and {@code guest} alone */
+	private User readOnly(String username) throws Exception {
+		User user = fx.user(username);
+		user.setType(User.Type.READONLY);
+		UserDAO.get().store(user);
+		return user;
 	}
 
 	private static String name(User user) {
