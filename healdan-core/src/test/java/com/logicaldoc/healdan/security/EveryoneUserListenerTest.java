@@ -76,7 +76,7 @@ public class EveryoneUserListenerTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testEveryoneCantBeDeleted() throws Exception {
-		// Its members would stay members of the deleted group, which CE's permission checks still count
+		// Its members would stay members of the deleted group, which Healdan's rules count while it has members
 		Group everyone = GroupDAO.get().findByName(HealdanConstants.EVERYONE_GROUP, Tenant.DEFAULT_ID);
 		HealdanRuleException refusal = assertThrows(HealdanRuleException.class,
 				() -> GroupDAO.get().delete(everyone.getId()));

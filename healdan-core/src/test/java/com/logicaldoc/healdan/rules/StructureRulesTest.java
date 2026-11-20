@@ -382,8 +382,7 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 
 	@Test
 	public void testRestoringALiveFolderIsAMove() throws Exception {
-		// CE's restore doesn't check that the folder is deleted, so on a live one it moves it: an admin's only, as
-		// for a document (folders and Trash spec, 5.3)
+		// Restoring a live folder moves it: an admin's only, as for a document (folders and Trash spec, 5.3)
 		Folder inner = fx.folder(template, "Correspondence");
 		// Alice may delete both (the template's folders use the Templates Store's ACL), but neither is in the Trash
 		fx.grant(templates, lawyers, Permission.READ, Permission.DELETE);
