@@ -1149,6 +1149,39 @@ a Store's, an alias, a folder in the Trash or one that doesn't exist, is `404 no
   up, granting exactly what this folder grants. The folder itself doesn't change. A folder with no live folder below
   it is `409 refused`.
 
+### Stores and Groups
+
+A Store is a workspace directly under the root that holds matters: LogicalDOC's Default workspace and the Templates
+Store aren't Stores.
+
+- **`GET /v1/admin/stores`**: every live Store, `{ "id", "name" }`, by name, ignoring case, as a plain array: it's a
+  short list, for the Store menus of New Matter, Move to Another Store and the Matters list.
+- **`POST /v1/admin/stores`** with `{ "name", "groupIds" }` makes the Store, and gives each group in `groupIds`, a
+  person's own group among them, Read, the Store's one level, **Can See**, all in one transaction, so a matter can be
+  made in it at once. It answers `201` with the Store and no `Location`. An empty `groupIds` leaves the Store to
+  administrators. A new Store keeps its files on Original. A `groupIds` that names a group twice or holds a null is
+  `400`; the name is checked as a folder's is (`422`), and a missing `groupIds` is `422` `required`; a name another
+  live folder directly under the root has, compared without regard to case, and a group that no longer exists, are
+  `409 refused`.
+- **`GET /v1/admin/stores/{id}/access`**: who can see the Store, `storeId` and its `rows`, as a folder's rows are
+  given, but with `level` `can-see` for a row of Read alone and `custom` for any other, and `owner` always false. A
+  group or person the Store grants nothing isn't listed. Default, Templates, the root and anything else that isn't a
+  live Store are `404`.
+- **`PUT /v1/admin/stores/{id}/access`** with `{ "groupIds" }`: each group listed gets Read, keeping any other
+  permission its row has, and every other row goes; a Store that followed another folder's permissions gets its own,
+  and an empty list leaves it to administrators. It's `409 refused` for a group that no longer exists (but a deleted
+  group the Store grants something to now may stay), and for a change that would shut a group out of the Store while
+  that group can read one of the Store's matters: whoever can read a matter must be able to read its Store (P2).
+  That's checked before anything is written, the matter's owner's own group passing while the owner could read the
+  Store, and the sentence names the first group shut out and its matter, or how many of the Store's matters it can
+  read and the first by name, as in "Group Partners can read the matter 1001.1 – Charter Dispute but would no longer
+  read its Store." A matter that already let in a group the Store didn't refuses no other change, so the change that
+  puts it right goes through. New Matter's **Let Everyone Read the Store** sends the groups whose rows have `read`, with
+  the problem's group added.
+- **`GET /v1/admin/groups?q=`**: a page of live groups, by name, ignoring case, without people's own groups, each with
+  its `id`, `name` and `description` (null for none). `q`, read trimmed, in any case, with `%` and `_` taken as they
+  are, keeps the groups whose name contains it; without it, every group.
+
 ## Healdan's Own Client
 
 The Healdan Helper, which brings Healdan into LibreOffice, is a client of this API, and uses most of what's above:

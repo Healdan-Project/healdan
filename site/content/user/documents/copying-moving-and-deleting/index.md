@@ -4,9 +4,9 @@ weight: 6
 ---
 
 In the app you can rename, move and delete documents and folders, and make folders. A matter's own folder and a Store
-are moved and deleted by an administrator in the [Classic Interface](../../the-classic-interface/), which is also where
-you copy a document or a folder. What you can't do, because of permissions or because a document is locked or checked
-out, is refused with a message in the app, and greyed out in the Classic Interface.
+are moved and deleted only by an administrator. You copy a document or a folder in the
+[Classic Interface](../../the-classic-interface/). What you can't do, because of permissions or because a document is
+locked or checked out, is refused with a message in the app, and greyed out in the Classic Interface.
 Documents work in any list in the app: a folder, search results, the Recent lists and a document's own page
 (`/app/doc/` and its doc #). Folders work in a folder's list, **Recent › Folders**, a **Folders** search and the
 **My Matters** tree.
@@ -124,7 +124,7 @@ does.
 - **Only administrators move the folders at the top of a matter's workspace,** or move a folder to the top of one:
   **Move To…** is greyed out there for anyone else, and Healdan says "Only administrators can move a matter's
   top-level folders." or, for a folder dropped on a matter in **My Matters**, "Only administrators can move folders
-  into a matter's top level." A matter's own folder is moved by an administrator in the Classic Interface.
+  into a matter's top level." A matter's own folder is moved only by an administrator.
 - **A folder can't go where another folder has its name.**
 - **Healdan asks before a folder leaves its matter.** "Move "Old Drafts" into 1003.2 – Licence Review?", it says, with
   "Its 11 documents will take 1003.2's client and matter, and the properties its template sets." Choose **Move**, or
@@ -161,8 +161,8 @@ Some renames aren't allowed, and the app says why:
 - **Only administrators rename the folders at the top of a matter,** such as Correspondence and Drafts, search
   folders included. For anyone else **Rename** is greyed out there, and **F2** says "Only administrators can rename a
   matter's top-level folders."
-- **A matter's own folder isn't renamed here.** It takes the matter's name, which an administrator changes with
-  **Edit Matter…** in the Classic Interface, so **Rename** is greyed out on it.
+- **A matter's own folder isn't renamed here.** It takes the matter's name, which only an administrator changes, so
+  **Rename** is greyed out on it.
 - **Two folders side by side can't share a name.** Healdan says "There's already a folder called Drafts here." beside
   the field, which stays open for you to choose another. Changing only the case of the folder's own name, such as
   `drafts` to `Drafts`, works.

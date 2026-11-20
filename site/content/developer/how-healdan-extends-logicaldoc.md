@@ -192,6 +192,11 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     and no `holds`. `AdminFolderAccessResource` is rooted at exactly `@Path("/v1/admin/folders")`, with the id in its
     methods' paths: CXF looks for a method only in the root classes whose path is the best match's, so every route
     under `/v1/admin/folders/{id}` has to be in a class with that same root, or another class's would answer `405`.
+  - **Stores and groups** are `AdminStoresResource` (`STORES`, rooted at exactly `/v1/admin/stores`), over
+    `healdan-core`'s `StoreService`, and `AdminGroupsResource` (`PEOPLE`), which reads `ld_group` itself: live groups
+    of the caller's tenant, LogicalDOC's ordinary groups only, without the `_user_` group each person has. A new
+    Store's name is checked by `FolderRenames.name`, the folder routes' rule, whose form overload adds its errors to
+    the other fields' so one `422` names them all.
 - **`healdan-storage`** keeps documents' files on [storage backends](../../admin/storage-backends/), and is a plugin
   of its own that requires `healdan-core`. Its code is under `com.logicaldoc.healdan.storage`, where `healdan-core`'s
   Spring scan finds its beans.
@@ -436,7 +441,10 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     changed, named as `group Partners` or `user jdoe`, with its permissions before and after (null for no row). Apply
     to Subfolders records `folder.access-applied` after it's done, with how many folders below, the Trash's included,
     had their own permissions and how many followed, before and after. Each names its folder by that path, as
-    `1001.1 – Charter Dispute/Documents`.
+    `1001.1 – Charter Dispute/Documents`. A Store's changes are the `STORES` area's: `store.created`, with its name and
+    a change for each row it was given, and `store.access-changed`, with `follows` when it followed another folder's
+    permissions and a change for each row that changed, both inside their transaction and named as a folder's rows
+    are.
   - **New Matter's check** is `MatterAdmin.check` (`com.logicaldoc.healdan.admin.matters`), which takes a
     `MatterAdmin.Draft`, every member of which may be null, and answers a `MatterCheck`. It looks for each problem
     only once the draft has what it needs, with `MatterService`'s own checks and sentences and `MatterNumbering`'s,
@@ -459,15 +467,29 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     below. A save that changes nothing writes nothing. **Follow Parent** is `FolderDAO.updateSecurityRef`, and
     **Apply to Subfolders** LogicalDOC's `applySecurityToTree`. The service doesn't check that its caller is an
     administrator: only the admin route, behind `AdminFilter`, calls it.
-  - **What `applySecurityToTree` does.** Healdan's hook runs first: `checkApplyToTree`, which needs the Security
-    permission on every folder below that has its own rows, and always lets an administrator through, then
-    `afterApplySecurityToTree`, which narrows only when it's applied from a Store or the root. The call needs a session
-    id for its history. Every folder `findFolderIdInTree(folder, true)` names but the folder itself, at every level,
-    deleted folders, search folders and aliases included, then gets `ld_securityref` set by JDBC, to the folder's id
-    or, when it follows, to what it follows, and loses every `ld_folder_acl` row; the folder caches are evicted.
-    Nothing is moved or deleted, and the folder itself doesn't change. So a restricted folder below is opened up: it
-    grants exactly what the folder grants, and one in the Trash comes back so if it's restored
-    (`FolderAccessServiceTest#testApplyToSubfoldersOpensUpARestrictedFolderBelow`).
+  - **What `applySecurityToTree` does.** Healdan's hook runs first: `PermissionRules.checkApplyToTree`, which inside
+    Stores, matters and templates needs the Security permission on every folder below that has permissions of its
+    own. Then every folder and search folder below, at every level, those in the Trash included, loses its own rows and
+    follows what the folder follows. Nothing is moved or deleted, and the folder itself doesn't change. So a restricted
+    folder below is opened up: it grants exactly what the folder grants, and one in the Trash comes back so if it's
+    restored (`FolderAccessServiceTest#testApplyToSubfoldersOpensUpARestrictedFolderBelow`).
+  - **A Store and who can see it** are `StoreService` (`com.logicaldoc.healdan.admin.stores`). `stores()` and
+    `store(id)` read the live Stores, `MatterLocator` deciding what's a Store, and `access(id)` gives a Store's rows
+    with `AccessLevel.CAN_SEE` for Read alone and `CUSTOM` for any other set. `create` makes the workspace under the
+    root through `FolderDAO`, with its own rows, a Read row for each group named, and records it, all in one
+    transaction, so a failed record leaves no folder. `setAccess` gives each group listed Read, keeping its other
+    permissions, and takes every other row away, in one `FolderDAO.store` with `FolderEvent.PERMISSION`, so
+    `PermissionsFolderListener` narrows what in the Store's matters follows the Store; a change that changes nothing
+    writes and records nothing.
+  - **P2 for a Store's matters** is `PermissionRules.checkStoreP2(storeId, storeAcl)`, which `setAccess` calls before
+    it writes, as `HibernateFolderDAO.store` logs a listener's refusal at error level. It reads the Store's live
+    matters' own folders, the groups each lets read it and the owners' memberships in a few queries, chunked by 500
+    ids, whatever the number of matters, skips a matter's folder that follows the Store (it follows the new rows too),
+    and checks each against the Store's permissions as they would be, as `checkP2` does, the owner's own group passing
+    while the owner could read the Store. It refuses only what the change breaks: a group counts only where P2 holds
+    against the Store's rows now and fails against the new ones, so a matter that already let in a group the Store
+    didn't blocks no other change, and the change that puts it right goes through. A matter in the Trash is checked
+    when it's restored (`checkRestore`).
   - **`hd_error` and `hd_error_hour`** (`V12__admin.sql` too) hold the errors the server logged, by fault. `hd_error`
     has a row for each fingerprint: the level, the area, the logger, the latest message, its stack and the documents
     it names (the ids a message names as `doc 10412` or `document id 10412`), how many times it was seen, when first

@@ -14,8 +14,8 @@ Only admins create Stores. In the Admin app, **New Store…**, beside the Store 
 - **Name:** at most 255 characters, with no `/` or `\`. New Store says so before **Create Store** when it's too long
   ("That is too long.") or has one of them ("That name isn't allowed.").
 - **Who Can See It:** the groups that can see the Store. **Add a Group** lists the first 50 groups by name, and finds
-  the others as you type two characters or more. A group added leaves that list, and the **×** beside it takes it off
-  again. With none added, New Store says only administrators can see the Store.
+  the others as you type two characters or more. A group added leaves that list, and the Remove button (an ×) beside
+  it takes it off again. With none added, New Store says only administrators can see the Store.
 
 A new Store keeps its files on Original, the server's own storage, as New Store says, until you give it another
 storage backend (see [Where Files Are Kept](#where-files-are-kept)). Anything Healdan refuses when you press **Create
@@ -28,8 +28,9 @@ Store the same way, with **Rename**.
 ## Who Can See a Store
 
 A Store's permissions decide who can see it, and they limit who can see the matters in it. A Store made in the Admin
-app starts with the groups its **Who Can See It** named. Change them on the Store's **Security** tab in the Classic
-Interface.
+app starts with the groups its **Who Can See It** named, and New Matter's button that lets a group read the Store,
+such as **Let Everyone Read the Store**, adds that group, keeping everyone who could see it already, as below.
+Otherwise, change them on the Store's **Security** tab in the Classic Interface.
 
 **Before creating matters, let the groups your templates use read the Store.** A Store made in the Classic Interface
 usually lets in only the admin who created it, and a matter that a group can read is refused when the Store doesn't
@@ -60,9 +61,10 @@ such as Wasabi. So Personal can stay on the server's disk while Client Work goes
 **Stores** list on the **Storage** tab of [Healdan Settings](../healdan-settings/#the-storage-tab): see
 [Storage Backends](../storage-backends/).
 
-- **Moving a matter to another Store** is as quick as before: it changes the database at once. When the other Store
-  keeps its files on another backend, the matter's files then follow it there in the background, and until each has
-  moved it's read from where it is. See
+- **Moving a matter to another Store,** with **Move to Another Store** on
+  [its page](../clients-and-matters/#move-to-another-store), is as quick as before: it changes the database at once.
+  When the other Store keeps its files on another backend, the matter's files then follow it there in the background,
+  and until each has moved it's read from where it is. See
   [Choosing a Store's Backend](../storage-backends/choosing-a-stores-backend/#matters-moving-between-stores).
 - **LogicalDOC's own Stores screen,** under **Administration → Settings**, is hidden, as Healdan's storage backends
   take its place. There, a *store* meant a place for files, not a Store.

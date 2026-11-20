@@ -227,11 +227,11 @@ and `ResourceServiceImplTest#testMoveFolder` (WebDAV's move). `RpcPermissionGaps
 
 ### The Admin App's Server Tests
 
-The administration record's, the error capture's, the job status's, the Dashboard's, and the clients', matters' and
-folder access's tests are in `healdan-core` (`com.logicaldoc.healdan.admin` and the packages under it), `healdan-api`
-and `healdan-storage`. No test makes a real
-start, so they call `ErrorWriter.drainOnce()` and `UsageSummary.refreshNow()` themselves, and the tests of the threads
-start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashboard keeps, before it reads again.
+The administration record's, the error capture's, the job status's, the Dashboard's, and the clients', matters',
+folder access's and Stores' tests are in `healdan-core` (`com.logicaldoc.healdan.admin` and the packages under it),
+`healdan-api` and `healdan-storage`. No test makes a real start, so they call `ErrorWriter.drainOnce()` and
+`UsageSummary.refreshNow()` themselves, and the tests of the threads start them; `DashboardServiceTest` calls
+`forget()`, which drops what the Dashboard keeps, before it reads again.
 
 - **`AdminEventsTest`** checks the record: who, what, when and from where, the detail's fields in the order of their
   names, no address outside an admin request, the record rolled back with its change and committed with it, a failed
@@ -306,6 +306,15 @@ start them; `DashboardServiceTest` calls `forget()`, which drops what the Dashbo
   `testApplyToSubfoldersOpensUpARestrictedFolderBelow` pins what LogicalDOC's `applySecurityToTree` does to a
   restricted folder below, a search folder and a folder in the Trash. `AccessLevelTest` checks the levels' exact
   matches, and `AdminFolderAccessResourceTest`, in `healdan-api`, the routes, their check order and their refusals.
+- **`StoreServiceTest`**, in `healdan-core`, checks New Store and who can see a Store: a Store a matter can be made in
+  at once, its record, a create whose record fails leaving no folder, the create's refusals, Read given and other
+  permissions kept, each row as Can See or Custom, a change of nothing neither written nor recorded, a Store that
+  followed another folder's permissions getting its own, what's a Store, and the refusals, P2's among them: a group a
+  matter lets in refused while it can still read the matter, the owner passing while they can read the Store, a matter
+  that already let in more blocking no other change, and only live matters with their own permissions checked.
+  `AdminStoresResourceTest`, in `healdan-api`, checks the Stores' routes, their check order and refusals, P2's among
+  them, and `AdminGroupsResourceTest` the groups' list: by name, without people's own or deleted groups, `q` and
+  paging. Each also checks the refusals of a non-administrator and of a device token.
 
 ### The Storage Tests
 

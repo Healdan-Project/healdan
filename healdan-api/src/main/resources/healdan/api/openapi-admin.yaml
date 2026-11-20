@@ -1841,7 +1841,16 @@ paths:
         - `422 validation` for a missing `groupIds` (`required`).
         - `409 refused` for a group that no longer exists (a deleted group
           the Store grants something now may stay, as LogicalDOC still lets
-          its members in), and for what Healdan's rules refuse.
+          its members in); for a change that would leave a matter in the
+          Store letting in a group the Store wouldn't (P2: whoever can read a
+          matter can read its Store), checked before anything is written,
+          the matter's owner's own group passing while the owner could read
+          the Store, with a sentence that names the first such group and its
+          matter, or how many of the Store's matters it can read and the
+          first by name; and for what Healdan's rules refuse. A matter that
+          already let in a group the Store didn't refuses no other change,
+          so the change that puts it right goes through, and a matter in the
+          Trash is checked when it's restored.
 
         Recorded as `store.access-changed`, with `follows` (the folder it
         followed, null after) when it followed another folder's permissions,

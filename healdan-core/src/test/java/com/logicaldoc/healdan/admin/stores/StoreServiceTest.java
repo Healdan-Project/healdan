@@ -42,8 +42,11 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.admin.AdminContext;
+import com.logicaldoc.healdan.admin.access.AccessGrant;
 import com.logicaldoc.healdan.admin.access.AccessLevel;
 import com.logicaldoc.healdan.admin.access.AccessRow;
+import com.logicaldoc.healdan.admin.access.FolderAccessService;
+import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.FolderPosition.Kind;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterLocator;
@@ -53,6 +56,7 @@ import com.logicaldoc.healdan.security.AclMath;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -365,6 +369,102 @@ public class StoreServiceTest extends AbstractHealdanTestCase {
 		assertEquals(Map.of(oldTeam.getId(), READ, clerks.getId(), READ), AclMath.rows(store.getId()));
 	}
 
+	@Test
+	public void testSetAccessKeepsItsMattersReadable() throws Exception {
+		Folder store = fx.store("Client Work");
+		setAcl(store, Map.of(partners.getId(), READ, clerks.getId(), READ));
+		Client client = fx.client(1001, "Ashcombe");
+		// Its folder lets in whom its template does: Partners and Clerks, as the Store does
+		String first = name(fx.matter(client, 1, "Charter Dispute", store));
+		DbSnapshot db = fx.snapshot();
+
+		// P2: whoever reads a matter reads its Store, so the Store can't stop letting Partners read it
+		assertRefused("Group Partners can read the matter %s but would no longer read its Store.".formatted(first),
+				() -> service.setAccess(store.getId(), List.of(clerks.getId()), admin));
+		db.assertUnchanged();
+
+		fx.matter(client, 2, "Boundary Wall", store);
+		db = fx.snapshot();
+		// The first group the change shuts out, by id, with how many of the Store's matters it can read
+		assertRefused(
+				"Group Partners can read 2 matters in this Store, %s among them, but would no longer read the Store."
+						.formatted(first),
+				() -> service.setAccess(store.getId(), List.of(), admin));
+		assertRefused(
+				"Group Clerks can read 2 matters in this Store, %s among them, but would no longer read the Store."
+						.formatted(first),
+				() -> service.setAccess(store.getId(), List.of(partners.getId()), admin));
+		db.assertUnchanged();
+
+		// Letting more in is no trouble
+		Group newcomers = fx.group("Newcomers");
+		service.setAccess(store.getId(), List.of(partners.getId(), clerks.getId(), newcomers.getId()), admin);
+		assertEquals(Map.of(partners.getId(), READ, clerks.getId(), READ, newcomers.getId(), READ),
+				AclMath.rows(store.getId()));
+	}
+
+	@Test
+	public void testTheOwnerPassesWhileTheyCanReadTheStore() throws Exception {
+		Group paralegals = fx.group("Paralegals");
+		User carol = fx.user("carol", "Paralegals");
+		long carolsGroup = GroupDAO.get().findByName(carol.getUserGroupName(), Tenant.DEFAULT_ID).getId();
+		Folder store = fx.store("Client Work");
+		setAcl(store, Map.of(partners.getId(), READ, clerks.getId(), READ, paralegals.getId(), READ));
+		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store);
+		MatterService.get().update(matter.getId(), "Charter Dispute", null, carol.getId(), admin);
+		// Its owner, carol, has every permission on its folder, and Partners Read Only
+		FolderAccessService.get().save(matter.getFolderId(),
+				List.of(new AccessGrant(carolsGroup, null, AccessLevel.FULL_ACCESS.permissions()),
+						new AccessGrant(partners.getId(), null, RO)),
+				admin);
+
+		// Clerks can go: carol still reads the Store as a paralegal, so her own group's row on the matter passes
+		service.setAccess(store.getId(), List.of(partners.getId(), paralegals.getId()), admin);
+		assertEquals(Map.of(partners.getId(), READ, paralegals.getId(), READ), AclMath.rows(store.getId()));
+
+		// Paralegals can't: carol would no longer read the Store
+		DbSnapshot db = fx.snapshot();
+		assertRefused("User carol can read the matter %s but would no longer read its Store.".formatted(name(matter)),
+				() -> service.setAccess(store.getId(), List.of(partners.getId()), admin));
+		db.assertUnchanged();
+	}
+
+	@Test
+	public void testAMatterThatAlreadyLetsInMoreStopsNoOtherChange() throws Exception {
+		Group outsiders = fx.group("Outsiders");
+		Folder store = fx.store("Client Work");
+		setAcl(store, Map.of(partners.getId(), READ));
+		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store);
+		// From before Healdan's rules, or past them: the matter's folder lets Outsiders read it, and the Store doesn't
+		readRow(matter.getFolderId(), outsiders.getId());
+		assertTrue(AclMath.effective(matter.getFolderId()).get(outsiders.getId()).contains(Permission.READ));
+
+		// A change that shuts no one out goes through, and so does the one that puts the matter right
+		service.setAccess(store.getId(), List.of(partners.getId(), clerks.getId()), admin);
+		service.setAccess(store.getId(), List.of(partners.getId(), clerks.getId(), outsiders.getId()), admin);
+		assertEquals(Map.of(partners.getId(), READ, clerks.getId(), READ, outsiders.getId(), READ),
+				AclMath.rows(store.getId()));
+	}
+
+	@Test
+	public void testOnlyLiveMattersWithPermissionsOfTheirOwnAreChecked() throws Exception {
+		Folder store = fx.store("Client Work");
+		setAcl(store, Map.of(partners.getId(), READ, clerks.getId(), READ));
+		Client client = fx.client(1001, "Ashcombe");
+		Matter trashed = fx.matter(client, 1, "Charter Dispute", store);
+		FolderDAO.get().delete(trashed.getFolderId(), fx.folderHistory(admin));
+		// LogicalDOC's own routes can make a matter's folder follow its Store
+		Matter following = fx.matter(client, 2, "Boundary Wall", store);
+		jdbc.update("delete from ld_folder_acl where ld_folderid = ?", following.getFolderId());
+		jdbc.update("update ld_folder set ld_securityref = ? where ld_id = ?", store.getId(), following.getFolderId());
+		CacheEvictor.get().evictFolders(List.of(following.getFolderId()));
+
+		// Neither the matter in the Trash nor the one that follows the Store stops it
+		service.setAccess(store.getId(), List.of(clerks.getId()), admin);
+
+		assertEquals(Map.of(clerks.getId(), READ), AclMath.rows(store.getId()));
+	}
+
 	/** @return each record of a Store, oldest first, as its address, area, action, target and detail */
 	private List<String> events() {
 		return jdbc.query("""
@@ -372,6 +472,23 @@ public class StoreServiceTest extends AbstractHealdanTestCase {
 				  from hd_admin_event where hd_targetkind = 'store' order by hd_id""",
 				(rs, n) -> "%s %s %s %s %d %s %s".formatted(rs.getString(1), rs.getString(2), rs.getString(3),
 						rs.getString(4), rs.getLong(5), rs.getString(6), rs.getString(7)));
+	}
+
+	/** @return the name of the matter's own folder, its display name */
+	private static String name(Matter matter) throws Exception {
+		return FolderDAO.get().findById(matter.getFolderId()).getName();
+	}
+
+	/** Writes a row that grants Read alone with JDBC, past Healdan's rules, and drops the folder from the cache */
+	private void readRow(long folderId, long groupId) {
+		jdbc.update("""
+				insert into ld_folder_acl (ld_folderid, ld_groupid, ld_read, ld_preview, ld_write, ld_add, ld_security,
+				 ld_immutable, ld_delete, ld_rename, ld_import, ld_export, ld_sign, ld_archive, ld_workflow, ld_download,
+				 ld_calendar, ld_subscription, ld_print, ld_password, ld_move, ld_email, ld_automation, ld_store,
+				 ld_readingreq, ld_customid, ld_revision)
+				values (?, ?, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)""", folderId,
+				groupId);
+		CacheEvictor.get().evictFolders(List.of(folderId));
 	}
 
 	private long recordVersion(Folder folder) {
