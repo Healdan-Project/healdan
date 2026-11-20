@@ -71,9 +71,7 @@ async function pick(page: Page, field: Locator, text: string, answer: string, op
   const answered = page.waitForResponse((response) => response.url().includes(answer) && response.request().method() === 'GET')
   await field.fill(text)
   await answered
-  // The list opens on the next key once the answer has come (React Aria's combo box opens as its text changes)
-  // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
-  await field.press('ArrowDown')
+  // The list opens by itself once the answer has come
   await page.getByRole('option', { name: option }).first().click()
 }
 

@@ -159,8 +159,6 @@ describe('The Matters list', () => {
     await rows()
     await userEvent.type(box('Client'), 'salt')
     await pause()
-    // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
-    await userEvent.keyboard('{ArrowDown}')
     await userEvent.click(await screen.findByRole('option', { name: '1001 – Saltmarsh Shipping Ltd' }))
     // The pick shows at once, so its list closes, before the address has followed
     expect(screen.queryByRole('listbox')).toBeNull()
@@ -174,8 +172,6 @@ describe('The Matters list', () => {
     await rows()
     await userEvent.type(box('Owner'), 'tom')
     await pause()
-    // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
-    await userEvent.keyboard('{ArrowDown}')
     await userEvent.click(await screen.findByRole('option', { name: 'Tom Reeve tom' }))
     expect(screen.queryByRole('listbox')).toBeNull()
     await waitFor(() => expect(lastQuery(api)).toEqual({ ownerId: tom.id, offset: 0, limit: 100 }))
@@ -192,8 +188,6 @@ describe('The Matters list', () => {
     await rows()
     await userEvent.type(box('Owner'), 'oldham')
     await pause()
-    // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
-    await userEvent.keyboard('{ArrowDown}')
     const option = await screen.findByRole('option', { name: 'Sally Oldham sally.old · Disabled' })
     // The people the admin find gives, those who have left among them; GET /v1/users gives only those who can sign in
     expect(api.callsTo('GET /v1/admin/find').at(-1)?.query).toEqual({ q: 'oldham' })

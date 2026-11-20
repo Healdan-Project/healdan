@@ -175,8 +175,6 @@ describe('Edit', () => {
     await userEvent.clear(owner)
     await userEvent.type(owner, 'hel')
     await waitFor(() => expect(api.callsTo('GET /v1/users').at(-1)?.query).toEqual({ q: 'hel' }))
-    // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
-    await userEvent.keyboard('{ArrowDown}')
     await userEvent.click(await screen.findByRole('option', { name: 'Helen Ashcombe helen' }))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(api.callsTo('PATCH /v1/admin/matters/11').map((call) => call.body)).toEqual([{ ownerId: 5 }]))

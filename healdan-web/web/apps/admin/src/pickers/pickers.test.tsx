@@ -89,13 +89,12 @@ describe('ClientPicker', () => {
     const { view } = renderWith(<ClientExample onChange={onChange} />, clientRoutes)
     await userEvent.type(box('Client'), 'bake')
     await pause()
-    // The arrow key goes to what was found (PickField opens its list by itself only as the text changes)
-    // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
-    await userEvent.keyboard('{ArrowDown}')
+    // The list opens by itself once what was found arrives
     const list = await screen.findByRole('listbox')
     expect(within(list).getAllByRole('option').map((one) => one.textContent)).toEqual(['1002 – Brightwell Bakeries Ltd'])
     await expectNoAxeViolations(view.container)
-    await userEvent.keyboard('{Enter}')
+    // The list opened with no option focused, so the key moves to the first
+    await userEvent.keyboard('{ArrowDown}{Enter}')
     // The client itself, as other objects name one
     expect(onChange).toHaveBeenLastCalledWith({ id: 2, number: 1002, name: 'Brightwell Bakeries Ltd' })
     expect(box('Client').value).toBe('1002 – Brightwell Bakeries Ltd')
@@ -129,11 +128,9 @@ function PersonExample({ accounts, onChange = vi.fn(), start = null }: { account
 // The admin find, answering people only, those who have left too
 const findRoutes: Routes = { 'GET /v1/admin/find': ({ query }: { query?: Record<string, unknown> }) => findPeople(query?.q) }
 
-/** The options the list offers once the typing has paused and the arrow key has gone to them */
+/** The options the list offers, once it has opened by itself after the typing has paused */
 async function offered() {
   await pause()
-  // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
-  await userEvent.keyboard('{ArrowDown}')
   const list = await screen.findByRole('listbox')
   return { list, names: within(list).getAllByRole('option').map((one) => one.textContent) }
 }
@@ -158,8 +155,6 @@ describe('PersonPicker', () => {
     await userEvent.type(box('Owner'), 'old')
     await pause()
     expect(api.callsTo('GET /v1/users').at(-1)?.query).toEqual({ q: 'old' })
-    // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
-    await userEvent.keyboard('{ArrowDown}')
     expect(screen.queryByRole('listbox')).toBeNull()
   })
 

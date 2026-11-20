@@ -53,12 +53,10 @@ async function openNewMatter(routes: Routes = {}) {
   return { ...rendered, dialog }
 }
 
-/** A search's option, found once the typing pauses: the list is reached with the arrow key, as PickField opens it */
+/** A search's option, found once the typing pauses and the list opens by itself */
 async function pick(dialog: HTMLElement, name: string, typed: string, option: string) {
   await userEvent.type(box(dialog, name), typed)
   await pause()
-  // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
-  await userEvent.keyboard('{ArrowDown}')
   await userEvent.click(await screen.findByRole('option', { name: option }))
 }
 
