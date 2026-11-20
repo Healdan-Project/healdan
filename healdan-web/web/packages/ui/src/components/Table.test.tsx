@@ -75,6 +75,19 @@ function press(element: Element, key: string) {
   fireEvent.keyUp(element, { key })
 }
 
+/**
+ * Starts a resize of a heading's column by the keys, as a person does: Resize Column in the heading's menu, here opened by a
+ * right-click. Its edge's slider, there only while a resize lasts, has the focus once it has started.
+ */
+async function startResizeByMenu(heading: string): Promise<HTMLInputElement> {
+  const header = screen.getByRole('columnheader', { name: heading })
+  expect(fireEvent.contextMenu(header)).toBe(false)
+  await userEvent.click(within(await screen.findByRole('menu', { name: `${heading} Column` })).getByRole('menuitem', { name: 'Resize Column' }))
+  const slider = header.querySelector<HTMLInputElement>('input[type="range"]')!
+  await waitFor(() => expect(document.activeElement).toBe(slider))
+  return slider
+}
+
 describe('Table', () => {
   it('shows its columns and a row per item, the first column naming each row', () => {
     render(<Harness />)
@@ -460,12 +473,9 @@ describe('Table resizing', () => {
     )
   }
 
-  /** Starts a resize of Doc # from its edge's slider and widens it by 10 pixels */
-  function widenDocNumber() {
-    const slider = within(header('Doc #')).getByRole('slider')
-    act(() => slider.focus())
-    press(slider, 'Enter')
-    press(slider, 'ArrowRight')
+  /** Starts a resize of Doc # by the keys and widens it by 10 pixels */
+  async function widenDocNumber() {
+    press(await startResizeByMenu('Doc #'), 'ArrowRight')
   }
 
   it('draws no resizer without `resizing`, as before', () => {
@@ -485,8 +495,11 @@ describe('Table resizing', () => {
       // The heading keeps its own name, which its edge's slider doesn't add to
       const one = header(name)
       expect(one.querySelectorAll('.resizer')).toHaveLength(1)
-      // Named for its column, for a screen reader, which hears the width as it changes
-      expect(within(one).getByRole('slider', { name: `Resize ${name}` }).getAttribute('aria-valuetext')).toMatch(/^\d+ pixels$/)
+      // Named for its column, for a screen reader, which hears the width as it changes, while a resize lasts: only then is it
+      // there (the heading focus tests check it, and its name then, "Resize Doc #")
+      const slider = within(one).getByRole('slider', { hidden: true })
+      expect([slider.getAttribute('aria-label'), slider.getAttribute('aria-labelledby')?.split(' ')[1]]).toEqual(['Resize', one.id])
+      expect(slider.getAttribute('aria-valuetext')).toMatch(/^\d+ pixels$/)
     }
     // jsdom lays nothing out, so the rules are read: the target is 24 pixels, centred on the edge, with the accent's line on it
     expect(tableCss).toMatch(/\.resizer \{[^}]*inset-inline-end: -12px;[^}]*width: 24px;[^}]*cursor: col-resize/)
@@ -537,11 +550,11 @@ describe('Table resizing', () => {
     expect(header('Doc #').style.width).toBe('260px')
   })
 
-  it('hands out, at a resize\'s end, the width of the column resized and of those to its left, which it fixed', () => {
+  it('hands out, at a resize\'s end, the width of the column resized and of those to its left, which it fixed', async () => {
     const kept = resizing()
     render(<Harness columns={sized} resizing={kept} />)
-    // Enter on the edge's slider starts a resize, and Right widens the column by 10 pixels, which the heading draws at once
-    widenDocNumber()
+    // Resize Column starts a resize, and Right widens the column by 10 pixels, which the heading draws at once
+    await widenDocNumber()
     expect(header('Doc #').style.width).toBe('110px')
     expect(kept.onResizeEnd).not.toHaveBeenCalled()
     press(within(header('Doc #')).getByRole('slider'), 'Enter')
@@ -574,10 +587,10 @@ describe('Table resizing', () => {
     expect(onResizeEnd).not.toHaveBeenCalled()
   })
 
-  it('ends a resize cut short by the list emptying or resizing going off: nothing kept, the kept widths drawn, the keys back', () => {
+  it('ends a resize cut short by the list emptying or resizing going off: nothing kept, the kept widths drawn, the keys back', async () => {
     const kept = resizing()
     const { rerender } = render(<Harness columns={sized} resizing={kept} />)
-    widenDocNumber()
+    await widenDocNumber()
     expect(header('Doc #').style.width).toBe('110px')
     rerender(<Harness columns={sized} resizing={kept} rows={[]} />)
     rerender(<Harness columns={sized} resizing={kept} />)
@@ -592,7 +605,7 @@ describe('Table resizing', () => {
     rerender(<Harness columns={sized} resizing={later} />)
     expect(header('Doc #').style.width).toBe('150px')
 
-    widenDocNumber()
+    await widenDocNumber()
     expect(header('Doc #').style.width).toBe('160px')
     rerender(<Harness columns={sized} />)
     rerender(<Harness columns={sized} resizing={later} />)
@@ -665,6 +678,261 @@ describe('Table resizing', () => {
     } finally {
       Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth')
     }
+  })
+})
+
+// A heading's keyboard focus on a list whose columns resize is its name, which React Aria's heading focuses as its first
+// focusable child (spec 4.3, 4.4): the edge's slider takes the focus only while a resize lasts
+describe('Table heading focus, on a list whose columns resize', () => {
+  const header = (name: RegExp | string) => screen.getByRole('columnheader', { name })
+  /** A heading's name, which has its focus */
+  const nameOf = (heading: string) => header(heading).querySelector<HTMLElement>('.heading')!
+  /** A heading's edge's slider, which React Aria resizes by */
+  const sliderOf = (heading: string) => header(heading).querySelector<HTMLInputElement>('input[type="range"]')!
+  const resizing = () => ({ widths: {}, onResizeEnd: vi.fn<(widths: Record<string, number>) => void>(), onReset: vi.fn<(column: string) => void>() })
+  const dated: TableColumn<Item>[] = [...sized, { id: 'edited', name: 'Edit Date', allowsSorting: true, newestFirst: true, cell: () => '' }]
+
+  /** From the first row up to Title's name, then right to the heading named */
+  function arrowTo(heading: string) {
+    act(() => row(/Letter 1/).focus())
+    press(row(/Letter 1/), 'ArrowUp')
+    const names = screen.getAllByRole('columnheader').map((one) => one.querySelector('.heading')?.textContent)
+    for (let at = 0; at < names.indexOf(heading); at++) press(document.activeElement!, 'ArrowRight')
+  }
+
+  /** Resize Column from the heading's menu, opened by Shift+F10 on its name: the slider has the focus once it has started */
+  async function resizeByKeys(heading: string) {
+    const user = userEvent.setup()
+    expect(document.activeElement).toBe(nameOf(heading))
+    fireEvent.keyDown(nameOf(heading), { key: 'F10', shiftKey: true })
+    const menu = await screen.findByRole('menu', { name: `${heading} Column` })
+    await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true))
+    act(() => within(menu).getByRole('menuitem', { name: 'Resize Column' }).focus())
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(document.activeElement).toBe(sliderOf(heading)))
+  }
+
+  it('takes the arrows from a row to a heading\'s name, not its edge\'s slider, and on to the next heading\'s name', () => {
+    render(<Harness columns={sized} onSort={vi.fn()} resizing={resizing()} />)
+    arrowTo('Title')
+    expect(document.activeElement).toBe(nameOf('Title'))
+    // A name takes the focus from the keys and React Aria, never from Tab
+    expect(nameOf('Title').getAttribute('tabindex')).toBe('-1')
+    press(nameOf('Title'), 'ArrowRight')
+    expect(document.activeElement).toBe(nameOf('Doc #'))
+    press(nameOf('Doc #'), 'ArrowRight')
+    expect(document.activeElement).toBe(nameOf('Note'))
+    press(nameOf('Note'), 'ArrowLeft')
+    expect(document.activeElement).toBe(nameOf('Doc #'))
+    // And down again to the rows
+    press(nameOf('Doc #'), 'ArrowDown')
+    expect(document.activeElement?.closest('[data-row-key]')).toBe(row(/Letter 1/))
+  })
+
+  it('sorts by Enter and by Space on a heading\'s name, a newest-first column\'s first sort descending, as on a list whose columns don\'t resize', () => {
+    const onSort = vi.fn<(sort: TableSort) => void>()
+    const { rerender } = render(<Harness columns={dated} onSort={onSort} resizing={resizing()} sort={{ column: 'title', direction: 'ascending' }} />)
+    arrowTo('Doc #')
+    press(nameOf('Doc #'), 'Enter')
+    expect(onSort).toHaveBeenLastCalledWith({ column: 'docNumber', direction: 'ascending' })
+    // Enter starts no resize
+    expect(header('Doc #').hasAttribute('data-resizing')).toBe(false)
+    press(nameOf('Doc #'), ' ')
+    expect(onSort).toHaveBeenCalledTimes(2)
+    // The arrows still move between the headings, as nothing is resizing
+    press(nameOf('Doc #'), 'ArrowRight')
+    expect(document.activeElement).toBe(nameOf('Note'))
+    press(nameOf('Note'), 'ArrowRight')
+    expect(document.activeElement).toBe(nameOf('Edit Date'))
+    press(nameOf('Edit Date'), 'Enter')
+    expect(onSort).toHaveBeenLastCalledWith({ column: 'edited', direction: 'descending' })
+    rerender(<Harness columns={dated} onSort={onSort} resizing={resizing()} sort={{ column: 'edited', direction: 'descending' }} />)
+    press(nameOf('Edit Date'), ' ')
+    expect(onSort).toHaveBeenLastCalledWith({ column: 'edited', direction: 'ascending' })
+    // Note doesn't sort
+    onSort.mockClear()
+    press(nameOf('Edit Date'), 'ArrowLeft')
+    press(nameOf('Note'), 'Enter')
+    press(nameOf('Note'), ' ')
+    expect(onSort).not.toHaveBeenCalled()
+  })
+
+  it('draws the heading\'s own ring round the heading while its name has the focus, and a screen reader reads the heading', () => {
+    render(<Harness columns={sized} onSort={vi.fn()} resizing={resizing()} sort={{ column: 'docNumber', direction: 'ascending' }} />)
+    arrowTo('Doc #')
+    expect(nameOf('Doc #').getAttribute('data-focus-visible')).toBe('true')
+    expect(nameOf('Title').hasAttribute('data-focus-visible')).toBe(false)
+    // The heading's inset ring, drawn round the heading, not the name's own outline (jsdom lays nothing out, so the rules are read)
+    expect(tableCss).toMatch(/\.column:has\(> \.heading\[data-focus-visible\]\) \{\s*box-shadow: var\(--hd-focus-inset\)/)
+    expect(tableCss).toMatch(/\.heading \{[^}]*outline: none/)
+    // The name is no control of its own: it is the heading's name, which says how the heading sorts
+    expect(nameOf('Doc #').hasAttribute('role')).toBe(false)
+    expect(header('Doc #').getAttribute('aria-labelledby')).toBe(nameOf('Doc #').id)
+    expect(header('Doc #').getAttribute('aria-sort')).toBe('ascending')
+  })
+
+  it('keeps the slider out of the keys and of a screen reader\'s reading until a resize starts, and Resize Column starts one on it', async () => {
+    const kept = resizing()
+    render(<Harness columns={sized} onSort={vi.fn()} resizing={kept} />)
+    // Outside a resize nothing reaches it: no key, no Tab, no screen reader
+    for (const name of ['Title', 'Doc #', 'Note']) {
+      expect(sliderOf(name).disabled).toBe(true)
+      expect(sliderOf(name).getAttribute('aria-hidden')).toBe('true')
+      expect(within(header(name)).queryByRole('slider')).toBeNull()
+    }
+    arrowTo('Doc #')
+    await resizeByKeys('Doc #')
+    // While the resize lasts the slider is there, named for its column, and the arrows resize
+    expect(sliderOf('Doc #').disabled).toBe(false)
+    expect(within(header('Doc #')).getByRole('slider', { name: 'Resize Doc #' })).toBe(sliderOf('Doc #'))
+    expect(header('Doc #').getAttribute('data-resizing')).toBe('true')
+    press(sliderOf('Doc #'), 'ArrowRight')
+    expect(header('Doc #').style.width).toBe('110px')
+    // The other headings' sliders stay out of it
+    expect(sliderOf('Note').disabled).toBe(true)
+    press(sliderOf('Doc #'), 'Enter')
+    expect(kept.onResizeEnd).toHaveBeenCalledExactlyOnceWith({ title: 220, docNumber: 110 })
+    // Out of reach again, and the focus back on the heading's name
+    expect(document.activeElement).toBe(nameOf('Doc #'))
+    expect(sliderOf('Doc #').disabled).toBe(true)
+    expect(sliderOf('Doc #').getAttribute('aria-hidden')).toBe('true')
+    // From where the arrows go on
+    press(nameOf('Doc #'), 'ArrowRight')
+    expect(document.activeElement).toBe(nameOf('Note'))
+  })
+
+  it('ends a resize by Esc or Tab too, the focus back on the heading\'s name, from where Tab goes on as from any heading', async () => {
+    const user = userEvent.setup()
+    const kept = resizing()
+    render(
+      <>
+        <Harness columns={sized} onSort={vi.fn()} resizing={kept} />
+        <button>After</button>
+      </>,
+    )
+    arrowTo('Doc #')
+    await resizeByKeys('Doc #')
+    press(sliderOf('Doc #'), 'ArrowRight')
+    press(sliderOf('Doc #'), 'Escape')
+    expect(header('Doc #').hasAttribute('data-resizing')).toBe(false)
+    expect(document.activeElement).toBe(nameOf('Doc #'))
+    expect(kept.onResizeEnd).toHaveBeenLastCalledWith({ title: 220, docNumber: 110 })
+
+    // This list keeps no width, so the column is at its default again
+    await resizeByKeys('Doc #')
+    await user.keyboard('{ArrowLeft}')
+    expect(header('Doc #').style.width).toBe('90px')
+    // React Aria's resize takes the Tab that ends it
+    await user.tab()
+    expect(header('Doc #').hasAttribute('data-resizing')).toBe(false)
+    expect(kept.onResizeEnd).toHaveBeenLastCalledWith({ title: 220, docNumber: 90 })
+    expect(sliderOf('Doc #').disabled).toBe(true)
+    expect(document.activeElement).toBe(nameOf('Doc #'))
+    // The next Tab leaves the list, with no stop on the slider
+    await user.tab()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'After' }))
+  })
+
+  it('has the slider there from a press on the edge, which React Aria focuses as the press starts, and out of reach again once the press ends', async () => {
+    const user = userEvent.setup()
+    const kept = resizing()
+    render(<Harness columns={sized} onSort={vi.fn()} resizing={kept} />)
+    act(() => row(/Letter 1/).focus())
+    const edge = header('Doc #').querySelector<HTMLElement>('.resizer')!
+    const mouse = { button: 0, pointerType: 'mouse', pointerId: 1, pressure: 0.5 }
+    // A press of the main button starts a resize: React Aria puts the focus on the slider as the press starts, as it always has
+    fireEvent.pointerDown(edge, mouse)
+    expect(document.activeElement).toBe(sliderOf('Doc #'))
+    expect(sliderOf('Doc #').disabled).toBe(false)
+    expect(header('Doc #').getAttribute('data-resizing')).toBe('true')
+    // React Aria ends a press at its click
+    fireEvent.pointerUp(edge, mouse)
+    fireEvent.click(edge, mouse)
+    expect(header('Doc #').hasAttribute('data-resizing')).toBe(false)
+    expect(sliderOf('Doc #').disabled).toBe(true)
+    // A touch's tap, which React Aria ends at once too, as the slider had the focus as it began
+    const touch = { button: 0, pointerType: 'touch', pointerId: 2, pressure: 0.5, width: 20, height: 20 }
+    fireEvent.pointerDown(edge, touch)
+    expect(document.activeElement).toBe(sliderOf('Doc #'))
+    fireEvent.pointerUp(edge, touch)
+    fireEvent.click(edge, touch)
+    expect(header('Doc #').hasAttribute('data-resizing')).toBe(false)
+    expect(sliderOf('Doc #').disabled).toBe(true)
+
+    // A drag of the edge
+    await user.pointer({ keys: '[MouseLeft>]', target: edge, coords: { pageX: 300 } })
+    await user.pointer({ coords: { pageX: 330 } })
+    await user.pointer({ keys: '[/MouseLeft]' })
+    expect(kept.onResizeEnd).toHaveBeenCalledExactlyOnceWith({ title: 220, docNumber: 130 })
+    // Ended, the slider is out of reach, and the focus is on the heading's name
+    expect(sliderOf('Doc #').disabled).toBe(true)
+    expect(document.activeElement).toBe(nameOf('Doc #'))
+    // A press that starts no resize, as one of another button, leaves it out of reach once it ends
+    for (const init of [{ button: 2, pointerType: 'mouse', pointerId: 1, pressure: 0.5 }, { button: 0, pointerType: 'mouse', pointerId: 1, pressure: 0.5, ctrlKey: true }]) {
+      fireEvent.pointerDown(edge, init)
+      fireEvent.pointerUp(edge, init)
+      expect(sliderOf('Doc #').disabled).toBe(true)
+      expect(sliderOf('Doc #').getAttribute('aria-hidden')).toBe('true')
+    }
+    expect(header('Doc #').hasAttribute('data-resizing')).toBe(false)
+  })
+
+  it('draws and keeps a screen reader\'s own change of the slider while a resize lasts, as the arrows\' change', async () => {
+    const kept = resizing()
+    render(<Harness columns={sized} onSort={vi.fn()} resizing={kept} />)
+    arrowTo('Doc #')
+    await resizeByKeys('Doc #')
+    // A screen reader sets the slider's value itself, which React Aria takes as a step of 10 pixels its way
+    fireEvent.change(sliderOf('Doc #'), { target: { value: '180' } })
+    expect(header('Doc #').style.width).toBe('110px')
+    fireEvent.change(sliderOf('Doc #'), { target: { value: '200' } })
+    expect(header('Doc #').style.width).toBe('120px')
+    expect(kept.onResizeEnd).not.toHaveBeenCalled()
+    press(sliderOf('Doc #'), 'Enter')
+    expect(kept.onResizeEnd).toHaveBeenCalledExactlyOnceWith({ title: 220, docNumber: 120 })
+  })
+
+  it('ends a resize as Shift+F10 opens the heading\'s menu from its slider, below the heading, and Esc gives the focus back to the name', async () => {
+    const kept = resizing()
+    render(<Harness columns={sized} onSort={vi.fn()} resizing={kept} />)
+    arrowTo('Doc #')
+    await resizeByKeys('Doc #')
+    press(sliderOf('Doc #'), 'ArrowRight')
+    // While the menu is open React Aria hides the list from a screen reader, so its heading is found before
+    const docNumber = header('Doc #')
+    docNumber.getBoundingClientRect = () => new DOMRect(260, 0, 100, 34)
+    sliderOf('Doc #').getBoundingClientRect = () => new DOMRect(347, 0, 1, 1)
+    fireEvent.keyDown(sliderOf('Doc #'), { key: 'F10', shiftKey: true })
+    const menu = await screen.findByRole('menu', { name: 'Doc # Column' })
+    const popover = menu.closest<HTMLElement>('.popover')!
+    expect({ left: popover.style.left, top: popover.style.top }).toEqual({ left: '260px', top: '36px' })
+    // The resize is over, and kept
+    expect(docNumber.hasAttribute('data-resizing')).toBe(false)
+    expect(kept.onResizeEnd).toHaveBeenCalledExactlyOnceWith({ title: 220, docNumber: 110 })
+    await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true))
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    fireEvent.keyUp(document.activeElement!, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    // Not to the slider, which is out of reach again
+    await waitFor(() => expect(document.activeElement).toBe(nameOf('Doc #')))
+  })
+
+  it('opens a heading\'s menu by Shift+F10 on its name, below the heading, and Esc gives the focus back to the name', async () => {
+    render(<Harness columns={sized} onSort={vi.fn()} resizing={resizing()} />)
+    arrowTo('Doc #')
+    // jsdom lays nothing out: the heading, and its name inside it, are given their boxes
+    header('Doc #').getBoundingClientRect = () => new DOMRect(260, 0, 100, 34)
+    nameOf('Doc #').getBoundingClientRect = () => new DOMRect(300, 9, 44, 16)
+    fireEvent.keyDown(nameOf('Doc #'), { key: 'F10', shiftKey: true })
+    const menu = await screen.findByRole('menu', { name: 'Doc # Column' })
+    // Below the heading, at its start, not below its name
+    const popover = menu.closest<HTMLElement>('.popover')!
+    expect({ left: popover.style.left, top: popover.style.top }).toEqual({ left: '260px', top: '36px' })
+    await waitFor(() => expect(document.activeElement).toBe(within(menu).getByRole('menuitemradio', { name: 'Sort Ascending' })))
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
+    fireEvent.keyUp(document.activeElement!, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(nameOf('Doc #')))
   })
 })
 
@@ -774,23 +1042,23 @@ describe('Table heading menu', () => {
     expect(await screen.findByRole('menu', { name: 'Doc # Column' })).toBeTruthy()
     await closeMenu()
 
-    // A heading whose column resizes has its focus on its edge's slider (React Aria's), where its menu opens from
+    // A heading whose column resizes has its focus on its name (React Aria's first focusable child), where its menu opens from
     rerender(<Harness {...options()} />)
     act(() => row(/Letter 1/).focus())
     press(row(/Letter 1/), 'ArrowUp')
-    const slider = within(header('Title')).getByRole('slider')
-    expect(document.activeElement).toBe(slider)
-    // jsdom lays nothing out: the heading and its edge's slider, hidden at the heading's end, are given their boxes
+    const name = header('Title').querySelector<HTMLElement>('.heading')!
+    expect(document.activeElement).toBe(name)
+    // jsdom lays nothing out: the heading and its name are given their boxes
     header('Title').getBoundingClientRect = () => new DOMRect(40, 0, 220, 34)
-    slider.getBoundingClientRect = () => new DOMRect(247, 0, 1, 1)
-    fireEvent.keyDown(slider, { key: 'F10', shiftKey: true })
+    name.getBoundingClientRect = () => new DOMRect(56, 9, 30, 16)
+    fireEvent.keyDown(name, { key: 'F10', shiftKey: true })
     const resizable = await screen.findByRole('menu', { name: 'Title Column' })
-    // Below the heading, at its start, not by the slider over the next heading
+    // Below the heading, at its start, not below its name
     const popover = resizable.closest<HTMLElement>('.popover')!
     expect({ left: popover.style.left, top: popover.style.top }).toEqual({ left: '40px', top: '36px' })
     await waitFor(() => expect(document.activeElement).toBe(within(resizable).getByRole('menuitemradio', { name: 'Sort Ascending' })))
     await closeMenu()
-    await waitFor(() => expect(document.activeElement).toBe(slider))
+    await waitFor(() => expect(document.activeElement).toBe(name))
   })
 
   it('offers Sort Ascending, Sort Descending, Resize Column and Reset Columns on every list, and Move Left, Move Right, Hide Doc #, Choose Columns… on a document list', async () => {
@@ -861,8 +1129,8 @@ describe('Table heading menu', () => {
     return <Harness onSort={() => undefined} {...props} columns={shown} choice={choice} />
   }
 
-  /** Where a heading's focus is: the heading, or its edge's slider on a list whose columns resize */
-  const focusOf = (name: string, resizable: boolean) => (resizable ? within(header(name)).getByRole('slider') : header(name))
+  /** Where a heading's focus is: the heading, or its name on a list whose columns resize */
+  const focusOf = (name: string, resizable: boolean) => (resizable ? header(name).querySelector<HTMLElement>('.heading')! : header(name))
   const headingKeys = () => screen.getAllByRole('columnheader').map((one) => one.getAttribute('data-column-key'))
 
   /** Opens a heading's menu by Shift+F10, from where its focus is, and presses Enter on the item */
@@ -880,7 +1148,7 @@ describe('Table heading menu', () => {
   }
 
   for (const resizable of [false, true]) {
-    const where = resizable ? ' (its edge\'s slider, on a list whose columns resize)' : ''
+    const where = resizable ? ' (its name, on a list whose columns resize)' : ''
     const given = () => (resizable ? { resizing: options().resizing } : {})
 
     it(`Hide from a heading's menu leaves the focus on the heading in its place, or the one before it for the last${where}, and selects nothing`, async () => {
@@ -975,6 +1243,20 @@ describe('Table heading menu', () => {
     // An empty list draws no edges, so nothing would start a resize
     rerender(<Harness columns={sized} {...given} rows={[]} />)
     expect(entries(await openMenu('Doc #'))).toEqual(['Sort Ascending', 'Sort Descending', '—', 'Reset Columns'])
+  })
+
+  it('passes axe with a heading\'s menu open, every item in it, opened by the keys from the heading\'s name', async () => {
+    render(<Harness columns={listColumns} sort={{ column: 'title', direction: 'ascending' }} {...options()} choice={choice()} relevance={{ onSelect: vi.fn() }} />)
+    act(() => row(/Letter 1/).focus())
+    press(row(/Letter 1/), 'ArrowUp')
+    press(document.activeElement!, 'ArrowRight')
+    press(document.activeElement!, 'ArrowRight')
+    fireEvent.keyDown(document.activeElement!, { key: 'F10', shiftKey: true })
+    const menu = await screen.findByRole('menu', { name: 'Doc # Column' })
+    await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true))
+    expect(entries(menu)).toEqual(['Sort Ascending', 'Sort Descending', 'Sort by Relevance', '—', 'Resize Column', '—', 'Move Left', 'Move Right', 'Hide Doc #', '—', 'Choose Columns…', 'Reset Columns'])
+    // The popover, the dialog React Aria makes round the menu, with it
+    await expectNoAxeViolations(menu.closest('.popover')!)
   })
 
   it('keeps the browser\'s menu on a heading when no option is given', () => {
@@ -1226,6 +1508,46 @@ describe('Table heading drag', () => {
     expect(resizing.onResizeEnd).not.toHaveBeenCalled()
   })
 
+  it('puts the focus on the name of a heading that drags as a press on it begins, so React Aria leaves the focus where the browser puts it and the drag starts', async () => {
+    const resizing = { widths: {}, onResizeEnd: vi.fn(), onReset: vi.fn() }
+    render(<Harness columns={listColumns} choice={choice()} resizing={resizing} />)
+    const author = header('Author')
+    const name = author.querySelector<HTMLElement>('.heading')!
+    act(() => row(/Letter 1/).focus())
+    // A press on the heading outside its name, where the browser focuses the heading itself: before the browser does, the
+    // focus is already in the heading, on its name
+    fireEvent.pointerDown(author, down)
+    expect(document.activeElement).toBe(name)
+    // Then the browser focuses the heading, which React Aria takes as the focus coming back from its name, and leaves: had it
+    // moved it on to the name in the next frame, as it does for a focus from outside the heading, Chromium and WebKit would
+    // start no drag (the browser test of a heading's drag is the check)
+    fireEvent.mouseDown(author, { button: 0 })
+    act(() => author.focus())
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+    expect(document.activeElement).toBe(author)
+    fireEvent.pointerUp(author, down)
+
+    // A press already in the heading, of another button, or on Title, which doesn't drag, leaves the focus to the browser and
+    // React Aria
+    for (const [element, init] of [
+      [name, down],
+      [header('Doc #').querySelector('.heading')!, { ...down, button: 2 }],
+      [header('Title').querySelector('.heading')!, down],
+    ] as const) {
+      const before = document.activeElement
+      fireEvent.pointerDown(element, init)
+      expect(document.activeElement).toBe(before)
+      fireEvent.pointerUp(element, init)
+    }
+    // Nor does a press on an edge, which resizes: React Aria puts the focus on its slider for the resize itself
+    act(() => row(/Letter 1/).focus())
+    const edge = header('Doc #').querySelector('.resizer')!
+    fireEvent.pointerDown(edge, down)
+    expect(document.activeElement).toBe(header('Doc #').querySelector('input[type="range"]'))
+    fireEvent.pointerUp(edge, down)
+    fireEvent.click(edge, down)
+  })
+
   it('takes neither a row\'s drag nor files over the headings, and a heading\'s drag is taken nowhere but its own headings', () => {
     const chosen = choice()
     render(<Harness columns={listColumns} choice={chosen} drag={rowDrag()} />)
@@ -1392,16 +1714,16 @@ describe('Table Columns button and panel', () => {
     expect(document.activeElement).toBe(header('Doc #'))
   })
 
-  it('gives the focus back to a resizable heading\'s edge, where its focus is, and to the button once the heading has gone', async () => {
+  it('gives the focus back to a resizable heading\'s name, where its focus is, and to the button once the heading has gone', async () => {
     const user = userEvent.setup()
     render(<Chosen resizing={{ widths: {}, onResizeEnd: vi.fn(), onReset: vi.fn() }} />)
-    // The arrows reach the headings from the rows; a resizable heading's focus is its edge's slider
+    // The arrows reach the headings from the rows; a resizable heading's focus is its name
     const first = row(/Letter 1/)
     act(() => first.focus())
     press(first, 'ArrowUp')
-    const slider = within(header('Title')).getByRole('slider')
-    expect(document.activeElement).toBe(slider)
-    fireEvent.keyDown(slider, { key: 'F10', shiftKey: true })
+    const name = header('Title').querySelector<HTMLElement>('.heading')!
+    expect(document.activeElement).toBe(name)
+    fireEvent.keyDown(name, { key: 'F10', shiftKey: true })
     const menu = await screen.findByRole('menu', { name: 'Title Column' })
     await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true))
     // Its last item, as this list has no Reset Columns
@@ -1410,7 +1732,10 @@ describe('Table Columns button and panel', () => {
     await user.keyboard('{Enter}')
     await screen.findByRole('dialog', { name: 'Columns' })
     await closeWithEscape()
-    expect(document.activeElement).toBe(slider)
+    expect(document.activeElement).toBe(name)
+    // And the list's own focus, from which the arrows go on
+    press(name, 'ArrowRight')
+    expect(document.activeElement).toBe(header('Author').querySelector('.heading'))
 
     // The panel hides the column whose heading opened it: the focus goes to the Columns button
     const dialog = await chooseColumnsFrom('Author')
@@ -1557,7 +1882,7 @@ describe('Table Columns button and panel', () => {
     expect(tableCss).toMatch(/\.columnsButton \{[^}]*position: absolute;[^}]*inset-block-start: 0;[^}]*inset-inline-end: 0;[^}]*width: var\(--row-height\);[^}]*height: var\(--row-height\);[^}]*border-bottom: 1px solid var\(--hd-line\);[^}]*background: var\(--hd-window\)/)
   })
 
-  it('makes room for the button only while the last heading reaches it, and keeps the last edge still while a resize lasts', () => {
+  it('makes room for the button only while the last heading reaches it, and keeps the last edge still while a resize lasts', async () => {
     const measured = observeByHand()
     try {
       render(<Chosen resizing={resizable()} />)
@@ -1580,9 +1905,7 @@ describe('Table Columns button and panel', () => {
       // A resize of the last column by keys: while it lasts, its edge stays where it began, under the keys (or the pointer)
       lay({ list: 800, content: 800 })
       measured()
-      const slider = within(header('Note')).getByRole('slider')
-      act(() => slider.focus())
-      press(slider, 'Enter')
+      const slider = await startResizeByMenu('Note')
       press(slider, 'ArrowLeft')
       lay({ list: 800, content: 600 })
       measured()

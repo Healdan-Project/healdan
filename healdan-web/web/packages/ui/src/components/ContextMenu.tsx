@@ -54,8 +54,8 @@ export function ItemContextMenu({ attribute, menu, children }: { attribute: stri
 }
 
 /**
- * A slider has no text, and has its item's menu: a resizable heading's focus is on its edge's slider (React Aria's), so the
- * heading's menu opens from there. The slider is hidden, so the menu opens below the item, not by the slider.
+ * A slider has no text, and has its item's menu: a heading's edge's slider has the focus while its column resizes by the
+ * keys, and the heading's menu opens from there. The slider is hidden, so the menu opens below the item, not by the slider.
  */
 const SLIDER = 'input[type="range"]'
 
@@ -128,8 +128,11 @@ export function ContextMenu<T>({ target, subjectOf, label, items, onOpen, childr
 
   function open(found: { element: HTMLElement; subject: T }, point: Opened<T>['point'], keyboard: boolean) {
     anchor.current = found.element
-    // The focus is on the element (or inside it) when the menu opens, so it's where the focus goes back to
-    if (!found.element.contains(globalThis.document.activeElement)) found.element.focus({ preventScroll: true })
+    // The focus is on the element (or inside it) when the menu opens, so it's where the focus goes back to. Not on a slider:
+    // a heading's edge's slider has it only while a resize lasts, which the menu's focus ends, and the slider is then out of
+    // reach, so the focus would go back to nothing.
+    const focused = globalThis.document.activeElement
+    if (!found.element.contains(focused) || focused?.matches(SLIDER)) found.element.focus({ preventScroll: true })
     onOpen?.(found.subject)
     setOpened({ subject: found.subject, point, keyboard })
   }
@@ -157,9 +160,11 @@ export function ContextMenu<T>({ target, subjectOf, label, items, onOpen, childr
     if (!found) return
     event.preventDefault()
     event.stopPropagation()
-    // At the focused element (a row, or a cell of it): its start, just below it. A slider's at its item.
+    // At the focused element (a row, or a cell of it): its start, just below it. A slider's at its item, and a heading's
+    // below the heading, wherever in it the focus is: on a list whose columns resize, its name.
     const focused = event.target as Element
-    const box = (focused.matches(SLIDER) ? found.element : focused).getBoundingClientRect()
+    const atItem = focused.matches(SLIDER) || found.element.matches('[role="columnheader"]')
+    const box = (atItem ? found.element : focused).getBoundingClientRect()
     open(found, { x: box.left, y: box.bottom }, true)
   }
 

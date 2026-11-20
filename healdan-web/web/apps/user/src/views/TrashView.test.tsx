@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 import type { components } from '@healdan/api'
 import { formatDate, formatDateTime } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
+import { resizeByKeys, sliderOf } from '../test/columns'
 import { client, folder, me, problem, trashItem, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
@@ -161,7 +162,7 @@ describe('The Trash', () => {
     await row(/Old Drafts/)
     const heading = async (name: RegExp) => within(await grid()).getByRole('columnheader', { name })
     // Every heading carries a resizer
-    for (const one of within(await grid()).getAllByRole('columnheader')) expect(within(one).getByRole('slider')).toBeTruthy()
+    for (const one of within(await grid()).getAllByRole('columnheader')) expect(sliderOf(one)).toBeTruthy()
     // A kept width is drawn on its column
     localStorage.setItem('healdan.columns.trashMine', JSON.stringify({ v: 1, widths: { docNumber: 140 } }))
     await userEvent.click(within(await within(main()).findByRole('radiogroup', { name: 'Show' })).getByRole('radio', { name: "Everyone's" }))
@@ -169,14 +170,7 @@ describe('The Trash', () => {
     await userEvent.click(within(main()).getByRole('radio', { name: 'Mine' }))
     await waitFor(async () => expect((await heading(/Doc #/)).style.width).toBe('140px'))
     // A resize by keys ends with the width kept under this view's name only
-    const slider = within(await heading(/Doc #/)).getByRole('slider')
-    act(() => slider.focus())
-    fireEvent.keyDown(slider, { key: 'Enter' })
-    fireEvent.keyUp(slider, { key: 'Enter' })
-    fireEvent.keyDown(slider, { key: 'ArrowRight' })
-    fireEvent.keyUp(slider, { key: 'ArrowRight' })
-    fireEvent.keyDown(slider, { key: 'Enter' })
-    fireEvent.keyUp(slider, { key: 'Enter' })
+    await resizeByKeys(await heading(/Doc #/), ['ArrowRight', 'Enter'])
     await waitFor(() => expect(JSON.parse(localStorage.getItem('healdan.columns.trashMine')!).widths.docNumber).toBe(150))
     expect(localStorage.getItem('healdan.columns.trashEveryone')).toBeNull()
     expect(localStorage.getItem('healdan.columns.trashRemoved')).toBeNull()
@@ -191,12 +185,7 @@ describe('The Trash', () => {
     // Removed keeps its own widths
     await userEvent.click(within(main()).getByRole('radio', { name: 'Removed' }))
     await waitFor(async () => expect(await headers()).toContain('Removed By'))
-    const removedSlider = within(await heading(/Doc #/)).getByRole('slider')
-    act(() => removedSlider.focus())
-    for (const key of ['Enter', 'ArrowRight', 'Enter']) {
-      fireEvent.keyDown(removedSlider, { key })
-      fireEvent.keyUp(removedSlider, { key })
-    }
+    await resizeByKeys(await heading(/Doc #/), ['ArrowRight', 'Enter'])
     await waitFor(() => expect(localStorage.getItem('healdan.columns.trashRemoved')).not.toBeNull())
     expect(localStorage.getItem('healdan.columns.trashMine')).toBeNull()
   })

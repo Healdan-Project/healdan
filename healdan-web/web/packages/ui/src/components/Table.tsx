@@ -18,11 +18,13 @@ import {
   type Selection,
   type SortDescriptor,
 } from 'react-aria-components'
+import { useFocusRing } from 'react-aria/useFocusRing'
 import { Icon } from '../icons'
 import { t } from '../strings'
 import { ColumnEdge } from './ColumnEdge'
 import { ColumnsButton, ColumnsPopover } from './ColumnsButton'
 import { ContextMenu, type ItemMenu } from './ContextMenu'
+import { focusHeading } from './headingFocus'
 import { headingMenu } from './headingMenu'
 import styles from './Table.module.css'
 import { useColumnResizing } from './useColumnResizing'
@@ -65,6 +67,21 @@ export interface TableColumn<T extends TableRow> {
   /** The least width in pixels, which the other columns give way for and a resize stops at (React Aria's 75 without one) */
   minWidth?: number
   cell: (row: T) => ReactNode
+}
+
+/**
+ * A heading's name. On a list whose columns resize it has the heading's keyboard focus (React Aria's documented way for a
+ * heading with a resizer): React Aria's heading focuses its first focusable child, and the name comes before the edge's
+ * slider, which takes the focus only while a resize lasts. Enter and Space on it sort, as on the heading, and the heading's
+ * own ring is drawn round the heading while it has the focus by the keys. It is the heading's name for a screen reader too.
+ */
+function HeadingName({ id, focusable, children }: { id: string | undefined; focusable: boolean; children: ReactNode }) {
+  const { focusProps, isFocusVisible } = useFocusRing()
+  return (
+    <span {...focusProps} id={id} tabIndex={focusable ? -1 : undefined} className={styles.heading} data-focus-visible={(focusable && isFocusVisible) || undefined}>
+      {children}
+    </span>
+  )
 }
 
 /** A cell that is only text goes in a box of its own: a flex cell clips its text with no ellipsis, a box with `text-overflow` doesn't. The whole text stays in it. */
@@ -360,17 +377,18 @@ export function Table<T extends TableRow>({
   const panel = useColumnsPanel(frame, { hasButton, resizable: resizing !== undefined, resizeLasts: resize.resized !== null })
 
   // Hide in a heading's menu takes away the heading the menu would give the focus back to, and React Aria's grid would give
-  // it to a cell of the first row. The heading now in its place takes it, or the one before it when the last was hidden:
-  // the heading itself, whose focus sets the list's own, which React Aria then puts on its edge on a list whose columns
-  // resize (its slider's focus alone wouldn't). Only at the Table's next commit, which the caller's hide makes as the menu
-  // closes, and before React Aria gives the focus back in the frame after: a hide the caller doesn't make is forgotten there.
+  // it to a cell of the first row. The heading now in its place takes it, or the one before it when the last was hidden,
+  // as the list's own focus, on its name on a list whose columns resize. Only at the Table's next commit, which the caller's
+  // hide makes as the menu closes, and before React Aria gives the focus back in the frame after: a hide the caller doesn't
+  // make is forgotten there.
   const afterHide = useRef<{ hidden: string; next: string } | undefined>(undefined)
   useLayoutEffect(() => {
     const pending = afterHide.current
     afterHide.current = undefined
     if (!pending || columns.some((column) => column.id === pending.hidden)) return
     const headings = [...(frame.current?.querySelectorAll<HTMLElement>('[data-column-key]') ?? [])]
-    headings.find((element) => element.getAttribute('data-column-key') === pending.next)?.focus()
+    const next = headings.find((element) => element.getAttribute('data-column-key') === pending.next)
+    if (next) focusHeading(next)
   })
   const menuChoice = choice && {
     ...choice,
@@ -429,10 +447,10 @@ export function Table<T extends TableRow>({
             >
               {({ sortDirection, isResizing, startResize }) => (
                 <>
-                  <span id={edges ? `${headingIds}-${column.id}` : undefined} className={styles.heading}>
+                  <HeadingName id={edges ? `${headingIds}-${column.id}` : undefined} focusable={edges}>
                     {column.name}
                     {sortDirection && <Icon name={sortDirection === 'ascending' ? 'arrowUp' : 'arrowDown'} size={12} />}
-                  </span>
+                  </HeadingName>
                   {edges && (
                     <ColumnEdge
                       column={column.id}

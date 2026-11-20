@@ -5,6 +5,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
+import { sliderOf } from '../test/columns'
 import { comeBack } from '../test/comeBack'
 import { document, folder, page, problem, type Routes } from '../test/fakeApi'
 import { detailsRoutes, letter } from '../test/details'
@@ -313,7 +314,7 @@ describe('Recent Folders', () => {
     expect(sorts()).toEqual({ Title: 'none', Matter: 'none', 'Last Used': 'descending' })
     // Its columns aren't chosen, so it has no Columns button, but they resize
     expect(within(main()).queryByRole('button', { name: 'Columns' })).toBeNull()
-    expect(within(header('Title')).getByRole('slider')).toBeTruthy()
+    expect(sliderOf(header('Title'))).toBeTruthy()
 
     fireEvent.click(header('Title'))
     await waitFor(() => expect(router.history.location.search).toBe('?sort=title&order=asc'))
@@ -366,7 +367,7 @@ describe('Recent Clients', () => {
     expect(headerNames()).toEqual(['Client', 'Number'])
     expect(sorts()).toEqual({ Client: 'ascending', Number: 'none' })
     expect(within(main()).queryByRole('button', { name: 'Columns' })).toBeNull()
-    expect(within(header('Client')).getByRole('slider')).toBeTruthy()
+    expect(sliderOf(header('Client'))).toBeTruthy()
 
     // The number as a number
     fireEvent.click(header('Number'))

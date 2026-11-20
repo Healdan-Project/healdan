@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { focusHeading } from './headingFocus'
 
 /**
  * Set on the Table's frame while the last heading's end reaches the Columns button, which lies over the heading row's end:
@@ -27,13 +28,14 @@ function follow(frame: HTMLElement | null, place: HTMLElement | null, resizeLast
 }
 
 /**
- * The focus back to what opened the panel: the heading, whose focus is its edge's slider on a resizable list (where the
+ * The focus back to what opened the panel: the heading, whose focus is its name on a list whose columns resize (where the
  * heading's own menu gives it back), or the button, as for a heading whose column the panel hid
  */
 function giveFocusBack(frame: HTMLElement | null, column: string | undefined, button: HTMLElement | null) {
   const headings = column === undefined ? [] : [...(frame?.querySelectorAll<HTMLElement>('[data-column-key]') ?? [])]
   const heading = headings.find((element) => element.getAttribute('data-column-key') === column)
-  ;(heading?.querySelector<HTMLElement>('input[type="range"]') ?? heading ?? button)?.focus()
+  if (heading) focusHeading(heading)
+  else button?.focus()
 }
 
 interface ColumnsPanelOptions {

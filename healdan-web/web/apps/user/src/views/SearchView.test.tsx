@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { components } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
+import { resizeByKeys, sliderOf } from '../test/columns'
 import { comeBack, settle } from '../test/comeBack'
 import { client, document, folder, matter, problem, zone, type Routes } from '../test/fakeApi'
 import { detailsRoutes } from '../test/details'
@@ -346,17 +347,12 @@ describe('SearchView', () => {
     window.localStorage.setItem('healdan.columns.folders', JSON.stringify({ v: 1, widths: { title: 300 } }))
     await renderApp('/search?scope=folders&q=corr', routes({ 'GET /v1/search': hits([folder({ id: 111, name: 'Correspondence' })]) }))
     await rows()
-    for (const one of within(await grid()).getAllByRole('columnheader')) expect(within(one).getByRole('slider')).toBeTruthy()
+    for (const one of within(await grid()).getAllByRole('columnheader')) expect(sliderOf(one)).toBeTruthy()
     // A kept width is drawn on its column
     await waitFor(() => expect(header('Title').style.width).toBe('300px'))
     expect(within(main()).queryByRole('button', { name: 'Columns' })).toBeNull()
 
-    const slider = within(header('Title')).getByRole('slider')
-    act(() => slider.focus())
-    for (const key of ['Enter', 'ArrowRight', 'Enter']) {
-      fireEvent.keyDown(slider, { key })
-      fireEvent.keyUp(slider, { key })
-    }
+    await resizeByKeys(header('Title'), ['ArrowRight', 'Enter'])
     await waitFor(() => expect(JSON.parse(window.localStorage.getItem('healdan.columns.folders')!).widths.title).toBe(310))
     expect(window.localStorage.getItem('healdan.columns.documents')).toBeNull()
     expect(window.localStorage.getItem('healdan.columns.matters')).toBeNull()
@@ -398,7 +394,7 @@ describe('SearchView', () => {
     )
     expect(within(await grid()).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Matter', 'Client'])
     // Resized, as every list is, under the scope's own name
-    for (const one of within(await grid()).getAllByRole('columnheader')) expect(within(one).getByRole('slider')).toBeTruthy()
+    for (const one of within(await grid()).getAllByRole('columnheader')) expect(sliderOf(one)).toBeTruthy()
     const [row] = await rows()
     expect(row!.textContent).toContain('1001.1 – Charter Dispute')
     expect(row!.textContent).toContain('Saltmarsh Shipping Ltd')

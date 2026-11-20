@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useRef, useState, type DragEvent, type PointerEvent } from 'react'
+import { nameOf } from './headingFocus'
 import styles from './Table.module.css'
 import type { TableColumn, TableColumnChoice, TableRow } from './Table'
 
@@ -113,9 +114,21 @@ export function useHeadingDrag<T extends TableRow>(columns: TableColumn<T>[], ch
   return {
     /** For the Table's own dragstart: true when it began in the heading row, which a row's drag then leaves alone */
     start,
-    /** For the Table's pointerdown, in its capture: where the press began */
+    /**
+     * For the Table's pointerdown, in its capture: where the press began. A press of the main button on a heading that drags,
+     * off its edge, first puts the focus on the heading's name, where its focus is on a list whose columns resize, unless the
+     * focus is in the heading already. The browser's own focus at the press then comes from inside the heading, which React
+     * Aria leaves where it is. From anywhere else React Aria moves the focus on to the name a frame later, and Chromium and
+     * WebKit then start no drag: only a second press would.
+     */
     pressed: (event: PointerEvent) => {
-      pressedEdge.current = event.target instanceof Element && event.target.closest(`.${styles.resizer}`) !== null
+      const target = event.target instanceof Element ? event.target : null
+      pressedEdge.current = target?.closest(`.${styles.resizer}`) != null
+      if (pressedEdge.current || event.button !== 0) return
+      const heading = headingOf(event)
+      const column = columns.find((one) => one.id === heading?.getAttribute('data-column-key'))
+      if (!heading || !column || !movable(column) || heading.contains(heading.ownerDocument.activeElement)) return
+      nameOf(heading)?.focus({ preventScroll: true })
     },
     /** For the element round the Table: the heading row's drop */
     frameProps,
