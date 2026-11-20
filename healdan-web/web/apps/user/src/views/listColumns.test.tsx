@@ -30,17 +30,23 @@ describe('the default widths (spec 4.1)', () => {
   it('gives Matter a share of the spare width beside Title and Author', () => {
     const columns = hitColumns('documents')
     expect(column(columns, 'title')).toMatchObject({ width: '2fr', minWidth: 220 })
-    expect(column(columns, 'matter')).toMatchObject({ width: '1.5fr', minWidth: 160 })
+    expect(column(columns, 'matter')).toMatchObject({ width: '1.5fr', minWidth: 100 })
     expect(column(columns, 'author')).toMatchObject({ width: '1fr' })
     for (const id of ['docNumber', 'version', 'edited']) expect(typeof column(columns, id).width).toBe('number')
+  })
+
+  it('fits beside the details or Filters at 1,280 pixels, where the list is 684 wide, without scrolling sideways', () => {
+    // React Aria gives every column at least 75 pixels: a fixed width below that, or a share with no least width
+    const least = hitColumns('documents').reduce((sum, one) => sum + Math.max(75, typeof one.width === 'number' ? one.width : (one.minWidth ?? 0)), 0)
+    expect(least).toBeLessThanOrEqual(684)
   })
 
   it("gives Checked Out to Me's and the Folders scope's Matter the same share", () => {
     const checkedOut = checkedOutColumns()
     expect(column(checkedOut, 'title')).toMatchObject({ width: '2fr', minWidth: 220 })
-    expect(column(checkedOut, 'matter')).toMatchObject({ width: '1.5fr', minWidth: 160 })
+    expect(column(checkedOut, 'matter')).toMatchObject({ width: '1.5fr', minWidth: 100 })
     const folders = hitColumns('folders')
     expect(column(folders, 'title')).toMatchObject({ width: '2fr' })
-    expect(column(folders, 'matter')).toMatchObject({ width: '1.5fr', minWidth: 160 })
+    expect(column(folders, 'matter')).toMatchObject({ width: '1.5fr', minWidth: 100 })
   })
 })

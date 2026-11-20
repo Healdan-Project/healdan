@@ -73,7 +73,7 @@ function matterOf(item: Hit): S['MatterRef'] | null {
 // Built when a list draws, so the firm's own word for a matter (setLabels) is the heading. A share of the spare width,
 // as Title and Author have, so a wider window shows more of the matter's name (list columns spec 4.1).
 function matterColumn(): TableColumn<ListRow> {
-  return { id: 'matter', name: t('list.matter'), width: '1.5fr', minWidth: 160, cell: ({ item }) => {
+  return { id: 'matter', name: t('list.matter'), width: '1.5fr', minWidth: 100, cell: ({ item }) => {
     const matter = matterOf(item)
     return matter && <MatterCell matter={matter} />
   } }
