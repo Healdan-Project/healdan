@@ -8,7 +8,7 @@ import { launch } from '../actions/launch'
 import { letter } from '../filing/testing'
 import { drafts, lease, plan, routes, row, select, toolbar } from '../organising/testing'
 import { expectNoAxeViolations } from '../test/axe'
-import { children, document as doc, folder, matter, page } from '../test/fakeApi'
+import { children, document as doc, folder, matter, me, page } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { setViewport } from '../test/viewport'
 
@@ -336,5 +336,44 @@ describe('the other lists', () => {
     expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to My Matters'])
     // A matter's own folder takes the matter's name: Rename is greyed out
     expect((await item('Rename')).getAttribute('aria-disabled')).toBe('true')
+  })
+})
+
+describe('Manage in Admin, on a matter’s menu', () => {
+  const admin = { ...routes().all, 'GET /v1/me': { ...me, admin: true } }
+
+  it('is an administrator’s last item, and opens the matter’s Admin page in a new tab', async () => {
+    await renderApp('/folders/7', admin)
+    fireEvent.contextMenu(await within(pane()).findByRole('link', { name: /1002\.1/ }))
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Add to My Matters', 'Manage in Admin'])
+    const manage = await item('Manage in Admin')
+    expect(manage.getAttribute('href')).toBe('/admin/matters/12')
+    expect(manage.getAttribute('target')).toBe('_blank')
+    expect(manage.getAttribute('rel')).toContain('noopener')
+  })
+
+  it('uses the matter’s id, not its folder’s, in the tree', async () => {
+    await renderApp('/folders/7', admin)
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.contextMenu(within(tree).getByRole('row', { name: /1001\.1/ }))
+    expect((await item('Manage in Admin')).getAttribute('href')).toBe('/admin/matters/11')
+  })
+
+  it('is not offered to a person who isn’t an administrator', async () => {
+    await renderApp('/folders/7', routes().all)
+    fireEvent.contextMenu(await within(pane()).findByRole('link', { name: /1002\.1/ }))
+    expect(await names()).not.toContain('Manage in Admin')
+  })
+
+  it('is not on a plain folder’s or a document’s menu', async () => {
+    await renderApp('/folders/7', admin)
+    fireEvent.contextMenu(await row(/Lease/))
+    expect(await names()).not.toContain('Manage in Admin')
+    fireEvent.keyDown(await menu(), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    const tree = await screen.findByRole('treegrid', { name: 'My Matters' })
+    fireEvent.click(within(tree).getByRole('button', { name: /expand/i }))
+    fireEvent.contextMenu(await within(tree).findByRole('row', { name: /Correspondence/ }))
+    expect(await names()).not.toContain('Manage in Admin')
   })
 })

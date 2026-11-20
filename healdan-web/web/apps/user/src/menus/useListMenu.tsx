@@ -51,7 +51,7 @@ export function useListMenu({ rows, selection, onSelect, selected, folders }: Li
       if (!hit) return undefined
       if (mixed(key)) return <SelectionMenuItems items={{ documents: selected, folders }} />
       if (hit.type === 'document') return <DocumentMenuItems documents={documentsFor(key, hit)} />
-      if (hit.type === 'matter') return <MatterMenuItems folderId={hit.folderId} />
+      if (hit.type === 'matter') return <MatterMenuItems folderId={hit.folderId} matterId={hit.id} />
       return folderMenu(hit, 'row')
     },
     onOpen: (key) => {

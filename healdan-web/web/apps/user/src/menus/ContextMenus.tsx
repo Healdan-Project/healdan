@@ -12,7 +12,7 @@ import { useFavorite, type Starred } from '../actions/FavoriteStar'
 import { anyDeletable, anyMovable, movingFolder } from '../actions/folders'
 import { useMyMattersChange } from '../actions/myMatters'
 import { favoriteAction, newTabAction, useDocumentActions } from '../actions/useDocumentActions'
-import { docHref, folderHref } from '../addresses'
+import { adminMatterHref, docHref, folderHref } from '../addresses'
 import { placeOf } from '../filing/dropTargets'
 import { mayMakeFolderIn } from '../organising/NewFolder'
 import { useOrganising, type RenamePlace } from '../organising/OrganisingProvider'
@@ -138,10 +138,13 @@ export function SelectionMenuItems({ items }: { items: OrganisingItems }) {
 
 /**
  * A matter (in My Matters, Recent Matters or a search's list): Open, Open in New Tab, Rename greyed out (a matter's own folder
- * takes the matter's name), and Add to or Remove from My Matters, as + and ⋯ do
+ * takes the matter's name), and Add to or Remove from My Matters, as + and ⋯ do; for an administrator, Manage in Admin, the
+ * matter's page in the Admin app (`matterId` is the matter's own id, not its folder's), in a new tab, as Open in New Tab opens
  */
-export function MatterMenuItems({ folderId }: { folderId: number }) {
+export function MatterMenuItems({ folderId, matterId }: { folderId: number; matterId: number }) {
   const navigate = useNavigate()
+  // Only decides what's offered: the Admin app asks the server again
+  const admin = useMe().data?.admin === true
   const mine = useMyMatters()
   const change = useMyMattersChange()
   const kept = mine.data?.items.some((matter) => matter.folderId === folderId) === true
@@ -159,6 +162,12 @@ export function MatterMenuItems({ folderId }: { folderId: number }) {
       <MenuItem id="myMatters" isDisabled={!mine.isSuccess} onAction={() => void change(kept ? 'DELETE' : 'PUT', folderId)}>
         {kept ? t('myMatters.remove') : t('myMatters.addMenu')}
       </MenuItem>
+      {admin && (
+        <>
+          <MenuSeparator />
+          <ActionItem action={{ id: 'manageInAdmin', label: t('menu.manageInAdmin'), isDisabled: false, href: adminMatterHref(matterId) }} />
+        </>
+      )}
     </>
   )
 }
@@ -219,6 +228,6 @@ function useOriginalName(favorite: S['FavoriteView']) {
 /** A folder of any kind: a matter's top level has the matter's menu, and a Store, which opens as no folder, has none */
 export function folderMenu(folder: S['FolderView'], renameIn: RenamePlace) {
   if (folder.kind === 'store') return undefined
-  if (folder.kind === 'matter') return <MatterMenuItems folderId={folder.id} />
+  if (folder.kind === 'matter' && folder.matter) return <MatterMenuItems folderId={folder.id} matterId={folder.matter.id} />
   return <FolderMenuItems folder={folder} renameIn={renameIn} />
 }

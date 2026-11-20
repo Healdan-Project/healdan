@@ -139,7 +139,7 @@ function RecentMattersSection() {
     label: (key) => t('menu.for', { name: matterAt(key)?.display ?? '' }),
     items: (key) => {
       const matter = matterAt(key)
-      return matter && <MatterMenuItems folderId={matter.folderId} />
+      return matter && <MatterMenuItems folderId={matter.folderId} matterId={matter.id} />
     },
   }
   return (
@@ -308,7 +308,8 @@ function MyMattersSection() {
             label: (id) => t('menu.for', { name: matters.find((matter) => String(matter.folderId) === id)?.display ?? folders.get(id)?.name ?? '' }),
             // A matter has its own menu, as its ⋯ has, and a folder its row's in a list; a folder that failed to load has none
             items: (id) => {
-              if (matters.some((matter) => String(matter.folderId) === id)) return <MatterMenuItems folderId={Number(id)} />
+              const matter = matters.find((one) => String(one.folderId) === id)
+              if (matter) return <MatterMenuItems folderId={matter.folderId} matterId={matter.id} />
               const folder = folders.get(id)
               return folder && folderMenu(folder, 'tree')
             },

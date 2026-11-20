@@ -343,6 +343,7 @@ export const enUS = {
   'organising.more': 'More',
   'menu.for': 'Actions for {name}',
   'menu.openInNewTab': 'Open in New Tab',
+  'menu.manageInAdmin': 'Manage in Admin',
   'organising.refused': '{name}: {reason}',
   'organising.close': 'Close',
   'rename.menu': 'Rename',
