@@ -538,7 +538,7 @@ at the end of the `Smoke test` step of the `Test (amd64)` or `Test (arm64)` job:
 - **`dms.log`'s last 40 lines.**
 - **The requests Tomcat took 2 seconds or more to answer,** from [its access log](#the-access-log), the last 40 of
   them, after a line that counts the log's requests. Once step 9 has begun, only that step's: a browser test that
-  waited on a request finds it there with its time, or learns that the server answered at once or never got it.
+  waited on a request finds it there with its time, or learns that the server answered at once or not at all.
   Before step 9, the whole run's, which has slow requests of its own (a start's first pages, the previews, step 5f's
   outage).
 
@@ -561,7 +561,8 @@ how long the answer took:
   only the smoke test adds, mounts the result over the image's. So the stack still runs the `server.xml` the image
   ships, the two can't drift, and `docker/server.xml` stays as it is.
 - **The log is `repository/logs/access.log`,** beside `dms.log` in the repository volume, which step 8's restart
-  keeps. It's unbuffered, so a failed run reads every request answered so far.
+  keeps. Tomcat writes a request's line when its answer ends, and the log is unbuffered, so a failed run reads every
+  request answered so far.
 - **A line is one request:** its start and end (UTC), the client's port, the thread that served it, the method, the
   path with its query, the status, the bytes sent and the time taken in microseconds. Tomcat ends a path that has no
   query with `-`. Requests on one connection share a client's port.
@@ -602,7 +603,7 @@ SMOKE_RESULTS=/tmp/smoke-results docker/smoke-test.sh
   `playwright.config.ts`).
 - **A request the page waited on is in both.** The trace has when the browser sent it and whether an answer came; the
   access log has when Tomcat began to serve it and for how long. A request in the trace with no line in the access
-  log never reached the server.
+  log was never answered: it didn't reach Tomcat, or Tomcat was still serving it when the run ended.
 - **`docker/tests/test-web.sh` takes `WEB_RESULTS=<folder>`** for a run by hand, on the same terms: empty or not
   there yet, each failed test's folder copied into it, and no folder left by a run that passes. The smoke test sets
   it to `e2e-results` in its own folder.

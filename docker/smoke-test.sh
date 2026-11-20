@@ -112,7 +112,7 @@ compose() {
 # it), the thread that served it, the method, the path with its query, or with Tomcat's - for none, the status, the
 # bytes sent and the time taken in microseconds:
 #   2026-11-20 07:15:02.123 07:15:02.180 rp=51234 http-nio-8080-exec-7 GET /api/v1/me- 200 412 57012us
-# Unbuffered, so a failed run reads every request answered so far.
+# Tomcat writes the line when the answer ends, unbuffered, so a failed run reads every request answered so far.
 SERVER_XML=$WORK/server.xml
 ACCESS_LOG=/opt/logicaldoc/repository/logs/access.log
 smoke_server_xml() {
@@ -222,9 +222,9 @@ show_server_log() {
   fi
 }
 # show_slow_requests <access log>: the requests Tomcat took 2 seconds or more to answer, the last 40 of them. Those
-# since step 9 began, once it has: a browser test that waited on a request finds it here, or learns that it never
-# arrived or was answered at once. Before that, the whole run's, which has slow requests of its own (a start's first
-# pages, the previews, step 5f's outage).
+# since step 9 began, once it has: a browser test that waited on a request finds it here, or learns that the server
+# answered it at once or not at all. Before that, the whole run's, which has slow requests of its own (a start's
+# first pages, the previews, step 5f's outage).
 show_slow_requests() {
   local slow=$WORK/slow-requests of="the run's"
   [ -z "$WEB_FROM" ] || of="those since step 9 began, at ${WEB_FROM#* },"
