@@ -61,7 +61,7 @@ export function readLayout(kind: ListKind): ColumnLayout {
     const size = sizes[id]
     if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0) return none
   }
-  return shown === undefined ? { widths: { ...(sizes as Record<string, number>) } } : { shown: [...(shown as string[])], widths: { ...(sizes as Record<string, number>) } }
+  return shown === undefined || !isDocumentKind(kind) ? { widths: { ...(sizes as Record<string, number>) } } : { shown: [...(shown as string[])], widths: { ...(sizes as Record<string, number>) } }
 }
 
 /** Keeps the layout for the kind, with `shown` only when it has one */
@@ -138,7 +138,7 @@ export function useColumnLayout(
     show: (id) =>
       change((layout) => {
         const kept = base(layout)
-        if (!kept || kept.includes(id)) return undefined
+        if (!kept || shownIds(kind, offeredRef.current, layout).includes(id) || kept.includes(id)) return undefined
         return { ...layout, shown: [...kept, id] }
       }),
     hide: (id) =>
@@ -158,7 +158,10 @@ export function useColumnLayout(
         const before = others[at - 1] as string
         const rest = kept.filter((one) => one !== id)
         const place = rest.indexOf(before) + 1
-        return { ...layout, shown: [...rest.slice(0, place), id, ...rest.slice(place)] }
+        const moved = [...rest.slice(0, place), id, ...rest.slice(place)]
+        // A drag that ends where it began changes nothing, so the kind's defaults still apply
+        if (moved.every((one, at) => one === kept[at])) return undefined
+        return { ...layout, shown: moved }
       }),
     reset: () => {
       forgetLayout(kind)

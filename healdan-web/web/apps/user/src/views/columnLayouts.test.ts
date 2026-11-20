@@ -131,6 +131,44 @@ describe('useColumnLayout', () => {
     expect(result.current.shown).toEqual(['a', 'b'])
   })
 
+  it('two changes in one event both count', () => {
+    const { result } = renderHook(() => useColumnLayout('folder', OFFERED))
+    act(() => {
+      result.current.show('size')
+      result.current.hide('author')
+    })
+    expect(JSON.parse(kept('folder')!).shown).toEqual(['title', 'docNumber', 'version', 'edited', 'size'])
+  })
+
+  it('a change that changes nothing writes nothing, and freezes no defaults', () => {
+    const { result } = renderHook(() => useColumnLayout('folder', OFFERED))
+    act(() => {
+      result.current.move('docNumber', 1)
+      result.current.show('author')
+      result.current.hide('size')
+      result.current.hide('title')
+    })
+    expect(kept('folder')).toBeNull()
+    act(() => result.current.resized({ author: 100 }))
+    act(() => result.current.move('docNumber', 1))
+    expect(kept('folder')).toBe('{"v":1,"widths":{"author":100}}')
+  })
+
+  it('a column offered later starts hidden in a layout that has shown', () => {
+    keepLayout('folder', { shown: ['title', 'author'], widths: {} })
+    const { result } = renderHook(() => useColumnLayout('folder', [...OFFERED, 'client']))
+    expect(result.current.shown).toEqual(['title', 'author'])
+  })
+
+  it('a shown stored for a kind that is not of documents is ignored and not written back', () => {
+    window.localStorage.setItem('healdan.columns.matters', '{"v":1,"shown":["b"],"widths":{"a":5}}')
+    expect(readLayout('matters')).toEqual({ widths: { a: 5 } })
+    const { result } = renderHook(() => useColumnLayout('matters', ['a', 'b']))
+    expect(result.current.shown).toEqual(['a', 'b'])
+    act(() => result.current.resized({ b: 7 }))
+    expect(kept('matters')).toBe('{"v":1,"widths":{"a":5,"b":7}}')
+  })
+
   it('reads again when the kind changes', () => {
     keepLayout('all', { widths: { matter: 10 } })
     const { result, rerender } = renderHook(({ kind }) => useColumnLayout(kind, OFFERED), { initialProps: { kind: 'folder' as 'folder' | 'all' } })
