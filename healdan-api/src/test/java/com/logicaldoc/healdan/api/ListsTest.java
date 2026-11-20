@@ -123,12 +123,21 @@ public class ListsTest extends ApiTestCase {
 
 		assertTrue(get("/api/v1/documents/recent").token(token).send().json().path("items").get(0).has("lastUsed"));
 		assertFalse(get("/api/v1/documents/" + number(first)).token(token).send().json().has("lastUsed"));
+		Folder sub = fx.folder(documents, "Sub");
 		JsonNode children = get("/api/v1/folders/" + documents.getId() + "/children").token(token).send().json()
 				.path("items");
-		assertTrue(children.size() > 0);
-		for (JsonNode item : children)
-			assertFalse(item.has("lastUsed"));
-		JsonNode hits = get("/api/v1/search?q=first").token(token).send().json().path("items");
+		boolean sawFolder = false;
+		boolean sawDocument = false;
+		for (JsonNode item : children) {
+			assertFalse(item.toString(), item.has("lastUsed"));
+			sawFolder |= "folder".equals(item.path("type").textValue());
+			sawDocument |= "document".equals(item.path("type").textValue());
+		}
+		assertTrue("a subfolder is among the children: " + children, sawFolder);
+		assertTrue("a document is among the children: " + children, sawDocument);
+		assertFalse(get("/api/v1/folders/" + sub.getId()).token(token).send().json().has("lastUsed"));
+		JsonNode hits = get("/api/v1/search?q=%23" + number(first)).token(token).send().json().path("items");
+		assertTrue("the search finds the document: " + hits, hits.size() > 0);
 		for (JsonNode item : hits)
 			assertFalse(item.has("lastUsed"));
 	}
