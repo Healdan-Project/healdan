@@ -79,13 +79,13 @@ describe('SearchView', () => {
     expect(api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'documents', q: 'charter', zone, offset: 0, limit: 100 })
   })
 
-  it("shows the matter's number and name in the Matter column, with the client as its tooltip", async () => {
+  it("shows the matter's number and name in the Matter column, with the whole of it and the client as its tooltip", async () => {
     await renderApp('/search?scope=documents&q=charter', routes())
     const [, second] = await rows()
     const cell = within(second!).getAllByRole('gridcell').find((one) => one.textContent?.includes('1002.1'))!
     // The name is the cell's own text, so a keyboard and a screen reader reach it as a pointer does
     expect(cell.textContent).toBe('1002.1 – Commercial Lease')
-    expect(cell.querySelector('[title="Brightwell"]')).toBeTruthy()
+    expect(cell.querySelector('[title="1002.1 – Commercial Lease · Brightwell"]')).toBeTruthy()
     // No swap on hover or focus any more: the client is a tooltip, and a column of its own later (#234)
     expect(cell.querySelector('[class*="matterName"], [class*="matterClient"]')).toBeNull()
     expect(viewsCss).not.toMatch(/\.matterName/)

@@ -171,7 +171,7 @@ The owner reviewed the layout in the browser, from mockups drawn with the demo f
 ### 6.3 Search
 
 - **Suggestions as you type** (call): matching matters first, then a few documents by title, then "Search Documents for "…"" with Enter. The arrow keys pick a suggestion.
-- **Enter runs the search** in the chosen scope. Results come by relevance; any column header sorts them instead. Document results add a Matter column: the matter number with the client muted, and the matter's name on hover.
+- **Enter runs the search** in the chosen scope. Results come by relevance; any column header sorts them instead. Document results add a Matter column: the matter number with the client muted, and the matter's name on hover (changed after M6: the [list columns spec](2026-11-19-list-columns-design.md) §4.1, the matter's number and name, with the whole of it and the client on hover).
 - **`#10388` then Enter** shows results with just that document, already selected with its details showing, ready to act on (roadmap principle 1), with the toolbar, F2 and Delete as in any list (changed in the build: R95). `#10388.2` selects version 2 in the details, whose Versions tab it opens (changed after M6: the owner's dogfooding punch list, 2026-11-14, which put the versions in a tab). A number the person can't read gets "No document # 10388 that you can see", the same words whether it exists or not. So does a legacy shortcut's number (changed in the build: R43; the API lists no shortcuts, so the lookup and `GET /documents/{n}` refuse them as unreadable).
 - **With the Matters scope, a matter number** such as `1001.1` then Enter opens the matter (M1).
 - **Nothing the person can't read appears,** in suggestions, results or counts.

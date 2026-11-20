@@ -109,7 +109,7 @@ Paths: `WEB` = `healdan-web/web`, `UI` = `WEB/packages/ui/src`, `SH` = `WEB/pack
 
 **Interfaces:**
 - Produces: `MatterCell({ matter }: { matter: S['MatterRef'] })` renders `matter.display` as its text and
-  `matter.client.name` as its `title`; `matterColumn()` keeps its signature.
+  `` `${matter.display} · ${matter.client.name}` `` as its `title` (changed in PR 1's review: the client alone at first); `matterColumn()` keeps its signature.
 
 - [ ] **Step 1: Write the failing tests**
   - `SearchView.test.tsx`: replace the hover-swap test with "shows the matter's number and name in the Matter column,

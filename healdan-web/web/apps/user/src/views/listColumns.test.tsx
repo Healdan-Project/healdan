@@ -14,10 +14,11 @@ function column(columns: ReturnType<typeof hitColumns>, id: string) {
 }
 
 describe('the Matter column', () => {
-  it('shows the number and the name, with the client as its tooltip', () => {
+  it('shows the number and the name, with the whole of it and the client as its tooltip', () => {
     const { container } = render(<MatterCell matter={{ id: 12, display: '1002.1 – Commercial Lease', client: client({ id: 2, number: 1002, name: 'Brightwell' }) }} />)
     expect(container.textContent).toBe('1002.1 – Commercial Lease')
-    expect(container.querySelector('[title="Brightwell"]')).toBeTruthy()
+    // A name the column cuts short can still be read by pointing at it, as before
+    expect(container.querySelector('[title="1002.1 – Commercial Lease · Brightwell"]')).toBeTruthy()
   })
 
   it('a matter with no name shows its number', () => {

@@ -105,7 +105,10 @@ and a sort on every column of every list.
 ### 4.1 The Matter column and the default widths (owner; widths call)
 
 - **The cell shows the number and the name,** as the left pane's Recent Matters does: `998.1 – Healdan General Demo`
-  (owner: option B). The client is the cell's tooltip, and a column of its own (§4.7). The hover swap goes. A matter with
+  (owner: option B). The client is in the cell's tooltip, after the whole number and name, such as
+  `1002.1 – Commercial Lease · Brightwell`, so a name the column cuts short can still be read by pointing at it (changed in
+  the build, PR 1's review: the tooltip had held the client alone); the client is a column of its own too (§4.7). The
+  hover swap goes. A matter with
   no name shows its number. A cell too narrow ends in an ellipsis, so the number and the name's start stay.
 - **Matter shares the spare width** (call). Where Matter shows, it is a fraction like Title and Author, about Title `2fr`
   (at least 220 pixels), Matter `1.5fr` (at least 100) and Author `1fr`, so a wider window widens it. Matter's least

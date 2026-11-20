@@ -54,13 +54,14 @@ const edited: TableColumn<ListRow> = { id: 'edited', name: t('list.edited'), all
 export const listColumns: TableColumn<ListRow>[] = [title, docNumber, version, author, edited]
 
 /**
- * "1001.1 – Charter Dispute", as the server formats it and the left pane's Recent Matters shows it, with the client as
- * its tooltip (list columns spec 4.1). The name is the cell's own text, so a keyboard and a screen reader reach it as a
- * pointer does; a matter with no name shows its number.
+ * "1001.1 – Charter Dispute", as the server formats it and the left pane's Recent Matters shows it (list columns spec
+ * 4.1). The name is the cell's own text, so a keyboard and a screen reader reach it as a pointer does; a matter with no
+ * name shows its number. The tooltip is the whole of it and the client, "1001.1 – Charter Dispute · Saltmarsh Shipping",
+ * so a name the column cuts short can still be read by pointing at it.
  */
 export function MatterCell({ matter }: { matter: S['MatterRef'] }) {
   return (
-    <span className={styles.matterCell} title={matter.client.name}>
+    <span className={styles.matterCell} title={`${matter.display} · ${matter.client.name}`}>
       {matter.display}
     </span>
   )
