@@ -3,6 +3,7 @@
 
 package com.logicaldoc.healdan.api;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 
 import java.nio.charset.StandardCharsets;
@@ -77,5 +78,20 @@ public class ContractTest {
 	@Test
 	public void testUndescribedRoutesMustRefuse() {
 		assertThrows(AssertionError.class, () -> Contract.check("GET", "/api/v1/nowhere", json(200, "{}")));
+		assertThrows(AssertionError.class, () -> Contract.check("GET", "/api/v1/admin/nowhere", json(200, "{}")));
+	}
+
+	// The admin API's paths are checked against its own file (Admin app spec section 9.2)
+	@Test
+	public void testTheAdminFileForTheAdminPaths() {
+		assertEquals(Contract.OPENAPI_ADMIN, Contract.file("/api/v1/admin/dashboard"));
+		assertEquals(Contract.OPENAPI_ADMIN, Contract.file("/api/v1/admin/test/ping"));
+		assertEquals(Contract.OPENAPI_ADMIN, Contract.file("/api/v1/admin"));
+		assertEquals(Contract.OPENAPI, Contract.file("/api/v1/administrators"));
+		assertEquals(Contract.OPENAPI, Contract.file("/api/v1/server"));
+
+		// openapi.yaml's routes aren't the admin file's
+		Contract.check("GET", "/api/v1/server", json(200, GOOD));
+		assertThrows(AssertionError.class, () -> Contract.check("GET", "/api/v1/admin/server", json(200, GOOD)));
 	}
 }

@@ -36,28 +36,6 @@
   margin-inline-start: auto;
 }
 
-.avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--hd-pill);
-  color: var(--hd-text);
-  font-size: var(--hd-font-size-small);
-  font-weight: var(--hd-weight-bold);
-}
-
-.visuallyHidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 /* A narrow window: the brand takes only what it needs, so the search box keeps room beside the folding buttons */
 @media (max-width: 1023px) {
   .bar {

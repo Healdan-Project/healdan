@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ErrorCaptureTest's logging configuration: no appenders, a logger that passes its events on to the root, and one
+	with additivity="false", which keeps them to itself, as 36 of log.xml's loggers do -->
+<Configuration status="off">
+	<Loggers>
+		<Logger name="test.additive" level="info" />
+		<Logger name="test.alone" level="info" additivity="false" />
+		<Logger name="test.quiet" level="fatal" />
+		<Root level="info" />
+	</Loggers>
+</Configuration>

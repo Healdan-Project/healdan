@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.app;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -157,6 +158,32 @@ public class AppServletTest {
 		}
 		assertEquals(Optional.empty(), AppServlet.resource("/../WEB-INF/web.xml"));
 		assertEquals(Optional.of(AppServlet.ROOT + "assets/a.js"), AppServlet.resource("/assets/a.js"));
+	}
+
+	// The files need no session here, so /app/ must never reach the Admin app's build beside it (admin spec 17.1)
+	@Test
+	public void testNeverReachesTheAdminApp() throws Exception {
+		// The Admin app's fixtures are on the classpath, so a path that escaped would find them
+		assertNotNull(AppServlet.class.getClassLoader().getResource(AdminAppServlet.ROOT + "assets/a-12345678.js"));
+		assertNotNull(AppServlet.class.getClassLoader().getResource(AdminAppServlet.ROOT + "index.html"));
+		for (boolean signedIn : new boolean[] { false, true }) {
+			this.signedIn = signedIn;
+			for (String path : new String[] { "/../admin/assets/a-12345678.js", "/%2e%2e/admin/assets/a-12345678.js",
+					"/..%2fadmin%2fassets%2fa-12345678.js", "/%252e%252e/admin/index.html",
+					"/assets/../../admin/index.html", "/assets/a-12345678.js;x=../../admin", "/../admin/index.html",
+					"/..\\admin\\index.html", "/assets/..%2f..%2fadmin%2findex.html" }) {
+				MockHttpServletResponse response = call("GET", path);
+				String body = response.getContentAsString();
+				String what = path + (signedIn ? ", signed in" : ", signed out");
+				assertFalse(what, body.contains("admin asset fixture"));
+				assertFalse(what, body.contains("admin page fixture"));
+				assertHeaders(response);
+				if (response.getStatus() == 200)
+					assertTrue(what, body.contains("index fixture"));
+				else if (response.getStatus() != 302)
+					assertEquals(what, 404, response.getStatus());
+			}
+		}
 	}
 
 	@Test

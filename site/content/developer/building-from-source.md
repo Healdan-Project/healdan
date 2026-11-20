@@ -37,17 +37,19 @@ mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder'  # on
 mvn -pl healdan-core -DskipTests install                   # healdan-core, with the test-jar healdan-api's tests use
 mvn -pl healdan-api test                                   # the API's tests
 mvn -pl healdan-storage test                               # the storage module's tests
+mvn -pl healdan-web test -Dhealdan.web.skip=true           # the web module's servlet tests, without the Node build
 docker/tests/test-db.sh stop                               # removes it, with what a killed run left
 ```
 
 A module's tests run against the installed jars of the modules it uses, so install those first.
 
-- **`healdan-api`'s and `healdan-storage`'s tests need `healdan-core` installed,** including its test-jar: they reuse
-  `healdan-core`'s base test case and fixtures. Install it again after changing `healdan-core`.
+- **`healdan-api`'s, `healdan-storage`'s and `healdan-web`'s tests need `healdan-core` installed,** including its
+  test-jar: they reuse `healdan-core`'s base test case and fixtures. Install it again after changing `healdan-core`.
 - **`-DskipTests` and `-Dmaven.test.skip=true` differ here.** `-DskipTests` compiles the tests without running them,
   so it still builds and installs `healdan-core`'s test-jar. `-Dmaven.test.skip=true` doesn't compile them, so
   there's no test-jar. Their `with-tests` profiles then leave the test-jar out, and the build still works, but
-  `healdan-api`'s and `healdan-storage`'s tests can't run until `healdan-core` is installed with `-DskipTests`.
+  `healdan-api`'s, `healdan-storage`'s and `healdan-web`'s tests can't run until `healdan-core` is installed with
+  `-DskipTests`.
 
 ## Skipping the GWT Compile
 
@@ -60,40 +62,41 @@ Healdan's modules need.
   `build` check does. The GUI's antrun step fails without the GWT output, and skipping it leaves every plugin zip
   unfinished, so a WAR built from them is broken.
 - After changing `logicaldoc-core`, `logicaldoc-webapp` or `logicaldoc-gui`, re-install that module before running
-  `healdan-core`'s, `healdan-api`'s or `healdan-storage`'s tests:
+  `healdan-core`'s, `healdan-api`'s, `healdan-storage`'s or `healdan-web`'s tests:
 
   ```bash
   mvn -pl logicaldoc-gui -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true install
   ```
 
-## The User App
+## The Web Apps
 
-The User app is the web page at `/app/`. Its source is an npm workspace in `healdan-web/web`, and the `healdan-web`
-module builds it with Maven, so a full build needs no Node of your own: `frontend-maven-plugin` downloads the Node
-version that `healdan-web/web/.nvmrc` names (the same one `healdan-web/pom.xml` names, which
-`scripts/workspace.test.mjs` checks) into `healdan-web/target/`, runs `npm ci --ignore-scripts` and `npm run
-build`, and copies `apps/user/dist/` into the module's jar.
+The User app is the web page at `/app/`, and the Admin app, for administrators, is at `/admin/`. Their source is one
+npm workspace in `healdan-web/web`, and the `healdan-web` module builds it with Maven, so a full build needs no Node
+of your own: `frontend-maven-plugin` downloads the Node version that `healdan-web/web/.nvmrc` names (the same one
+`healdan-web/pom.xml` names, which `scripts/workspace.test.mjs` checks) into `healdan-web/target/`, runs
+`npm ci --ignore-scripts` and `npm run build`, and copies `apps/user/dist/` and `apps/admin/dist/` into the module's
+jar, under `healdan/app/user/` and `healdan/app/admin/`.
 
-- **`-Dhealdan.web.skip=true`** skips all of that. The jar then holds no app, and `/app/` answers `503`. Use it
-  when you aren't working on the app, as CI's `build` check does.
+- **`-Dhealdan.web.skip=true`** skips all of that. The jar then holds neither app, and `/app/` answers `503`, as
+  `/admin/` does an administrator. Use it when you aren't working on the apps, as CI's `build` check does.
 - **`npm ci --ignore-scripts`** installs the packages exactly as the lockfile records them, and runs none of their
   install scripts. The build tools' binaries come from platform packages, so nothing needs a script. The
   workspace's `.npmrc` sets `ignore-scripts` and `save-exact`, so your own `npm install` runs none either and pins
   the exact version of a package it adds.
 - **The packages' licences** are checked by `.github/scripts/check-web-licences.py`, and the build writes the
-  notices for the ones the app ships into `apps/user/dist/notices.txt`. It fails on a shipped package with no
+  notices for the ones the apps ship into `apps/user/dist/notices.txt`. It fails on a shipped package with no
   licence file, and on an entry in `scripts/notices.mjs`' `DECLARED_ONLY`, the few reviewed packages that declare
   their licence without a file, that no longer needs to be there.
 
-To work on the app itself, use Node from `.nvmrc` and run, in `healdan-web/web`:
+To work on the apps themselves, use Node from `.nvmrc` and run, in `healdan-web/web`:
 
 ```bash
 npm ci --ignore-scripts   # install the packages
-npm run generate          # the API's types, from healdan-api's openapi.yaml
-npm run typecheck         # tsc over the workspace
+npm run generate          # the APIs' types, from healdan-api's openapi.yaml and openapi-admin.yaml
+npm run typecheck         # tsc over the packages, then over each app on its own
 npm run lint              # ESLint
 npm test                  # Vitest, and Node's runner for the build's scripts
-npm run build             # generate, typecheck, then Vite's production build into apps/user/dist/
+npm run build             # generate, typecheck, then Vite's production builds into apps/user/dist/ and apps/admin/dist/
 ```
 
 ## The Desktop Clients

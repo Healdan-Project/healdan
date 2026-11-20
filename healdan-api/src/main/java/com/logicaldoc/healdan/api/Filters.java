@@ -4,7 +4,6 @@
 package com.logicaldoc.healdan.api;
 
 import java.time.Clock;
-import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
@@ -136,13 +135,7 @@ record Filters(ListingQuery query, boolean foldersOnly, Set<String> facets) {
 	 * @throws ApiProblem {@code 400} for one {@link ZoneId#of} refuses
 	 */
 	private static ZoneId zone(String zone) {
-		if (StringUtils.isEmpty(zone))
-			return null;
-		try {
-			return ZoneId.of(zone);
-		} catch (DateTimeException e) {
-			throw ApiProblem.badRequest("The zone is a time zone's id, such as Europe/London, not %s.".formatted(zone));
-		}
+		return Zones.parse(zone);
 	}
 
 	private static Edited edited(String preset, String from, String to, Clock clock, ZoneId zone) {

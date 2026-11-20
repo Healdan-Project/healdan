@@ -49,6 +49,10 @@ When the log shows `Server startup`, open http://127.0.0.1:8080 and sign in as `
 Change the `admin` password straight away.
 {{< /callout >}}
 
+Signing in opens Healdan's web app. As `admin`, open your menu, under your initials in the top bar, and choose
+**Admin** for the [Admin app](../../admin/the-admin-app/), whose Dashboard shows the server's health and what needs
+your attention. Give yourself an ordinary account for everyday work: `admin` can read every document.
+
 {{% /steps %}}
 
 By default Healdan is only reachable from the machine running Docker. To use it from other machines, put a

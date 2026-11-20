@@ -194,6 +194,16 @@ public class ApiCall {
 	}
 
 	/**
+	 * @param contentType the body's media type
+	 * @param content the body, sent as it is
+	 */
+	public ApiCall body(String contentType, byte[] content) {
+		this.body = content;
+		this.contentType = contentType;
+		return this;
+	}
+
+	/**
 	 * Adds a JSON part to a {@code multipart/form-data} body.
 	 */
 	public ApiCall part(String name, String json) {

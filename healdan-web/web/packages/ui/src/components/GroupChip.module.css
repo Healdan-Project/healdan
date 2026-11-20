@@ -1,0 +1,23 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* Pill holds --hd-text, and the danger tint --hd-danger-text, at AA in both themes (tokens.test.ts). */
+.chip {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 var(--hd-space-2) var(--hd-space-2) 0;
+  padding: var(--hd-space-1) var(--hd-space-3);
+  overflow: hidden;
+  border-radius: var(--hd-radius-large);
+  background: var(--hd-pill);
+  color: var(--hd-text);
+  font-size: var(--hd-font-size-small);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.chip[data-admin] {
+  background: var(--hd-danger-tint);
+  color: var(--hd-danger-text);
+}

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useId } from 'react'
-import { FieldError, Input, Label, TextField as AriaTextField } from 'react-aria-components'
+import { FieldError, Input, Label, TextArea, TextField as AriaTextField } from 'react-aria-components'
 import styles from './Fields.module.css'
 
 interface FieldProps {
@@ -16,12 +16,16 @@ interface FieldProps {
 export interface TextFieldProps extends FieldProps {
   value: string
   onChange: (value: string) => void
-  /** `number` for a whole or decimal number; text by default */
+  /** `number` for a whole or decimal number; text by default. A multi-line field is always text */
   type?: 'text' | 'number'
   /** The keyboard a phone shows; `decimal` for a number typed as text, which a form can then check itself */
   inputMode?: 'decimal' | 'numeric'
   /** Takes the focus when it first draws, as the first field of a dialog does */
   autoFocus?: boolean
+  /** Several lines, such as a description, where Enter starts a new line */
+  multiline?: boolean
+  /** How many lines a multi-line field shows before it scrolls; 3 by default */
+  rows?: number
 }
 
 function Mark({ required }: { required?: boolean }) {
@@ -32,15 +36,28 @@ function Mark({ required }: { required?: boolean }) {
   ) : null
 }
 
-/** A one-line field with its label above it. */
-export function TextField({ label, value, onChange, type = 'text', inputMode, autoFocus, required, error }: TextFieldProps) {
+/** A text field with its label above it: one line, or several when `multiline`. */
+export function TextField({ label, value, onChange, type = 'text', inputMode, autoFocus, required, error, multiline = false, rows = 3 }: TextFieldProps) {
   return (
-    <AriaTextField className={styles.field} autoFocus={autoFocus} value={value} onChange={onChange} type={type} isRequired={required} validationBehavior="aria" isInvalid={error ? true : undefined}>
+    <AriaTextField
+      className={styles.field}
+      autoFocus={autoFocus}
+      value={value}
+      onChange={onChange}
+      type={multiline ? undefined : type}
+      isRequired={required}
+      validationBehavior="aria"
+      isInvalid={error ? true : undefined}
+    >
       <Label className={styles.label}>
         {label}
         <Mark required={required} />
       </Label>
-      <Input className={styles.input} inputMode={inputMode} step={type === 'number' ? 'any' : undefined} />
+      {multiline ? (
+        <TextArea className={`${styles.input} ${styles.multiline}`} inputMode={inputMode} rows={rows} />
+      ) : (
+        <Input className={styles.input} inputMode={inputMode} step={type === 'number' ? 'any' : undefined} />
+      )}
       <FieldError className={styles.error}>{error}</FieldError>
     </AriaTextField>
   )

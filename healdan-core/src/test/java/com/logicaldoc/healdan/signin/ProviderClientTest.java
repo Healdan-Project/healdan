@@ -362,6 +362,70 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		assertEquals(5, fake.discoveryRequests());
 	}
 
+	/**
+	 * Whether a provider answers, for the Dashboard: a fresh fetch of its
+	 * discovery document each time, which a sign-in's kept document doesn't
+	 * stand in for. Its own failure isn't remembered, so it never makes a
+	 * sign-in fail; a sign-in's failure, remembered for 30 seconds, answers
+	 * false without asking.
+	 */
+	@Test
+	public void testAnswers() throws Exception {
+		long[] now = { 1_000_000L };
+		client.clock = () -> now[0];
+		SignInProvider p = fake.asProvider("fake");
+		client.start(p, REDIRECT, false);
+		assertEquals(1, fake.discoveryRequests());
+
+		assertTrue(client.answers(p));
+		assertEquals(2, fake.discoveryRequests());
+		assertTrue(client.answers(p));
+		assertEquals(3, fake.discoveryRequests());
+
+		// Down: false, and not remembered, so the next one asks; the document a sign-in keeps stays
+		fake.discoveryStatus(503);
+		assertFalse(client.answers(p));
+		assertEquals(4, fake.discoveryRequests());
+		fake.discoveryStatus(200);
+		assertNotNull(client.start(p, REDIRECT, false));
+		assertEquals(4, fake.discoveryRequests());
+		assertTrue(client.answers(p));
+		assertEquals(5, fake.discoveryRequests());
+
+		// A failed answer doesn't stop a sign-in that has no document yet asking the provider
+		SignInProvider fresh = fake.asProvider("fresh");
+		fake.discoveryStatus(503);
+		assertFalse(client.answers(fresh));
+		assertEquals(6, fake.discoveryRequests());
+		fake.discoveryStatus(200);
+		assertNotNull(client.start(fresh, REDIRECT, false));
+		assertEquals(7, fake.discoveryRequests());
+
+		// A sign-in's failure is remembered for 30 seconds, in which the answer is false without asking
+		SignInProvider later = fake.asProvider("later");
+		fake.discoveryStatus(503);
+		assertThrows(ProviderException.class, () -> client.start(later, REDIRECT, false));
+		assertEquals(8, fake.discoveryRequests());
+		fake.discoveryStatus(200);
+		now[0] += 29_999;
+		assertFalse(client.answers(later));
+		assertEquals(8, fake.discoveryRequests());
+		now[0] += 1;
+		assertTrue(client.answers(later));
+		assertEquals(9, fake.discoveryRequests());
+
+		// A document a sign-in couldn't use is no answer
+		fake.discovery("issuer", "https://other.example/realm");
+		assertFalse(client.answers(p));
+		fake.discovery("issuer", fake.issuer());
+
+		// No issuer set: nothing to ask
+		SignInProvider unset = new SignInProvider("unset", p.preset(), p.label(), true, null, p.clientId(), true,
+				p.identityClaim(), p.usernameClaim(), p.emailClaim(), p.groupsClaim(), p.linkByEmail());
+		assertFalse(client.answers(unset));
+		assertEquals(10, fake.discoveryRequests());
+	}
+
 	@Test
 	public void testUnreachableAtStart() throws Exception {
 		SignInProvider p = fake.asProvider("fake");

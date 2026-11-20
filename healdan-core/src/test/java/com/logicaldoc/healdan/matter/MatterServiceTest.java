@@ -40,6 +40,7 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.HealdanRuleException;
+import com.logicaldoc.healdan.admin.AdminContext;
 import com.logicaldoc.healdan.profile.LocalValueDAO;
 import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
 import com.logicaldoc.healdan.searchfolder.SearchFolderRule;
@@ -457,6 +458,51 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testCreateAndEditAreRecorded() throws Exception {
+		int layout = ClientServiceTest.events().size();
+
+		Matter created = create(2, "Smith v Jones", alice, demo, "First description");
+
+		String event = "%d admin %s MATTERS matter.%s matter " + created.getId() + " 998.2 \u2013 %s %s";
+		// Every field the create set
+		assertEquals(List.of(event.formatted(admin.getId(), null, "created", "Smith v Jones",
+				"{\"client\":{\"before\":null,\"after\":\"998 \u2013 Healdan\"},"
+						+ "\"description\":{\"before\":null,\"after\":\"First description\"},"
+						+ "\"name\":{\"before\":null,\"after\":\"Smith v Jones\"},"
+						+ "\"number\":{\"before\":null,\"after\":\"2\"},"
+						+ "\"owner\":{\"before\":null,\"after\":\"alice alice\"},"
+						+ "\"store\":{\"before\":null,\"after\":\"Main\"},"
+						+ "\"template\":{\"before\":null,\"after\":\"Demo\"}}")),
+				eventsSince(layout));
+
+		// Only the fields an edit changed, each with its old and new value; an owner by name
+		service.update(created.getId(), " Smith v Brown ", "First description", alice.getId(), admin);
+		AdminContext.set("192.0.2.30");
+		try {
+			service.update(created.getId(), "Smith v Brown", null, alice.getId(), admin);
+		} finally {
+			AdminContext.clear();
+		}
+		service.update(created.getId(), "Smith v Brown", null, bob.getId(), admin);
+		// No change, no record; nor a refusal
+		service.update(created.getId(), "Smith v Brown ", null, bob.getId(), admin);
+		User erin = fx.user("erin", lawyers.getName());
+		erin.setEnabled(false);
+		UserDAO.get().store(erin);
+		assertRefused("The owner erin is disabled.",
+				() -> service.update(created.getId(), "Smith v Brown", null, erin.getId(), admin));
+
+		assertEquals(List.of(
+				event.formatted(admin.getId(), null, "updated", "Smith v Brown",
+						"{\"name\":{\"before\":\"Smith v Jones\",\"after\":\"Smith v Brown\"}}"),
+				event.formatted(admin.getId(), "192.0.2.30", "updated", "Smith v Brown",
+						"{\"description\":{\"before\":\"First description\",\"after\":null}}"),
+				event.formatted(admin.getId(), null, "updated", "Smith v Brown",
+						"{\"owner\":{\"before\":\"alice alice\",\"after\":\"bob bob\"}}")),
+				eventsSince(layout + 1));
+	}
+
+	@Test
 	public void testOwnerChangeSwapsEntries() throws Exception {
 		Matter created = create(2, "Demo", alice, demo);
 		Folder ws = workspace(created);
@@ -528,9 +574,14 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 				jdbc.queryForObject("select ld_deleted from ld_group where ld_id = ?", Integer.class, lenasGroup));
 		assertTrue(acl(ws).containsKey(lenasGroup));
 
+		int events = ClientServiceTest.events().size();
 		service.update(created.getId(), "Demo", null, bob.getId(), admin);
 
 		assertEquals(bob.getId(), MatterDAO.get().findById(created.getId()).getOwnerId());
+		// The record names the deleted owner as she was
+		List<String> recorded = eventsSince(events);
+		assertEquals(1, recorded.size());
+		assertTrue(recorded.get(0), recorded.get(0).endsWith(" {\"owner\":{\"before\":\"lena lena\",\"after\":\"bob bob\"}}"));
 		Map<Long, Set<Permission>> acl = acl(ws);
 		assertFalse(acl.containsKey(lenasGroup));
 		assertEquals(set(Permission.values()), acl.get(bobsGroup.getId()));
@@ -658,6 +709,15 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 			throws Exception {
 		return service.create(new NewMatter(healdan.getId(), number, name, description, store.getId(), owner.getId(),
 				template.getId()), admin);
+	}
+
+	/**
+	 * @return the administration record's rows after the first ones, as
+	 *         {@link ClientServiceTest#events()} gives them
+	 */
+	private static List<String> eventsSince(int first) {
+		List<String> events = ClientServiceTest.events();
+		return events.subList(first, events.size());
 	}
 
 	private NewMatter request(Client client, long number, String name, User owner, Folder template) {

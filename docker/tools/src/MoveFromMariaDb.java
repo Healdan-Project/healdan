@@ -69,16 +69,16 @@ import com.logicaldoc.healdan.db.HealdanMigrator;
 final class MoveFromMariaDb {
 
     /** The last version of the mariadb/ folder: a source at any other is refused */
-    static final String SOURCE_VERSION = "11";
+    static final String SOURCE_VERSION = "12";
 
     /**
      * The version of Healdan's tables that pairs with a source at SOURCE_VERSION, which the move makes its target's:
-     * the eleven scripts the source ran, translated, and V12, the widening of eight of LogicalDOC's text columns. The
+     * the twelve scripts the source ran, translated, and V13, the widening of eight of LogicalDOC's text columns. The
      * move runs no later migration, as one that writes rows would write them to tables the copy then empties, and be
      * recorded as applied: the app's first start applies each later one to the moved rows, as on any upgrade. So it
-     * stays 12 when a later migration ships.
+     * stays 13 when a later migration ships.
      */
-    static final String TARGET_VERSION = "12";
+    static final String TARGET_VERSION = "13";
 
     /** Where an admin reports what the move can't sort out itself */
     private static final String ISSUES = "https://github.com/Healdan-Project/healdan/issues";

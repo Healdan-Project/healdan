@@ -26,7 +26,7 @@ import com.logicaldoc.healdan.HealdanStartupException;
 /**
  * Creates and upgrades Healdan's own tables (prefix {@code hd_}) with Flyway.
  * LogicalDOC's tables are never touched, but for the widening of eight text
- * columns (V12). Only PostgreSQL is supported; any other database, MySQL and
+ * columns (V13). Only PostgreSQL is supported; any other database, MySQL and
  * HSQLDB included, is refused before Flyway runs, and a MariaDB install is
  * pointed to the page that moves it across.
  */
@@ -93,7 +93,7 @@ public class HealdanMigrator {
 	 * first start applies the later ones to the moved rows. Tests use it to
 	 * reach an earlier version before an upgrade.
 	 *
-	 * @param version the last version to apply, e.g. {@code "12"}; one that no
+	 * @param version the last version to apply, e.g. {@code "13"}; one that no
 	 *        script has fails the migration
 	 * @param locations the Flyway locations; the default location of the
 	 *        connected database when empty

@@ -244,7 +244,7 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 	/**
 	 * @return the problem as a response
 	 */
-	static Response problem(ApiProblem problem) {
+	public static Response problem(ApiProblem problem) {
 		Map<String, Object> body = new LinkedHashMap<>();
 		body.put("type", TYPE_BASE + problem.code());
 		body.put("title", title(problem.code()));

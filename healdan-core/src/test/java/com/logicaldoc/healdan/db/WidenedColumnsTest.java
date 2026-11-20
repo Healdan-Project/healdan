@@ -14,7 +14,7 @@ import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 
 /**
- * V12 widens LogicalDOC's narrow text columns, which PostgreSQL enforces and
+ * V13 widens LogicalDOC's narrow text columns, which PostgreSQL enforces and
  * MariaDB's mediumtext never did (spec section 6.4)
  */
 public class WidenedColumnsTest extends AbstractHealdanTestCase {

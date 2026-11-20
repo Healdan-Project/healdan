@@ -31,29 +31,30 @@ import com.logicaldoc.healdan.TestDatabase;
 import com.logicaldoc.healdan.db.HealdanMigrator.Status;
 
 /**
- * Healdan's tables on PostgreSQL: the {@code postgresql/} scripts, V1 to V12 (spec
+ * Healdan's tables on PostgreSQL: the {@code postgresql/} scripts, V1 to V13 (spec
  * section 6.5), apply on a database with CE's schema.
  */
 public class PostgresMigrationsTest {
 
-	/** How many date columns Healdan's tables have but Flyway's history, V1 to V12 */
-	private static final int DATE_COLUMNS = 36;
+	/** How many date columns Healdan's tables have but Flyway's history, V1 to V13 */
+	private static final int DATE_COLUMNS = 41;
 
-	/** The columns declared timestamp(3), V4's and V11's */
+	/** The columns declared timestamp(3), V4's, V11's and V12's */
 	private static final Set<String> MILLISECOND_COLUMNS = Set.of("hd_hold_device.ld_lastmodified",
 			"hd_hold_device.ld_creation", "hd_trash.hd_deletedat", "hd_trash_member.hd_removedat",
-			"hd_trash_member.hd_restoredat", "hd_trash_member.hd_destroyedat");
+			"hd_trash_member.hd_restoredat", "hd_trash_member.hd_destroyedat", "hd_admin_event.hd_date",
+			"hd_error.hd_firstseen", "hd_error.hd_lastseen", "hd_error.hd_resolvedat");
 
 	/**
 	 * hd_schema_history once every script has applied: Flyway's baseline at
 	 * version 0, which it writes as CE's tables were there first, then a
-	 * successful row for each of the twelve scripts
+	 * successful row for each of the thirteen scripts
 	 */
 	private static final List<String> HISTORY = Stream
-			.concat(Stream.of("0 BASELINE true"), IntStream.rangeClosed(1, 12).mapToObj(v -> v + " SQL true"))
+			.concat(Stream.of("0 BASELINE true"), IntStream.rangeClosed(1, 13).mapToObj(v -> v + " SQL true"))
 			.toList();
 
-	/** The eight columns V12 widens */
+	/** The eight columns V13 widens */
 	private static final List<String> WIDENED = List.of("ld_user.ld_avatar", "ld_systemmessage.ld_messagetext",
 			"ld_filler.ld_automation", "ld_filler.ld_automationbefore", "ld_folder.ld_tile", "ld_menu.ld_automation",
 			"ld_generic.ld_text1", "ld_legal.ld_content");
@@ -95,7 +96,7 @@ public class PostgresMigrationsTest {
 
 		assertEquals(Status.MIGRATED, migrator.migrate());
 
-		assertEquals(MigrationVersion.fromVersion("12"), migrator.currentVersion());
+		assertEquals(MigrationVersion.fromVersion("13"), migrator.currentVersion());
 		assertEquals(HISTORY, history());
 	}
 
@@ -107,9 +108,10 @@ public class PostgresMigrationsTest {
 		assertEquals("text", jdbc.queryForObject("select data_type from information_schema.columns "
 				+ "where table_name = 'hd_api_token' and column_name = 'hd_refresh'", String.class));
 
-		// V11's auto_increment
-		assertEquals("YES", jdbc.queryForObject("select is_identity from information_schema.columns "
-				+ "where table_name = 'hd_trash' and column_name = 'hd_id'", String.class));
+		// V11's and V12's auto_increment
+		for (String table : List.of("hd_trash", "hd_admin_event", "hd_error"))
+			assertEquals(table, "YES", jdbc.queryForObject("select is_identity from information_schema.columns "
+					+ "where table_name = ? and column_name = 'hd_id'", String.class, table));
 
 		// datetime(3) keeps milliseconds and datetime, here, microseconds
 		SortedMap<String, String> dates = new TreeMap<>();
@@ -125,6 +127,7 @@ public class PostgresMigrationsTest {
 		assertEquals(dates.toString(), DATE_COLUMNS, dates.size());
 		assertTrue(dates.toString(), dates.keySet().containsAll(MILLISECOND_COLUMNS));
 		assertTrue(dates.toString(), dates.containsKey("hd_matter.ld_creation"));
+		assertTrue(dates.toString(), dates.containsKey("hd_error_hour.hd_hour"));
 		assertEquals(expectedDates, dates);
 
 		// Each index V1 to V11 make after their tables
@@ -140,13 +143,22 @@ public class PostgresMigrationsTest {
 		assertEquals("hd_trash (hd_tenantid, hd_deletedby)", indexes.get("hd_trash_deleter"));
 		assertEquals("hd_trash_member (hd_objecttype, hd_objectid, hd_state)", indexes.get("hd_trash_member_object"));
 		assertEquals("hd_trash_member (hd_state, hd_removedat)", indexes.get("hd_trash_member_removed"));
+		assertEquals("hd_admin_event (hd_targetkind, hd_targetid)", indexes.get("hd_admin_event_target"));
+		assertEquals("hd_admin_event (hd_userid)", indexes.get("hd_admin_event_user"));
+		assertEquals("hd_error (hd_fingerprint)", indexes.get("hd_error_fingerprint"));
+		assertEquals("hd_error (hd_lastseen)", indexes.get("hd_error_lastseen"));
+
+		// V12's inline unique index, made unique after its table
+		String definition = "select indexdef from pg_indexes where schemaname = current_schema() and indexname = ?";
+		assertTrue(jdbc.queryForObject(definition, String.class, "hd_error_fingerprint").startsWith("CREATE UNIQUE INDEX "));
+		assertTrue(jdbc.queryForObject(definition, String.class, "hd_error_lastseen").startsWith("CREATE INDEX "));
 	}
 
 	@Test
 	public void testLogicaldocsNarrowColumnsAreText() {
 		new HealdanMigrator(dataSource).migrate();
 
-		// The eight V12 widens, and no other ld_ column: LogicalDOC's script makes no text column of its own
+		// The eight V13 widens, and no other ld_ column: LogicalDOC's script makes no text column of its own
 		SortedSet<String> text = new TreeSet<>(jdbc.queryForList("select table_name || '.' || column_name "
 				+ "from information_schema.columns where table_schema = current_schema() and table_name like 'ld\\_%' "
 				+ "and data_type = 'text'", String.class));

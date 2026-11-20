@@ -179,7 +179,7 @@ public class MoveFromMariaDbTest {
         Check.eq(MoveValues.Nul.REPLACE, MoveFromMariaDb.nulOption(new String[] { "--replace-nul" }),
                 "--replace-nul replaces it");
         Check.eq("--replace-nul", MoveFromMariaDb.REPLACE_NUL, "the option's name");
-        Check.eq("11", MoveFromMariaDb.SOURCE_VERSION, "the last mariadb/ version");
+        Check.eq("12", MoveFromMariaDb.SOURCE_VERSION, "the last mariadb/ version");
         try {
             MoveFromMariaDb.nulOption(new String[] { "--replace-nulls" });
             Check.fail("an unknown argument is refused");
@@ -237,11 +237,11 @@ public class MoveFromMariaDbTest {
     }
 
     private static void refusesASourceAtAnotherVersion() {
-        Check.eq(null, MoveFromMariaDb.historyRefusal(true, "11", List.of()), "version 11, every row succeeded");
-        String older = MoveFromMariaDb.historyRefusal(true, "10", List.of());
-        Check.isTrue(older != null && older.contains("version 10") && older.contains("mariadb-final")
+        Check.eq(null, MoveFromMariaDb.historyRefusal(true, "12", List.of()), "version 12, every row succeeded");
+        String older = MoveFromMariaDb.historyRefusal(true, "11", List.of());
+        Check.isTrue(older != null && older.contains("version 11") && older.contains("mariadb-final")
                 && older.contains("start it once"), "an older source is told to upgrade and start once: " + older);
-        String failed = MoveFromMariaDb.historyRefusal(true, "11", List.of("9"));
+        String failed = MoveFromMariaDb.historyRefusal(true, "12", List.of("9"));
         Check.isTrue(failed != null && failed.contains("version 9") && failed.contains("mariadb-final"),
                 "a failed migration is refused, naming it: " + failed);
         String none = MoveFromMariaDb.historyRefusal(false, null, List.of());
@@ -299,22 +299,22 @@ public class MoveFromMariaDbTest {
 
     /**
      * The version the move makes its target's tables at (the review's item 7, option B): the one that pairs with a
-     * version-11 source, and no later one, which the app's first start applies to the moved rows
+     * version-12 source, and no later one, which the app's first start applies to the moved rows
      */
     private static void pairsWithOneSchemaVersion() {
         String why = "TARGET_VERSION is the version of Healdan's tables that pairs with a source at version "
-                + MoveFromMariaDb.SOURCE_VERSION + ": the eleven scripts it ran, translated, and V12, the widening of"
-                + " LogicalDOC's text columns. A later migration (V13 or after) changes nothing here: the move stops at"
-                + " 12, and the app's first start applies the later ones to the moved rows, as on any upgrade. So"
-                + " there's nothing to decide when one ships, and the constant stays 12";
-        Check.eq("12", MoveFromMariaDb.TARGET_VERSION, why);
+                + MoveFromMariaDb.SOURCE_VERSION + ": the twelve scripts it ran, translated, and V13, the widening of"
+                + " LogicalDOC's text columns. A later migration (V14 or after) changes nothing here: the move stops at"
+                + " 13, and the app's first start applies the later ones to the moved rows, as on any upgrade. So"
+                + " there's nothing to decide when one ships, and the constant stays 13";
+        Check.eq("13", MoveFromMariaDb.TARGET_VERSION, why);
         Check.isTrue(MoveFromMariaDbTest.class.getClassLoader().getResource("healdan/db/migration/postgresql/V"
                 + MoveFromMariaDb.TARGET_VERSION + "__widen_logicaldoc_text.sql") != null,
                 "the widening is the WAR's script at TARGET_VERSION. " + why);
-        Check.eq(null, MoveFromMariaDb.versionRefusal("12"), "a target at 12 goes on");
-        String other = MoveFromMariaDb.versionRefusal("13");
-        Check.isTrue(other != null && other.contains("version 13") && other.contains("version 12")
-                && other.contains("version 11") && other.contains("Run the move again"),
+        Check.eq(null, MoveFromMariaDb.versionRefusal("13"), "a target at 13 goes on");
+        String other = MoveFromMariaDb.versionRefusal("14");
+        Check.isTrue(other != null && other.contains("version 14") && other.contains("version 13")
+                && other.contains("version 12") && other.contains("Run the move again"),
                 "a target at another version stops the move: " + other);
     }
 

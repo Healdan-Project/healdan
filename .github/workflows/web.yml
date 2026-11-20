@@ -5,8 +5,9 @@ name: Web
 # and the Docker image build runs the same build through Maven.
 #
 # No paths filter: the Web check should be required, so every pull request runs the workflow and the app job skips
-# itself when code-changed.sh says the app didn't change: nothing under healdan-web/, this workflow or the API contract
-# (healdan-api's openapi.yaml, which the app's types are generated from). The Web job, the check, then passes at once.
+# itself when code-changed.sh says the app didn't change: nothing under healdan-web/, this workflow or the API contracts
+# (healdan-api's openapi.yaml and openapi-admin.yaml, which the apps' types are generated from). The Web job, the check,
+# then passes at once.
 
 on:
   push:
