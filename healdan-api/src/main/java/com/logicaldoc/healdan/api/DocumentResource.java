@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -236,6 +237,7 @@ public class DocumentResource {
 		User caller = Caller.current().user();
 		try {
 			List<Document> documents = new ArrayList<>();
+			Map<Long, Date> lastUsed = new HashMap<>();
 			// The kind filters before the cap of 50, so Emails lists as many as there are; the types in the database,
 			// so the documents of other kinds are never read
 			Set<String> types = kind == null ? Set.of() : FileKinds.extensions(FileKinds.EMAIL);
@@ -243,14 +245,16 @@ public class DocumentResource {
 					d -> ApiViews.shows(d) && (kind == null
 							|| FileKinds.EMAIL.equals(FileKinds.of(FilenameUtils.getExtension(d.getFileName())))))) {
 				Document document = DocumentDAO.get().findById(recent.docId());
-				if (document != null)
+				if (document != null) {
 					documents.add(document);
+					lastUsed.put(document.getId(), recent.lastAccess());
+				}
 			}
 			// The Authors in one query, not one a row
 			Map<Long, Author> authors = ApiViews.authors(documents);
 			List<DocumentView> views = new ArrayList<>();
 			for (Document document : documents)
-				views.add(ApiViews.document(document, caller, authors));
+				views.add(ApiViews.document(document, caller, authors).withLastUsed(lastUsed.get(document.getId())));
 			return Page.whole(views);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list recent documents", e);

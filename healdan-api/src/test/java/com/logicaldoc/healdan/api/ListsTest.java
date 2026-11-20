@@ -4,9 +4,11 @@
 package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -17,6 +19,7 @@ import org.junit.Test;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
@@ -27,6 +30,10 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
+import com.logicaldoc.healdan.navigation.RecentDocuments;
+import com.logicaldoc.healdan.navigation.RecentDocuments.RecentDocument;
+import com.logicaldoc.healdan.navigation.RecentFolders;
+import com.logicaldoc.healdan.navigation.RecentFolders.RecentFolder;
 
 /**
  * Recent folders, recent documents and check-outs (spec sections 6.2 and 6.4).
@@ -77,6 +84,53 @@ public class ListsTest extends ApiTestCase {
 		own.setSecurityRef(null);
 		FolderDAO.get().store(own, fx.folderHistory(boss));
 		fx.grant(f, boss.getUserGroup(), Permission.READ, Permission.WRITE, Permission.DOWNLOAD);
+	}
+
+	@Test
+	public void testRecentCarriesLastUsed() throws Exception {
+		file(documents, "first.docx", clerk);
+		Thread.sleep(1100);
+		Folder sub = fx.folder(documents, "Sub");
+		file(sub, "second.docx", clerk);
+		String token = signIn(clerk);
+
+		// The API writes whole seconds, as it does every date
+		JsonNode docs = get("/api/v1/documents/recent").token(token).send().json().path("items");
+		List<RecentDocument> recentDocs = RecentDocuments.get().list(clerk.getId(), Set.of(), d -> true);
+		assertEquals(recentDocs.size(), docs.size());
+		assertTrue(docs.size() > 1);
+		for (JsonNode item : docs) {
+			Document d = DocumentDAO.get().findByCustomId(item.path("docNumber").asText(), Tenant.DEFAULT_ID);
+			RecentDocument match = recentDocs.stream().filter(r -> r.docId() == d.getId()).findFirst().orElseThrow();
+			assertEquals(match.lastAccess().getTime() / 1000, Instant.parse(item.path("lastUsed").textValue()).getEpochSecond());
+		}
+
+		JsonNode folders = get("/api/v1/folders/recent").token(token).send().json().path("items");
+		List<RecentFolder> recentFolders = RecentFolders.get().list(clerk.getId());
+		assertEquals(recentFolders.size(), folders.size());
+		assertTrue(folders.size() > 1);
+		for (JsonNode item : folders) {
+			RecentFolder match = recentFolders.stream().filter(r -> r.folderId() == item.path("id").asLong()).findFirst()
+					.orElseThrow();
+			assertEquals(match.lastChange().getTime() / 1000, Instant.parse(item.path("lastUsed").textValue()).getEpochSecond());
+		}
+	}
+
+	@Test
+	public void testOnlyRecentCarriesLastUsed() throws Exception {
+		Document first = file(documents, "first.docx", clerk);
+		String token = signIn(clerk);
+
+		assertTrue(get("/api/v1/documents/recent").token(token).send().json().path("items").get(0).has("lastUsed"));
+		assertFalse(get("/api/v1/documents/" + number(first)).token(token).send().json().has("lastUsed"));
+		JsonNode children = get("/api/v1/folders/" + documents.getId() + "/children").token(token).send().json()
+				.path("items");
+		assertTrue(children.size() > 0);
+		for (JsonNode item : children)
+			assertFalse(item.has("lastUsed"));
+		JsonNode hits = get("/api/v1/search?q=first").token(token).send().json().path("items");
+		for (JsonNode item : hits)
+			assertFalse(item.has("lastUsed"));
 	}
 
 	@Test

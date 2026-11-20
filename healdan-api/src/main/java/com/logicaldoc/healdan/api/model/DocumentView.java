@@ -5,6 +5,8 @@ package com.logicaldoc.healdan.api.model;
 
 import java.util.Date;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 /**
  * A document as {@code GET /v1/documents/{docNumber}} describes it (spec
  * section 6.4).
@@ -29,8 +31,20 @@ import java.util.Date;
  * @param canEdit whether the caller may check the document out and save to it
  * @param canOpen whether the caller may download the document's file, as
  *        its content and thumbnail ask
+ * @param lastUsed when the caller last used the document; only in Recent's
+ *        list, and left out of every other answer
  */
 public record DocumentView(String type, long docNumber, String name, String kind, long size, String version, String fileVersion,
 		String reference, FolderRef folder, MatterRef matter, AuthorRef author, Date dateFiled, Date lastModified,
-		HoldView hold, boolean canEdit, boolean canOpen) {
+		HoldView hold, boolean canEdit, boolean canOpen,
+		@JsonInclude(JsonInclude.Include.NON_NULL) Date lastUsed) {
+
+	/**
+	 * @param used when the caller last used the document
+	 * @return this view with {@code lastUsed} set
+	 */
+	public DocumentView withLastUsed(Date used) {
+		return new DocumentView(type, docNumber, name, kind, size, version, fileVersion, reference, folder, matter, author,
+				dateFiled, lastModified, hold, canEdit, canOpen, used);
+	}
 }
