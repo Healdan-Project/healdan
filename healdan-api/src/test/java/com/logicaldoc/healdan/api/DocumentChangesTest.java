@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -56,7 +57,10 @@ import com.logicaldoc.healdan.trash.TrashStore;
  */
 public class DocumentChangesTest extends ApiTestCase {
 
-	private static final String EMAIL = "From: Cara Diaz <cara@example.com>\r\nSubject: Twin\r\n"
+	/** A change another write makes, which tells a version record made before it from one made after */
+	private static final Consumer<Document> RED = d -> d.setColor("red");
+
+	private static final String EMAIL ="From: Cara Diaz <cara@example.com>\r\nSubject: Twin\r\n"
 			+ "Message-ID: <twin-1@example.com>\r\nContent-Type: text/plain\r\n\r\nTwin.\r\n";
 
 	private User clerk;
@@ -247,6 +251,44 @@ public class DocumentChangesTest extends ApiTestCase {
 		assertEquals("a.docx", DocumentDAO.get().findById(held.getId()).getFileName());
 	}
 
+	@Test
+	public void testRenamePastABackgroundWrite() throws Exception {
+		// The Indexer saves the document after CE's rename read it, so CE's write of the rename fails and the API asks
+		// again. CE's rename had started saving its version record before that write: the record of a write that
+		// failed, under the number the rename asked again gives the document (the smoke test's step 9, 2026-11-20)
+		Document d = file("a.docx");
+		ApiResponse response;
+		try (BackgroundWrite indexer = BackgroundWrite.of(d.getId(), DocumentEvent.INDEXED, RED)
+				.overtaking(DocumentEvent.RENAMED).start()) {
+			response = rename(d, "Lease", token);
+			indexer.assertWritten();
+		}
+		awaitAsyncWork();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("Lease.docx", DocumentDAO.get().findById(d.getId()).getFileName());
+		// The rename's one record is the rename as stored, after the other write
+		assertEquals(List.of("1.0 event.stored a.docx -", "1.1 event.renamed Lease.docx red"), versions(d));
+	}
+
+	@Test
+	public void testRenamePastABackgroundWriteAtTheFlush() throws Exception {
+		// The other write commits just before CE's UPDATE of the rename, whose failure CE's DAO swallows: the rename
+		// goes on, and CE keeps its version record, which goes before the API asks again
+		Document d = file("a.docx");
+		ApiResponse response;
+		try (BackgroundWrite indexer = BackgroundWrite.atFlush(d.getId(), DocumentEvent.INDEXED, RED)
+				.overtaking(DocumentEvent.RENAMED).start()) {
+			response = rename(d, "Lease", token);
+			indexer.assertWritten();
+		}
+		awaitAsyncWork();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("Lease.docx", DocumentDAO.get().findById(d.getId()).getFileName());
+		assertEquals(List.of("1.0 event.stored a.docx -", "1.1 event.renamed Lease.docx red"), versions(d));
+	}
+
 	// Move
 
 	@Test
@@ -347,6 +389,39 @@ public class DocumentChangesTest extends ApiTestCase {
 		makeImmutable(immutable);
 		assertEquals("refused", move(immutable, drafts.getId(), token).code());
 		assertEquals(documents.getId(), DocumentDAO.get().findById(held.getId()).getFolder().getId());
+	}
+
+	@Test
+	public void testMovePastABackgroundWrite() throws Exception {
+		// As the rename's: CE's move starts saving its version record only once its write is stored
+		Document d = file("a.docx");
+		ApiResponse response;
+		try (BackgroundWrite indexer = BackgroundWrite.of(d.getId(), DocumentEvent.INDEXED, RED)
+				.overtaking(DocumentEvent.MOVED).start()) {
+			response = move(d, drafts.getId(), token);
+			indexer.assertWritten();
+		}
+		awaitAsyncWork();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(drafts.getId(), DocumentDAO.get().findById(d.getId()).getFolder().getId());
+		assertEquals(List.of("1.0 event.stored a.docx -", "1.1 event.moved a.docx red"), versions(d));
+	}
+
+	@Test
+	public void testMovePastABackgroundWriteAtTheFlush() throws Exception {
+		Document d = file("a.docx");
+		ApiResponse response;
+		try (BackgroundWrite indexer = BackgroundWrite.atFlush(d.getId(), DocumentEvent.INDEXED, RED)
+				.overtaking(DocumentEvent.MOVED).start()) {
+			response = move(d, drafts.getId(), token);
+			indexer.assertWritten();
+		}
+		awaitAsyncWork();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(drafts.getId(), DocumentDAO.get().findById(d.getId()).getFolder().getId());
+		assertEquals(List.of("1.0 event.stored a.docx -", "1.1 event.moved a.docx red"), versions(d));
 	}
 
 	// Delete
@@ -619,6 +694,15 @@ public class DocumentChangesTest extends ApiTestCase {
 		DocumentHistory history = fx.documentHistory(as);
 		history.setEvent(DocumentEvent.LOCKED);
 		DocumentManager.get().lock(d.getId(), DocumentStatus.LOCKED, history);
+	}
+
+	/** The document's version records that aren't deleted, oldest first: number, event, file name and colour */
+	private List<String> versions(Document d) {
+		return jdbc().queryForList("select ld_version, ld_event, ld_filename, ld_color from ld_version"
+				+ " where ld_documentid = ? and ld_deleted = 0 order by ld_id", d.getId()).stream()
+				.map(r -> "%s %s %s %s".formatted(r.get("ld_version"), r.get("ld_event"), r.get("ld_filename"),
+						r.get("ld_color") != null ? r.get("ld_color") : "-"))
+				.toList();
 	}
 
 	/** The document's history, oldest first */

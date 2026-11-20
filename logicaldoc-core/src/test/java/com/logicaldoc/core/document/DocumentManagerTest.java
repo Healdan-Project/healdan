@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -49,6 +50,7 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.store.MockStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
+import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.core.ticket.Ticket;
 import com.logicaldoc.util.io.FileUtil;
 import com.logicaldoc.util.io.ResourceUtil;
@@ -431,6 +433,77 @@ public class DocumentManagerTest extends AbstractCoreTestCase {
 
         doc = docDao.findById(1);
         assertEquals("archimede.pdf", doc.getFileName());
+    }
+
+    /**
+     * Healdan: a rename whose write of the document fails, as when another
+     * thread stored the document after the rename read it, keeps no version
+     * record. CE started saving the record before the write, so a rename that
+     * never happened was in the timeline, under the number the document's
+     * next write takes, and that write's own record then failed on
+     * {@code ak_version}.
+     */
+    @Test
+    public void testRenameWhoseWriteFailsKeepsNoVersion() throws Exception {
+        String versions = "select ld_version from ld_version where ld_documentid = 1 order by ld_id";
+        List<String> before = docDao.queryForList(versions, String.class);
+        DocumentListener refusing = new DocumentListener() {
+            @Override
+            public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary)
+                    throws PersistenceException {
+                if (transaction != null && DocumentEvent.RENAMED.toKey().equals(transaction.getEvent()))
+                    throw new PersistenceException("Another write came first");
+            }
+
+            @Override
+            public void afterStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+                // Nothing to do
+            }
+
+            @Override
+            public void afterFileStore(Document document, DocumentHistory transaction,
+                    Map<String, Object> dictionary) {
+                // Nothing to do
+            }
+
+            @Override
+            public void beforeCheckin(Document document, DocumentHistory transaction,
+                    Map<String, Object> dictionary) {
+                // Nothing to do
+            }
+
+            @Override
+            public void afterCheckin(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+                // Nothing to do
+            }
+
+            @Override
+            public void afterSaveHistory(Document document, DocumentHistory event, Map<String, Object> dictionary) {
+                // Nothing to do
+            }
+        };
+
+        DocumentHistory transaction = new DocumentHistory();
+        transaction.setUser(userDao.findByUsername("admin"));
+        DocumentListenerManager.get().getListeners().add(refusing);
+        try {
+            testSubject.rename(1L, "archimede.pdf", transaction);
+            fail("The rename's write was refused");
+        } catch (PersistenceException e) {
+            // As expected
+        } finally {
+            DocumentListenerManager.get().getListeners().remove(refusing);
+        }
+
+        // Any version save the rename started is done
+        ThreadPoolExecutor pool = ThreadPools.get().getPool("VersionSave");
+        long deadline = System.currentTimeMillis() + 20000L;
+        while (!pool.getQueue().isEmpty() || pool.getActiveCount() > 0) {
+            assertTrue("Background version saves didn't finish", System.currentTimeMillis() < deadline);
+            Thread.sleep(50L);
+        }
+        assertEquals("pippo.pdf", docDao.findById(1L).getFileName());
+        assertEquals(before, docDao.queryForList(versions, String.class));
     }
 
     @Test

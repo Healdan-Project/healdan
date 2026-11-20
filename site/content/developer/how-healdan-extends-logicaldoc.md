@@ -546,6 +546,16 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
 - **`HealdanHooks`** in `logicaldoc-core` lets the few places in LogicalDOC that write without telling its
   listeners ask Healdan first. Every refusal throws `HealdanVetoException`, which the document and folder DAOs roll
   back on.
+- **A version record follows its write.** LogicalDOC's `DocumentManager` writes the document, then saves the
+  write's version record a second or more later, on a thread of its own, under the number the write gave the
+  document; `ak_version`, a unique index on the document and the number, refuses a second record with it. Another
+  thread's write of the document between LogicalDOC's read and its write, as the Indexer's after it parses, makes
+  that write fail, and the API asks LogicalDOC again. LogicalDOC's `rename` started its record before its write, so
+  a rename that failed kept one, and the rename asked again had its own refused: an `ERROR` line in PostgreSQL's
+  log, and in the Classic Interface, which doesn't ask again, a rename in the timeline that never happened, holding
+  the number whose record the document's next write, a save among them, then lost. `rename` starts it once the write is stored, as a check-in and a move
+  do, an upstream edit marked `// Healdan:` (`DocumentManagerTest#testRenameWhoseWriteFailsKeepsNoVersion`, in
+  `UPSTREAM_TESTS`, and `DocumentChangesTest`'s renames and moves past a background write).
 - **Licence headers.** Every source file Healdan writes opens with two SPDX lines in its own comment syntax, with
   the year the file was created:
 
