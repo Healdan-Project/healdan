@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, fieldErrors, useApi } from '@healdan/shell'
 import { Button, DatePicker, formatDay, SelectField, TextField, toast } from '@healdan/ui'
@@ -115,6 +115,8 @@ function ValuesForm({ values, node, root, kind }: { values: A['FolderProperties'
   const [people, setPeople] = useState<Record<string, A['PersonBrief']>>({})
   const [failure, setFailure] = useState<unknown>()
   const [busy, setBusy] = useState(false)
+  const held = useRef<HTMLFieldSetElement>(null)
+  const saveButton = useRef<HTMLButtonElement>(null)
   const shown = draft ?? initial
   const dirty = draft !== null && properties.some((property) => draft[property.name] !== initial[property.name])
   useEditState('values', dirty, busy)
@@ -146,6 +148,8 @@ function ValuesForm({ values, node, root, kind }: { values: A['FolderProperties'
   }
 
   async function save() {
+    // The fields are held while it saves, so a field Enter saved from would drop the focus: it goes to Save Values
+    if (held.current?.contains(document.activeElement)) saveButton.current?.focus()
     setBusy(true)
     setFailure(undefined)
     try {
@@ -153,6 +157,8 @@ function ValuesForm({ values, node, root, kind }: { values: A['FolderProperties'
         values: Object.fromEntries(properties.map((property) => [property.name, valueOf(property, shown[property.name] ?? '', initial[property.name] ?? '')])),
       }
       const answer = await api.send<A['FolderProperties']>('PUT', apiPath`/v1/admin/folders/${node.id}/properties`, body)
+      // A read still on its way began before the save, so it's called off rather than land after it
+      await queryClient.cancelQueries({ queryKey: workspaceKeys.properties(node.id), exact: true })
       queryClient.setQueryData(workspaceKeys.properties(node.id), answer)
       setDraft(null)
       workspaceChanged(queryClient, root.id, kind, workspaceKeys.properties(node.id))
@@ -189,7 +195,7 @@ function ValuesForm({ values, node, root, kind }: { values: A['FolderProperties'
       ]
       return <SelectField label={property.label} value={value} empty={t('admin.properties.notSet')} options={options} error={error} onChange={onChange} />
     }
-    if (property.type === 'date') return <DatePicker label={property.label} value={value || undefined} error={error} onChange={(day) => onChange(day ?? '')} />
+    if (property.type === 'date') return <DatePicker label={property.label} value={value || undefined} error={error} isDisabled={busy} onChange={(day) => onChange(day ?? '')} />
     if (property.type === 'user') {
       const local = property.source === 'local' ? personOf(property.value) : null
       const person = value === '' ? null : (people[value] ?? (local && String(local.id) === value ? { id: local.id, username: '', name: local.name ?? '' } : null))
@@ -217,22 +223,25 @@ function ValuesForm({ values, node, root, kind }: { values: A['FolderProperties'
         if (dirty && !invalid && !busy) void save()
       }}
     >
-      {properties.map((property) => {
-        const source = sourceOf(property)
-        return (
-          <div key={property.name} className={styles.field}>
-            {field(property)}
-            {source && <p className={styles.note}>{source}</p>}
-          </div>
-        )
-      })}
+      {/* Held while the save is on its way, so nothing changed meanwhile is dropped under its Saved */}
+      <fieldset ref={held} disabled={busy} className={styles.hold}>
+        {properties.map((property) => {
+          const source = sourceOf(property)
+          return (
+            <div key={property.name} className={styles.field}>
+              {field(property)}
+              {source && <p className={styles.note}>{source}</p>}
+            </div>
+          )
+        })}
+      </fieldset>
       {refusal !== undefined && (
         <p className={styles.problem} role="alert">
           {refusal}
         </p>
       )}
       <div className={styles.buttons}>
-        <Button type="submit" variant="default" isDisabled={!dirty || invalid} isPending={busy}>
+        <Button ref={saveButton} type="submit" variant="default" isDisabled={!dirty || invalid} isPending={busy}>
           {t('admin.properties.save')}
         </Button>
       </div>

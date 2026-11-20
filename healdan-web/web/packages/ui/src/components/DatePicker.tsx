@@ -33,6 +33,8 @@ export interface DatePickerProps {
   required?: boolean
   /** What is wrong with the day, shown under the field and tied to it for a screen reader */
   error?: string
+  /** Greyed out and taking nothing, as while the form it's in is being saved */
+  isDisabled?: boolean
 }
 
 function day(text?: string) {
@@ -45,7 +47,7 @@ function day(text?: string) {
 }
 
 /** A day typed in parts (month, day, year in the person's order), or picked from a calendar. Days go in and out as 2026-11-02. */
-export function DatePicker({ label, value, onChange, min, max, required, error }: DatePickerProps) {
+export function DatePicker({ label, value, onChange, min, max, required, error, isDisabled }: DatePickerProps) {
   // The field keeps what is typed so far, which may not be a day the caller should hear of yet. It's replaced when the
   // caller's value changes (compared with the caller's last value, not with what the field reported, so a caller that
   // keeps its own value while the field is half typed doesn't blank it), adjusted during render, not in an effect.
@@ -67,6 +69,7 @@ export function DatePicker({ label, value, onChange, min, max, required, error }
       }}
       isInvalid={error ? true : undefined}
       isRequired={required}
+      isDisabled={isDisabled}
       minValue={day(min)}
       maxValue={day(max)}
     >

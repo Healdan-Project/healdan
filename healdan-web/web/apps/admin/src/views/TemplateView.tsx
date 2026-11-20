@@ -63,8 +63,8 @@ function Template({ template }: { template: A['TemplateInfo'] }) {
     // Its Trash item isn't offered back: the Trash restores into a Store only, and answers a template 409 place-gone
     await api.send<A['DeletedFolder']>('DELETE', apiPath`/v1/admin/templates/${template.id}`)
     toast(t('admin.deleteTemplate.done', { name: template.name }))
-    // Off its page first, so nothing asks for it again
-    await navigate({ to: routes.templates })
+    // Off its page first, so nothing asks for it again; a change left in its workspace went with it, so without asking
+    await navigate({ to: routes.templates, ignoreBlocker: true })
     queryClient.removeQueries({ queryKey: workspaceKeys.template(template.id) })
     void queryClient.invalidateQueries({ queryKey: workspaceKeys.templates })
   }

@@ -14,6 +14,8 @@ export interface EveryPermissionProps {
   rows: readonly Grant[]
   /** Ticks to change, or the permissions only listed, for a folder that follows another's */
   editable: boolean
+  /** A row whose ticks are shown but can't be changed, as the owner's on a matter's own folder */
+  locked?: (row: Grant) => boolean
   onChange: (key: string, permissions: Permission[]) => void
 }
 
@@ -22,7 +24,7 @@ export interface EveryPermissionProps {
  * row's name, so a row can grant anything, which its level then shows as Custom. A folder that follows another's lists
  * what each row grants instead.
  */
-export function EveryPermission({ rows, editable, onChange }: EveryPermissionProps) {
+export function EveryPermission({ rows, editable, locked, onChange }: EveryPermissionProps) {
   if (!editable) {
     return (
       <div className={styles.every}>
@@ -37,7 +39,7 @@ export function EveryPermission({ rows, editable, onChange }: EveryPermissionPro
   return (
     <div className={styles.every}>
       {rows.map((row) => (
-        <fieldset key={row.key} className={styles.permissions}>
+        <fieldset key={row.key} disabled={locked?.(row)} className={styles.permissions}>
           <legend>{t('admin.access.everyOf', { name: row.name })}</legend>
           <div className={styles.grid}>
             {PERMISSIONS.map((permission) => (

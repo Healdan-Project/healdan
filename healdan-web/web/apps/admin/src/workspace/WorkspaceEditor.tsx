@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useId, useRef, useState } from 'react'
+import { useBlocker } from '@tanstack/react-router'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { ApiError, apiPath, type adminComponents, type components } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Icon, toast, toastWithAction, type ToastAction } from '@healdan/ui'
@@ -35,7 +36,7 @@ export interface WorkspaceEditorProps {
  * folder on the right, with who can use it and the values it sets, or a search folder's rule. New Folder, New Search
  * Folder, Rename, Move To… and Delete work on every folder below the top. In a template, what New Matter would refuse
  * is said as warnings beside the folder's Save, which still saves. A matter's folder deleted here has Undo; a template's
- * hasn't, as the Trash can't put it back.
+ * hasn't, as the Trash can't put it back. Leaving the page over a change unsaved, or a save on its way, asks first.
  */
 export function WorkspaceEditor({ rootFolderId, kind }: WorkspaceEditorProps) {
   const tree = useWorkspaceTree(rootFolderId)
@@ -62,6 +63,8 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
   const [leaving, setLeaving] = useState<number | null>(null)
   const [waiting, setWaiting] = useState<number | null>(null)
   const waitingFor = useRef<number | null>(null)
+  // Where the panels stand together: a save on its way, else a change unsaved, else nothing, for leaving the page
+  const [standing, setStanding] = useState<EditState>('clean')
 
   const wait = (id: number | null) => {
     waitingFor.current = id
@@ -72,6 +75,8 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
     const was = parts.current.get(part)
     if (state === 'clean') parts.current.delete(part)
     else parts.current.set(part, state)
+    const all = [...parts.current.values()]
+    setStanding(all.includes('saving') ? 'saving' : all.length > 0 ? 'dirty' : 'clean')
     const next = waitingFor.current
     if (was !== 'saving' || state === 'saving' || next === null) return
     // Refused: the panel says why, and the folder chosen meanwhile is forgotten
@@ -82,6 +87,21 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
     if (states.includes('dirty')) setLeaving(next)
     else setSelected(next)
   }, [])
+
+  // Leaving the page over a change, by a link, the find, the crumb or Back, asks first; changing the tab doesn't, as the
+  // editor stays where it is. A reload or closing the window over one is asked about by the browser, in its own words.
+  const changing = standing !== 'clean'
+  const shouldBlock = useCallback(({ current, next }: { current: { pathname: string }; next: { pathname: string } }) => current.pathname !== next.pathname && parts.current.size > 0, [])
+  const blocker = useBlocker({ shouldBlockFn: shouldBlock, enableBeforeUnload: false, disabled: !changing, withResolver: true })
+  useEffect(() => {
+    if (!changing) return
+    const ask = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', ask)
+    return () => window.removeEventListener('beforeunload', ask)
+  }, [changing])
 
   /** Another folder chosen: at once, after asking over an unsaved change, or once a save on its way is saved */
   function choose(id: number) {
@@ -299,6 +319,16 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
             onClose={() => setLeaving(null)}
           >
             <p className={page.line}>{t('admin.workspace.leaveLine', { name: node.name, next: findNode(root, leaving)?.name ?? '' })}</p>
+          </Confirm>
+        )}
+        {blocker.status === 'blocked' && (
+          <Confirm
+            title={t('admin.workspace.leaveTitle', { name: node.name })}
+            confirm={standing === 'saving' ? t('admin.workspace.leavePage') : t('admin.access.discard')}
+            run={async () => blocker.proceed()}
+            onClose={() => blocker.reset()}
+          >
+            <p className={page.line}>{t(standing === 'saving' ? 'admin.workspace.leaveSavingLine' : 'admin.workspace.leavePageLine', { name: node.name })}</p>
           </Confirm>
         )}
       </div>

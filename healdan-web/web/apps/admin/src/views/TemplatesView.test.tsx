@@ -3,7 +3,7 @@
 
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
 import { deletedFolder, litigationAccess, problem, templateInfos, workspaceRoutes, type Routes } from '../test/fakeApi'
@@ -145,6 +145,20 @@ describe("A template's page", () => {
     await waitFor(() => expect(within(main()).queryByRole('region', { name: 'What New Matter Would Refuse' })).toBeNull())
   })
 
+  it('lists two warnings alike in code, group and Store, each once', async () => {
+    const twice: A['TemplateProblem'] = { code: 'wider-than-parent', message: 'Privileged grants more than its parent.', folderId: 2024, storeId: null, groupId: 21, groupName: 'Trainees' }
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await openTemplate({ 'GET /v1/admin/templates/*/problems': [twice, { ...twice, message: 'Privileged grants more than its parent, again.' }] })
+      fireEvent.click(within(within(main()).getByRole('treegrid', { name: 'Folders of Litigation' })).getByRole('row', { name: /^Privileged/ }))
+      const warning = await within(within(main()).getByRole('region', { name: 'Chosen Folder' })).findByRole('note')
+      expect(within(warning).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Privileged grants more than its parent.', 'Privileged grants more than its parent, again.'])
+      expect(errors.mock.calls.filter(([message]) => String(message).includes('same key'))).toEqual([])
+    } finally {
+      errors.mockRestore()
+    }
+  })
+
   it('renames the template, saying first that a name is taken', async () => {
     let info = templateInfos[1]!
     const { api } = await openTemplate({
@@ -166,6 +180,8 @@ describe("A template's page", () => {
 
   it('asks before a delete, saying matters made from it are unchanged, then goes to the list, with no Undo', async () => {
     const { api, router } = await openTemplate({ 'DELETE /v1/admin/templates/202': deletedFolder({ trashItemId: 907, folders: 5 }) })
+    // A change left in its workspace goes with it, so the list opens without asking about it
+    await userEvent.selectOptions(await within(main()).findByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
     await userEvent.click(within(main()).getByRole('button', { name: 'Delete' }))
     const dialog = await screen.findByRole('alertdialog', { name: 'Move the Template Litigation to the Trash?' })
     expect(within(dialog).getByText('Its 5 folders go with it.')).toBeTruthy()
@@ -174,6 +190,7 @@ describe("A template's page", () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/templates'))
     expect(api.callsTo('DELETE /v1/admin/templates/202')).toHaveLength(1)
+    expect(screen.queryByRole('alertdialog', { name: /^Leave the Changes/ })).toBeNull()
     // The Trash can't put a template back (409 place-gone), so the toast offers nothing to press
     expect(within(await toastOf('Moved the template Litigation to the Trash')).queryByRole('button', { name: 'Undo' })).toBeNull()
   })

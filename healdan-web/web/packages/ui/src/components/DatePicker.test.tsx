@@ -39,6 +39,17 @@ describe('DatePicker', () => {
     expect(onChange.mock.calls).toEqual([['2026-11-02']])
   })
 
+  it('takes nothing while disabled, as while the form it is in is being saved', async () => {
+    const onChange = vi.fn()
+    render(<DatePicker label="From" value="2026-11-02" isDisabled onChange={onChange} />)
+    const month = screen.getByRole('spinbutton', { name: /month/i })
+    expect(month.getAttribute('aria-disabled')).toBe('true')
+    await userEvent.click(month)
+    await userEvent.keyboard('{ArrowUp}')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('button').hasAttribute('disabled')).toBe(true)
+  })
+
   it('ignores a value that is not a day', () => {
     render(<DatePicker label="From" value="2026-13-45" onChange={() => {}} />)
     expect(screen.getByRole('spinbutton', { name: /month/i }).textContent).toMatch(/mm/i)

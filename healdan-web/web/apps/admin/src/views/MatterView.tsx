@@ -142,7 +142,8 @@ function Matter({ matter, tab }: { matter: A['Matter']; tab: MatterTab }) {
       />
       {dialog === 'edit' && <EditMatterDialog matter={matter} onClose={close} />}
       {dialog === 'move' && <MoveMatterDialog matter={matter} onClose={close} />}
-      {dialog === 'delete' && <DeleteMatterDialog matter={matter} onDeleted={() => navigate({ to: routes.matters })} onClose={close} />}
+      {/* A change left in its workspace went with the matter, so the list opens without asking */}
+      {dialog === 'delete' && <DeleteMatterDialog matter={matter} onDeleted={() => navigate({ to: routes.matters, ignoreBlocker: true })} onClose={close} />}
     </div>
   )
 }

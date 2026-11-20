@@ -300,6 +300,9 @@ export const adminEnUS = {
   // Choosing another folder while the chosen one's changes aren't saved, or are being saved
   'admin.workspace.leaveTitle': 'Leave the Changes to {name}?',
   'admin.workspace.leaveLine': "The changes to {name} aren't saved. Opening {next} discards them.",
+  'admin.workspace.leavePageLine': "The changes to {name} aren't saved. Leaving this page discards them.",
+  'admin.workspace.leaveSavingLine': "The changes to {name} are still being saved. If you leave this page now, you won't hear whether they were.",
+  'admin.workspace.leavePage': 'Leave Page',
   'admin.workspace.waiting': 'Opens {name} once the changes are saved.',
 
   // Who Can Use This Folder (spec 8.4, P2-R8, P2-R14, P2-R15)
@@ -315,7 +318,7 @@ export const adminEnUS = {
   'admin.access.owner': 'Owner',
   'admin.access.remove': 'Remove {name}',
   'admin.access.removeColumn': 'Remove',
-  'admin.access.ownerStays': "The owner's row stays on the {matterLower}'s own folder.",
+  'admin.access.ownerStays': "The owner's row stays on the {matterLower}'s own folder, with Full Access.",
   'admin.access.none': 'Nobody but administrators can use this folder.',
   'admin.access.follows': 'It follows the permissions of {name}.',
   'admin.access.followsStore': "It follows its Store's permissions.",

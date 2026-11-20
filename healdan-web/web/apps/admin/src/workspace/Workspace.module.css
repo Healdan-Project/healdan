@@ -89,6 +89,17 @@
   gap: var(--hd-space-3);
 }
 
+/* The fields of a panel, held while its save is on its way: a fieldset that draws nothing of its own */
+.hold {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .sectionHead {
   display: flex;
   flex-wrap: wrap;

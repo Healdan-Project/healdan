@@ -6,9 +6,29 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
-import { charterAccess, charterTree, classOptions, deletedFolder, folderAccess, folderNode, groupRow, personRow, problem, restoredFolder, tom, workspaceRoutes, wsPartners, type FakeApi, type Routes } from '../test/fakeApi'
+import {
+  charterAccess,
+  charterProperties,
+  charterTree,
+  classOptions,
+  deletedFolder,
+  folderAccess,
+  folderNode,
+  folderProperties,
+  groupRow,
+  personRow,
+  problem,
+  restoredFolder,
+  searchFolders,
+  tom,
+  workspaceRoutes,
+  wsPartners,
+  type FakeApi,
+  type Routes,
+} from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { PERMISSIONS, permissionsOf } from './levels'
+import { workspaceKeys } from './queries'
 
 type A = adminComponents['schemas']
 
@@ -182,16 +202,37 @@ describe('Who Can Use This Folder', () => {
     expect(within(panel()).getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false)
   })
 
-  it("keeps the owner's row on the matter's own folder, and lets it go from a folder inside", async () => {
+  it("keeps the owner's row on the matter's own folder, at Full Access, and lets it go from a folder inside", async () => {
     const { api } = await openWorkspace({ 'PUT /v1/admin/folders/110/access': charterAccess[110] })
     expect(within(access()).queryByRole('button', { name: 'Remove Tom Reeve' })).toBeNull()
-    expect(within(panel()).getByText("The owner's row stays on the matter's own folder.")).toBeTruthy()
+    expect(within(panel()).getByText("The owner's row stays on the matter's own folder, with Full Access.")).toBeTruthy()
+    // Its access is shown, not offered to change, in the menu or one by one
+    expect(within(access()).queryByRole('combobox', { name: 'Access for Tom Reeve' })).toBeNull()
+    expect(accessRows()[2]).toEqual(['Tom Reeve Owner', 'Full Access'])
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Show Every Permission' }))
+    const tomsEvery = within(panel()).getByRole('group', { name: 'Every Permission of Tom Reeve' })
+    expect(within(tomsEvery).getAllByRole('checkbox').every((box) => box.matches(':disabled') && (box as HTMLInputElement).checked)).toBe(true)
+    expect(within(within(panel()).getByRole('group', { name: 'Every Permission of Partners' })).getByRole('checkbox', { name: 'Read' }).matches(':disabled')).toBe(false)
     await userEvent.click(within(access()).getByRole('button', { name: 'Remove Everyone' }))
     expect(accessRows().map(([name]) => name)).toEqual(['Partners', 'Tom Reeve Owner'])
     await userEvent.click(within(panel()).getByRole('button', { name: 'Save' }))
     await waitFor(() => expect((putsTo(api, 110)[0] as A['FolderAccessChange']).rows).toHaveLength(2))
     await choose('Privileged')
     expect(within(access()).getByRole('button', { name: 'Remove Tom Reeve' })).toBeTruthy()
+    expect(within(access()).getByRole('combobox', { name: 'Access for Tom Reeve' })).toBeTruthy()
+  })
+
+  it("moves the focus to the next row's Remove once a row is removed, and to Add Person or Group when none follows", async () => {
+    await openWorkspace()
+    // On the matter's own folder the owner's row, last, has no Remove
+    await userEvent.click(within(access()).getByRole('button', { name: 'Remove Everyone' }))
+    expect(document.activeElement).toBe(within(access()).getByRole('button', { name: 'Remove Partners' }))
+    await userEvent.click(within(access()).getByRole('button', { name: 'Remove Partners' }))
+    expect(document.activeElement).toBe(within(panel()).getByRole('button', { name: 'Add Person or Group' }))
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Discard Changes' }))
+    await choose('Evidence')
+    await userEvent.click(within(access()).getByRole('button', { name: 'Remove Tom Reeve' }))
+    expect(document.activeElement).toBe(within(panel()).getByRole('button', { name: 'Add Person or Group' }))
   })
 
   it('takes back what was changed with Discard Changes', async () => {
@@ -795,5 +836,172 @@ describe("The Workspace Editor keeps what's being edited", () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Move Drafts to the Trash?' })).toBeNull())
     expect(within(panel()).getByRole('heading', { level: 2 }).textContent).toBe(LABEL)
     expect(level('Everyone')).toBe('Read Only')
+  })
+})
+
+const isDisabled = (element: Element) => element.matches(':disabled')
+
+describe('The Workspace Editor holds what it saves', () => {
+  it('holds who can use the folder while its save is on its way, so nothing changed meanwhile is lost under Saved', async () => {
+    const answer = held<A['FolderAccess']>()
+    const { api } = await openWorkspace({ 'PUT /v1/admin/folders/110/access': () => answer.promise })
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Show Every Permission' }))
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(putsTo(api, 110)).toHaveLength(1))
+    expect(isDisabled(within(access()).getByRole('combobox', { name: 'Access for Everyone' }))).toBe(true)
+    expect(isDisabled(within(access()).getByRole('button', { name: 'Remove Partners' }))).toBe(true)
+    expect(isDisabled(within(within(panel()).getByRole('group', { name: 'Every Permission of Partners' })).getByRole('checkbox', { name: 'Write' }))).toBe(true)
+    expect(isDisabled(within(panel()).getByRole('button', { name: 'Add Person or Group' }))).toBe(true)
+    expect(isDisabled(within(panel()).getByRole('button', { name: 'Apply to Subfolders' }))).toBe(true)
+    answer.answer({ ...charterAccess[110]!, rows: charterAccess[110]!.rows.map((one) => (one.groupId === 2 ? { ...one, level: 'read-only', permissions: permissionsOf('read-only') } : one)) })
+    expect(await screen.findByText(`Saved who can use ${LABEL}`)).toBeTruthy()
+    await waitFor(() => expect(isDisabled(within(access()).getByRole('combobox', { name: 'Access for Everyone' }))).toBe(false))
+    expect(level('Everyone')).toBe('Read Only')
+  })
+
+  it('holds the values a folder sets while they are saved, keeping the focus on Save Values', async () => {
+    const answer = held<A['FolderProperties']>()
+    await openWorkspace({ 'PUT /v1/admin/folders/111/properties': () => answer.promise })
+    await choose('Correspondence')
+    const values = await within(panel()).findByRole('region', { name: 'Values It Sets' })
+    await waitFor(() => expect((within(values).getByRole('combobox', { name: 'Subclass' }) as HTMLSelectElement).value).toBe('Letters'))
+    await userEvent.selectOptions(within(values).getByRole('combobox', { name: 'Subclass' }), 'Emails')
+    await userEvent.click(within(values).getByRole('button', { name: 'Save Values' }))
+    await waitFor(() => expect(isDisabled(within(values).getByRole('combobox', { name: 'Class' }))).toBe(true))
+    expect(isDisabled(within(values).getByRole('combobox', { name: 'Subclass' }))).toBe(true)
+    expect(document.activeElement).toBe(within(values).getByRole('button', { name: 'Save Values' }))
+    answer.answer(folderProperties(111, { docclass: { value: 'Correspondence', source: 'local' }, docsubclass: { value: 'Emails', source: 'local' } }))
+    expect(await screen.findByText('Saved the values of Correspondence')).toBeTruthy()
+    expect(isDisabled(within(values).getByRole('combobox', { name: 'Class' }))).toBe(false)
+  })
+
+  it("holds a search folder's rule while it's saved, the focus moved to Save Rule when Enter saved it from a field", async () => {
+    const answer = held<A['SearchFolder']>()
+    await openWorkspace({ 'PATCH /v1/admin/search-folders/119': () => answer.promise })
+    await choose('My Recent Docs Here')
+    const rule = await within(panel()).findByRole('region', { name: 'Rule' })
+    const days = within(rule).getByRole('textbox', { name: /Changed Within/ }) as HTMLInputElement
+    await waitFor(() => expect(days.value).toBe('14'))
+    await userEvent.type(days, '0{Enter}')
+    await waitFor(() => expect(isDisabled(days)).toBe(true))
+    expect(isDisabled(within(rule).getByRole('checkbox', { name: /Only/ }))).toBe(true)
+    expect(document.activeElement).toBe(within(rule).getByRole('button', { name: 'Save Rule' }))
+    answer.answer({ ...searchFolders[119]!, rule: { ...searchFolders[119]!.rule, days: 140 } })
+    expect(await screen.findByText('Saved the rule of My Recent Docs Here')).toBeTruthy()
+    expect(isDisabled(days)).toBe(false)
+  })
+
+  it('never lets an answer asked for before a save land after it, for who can use the folder, its values or its rule', async () => {
+    const savedAccess = { ...charterAccess[110]!, rows: charterAccess[110]!.rows.map((one) => (one.groupId === 2 ? { ...one, level: 'read-only' as const, permissions: permissionsOf('read-only') } : one)) }
+    const late = { access: held<A['FolderAccess']>(), values: held<A['FolderProperties']>(), rule: held<A['SearchFolder']>() }
+    const asked = { access: 0, values: 0, rule: 0 }
+    const { queryClient } = await openWorkspace({
+      'GET /v1/admin/folders/110/access': () => (asked.access++ === 0 ? charterAccess[110] : late.access.promise),
+      'PUT /v1/admin/folders/110/access': savedAccess,
+      'GET /v1/admin/folders/111/properties': () => (asked.values++ === 0 ? charterProperties[111] : late.values.promise),
+      'PUT /v1/admin/folders/111/properties': folderProperties(111, { docclass: { value: 'Correspondence', source: 'local' }, docsubclass: { value: 'Emails', source: 'local' } }),
+      'GET /v1/admin/search-folders/119': () => (asked.rule++ === 0 ? searchFolders[119] : late.rule.promise),
+      'PATCH /v1/admin/search-folders/119': { ...searchFolders[119]!, rule: { ...searchFolders[119]!.rule, days: 140 } },
+    })
+    // A refetch, as on a return to the window, still on its way when the save is answered, then answered with the old
+    void queryClient.refetchQueries({ queryKey: workspaceKeys.access(110) })
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText(`Saved who can use ${LABEL}`)).toBeTruthy()
+    late.access.answer(charterAccess[110]!)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(level('Everyone')).toBe('Read Only')
+
+    await choose('Correspondence')
+    const values = await within(panel()).findByRole('region', { name: 'Values It Sets' })
+    await waitFor(() => expect((within(values).getByRole('combobox', { name: 'Subclass' }) as HTMLSelectElement).value).toBe('Letters'))
+    void queryClient.refetchQueries({ queryKey: workspaceKeys.properties(111) })
+    await userEvent.selectOptions(within(values).getByRole('combobox', { name: 'Subclass' }), 'Emails')
+    await userEvent.click(within(values).getByRole('button', { name: 'Save Values' }))
+    expect(await screen.findByText('Saved the values of Correspondence')).toBeTruthy()
+    late.values.answer(charterProperties[111]!)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect((within(values).getByRole('combobox', { name: 'Subclass' }) as HTMLSelectElement).value).toBe('Emails')
+
+    await choose('My Recent Docs Here')
+    const rule = await within(panel()).findByRole('region', { name: 'Rule' })
+    const days = within(rule).getByRole('textbox', { name: /Changed Within/ }) as HTMLInputElement
+    await waitFor(() => expect(days.value).toBe('14'))
+    void queryClient.refetchQueries({ queryKey: workspaceKeys.searchFolder(119) })
+    await userEvent.type(days, '0')
+    await userEvent.click(within(rule).getByRole('button', { name: 'Save Rule' }))
+    expect(await screen.findByText('Saved the rule of My Recent Docs Here')).toBeTruthy()
+    late.rule.answer(searchFolders[119]!)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(days.value).toBe('140')
+  })
+})
+
+describe('Leaving the page over a change in the Workspace Editor', () => {
+  it('asks before a link in the left pane leaves the page while a change is unsaved, and Cancel keeps it', async () => {
+    const { router, view } = await openWorkspace()
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Navigation' })).getByRole('link', { name: 'Clients' }))
+    let dialog = await screen.findByRole('alertdialog', { name: `Leave the Changes to ${LABEL}?` })
+    expect(within(dialog).getByText(`The changes to ${LABEL} aren't saved. Leaving this page discards them.`)).toBeTruthy()
+    await expectNoAxeViolations(view.container)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(router.state.location.pathname).toBe('/matters/11')
+    expect(level('Everyone')).toBe('Read Only')
+
+    // The crumb asks too, and Discard Changes leaves
+    await userEvent.click(within(within(main()).getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Matters' }))
+    dialog = await screen.findByRole('alertdialog', { name: `Leave the Changes to ${LABEL}?` })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard Changes' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/matters'))
+  })
+
+  it('asks while a save is on its way, saying so, and leaves without asking once nothing is unsaved', async () => {
+    const answer = held<A['FolderAccess']>()
+    const { api, router } = await openWorkspace({ 'PUT /v1/admin/folders/110/access': () => answer.promise })
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(putsTo(api, 110)).toHaveLength(1))
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Navigation' })).getByRole('link', { name: 'Clients' }))
+    const dialog = await screen.findByRole('alertdialog', { name: `Leave the Changes to ${LABEL}?` })
+    expect(within(dialog).getByText(`The changes to ${LABEL} are still being saved. If you leave this page now, you won't hear whether they were.`)).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Leave Page' })).toBeTruthy()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    answer.answer(charterAccess[110]!)
+    expect(await screen.findByText(`Saved who can use ${LABEL}`)).toBeTruthy()
+    // Saved: nothing to ask about
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Navigation' })).getByRole('link', { name: 'Clients' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/clients'))
+    expect(screen.queryByRole('alertdialog', { name: /^Leave the Changes/ })).toBeNull()
+  })
+
+  it('changes tab without asking, and asks the browser before the window is closed or reloaded over a change', async () => {
+    const { router } = await openWorkspace()
+    const unload = () => {
+      const event = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    expect(unload()).toBe(false)
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
+    expect(unload()).toBe(true)
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Overview' }))
+    await waitFor(() => expect(router.state.location.search).toEqual({}))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Workspace' }))
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Discard Changes' }))
+    expect(unload()).toBe(false)
+  })
+
+  it('goes to the Matters list without asking once the matter itself is deleted', async () => {
+    const { router } = await openWorkspace({ 'DELETE /v1/admin/matters/11': { trashItemId: 77, folders: 8, documents: 412 } satisfies A['DeletedMatter'] })
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
+    await userEvent.click(within(main()).getByRole('button', { name: 'Delete' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Move 1001.1 to the Trash?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/matters'))
+    expect(screen.queryByRole('alertdialog', { name: /^Leave the Changes/ })).toBeNull()
   })
 })

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom, useApi } from '@healdan/shell'
 import { Button, CheckField, SelectField, TextField, toast } from '@healdan/ui'
@@ -147,6 +147,8 @@ function RuleForm({ folder, node, root, kind }: { folder: A['SearchFolder'] } & 
   const [draft, setDraft] = useState<RuleDraft | null>(null)
   const [failure, setFailure] = useState<unknown>()
   const [busy, setBusy] = useState(false)
+  const held = useRef<HTMLFieldSetElement>(null)
+  const saveButton = useRef<HTMLButtonElement>(null)
   const shown = draft ?? initial
   const rule = ruleOf(shown)
   const dirty = draft !== null && JSON.stringify(ruleOf(draft) ?? draft) !== JSON.stringify(ruleOf(initial))
@@ -154,10 +156,14 @@ function RuleForm({ folder, node, root, kind }: { folder: A['SearchFolder'] } & 
 
   async function save() {
     if (rule === undefined) return
+    // The fields are held while it saves, so a field Enter saved from would drop the focus: it goes to Save Rule
+    if (held.current?.contains(document.activeElement)) saveButton.current?.focus()
     setBusy(true)
     setFailure(undefined)
     try {
       const answer = await api.send<A['SearchFolder']>('PATCH', apiPath`/v1/admin/search-folders/${node.id}`, { rule } satisfies A['SearchFolderChange'])
+      // A read still on its way began before the save, so it's called off rather than land after it
+      await queryClient.cancelQueries({ queryKey: workspaceKeys.searchFolder(node.id), exact: true })
       queryClient.setQueryData(workspaceKeys.searchFolder(node.id), answer)
       setDraft(null)
       workspaceChanged(queryClient, root.id, kind, workspaceKeys.searchFolder(node.id))
@@ -177,22 +183,25 @@ function RuleForm({ folder, node, root, kind }: { folder: A['SearchFolder'] } & 
         if (dirty && rule && !busy) void save()
       }}
     >
-      <RuleFields
-        draft={shown}
-        classes={classes}
-        subclasses={subclasses}
-        onChange={(next) => {
-          setDraft(next)
-          setFailure(undefined)
-        }}
-      />
+      {/* Held while the save is on its way, so nothing changed meanwhile is dropped under its Saved */}
+      <fieldset ref={held} disabled={busy} className={styles.hold}>
+        <RuleFields
+          draft={shown}
+          classes={classes}
+          subclasses={subclasses}
+          onChange={(next) => {
+            setDraft(next)
+            setFailure(undefined)
+          }}
+        />
+      </fieldset>
       {failure !== undefined && (
         <p className={styles.problem} role="alert">
           {refusalFor(failure)}
         </p>
       )}
       <div className={styles.buttons}>
-        <Button type="submit" variant="default" isDisabled={!dirty || rule === undefined} isPending={busy}>
+        <Button ref={saveButton} type="submit" variant="default" isDisabled={!dirty || rule === undefined} isPending={busy}>
           {t('admin.searchFolder.save')}
         </Button>
       </div>
