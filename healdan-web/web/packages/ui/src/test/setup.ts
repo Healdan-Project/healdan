@@ -3,9 +3,14 @@
 
 import { cleanup } from '@testing-library/react'
 import { afterEach } from 'vitest'
+import { resetAnnouncer } from '../announcer'
 import { installIntersectionObserver } from './intersection'
 
 installIntersectionObserver()
 
 // Vitest has no globals here, so Testing Library can't register its own cleanup.
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  // React Aria's first announcement waits 100 ms, which can outlast the test file's page
+  resetAnnouncer()
+})
