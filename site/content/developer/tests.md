@@ -547,11 +547,17 @@ code is laid out.
     request sent on one at that moment fails with `socket hang up`, as `keyboard.spec.ts`'s sign-out after its tests
     did. A new spec makes its context with `apiContext` too.
   - It runs in `docker/smoke-test.sh` as step 9, on amd64 and arm64. On a Mac, Docker Desktop doesn't reach the
-    host's ports from the default `--network host`: set `WEB_NETWORK=bridge`. The browser then still opens
-    `http://127.0.0.1:<port>`, which a small proxy in its container forwards to `host.docker.internal`, because the web
-    session refuses a request whose `Origin` isn't the server's own address. A failing spec leaves its trace and screenshot in
-    the container, which is removed, so reproduce it with `npx playwright test` against the stack, using a
-    Playwright version's browsers installed with `npx playwright install`.
+    host's ports from the default `--network host`: set `WEB_NETWORK=bridge`. The browser's container then joins the
+    network of the container that publishes the stack's port, and the browser still opens `http://127.0.0.1:<port>`,
+    which a small proxy in its container forwards to that container's own address, because the web session refuses a
+    request whose `Origin` isn't the server's own address. The proxy never goes through the host
+    (`host.docker.internal`). Docker Desktop's network remembers a connection's source port for 60 seconds when the
+    server was the first to close it, as Tomcat is after each of `apiContext`'s calls, and answers no new connection
+    from that port meanwhile; Linux uses a source port again within that time, so about one connection in 700 opened
+    11 to 67 seconds late. WebKit sends every `POST` and `PATCH` on a new connection, so a save sometimes waited and
+    its test failed at 30 seconds, a different test each run, in WebKit only. A failing spec leaves its trace and
+    screenshot in the container, which is removed, so reproduce it with `npx playwright test` against the stack, using
+    a Playwright version's browsers installed with `npx playwright install`.
 
 ## Desktop Client Tests
 

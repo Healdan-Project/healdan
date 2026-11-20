@@ -10,9 +10,17 @@
 # check, so the browser tests use another user), a running stack, Docker, curl and python3.
 # Usage: BASE=http://127.0.0.1:18080 docker/tests/test-web.sh
 # The browser container shares the host's network (--network host), which Linux and CI allow. Docker Desktop on a Mac
-# doesn't reach the host's ports that way: there, set WEB_NETWORK=bridge. The browser then still opens
-# http://127.0.0.1:<port>, which a small proxy in its container forwards to host.docker.internal:<port>, because the web
-# session refuses a request whose Origin isn't the server's own address (a different name for it fails every spec).
+# doesn't reach the host's ports that way: there, set WEB_NETWORK=bridge. The browser container then joins the network
+# of the container that publishes BASE's port, and still opens http://127.0.0.1:<port>, which a small proxy in its
+# container forwards to that container's own address and port, because the web session refuses a request whose Origin
+# isn't the server's own address (a different name for it fails every spec).
+# The proxy doesn't go through the host (host.docker.internal:<port>), as it did until 2026-11-19. When the server is
+# the first to close a connection made that way, as Tomcat is after a request with Connection: close (every call of
+# helpers.ts' apiContext), Docker Desktop's network remembers its source port for 60 seconds and answers no new
+# connection from it. Linux picks its source ports afresh every 10 seconds, so one comes round again within the minute,
+# and the connection opens only when the kernel tries again after that: 11, 19, 35 or 67 seconds late, about one
+# connection in 700. WebKit sends every POST and PATCH on a new connection, so a save waited and its test failed at 30
+# seconds, a different one each run; Chromium sends them on connections it has, and never failed.
 # finding.spec searches for documents it has just filed, which the search index only has once the Indexer has run
 # (every 30 minutes). docker/smoke-test.sh sets it to every 5 seconds before running this; for a run by hand, do the
 # same (Developer Guide, Tests) and set HEALDAN_INDEXER_FAST=1, or finding.spec waits 80 s and fails.
@@ -28,7 +36,20 @@ if [ "$WEB_NETWORK" = host ]; then
   PROXY=
 else
   WEB_BROWSER_BASE=${WEB_BROWSER_BASE:-http://127.0.0.1:$port}
-  PROXY="node -e \"require('net').createServer(c=>{const u=require('net').connect($port,'host.docker.internal');c.pipe(u);u.pipe(c);c.on('error',()=>u.destroy());u.on('error',()=>c.destroy())}).listen($port,'127.0.0.1')\" &"
+  # The container that publishes the port, the first network it is on, its address there and the port it listens on
+  app=$(docker ps -q --filter "publish=$port" | head -n 1)
+  if [ -z "$app" ]; then
+    echo "WEB_NETWORK=$WEB_NETWORK needs the stack on this Docker: no running container publishes port $port"
+    exit 1
+  fi
+  WEB_NETWORK=$(docker inspect -f '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' "$app" | head -n 1)
+  app_address=$(docker inspect -f "{{(index .NetworkSettings.Networks \"$WEB_NETWORK\").IPAddress}}" "$app")
+  app_port=$(docker port "$app" | sed -n "s|^\([0-9]*\)/tcp -> .*:$port\$|\1|p" | head -n 1)
+  if [ -z "$app_address" ] || [ -z "$app_port" ]; then
+    echo "Couldn't find the address and port of the container that publishes port $port (container $app, network '$WEB_NETWORK')"
+    exit 1
+  fi
+  PROXY="node -e \"require('net').createServer(c=>{const u=require('net').connect($app_port,'$app_address');c.pipe(u);u.pipe(c);c.on('error',()=>u.destroy());u.on('error',()=>c.destroy())}).listen($port,'127.0.0.1')\" &"
 fi
 [ -n "${HEALDAN_INDEXER_FAST:-}" ] || echo "WARNING: HEALDAN_INDEXER_FAST isn't set: unless the Indexer runs every few seconds, finding.spec's searches fail"
 # A throwaway password for a throwaway user on a throwaway stack: healdan-core's SmokeWebUserSeed.PASSWORD.
