@@ -120,7 +120,7 @@ describe('every document column (spec 4.7)', () => {
     // The owner chose Last Used among Recent's defaults: its least widths pass 684, so beside the details the list scrolls
     // sideways (spec 4.3). Pinned so that a width change is a choice.
     const least = columnsFor('recentDocuments', DEFAULT_SHOWN.recentDocuments, false).reduce((sum, one) => sum + Math.max(75, typeof one.width === 'number' ? one.width : (one.minWidth ?? 0)), 0)
-    expect(least).toBe(834)
+    expect(least).toBe(842)
   })
 
   it('shows nothing in a folder row for a document column, and its Matter and Last Used', () => {

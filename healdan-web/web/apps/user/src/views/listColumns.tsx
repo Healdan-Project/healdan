@@ -133,8 +133,9 @@ export const documentColumns: Record<string, TableColumn<ListRow>> = {
   size: { id: 'size', name: t('list.size'), allowsSorting: true, align: 'end', width: 84, cell: ({ item }) => item.type === 'document' && formatSize(item.size) },
   type: { id: 'type', name: t('list.type'), allowsSorting: true, width: 112, cell: ({ item }) => item.type === 'document' && typeLabel(item.kind) },
   edited: { id: 'edited', name: t('list.edited'), allowsSorting: true, newestFirst: true, width: 132, cell: ({ item }) => item.type === 'document' && formatDate(item.lastModified) },
-  // Wide enough for a date and a time: "Nov 12, 2026, 2:32 PM"
-  lastUsed: { id: 'lastUsed', name: t('list.lastUsed'), allowsSorting: true, newestFirst: true, width: 168, cell: ({ item }) => item.type !== 'matter' && item.lastUsed ? formatDateTime(item.lastUsed) : null },
+  // Wide enough for a date and a time with the cell's padding: US English's widest, "May 30, 2026, 10:48 AM", is 148 pixels
+  // in macOS's system font at the list's 13 pixels, so it needs 173, and 176 leaves a margin
+  lastUsed: { id: 'lastUsed', name: t('list.lastUsed'), allowsSorting: true, newestFirst: true, width: 176, cell: ({ item }) => item.type !== 'matter' && item.lastUsed ? formatDateTime(item.lastUsed) : null },
   computer: {
     id: 'computer',
     name: t('list.computer'),
