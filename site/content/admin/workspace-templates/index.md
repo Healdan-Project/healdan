@@ -66,15 +66,27 @@ Templates**.
   **Rename** saves the new one. Changing only the case of its own name works. Matters already made from it are
   unchanged, and the Matters list shows the template's new name.
 - **Delete** asks first, as in "Move the Template Litigation to the Trash?" It says the template's folders go with it,
-  and that matters already made from it are unchanged and New Matter won't offer it any more. **Move to Trash** moves
-  it, with its folders and search folders, to your Trash, and the list opens. The matters made from it then show no
-  template in the Matters list.
+  that matters already made from it are unchanged and New Matter won't offer it any more, and "The Trash will list
+  it, but can't put it back in the Templates Store." **Move to Trash** moves it, with its folders and search folders,
+  to your Trash, and the list opens. The matters made from it then show no template in the Matters list.
 
 Healdan records each rename, with the name before and after, and each delete.
 
-A deleted template is in the Trash like anything else deleted, and so is a folder deleted from a template, but the
-User app's Trash can't put either back in the Templates Store: its **Restore** says the folder it was deleted from is
-gone, as it restores only into Stores. So their deletes have no **Undo**.
+A deleted template is in the Trash like anything else deleted, and so is a folder deleted from a template, but the User
+app's Trash can't put either back. Its **Restore** can't go back where it was, as it restores only into Stores, and asks
+for another folder, but it offers only matters and their folders, never the Templates Store or a template. So their
+deletes have no **Undo**. An administrator restores them in the Classic Interface, whose Trash restores into the folder
+chosen:
+
+- **A template you deleted:** open the Templates Store in the Documents screen's folder tree, then right-click the
+  template in the left pane's **Trash** section and choose **Restore**, which restores into the folder open in the
+  tree. For a folder deleted from a template, open the template it was in.
+- **Anyone's:** under **Administration → Reports**, **Deleted folders** lists everyone's; right-click the template, or
+  the template's folder, choose **Restore**, then the Templates Store, or the template, in the folder tree it shows, and
+  its **Restore**.
+
+It comes back with what the delete took, and leaves the User app's Trash too. See
+[The Trash and Removed Items](../the-trash-and-removed-items/#in-the-classic-interface).
 
 ### What New Matter Would Refuse
 

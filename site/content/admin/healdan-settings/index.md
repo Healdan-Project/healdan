@@ -83,7 +83,7 @@ services.
 - **Alerts.** When a username, an address or an API key gets blocked, the users in `throttle.alert.recipients`
   (`admin` to begin with) get one message in Healdan about it, and an email too if
   [outgoing email](../system/outgoing-email/) is set up. Attempts during the block don't send more.
-- **`admin` and the server's own address.** LogicalDOC never blocks the `admin` account signing in from
+- **`admin` and the server's own address.** The throttle never blocks the `admin` account signing in from
   `127.0.0.1` or `::1`. Only a request from inside the app's container comes from that address, and Healdan believes
   a forwarded `127.0.0.1` only from a proxy it trusts. Give `admin` a long password that isn't used anywhere else
   all the same.

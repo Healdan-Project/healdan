@@ -139,7 +139,8 @@ Select a matter, with a click or Enter, to open [its page](#a-matters-page).
 
 **New Matter**, at the end of the Matters list's title or on a client's page, opens New Matter. Its fields are on the
 left, and **It Will Contain**, on the right, shows the matter's own folder named as it will be, such as "1004.2 –
-Community Hall Lease", with the chosen template's folders and search folders under it.
+Community Hall Lease", with the chosen template's folders and search folders under it. The template menu and It Will
+Contain ask Healdan again when you come back to the window, so a template changed meanwhile shows as it is now.
 
 | Field | What to put |
 |---|---|
@@ -172,7 +173,8 @@ form as it is, and it found nothing.
 A group, or an owner, who can't read the Store has a button that names them, such as **Let Everyone Read the
 Store**, with "Or choose another Store." beside it. The button lets them see the Store, keeping everyone who could
 see it already, then checks the form again, and Healdan says so: "Everyone can now see Regional Office." If Healdan
-refuses, the reason shows under the problem.
+refuses, the reason shows under the problem. The buttons are greyed out until the check has answered for the form as
+it is, so a button never acts on a Store the form no longer names, and while one is on its way the others wait.
 
 #### When You Create It
 
@@ -236,7 +238,8 @@ The **Workspace** tab is the matter's workspace in the [Workspace Editor](../top
 its folders and search folders, who can use each folder, the values each sets, and each search folder's rule. Healdan's
 permission rules check each change you save to a matter's workspace: see
 [Who Can Use This Folder](../permissions/#who-can-use-this-folder). What you were changing there is kept while you
-look at the Overview.
+look at the Overview, and leaving the page over a change that isn't saved asks first (see
+[Unsaved Changes](../top-level-folders/#unsaved-changes)).
 
 #### Edit
 

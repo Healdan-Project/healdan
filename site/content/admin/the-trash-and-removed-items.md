@@ -59,8 +59,9 @@ with it. Every document that comes back is queued for indexing, so search finds 
   and a matter that already holds a copy of an email refuses a second one.
 - **A Store deleted in the Classic Interface is restored there,** not through the API.
 - **A workspace template, or a folder deleted from one,** is listed like any other item, but the API restores only
-  into Stores, so it can't put either back in the Templates Store: see
-  [Workspace Templates](../workspace-templates/#renaming-and-deleting-a-template).
+  into Stores, so its restore is `409 place-gone`, and the folders the User app then offers are matters and their
+  folders, never the Templates Store or a template. An administrator restores them in the Classic Interface, below:
+  see [Workspace Templates](../workspace-templates/#renaming-and-deleting-a-template).
 
 ### In the Classic Interface
 
@@ -69,7 +70,9 @@ The Classic Interface keeps its **Trash** section in the Documents screen's left
 from the Trash above:
 
 - **Its Trash lists a deleted folder's contents as rows of their own,** as it always has, with the folder.
-- **It restores into the folder that is open in its tree,** not necessarily where the item was deleted from.
+- **It restores into the folder that is open in its tree,** not necessarily where the item was deleted from. So it
+  can put a workspace template back in the Templates Store, or a template's folder back in its template, with that
+  folder open, which the Trash above can't.
 
 What it restores follows the same rules as the rest: a restore of a folder brings back only what that delete took, and
 a folder that has been removed from the Trash comes back only for an administrator. The reports list what is in the

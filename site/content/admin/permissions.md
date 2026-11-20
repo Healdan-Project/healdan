@@ -62,11 +62,14 @@ tree marks with a lock.
   permissions.", and its rows can't be changed. **Set Own Permissions** makes them the folder's own, to change and
   save.
 - **A folder with its own** has **Add Person or Group**, a menu of levels on each row, and a Remove button (an ×)
-  beside each. **Add Person or Group** finds groups by name, and people who can sign in by name or username, in one
-  search, leaving out those the folder lists already. A new row starts at Read Only.
+  beside each, but for the owner's row on a matter's own folder (see [The Rules It Keeps](#the-rules-it-keeps)).
+  **Add Person or Group** finds groups by name, and people who can sign in by name or username, in one search, leaving
+  out those the folder lists already. A new row starts at Read Only. Once a row is removed, the focus moves to the
+  next row's Remove, or to **Add Person or Group** when no row follows.
 - **Save** saves the rows, and **Discard Changes** takes back what you changed. A row left with no permission says so,
   as in "Partners has no permission left. Give it one, or remove it.", and **Save** waits until it's given one or
-  removed. With no rows, it says "Nobody but administrators can use this folder."
+  removed. With no rows, it says "Nobody but administrators can use this folder." While the save is on its way, the
+  rows and the buttons beside them are greyed out, so nothing changes under it.
 - **Follow Parent** gives a folder's own permissions up for those of the folder it's in, after asking, as in "Follow
   the Permissions of Documents?" The question names the folders below that follow this one, as they take the new
   permissions too. A workspace's top folder has no **Follow Parent**.
@@ -92,12 +95,15 @@ In a matter, Healdan checks each save against the rules on this page, and refuse
   narrow this list, never widen it." When a folder narrows, the restricted folders inside it narrow with it.
 - **Every group the matter's own folder lets read it must be able to read its Store** (see
   [A Matter and Its Store](#a-matter-and-its-store)).
-- **The owner keeps Full Access to the matter's own folder.** There, the owner's row has no Remove button, as a note
-  says, and a save that gives it less is refused. Below that folder, the owner's row may go, as a restricted folder may
-  keep anyone out.
+- **The owner keeps Full Access to the matter's own folder.** There, the owner's row shows Full Access as text, with
+  no menu and no Remove button, and its tick boxes are greyed out under **Show Every Permission**, as a note says:
+  "The owner's row stays on the matter's own folder, with Full Access." **Save** sends it with Full Access whoever
+  owns the matter, someone whose account is read-only included, whose row then holds what a read-only account can:
+  Read, Preview, Download, Print, Email, Subscription and Store. Below that folder, the owner's row may go, as a
+  restricted folder may keep anyone out.
 
 In a matter or a template, the `guest` group and people whose accounts are read-only can't be given more than Read
-Only: Healdan refuses the save.
+Only: Healdan refuses the save. The owner's row on a matter's own folder is the one exception, above.
 
 In a template, the first two rules aren't checked as you change it: the save works, and the template's page lists
 what New Matter would refuse in a matter made from it, as warnings, with each folder's own beside its **Save**, under
@@ -122,10 +128,10 @@ upgrade that brought this removed the ones already there (see
 [Upgrading](../../install/upgrading/#document-permissions-with-nothing-ticked)). To keep someone out of a document,
 move it to a folder they can't read.
 
-A read-only user's row, and the guest group's, can't hold Write, Delete, Move or the other permissions that change a
-document: LogicalDOC takes them off. So a row for a read-only user with only those ticked grants nothing, and is
-refused too. Making a user read-only takes them off the user's rows already there, so a row that granted only those
-then keeps no one out, and the next save of that document's **Security** tab asks for the row to be ticked or removed.
+A read-only user's row, and the guest group's, holds none of the permissions that change a document, such as Write,
+Delete or Move. So a row for a read-only user with only those ticked would grant nothing, and is refused too. Making a
+user read-only takes them off the user's rows already there, so a row that granted only those then keeps no one out, and
+the next save of that document's **Security** tab asks for the row to be ticked or removed.
 
 ## What These Rules Don't Do
 

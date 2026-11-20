@@ -888,15 +888,15 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     isn't visible and the other folder is. Like every admin spec, it changes nothing global: it makes its own clients,
     matters, Stores and templates, and changes neither `webuser`, Everyone nor `Smoke Garage`.
   - `admin-a11y.spec.ts` runs axe on the Admin app as `admin`, in the light theme and again in the dark one, as
-    `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart,
-    so a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
-    person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes
-    it, and the focus goes back to **☰**), Phase 2's screens (the Clients list, the Matters list, a matter's page on
-    its Overview and Workspace tabs, and Workspace Templates, with a client and a matter of its own where a screen
-    needs one, so nothing global changes), and last the signed-out screen. This is where the Dashboard's colour
-    contrast is checked. The find's list is checked with the whole page around it, as the User app's search box's
-    is: `@healdan/ui`'s `ComboBox` draws the list right after the box, inside the find's search landmark, and keeps
-    the page around it shown to a screen reader while it's open (The Web App page's The Search Box and Search
+    `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart, so
+    a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
+    person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes it,
+    and the focus goes back to **☰**), Phase 2's screens (the Clients list, the Matters list, a matter's page on its
+    Overview and Workspace tabs, and Workspace Templates, with the smoke fixture's client 1 and matter 1.1, which it
+    only reads, so it changes nothing and needs the smoke overlay), and last the signed-out screen. This is where the
+    Dashboard's colour contrast is checked. The find's list is checked with the whole page around it, as the User app's
+    search box's is: `@healdan/ui`'s `ComboBox` draws the list right after the box, inside the find's search landmark,
+    and keeps the page around it shown to a screen reader while it's open (The Web App page's The Search Box and Search
     Results), so nothing hidden holds a link (axe's `aria-hidden-focus`). `e2e/helpers.ts`'s `expectListUnder` then
     checks that the list's layer covers the window and the list starts at the find's left edge, 4 pixels below it, as
     wide as the box, though the find's field is positioned and padded.

@@ -1123,11 +1123,11 @@ A workspace is a matter's own folder and everything in it, or a workspace templa
 Templates Store, and everything in it. These routes take only those folders and search folders: any other id, such as
 a Store's, the Templates Store's, an alias, a folder in the Trash or one that doesn't exist, is `404 not-found`. A
 workspace's top folder is renamed, moved and deleted with its matter or template, through their routes, so the
-folder routes refuse to rename, move or delete it (`409 refused`). A name has the whitespace at either end taken off, and is checked as
-`renameFolder` in `openapi.yaml` checks it (`FolderName`: `422` `required`, `too-long` or `invalid`), and a name
-another folder or search folder in the same folder has, compared without regard to case, is `409 refused`; changing
-only the case of a folder's own name works. Each change is recorded, naming the folder by its path from the
-workspace's top folder, as `1001.1 – Charter Dispute/Documents`.
+folder routes refuse to rename, move or delete it (`409 refused`). A name has the whitespace at either end taken off,
+and is checked as `renameFolder` in `openapi.yaml` checks it (`FolderName`: `422` `required`, `too-long` or
+`invalid`), and a name another folder or search folder in the same folder has, compared without regard to case, is
+`409 refused`; changing only the case of a folder's own name works. Each change is recorded, naming the folder by its
+path from the workspace's top folder, as `1001.1 – Charter Dispute/Documents`.
 
 - **`GET /v1/admin/workspaces/{folderId}/tree`**, with a matter's own folder (its `folderId`) or a template's id: the
   workspace's top folder as a `WorkspaceNode`, `{ "id", "name", "kind", "ownPermissions", "children" }`, with every
@@ -1145,36 +1145,43 @@ workspace's top folder, as `1001.1 – Charter Dispute/Documents`.
   into another folder of the same workspace, its top included, and answers `204`; inside a matter, a folder that would
   then grant more than its new parent is narrowed to fit, as on every route. A move into the folder it's in changes
   nothing. A missing `folderId` is `422` `required`; one that isn't a live folder of a workspace is `409 refused`, as
-  any id in a body that names nothing is, and so are a move into another workspace (a folder moves to another matter
-  through the public `POST /v1/folders/{id}/move`), into a search folder, the folder itself or a folder inside it, and
-  one while a document in it is checked out, by anyone. Recorded as `folder.moved`.
+  any id in a body that names nothing is, and so are a move into another workspace (a matter's folder moves to another
+  matter through the public `POST /v1/folders/{id}/move`, and a template's stays in its template), into a search
+  folder, the folder itself or a folder inside it, and one while a document in it is checked out, by anyone. Recorded
+  as `folder.moved`.
 - **`DELETE /v1/admin/folders/{id}`** moves a folder or search folder, and everything live in it, to the caller's
   Trash, as the public folder delete does, and answers the Trash item, `DeletedFolder`,
   `{ "trashItemId", "folders", "documents" }`, as a matter's delete does. `POST /v1/trash/{id}/restore` brings a
   matter's folder back where it was, and answers a template's, or a folder of one, `409 place-gone`, as it restores
-  into a Store only. A document in it checked out, by anyone, or an immutable one, is `409 refused`, with the
-  sentence the public routes' `checked-out` and `immutable` give. Recorded as `folder.deleted`, straight after.
+  into a Store only; an administrator restores those in the Classic Interface (see
+  [The Trash and Removed Items](../../admin/the-trash-and-removed-items/#in-the-classic-interface)). A document in it
+  checked out, by anyone, or an immutable one, is `409 refused`, with the sentence the public routes' `checked-out`
+  and `immutable` give. Recorded as `folder.deleted`, straight after.
 - **`GET /v1/admin/folders/{id}/access`** is who can use the folder: `ownPermissions`, true when it has its own, or
   `followsFolderId`, the folder whose permissions it follows, which may be above its parent, or its Store; `rows`,
-  groups first and then people, each by name; and `canApplyToSubfolders`. A row has its `groupId` (a person's own
-  group for a person, with `person` true and their `userId`), its `name`, its `permissions` and `level`, and `owner`,
-  true for the matter owner's row. A group or person the folder grants nothing isn't listed, so every row can go back
-  to `PUT` as it is. A `level` is `read-only` (Read, Preview, Download, Print and Email), `read-write` (those, and
-  Write, Add, Rename, Move and Delete), `full-access` (all 25), `can-see` (Read alone) or `custom` for any other set:
-  the match is exact. Permissions are LogicalDOC's names in lower case, such as `read`, `readingreq` and `customid`.
+  groups first and then people, each by name; and `canApplyToSubfolders`. A row has its `groupId` (a person's own group
+  for a person, with `person` true and their `userId`), its `name` (a person's first and last name, or their username
+  when both are blank; `Group` and its id for a group whose record is gone), its `permissions` and `level`, and `owner`,
+  true for the matter owner's row. A group or person the folder grants nothing isn't listed, so every row can go back to
+  `PUT` as it is. A `level` is `read-only` (Read, Preview, Download, Print and Email), `read-write` (those, and Write,
+  Add, Rename, Move and Delete), `full-access` (all 25), `can-see` (Read alone) or `custom` for any other set: the match
+  is exact. Permissions are LogicalDOC's names in lower case, such as `read`, `readingreq` and `customid`.
 - **`PUT /v1/admin/folders/{id}/access`** takes either `rows`, each `{ "groupId" }` or `{ "userId" }` with its
-  `permissions`, which become the folder's own and replace every row it had (an empty list leaves it to
-  administrators), or `{ "followParent": true }`, which gives them up for its parent's, as LogicalDOC's
-  `updateSecurityRef` does: the folders that followed it then follow what it follows. A permission that isn't one of
-  the names, or is named twice in a row, is `400`. A row with neither id or both, or naming someone an earlier row
-  named, a person by `userId` and by their own group's `groupId` included, is `422`, and so are missing or empty
-  `permissions`. `409 refused` covers a group or person that no longer exists (but a deleted group the folder grants
-  something to now may stay, as LogicalDOC still lets its members in); `guest`, or a read-only person's own group,
-  given more than Read Only's five; on a matter's own folder, its owner's row left out or given less than Full Access,
-  or the folder following its Store; and, inside a matter, a folder granting more than its parent, or, on the
-  matter's own folder, a group that could read the matter but can't read its Store. In a template those two rules
-  aren't checked as it's edited. Inside a matter, the folders below that would grant more then narrow with it, as on
-  every route.
+  `permissions`, which become the folder's own and replace every row it had (an empty list leaves it to administrators),
+  or `{ "followParent": true }`, which gives them up for its parent's, as LogicalDOC's `updateSecurityRef` does: the
+  folders that followed it then follow what it follows. A permission that isn't one of the names, or is named twice in a
+  row, is `400`. A row with neither id or both, or naming someone an earlier row named, a person by `userId` and by
+  their own group's `groupId` included, is `422`, and so are missing or empty `permissions`. `409 refused` covers a
+  group or person that no longer exists (but a deleted group the folder already grants something may stay, so a save
+  needn't take away what's there); `guest`, or a read-only person's own group, given anything beyond Read Only's five
+  permissions, but for the owner's row on a matter's own folder; on a matter's own folder, its owner's row left out or
+  given less than Full Access, or the folder following its Store; and, inside a matter, a folder granting more than its
+  parent, or, on the matter's own folder, a group that could read the matter but can't read its Store. In a template
+  those two rules aren't checked as it's edited. The owner's row on a matter's own folder is sent with Full Access
+  whoever owns the matter, and a read-only owner's is then kept as what a read-only person's row can hold: `read`,
+  `download`, `preview`, `print`, `email`, `subscription` and `store`, which `GET` answers as `custom`, with `owner`
+  true. Below that folder the owner's row may go, and is capped as anyone's. Inside a matter, the folders below that
+  would grant more then narrow with it, as on every route.
 - **`POST /v1/admin/folders/{id}/apply-access`** is LogicalDOC's `applySecurityToTree`, and answers `204`. Every folder
   and search folder below this one, at every level, those in the Trash too, loses its own rows and follows what this
   folder follows: nothing is skipped, moved or deleted, so a restricted folder below stays where it is but is opened
@@ -1188,9 +1195,10 @@ workspace's top folder, as `1001.1 – Charter Dispute/Documents`.
 - **`PUT /v1/admin/folders/{id}/properties`** with `{ "values" }`, the whole set by name: a value that differs from what
   the folder would inherit becomes its own and passes down to what below sets none; one equal to it, null, empty text
   or left out goes back to inheriting. In a matter what's below takes it at once; in a template, matters made
-  afterwards do. It answers the folder's values. Every wrong value is `422`, by its name, before anything is saved,
-  with the codes `setProperties` in `openapi.yaml` uses (`read-only` for Client and Matter). Recorded as
-  `folder.properties-changed`, with each value of its own that changed, null for one it inherits.
+  afterwards do. It answers the folder's values. A missing or null `values` is `422` `required`, after the `404` for
+  the folder, and every wrong value is `422`, by its name, before anything is saved, with the codes `setProperties` in
+  `openapi.yaml` uses (`read-only` for Client and Matter). Recorded as `folder.properties-changed`, with each value of
+  its own that changed, null for one it inherits.
 - **`POST /v1/admin/folders/{id}/search-folders`** with `{ "name", "rule" }` makes a search folder there, through
   `SearchFolderService.create`, and answers `201` with it and its `Location`; its name is checked as a folder's,
   before the service runs, so it's stored as sent. A `rule` is `{ "days", "onlyMine", "kind", "docClass",
@@ -1226,8 +1234,9 @@ through the routes above, and its name is checked as a folder's is (`FolderName`
   `409 refused`; changing only the case of its own works. Recorded as `template.renamed`.
 - **`DELETE /v1/admin/templates/{id}`** moves the template, with its folders and search folders, to the caller's Trash
   and answers `DeletedFolder`, as a folder's delete does. The User app's Trash lists it, but answers its restore
-  `409 place-gone`. Matters made from it are unchanged, with `template` null from then on, and New Matter no longer
-  offers it. Recorded as `template.deleted`, straight after.
+  `409 place-gone`, and an administrator restores it in the Classic Interface. Matters made from it are unchanged,
+  with `template` null from then on, and New Matter no longer offers it. Recorded as `template.deleted`, straight
+  after.
 - **`GET /v1/admin/templates/{id}/problems`** is what New Matter would refuse in a matter made from the template, as
   warnings, as nothing checks a template's permissions as it's edited: each a `code`, a `message` to show,
   `folderId`, `storeId`, `groupId` and `groupName`, as `MatterProblem` has them. `wider-than-parent` comes once for each

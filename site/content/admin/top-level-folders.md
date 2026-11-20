@@ -64,15 +64,17 @@ search folder's rule.
   it.
 - **Move To…** moves a folder within the workspace. **Into** lists the workspace's folders by their path, leaving out
   the folder itself, the folders inside it and the search folders, and says "It's in that folder already." for the
-  one it's in, and when the folder you chose has one with its name. **Move** moves it. A folder moves into another
-  matter from the User app.
+  one it's in, and when the folder you chose has one with its name. **Move** moves it. A matter's folder moves into
+  another matter from the User app, and a template's stays in its template.
 - **Delete** asks first, as in "Move Drafts to the Trash?", and says what the folder holds, counted afresh, such as
   "It holds 2 folders and 14 documents, which go with it." In a matter it says that an administrator can restore the
-  folder from the Trash in Healdan, and in a template that matters already made from the template keep their own
-  copy of it. **Move to Trash** deletes it, and if it was the folder chosen, or held it, the folder it was in is
-  chosen instead. In a matter, "Moved Drafts to the Trash" comes with **Undo**, which puts the folder back where it
-  was, with what the delete took, and says why when it can't, such as when it has been restored already. A template's
-  folder has no Undo: the Trash lists it, but can't put it back in a template.
+  folder from the Trash in Healdan. In a template it says that matters already made from the template keep their own
+  copy of it, and "The Trash will list it, but can't put it back in the template." **Move to Trash** deletes it, and
+  if it was the folder chosen, or held it, the folder it was in is chosen instead. In a matter, "Moved Drafts to the
+  Trash" comes with **Undo**, which puts the folder back where it was, with what the delete took, and says why when it
+  can't, such as when it has been restored already. A template's folder has no Undo, as the User app's Trash can't
+  put it back: an administrator restores it in the Classic Interface (see
+  [Workspace Templates](../workspace-templates/#renaming-and-deleting-a-template)).
 
 Anything Healdan refuses shows in the dialog, in Healdan's own words, and while a change is on its way the dialog's
 **Cancel** is greyed out and Esc does nothing. Healdan refuses, for administrators too:
@@ -96,12 +98,14 @@ Subclass (see [Properties](../../user/working-with-matters/properties/)):
 
 - **Each has a field of its kind:** a menu for a property with a list of options, and for yes or no, each with **Not
   Set Here** to set nothing; a date picker for a date; a search for a person; and a text field for text, numbers,
-  folders and documents.
+  folders and documents, a folder or a document by its id, a whole number. A number that isn't one of its kind says
+  "That isn't the right kind of value.", and **Save Values** waits until it's put right.
 - **Under each field,** where its value comes from: "Set on this folder, and passed down.", or, when the folder sets
   nothing, the folder above that sets it, with its value, as in "From Privileged: Evidence", or the install's default
   Class, as in "The install's default: Correspondence".
 - **A Subclass** is offered only within the Class the folder sets, or the one it takes from above.
-- **Save Values** saves them all, and a property set to **Not Set Here** goes back to taking its value from above.
+- **Save Values** saves them all, and a property set to **Not Set Here** goes back to taking its value from above. A
+  field you left alone is saved exactly as it was. While the save is on its way, the fields are greyed out.
 
 Client and Matter aren't among them: they come from the matter. A value set to what the folder would take from above
 anyway sets nothing of its own. In a matter, the folders and documents below that don't set their own take a change at
@@ -120,11 +124,12 @@ A search folder shows its **Rule** in place of values, as New Search Folder asks
 | Class | **Any**, or only documents of one Class |
 | Subclass | once a Class is chosen: **Any**, or one of that Class's Subclasses |
 
-**Save Rule** saves it. A new search folder starts at 30 days, anyone's changes, everything and any Class. In a matter,
-the search folder lists its matter's documents changed within the window that whoever opens it can read, newest
-first. A template's is copied, with its rule, into each new matter made from the template, and a change to its rule
-reaches only matters made afterwards. Healdan records each new search folder with its rule, and each change to a rule
-with what it was before. See [Search Folders](../../user/finding-documents/search-folders/) in the User Guide.
+**Save Rule** saves it, with the fields greyed out while it's on its way. A new search folder starts at 30 days,
+anyone's changes, everything and any Class. In a matter, the search folder lists its matter's documents changed within
+the window that whoever opens it can read, newest first. A template's is copied, with its rule, into each new matter
+made from the template, and a change to its rule reaches only matters made afterwards. Healdan records each new search
+folder with its rule, and each change to a rule with what it was before. See
+[Search Folders](../../user/finding-documents/search-folders/) in the User Guide.
 
 ### Unsaved Changes
 
@@ -132,8 +137,18 @@ Choosing another folder while the folder chosen has changes that aren't saved as
 Evidence?": **Discard Changes** opens the other folder, and **Cancel** keeps you where you were, with your changes.
 While a save is on its way, the other folder opens once it's saved, and the panel says so; if Healdan refuses the
 save, you stay, with the reason and your changes. On a matter's page, what you were changing on the **Workspace** tab
-is kept while you look at the **Overview**. Leaving the page for another of the Admin app's screens doesn't ask, so
-save first.
+is kept while you look at the **Overview**.
+
+Leaving the page while a change isn't saved, or while a save is on its way, asks the same question, whether by a link in
+the left pane, the page's crumb, the find, another link or the browser's Back:
+
+- **With a change not saved,** it says "The changes to Evidence aren't saved. Leaving this page discards them.", with
+  **Discard Changes**, which leaves, and **Cancel**, which keeps you on the page with your changes.
+- **With a save on its way,** it says "The changes to Evidence are still being saved. If you leave this page now, you
+  won't hear whether they were.", with **Leave Page** and **Cancel**.
+
+A reload, or closing the tab or the window, asks in the browser's own words. Changing a matter's tab doesn't ask, and
+nor does deleting the matter or the template, whose changes go with it.
 
 ## Where Documents and Folders Can Go
 

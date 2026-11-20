@@ -39,9 +39,9 @@ weight: 13
   says what the person finds there.
 - **Provider accounts can't use LogicalDOC's API keys.** An account that signs in through a provider never signs in
   with an API key, on any route, as the key would skip the provider. Linking an account to a provider deletes the
-  API keys it had and closes the sessions they opened, and so does unlinking it. The web page still lets a provider
-  account make a key, under the person icon, **Security → API Keys**, but that key never signs in, and unlinking
-  deletes it rather than let it start working.
+  API keys it had and closes the sessions they opened, and so does unlinking it. A key a provider account makes on
+  the web page, under the person icon, **Security → API Keys**, never signs in either, and unlinking deletes it
+  rather than let it start working.
 - **Web page sessions aren't checked again with the provider.** Healdan checks a Healdan Helper sign-in with its
   provider every eight hours, but not a sign-in to the web page. A web page session stays open after the person is
   disabled at the provider, until they sign out, it times out, or an administrator kills it.

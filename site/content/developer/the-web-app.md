@@ -141,8 +141,7 @@ takes Esc first).
 `NAV`, in `frame/LeftPane.tsx`, is the left pane: the Dashboard, then the spec's groups in its order (Firm, People,
 Storage, Search and Monitoring), each a heading from the catalogue and its `NavItem`s. A group with no items isn't
 drawn, so the pane shows only the groups a shipped screen is in: Firm, with Clients, Matters and Workspace Templates,
-so far.
-**Classic Interface** is at the pane's foot, apart from `NAV`. A screen joins when its phase ships:
+so far. **Classic Interface** is at the pane's foot, apart from `NAV`. A screen joins when its phase ships:
 
 1. Write the view in `views/`. Take its data through `useAdminQuery` (below), and its pieces from `@healdan/ui`.
 2. Give it a route in `router.tsx`, a child of the root, at its path in `addresses.ts`' `routes`.
@@ -193,6 +192,57 @@ isn't guarded. `Frame` reads `useSignedOut()` and `useRefused()`, and draws `Sig
 the frame and every screen in it, which stops their polls; the guard stops a call already on its way and one an effect
 makes as it goes. `access` never goes back: only a page load, which the server answers, lets someone in again. Any other
 refusal or failure is the screen's own. `access.test.ts` has the cases.
+
+### Forms, Lists and Refusals
+
+What the screens from Phase 2 on share (the spec's section 7.2):
+
+- **Messages in the app's words.** `App` wraps the router in `@healdan/shell`'s `MessagesProvider`, with the Admin app's
+  catalogue (`problemLookup`, in `strings/index.ts`), so `useMessageFor()` says a problem in the Admin app's words, in
+  its own screens and in the shell's shared components alike. Outside React, `messageFor(error, catalogue?)` does the
+  same.
+- **Refusals.** Every form and dialog says a refusal through `useRefusalFor()`, in `strings/refusals.ts`: the rule's own
+  sentence, which Healdan writes to be shown as it is, when the refusal carries one (a `409 refused`'s `detail`, or the
+  `message` of a problem a check found, `MatterProblem` or `TemplateProblem`), drawn as text; otherwise the catalogue's
+  message for the problem's code. Nothing else the server says is shown, and an ordinary `Error`'s message never is. A
+  `422 validation` names its fields, which the form shows beside them (the shell's `fieldErrors`).
+- **A dialog holds while its change is on its way.** A dialog that makes or changes something greys out **Cancel**, and
+  takes no Esc or click outside, until the answer comes: then it closes, or stays with the reason, so nothing is made
+  that someone thought they had cancelled. `dialogs/Confirm.tsx`, the question with the warning sign that a delete,
+  Follow Parent, Apply to Subfolders and the Leave question use, does it, and so do the forms, such as `ClientDialog`,
+  New Matter and the Workspace Editor's `FolderDialogs`.
+- **Paged lists.** `lists/usePagedList(path, query, pageSize)` is a list that comes a page at a time, the Clients and
+  Matters lists: TanStack Query's infinite query over the route by `offset`, which keeps the last question's rows while
+  a new filter or order loads and asks again at each return to the window (`ASK_ON_RETURN`), with the summary's
+  `figuresAt`. `lists/useWords(q, send)` is such a list's words field: what's typed shows at once and goes into the
+  address, trimmed, once the typing pauses (`TYPING_DELAY_MS`, 150 ms, in `pickers/typing.ts`), and the field follows
+  the address when something else changes it, as the left pane's entry does.
+- **Pickers.** Anything that can grow long is a search, `@healdan/ui`'s `PickField` asking as it's typed:
+  `pickers/ClientPicker.tsx`, by a client's number or name (`useClientSearch`), and `pickers/PersonPicker.tsx`, whose
+  `accounts` each caller chooses. `enabled` offers the people who can sign in, from `GET /v1/users`, for a field that
+  makes someone an owner; `all` the admin find's people, those whose accounts are disabled marked **Disabled**, for a
+  filter, as their matters stay theirs. Stores and templates are plain menus.
+- **The Workspace Editor** is `workspace/`: `WorkspaceEditor.tsx` (the tree, the chosen folder's panels, the dialogs and
+  the questions), `FolderTree.tsx`, `AccessPanel.tsx` with `AddPersonOrGroup.tsx`, `EveryPermission.tsx`, `levels.ts`
+  and `grants.ts`, `PropertiesPanel.tsx`, `SearchFolderPanel.tsx` and `FolderDialogs.tsx`, beside `queries.ts`
+  (`workspaceKeys`), `tree.ts`, `text.ts` and `edits.ts`. Each panel tells the editor whether it's `clean`, `dirty` or
+  `saving` (`edits.ts`' `useEditState`), which the questions before choosing another folder and before leaving the page
+  read. While a panel saves, its fields are in a disabled `<fieldset>` (and `DatePicker` takes `isDisabled`, as React
+  Aria's date segments aren't form controls), and it cancels the folder's queries before it writes the answer into the
+  cache, so an answer asked for before the save can't land after it. A save sends back what the server gave: a row the
+  server listed by its `groupId`, a person's own group included, and only a person added in the editor by `userId`, so a
+  person whose account has gone doesn't stop the save; and a value left alone as the server's own `value`, only an
+  edited one converted. The owner's row on a matter's own folder is drawn at Full Access, locked, and sent with all 25
+  permissions, whatever the folder holds.
+- **Leaving the page.** While any panel is dirty or saving, the editor's `useBlocker` (TanStack Router's, with
+  `withResolver`) asks the Leave question before the page's path changes, by a link, the find, the crumb or Back, but
+  not when a matter's tab changes, which changes only the search; and a `beforeunload` handler has the browser ask
+  before a reload or closing the tab, as `FilingProvider` does for uploads. A page's own delete navigates with
+  `ignoreBlocker: true`, as the change goes with what it deletes.
+- **A page starts afresh.** A client's, a matter's and a template's page are keyed by its id, so Back or Forward between
+  two pages of one route carries no dialog, tab or chosen folder over.
+- **A link the server gives,** such as the Dashboard's, goes through `frame/ServerLink.tsx` (see
+  [Adding a Screen](#adding-a-screen)).
 
 ## Lists
 
