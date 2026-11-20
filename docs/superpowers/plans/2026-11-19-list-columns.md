@@ -420,6 +420,8 @@ export const documentColumns: Record<string, TableColumn<ListRow>>   // title, d
 export function offeredFor(kind: DocumentListKind): string[]          // §4.7's order; lastUsed only on recent*, computer and checkedOut only on checkedOut
 export const SERVER_SORTS: ReadonlySet<string>                        // PR 2: title, docNumber, version, author, edited
 export function columnsFor(kind: ListKind, shown: string[], serverSorted: boolean): TableColumn<ListRow>[]
+// Task 1's, gaining withClient (false leaves out the VisuallyHidden client)
+export function MatterCell({ matter, withClient = true }: { matter: S['MatterRef']; withClient?: boolean })
 // compareRows.ts
 export function compareRows(column: string, a: ListRow, b: ListRow): number   // ascending; values missing → 0 here, last by sortRows
 export function sortRows(rows: ListRow[], sort: TableSort): ListRow[]          // stable: ties and missing values keep the list's order
@@ -430,7 +432,9 @@ TableColumn.newestFirst?: boolean   // the first click sorts descending
   New cells (spec §4.7): Client `matter.client.name`; Location the folder's name with title `"{folder} · {display}"`;
   Date Filed `formatDate(dateFiled)`; Size `formatSize(size)`; File Type `typeLabel(kind)`; Last Used
   `formatDateTime(lastUsed)`; a folder row's document columns blank. A column not in `SERVER_SORTS` has
-  `allowsSorting: false` when `serverSorted` (spec §6).
+  `allowsSorting: false` when `serverSorted` (spec §6). When `shown` holds `client`, `columnsFor` draws Matter's cell
+  with `withClient: false`, which leaves out its `VisuallyHidden` client, so a screen reader doesn't read the client
+  twice; its `title` stays the whole matter and the client (spec §4.1, added after PR 1's second review).
 
 - [ ] **Step 1: Write the failing tests**:
   - `compareRows.test.ts`, one table of cases, by the server's rules: titles ignoring case (`'apple' < 'Banana'`); doc #s
@@ -440,7 +444,10 @@ TableColumn.newestFirst?: boolean   // the first click sorts descending
     directions".
   - `listColumns.test.tsx`: "offers every document column, Last Used only on Recent and Computer and Checked Out only on
     Checked Out to Me"; "blank document cells on a folder row"; "Size, File Type and Location's text and tooltips"; "a
-    column the server can't sort yet doesn't sort on a paged list"; "date columns sort newest first at their first click".
+    column the server can't sort yet doesn't sort on a paged list"; "date columns sort newest first at their first
+    click"; "with Client shown, Matter's cell doesn't repeat the client for a screen reader" (its text is the display
+    alone, its `title` still `'1002.1 – Commercial Lease · Brightwell'`, and without Client it holds the hidden client
+    as before).
   - `Table.test.tsx`: "a newest-first column's first click sorts descending".
 - [ ] **Step 2: Run** the three files. Expected: FAIL.
 - [ ] **Step 3: Implement.** Strings: `'list.location': 'Location'`, `'list.filed': 'Date Filed'`, `'list.size':

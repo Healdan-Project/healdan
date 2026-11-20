@@ -109,8 +109,9 @@ and a sort on every column of every list.
   `1002.1 – Commercial Lease · Brightwell`, so a name the column cuts short can still be read by pointing at it (changed in
   the build, PR 1's review: the tooltip had held the client alone); the client is a column of its own too (§4.7). As a
   tooltip can't be reached by keyboard, the client is in the cell's text for a screen reader too, not drawn, and a
-  sighted keyboard user finds it in the details (changed in PR 1's second review). The hover swap goes. A matter with no
-  name shows its number. A cell too narrow ends in an ellipsis, so the number and the name's start stay.
+  sighted keyboard user finds it in the details (changed in PR 1's second review). Where the Client column shows, the
+  cell leaves that text out, so a screen reader doesn't read the client twice (PR 2). The hover swap goes. A matter with
+  no name shows its number. A cell too narrow ends in an ellipsis, so the number and the name's start stay.
 - **Matter shares the spare width** (call). Where Matter shows, it is a fraction like Title and Author, about Title `2fr`
   (at least 220 pixels), Matter `1.5fr` (at least 100) and Author `1fr`, so a wider window widens it. Matter's least
   width was 160 until the build found that, with React Aria giving every column at least 75 pixels, the list beside the
