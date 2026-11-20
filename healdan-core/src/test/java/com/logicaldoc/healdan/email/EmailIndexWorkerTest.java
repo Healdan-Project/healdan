@@ -10,9 +10,12 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.File;
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +25,7 @@ import javax.sql.DataSource;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.document.Document;
@@ -36,6 +40,8 @@ import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.admin.jobs.JobView;
+import com.logicaldoc.healdan.admin.jobs.Jobs;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.healdan.support.HealdanFixtures;
@@ -447,5 +453,49 @@ public class EmailIndexWorkerTest extends AbstractHealdanTestCase {
 			worker.stop();
 		}
 		assertFalse(threadRuns());
+	}
+
+	/**
+	 * Each run reports to the background jobs' status (Admin app spec section 9.5); one that fails gives its
+	 * exception's class alone, as the worker logs it, since a driver's message can hold values
+	 */
+	@Test
+	public void testARunReportsToTheJobList() {
+		Jobs jobs = Context.get(Jobs.class);
+		Instant before = Instant.now();
+		assertFalse(worker().runOnce());
+
+		JobView done = jobs.one(EmailIndexWorker.JOB);
+		assertEquals("Email Index", done.label());
+		assertFalse(done.lastStart().isBefore(before));
+		assertFalse(done.lastEnd().isBefore(done.lastStart()));
+		// The batch came short, so the first pass is done, and the thread ends
+		assertEquals(JobView.DONE, done.result());
+		assertNull(done.nextRun());
+		assertFalse(done.running());
+
+		DataSource broken = (DataSource) Proxy.newProxyInstance(getClass().getClassLoader(),
+				new Class<?>[] { DataSource.class }, (proxy, method, args) -> switch (method.getName()) {
+				case "getConnection" -> throw new SQLException("password authentication failed: <secret-1@example.com>");
+				case "hashCode" -> System.identityHashCode(proxy);
+				case "equals" -> proxy == args[0];
+				case "toString" -> "a database that refuses";
+				default -> throw new UnsupportedOperationException(method.getName());
+				});
+		EmailIndexWorker failing = new EmailIndexWorker(broken, HealdanSettings.get(), EmailIndex.get(),
+				CacheEvictor.get());
+		try {
+			failing.runOnce();
+			fail("the run's failure goes on to the loop, which logs it");
+		} catch (RuntimeException expected) {
+			// As before
+		}
+		JobView failed = jobs.one(EmailIndexWorker.JOB);
+		assertEquals(JobView.FAILED, failed.result());
+		assertEquals(CannotGetJdbcConnectionException.class.getName(), failed.error());
+		// The loop tries again in 30 seconds, worked out after the run began and before its end, which no pause on a
+		// busy machine changes
+		assertFalse(failed.nextRun().isBefore(failed.lastStart().plusSeconds(30)));
+		assertFalse(failed.nextRun().isAfter(failed.lastEnd().plusSeconds(30)));
 	}
 }

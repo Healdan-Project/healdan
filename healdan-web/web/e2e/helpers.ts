@@ -16,8 +16,9 @@ export const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\
 /** A pattern that finds the text anywhere in a name */
 export const escape = (text: string) => new RegExp(escaped(text))
 
-// Fills the old UI's sign-in page and submits it. The page is a GWT app, so its fields have no labels to find them by.
-export async function signIn(page: Page) {
+// Fills the old UI's sign-in page and submits it, as webuser or as `who`. The page is a GWT app, so its fields have no
+// labels to find them by.
+export async function signIn(page: Page, who: { username: string; password: string } = { username: USERNAME, password: PASSWORD }) {
   // The page keeps hidden copies of its fields, so only the visible ones count.
   const user = page.locator('input[placeholder="username"]:visible')
   const password = page.locator('input[placeholder="password"]:visible')
@@ -31,8 +32,8 @@ export async function signIn(page: Page) {
     "the server's sign-in providers",
   )
   if (server.providers.length > 0) await page.getByText(server.passwordLabel).click()
-  await user.fill(USERNAME)
-  await password.fill(PASSWORD)
+  await user.fill(who.username)
+  await password.fill(who.password)
   await password.press('Enter')
 }
 

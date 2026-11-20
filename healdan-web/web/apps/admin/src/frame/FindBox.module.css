@@ -1,0 +1,60 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* As the User app's search box (its SearchBox.module.css): one field, with the search icon at its start */
+.find {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--hd-space-3);
+  max-width: 520px;
+  height: 34px;
+  padding-inline-start: var(--hd-space-4);
+  border: 1px solid var(--hd-field-line);
+  border-radius: var(--hd-radius-large);
+  background: var(--hd-field);
+}
+
+.icon {
+  color: var(--hd-text-secondary);
+}
+
+.combo {
+  display: flex;
+  flex: 1;
+  align-self: stretch;
+  min-width: 0;
+}
+
+.box {
+  flex: 1;
+  min-width: 0;
+  padding: 0 var(--hd-space-4) 0 0;
+  border: 0;
+  border-radius: 0 var(--hd-radius-large) var(--hd-radius-large) 0;
+  background: var(--hd-field);
+  color: var(--hd-text);
+  font: inherit;
+}
+
+/* The ring goes round the whole field, as the field is what the person sees as the box */
+.box:focus-visible {
+  outline: none;
+}
+
+.find:has(.box:focus-visible) {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}
+
+/* For a screen reader only: what the find says when there's no list to show */
+.note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

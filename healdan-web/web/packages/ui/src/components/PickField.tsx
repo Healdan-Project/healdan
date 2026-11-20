@@ -3,12 +3,18 @@
 
 import { useState, type Key } from 'react'
 import { ComboBox as AriaComboBox, FieldError, Input, Label, ListBox, ListBoxItem, Popover } from 'react-aria-components'
+import { Icon, type IconName } from '../icons'
 import comboStyles from './ComboBox.module.css'
 import styles from './Fields.module.css'
 
 export interface PickFieldOption {
   id: string
+  /** What the box shows once it is picked */
   label: string
+  /** Drawn before the label, as decoration */
+  icon?: IconName
+  /** Smaller and muted after the label, and part of the option's name (a person's username, a matter's client); the box shows only the label */
+  meta?: string
 }
 
 export interface PickFieldProps {
@@ -103,7 +109,17 @@ export function PickField({ label, required, error, value, onChange, options, on
         <ListBox className={comboStyles.list}>
           {(option: PickFieldOption) => (
             <ListBoxItem id={option.id} textValue={option.label} className={comboStyles.option}>
-              <span className={comboStyles.label}>{option.label}</span>
+              {option.icon && <Icon name={option.icon} />}
+              {/* One text, so the name is the label, a space, then the secondary text, as a screen reader reads what is drawn */}
+              <span className={comboStyles.label}>
+                {option.label}
+                {option.meta && (
+                  <>
+                    {' '}
+                    <span className={comboStyles.meta}>{option.meta}</span>
+                  </>
+                )}
+              </span>
             </ListBoxItem>
           )}
         </ListBox>

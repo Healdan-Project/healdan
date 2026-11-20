@@ -3,8 +3,8 @@
 
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import { SignedOut } from '@healdan/shell'
 import { expectNoAxeViolations } from '../test/axe'
-import { SignedOut } from './SignedOut'
 
 describe('SignedOut', () => {
   it('says so and offers Sign In, a link to the address the person is at', async () => {

@@ -8,6 +8,8 @@ import java.util.List;
 import org.apache.cxf.bus.extension.ExtensionManagerBus;
 import org.apache.cxf.transport.servlet.CXFNonSpringServlet;
 
+import com.logicaldoc.healdan.admin.AdminContext;
+
 import jakarta.servlet.ServletConfig;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebInitParam;
@@ -64,15 +66,22 @@ public class ApiServlet extends CXFNonSpringServlet {
 	 * Serves a request with nothing signed in on the thread before it, and
 	 * nothing left after it, whatever happens: Tomcat's threads serve one
 	 * request after another. Only here is it cleared, so that a streamed body
-	 * (a document's content) still has its caller.
+	 * (a document's content) still has its caller. The admin API's address
+	 * ({@link AdminContext}) goes with it, here only too, so an export's
+	 * streamed body still has it.
 	 */
 	@Override
 	protected void invoke(HttpServletRequest request, HttpServletResponse response) throws ServletException {
-		TokenFilter.clear();
+		clear();
 		try {
 			super.invoke(request, response);
 		} finally {
-			TokenFilter.clear();
+			clear();
 		}
+	}
+
+	private static void clear() {
+		TokenFilter.clear();
+		AdminContext.clear();
 	}
 }

@@ -20,6 +20,7 @@ import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ClassUtils;
 
+import com.logicaldoc.healdan.api.admin.AdminFilter;
 import com.logicaldoc.util.spring.Context;
 
 import jakarta.ws.rs.Path;
@@ -80,7 +81,8 @@ public class ApiServer implements ApplicationContextAware {
 	/**
 	 * @return the providers every request goes through: JSON, problems, CORS
 	 *         (before matching, so a preflight needs no token), the token
-	 *         check, and the upload limit and clean-up
+	 *         check, the admin API's checks after it, and the upload limit and
+	 *         clean-up
 	 */
 	static List<Object> providers() {
 		List<Object> providers = new ArrayList<>();
@@ -88,6 +90,7 @@ public class ApiServer implements ApplicationContextAware {
 		providers.add(new ProblemMapper());
 		providers.add(new CorsFilter());
 		providers.add(new TokenFilter());
+		providers.add(new AdminFilter());
 		providers.add(new UploadFilter());
 		// CXF answers ?_wadl with a WADL document whenever its generator is on the classpath, as the webservice
 		// plugin puts it; the API is described by openapi.yaml only
@@ -129,7 +132,7 @@ public class ApiServer implements ApplicationContextAware {
 	 * @return the Spring beans in this package, or one below it, that carry
 	 *         {@link Path}
 	 */
-	static List<Object> resources() {
+	public static List<Object> resources() {
 		return Context.get(ApiServer.class).findResources();
 	}
 

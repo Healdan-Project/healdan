@@ -8,7 +8,12 @@ cascade:
 How to set Healdan up: Stores, clients and matters, workspace templates, users and permissions, and where files are
 kept.
 
+Start in [the Admin app](the-admin-app/), at `/admin/`, whose Dashboard shows what needs your attention, the server's
+health and how Healdan is used. Everything else is still done in the Classic Interface, under **Administration** and
+in the Documents tab's folder tree, and the rest of this guide describes those screens.
+
 {{< cards >}}
+  {{< card link="the-admin-app/" title="The Admin App" icon="presentation-chart-bar" >}}
   {{< card link="stores/" title="Stores" icon="server" >}}
   {{< card link="clients-and-matters/" title="Clients and Matters" icon="users" >}}
   {{< card link="workspace-templates/" title="Workspace Templates" icon="template" >}}

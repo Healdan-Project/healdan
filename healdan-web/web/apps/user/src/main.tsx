@@ -4,9 +4,9 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createApi, type components } from '@healdan/api'
+import { InsecureAddress, NoAdminAccess } from '@healdan/shell'
 import { setLabels } from '@healdan/ui'
 import { App } from './App'
-import { InsecureAddress } from './frame/InsecureAddress'
 import { createQueryClient } from './queryClient'
 import { createAppRouter } from './router'
 import { createSignedOut } from './signedOut'
@@ -14,13 +14,26 @@ import { createSignedOut } from './signedOut'
 /** How long the first draw waits for the server's word for a matter */
 const SERVER_INFO_WAIT_MS = 5_000
 
+/** Healdan Admin's addresses: /admin and everything under it, a path parameter (/admin;x) too, not /administrator */
+const ADMIN = /^\/admin([/;]|$)/
+
 /**
  * Draws the app in `root`, and gives back what takes it away again. At an address that isn't secure (plain http://, not
  * the machine itself) the browser sends no Sec-Fetch-Site, so the web session's route refuses every call: the app says
- * so on a page of its own, before it asks the server anything (R91).
+ * so on a page of its own, before it asks the server anything (R91). At Healdan Admin's addresses, where the server
+ * sends this page only to someone who isn't an administrator, it says they have no access there before anything else:
+ * that needs nothing from the server, at a secure address or not (admin spec 6.1).
  */
 export async function start(root: HTMLElement, secure = window.isSecureContext): Promise<() => void> {
   const drawn = createRoot(root)
+  if (ADMIN.test(window.location.pathname)) {
+    drawn.render(
+      <StrictMode>
+        <NoAdminAccess />
+      </StrictMode>,
+    )
+    return () => drawn.unmount()
+  }
   if (!secure) {
     drawn.render(
       <StrictMode>

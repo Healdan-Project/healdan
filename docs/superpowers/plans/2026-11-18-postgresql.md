@@ -693,18 +693,18 @@ git commit -m "Text: keep emoji, refuse only what PostgreSQL can't store"
 Spec §6.4, §6.5.
 
 **Files:**
-- Create: `healdan-core/src/main/resources/healdan/db/migration/postgresql/V12__widen_logicaldoc_text.sql` (the next free version, if another change has taken 12)
-- Delete: `healdan-core/src/main/resources/healdan/db/migration/mariadb/` (eleven scripts)
+- Create: `healdan-core/src/main/resources/healdan/db/migration/postgresql/V13__widen_logicaldoc_text.sql` (the next free version: the Admin app's `V12__admin.sql` took 12; if another change has taken 13, the next after it)
+- Delete: `healdan-core/src/main/resources/healdan/db/migration/mariadb/` (twelve scripts)
 - Modify: `healdan-core/pom.xml` (remove `flyway-mysql`, 27-31), `HC/db/HealdanMigrator.java` (`RECOVERY` 51-53, `vendorFolder`)
 - Test: `HCT/db/PostgresMigrationsTest.java`, `HCT/db/HealdanMigratorTest.java`, `HCT/db/WidenedColumnsTest.java` (new)
 
 **Interfaces:**
-- Produces: `HealdanMigrator.MOVE_PAGE = "https://docs.healdan.com/install/moving-from-mariadb/"`; schema version 12 on every PostgreSQL database.
+- Produces: `HealdanMigrator.MOVE_PAGE = "https://docs.healdan.com/install/moving-from-mariadb/"`; schema version 13 on every PostgreSQL database.
 
 - [ ] **Step 1: Write the failing tests**
   - `PostgresMigrationsTest#testLogicaldocsNarrowColumnsAreText`: after `migrate()`, `data_type` is `text` for `ld_user.ld_avatar`, `ld_systemmessage.ld_messagetext`, `ld_filler.ld_automation`, `ld_filler.ld_automationbefore`, `ld_folder.ld_tile`, `ld_menu.ld_automation`, `ld_generic.ld_text1` and `ld_legal.ld_content`, and for no other `ld_` column.
   - `WidenedColumnsTest extends AbstractHealdanTestCase`, `testALongAvatarIsKept`: a user stored through `UserDAO` with a 6,000-character avatar reads back whole.
-  - `HealdanMigratorTest`: `testRefusesMariadbAndNamesTheMove` (fake metadata for MariaDB, and for MariaDB through MySQL's driver: the message holds `MOVE_PAGE`); `testRefusesUnsupportedDatabase` gains nothing new; `testFailingScriptFailsStartup` expects the new recovery text; the version expected wherever a test says 11 becomes 12.
+  - `HealdanMigratorTest`: `testRefusesMariadbAndNamesTheMove` (fake metadata for MariaDB, and for MariaDB through MySQL's driver: the message holds `MOVE_PAGE`); `testRefusesUnsupportedDatabase` gains nothing new; `testFailingScriptFailsStartup` expects the new recovery text; the version expected wherever a test says 12 becomes 13.
 
 - [ ] **Step 2: Run them to see them fail**
 
@@ -1167,7 +1167,7 @@ Spec §9. Review Focus 1.
 ```java
 final class MoveFromMariaDb {
 	/** The last version of the mariadb/ folder: a source at any other is refused */
-	static final String SOURCE_VERSION = "11";
+	static final String SOURCE_VERSION = "12";
 	static final String REPLACE_NUL = "--replace-nul";
 	/** Exit statuses: 0 moved, 1 refused or failed (the target is left marked unfinished, or untouched) */
 	public static void main(String[] args);
@@ -1214,7 +1214,7 @@ volumes:
   4. **The schema:** `runScripts(plannedScripts(cl, true, DBMS), …)`, then `new HealdanMigrator(dataSource).migrate()` on a `DriverManagerDataSource`. No seed runs, and the app never starts.
   5. Read every foreign key's table, name and `pg_get_constraintdef`, and drop them. `truncate` every table but `MovePlan.OWN`.
   6. **The copy:** `MovePlan.plan` from both sides' `information_schema.columns`; any problem stops the move. For each table: read the source in the plan's column order, dates and times as text; `MoveValues.carry` each value; insert in batches of 1,000; add each carried row to the source's `MoveChecksum.Sum`. One transaction a table. An `Unstorable` stops the move, after the whole table has been read, so the report lists every such place in it. With `--replace-nul`, NULs are replaced and their places collected.
-  7. **The counters:** for each sequence in the target's `pg_sequences` that isn't an identity column's, find the source's sequence of the same name, whatever its case, and `setval(<seq>, <next_not_cached_value>, false)`; a target sequence with no source sequence stops the move. For each identity column, `setval(pg_get_serial_sequence(…), <the column's highest value>)` when the table has rows.
+  7. **The counters:** for each sequence in the target's `pg_sequences` that isn't an identity column's, find the source's sequence of the same name, whatever its case, and `setval(<seq>, <next_not_cached_value>, false)`; a target sequence with no source sequence stops the move. For each identity column, `setval(pg_get_serial_sequence(…), <the column's highest value>)` when the table has rows: V11's `hd_trash.hd_id`, and `hd_admin_event.hd_id` and `hd_error.hd_id`, which the Admin app's `V12__admin.sql` adds.
   8. Add the foreign keys back from their definitions. A failure names the constraint.
   9. **The comparison:** for each copied table, read the target in the same column order into a second `Sum`; the row counts and `hex()` must match. Each sequence must be `MoveCounters.safe` against its table's highest id, the table being the sequence's name without `_seq`. Any difference stops the move and names the table.
   10. `create table docker_init …` as `Db.recordCompletion` does, set `docker_move.finished`, print `Move complete.`, exit 0.
@@ -1503,7 +1503,7 @@ Every `docker compose` command below that starts a container names it with `-f`.
 
 - [ ] **Step 3: Bring the clone to the last MariaDB version**
 
-Check out the commit of `master` that PR B will merge onto. `docker compose -f compose.yaml -f compose.rehearsal.yaml up -d --build`; wait for healthy; from `dms.log`, Flyway's version is 11 and no seed failed; then `docker compose down` (never `-v`).
+Check out the commit of `master` that PR B will merge onto. `docker compose -f compose.yaml -f compose.rehearsal.yaml up -d --build`; wait for healthy; from `dms.log`, Flyway's version is 12 and no seed failed; then `docker compose down` (never `-v`).
 
 - [ ] **Step 4: Rehearse the move**
 

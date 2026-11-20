@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { describe, expect, it } from 'vitest'
 import html from '../index.html?raw'
-import css from '../public/pressable.css?raw'
+// Both apps' file, @healdan/ui's
+import css from '../../../packages/ui/public/pressable.css?raw'
 
 // react-aria's exports map hides its files, so find the package's entry and its usePress beside it.
 const entry = createRequire(import.meta.url).resolve('react-aria')

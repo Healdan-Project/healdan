@@ -8,12 +8,14 @@ import java.util.regex.Pattern;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * The page a signed-out visit to the User app comes back to after signing in. CE's <code>login.jsp</code> reads the
- * HTTP session's <code>RequestedUrl</code> and writes it, unescaped, into a JavaScript string, so nothing goes in
- * that this class hasn't checked: a path under <code>/app/</code> of letters, digits and
- * <code>/ . _ ~ % - ? &amp; = + *</code> only (<code>+</code> is a space in the app's own queries, and <code>*</code>
- * a search's wildcard, which the app's addresses leave as it is), with no <code>//</code> (M6 spec 8.3).
- * <code>AppServlet</code> forgets it once a signed-in page loads.
+ * The page a signed-out visit to the User app or the Admin app comes back to after signing in. CE's
+ * <code>login.jsp</code> reads the HTTP session's <code>RequestedUrl</code> and writes it, unescaped, into a JavaScript
+ * string, so nothing goes in that this class hasn't checked: a path under <code>/app/</code> or <code>/admin/</code>
+ * of letters, digits and <code>/ . _ ~ % - ? &amp; = + *</code> only (<code>+</code> is a space in the apps' own
+ * queries, and <code>*</code> a search's wildcard, which the apps' addresses leave as it is), with no <code>//</code>
+ * (M6 spec 8.3, admin spec 6.2). A refused path, or a bare one, under <code>/admin</code> falls back to the Admin app's
+ * {@link #ADMIN_FALLBACK}, and any other to the User app's {@link #FALLBACK}. <code>AppServlet</code> and
+ * <code>AdminAppServlet</code> forget it once a signed-in page loads.
  */
 public final class ReturnPath {
 
@@ -22,22 +24,31 @@ public final class ReturnPath {
 
 	public static final String FALLBACK = "/app/";
 
+	/** Where a refused or bare path under <code>/admin</code> comes back to */
+	public static final String ADMIN_FALLBACK = "/admin/";
+
 	public static final int MAX_LENGTH = 2000;
 
-	private static final Pattern ALLOWED = Pattern.compile("/app/[A-Za-z0-9/._~%?&=+*-]*");
+	private static final Pattern ALLOWED = Pattern.compile("/(?:app|admin)/[A-Za-z0-9/._~%?&=+*-]*");
+
+	/** <code>/admin</code> itself, or anything under it: not <code>/administrator/</code> */
+	private static final Pattern ADMIN = Pattern.compile("/admin(?:[/?;].*)?", Pattern.DOTALL);
 
 	private ReturnPath() {
 	}
 
 	/**
 	 * @param pathAndQuery an address relative to the context path
-	 * @return it if it passes the rule, else {@link #FALLBACK}; never a value with a quote, an angle bracket or a
-	 *         backslash
+	 * @return it if it passes the rule, else {@link #ADMIN_FALLBACK} for one under <code>/admin</code> and
+	 *         {@link #FALLBACK} for any other; never a value with a quote, an angle bracket or a backslash
 	 */
 	public static String safe(String pathAndQuery) {
-		if (pathAndQuery == null || pathAndQuery.length() > MAX_LENGTH || pathAndQuery.contains("//"))
+		if (pathAndQuery == null)
 			return FALLBACK;
-		return ALLOWED.matcher(pathAndQuery).matches() ? pathAndQuery : FALLBACK;
+		if (pathAndQuery.length() <= MAX_LENGTH && !pathAndQuery.contains("//")
+				&& ALLOWED.matcher(pathAndQuery).matches())
+			return pathAndQuery;
+		return ADMIN.matcher(pathAndQuery).matches() ? ADMIN_FALLBACK : FALLBACK;
 	}
 
 	/**
@@ -50,11 +61,12 @@ public final class ReturnPath {
 
 	/**
 	 * @param stored the HTTP session's {@link #ATTRIBUTE}, or null
-	 * @return true if it's a return path into the User app still waiting for a sign-in, which only
+	 * @return true if it's a return path into the User app or the Admin app still waiting for a sign-in, which only
 	 *         {@link #remember} stores; false for none, or for an earlier landing such as <code>frontend.jsp</code>
 	 */
 	public static boolean waiting(Object stored, HttpServletRequest request) {
+		String context = request.getServletContext().getContextPath();
 		return stored instanceof String path
-				&& path.startsWith(request.getServletContext().getContextPath() + FALLBACK);
+				&& (path.startsWith(context + FALLBACK) || path.startsWith(context + ADMIN_FALLBACK));
 	}
 }
