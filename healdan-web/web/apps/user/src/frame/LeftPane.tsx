@@ -323,7 +323,7 @@ function MyMattersSection() {
             else organising.startRename(`f${folder.id}`, 'tree')
           }}
           onDelete={(id) => {
-            // A matter's own folder is deleted in the Classic Interface (folders and Trash spec 2.2)
+            // A matter's own folder is deleted by an administrator, on the matter's page in the Admin app (folders and Trash spec 2.2)
             if (matters.some((matter) => String(matter.folderId) === id)) return toast(t('delete.matterFolder'))
             const folder = folders.get(id)
             if (!folder) return

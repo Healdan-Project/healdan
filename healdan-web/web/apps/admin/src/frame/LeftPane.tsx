@@ -57,7 +57,7 @@ export const NAV: readonly NavGroup[] = [
   { group: 'admin.nav.monitoring', items: [] },
 ]
 
-/** The label of the screen at an address of the app (with ADMIN_BASE), or undefined when no shipped screen is there */
+/** The label of the screen at a path of the app (with ADMIN_BASE, no query), or undefined when no shipped screen is there */
 export function screenAt(href: string, nav: readonly NavGroup[] = NAV): string | undefined {
   if (href !== ADMIN_BASE && !href.startsWith(`${ADMIN_BASE}/`)) return undefined
   const path = href.slice(ADMIN_BASE.length) || '/'

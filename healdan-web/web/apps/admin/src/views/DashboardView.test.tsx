@@ -1,14 +1,17 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { act, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import type { adminComponents } from '@healdan/api'
 import { formatDate, setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
 import { attention, dashboard, health, problem, tile, usage, usageNotYet } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { hidePage, returnToPage } from '../test/visibility'
+
+type A = adminComponents['schemas']
 
 const region = (name: string) => screen.findByRole('region', { name })
 /** A row's or tile's part, by the data attribute that marks it: its message, detail or status */
@@ -172,6 +175,72 @@ describe('Server Health', () => {
     const part = await region('Server Health')
     expect(await within(part).findByText('Something went wrong.')).toBeTruthy()
     expect(within(part).getByRole('button', { name: 'Try Again' })).toBeTruthy()
+  })
+})
+
+describe("The server's links", () => {
+  /** Whether a click on the link was left to the browser (not prevented), which is then stopped, as jsdom can't load a page */
+  function leftToTheBrowser(link: HTMLElement, init: MouseEventInit = {}): boolean {
+    let prevented: boolean | undefined
+    const listen = (event: MouseEvent) => {
+      prevented = event.defaultPrevented
+      event.preventDefault()
+    }
+    window.addEventListener('click', listen, { once: true })
+    fireEvent.click(link, init)
+    window.removeEventListener('click', listen)
+    return prevented === false
+  }
+
+  const atScreens: A['AttentionItem'][] = [
+    { code: 'index-failed', count: 2, detail: '# 10412, # 10398', link: '/admin/matters?sort=name' },
+    { code: 'errors', count: 14, detail: 'Latest 10:41', link: '/admin/clients' },
+    { code: 'files-stuck', count: 3, detail: 'Client Work', link: '/frontend.jsp?x=1' },
+  ]
+
+  it("say the screen they open by its path, whatever the link's query", async () => {
+    await renderApp('/', { 'GET /v1/admin/dashboard': { ...dashboard, attention: atScreens } })
+    const items = await within(await region('Needs Attention')).findAllByRole('listitem')
+    expect(items.map((item) => within(item).getByRole('link').textContent)).toEqual(['Matters', 'Clients', 'Classic Interface'])
+  })
+
+  it('open a screen of the app inside it, with the router, and leave the Classic Interface to the browser', async () => {
+    const { router } = await renderApp('/', { 'GET /v1/admin/dashboard': { ...dashboard, attention: atScreens } })
+    const items = await within(await region('Needs Attention')).findAllByRole('listitem')
+    const link = (index: number) => within(items[index]!).getByRole('link')
+    // The link is still the address, so a new tab or a copied link opens the screen
+    expect(link(1).getAttribute('href')).toBe('/admin/clients')
+    expect(leftToTheBrowser(link(2))).toBe(true)
+    expect(router.state.location.pathname).toBe('/')
+    expect(leftToTheBrowser(link(1))).toBe(false)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/clients'))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Clients' })).toBeTruthy()
+  })
+
+  it('keep the query of the screen they open', async () => {
+    const { router } = await renderApp('/', { 'GET /v1/admin/dashboard': { ...dashboard, attention: atScreens } })
+    const items = await within(await region('Needs Attention')).findAllByRole('listitem')
+    fireEvent.click(within(items[0]!).getByRole('link'))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/matters'))
+    expect(router.state.location.search).toEqual({ sort: 'name' })
+  })
+
+  it('leave a click with a modifier, which opens a new tab or window, to the browser', async () => {
+    const { router } = await renderApp('/', { 'GET /v1/admin/dashboard': { ...dashboard, attention: atScreens } })
+    const items = await within(await region('Needs Attention')).findAllByRole('listitem')
+    const link = within(items[1]!).getByRole('link')
+    for (const init of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) expect(leftToTheBrowser(link, init)).toBe(true)
+    expect(router.state.location.pathname).toBe('/')
+  })
+
+  it("open a tile's screen of the app inside it too", async () => {
+    const tiles = health.map((one) => (one.name === 'server' ? { ...one, link: '/admin/templates' } : one))
+    const { router } = await renderApp('/', { 'GET /v1/admin/dashboard': { ...dashboard, health: tiles } })
+    const section = await region('Server Health')
+    const server = await within(section).findByRole('link', { name: 'Server' })
+    expect(leftToTheBrowser(within(section).getByRole('link', { name: 'Database' }))).toBe(true)
+    expect(leftToTheBrowser(server)).toBe(false)
+    await waitFor(() => expect(router.state.location.pathname).toBe('/templates'))
   })
 })
 

@@ -140,8 +140,9 @@ export function SelectionMenuItems({ items }: { items: OrganisingItems }) {
  * A matter (in My Matters, Recent Matters or a search's list): Open, Open in New Tab, Rename greyed out (a matter's own folder
  * takes the matter's name), and Add to or Remove from My Matters, as + and ⋯ do; for an administrator, Manage in Admin, the
  * matter's page in the Admin app (`matterId` is the matter's own id, not its folder's), in a new tab, as Open in New Tab opens
+ * it. A matter's own folder whose answer names no matter (`matterId` null) has the rest, and no Manage in Admin.
  */
-export function MatterMenuItems({ folderId, matterId }: { folderId: number; matterId: number }) {
+export function MatterMenuItems({ folderId, matterId }: { folderId: number; matterId: number | null }) {
   const navigate = useNavigate()
   // Only decides what's offered: the Admin app asks the server again
   const admin = useMe().data?.admin === true
@@ -155,14 +156,14 @@ export function MatterMenuItems({ folderId, matterId }: { folderId: number; matt
       </MenuItem>
       <ActionItem action={newTabAction(folderHref(folderId))} />
       <MenuSeparator />
-      {/* A matter's own folder takes the matter's name: Edit Matter, in the Classic Interface (folder rename spec 5.2) */}
+      {/* A matter's own folder takes the matter's name: Edit, on the matter's page in the Admin app (folder rename spec 5.2) */}
       <MenuItem id="rename" isDisabled>
         {t('rename.menu')}
       </MenuItem>
       <MenuItem id="myMatters" isDisabled={!mine.isSuccess} onAction={() => void change(kept ? 'DELETE' : 'PUT', folderId)}>
         {kept ? t('myMatters.remove') : t('myMatters.addMenu')}
       </MenuItem>
-      {admin && (
+      {admin && matterId !== null && (
         <>
           <MenuSeparator />
           <ActionItem action={{ id: 'manageInAdmin', label: t('menu.manageInAdmin'), isDisabled: false, href: adminMatterHref(matterId) }} />
@@ -228,6 +229,6 @@ function useOriginalName(favorite: S['FavoriteView']) {
 /** A folder of any kind: a matter's top level has the matter's menu, and a Store, which opens as no folder, has none */
 export function folderMenu(folder: S['FolderView'], renameIn: RenamePlace) {
   if (folder.kind === 'store') return undefined
-  if (folder.kind === 'matter' && folder.matter) return <MatterMenuItems folderId={folder.id} matterId={folder.matter.id} />
+  if (folder.kind === 'matter') return <MatterMenuItems folderId={folder.id} matterId={folder.matter?.id ?? null} />
   return <FolderMenuItems folder={folder} renameIn={renameIn} />
 }

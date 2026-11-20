@@ -138,11 +138,14 @@ public class DashboardService {
 
 	/**
 	 * The screens the Dashboard links to (spec section 8.1): the Admin app's address once a screen has shipped, and
-	 * the Classic Interface until then. Each phase that ships a screen changes its row.
+	 * the Classic Interface until then. Each phase that ships a screen changes its row; Phase 2 shipped Clients, Matters
+	 * and Workspace Templates.
 	 */
 	enum Screen {
 		DASHBOARD("/admin/"),
+		CLIENTS("/admin/clients"),
 		MATTERS("/admin/matters"),
+		TEMPLATES("/admin/templates"),
 		STORES(Landing.CLASSIC),
 		BACKENDS(Landing.CLASSIC),
 		USERS(Landing.CLASSIC),

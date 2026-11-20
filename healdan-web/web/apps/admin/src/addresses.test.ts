@@ -3,7 +3,7 @@
 
 import { createMemoryHistory } from '@tanstack/react-router'
 import { describe, expect, it } from 'vitest'
-import { ADMIN_BASE, routes } from './addresses'
+import { ADMIN_BASE, appAddressOf, clientHref, pathOf, routes } from './addresses'
 import { createAdminRouter } from './router'
 
 // CE's UrlRewriteFilter isn't anchored at the start of the path, and login.jsp drops some return paths, so no address
@@ -70,5 +70,37 @@ describe('The Admin app\'s addresses', () => {
       ].sort(),
     )
     expect(routes.dashboard).toBe('/')
+  })
+})
+
+describe('A link the server gives', () => {
+  it('is an address of this app when its path is /admin or under it, on this origin, with its query and hash', () => {
+    expect(appAddressOf('/admin/')).toBe('/admin/')
+    expect(appAddressOf('/admin')).toBe('/admin')
+    expect(appAddressOf('/admin/matters?sort=name#top')).toBe('/admin/matters?sort=name#top')
+    expect(appAddressOf(`${window.location.origin}/admin/clients/7`)).toBe('/admin/clients/7')
+  })
+
+  it("isn't one when it's the Classic Interface, another of the server's pages, another origin's or no address at all", () => {
+    expect(appAddressOf('/frontend.jsp')).toBeUndefined()
+    expect(appAddressOf('/administrator')).toBeUndefined()
+    expect(appAddressOf('/app/folders/7')).toBeUndefined()
+    // The path as the browser reads it, not as written
+    expect(appAddressOf('/admin/../frontend.jsp')).toBeUndefined()
+    expect(appAddressOf('https://elsewhere.example/admin/matters')).toBeUndefined()
+    expect(appAddressOf('//elsewhere.example/admin/matters')).toBeUndefined()
+    expect(appAddressOf('javascript:alert(1)')).toBeUndefined()
+  })
+
+  it('has a path on this origin, without its query or hash, and none on another', () => {
+    expect(pathOf('/frontend.jsp?x=1#y')).toBe('/frontend.jsp')
+    expect(pathOf('/admin/matters?sort=name')).toBe('/admin/matters')
+    expect(pathOf('https://elsewhere.example/frontend.jsp')).toBeUndefined()
+  })
+})
+
+describe("A client's page", () => {
+  it("is the client's id as one segment under the Clients screen", () => {
+    expect(clientHref(7)).toBe('/admin/clients/7')
   })
 })

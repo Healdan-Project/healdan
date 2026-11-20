@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { launch } from '../actions/launch'
 import { letter } from '../filing/testing'
-import { drafts, lease, plan, routes, row, select, toolbar } from '../organising/testing'
+import { drafts, lease, matterTop, plan, routes, row, select, toolbar } from '../organising/testing'
 import { expectNoAxeViolations } from '../test/axe'
 import { children, document as doc, folder, matter, me, page } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
@@ -23,6 +23,7 @@ const item = async (name: string | RegExp) => within(await menu()).findByRole('m
 // Read from the page itself: while a menu is open, the rest of the page is hidden from the accessibility tree
 const selectedRows = () => Array.from(document.querySelectorAll('[data-row-key][aria-selected="true"]'), (one) => one.getAttribute('data-row-key'))
 const pane = () => screen.getByRole('navigation', { name: 'Navigation' })
+const main = () => screen.getByRole('main')
 
 beforeEach(() => vi.mocked(launch).mockClear())
 
@@ -363,6 +364,21 @@ describe('Manage in Admin, on a matter’s menu', () => {
     await renderApp('/folders/7', routes().all)
     fireEvent.contextMenu(await within(pane()).findByRole('link', { name: /1002\.1/ }))
     expect(await names()).not.toContain('Manage in Admin')
+  })
+
+  it('uses the matter’s id from a list that shows a matter’s own folder as a folder (Recent › Folders)', async () => {
+    await renderApp('/recent/folders', { ...admin, 'GET /v1/folders/recent': page([matterTop]) })
+    fireEvent.contextMenu(await within(await within(main()).findByRole('grid')).findByRole('row', { name: /Charter Dispute/ }))
+    // 1001.1 is in My Matters
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Remove from My Matters', 'Manage in Admin'])
+    expect((await item('Manage in Admin')).getAttribute('href')).toBe('/admin/matters/11')
+  })
+
+  it('keeps a matter’s own folder on the matter’s menu without it when the server names no matter, so Rename stays greyed out', async () => {
+    await renderApp('/recent/folders', { ...admin, 'GET /v1/folders/recent': page([{ ...matterTop, matter: null }]) })
+    fireEvent.contextMenu(await within(await within(main()).findByRole('grid')).findByRole('row', { name: /Charter Dispute/ }))
+    expect(await names()).toEqual(['Open', 'Open in New Tab', 'Rename', 'Remove from My Matters'])
+    expect((await item('Rename')).getAttribute('aria-disabled')).toBe('true')
   })
 
   it('is not on a plain folder’s or a document’s menu', async () => {

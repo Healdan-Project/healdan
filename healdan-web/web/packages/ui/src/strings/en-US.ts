@@ -353,7 +353,7 @@ export const enUS = {
   'rename.noExtension': "The name can't have an extension, as the document's has none.",
   'rename.taken': "There's already a folder called {name} here.",
   'rename.adminsOnly': "Only administrators can rename a {matterLower}'s top-level folders.",
-  'rename.matterFolder': "A {matterLower}'s own folder takes the {matterLower}'s name: an administrator changes it with Edit {matter}… in the Classic Interface.",
+  'rename.matterFolder': "A {matterLower}'s own folder takes the {matterLower}'s name: an administrator changes it with Edit on the {matterLower}'s page in the Admin app.",
   'rename.noPermission': "You don't have permission to rename this folder.",
   'rename.tooLong': "With its .{ext}, the name can't be longer than 255 characters.",
   'move.menu': 'Move To…',
@@ -379,7 +379,7 @@ export const enUS = {
   'move.adminsOnly': 'Administrators only',
   'move.notAllowed': "It holds items you don't have permission to move.",
   'move.doneFolder': 'Moved "{name}" to {folder}',
-  'move.matterFolder': "A {matterLower}'s own folder is moved by an administrator in the Classic Interface.",
+  'move.matterFolder': "A {matterLower}'s own folder is moved by an administrator, with Move to Another Store on the {matterLower}'s page in the Admin app.",
   'move.adminsOnlyFolder': "Only administrators can move a {matterLower}'s top-level folders.",
   // A folder that isn't top-level itself, refused a matter's top level: dropped on the matter, or the server's admins-only
   'move.adminsOnlyInto': "Only administrators can move folders into a {matterLower}'s top level.",
@@ -404,7 +404,7 @@ export const enUS = {
   'delete.notAllowed': "It holds items you don't have permission to delete.",
   'delete.checkedOut': 'Documents in it are checked out:',
   'delete.checkedOutAfter': "They can be deleted once they're checked in or released.",
-  'delete.matterFolder': "A {matterLower}'s own folder is deleted by an administrator in the Classic Interface.",
+  'delete.matterFolder': "A {matterLower}'s own folder is deleted by an administrator, with Delete on the {matterLower}'s page in the Admin app.",
   'delete.adminsOnly': "Only administrators can delete a {matterLower}'s top-level folders.",
   'delete.noPermission': "You don't have permission to delete this folder.",
   // Undo, on the toast after a delete

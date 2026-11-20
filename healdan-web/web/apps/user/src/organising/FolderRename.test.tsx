@@ -110,7 +110,7 @@ describe('Renaming a folder in a list', () => {
     await renderApp('/search?scope=matters&q=charter', all)
     const target = within(await grid()).getAllByRole('row').find((one) => one.getAttribute('data-row-key') === 'm11')!
     await pressF2OnRow(target)
-    expect(await screen.findByText("A matter's own folder takes the matter's name: an administrator changes it with Edit Matter… in the Classic Interface.")).toBeTruthy()
+    expect(await screen.findByText("A matter's own folder takes the matter's name: an administrator changes it with Edit on the matter's page in the Admin app.")).toBeTruthy()
     expect(screen.queryByRole('textbox', { name: /New Name/ })).toBeNull()
     expect(written.renamedFolders).toEqual([])
   })

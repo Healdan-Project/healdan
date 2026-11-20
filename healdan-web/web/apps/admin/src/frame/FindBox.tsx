@@ -3,12 +3,14 @@
 
 import { useMemo, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
-import { goTo, useMessageFor } from '@healdan/shell'
+import { useMessageFor } from '@healdan/shell'
 import { ComboBox, Icon, type ComboBoxSection } from '@healdan/ui'
+import { clientHref, matterHref } from '../addresses'
 import { useDebounced } from '../pickers/typing'
 import { useAdminQuery } from '../queries'
 import { t } from '../strings'
 import { CLASSIC } from './LeftPane'
+import { useFollow } from './ServerLink'
 import styles from './FindBox.module.css'
 
 type A = adminComponents['schemas']
@@ -20,13 +22,13 @@ export const FIND_MAX = 100
 export type Found = { kind: 'client'; client: A['FoundClient'] } | { kind: 'matter'; matter: A['FoundMatter'] } | { kind: 'person'; person: A['FoundPerson'] }
 
 /**
- * Where a find opens what it found, by its kind. Clients, Matters and Users have no screen here until Phases 2 and 4,
- * so each opens the Classic Interface, where they're managed now. A matter doesn't open in the User app: the find gives
- * the matter's id, and the User app's addresses need its folder's.
+ * Where a find opens what it found, by its kind: a client's or a matter's page here (Phase 2), by its id, inside the app;
+ * a person in the Classic Interface, where people are managed until Users ships (Phase 4). A matter doesn't open in the
+ * User app: the find gives the matter's id, and the User app's addresses need its folder's.
  */
 const DESTINATIONS: { [K in Found['kind']]: (found: Extract<Found, { kind: K }>) => string } = {
-  client: () => CLASSIC,
-  matter: () => CLASSIC,
+  client: (found) => clientHref(found.client.id),
+  matter: (found) => matterHref(found.matter.id),
   person: () => CLASSIC,
 }
 
@@ -97,6 +99,7 @@ export function FindBox() {
   const wanted = findable(text)
   const settled = useDebounced(wanted, FIND_DELAY_MS)
   const form = useRef<HTMLFormElement>(null)
+  const follow = useFollow()
   const find = useAdminQuery('/v1/admin/find', {
     query: { q: settled ?? '' },
     enabled: settled !== undefined,
@@ -115,7 +118,7 @@ export function FindBox() {
     const found = byId.get(id)
     if (!found) return
     setText('')
-    goTo(destinationOf(found))
+    follow(destinationOf(found))
   }
 
   return (
