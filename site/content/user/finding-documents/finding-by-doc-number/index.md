@@ -27,7 +27,7 @@ and its versions. For a version or snapshot, the details open on the **Versions*
 list has a **Documents** search's columns, and choosing them here chooses them there too (see [The List's
 Columns](../../getting-started/getting-around/#the-lists-columns)).
 
-![The page for document # 31 in the web page: the toolbar, with Open, Preview, Download, Check Out and the ⋯ (More) button, above a list with just Subscription Agreement – Draft.docx, version 2, by Helen Ashcombe, selected, and its details at the right with its thumbnail, its name with the filled Favorites star, Open, Download, Copy Link and Check Out, and the Versions (3) tab, where Version 1.1, saved on 25 Oct 2026 at 15:30 by Priya Nair, is marked](doc-page.png)
+![The page for document # 31 in the web page: the toolbar, with Open, Preview, Download, Check Out and the ⋯ (More) button, above a list with a Documents search's columns and the Columns button at the end of their headings, holding just Subscription Agreement – Draft.docx, version 2, in 1003.1 – Series A Investment, by Helen Ashcombe, selected, its title, matter and author cut short; and its details at the right with its thumbnail, its name with the filled Favorites star, Open, Download, Copy Link and Check Out, and the Versions (3) tab, where Version 1.1, saved on 31 Oct 2026 at 15:30 by Priya Nair, is marked](doc-page.png)
 
 - **It's found the moment it's filed.** Doc # addresses don't wait for the search index.
 - **If you can't read the document,** Healdan answers as if it didn't exist: "No document # 1234 that you can see."

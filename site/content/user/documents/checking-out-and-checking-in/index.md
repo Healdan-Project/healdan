@@ -56,7 +56,7 @@ wherever you checked it out: in the app, in the Classic Interface, or on any of 
 [Healdan Helper](../../office/). It's the place to look for work still in progress, or for a document you forgot to
 check in. Beside it, a count says how many there are, once there's at least one.
 
-![Checked Out to Me open in the main area, its entry highlighted at the top of the left pane with 4 beside it. Its list shows three documents on MacBook, each with its app beside the computer's name, LibreOffice cut short with an ellipsis, then one on Web Page, the latest check-out first](checked-out-to-me.png)
+![Checked Out to Me open in the main area, its entry highlighted at the top of the left pane with 4 beside it. Its list, sorted by Checked Out with the arrow on that heading and the Columns button at the end of the headings, shows three documents on MacBook, each with its matter by number and name and its app beside the computer's name, LibreOffice cut short with an ellipsis, then one on Web Page, the latest check-out first](checked-out-to-me.png)
 
 | Column | What it shows |
 |---|---|
