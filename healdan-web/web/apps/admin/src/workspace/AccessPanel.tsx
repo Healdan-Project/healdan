@@ -90,12 +90,13 @@ function AccessEditor({ node, root, parent, kind, warnings, access, headingId }:
 
   const isTop = node.id === root.id
   const editable = access.ownPermissions || settingOwn
-  const original = sortGrants(access.rows.map(grantOf))
+  // A matter's own folder keeps its owner's row, at Full Access, as the server does (spec 8.4), and never follows its Store
+  const ownerStays = kind === 'matter' && isTop
+  // Whatever was stored for it (a read-only account's row holds seven flags), the row is shown and sent at Full Access
+  const original = sortGrants(access.rows.map(grantOf).map((row) => (ownerStays && row.owner ? { ...row, permissions: permissionsOf('full-access') } : row)))
   const rows = draft ?? original
   const dirty = settingOwn || (draft !== null && !sameGrants(draft, original))
   const empty = editable ? rows.find((row) => row.permissions.length === 0) : undefined
-  // A matter's own folder keeps its owner's row, at Full Access, as the server does (spec 8.4), and never follows its Store
-  const ownerStays = kind === 'matter' && isTop
   const locked = (row: Grant) => ownerStays && row.owner
   const followed = access.followsFolderId === null ? undefined : findNode(root, access.followsFolderId)
   const restricted = below(node).filter((one) => one.ownPermissions)
