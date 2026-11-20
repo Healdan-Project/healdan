@@ -425,6 +425,7 @@ export const adminEnUS = {
   'admin.deleteFolder.holds': 'It holds {what}, which go with it.',
   'admin.deleteFolder.matter': 'An administrator can restore it from the Trash in Healdan.',
   'admin.deleteFolder.template': '{matters} already made from this template keep their own copy of it.',
+  'admin.deleteFolder.templateTrash': "The Trash will list it, but can't put it back in the template.",
   'admin.deleteFolder.confirm': 'Move to Trash',
   'admin.deleteFolder.done': 'Moved {name} to the Trash',
   'admin.deleteFolder.undoRefused': "Couldn't restore {name}: {reason}",
@@ -462,6 +463,7 @@ export const adminEnUS = {
   'admin.deleteTemplate.title': 'Move the Template {name} to the Trash?',
   'admin.deleteTemplate.holds': 'Its {folders} go with it.',
   'admin.deleteTemplate.unchanged': "{matters} already made from it are unchanged, and New {matter} won't offer it any more.",
+  'admin.deleteTemplate.trash': "The Trash will list it, but can't put it back in the Templates Store.",
   'admin.deleteTemplate.confirm': 'Move to Trash',
   'admin.deleteTemplate.done': 'Moved the template {name} to the Trash',
 } as const satisfies Record<`admin.${string}`, string>

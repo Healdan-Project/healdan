@@ -178,7 +178,7 @@ describe("A template's page", () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Disputes' })).toBeTruthy()
   })
 
-  it('asks before a delete, saying matters made from it are unchanged, then goes to the list, with no Undo', async () => {
+  it("asks before a delete, saying matters made from it are unchanged and the Trash can't put it back, then goes to the list, with no Undo", async () => {
     const { api, router } = await openTemplate({ 'DELETE /v1/admin/templates/202': deletedFolder({ trashItemId: 907, folders: 5 }) })
     // A change left in its workspace goes with it, so the list opens without asking about it
     await userEvent.selectOptions(await within(main()).findByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
@@ -186,11 +186,12 @@ describe("A template's page", () => {
     const dialog = await screen.findByRole('alertdialog', { name: 'Move the Template Litigation to the Trash?' })
     expect(within(dialog).getByText('Its 5 folders go with it.')).toBeTruthy()
     expect(within(dialog).getByText("Matters already made from it are unchanged, and New Matter won't offer it any more.")).toBeTruthy()
+    expect(within(dialog).getByText("The Trash will list it, but can't put it back in the Templates Store.")).toBeTruthy()
     await expectNoAxeViolations(dialog)
     await userEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }))
     await waitFor(() => expect(router.state.location.pathname).toBe('/templates'))
-    expect(api.callsTo('DELETE /v1/admin/templates/202')).toHaveLength(1)
     expect(screen.queryByRole('alertdialog', { name: /^Leave the Changes/ })).toBeNull()
+    expect(api.callsTo('DELETE /v1/admin/templates/202')).toHaveLength(1)
     // The Trash can't put a template back (409 place-gone), so the toast offers nothing to press
     expect(within(await toastOf('Moved the template Litigation to the Trash')).queryByRole('button', { name: 'Undo' })).toBeNull()
   })
@@ -204,6 +205,7 @@ describe("A template's page", () => {
     fireEvent.keyDown(within(tree).getByRole('row', { name: /^Correspondence/ }), { key: 'Delete' })
     const dialog = await screen.findByRole('alertdialog', { name: 'Move Correspondence to the Trash?' })
     expect(within(dialog).getByText('Matters already made from this template keep their own copy of it.')).toBeTruthy()
+    expect(within(dialog).getByText("The Trash will list it, but can't put it back in the template.")).toBeTruthy()
     expect(within(dialog).queryByText(/restore/)).toBeNull()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }))
     await waitFor(() => expect(api.callsTo('DELETE /v1/admin/folders/2021')).toHaveLength(1))

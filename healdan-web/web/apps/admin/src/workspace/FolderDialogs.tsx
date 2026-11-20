@@ -208,7 +208,10 @@ export interface DeleteFolderDialogProps {
   onClose: () => void
 }
 
-/** Delete in a workspace: asks first, naming what the folder holds, counted afresh, and where it can come back from */
+/**
+ * Delete in a workspace: asks first, naming what the folder holds, counted afresh, and where it can come back from: a
+ * matter's from the Trash, a template's from nowhere
+ */
 export function DeleteFolderDialog({ node, kind, run, onClose }: DeleteFolderDialogProps) {
   const contents = useFolderContents(node.id)
   const what = holdsWhat(contents.data)
@@ -216,6 +219,8 @@ export function DeleteFolderDialog({ node, kind, run, onClose }: DeleteFolderDia
     <Confirm title={t('admin.deleteFolder.title', { name: node.name })} confirm={t('admin.deleteFolder.confirm')} run={run} onClose={onClose}>
       {what !== undefined && <p className={page.line}>{t('admin.deleteFolder.holds', { what })}</p>}
       <p className={page.line}>{t(kind === 'template' ? 'admin.deleteFolder.template' : 'admin.deleteFolder.matter')}</p>
+      {/* Its Trash item is listed, but the Trash's Restore offers no folder of the Templates Store */}
+      {kind === 'template' && <p className={page.line}>{t('admin.deleteFolder.templateTrash')}</p>}
     </Confirm>
   )
 }

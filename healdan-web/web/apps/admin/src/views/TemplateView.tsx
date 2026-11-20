@@ -129,6 +129,8 @@ function Template({ template }: { template: A['TemplateInfo'] }) {
         <Confirm title={t('admin.deleteTemplate.title', { name: template.name })} confirm={t('admin.deleteTemplate.confirm')} run={remove} onClose={() => setDialog(null)}>
           {template.folders > 0 && <p className={page.line}>{t('admin.deleteTemplate.holds', { folders: plural('folders', template.folders) })}</p>}
           <p className={page.line}>{t('admin.deleteTemplate.unchanged')}</p>
+          {/* Its Trash item is listed, but the Trash's Restore offers no folder of the Templates Store */}
+          <p className={page.line}>{t('admin.deleteTemplate.trash')}</p>
         </Confirm>
       )}
     </div>
