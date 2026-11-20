@@ -119,10 +119,10 @@ Paths: `WEB` = `healdan-web/web`, `UI` = `WEB/packages/ui/src`, `SH` = `WEB/pack
   - `listColumns.test.tsx`:
     - "a matter with no name shows its number": render `MatterCell` with `display: '1001.7'`; text is `'1001.7'`.
     - "gives Matter a share of the spare width beside Title and Author": in `hitColumns('documents')`, Title is
-      `width: '2fr', minWidth: 220`, Matter `width: '1.5fr', minWidth: 160`, Author `width: '1fr'`; Doc #, Version and
+      `width: '2fr', minWidth: 220`, Matter `width: '1.5fr', minWidth: 100`, Author `width: '1fr'`; Doc #, Version and
       Edit Date keep numbers.
     - "gives Checked Out to Me's and the Folders scope's Matter the same share": `checkedOutColumns()`'s Matter is
-      `'1.5fr'`/160 with Title `'2fr'`/220; `hitColumns('folders')`'s Matter is `'1.5fr'`/160 beside Title `'2fr'`.
+      `'1.5fr'`/100 with Title `'2fr'`/220; `hitColumns('folders')`'s Matter is `'1.5fr'`/100 beside Title `'2fr'`.
 
 - [ ] **Step 2: Run them to see them fail**
 

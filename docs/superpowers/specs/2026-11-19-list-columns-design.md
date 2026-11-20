@@ -108,7 +108,10 @@ and a sort on every column of every list.
   (owner: option B). The client is the cell's tooltip, and a column of its own (§4.7). The hover swap goes. A matter with
   no name shows its number. A cell too narrow ends in an ellipsis, so the number and the name's start stay.
 - **Matter shares the spare width** (call). Where Matter shows, it is a fraction like Title and Author, about Title `2fr`
-  (at least 220 pixels), Matter `1.5fr` (at least 160) and Author `1fr`, so a wider window widens it. The test is the
+  (at least 220 pixels), Matter `1.5fr` (at least 100) and Author `1fr`, so a wider window widens it. Matter's least
+  width was 160 until the build found that, with React Aria giving every column at least 75 pixels, the list beside the
+  details or Filters (684 pixels at 1,280) then scrolled sideways; at 100 the least widths come to 666 (changed in the
+  build, PR 1). The test is the
   owner's screenshot: on a maximised 1,920-pixel window with the panes at their defaults, Recent Documents shows
   `998.1 – Healdan General Demo` whole, and at 1,280 pixels Title keeps at least 220. Checked Out to Me's and the Folders
   scope's Matter follow the same rule.
