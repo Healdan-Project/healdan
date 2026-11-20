@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { act, createEvent, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { Dialog } from 'react-aria-components'
@@ -70,6 +70,12 @@ const section = (name: string) => screen.getByRole('group', { name })
 const box = (name: string) => screen.getByRole('checkbox', { name }) as HTMLInputElement
 const names = (name: string) => within(section(name)).getAllByRole('checkbox').map((input) => input.getAttribute('aria-label'))
 const button = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement
+
+/** The declarations of the panel's rule for exactly this selector */
+function rule(selector: string): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?:^|\\})\\s*${escaped}\\s*\\{([^}]*)\\}`).exec(panelCss.replace(/\/\*[\s\S]*?\*\//g, ''))?.[1] ?? ''
+}
 
 describe('ColumnsPanel', () => {
   it('titles itself Columns, with its list under it', () => {
@@ -171,22 +177,55 @@ describe('ColumnsPanel', () => {
     await user.keyboard('{Enter}')
     expect(onMove).toHaveBeenLastCalledWith('version', 1)
     expect(names('Shown')).toEqual(['Title', 'Version', 'Doc #', 'Matter'])
-    // It can go no higher: Move Up can't be pressed, and the keys go on to Move Down
+    // It can go no higher: Move Up can't be pressed, and the focus goes back to the column, which says its new place
     expect(button('Move Up').disabled).toBe(true)
+    expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'Version', description: '2 of 4' }))
+    // From the list, Tab passes Move Up, which can't be pressed
+    await user.tab()
     expect(document.activeElement).toBe(button('Move Down'))
     await user.keyboard('{Enter}')
     expect(onMove).toHaveBeenLastCalledWith('version', 2)
+    expect(document.activeElement).toBe(button('Move Down'))
     await user.keyboard('{Enter}')
     expect(onMove).toHaveBeenLastCalledWith('version', 3)
     expect(names('Shown')).toEqual(['Title', 'Doc #', 'Matter', 'Version'])
     expect(button('Move Down').disabled).toBe(true)
-    expect(document.activeElement).toBe(button('Move Up'))
-    expect(screen.getByRole('checkbox', { name: 'Version', description: '4 of 4' })).toBeTruthy()
+    expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'Version', description: '4 of 4' }))
     // A column that isn't shown has nowhere to move
     act(() => box('Author').focus())
     expect(button('Move Up').disabled).toBe(true)
     expect(button('Move Down').disabled).toBe(true)
     expect(onMove).toHaveBeenCalledTimes(3)
+  })
+
+  it('Move Up and Move Down say which column they move, and a move says where it went', async () => {
+    const user = userEvent.setup()
+    render(<Harness />)
+    // Nothing to move yet, so nothing to say
+    expect(button('Move Up').getAttribute('aria-describedby')).toBeNull()
+    await user.tab()
+    await user.keyboard('{ArrowDown}{ArrowDown}')
+    expect(screen.getByRole('button', { name: 'Move Up', description: 'Version, 3 of 4' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Move Down', description: 'Version, 3 of 4' })).toBeTruthy()
+    await user.tab()
+    await user.keyboard('{Enter}')
+    // Said politely, as the focus may stay on the button, whose name hasn't changed
+    await waitFor(() => expect(document.querySelector('[data-live-announcer] [aria-live="polite"]')?.textContent).toBe('Version, 2 of 4'))
+    expect(screen.getByRole('button', { name: 'Move Down', description: 'Version, 2 of 4' })).toBeTruthy()
+  })
+
+  it('draws only the shown columns the list offers, and counts only them', async () => {
+    const user = userEvent.setup()
+    const onMove = vi.fn()
+    render(<Harness initial={['title', 'docNumber', 'retired', 'version']} onMove={onMove} />)
+    expect(names('Shown')).toEqual(['Title', 'Doc #', 'Version'])
+    expect(screen.getByRole('checkbox', { name: 'Version', description: '3 of 3' })).toBeTruthy()
+    await user.tab()
+    await user.keyboard('{ArrowDown}{ArrowDown}')
+    expect(button('Move Down').disabled).toBe(true)
+    await user.tab()
+    await user.keyboard('{Enter}')
+    expect(onMove).toHaveBeenCalledWith('version', 1)
   })
 
   it('Reset to Default calls onReset', async () => {
@@ -197,19 +236,29 @@ describe('ColumnsPanel', () => {
     expect(names('Shown')).toEqual(['Title', 'Doc #', 'Version', 'Matter'])
   })
 
-  // jsdom draws no style, so axe can't weigh colours: the stylesheet is read instead, and draws only in tokens.css's
-  // colours, which it defines again for dark, in pairs tokens.test.ts checks in both themes
-  it('passes axe in light and dark', async () => {
+  it('passes axe on its markup', async () => {
     const { container } = render(<Harness />)
     await expectNoAxeViolations(container)
+  })
+
+  // jsdom draws no style, so axe can't weigh colours: the stylesheet is read instead. It draws only in tokens.css's
+  // colours, which it defines again for dark, each text in a pair tokens.test.ts checks at AA in both themes: on the
+  // popover's surface (--hd-window), a hovered row's (--hd-row-alt), the accent fill and a read-only field's face.
+  it('draws in tokens whose pairs pass in both themes', () => {
+    expect(rule('.row')).toMatch(/(?:^|;)\s*color:\s*var\(--hd-text\)/)
+    expect(rule('.row[data-hovered]')).toMatch(/background:\s*var\(--hd-row-alt\)/)
+    for (const quiet of ['.for', '.legend', '.always']) expect(rule(quiet)).toMatch(/color:\s*var\(--hd-text-secondary\)/)
+    expect(rule('.row[data-selected] .box')).toMatch(/(?=[\s\S]*background:\s*var\(--hd-accent-fill\))(?=[\s\S]*color:\s*var\(--hd-accent-on-fill\))/)
+    expect(rule('.row[data-readonly] .box')).toMatch(/(?=[\s\S]*background:\s*var\(--hd-field-readonly\))(?=[\s\S]*color:\s*var\(--hd-text-secondary\))/)
     const colours = [...panelCss.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/(?:^|[\s;{])(color|background|border(?:-[\w-]+)?):\s*([^;]+);/g)]
     expect(colours.length).toBeGreaterThan(0)
     for (const [, , value] of colours) {
       for (const token of value!.match(/--hd-[\w-]+/g) ?? []) expect(tokensCss).toContain(`${token}:`)
       expect(value!.replace(/var\(--hd-[\w-]+\)/g, '')).not.toMatch(/#|rgb|hsl/)
     }
-    // The drop line is the accent, 2 pixels
-    expect(panelCss).toMatch(/\[data-drop\]::before\s*\{(?=[^}]*height:\s*2px)(?=[^}]*background:\s*var\(--hd-accent-fill\))/)
+    // The drop line is the accent, 2 pixels, and a row that drags says so under the pointer
+    expect(rule('.row[data-drop]::before')).toMatch(/(?=[\s\S]*height:\s*2px)(?=[\s\S]*background:\s*var\(--hd-accent-fill\))/)
+    expect(rule(".row[draggable='true']")).toMatch(/cursor:\s*grab/)
   })
 })
 
@@ -321,10 +370,38 @@ describe('ColumnsPanel drags', () => {
     expect(outside.onDragStart).not.toHaveBeenCalled()
     expect(outside.onDragOver).not.toHaveBeenCalled()
     expect(outside.onDrop).not.toHaveBeenCalled()
-    // Rows dragged from a list, or files, aren't the panel's to take
-    for (const types of [['application/x-healdan-documents'], ['Files']]) {
-      expect(fire('dragOver', row('Doc #'), { types }, 25)).toBe(true)
-      expect(document.querySelector('[data-drop]')).toBeNull()
+    // Rows dragged from a list, or files, aren't the panel's to take, before its own drag, during it and after
+    const foreign = [['application/x-healdan-documents'], ['Files']]
+    const refused = () => {
+      for (const types of foreign) {
+        expect(fire('dragOver', row('Doc #'), { types }, 25)).toBe(true)
+        expect(document.querySelector('[data-drop]')).toBeNull()
+      }
     }
+    refused()
+    fire('dragStart', row('Matter'), transfer())
+    refused()
+    fire('dragEnd', row('Matter'), data)
+    refused()
+  })
+
+  it('starts each drag afresh, whatever an earlier one left', () => {
+    render(<Harness />)
+    const first = transfer()
+    fire('dragStart', row('Matter'), first)
+    // Two elements entered, and the drag then ended with no dragleave or dragend, as when its row is drawn away
+    fire('dragEnter', row('Doc #'), first, 25)
+    fire('dragEnter', row('Doc #'), first, 25)
+    fire('dragOver', row('Doc #'), first, 25)
+    expect(row('Doc #').getAttribute('data-drop')).toBe('before')
+    const second = transfer()
+    fire('dragStart', row('Version'), second)
+    expect(document.querySelector('[data-drop]')).toBeNull()
+    fire('dragEnter', row('Doc #'), second, 25)
+    fire('dragOver', row('Doc #'), second, 25)
+    expect(row('Doc #').getAttribute('data-drop')).toBe('before')
+    // Leaving the one element it entered leaves Shown
+    fire('dragLeave', row('Doc #'), second, 25)
+    expect(document.querySelector('[data-drop]')).toBeNull()
   })
 })

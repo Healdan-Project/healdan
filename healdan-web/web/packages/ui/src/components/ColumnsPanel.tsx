@@ -3,6 +3,7 @@
 
 import { useId, useLayoutEffect, useRef, useState, type DragEvent, type FocusEvent, type KeyboardEvent, type RefObject } from 'react'
 import { Checkbox, CheckboxGroup, Heading, Label } from 'react-aria-components'
+import { announcePolitely } from '../announcer'
 import { Icon } from '../icons'
 import { t } from '../strings'
 import { Button } from './Button'
@@ -16,11 +17,11 @@ export interface ColumnsPanelProps {
   forLabel: string
   /** Every column the list offers, in spec §4.7's order */
   offered: { id: string; name: string }[]
-  /** The shown columns' ids, in their order: Title's first */
+  /** The shown columns' ids, in their order: Title's first, then only ids `offered` has (any other isn't drawn) */
   shown: string[]
   onShow: (id: string) => void
   onHide: (id: string) => void
-  /** Moves a shown column to the index it ends at in `shown`, never 0 (Title's) */
+  /** Moves a shown column to the index it ends at among the shown ones, never 0 (Title's) */
   onMove: (id: string, to: number) => void
   onReset: () => void
 }
@@ -58,37 +59,43 @@ function focusOn(element: HTMLElement | undefined | null) {
  */
 export function ColumnsPanel({ forLabel, offered, shown, onShow, onHide, onMove, onReset }: ColumnsPanelProps) {
   const ids = useId()
-  const title = shown[0]
   const names = new Map(offered.map((column) => [column.id, column.name]))
   const nameOf = (id: string) => names.get(id) ?? id
-  const more = offered.filter((column) => !shown.includes(column.id))
+  const title = shown[0]
+  // The shown columns drawn: Title, always, and the others the list offers. Every index the panel reports is in these.
+  const listed = shown.filter((id, index) => index === 0 || names.has(id))
+  const more = offered.filter((column) => !listed.includes(column.id))
+  /** A shown column and its place among them: "Version, 3 of 4" */
+  const place = (id: string, index: number) => t('columns.place', { column: nameOf(id), n: index + 1, total: listed.length })
 
   // The column the keys are on, or were last on: what Move Up and Move Down move, and the list's stop for Tab
   const [current, setCurrent] = useState<string>()
   const stop = current !== undefined && names.has(current) ? current : title
-  const at = current === undefined ? -1 : shown.indexOf(current)
+  const at = current === undefined ? -1 : listed.indexOf(current)
   const canMoveUp = at >= 2
-  const canMoveDown = at >= 1 && at < shown.length - 1
+  const canMoveDown = at >= 1 && at < listed.length - 1
+  // What Move Up and Move Down would move, which they are described by: the list's own focus needn't be where a screen
+  // reader's cursor last read
+  const moving = current !== undefined && at >= 1 ? place(current, at) : undefined
 
   const panel = useRef<HTMLDivElement>(null)
   const up = useRef<HTMLButtonElement>(null)
   const down = useRef<HTMLButtonElement>(null)
   // Where the focus goes once the caller's new columns are drawn: a column ticked or unticked is drawn afresh in the other
-  // section, and the focus goes with it; a Move button that can move its column no further gives the focus to the other,
-  // or back to the column, so it isn't left on a button that can't be pressed
+  // section, and the focus goes with it; a Move button that can move its column no further gives the focus back to the
+  // column, which says its new place, so it isn't left on a button that can't be pressed (and the other button's press
+  // with the same key doesn't undo the move)
   const following = useRef<{ id: string; shown: boolean }>(undefined)
-  const handingOver = useRef<RefObject<HTMLButtonElement | null>>(undefined)
+  const backToColumn = useRef<RefObject<HTMLButtonElement | null>>(undefined)
   useLayoutEffect(() => {
     const column = following.current
-    if (column && shown.includes(column.id) === column.shown) {
+    if (column && listed.includes(column.id) === column.shown) {
       following.current = undefined
       focusOn(checkboxOf(panel.current, column.id))
     }
-    const pressed = handingOver.current
-    if (pressed?.current?.disabled) {
-      handingOver.current = undefined
-      const other = (pressed === up ? down : up).current
-      focusOn(other && !other.disabled ? other : checkboxOf(panel.current, current))
+    if (backToColumn.current?.current?.disabled) {
+      backToColumn.current = undefined
+      focusOn(checkboxOf(panel.current, current))
     }
   })
 
@@ -96,7 +103,7 @@ export function ColumnsPanel({ forLabel, offered, shown, onShow, onHide, onMove,
   function onFocus(event: FocusEvent<HTMLDivElement>) {
     const focused: EventTarget = event.target
     if (following.current && focused !== checkboxOf(panel.current, following.current.id)) following.current = undefined
-    if (handingOver.current && focused !== handingOver.current.current) handingOver.current = undefined
+    if (backToColumn.current && focused !== backToColumn.current.current) backToColumn.current = undefined
   }
 
   function show(id: string) {
@@ -110,10 +117,12 @@ export function ColumnsPanel({ forLabel, offered, shown, onShow, onHide, onMove,
     onHide(id)
   }
 
+  // The move is said once it's made, as nothing on the button changes but its description
   function move(button: RefObject<HTMLButtonElement | null>, to: number) {
     if (current === undefined) return
-    if (button.current && button.current.ownerDocument.activeElement === button.current) handingOver.current = button
+    if (button.current && button.current.ownerDocument.activeElement === button.current) backToColumn.current = button
     onMove(current, to)
+    announcePolitely(place(current, to))
   }
 
   // Only the keys that move between the columns: each tick box keeps its own
@@ -127,8 +136,8 @@ export function ColumnsPanel({ forLabel, offered, shown, onShow, onHide, onMove,
     boxes[Math.min(Math.max(step(from, boxes.length), 0), boxes.length - 1)]?.focus()
   }
 
-  // The drag: the column being dragged, and the gap the drop line is drawn in (before shown[line], or after the last
-  // when it is shown.length). Gap 0, above Title, is never one.
+  // The drag: the column being dragged, and the gap the drop line is drawn in (before listed[line], or after the last
+  // when it is listed.length). Gap 0, above Title, is never one.
   const dragging = useRef<string>(undefined)
   const [line, setLine] = useState<number>()
   // How many elements of Shown the drag is inside: dragenter and dragleave come in pairs for each element it crosses, and
@@ -148,7 +157,7 @@ export function ColumnsPanel({ forLabel, offered, shown, onShow, onHide, onMove,
 
   /** Where a drop in `gap` moves the dragged column to, or nothing when it would stay where it is */
   function destination(gap: number): number | undefined {
-    const from = dragging.current === undefined ? -1 : shown.indexOf(dragging.current)
+    const from = dragging.current === undefined ? -1 : listed.indexOf(dragging.current)
     if (from < 1 || gap === from || gap === from + 1) return undefined
     return gap > from ? gap - 1 : gap
   }
@@ -160,11 +169,13 @@ export function ColumnsPanel({ forLabel, offered, shown, onShow, onHide, onMove,
   }
 
   // Every drag that starts in the panel is a shown column's, or is cancelled (a column's name dragged as text), and none
-  // reaches the list or the tree the panel is drawn over, whose own drag would take it
+  // reaches the list or the tree the panel is drawn over, whose own drag would take it. Each starts afresh, whatever an
+  // earlier one left: a row drawn away mid-drag sends no dragleave or dragend.
   function onDragStart(event: DragEvent<HTMLDivElement>) {
     event.stopPropagation()
+    endDrag()
     const id = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-column]')?.dataset.column : undefined
-    if (id === undefined || id === title || !shown.includes(id)) return event.preventDefault()
+    if (id === undefined || id === title || !listed.includes(id)) return event.preventDefault()
     dragging.current = id
     event.dataTransfer.setData(PANEL_COLUMN_TYPE, id)
     event.dataTransfer.effectAllowed = 'move'
@@ -201,7 +212,7 @@ export function ColumnsPanel({ forLabel, offered, shown, onShow, onHide, onMove,
     },
   }
 
-  const dropOf = (index: number) => (line === index ? 'before' : line === shown.length && index === shown.length - 1 ? 'after' : undefined)
+  const dropOf = (index: number) => (line === index ? 'before' : line === listed.length && index === listed.length - 1 ? 'after' : undefined)
 
   return (
     <div ref={panel} className={styles.panel} onFocus={onFocus} onDragStart={onDragStart} onDragEnd={endDrag}>
@@ -215,15 +226,15 @@ export function ColumnsPanel({ forLabel, offered, shown, onShow, onHide, onMove,
       <div className={styles.columns} onKeyDown={onKeyDown}>
         <CheckboxGroup
           className={styles.section}
-          value={shown}
+          value={listed}
           onChange={(next) => {
-            const gone = shown.find((id) => !next.includes(id))
+            const gone = listed.find((id) => !next.includes(id))
             if (gone !== undefined) hide(gone)
           }}
         >
           <Label className={styles.legend}>{t('columns.shown')}</Label>
           <div className={styles.rows} {...drops}>
-            {shown.map((id, index) => {
+            {listed.map((id, index) => {
               const always = id === title
               return (
                 <Checkbox
@@ -249,7 +260,7 @@ export function ColumnsPanel({ forLabel, offered, shown, onShow, onHide, onMove,
                     </span>
                   ) : (
                     <span id={`${ids}-${id}`} hidden>
-                      {t('columns.position', { n: index + 1, total: shown.length })}
+                      {t('columns.position', { n: index + 1, total: listed.length })}
                     </span>
                   )}
                 </Checkbox>
@@ -289,10 +300,15 @@ export function ColumnsPanel({ forLabel, offered, shown, onShow, onHide, onMove,
         )}
       </div>
       <div className={styles.order}>
-        <Button ref={up} isDisabled={!canMoveUp} onPress={() => move(up, at - 1)}>
+        {moving && (
+          <span id={`${ids}-moving`} hidden>
+            {moving}
+          </span>
+        )}
+        <Button ref={up} isDisabled={!canMoveUp} aria-describedby={moving && `${ids}-moving`} onPress={() => move(up, at - 1)}>
           {t('columns.moveUp')}
         </Button>
-        <Button ref={down} isDisabled={!canMoveDown} onPress={() => move(down, at + 1)}>
+        <Button ref={down} isDisabled={!canMoveDown} aria-describedby={moving && `${ids}-moving`} onPress={() => move(down, at + 1)}>
           {t('columns.moveDown')}
         </Button>
       </div>

@@ -79,6 +79,11 @@
   background: var(--hd-row-alt);
 }
 
+/* A shown column but Title drags within Shown */
+.row[draggable='true'] {
+  cursor: grab;
+}
+
 .row[data-focus-visible] {
   box-shadow: var(--hd-focus-inset);
 }

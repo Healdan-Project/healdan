@@ -297,6 +297,8 @@ export const enUS = {
   'columns.alwaysShown': 'Always Shown',
   // A shown column's place among the shown ones, which a screen reader says after its name: "2 of 5"
   'columns.position': '{n} of {total}',
+  // What Move Up and Move Down move, their description, and where a move left it, announced: "Version, 3 of 4"
+  'columns.place': '{column}, {n} of {total}',
   'columns.moveUp': 'Move Up',
   'columns.moveDown': 'Move Down',
   'columns.resetToDefault': 'Reset to Default',
