@@ -60,6 +60,8 @@ export interface TableColumn<T extends TableRow> {
   /** The column that names each row for a screen reader */
   isRowHeader?: boolean
   allowsSorting?: boolean
+  /** A date: a click on its heading sorts it newest first, not oldest first (the heading menu's two sorts keep their directions) */
+  newestFirst?: boolean
   /** Numbers line up at the end */
   align?: 'start' | 'end'
   /** A share of the width left (`'3fr'`) or pixels: the column's default */
@@ -426,7 +428,12 @@ export function Table<T extends TableRow>({
         disabledKeys={disabledKeys}
         disabledBehavior="selection"
         sortDescriptor={sortDescriptor}
-        onSortChange={(next) => onSort?.({ column: String(next.column), direction: next.direction })}
+        onSortChange={(next) => {
+          const id = String(next.column)
+          // React Aria starts a column ascending and flips the current one; a date's first click goes the other way
+          const first = sort?.column !== id && columns.find((column) => column.id === id)?.newestFirst
+          onSort?.({ column: id, direction: first ? 'descending' : next.direction })
+        }}
         onRowAction={onOpen && ((key: Key) => onOpen(String(key)))}
       >
         {/* React Aria keeps each heading's element until a dependency changes, so what a heading draws from is one */}

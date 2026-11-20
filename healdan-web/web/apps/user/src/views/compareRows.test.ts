@@ -66,6 +66,31 @@ describe('compareRows, by the server\'s rules', () => {
     expect(compareRows(column, a, a)).toBe(0)
   })
 
+  it('compares upper case with lower case by UTF-16 code units after lower-casing, so Z follows a and _ precedes letters', () => {
+    expect(compareRows('title', doc(1, { name: 'a.pdf' }), doc(2, { name: 'Z.pdf' }))).toBeLessThan(0)
+    expect(compareRows('title', doc(1, { name: '_a.pdf' }), doc(2, { name: 'a.pdf' }))).toBeLessThan(0)
+  })
+
+  it('has no value for an unparseable date, so it sorts last both ways', () => {
+    const rows = [doc(1, { lastModified: 'not a date' }), doc(2, { lastModified: '2026-02-01T00:00:00Z' }), doc(3, { lastModified: '2026-01-01T00:00:00Z' })]
+    expect(ids(sortRows(rows, { column: 'edited', direction: 'ascending' }))).toEqual([3, 2, 1])
+    expect(ids(sortRows(rows, { column: 'edited', direction: 'descending' }))).toEqual([2, 3, 1])
+  })
+
+  it('has a value for a doc # of 0', () => {
+    const rows = [doc(1, { docNumber: 5 }), doc(2, { docNumber: 0 })]
+    expect(ids(sortRows(rows, { column: 'docNumber', direction: 'ascending' }))).toEqual([0, 5])
+  })
+
+  it('has no Client for a row with no matter, and no Last Used for a row without one', () => {
+    const rows = [doc(1, { matter: null }), doc(2, { matter: matterRef('1.1 – A', 1, 'Beta') }), doc(3, { matter: matterRef('1.1 – A', 1, 'Acme') })]
+    expect(ids(sortRows(rows, { column: 'client', direction: 'ascending' }))).toEqual([3, 2, 1])
+    expect(ids(sortRows(rows, { column: 'client', direction: 'descending' }))).toEqual([2, 3, 1])
+    const used = [doc(1), doc(2, { lastUsed: '2026-01-01T00:00:00Z' })]
+    expect(ids(sortRows(used, { column: 'lastUsed', direction: 'ascending' }))).toEqual([2, 1])
+    expect(ids(sortRows(used, { column: 'lastUsed', direction: 'descending' }))).toEqual([2, 1])
+  })
+
   it('compares every row equal for a column it does not know', () => {
     expect(compareRows('nope', doc(1), doc(2))).toBe(0)
   })

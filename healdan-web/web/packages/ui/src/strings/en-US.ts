@@ -274,6 +274,11 @@ export const enUS = {
   'list.matter': '{matter}',
   'list.client': 'Client',
   'list.clientNumber': 'Number',
+  'list.location': 'Location',
+  'list.filed': 'Date Filed',
+  'list.size': 'Size',
+  'list.type': 'File Type',
+  'list.lastUsed': 'Last Used',
   // A heading's edge, which resizes its column. React Aria names it by this and the heading it's in: "Resize Doc #"
   'columns.resizer': 'Resize',
   // A heading's menu, named for its column: "Doc # Column"
@@ -290,6 +295,14 @@ export const enUS = {
   // The Columns panel (spec 4.5), and the button at the heading row's end that opens it
   'columns.button': 'Columns',
   'columns.title': 'Columns',
+  'columns.kind.folder': 'Folders',
+  'columns.kind.documents': 'Documents Search',
+  'columns.kind.all': 'Docs & Emails Search',
+  'columns.kind.emails': 'Emails Search',
+  'columns.kind.recentDocuments': 'Recent Documents',
+  'columns.kind.recentEmails': 'Recent Emails',
+  'columns.kind.checkedOut': 'Checked Out to Me',
+  'columns.kind.beside': 'Lists Beside the Reading Pane',
   // Under the panel's title: "For Recent Documents"
   'columns.for': 'For {list}',
   'columns.shown': 'Shown',

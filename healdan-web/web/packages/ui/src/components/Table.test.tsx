@@ -100,6 +100,21 @@ describe('Table', () => {
     expect(onSort).not.toHaveBeenCalled()
   })
 
+  it("a newest-first column's first click sorts descending", () => {
+    const onSort = vi.fn<(sort: TableSort) => void>()
+    const dated: TableColumn<Item>[] = [...columns, { id: 'edited', name: 'Edit Date', allowsSorting: true, newestFirst: true, cell: () => '' }]
+    const { rerender } = render(<Harness columns={dated} onSort={onSort} sort={{ column: 'title', direction: 'ascending' }} />)
+    fireEvent.click(screen.getByRole('columnheader', { name: 'Edit Date' }))
+    expect(onSort).toHaveBeenLastCalledWith({ column: 'edited', direction: 'descending' })
+    // Then the other way, as any column
+    rerender(<Harness columns={dated} onSort={onSort} sort={{ column: 'edited', direction: 'descending' }} />)
+    fireEvent.click(screen.getByRole('columnheader', { name: /Edit Date/ }))
+    expect(onSort).toHaveBeenLastCalledWith({ column: 'edited', direction: 'ascending' })
+    // A column that isn't newest first still starts ascending
+    fireEvent.click(screen.getByRole('columnheader', { name: 'Doc #' }))
+    expect(onSort).toHaveBeenLastCalledWith({ column: 'docNumber', direction: 'ascending' })
+  })
+
   it('selects a row when clicked, and more with Cmd or Shift', async () => {
     const user = userEvent.setup()
     const onSelectionChange = vi.fn()

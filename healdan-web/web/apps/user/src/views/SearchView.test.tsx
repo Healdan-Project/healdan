@@ -88,15 +88,22 @@ describe('SearchView', () => {
   it('sorts by a header, asking the server, and reverses on a second click', async () => {
     const { api, router } = await renderApp('/search?scope=documents&q=charter', routes())
     await rows()
-    fireEvent.click(within(await grid()).getByRole('columnheader', { name: /Edit Date/ }))
-    await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toEqual({ scope: 'documents', q: 'charter', sort: 'edited', order: 'asc', zone, offset: 0, limit: 100 }))
-    expect(new URLSearchParams(router.history.location.search).get('sort')).toBe('edited')
+    fireEvent.click(within(await grid()).getByRole('columnheader', { name: /Doc #/ }))
+    await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toEqual({ scope: 'documents', q: 'charter', sort: 'docNumber', order: 'asc', zone, offset: 0, limit: 100 }))
+    expect(new URLSearchParams(router.history.location.search).get('sort')).toBe('docNumber')
     expect(new URLSearchParams(router.history.location.search).get('q')).toBe('charter')
-    await waitFor(() => expect(within(grid2()).getByRole('columnheader', { name: /Edit Date/ }).getAttribute('aria-sort')).toBe('ascending'))
-    fireEvent.click(within(grid2()).getByRole('columnheader', { name: /Edit Date/ }))
-    await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toMatchObject({ sort: 'edited', order: 'desc' }))
+    await waitFor(() => expect(within(grid2()).getByRole('columnheader', { name: /Doc #/ }).getAttribute('aria-sort')).toBe('ascending'))
+    fireEvent.click(within(grid2()).getByRole('columnheader', { name: /Doc #/ }))
+    await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toMatchObject({ sort: 'docNumber', order: 'desc' }))
     // The Matter column has nothing to sort by
     expect(within(grid2()).getByRole('columnheader', { name: /Matter/ }).getAttribute('aria-sort')).toBeNull()
+  })
+
+  it('sorts Edit Date newest first at its first click', async () => {
+    const { api } = await renderApp('/search?scope=documents&q=charter', routes())
+    await rows()
+    fireEvent.click(within(await grid()).getByRole('columnheader', { name: /Edit Date/ }))
+    await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toMatchObject({ sort: 'edited', order: 'desc' }))
   })
 
   it('keeps a sort, the filters and the scope from the address', async () => {

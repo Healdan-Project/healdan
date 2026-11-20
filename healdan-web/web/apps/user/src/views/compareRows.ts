@@ -9,7 +9,7 @@ import type { ListRow } from './listColumns'
 
 type S = components['schemas']
 
-/** One part of a column's sort key: text (compared lower-cased, by code point), a number, or nothing. */
+/** One part of a column's sort key: text (compared lower-cased, by UTF-16 code unit), a number, or nothing. */
 type Part = string | number | null
 /** A row's key for a column, or null when the row has no value in it. */
 type Key = Part[] | null
@@ -18,6 +18,11 @@ const text = (value: string | null | undefined): Part => (value == null ? null :
 const time = (value: string | null | undefined): Part => {
   const at = value == null ? NaN : Date.parse(value)
   return Number.isNaN(at) ? null : at
+}
+// A date's key: no value at all when it can't be read, so the row sorts last both ways
+const timeKey = (value: string | null | undefined): Key => {
+  const at = time(value)
+  return at === null ? null : [at]
 }
 
 // "998.10 – Name": the client's number and the matter's own, as the server formats the display; MatterRef has no number
@@ -37,42 +42,31 @@ function versionKey(version: string): Key {
   return found ? [Number(found[1]), Number(found[2])] : null
 }
 
-function keyOf(column: string, { item }: ListRow): Key {
-  const document = item.type === 'document' ? item : null
-  switch (column) {
-    case 'title':
-      return [text(item.type === 'matter' ? item.display : item.name)]
-    case 'docNumber':
-      return document && [document.docNumber]
-    case 'version':
-      return document && versionKey(document.fileVersion)
-    case 'author':
-      return document?.author ? [text(document.author.displayName)] : null
-    case 'edited':
-      return document && [time(document.lastModified)]
-    case 'matter':
-      return item.type === 'matter' ? null : matterKey(item.matter)
-    case 'client': {
-      const name = item.type === 'matter' ? item.client.name : item.matter?.client.name
-      return name == null ? null : [text(name)]
-    }
-    case 'location':
-      return document && [text(document.folder.name), ...(matterKey(document.matter) ?? [null, null])]
-    case 'filed':
-      return document && [time(document.dateFiled)]
-    case 'size':
-      return document && [document.size]
-    case 'type':
-      return document && [text(typeLabel(document.kind)), extension(document.name)]
-    case 'lastUsed':
-      return item.type === 'matter' || !item.lastUsed ? null : [time(item.lastUsed)]
-    case 'computer':
-      return document?.hold ? [text(computerLabel(document.hold).computer)] : null
-    case 'checkedOut':
-      return document?.hold ? [time(document.hold.since)] : null
-    default:
-      return null
-  }
+const documentOf = ({ item }: ListRow) => (item.type === 'document' ? item : null)
+
+// The one source of the known columns: a column's key for a row. A row a column doesn't apply to has none.
+const KEYS: Record<string, (row: ListRow) => Key> = {
+  title: ({ item }) => [text(item.type === 'matter' ? item.display : item.name)],
+  docNumber: (row) => { const d = documentOf(row); return d && [d.docNumber] },
+  version: (row) => { const d = documentOf(row); return d && versionKey(d.fileVersion) },
+  author: (row) => { const d = documentOf(row); return d?.author ? [text(d.author.displayName)] : null },
+  edited: (row) => { const d = documentOf(row); return d && timeKey(d.lastModified) },
+  matter: ({ item }) => (item.type === 'matter' ? null : matterKey(item.matter)),
+  client: ({ item }) => {
+    const name = item.type === 'matter' ? item.client.name : item.matter?.client.name
+    return name == null ? null : [text(name)]
+  },
+  location: (row) => { const d = documentOf(row); return d && [text(d.folder.name), ...(matterKey(d.matter) ?? [null, null])] },
+  filed: (row) => { const d = documentOf(row); return d && timeKey(d.dateFiled) },
+  size: (row) => { const d = documentOf(row); return d && [d.size] },
+  type: (row) => { const d = documentOf(row); return d && [text(typeLabel(d.kind)), extension(d.name)] },
+  lastUsed: ({ item }) => (item.type === 'matter' ? null : timeKey(item.lastUsed)),
+  computer: (row) => { const d = documentOf(row); return d?.hold ? [text(computerLabel(d.hold).computer)] : null },
+  checkedOut: (row) => { const d = documentOf(row); return d?.hold ? timeKey(d.hold.since) : null },
+}
+
+function keyOf(column: string, row: ListRow): Key {
+  return Object.hasOwn(KEYS, column) ? KEYS[column]!(row) : null
 }
 
 function comparePart(a: Part, b: Part): number {
@@ -90,11 +84,9 @@ function compareKeys(a: Part[], b: Part[]): number {
   return 0
 }
 
-const KNOWN = new Set(['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'lastUsed', 'computer', 'checkedOut'])
-
-/** Ascending, by the server's rules: text lower-cased by code point, numbers as numbers, dates by their time. A row with no value in the column compares equal here; `sortRows` puts it last. An unknown column compares every row equal. */
+/** Ascending, by the server's rules: text lower-cased by UTF-16 code unit (JavaScript's `<`, which agrees with PostgreSQL's `C` collation except for characters beyond the Basic Multilingual Plane against U+E000 to U+FFFF), numbers as numbers, dates by their time. A row with no value in the column compares equal here; `sortRows` puts it last. An unknown column compares every row equal. */
 export function compareRows(column: string, a: ListRow, b: ListRow): number {
-  if (!KNOWN.has(column)) return 0
+  if (!Object.hasOwn(KEYS, column)) return 0
   const x = keyOf(column, a)
   const y = keyOf(column, b)
   return x && y ? compareKeys(x, y) : 0
@@ -102,7 +94,7 @@ export function compareRows(column: string, a: ListRow, b: ListRow): number {
 
 /** A new array: rows with a value sorted in the sort's direction, ties in the list's own order either way, then the rows with none, in the list's order. */
 export function sortRows(rows: ListRow[], sort: TableSort): ListRow[] {
-  const known = KNOWN.has(sort.column)
+  const known = Object.hasOwn(KEYS, sort.column)
   const keyed = rows.map((row) => ({ row, key: known ? keyOf(sort.column, row) : [null] as Key }))
   const sign = sort.direction === 'descending' ? -1 : 1
   const have = keyed.filter((one) => one.key !== null).sort((a, b) => sign * compareKeys(a.key!, b.key!))
