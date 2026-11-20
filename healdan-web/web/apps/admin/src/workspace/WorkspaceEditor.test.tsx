@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { expectNoAxeViolations } from '../test/axe'
-import { charterAccess, charterTree, deletedFolder, folderNode, problem, restoredFolder, workspaceRoutes, type FakeApi, type Routes } from '../test/fakeApi'
+import { charterAccess, charterTree, classOptions, deletedFolder, folderAccess, folderNode, groupRow, personRow, problem, restoredFolder, tom, workspaceRoutes, wsPartners, type FakeApi, type Routes } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 import { PERMISSIONS, permissionsOf } from './levels'
 
@@ -109,7 +109,7 @@ describe('The Workspace Editor: the tree', () => {
 })
 
 describe('Who Can Use This Folder', () => {
-  it('sets exactly a level’s permissions, and Save sends each row as flags, a person by their id', async () => {
+  it('sets exactly a level’s permissions, and Save sends each row as flags, a row the server listed by its group’s id', async () => {
     const { api } = await openWorkspace({ 'PUT /v1/admin/folders/110/access': charterAccess[110] })
     const save = within(panel()).getByRole('button', { name: 'Save' })
     expect(save.hasAttribute('disabled')).toBe(true)
@@ -122,12 +122,29 @@ describe('Who Can Use This Folder', () => {
           rows: [
             { groupId: 2, permissions: ['read', 'download', 'print', 'email', 'preview'] },
             { groupId: 20, permissions: permissionsOf('read-write') },
-            { userId: 6, permissions: [...PERMISSIONS] },
+            { groupId: 106, permissions: [...PERMISSIONS] },
           ],
         },
       ]),
     )
     expect(await screen.findByText(`Saved who can use ${LABEL}`)).toBeTruthy()
+  })
+
+  it("sends a person's row the server listed back by their own group's id, so a person whose account has gone doesn't stop the save", async () => {
+    const gone = personRow({ id: 12, username: 'jo', name: 'Jo Lister' }, 'read-only')
+    const { api } = await openWorkspace({
+      'GET /v1/admin/folders/113/access': folderAccess(113, [groupRow(wsPartners, 'read-write'), gone, personRow(tom, 'full-access', { owner: true })]),
+      'PUT /v1/admin/folders/113/access': charterAccess[113],
+    })
+    await choose('Evidence')
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Partners' }), 'full-access')
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(putsTo(api, 113)).toHaveLength(1))
+    expect((putsTo(api, 113)[0] as A['FolderAccessChange']).rows).toEqual([
+      { groupId: 20, permissions: [...PERMISSIONS] },
+      { groupId: 112, permissions: permissionsOf('read-only') },
+      { groupId: 106, permissions: [...PERMISSIONS] },
+    ])
   })
 
   it('edits the 25 permissions one by one under Show Every Permission, a row that matches no level shown as Custom', async () => {
@@ -237,7 +254,7 @@ describe('Who Can Use This Folder', () => {
     expect(await within(panel()).findByText(`It follows the permissions of ${LABEL}.`)).toBeTruthy()
   })
 
-  it('adds a person or a group, found by one search of both, at Read Only, and sends each as itself', async () => {
+  it('adds a person or a group, found by one search of both, at Read Only, and sends a person added here by their id', async () => {
     const { api } = await openWorkspace({ 'PUT /v1/admin/folders/110/access': charterAccess[110] })
     await userEvent.click(within(panel()).getByRole('button', { name: 'Add Person or Group' }))
     let dialog = await screen.findByRole('dialog', { name: 'Add Person or Group' })
@@ -271,7 +288,7 @@ describe('Who Can Use This Folder', () => {
       { groupId: 20, permissions: permissionsOf('read-write') },
       { groupId: 21, permissions: permissionsOf('read-only') },
       { userId: 10, permissions: permissionsOf('read-only') },
-      { userId: 6, permissions: [...PERMISSIONS] },
+      { groupId: 106, permissions: [...PERMISSIONS] },
     ])
   })
 
@@ -487,6 +504,62 @@ describe('The values a folder sets', () => {
     await waitFor(() =>
       expect(api.callsTo('PUT /v1/admin/folders/111/properties').map((call) => call.body)).toEqual([{ values: { docclass: 'Correspondence', docsubclass: 'Emails', confidential: null } }]),
     )
+  })
+
+  it("sends back the server's own value of each field left alone, a day, a folder, a document and a person as they came", async () => {
+    const local = { source: 'local' as const, inheritedFrom: null, options: null }
+    const values: A['FolderProperties'] = {
+      folderId: 112,
+      properties: [
+        { name: 'docclass', label: 'Class', type: 'string', value: 'Evidence', source: 'local', inheritedFrom: null, options: classOptions },
+        // Midnight in Rome on 5 March, which is the 4th in UTC
+        { name: 'filed', label: 'Filed', type: 'date', value: '2026-03-04T23:00:00Z', ...local },
+        { name: 'related', label: 'Related Folder', type: 'folder', value: 115, ...local },
+        { name: 'source', label: 'Source Document', type: 'document', value: 10388, ...local },
+        { name: 'reviewer', label: 'Reviewer', type: 'user', value: { id: tom.id, name: tom.name }, ...local },
+        { name: 'confidential', label: 'Confidential', type: 'boolean', value: true, source: 'inherited', inheritedFrom: { id: 110, name: LABEL }, options: null },
+      ],
+    }
+    const { api } = await openWorkspace({
+      'GET /v1/admin/folders/112/properties': values,
+      'PUT /v1/admin/folders/112/properties': values,
+    })
+    await choose('Drafts')
+    const form = await within(panel()).findByRole('region', { name: 'Values It Sets' })
+    await waitFor(() => expect((within(form).getByRole('combobox', { name: 'Confidential' }) as HTMLSelectElement).value).toBe(''))
+    await userEvent.selectOptions(within(form).getByRole('combobox', { name: 'Confidential' }), 'false')
+    await userEvent.click(within(form).getByRole('button', { name: 'Save Values' }))
+    await waitFor(() => expect(api.callsTo('PUT /v1/admin/folders/112/properties')).toHaveLength(1))
+    expect(api.callsTo('PUT /v1/admin/folders/112/properties')[0]!.body).toEqual({
+      values: { docclass: 'Evidence', filed: '2026-03-04T23:00:00Z', related: 115, source: 10388, reviewer: { id: tom.id, name: tom.name }, confidential: false },
+    })
+  })
+
+  it('sends a folder or a document typed in as its id, saying first when it isn’t a whole number', async () => {
+    const local = { value: null, source: null, inheritedFrom: null, options: null }
+    const values: A['FolderProperties'] = {
+      folderId: 112,
+      properties: [
+        { name: 'related', label: 'Related Folder', type: 'folder', ...local },
+        { name: 'source', label: 'Source Document', type: 'document', ...local },
+      ],
+    }
+    const { api } = await openWorkspace({
+      'GET /v1/admin/folders/112/properties': values,
+      'PUT /v1/admin/folders/112/properties': values,
+    })
+    await choose('Drafts')
+    const form = await within(panel()).findByRole('region', { name: 'Values It Sets' })
+    const related = await within(form).findByRole('textbox', { name: 'Related Folder' })
+    await userEvent.type(related, '11.5')
+    expect(within(form).getByText("That isn't the right kind of value.")).toBeTruthy()
+    expect(within(form).getByRole('button', { name: 'Save Values' }).hasAttribute('disabled')).toBe(true)
+    await userEvent.clear(related)
+    await userEvent.type(related, '115')
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Source Document' }), '10388')
+    await userEvent.click(within(form).getByRole('button', { name: 'Save Values' }))
+    await waitFor(() => expect(api.callsTo('PUT /v1/admin/folders/112/properties')).toHaveLength(1))
+    expect(api.callsTo('PUT /v1/admin/folders/112/properties')[0]!.body).toEqual({ values: { related: 115, source: 10388 } })
   })
 
   it('says a value comes from a folder above', async () => {

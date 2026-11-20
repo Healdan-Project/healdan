@@ -7,12 +7,13 @@ import { inOrder, type Permission } from './levels'
 type A = adminComponents['schemas']
 
 /**
- * A row of Who Can Use This Folder as the editor holds it: a group, or a person (by their id, P2-R15, so a person added
- * here needs no own group's id), with exactly what it grants.
+ * A row of Who Can Use This Folder as the editor holds it: a group, or a person, with exactly what it grants. A row the
+ * server listed has its group's id, a person's own group's included; a person added here has only their id (P2-R15).
  */
 export interface Grant {
   /** `g` and the group's id, or `u` and the person's */
   key: string
+  /** The group, or the person's own group; null only for a person added here */
   groupId: number | null
   userId: number | null
   person: boolean
@@ -35,9 +36,14 @@ export function grantOf(row: A['AccessRow']): Grant {
   }
 }
 
-/** What a save sends for the row: a person by their id, a group by its own */
+/**
+ * What a save sends for the row: a row the server listed by its group's id, as it came, so a person whose account has
+ * gone since doesn't stop the save; a person added here by their id
+ */
 export function bodyOf(grant: Grant): A['AccessGrant'] {
-  return grant.person && grant.userId !== null ? { userId: grant.userId, permissions: grant.permissions } : { groupId: grant.groupId ?? -1, permissions: grant.permissions }
+  if (grant.groupId !== null) return { groupId: grant.groupId, permissions: grant.permissions }
+  if (grant.userId !== null) return { userId: grant.userId, permissions: grant.permissions }
+  throw new Error(`The row ${grant.key} names neither a group nor a person`)
 }
 
 /** The rows as the server lists them: groups first, then people, each by name, ignoring case */

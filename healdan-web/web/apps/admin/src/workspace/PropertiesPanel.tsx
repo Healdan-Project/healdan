@@ -27,6 +27,10 @@ export interface PropertiesPanelProps {
 const CLASS = 'docclass'
 
 const isNumber = (property: Property) => property.type === 'integer' || property.type === 'decimal'
+/** A folder or a document, which the field holds as its id, a whole number */
+const isId = (property: Property) => property.type === 'folder' || property.type === 'document'
+/** Typed as a number: a number, or a folder's or a document's id */
+const isNumeric = (property: Property) => isNumber(property) || isId(property)
 
 /** A person a `user` property names */
 function personOf(value: Property['value']): A['PropertyUser'] | null {
@@ -43,12 +47,16 @@ function draftOf(property: Property): string {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : ''
 }
 
-/** What a save sends for the property: null to inherit */
-function valueOf(property: Property, draft: string): A['FolderPropertyValue'] {
+/**
+ * What a save sends for the property: null to inherit. A field left as it came sends the server's own value, so a day,
+ * a folder, a document or a person nobody touched goes back exactly as it was; only what was changed is converted.
+ */
+function valueOf(property: Property, draft: string, initial: string): A['FolderPropertyValue'] {
+  if (draft === initial) return property.source === 'local' ? property.value : null
   if (draft.trim() === '') return null
   if (property.type === 'boolean') return draft === 'true'
   if (property.type === 'user') return { id: Number(draft) }
-  if (isNumber(property)) return Number(draft)
+  if (isNumeric(property)) return Number(draft)
   return property.type === 'date' ? `${draft}T00:00:00Z` : draft
 }
 
@@ -62,16 +70,17 @@ function textOf(property: Property, value: Property['value']): string {
   return String(value)
 }
 
-/** Whether what was typed into a number field is a number of its kind */
+/** Whether what was typed into a number field is a number of its kind: a whole number for an integer or an id */
 function numberOk(property: Property, draft: string): boolean {
   const number = Number(draft)
-  return Number.isFinite(number) && (property.type !== 'integer' || Number.isInteger(number))
+  return Number.isFinite(number) && (property.type === 'decimal' || Number.isInteger(number))
 }
 
 /**
  * The values a folder sets for what's filed below it (spec 8.4): each property that passes down from folders, such as
  * a Class, with where its value comes from when the folder sets none. A Subclass is offered only within its Class.
- * Save sends the whole set, as the route takes it: a property set here is the folder's own, one Not Set Here inherits.
+ * Save sends the whole set, as the route takes it: a property set here is the folder's own, one Not Set Here inherits,
+ * and one left alone goes back as the server gave it.
  */
 export function PropertiesPanel({ node, root, kind }: PropertiesPanelProps) {
   const headingId = useId()
@@ -117,10 +126,10 @@ function ValuesForm({ values, node, root, kind }: { values: A['FolderProperties'
   const fields = fieldErrors(failure)
   const errorOf = (property: Property): string | undefined => {
     const text = shown[property.name] ?? ''
-    if (isNumber(property) && text.trim() !== '' && !numberOk(property, text)) return t('fields.type')
+    if (isNumeric(property) && text.trim() !== '' && !numberOk(property, text)) return t('fields.type')
     return fields.get(property.name) ?? fields.get(`values.${property.name}`)
   }
-  const invalid = properties.some((property) => isNumber(property) && (shown[property.name] ?? '').trim() !== '' && !numberOk(property, shown[property.name]!))
+  const invalid = properties.some((property) => isNumeric(property) && (shown[property.name] ?? '').trim() !== '' && !numberOk(property, shown[property.name]!))
   const refusal = failure !== undefined && !properties.some((property) => fields.has(property.name) || fields.has(`values.${property.name}`)) ? refusalFor(failure) : undefined
 
   function set(name: string, value: string) {
@@ -140,7 +149,9 @@ function ValuesForm({ values, node, root, kind }: { values: A['FolderProperties'
     setBusy(true)
     setFailure(undefined)
     try {
-      const body: A['FolderPropertiesChange'] = { values: Object.fromEntries(properties.map((property) => [property.name, valueOf(property, shown[property.name] ?? '')])) }
+      const body: A['FolderPropertiesChange'] = {
+        values: Object.fromEntries(properties.map((property) => [property.name, valueOf(property, shown[property.name] ?? '', initial[property.name] ?? '')])),
+      }
       const answer = await api.send<A['FolderProperties']>('PUT', apiPath`/v1/admin/folders/${node.id}/properties`, body)
       queryClient.setQueryData(workspaceKeys.properties(node.id), answer)
       setDraft(null)
@@ -195,7 +206,7 @@ function ValuesForm({ values, node, root, kind }: { values: A['FolderProperties'
         />
       )
     }
-    return <TextField label={property.label} value={value} inputMode={isNumber(property) || property.type === 'folder' || property.type === 'document' ? 'decimal' : undefined} error={error} onChange={onChange} />
+    return <TextField label={property.label} value={value} inputMode={isNumeric(property) ? 'decimal' : undefined} error={error} onChange={onChange} />
   }
 
   return (
