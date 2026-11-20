@@ -38,8 +38,11 @@ import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
  * folder's own name, sent back, changes nothing, whatever the rules for a new
  * name say of it. A veto of Healdan's
  * listeners is {@code 409 refused}, as the ProblemMapper answers one.
+ * <p>
+ * Its rule for a name, {@link #name}, is the admin API's too, for every
+ * folder name it takes ({@code openapi-admin.yaml}'s {@code FolderName}).
  */
-final class FolderRenames {
+public final class FolderRenames {
 
 	/**
 	 * One lock per parent folder, so two renames to one name can't both pass
@@ -134,31 +137,51 @@ final class FolderRenames {
 	 *         reference such as {@code &amp;}, which CE's folder DAO would turn
 	 *         into its character)
 	 */
-	static String name(String requested) {
-		String sent = StringUtils.strip(requested);
-		// Spaces alone, or characters that show nothing (such as U+200B and U+FEFF), make no name
-		if (sent.codePoints().allMatch(c -> Character.isWhitespace(c) || Character.isSpaceChar(c)
-				|| Character.getType(c) == Character.FORMAT))
-			throw ApiProblem.validation(List.of(new FieldError("name", "required", "Give the folder a name.")));
-
+	public static String name(String requested) {
 		List<FieldError> errors = new ArrayList<>();
+		String name = name(requested, errors);
+		if (!errors.isEmpty())
+			throw ApiProblem.validation(errors);
+		return name;
+	}
+
+	/**
+	 * As {@link #name(String)}, for a form with other fields: what's wrong
+	 * with the name is added to the errors, as the field {@code name}, rather
+	 * than thrown.
+	 *
+	 * @param requested the name sent, null for none, which is
+	 *        {@code required}
+	 * @param errors what's wrong with the form's fields so far, which this
+	 *        adds to
+	 * @return the name to store, null if it has an error
+	 */
+	public static String name(String requested, List<FieldError> errors) {
+		String sent = StringUtils.strip(requested);
+		// None, spaces alone, or characters that show nothing (such as U+200B and U+FEFF), make no name
+		if (sent == null || sent.codePoints().allMatch(c -> Character.isWhitespace(c) || Character.isSpaceChar(c)
+				|| Character.getType(c) == Character.FORMAT)) {
+			errors.add(new FieldError("name", "required", "Give the folder a name."));
+			return null;
+		}
+
+		int before = errors.size();
 		// As a document's and a favourite's name: no slash, backslash or control character, nothing PostgreSQL can't
 		// store (a NUL or a lone surrogate, StorableText), and at most 255 characters
 		Uploads.checkText(sent, "name", Uploads.MAX_NAME_LENGTH, false, errors);
-		boolean invalid = errors.stream().anyMatch(error -> "invalid".equals(error.code()));
+		List<FieldError> found = errors.subList(before, errors.size());
+		boolean invalid = found.stream().anyMatch(error -> "invalid".equals(error.code()));
 		// A direction override shows a name as another, such as "Invoice", U+202E, then "fdp.exe" as "Invoiceexe.pdf"
 		if (!invalid && sent.codePoints().anyMatch(FolderRenames::directionControl))
-			errors.add(0, new FieldError("name", "invalid",
+			found.add(0, new FieldError("name", "invalid",
 					"A name can't contain characters that change the direction of the text."));
 		// CE's folder DAO cleans the name of markup and character references as it stores it, so a name it would change
 		// isn't the name typed; and the tags CE's cleaning keeps (b, em, i, strong and u) are refused too, as a name has
 		// no HTML tags at all
 		else if (!invalid && !sent.equals(withoutTags(sent)))
-			errors.add(0, new FieldError("name", "invalid",
+			found.add(0, new FieldError("name", "invalid",
 					"A name can't contain HTML tags or character references such as &amp;."));
-		if (!errors.isEmpty())
-			throw ApiProblem.validation(errors);
-		return sent;
+		return found.isEmpty() ? sent : null;
 	}
 
 	/** The embeddings, overrides and isolates (U+202A to U+202E, U+2066 to U+2069); the marks a script needs are fine */
