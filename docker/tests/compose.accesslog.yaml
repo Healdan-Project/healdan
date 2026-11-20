@@ -1,0 +1,15 @@
+# Smoke test only: Tomcat's access log, so a failed run can say whether a request reached the server and how long it
+# took. The app runs with the image's own server.xml and one valve more, an AccessLogValve that writes
+# repository/logs/access.log in the repository volume, beside dms.log. docker/smoke-test.sh makes that file from the
+# image it tests (smoke_server_xml) and names it in SMOKE_SERVER_XML, so it can't drift from docker/server.xml, which
+# stays without an access log. Tomcat's folder is the image's CATALINA_HOME.
+services:
+  app:
+    volumes:
+      - type: bind
+        source: ${SMOKE_SERVER_XML:?docker/smoke-test.sh makes it and sets it}
+        target: /usr/local/tomcat/conf/server.xml
+        read_only: true
+        bind:
+          # A file that isn't there fails the start: Docker would otherwise make a folder in its place
+          create_host_path: false

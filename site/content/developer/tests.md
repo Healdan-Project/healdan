@@ -379,10 +379,10 @@ build out (see [Building from Source](../building-from-source/#commands)).
 | `docker/tests/test-previews.sh` | Office and drawing previews: converted ahead of time, text, markup and thumbnails, no fetching or macros while converting, a broken file failing cleanly, leftover processes cleaned up |
 | `docker/tests/test-proxies.sh` | which forwarded addresses Tomcat believes with `LOGICALDOC_TRUSTED_PROXIES` unset: a header from the Docker host, but not a private address in the chain or a header sent from inside the app's container. It reads the sign-in throttle's per-address counters, so it needs a running stack: `BASE=http://127.0.0.1:8080 APP_CONTAINER=<id> DB_CONTAINER=<id> docker/tests/test-proxies.sh` |
 | `docker/tests/test-api.sh` | the API through the image's real filter chain, as the non-admin `apiuser` that the `smoke-api-user` setup step makes (`test-web.sh` signs in as `webuser`, made by `smoke-web-user`, since this script leaves `apiuser` blocked by the throttle for 15 minutes): LogicalDOC's SOAP services answering 404, M2's client flow (sign in, find the smoke matter, file a `.docx`, check it out, save twice, download two versions, sign out), the docs page, a session cookie refused without a token, the sign-in throttle, and LogicalDOC's `loginApiKey` refusing the token. Then M3's additions: searching inside the matter, a new folder and a favourite, a stamped `.docx`, a second device refused with `held-elsewhere`, moving the check-out, `ifVersion` and a repeated `saveId`, and the `#1234 v2.1` lookup. Then M5's: an `.eml` inspected, filed with its attachment and found by its Message-ID, and `already-filed` for filing it again and for uploading it into the matter. Run it against a fresh stack with the smoke overlay: `BASE=http://127.0.0.1:8080 docker/tests/test-api.sh` |
-| `docker/tests/test-web.sh` | the User app and the Admin app in a browser, against a stack with the smoke overlay (see [The Web Apps' Tests](#the-web-apps-tests)): Playwright's specs in Chromium and WebKit, then `curl` checks of the web session's forgery refusals and the Admin app's refusals. Needs Docker, curl and Python 3: `BASE=http://127.0.0.1:18080 docker/tests/test-web.sh`, which `docker/smoke-test.sh` runs as step 9, the last. It needs the Indexer set to every few seconds (see [The Web Apps' Tests](#the-web-apps-tests)) |
+| `docker/tests/test-web.sh` | the User app and the Admin app in a browser, against a stack with the smoke overlay (see [The Web Apps' Tests](#the-web-apps-tests)): Playwright's specs in Chromium and WebKit, then `curl` checks of the web session's forgery refusals and the Admin app's refusals. Needs Docker, curl and Python 3: `BASE=http://127.0.0.1:18080 docker/tests/test-web.sh`, which `docker/smoke-test.sh` runs as step 9, the last. It needs the Indexer set to every few seconds (see [The Web Apps' Tests](#the-web-apps-tests)). With `WEB_RESULTS=<folder>` it keeps each failed test's trace and screenshot (see [What a Failed Run Keeps](#what-a-failed-run-keeps)) |
 | `docker/tests/test-signin.sh` | provider sign-in through the stand-in Keycloak (see below), with `curl` and a cookie jar: the web page's sign-in ending at the User app, signed in, a local account linked by email losing its password and its device token, the gate refusing someone in none of the mapped groups, the helper's sign-in handing a code to a pretend loopback address and the code exchanged for a device token, and a person disabled at Keycloak losing that token at its next re-check. Run it against a fresh stack with the sign-in overlay: `BASE=http://127.0.0.1:8080 KEYCLOAK=127.0.0.1:18180 docker/tests/test-signin.sh` |
 | `docker/tests/test-storage.sh` | storage backends against the stand-in Garage (see below): a file filed in Smoke Cloud reaching Garage encrypted, files moved in from Smoke moving up and not cached, reads through Garage and from the read cache, then with Garage stopped a save waiting in staging, an uncached file answering `503` through the API, `/download` and a shared link, and `/convertpdf` of an uncached PDF serving LogicalDOC's placeholder, and a matter moved to Smoke bringing its files home while Garage keeps them held. With `after-restart` it checks the same rows after a restart, a first read through Garage, and a read from the cache rebuilt from its folder with Garage stopped. It stops and starts Garage itself, and needs curl 8.0.0 or later, jq, sha256sum and docker: `docker/smoke-test.sh` runs it, passing it the stack's containers, as step 5f and again in step 8 |
-| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache`, a Content-Security-Policy with `object-src 'none'` and Tomcat's JVM having its Base64 intrinsics off, though the stack's `CATALINA_OPTS` asks for them (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the stack running on Healdan's storage (its setup steps recorded and Original's marker written, step 5), PostgreSQL itself in step 5 (the app's role waiting 50 seconds for a lock; an email's subject and file name, a new matter's name and a document's name keeping their emoji, the matter made through the Classic Interface's New Matter service as client 1's next free number, 1.5 on today's stack, which stays for the later steps; a NUL in a query parameter answered `400 bad-request`; and `apiuser` disabled and enabled again through the Classic Interface's service, each edit read back from the database and the API, as LogicalDOC's typed reads lost such an edit on PostgreSQL without Healdan's fix), PostgreSQL's own log after steps 7 and 9 (see [PostgreSQL's Log](#postgresqls-log)), M2's client flow through the API (`test-api.sh`, step 5c), the User app in Chromium and WebKit (`test-web.sh`, step 9, the last), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), storage backends against a stand-in S3 server, Garage (`test-storage.sh`, step 5f, and again after step 8's restart), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which checks LogicalDOC's tables, replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one. Two can run on one machine at once (see [Two Smoke Tests at Once](#two-smoke-tests-at-once)) |
+| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the sign-in page showing no alert on the first start, such as "The application has to be restarted", the GUI's loaders sent with `Cache-Control: no-cache`, a Content-Security-Policy with `object-src 'none'` and Tomcat's JVM having its Base64 intrinsics off, though the stack's `CATALINA_OPTS` asks for them (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the stack running on Healdan's storage (its setup steps recorded and Original's marker written, step 5), PostgreSQL itself in step 5 (the app's role waiting 50 seconds for a lock; an email's subject and file name, a new matter's name and a document's name keeping their emoji, the matter made through the Classic Interface's New Matter service as client 1's next free number, 1.5 on today's stack, which stays for the later steps; a NUL in a query parameter answered `400 bad-request`; and `apiuser` disabled and enabled again through the Classic Interface's service, each edit read back from the database and the API, as LogicalDOC's typed reads lost such an edit on PostgreSQL without Healdan's fix), PostgreSQL's own log after steps 7 and 9 (see [PostgreSQL's Log](#postgresqls-log)), M2's client flow through the API (`test-api.sh`, step 5c), the User app in Chromium and WebKit (`test-web.sh`, step 9, the last), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), storage backends against a stand-in S3 server, Garage (`test-storage.sh`, step 5f, and again after step 8's restart), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which checks LogicalDOC's tables, replaces an older image's `cachecontrol` default and makes a non-breaking space in `security.csp` plain (step 8). Its stack's Tomcat writes an access log, which the image doesn't have (see [The Access Log](#the-access-log)): step 2 checks it's written, and step 8 that the restart kept it. With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one. With `SMOKE_RESULTS=<folder>` a run that fails keeps its logs and its failed browser tests' traces there (see [What a Failed Run Keeps](#what-a-failed-run-keeps)). Two can run on one machine at once (see [Two Smoke Tests at Once](#two-smoke-tests-at-once)) |
 
 `docker/tests/bulk-documents.sh` isn't a test: it fills a folder on a throwaway stack with generated `.docx`, `.pdf`,
 `.xlsx`, `.eml` and `.odt` files, five uploads at a time, to measure big folders and searches. Give it the stack's
@@ -485,6 +485,7 @@ SMOKE_PROJECT=smoke-b SMOKE_PORT=28080 SMOKE_KEYCLOAK_PORT=28180 SMOKE_GARAGE_PO
   files, which BuildKit builds once for both.
 - **Step 5d builds the helper's tests in the checkout,** so two runs from one checkout can't both set
   `SMOKE_HELPER_TEST=1`. Runs from separate worktrees can.
+- **Each run that sets `SMOKE_RESULTS` names a folder of its own.** The script refuses one that holds anything.
 
 In two runs side by side on a Mac, each stack used up to about 2 GB of Docker's memory, besides step 9's browser
 container.
@@ -534,14 +535,80 @@ at the end of the `Smoke test` step of the `Test (amd64)` or `Test (arm64)` job:
   logs it in one line at info, with its frames at debug, and the dump skips one that an older server logged as a
   failure.
 - **`dms.log`'s last 40 lines.**
+- **The requests Tomcat took 2 seconds or more to answer,** from [its access log](#the-access-log), the last 40 of
+  them, after a line that counts the log's requests. Once step 9 has begun, only that step's: a browser test that
+  waited on a request finds it there with its time, or learns that the server answered at once or never got it.
+  Before step 9, the whole run's, which has slow requests of its own (a start's first pages, the previews, step 5f's
+  outage).
 
 When a browser test in step 9 fails, `docker/tests/test-web.sh` also prints the page of each failed test as Playwright
 saw it (its `error-context.md`), before the container that ran them goes. It's in the step's output, after the line
 that names the failed tests.
 
-`dms.log` covers the whole run. Step 8 replaces the container but keeps the volume, so its restart doesn't lose the
-earlier steps' lines. Every `FAIL` line ends with its time in UTC, and the smoke stack logs in UTC, so the log's
-lines from around a failure are easy to find.
+`dms.log` and the access log cover the whole run. Step 8 replaces the container but keeps the volume, so its restart
+doesn't lose the earlier steps' lines. Every `FAIL` line ends with its time in UTC, and the smoke stack logs in UTC,
+so the logs' lines from around a failure are easy to find.
+
+### The Access Log
+
+The image's Tomcat writes no access log (`docker/server.xml` has no `AccessLogValve`), so on a server nothing records
+each request. The smoke stack's does, so that a failed run can say whether a request reached the server, when, and
+how long the answer took:
+
+- **`docker/smoke-test.sh` makes the stack's `server.xml` from the image's own** (`smoke_server_xml`): it reads the
+  file out of the image it tests and adds one valve to its `Host`. `docker/tests/compose.accesslog.yaml`, an overlay
+  only the smoke test adds, mounts the result over the image's. So the stack still runs the `server.xml` the image
+  ships, the two can't drift, and `docker/server.xml` stays as it is.
+- **The log is `repository/logs/access.log`,** beside `dms.log` in the repository volume, which step 8's restart
+  keeps. It's unbuffered, so a failed run reads every request answered so far.
+- **A line is one request:** its start and end (UTC), the client's port, the thread that served it, the method, the
+  path with its query, the status, the bytes sent and the time taken in microseconds. Tomcat ends a path that has no
+  query with `-`. Requests on one connection share a client's port.
+
+  ```text
+  2026-11-20 07:15:02.123 07:15:02.180 rp=51234 http-nio-8080-exec-7 GET /api/v1/me- 200 412 57012us
+  2026-11-20 07:15:02.201 07:15:02.215 rp=51234 http-nio-8080-exec-3 GET /api/v1/users?q=web 200 388 13544us
+  ```
+
+- **Step 2 checks that the log is written in that form,** and step 8 that it still begins with the first start's
+  first request, so a run that needs the log finds it.
+
+A stack started by hand has no access log. To give it one, make the file as `smoke_server_xml` does and add the
+overlay with `SMOKE_SERVER_XML` naming the file.
+
+### What a Failed Run Keeps
+
+What the script prints is the end of each log. With `SMOKE_RESULTS=<folder>`, a run that fails also keeps what
+can't be printed, in that folder:
+
+| In the folder | What it is |
+|---|---|
+| `access.log` | Tomcat's [access log](#the-access-log), whole |
+| `dms.log` | the server's log, whole, its rolled-over files joined in order |
+| `e2e-results/` | when a browser test failed: a folder for each failed test, with its `trace.zip`, its screenshot (`test-failed-1.png`) and its `error-context.md` |
+
+```bash
+SMOKE_RESULTS=/tmp/smoke-results docker/smoke-test.sh
+```
+
+- **The folder is empty or not there yet.** The script refuses one that holds anything, so nothing in it is another
+  run's. A run that passes keeps nothing, and leaves no folder it made.
+- **A trace is Playwright's record of one test:** every action with the page before and after it, the console, and
+  each request the page and the spec made, with its times and its answer. Open it with
+  `npx playwright show-trace <folder>/trace.zip` in `healdan-web/web`, or drop it on
+  [trace.playwright.dev](https://trace.playwright.dev), which reads it in the browser and sends it nowhere. Playwright
+  records a trace for every test and keeps only a failed one's (`trace: 'retain-on-failure'` in
+  `playwright.config.ts`).
+- **A request the page waited on is in both.** The trace has when the browser sent it and whether an answer came; the
+  access log has when Tomcat began to serve it and for how long. A request in the trace with no line in the access
+  log never reached the server.
+- **`docker/tests/test-web.sh` takes `WEB_RESULTS=<folder>`** for a run by hand, on the same terms: empty or not
+  there yet, each failed test's folder copied into it, and no folder left by a run that passes. The smoke test sets
+  it to `e2e-results` in its own folder.
+- **In CI** the image workflow sets `SMOKE_RESULTS` and uploads the folder when the smoke test fails (see
+  [The Smoke Test's Results in the Image CI](../continuous-integration/#the-smoke-tests-results-in-the-image-ci)).
+- **Everything in it is the smoke stack's:** invented documents, and accounts whose passwords are in this
+  repository. The access log has each request's query, which on this stack is test data too.
 
 ### The Move's Test
 
@@ -750,8 +817,9 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     host's ports from the default `--network host`: set `WEB_NETWORK=bridge`. The browser then still opens
     `http://127.0.0.1:<port>`, which a small proxy in its container forwards to `host.docker.internal`, because the web
     session refuses a request whose `Origin` isn't the server's own address. A failing spec leaves its trace and screenshot in
-    the container, which is removed, so reproduce it with `npx playwright test` against the stack, using a
-    Playwright version's browsers installed with `npx playwright install`.
+    the container, which is removed: set `WEB_RESULTS=<folder>` to have them copied out first (see
+    [What a Failed Run Keeps](#what-a-failed-run-keeps)), or reproduce it with `npx playwright test` against the
+    stack, using a Playwright version's browsers installed with `npx playwright install`.
 
 ## Desktop Client Tests
 

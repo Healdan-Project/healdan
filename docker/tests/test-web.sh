@@ -17,7 +17,24 @@
 # finding.spec searches for documents it has just filed, which the search index only has once the Indexer has run
 # (every 30 minutes). docker/smoke-test.sh sets it to every 5 seconds before running this; for a run by hand, do the
 # same (Developer Guide, Tests) and set HEALDAN_INDEXER_FAST=1, or finding.spec waits 80 s and fails.
+# The browser container is removed when it ends, and what Playwright kept for the failed tests goes with it. To keep
+# it, set WEB_RESULTS to a folder, empty or not yet there: when a test fails, each failed test's folder is copied
+# there, with its trace (trace.zip: every action, the page before and after it, the console and each request with its
+# times), its screenshot and its error-context.md. A run that passes leaves no folder. Open a trace with
+# npx playwright show-trace <folder>/trace.zip, or at trace.playwright.dev.
 set -euo pipefail
+# Before the cd, so a relative folder is the caller's. Made here: Docker would make a missing one as root.
+WEB_RESULTS=${WEB_RESULTS:-}
+results_made=0
+if [ -n "$WEB_RESULTS" ]; then
+  [ -d "$WEB_RESULTS" ] || results_made=1
+  mkdir -p "$WEB_RESULTS"
+  WEB_RESULTS=$(cd "$WEB_RESULTS" && pwd)
+  if [ -n "$(ls -A "$WEB_RESULTS")" ]; then
+    echo "WEB_RESULTS '$WEB_RESULTS' holds files already: name an empty folder, or one that isn't there yet"
+    exit 1
+  fi
+fi
 cd "$(dirname "$0")/../.."
 . docker/tests/lib.sh
 
@@ -44,14 +61,32 @@ lock=healdan-web/web/package-lock.json
 version=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['packages']['node_modules/@playwright/test']['version'])" "$lock")
 
 browsers() {
+  local keep=() status=0
+  # WEB_RESULTS, mounted for the failed tests' results. The container runs as root, so it hands them to this user.
+  [ -z "$WEB_RESULTS" ] || keep=(-v "$WEB_RESULTS:/results" -e "RESULTS_OWNER=$(id -u):$(id -g)")
   # The workspace is copied in, without node_modules, so npm ci's Linux packages never replace a host's own.
+  # (An empty array's expansion is spelt for bash 3.2, which takes a plain one as an unset variable.)
   docker run --rm --network "$WEB_NETWORK" --ipc=host -e BASE="$WEB_BROWSER_BASE" -e WEBUSER_PASSWORD -e ADMIN_PASSWORD \
-    -v "$PWD/healdan-web/web:/src:ro" "mcr.microsoft.com/playwright:v${version}-noble" \
+    ${keep[@]+"${keep[@]}"} -v "$PWD/healdan-web/web:/src:ro" "mcr.microsoft.com/playwright:v${version}-noble" \
     bash -c "$PROXY "'mkdir /work && cd /src && tar cf - --exclude=node_modules --exclude=dist --exclude=e2e-results . | tar xf - -C /work \
       && cd /work && npm ci --ignore-scripts --no-audit --no-fund && { npx playwright test --reporter=line || { status=$?
         # The container goes with its results: the page of each failed test, as Playwright saw it, says what was on screen
         for f in e2e-results/*/error-context.md; do [ -f "$f" ] && { echo "== $f"; head -c 8000 "$f"; echo; }; done
-        exit $status; }; }'
+        # And, with WEB_RESULTS, everything it kept for them goes to the host: each failed test has a folder there
+        if [ -d /results ] && [ -d e2e-results ]; then
+          # Not the scratch folders of a run stopped at its tenth failure: they hold no finished test
+          cp -R e2e-results/. /results/ && rm -rf /results/.playwright-artifacts-* && chown -R "$RESULTS_OWNER" /results
+        fi
+        exit $status; }; }' || status=$?
+  if [ -n "$WEB_RESULTS" ]; then
+    if [ -n "$(ls -A "$WEB_RESULTS" 2>/dev/null)" ]; then
+      echo "== the failed tests' results are in $WEB_RESULTS: a folder each, with its trace, for" \
+        "npx playwright show-trace <folder>/trace.zip"
+    elif [ "$results_made" = 1 ]; then
+      rmdir "$WEB_RESULTS" 2>/dev/null || true
+    fi
+  fi
+  return "$status"
 }
 check "every spec in healdan-web/web/e2e/, in Chromium and WebKit" browsers
 
