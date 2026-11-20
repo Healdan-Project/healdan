@@ -133,6 +133,25 @@ export function clientList(items: A['Client'][], over: Partial<A['ClientList']> 
   return { items, offset: 0, limit: 20, total: items.length, figuresAt: '2026-11-19T10:41:00Z', ...over }
 }
 
+/** A client with no matter yet, so nothing to count */
+export const marshLane: A['ClientBrief'] = { id: 4, number: 1004, name: 'Marsh Lane Community Trust' }
+
+/** The firm's clients, in the list's own order (by number), each with its matters' figures as matterRows adds them up */
+export const clientRows: A['Client'][] = [
+  clientOf(ashcombe, { documents: 127, lastActivity: '2026-11-12T09:00:00Z' }),
+  clientOf(saltmarsh, { documents: 508, lastActivity: '2026-11-19T10:12:00Z' }),
+  clientOf(brightwell, { documents: 221, lastActivity: '2026-11-18T16:20:00Z' }),
+  clientOf(kestrel, { documents: 235, lastActivity: '2026-11-19T09:05:00Z' }),
+  clientOf(marshLane, { matters: 0, documents: 0, lastActivity: null }),
+]
+
+/** GET /v1/admin/clients over clientRows: those whose number starts with `q` or whose name holds it, in any case */
+export function clients(query?: Record<string, unknown>): A['ClientList'] {
+  const q = String(query?.q ?? '').trim().toLowerCase()
+  const items = clientRows.filter((one) => String(one.number).startsWith(q) || one.name.toLowerCase().includes(q))
+  return clientList(items, { limit: Number(query?.limit ?? 100) })
+}
+
 /** A matter, as the Matters list shows it: 1001.1 unless `over` says otherwise */
 export function matterRow(over: Partial<A['MatterRow']> = {}): A['MatterRow'] {
   return {
@@ -202,6 +221,7 @@ export function defaultRoutes(): Routes {
     'GET /v1/admin/matters': matterList(matterRows),
     'GET /v1/admin/stores': stores,
     'GET /v1/admin/clients': clientList([]),
+    'GET /v1/admin/clients/next-number': { number: 1005 } satisfies A['NextNumber'],
     'GET /v1/users': ({ query }: { query?: Record<string, unknown> }) => people(query?.q),
   }
 }

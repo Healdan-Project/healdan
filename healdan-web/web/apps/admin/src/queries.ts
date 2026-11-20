@@ -51,6 +51,8 @@ export const adminKeys = {
   clients: adminKey('/v1/admin/clients'),
   /** A client by its id, as its page and the Matters list's Client filter read it */
   client: (id: number) => [...adminKey('/v1/admin/clients'), id] as const,
+  /** The number New Client suggests, under `clients` too */
+  nextClientNumber: adminKey('/v1/admin/clients/next-number'),
   /** Every page of the Matters list, whatever its filters and order */
   matters: adminKey('/v1/admin/matters'),
   stores: adminKey('/v1/admin/stores'),
@@ -97,5 +99,20 @@ export function useClient(id: number | undefined, enabled = true) {
     queryKey: adminKeys.client(id ?? -1),
     queryFn: ({ signal }) => api.get<A['Client']>(apiPath`/v1/admin/clients/${id ?? -1}`, undefined, { signal }),
     enabled: enabled && id !== undefined,
+  })
+}
+
+/**
+ * The number New Client suggests, the highest in use plus one: asked afresh each time the dialog opens, and forgotten
+ * once it closes, as another administrator may have taken it meanwhile. Nothing is asked while `enabled` is false.
+ */
+export function useNextClientNumber(enabled = true) {
+  const api = useApi()
+  return useQuery({
+    queryKey: adminKeys.nextClientNumber,
+    queryFn: ({ signal }) => api.get<AdminAnswer<'/v1/admin/clients/next-number'>>('/v1/admin/clients/next-number', undefined, { signal }),
+    enabled,
+    staleTime: 0,
+    gcTime: 0,
   })
 }

@@ -6,6 +6,8 @@ import { createRootRoute, createRoute, createRouter, type ErrorComponentProps, t
 import { ErrorPanel, parseSearch, stringifySearch } from '@healdan/shell'
 import { ADMIN_BASE, routes } from './addresses'
 import { Frame } from './frame/Frame'
+import { ClientView, clientSearch } from './views/ClientView'
+import { ClientsView, clientsSearch } from './views/ClientsView'
 import { DashboardView } from './views/DashboardView'
 import { MattersView, mattersSearch } from './views/MattersView'
 import { NotFoundView } from './views/NotFoundView'
@@ -15,6 +17,26 @@ import { NotFoundView } from './views/NotFoundView'
 const rootRoute = createRootRoute({ component: Frame, notFoundComponent: NotFoundView })
 
 const dashboardRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.dashboard, component: DashboardView })
+
+// /clients: every client, its words and order in the address (ClientsView); /clients/$id, a client's page, the order of
+// its matters in the address (ClientView), which says itself when the id names no client.
+const clientsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.clients,
+  validateSearch: clientsSearch,
+  component: function ClientsRoute() {
+    return <ClientsView search={clientsRoute.useSearch()} />
+  },
+})
+
+const clientRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.client,
+  validateSearch: clientSearch,
+  component: function ClientRoute() {
+    return <ClientView id={clientRoute.useParams().id} search={clientRoute.useSearch()} />
+  },
+})
 
 // /matters: every matter, its order and filters in the address (MattersView). A matter's page, /matters/$id, is
 // Phase 2's next screen; until it's routed the frame says there's no such page.
@@ -27,7 +49,7 @@ const mattersRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([dashboardRoute, mattersRoute])
+const routeTree = rootRoute.addChildren([dashboardRoute, clientsRoute, clientRoute, mattersRoute])
 
 /**
  * A view that failed as it drew: the catalogue's short message and Try Again, which asks the server again for what the

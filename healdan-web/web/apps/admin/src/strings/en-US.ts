@@ -25,6 +25,7 @@ export const adminEnUS = {
   'admin.nav.search': 'Search',
   'admin.nav.monitoring': 'Monitoring',
   // The screens, each under its group
+  'admin.nav.clients': 'Clients',
   'admin.nav.matters': '{matters}',
 
   // The top bar's find: its name and placeholder, as the spec words it (7.1)
@@ -98,6 +99,55 @@ export const adminEnUS = {
   'admin.client.field': 'Client',
   'admin.client.label': '{number} – {name}',
 
+  // A page's way back to its list, above its title
+  'admin.crumbs.label': 'Breadcrumb',
+
+  // The Clients list (spec 8.2): its words, its columns and what it says when it has no rows
+  'admin.clients.title': 'Clients',
+  'admin.clients.new': 'New Client',
+  'admin.clients.filters': 'Filter Clients',
+  'admin.clients.text': 'Number or Name',
+  'admin.clients.column.number': 'Number',
+  'admin.clients.column.name': 'Name',
+  'admin.clients.column.matters': '{matters}',
+  'admin.clients.column.documents': 'Documents',
+  'admin.clients.column.lastActivity': 'Last Activity',
+  'admin.clients.figuresAt': 'Documents and Last Activity as of {when}',
+  'admin.clients.figuresPending': "Documents and Last Activity haven't been worked out since the server started. They show here within a few minutes.",
+  'admin.clients.none': 'No client has been made yet.',
+  'admin.clients.noneMatch': 'No client matches the filter.',
+
+  // A client's page (spec 8.2): its facts, its matters, and what it says when there's no such client
+  'admin.client.rename': 'Rename',
+  'admin.client.number': 'Number',
+  'admin.client.matters': '{matters}',
+  'admin.client.documents': 'Documents',
+  'admin.client.lastActivity': 'Last Activity',
+  // A figure the summary hasn't given since the server started
+  'admin.client.pending': 'Not worked out yet',
+  // The last activity of a client with nothing filed
+  'admin.client.noActivity': 'None',
+  // The heading of the client's matters, under its facts
+  'admin.client.mattersTitle': '{matters}',
+  'admin.client.noMatters': 'No {matterLower} has been made for this client yet.',
+  'admin.client.notFound.title': 'Client Not Found',
+  'admin.client.notFound.message': "There's no such client.",
+  'admin.client.notFound.clients': 'Go to Clients',
+
+  // New Client, and renaming one: the number is set once, and only the name changes afterwards (spec 8.2)
+  'admin.clientDialog.newTitle': 'New Client',
+  'admin.clientDialog.renameTitle': 'Rename Client',
+  'admin.clientDialog.number': 'Number',
+  'admin.clientDialog.name': 'Name',
+  'admin.clientDialog.create': 'Create Client',
+  'admin.clientDialog.rename': 'Rename',
+  'admin.clientDialog.numberNote': "A client's number can't be changed once the client is made.",
+  'admin.clientDialog.numberFixed': "Its number, {number}, can't be changed.",
+  'admin.clientDialog.numberInvalid': 'The number has to be a whole number, 1 or more.',
+  'admin.clientDialog.numberUsed': 'Client number {number} is already used, by {name}.',
+  // Once a client is made: its number and name
+  'admin.clientDialog.created': 'Created {client}',
+
   // The Matters list (spec 8.3): its filters, its columns and what it says when it has no rows
   'admin.matters.title': '{matters}',
   'admin.matters.filters': 'Filter {matters}',
@@ -140,6 +190,8 @@ export const adminPlurals = {
   'admin.usage.last30': { one: '{n} in the last 30 days', other: '{n} in the last 30 days' },
   'admin.usage.signedIn': { one: '{n} signed in now', other: '{n} signed in now' },
   'admin.usage.filed': { one: '{n} filed', other: '{n} filed' },
+  // Beside the Clients list's title
+  'admin.clients.count': { one: '{n} Client', other: '{n} Clients' },
 } as const satisfies Record<`admin.${string}`, PluralForms>
 
 export type AdminStringKey = keyof typeof adminEnUS
