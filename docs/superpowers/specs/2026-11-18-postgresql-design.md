@@ -9,7 +9,10 @@
   [`docs/superpowers/plans/2026-11-18-postgresql.md`](../plans/2026-11-18-postgresql.md); its "Spec Corrections and
   Calls This Plan Makes" lists where it decides what this spec left open. PR A (the plan's Tasks 1 to 9) was built
   on 2026-11-18 and merged on 2026-11-19 (Healdan-Project/healdan#277). The switch (PR B, Tasks 10 to 22) was built
-  on 2026-11-19, and stays a draft pull request until the rehearsal of §13.2 has passed. Where the build departed
+  on 2026-11-19, rehearsed on the owner's clone that day (§13.2, step 1) and merged on 2026-11-20
+  (Healdan-Project/healdan#280), with `mariadb-final` tagged on the commit it merged onto. The owner's server moved
+  the same morning and the owner's walkthrough passed (§13.2, steps 2 and 3): the plan's Decision Log 51 to 53 have
+  the results. Where the build departed
   from this text, the section says so in a "changed in the build" clause, with the plan's Decision Log number.
 - **Inputs:**
   - the [PostgreSQL recon](../../reference/postgresql-recon.md) of 2026-11-03, re-checked on 2026-11-18, whose
