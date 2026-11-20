@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.healdan.listing.ListingSql;
 import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.util.spring.Context;
 
@@ -119,10 +120,8 @@ public class HealdanSettings {
 	 * @return the names of the settings that start with the prefix, in order
 	 */
 	public List<String> names(String prefix) {
-		// LIKE's wildcards are escaped with "!", which both databases take
-		String pattern = prefix.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
-		return jdbc.queryForList("select name from hd_setting where name like ? escape '!' order by name",
-				String.class, pattern);
+		return jdbc.queryForList("select name from hd_setting where name like ? %s order by name"
+				.formatted(ListingSql.LIKE_ESCAPE), String.class, ListingSql.startingWith(prefix));
 	}
 
 	/**

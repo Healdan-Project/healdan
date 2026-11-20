@@ -168,6 +168,18 @@ public class AdminFindResourceTest extends ApiTestCase {
 		assertEquals(List.of(), texts(find("_"), "clients", "name"));
 	}
 
+	// LIKE's escape character is a plain character too, alone or before a wildcard
+	@Test
+	public void testTheEscapeCharacterIsLiteral() throws Exception {
+		fx.client(1001, "Yes! Ltd");
+		fx.client(1002, "Bang!% Holdings");
+		fx.client(1003, "Bang% Holdings");
+
+		assertEquals(List.of("Yes! Ltd", "Bang!% Holdings"), texts(find("!"), "clients", "name"));
+		assertEquals(List.of("Bang!% Holdings"), texts(find("!%"), "clients", "name"));
+		assertEquals(List.of(), texts(find("!!"), "clients", "name"));
+	}
+
 	@Test
 	public void testABlankQueryIs422() throws Exception {
 		for (String uri : List.of("/api/v1/admin/find", "/api/v1/admin/find?q=", "/api/v1/admin/find?q=%20%20")) {
