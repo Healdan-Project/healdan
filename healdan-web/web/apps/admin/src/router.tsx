@@ -10,6 +10,9 @@ import { ClientView, clientSearch } from './views/ClientView'
 import { ClientsView, clientsSearch } from './views/ClientsView'
 import { DashboardView } from './views/DashboardView'
 import { MattersView, mattersSearch } from './views/MattersView'
+import { MatterView, matterSearch } from './views/MatterView'
+import { TemplatesView } from './views/TemplatesView'
+import { TemplateView } from './views/TemplateView'
 import { NotFoundView } from './views/NotFoundView'
 
 // The frame holds every page, and an address no page has is said in the frame, in the app's own words. A page reads only
@@ -38,8 +41,7 @@ const clientRoute = createRoute({
   },
 })
 
-// /matters: every matter, its order and filters in the address (MattersView). A matter's page, /matters/$id, is
-// Phase 2's next screen; until it's routed the frame says there's no such page.
+// /matters: every matter, its order and filters in the address (MattersView).
 const mattersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: routes.matters,
@@ -49,7 +51,28 @@ const mattersRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([dashboardRoute, clientsRoute, clientRoute, mattersRoute])
+// /matters/$id: a matter's page, its tab in the address (MatterView); /templates, every workspace template, and
+// /templates/$id, a template's page, each saying itself when the id names nothing
+const matterRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.matter,
+  validateSearch: matterSearch,
+  component: function MatterRoute() {
+    return <MatterView id={matterRoute.useParams().id} search={matterRoute.useSearch()} />
+  },
+})
+
+const templatesRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.templates, component: TemplatesView })
+
+const templateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.template,
+  component: function TemplateRoute() {
+    return <TemplateView id={templateRoute.useParams().id} />
+  },
+})
+
+const routeTree = rootRoute.addChildren([dashboardRoute, clientsRoute, clientRoute, mattersRoute, matterRoute, templatesRoute, templateRoute])
 
 /**
  * A view that failed as it drew: the catalogue's short message and Try Again, which asks the server again for what the

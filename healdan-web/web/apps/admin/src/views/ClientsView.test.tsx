@@ -35,7 +35,7 @@ describe('The Clients list', () => {
   it("is the Firm group's Clients, before Matters, at /admin/clients: each client's number, name, matters and figures, and how many there are", async () => {
     const { view, router } = await renderApp('/', LIST)
     const firm = within(pane()).getByRole('region', { name: 'Firm' })
-    expect(within(firm).getAllByRole('link').map((link) => link.textContent)).toEqual(['Clients', 'Matters'])
+    expect(within(firm).getAllByRole('link').map((link) => link.textContent)).toEqual(['Clients', 'Matters', 'Workspace Templates'])
     await userEvent.click(within(pane()).getByRole('link', { name: 'Clients' }))
     expect(router.state.location.pathname).toBe('/clients')
     expect(screen.getByRole('heading', { level: 1, name: 'Clients' })).toBeTruthy()
