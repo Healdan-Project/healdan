@@ -238,6 +238,23 @@ public class AdminStoresResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testSetAccessKeepsItsMattersReadable() throws Exception {
+		Folder store = fx.store("Client Work");
+		setAcl(store, Map.of(partners.getId(), READ, clerks.getId(), READ));
+		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store);
+		String name = FolderDAO.get().findById(matter.getFolderId()).getName();
+		jdbc().update("delete from hd_admin_event");
+
+		// The matter's folder lets Partners read it, as its template did
+		assertProblem(put(access(store.getId())).webSession(web).json(Map.of("groupIds", List.of(clerks.getId())))
+				.send(), 409, "refused",
+				"Group Partners can read the matter %s but would no longer read its Store.".formatted(name));
+
+		assertEquals(Map.of(partners.getId(), READ, clerks.getId(), READ), AclMath.rows(store.getId()));
+		assertEquals(List.of(), events());
+	}
+
+	@Test
 	public void testOnlyStores() throws Exception {
 		Folder store = fx.store("Client Work");
 		Folder deleted = fx.store("Old Work");

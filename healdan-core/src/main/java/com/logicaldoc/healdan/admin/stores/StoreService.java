@@ -44,6 +44,7 @@ import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.matter.MatterService;
 import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.security.AclMath;
+import com.logicaldoc.healdan.security.PermissionRules;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.healdan.util.StorableText;
 import com.logicaldoc.util.html.HTMLSanitizer;
@@ -57,8 +58,10 @@ import com.logicaldoc.util.spring.Context;
  * A Store is made with its rows in one transaction, so a matter can be made in it at once, and keeps its files on
  * Original, the server's own folder, until its storage backend is changed (Admin app plan, Spec Correction 1). Who can
  * see it is set by group, a person's own group among them: each group listed gets Read, keeping any other permission
- * its row has, and every other group's row goes. Healdan's permission rules then narrow what in the Store's matters
- * follows its permissions, as on every route. Both go through {@link FolderDAO}, so Healdan's listeners check them.
+ * its row has, and every other group's row goes, but not while a group the change shuts out of the Store can read one
+ * of its matters (P2, {@link PermissionRules#checkStoreP2}). Healdan's permission rules then narrow what in the
+ * Store's matters follows its permissions, as on every route. Both go through {@link FolderDAO}, so Healdan's
+ * listeners check them.
  * <p>
  * Each change is recorded in the administration record inside its transaction, a row's change by whom it names
  * ({@link FolderAccessService#rowName}) with its permissions before and after; a change that changes nothing isn't
@@ -99,6 +102,8 @@ public class StoreService {
 
 	private final FolderAccessService folderAccess;
 
+	private final PermissionRules rules;
+
 	private final CacheEvictor evictor;
 
 	private final AdminEvents events;
@@ -106,10 +111,11 @@ public class StoreService {
 	private final JdbcTemplate jdbc;
 
 	@Autowired
-	public StoreService(MatterLocator locator, FolderAccessService folderAccess, CacheEvictor evictor,
-			AdminEvents events, DataSource dataSource) {
+	public StoreService(MatterLocator locator, FolderAccessService folderAccess, PermissionRules rules,
+			CacheEvictor evictor, AdminEvents events, DataSource dataSource) {
 		this.locator = locator;
 		this.folderAccess = folderAccess;
+		this.rules = rules;
 		this.evictor = evictor;
 		this.events = events;
 		this.jdbc = new JdbcTemplate(dataSource);
@@ -222,8 +228,11 @@ public class StoreService {
 	 *        alone
 	 * @param actor who changes it
 	 * @throws PersistenceException a refusal, a {@link HealdanRuleException} with its sentence: the actor isn't an
-	 *         administrator, the folder isn't a Store, or a group no longer exists (a deleted group the Store grants
-	 *         something now may stay, as LogicalDOC still lets its members in). Or an error at data layer
+	 *         administrator, the folder isn't a Store, a group no longer exists (a deleted group the Store grants
+	 *         something now may stay, as LogicalDOC still lets its members in), or a group the change would shut out
+	 *         of the Store can read one of its live matters, the owner's own group passing while the owner could
+	 *         read the Store (P2; a matter that already let in a group the Store didn't stops no other change). Or an
+	 *         error at data layer
 	 * @throws IllegalArgumentException for a group listed twice, or a null one
 	 */
 	@Transactional(rollbackFor = Exception.class)
@@ -243,6 +252,8 @@ public class StoreService {
 		boolean own = source == storeId;
 		if (own && after.equals(before))
 			return;
+		// P2 for the Store's matters, before the write: LogicalDOC's store logs a listener's refusal as an error
+		rules.checkStoreP2(storeId, after);
 
 		Folder stored = FolderDAO.get().findById(storeId, true);
 		stored.setSecurityRef(null);

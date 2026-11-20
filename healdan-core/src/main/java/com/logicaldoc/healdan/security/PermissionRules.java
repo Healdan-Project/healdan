@@ -8,7 +8,9 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -18,6 +20,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
@@ -84,6 +87,13 @@ public class PermissionRules {
 	static final String P1 = "A folder can't grant more than its parent (%s).";
 
 	static final String P2 = "%s can read this %s but not its Store.";
+
+	/** P2 for a Store's change of permissions, with the one matter it would break */
+	static final String P2_STORE_ONE = "%s can read the %s %s but would no longer read its Store.";
+
+	/** P2 for a Store's change of permissions, with how many matters it would break and the first by name */
+	static final String P2_STORE_MANY = "%s can read %d %s in this Store, %s among them, "
+			+ "but would no longer read the Store.";
 
 	static final String APPLY_TO_TREE = "You can't apply these permissions to subfolders that you can't manage.";
 
@@ -290,6 +300,117 @@ public class PermissionRules {
 			return;
 		Matter matter = MatterDAO.get().findByFolderId(folderId);
 		checkP2(AclMath.effective(folderId), target.getId(), matter != null ? matter.getOwnerId() : null, folderId);
+	}
+
+	/**
+	 * P2 for every live matter in a Store, before the Store's permissions change: a group that can read a matter's
+	 * folder and couldn't read the Store with its new permissions is refused, the matter's owner's own group passing
+	 * while the owner could read the Store, as {@link #checkP2} decides. Only what the change breaks is refused: a
+	 * matter that already lets in a group the Store doesn't stops no other change, so the change that puts it right
+	 * goes through. A matter's folder that follows the Store follows it still, so it isn't checked; one in the Trash
+	 * is checked when it's restored ({@link #checkRestore}). It takes a few queries in all, whatever the number of
+	 * matters and groups.
+	 *
+	 * @param storeId a Store
+	 * @param storeAcl what the Store is to grant
+	 * @throws HealdanRuleException naming the first group, by id, that the change would shut out of the Store while
+	 *         it can read one of its matters, with that matter, or with how many there are and the first by name
+	 */
+	public void checkStoreP2(long storeId, Map<Long, Set<Permission>> storeAcl) throws HealdanRuleException {
+		record Row(long id, String name, Long securityRef, Long ownerId, Long ownersGroup) {
+		}
+		record Workspace(String name, long source, Long ownerId, Long ownersGroup) {
+		}
+		// The live matters' folders in the Store, each with its owner and the owner's own group
+		List<Row> rows = jdbc.query("""
+				select f.ld_id, f.ld_name, f.ld_securityref, m.hd_ownerid, g.ld_id
+				  from ld_folder f
+				  left join hd_matter m on m.hd_folderid = f.ld_id and m.ld_deleted = 0
+				  left join ld_group g on g.ld_name = concat('_user_', cast(m.hd_ownerid as varchar(20)))
+				   and g.ld_tenantid = ?
+				 where f.ld_parentid = ? and not f.ld_id = f.ld_parentid and f.ld_deleted = 0
+				   and f.ld_foldref is null and not f.ld_type = ?
+				 order by f.ld_id""",
+				(rs, i) -> new Row(rs.getLong(1), rs.getString(2), nullable(rs, 3), nullable(rs, 4), nullable(rs, 5)),
+				Tenant.DEFAULT_ID, storeId, Folder.TYPE_ALIAS);
+		Map<Long, Workspace> workspaces = new LinkedHashMap<>();
+		for (Row row : rows) {
+			// Its own permissions, or those of the folder it follows: the Store's, which it follows still, or for the
+			// rare one that follows another folder, the walk's
+			Long ref = row.securityRef();
+			long source = ref == null || ref == row.id() ? row.id() : ref == storeId ? storeId : AclMath.source(row.id());
+			if (source != storeId)
+				workspaces.putIfAbsent(row.id(), new Workspace(row.name(), source, row.ownerId(), row.ownersGroup()));
+		}
+		if (workspaces.isEmpty())
+			return;
+
+		// The live groups each one's permissions let read it
+		Map<Long, Set<Long>> readers = new HashMap<>();
+		Set<Long> sources = workspaces.values().stream().map(Workspace::source).collect(Collectors.toSet());
+		for (List<Long> chunk : chunks(sources))
+			named.query("select ld_folderid, ld_groupid from ld_folder_acl where ld_folderid in (:ids) and ld_read = 1"
+					+ " and " + AclMath.LIVE_GROUPS, new MapSqlParameterSource("ids", chunk),
+					rs -> {
+						readers.computeIfAbsent(rs.getLong(1), folder -> new TreeSet<>()).add(rs.getLong(2));
+					});
+
+		// The groups of each owner whose own group can read their matter
+		Set<Long> owners = workspaces.values().stream()
+				.filter(ws -> ws.ownersGroup() != null
+						&& readers.getOrDefault(ws.source(), Set.of()).contains(ws.ownersGroup()))
+				.map(Workspace::ownerId).collect(Collectors.toSet());
+		Map<Long, Set<Long>> memberships = new HashMap<>();
+		for (List<Long> chunk : chunks(owners))
+			named.query("select ld_userid, ld_groupid from ld_usergroup where ld_userid in (:ids)",
+					new MapSqlParameterSource("ids", chunk), rs -> {
+						memberships.computeIfAbsent(rs.getLong(1), user -> new HashSet<>()).add(rs.getLong(2));
+					});
+
+		Map<Long, Set<Permission>> current = AclMath.effective(storeId);
+		Map<Long, List<String>> shutOut = new TreeMap<>();
+		for (Workspace ws : workspaces.values())
+			for (long group : readers.getOrDefault(ws.source(), Set.of())) {
+				// The owner's own group passes while the owner can read the Store
+				Set<Long> ownersGroups = ws.ownersGroup() != null && ws.ownersGroup() == group
+						? memberships.getOrDefault(ws.ownerId(), Set.of())
+						: null;
+				if (!reads(group, ownersGroups, storeAcl) && reads(group, ownersGroups, current))
+					shutOut.computeIfAbsent(group, key -> new ArrayList<>()).add(ws.name());
+			}
+		if (shutOut.isEmpty())
+			return;
+
+		Map.Entry<Long, List<String>> first = shutOut.entrySet().iterator().next();
+		String who = capitalize(AclMath.describe(first.getKey()));
+		List<String> matters = first.getValue().stream()
+				.sorted(String.CASE_INSENSITIVE_ORDER.thenComparing(Comparator.naturalOrder())).toList();
+		throw refuse(matters.size() == 1 ? P2_STORE_ONE.formatted(who, label(), matters.get(0))
+				: P2_STORE_MANY.formatted(who, matters.size(), settings.matterLabelPlural().toLowerCase(Locale.ROOT),
+						matters.get(0)),
+				storeId);
+	}
+
+	/**
+	 * @param group a group that can read a matter
+	 * @param ownersGroups the owner's groups, when it's the matter's owner's own group; null otherwise
+	 * @param storeAcl what the Store grants
+	 * @return whether P2 lets the group read the matter: it can read the Store, or it's the owner's own group and the
+	 *         owner is an administrator or in a group that can read the Store, as {@link #canRead} decides
+	 */
+	private static boolean reads(long group, Set<Long> ownersGroups, Map<Long, Set<Permission>> storeAcl) {
+		if (storeAcl.getOrDefault(group, Set.of()).contains(Permission.READ))
+			return true;
+		return ownersGroups != null && (ownersGroups.contains(Group.GROUPID_ADMIN) || ownersGroups.stream()
+				.anyMatch(member -> storeAcl.getOrDefault(member, Set.of()).contains(Permission.READ)));
+	}
+
+	/**
+	 * @return the column's value, null for SQL's NULL
+	 */
+	private static Long nullable(ResultSet rs, int column) throws SQLException {
+		long value = rs.getLong(column);
+		return rs.wasNull() ? null : value;
 	}
 
 	/**
