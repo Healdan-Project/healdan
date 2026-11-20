@@ -72,6 +72,7 @@ browsers() {
   [ -z "$WEB_RESULTS" ] || keep=(-v "$WEB_RESULTS:/results" -e "RESULTS_OWNER=$(id -u):$(id -g)")
   # The workspace is copied in, without node_modules, so npm ci's Linux packages never replace a host's own.
   # (An empty array's expansion is spelt for bash 3.2, which takes a plain one as an unset variable.)
+  # The container's script is in single quotes from mkdir on: an apostrophe in it, in a comment too, ends them.
   docker run --rm --network "$WEB_NETWORK" --ipc=host -e BASE="$WEB_BROWSER_BASE" -e WEBUSER_PASSWORD -e ADMIN_PASSWORD \
     ${keep[@]+"${keep[@]}"} -v "$PWD/healdan-web/web:/src:ro" "mcr.microsoft.com/playwright:v${version}-noble" \
     bash -c "$PROXY "'mkdir /work && cd /src && tar cf - --exclude=node_modules --exclude=dist --exclude=e2e-results . | tar xf - -C /work \
@@ -81,7 +82,7 @@ browsers() {
         # And, with WEB_RESULTS, everything it kept for them goes to the host: each failed test has a folder there
         if [ -d /results ] && [ -d e2e-results ]; then
           # Not the scratch folders of a run stopped at its tenth failure: they hold no finished test. Whatever was
-          # copied is handed over, a copy cut short too, or the host's user couldn't remove it
+          # copied is handed over, a copy cut short too, which the user on the host could not remove otherwise
           cp -R e2e-results/. /results/
           rm -rf /results/.playwright-artifacts-*
           chown -R "$RESULTS_OWNER" /results
