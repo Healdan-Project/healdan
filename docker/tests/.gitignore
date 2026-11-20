@@ -1,0 +1,2 @@
+# The smoke stack's server.xml, which docker/smoke-test.sh makes for each run and removes at its end
+/.smoke-*.server.xml

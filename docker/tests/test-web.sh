@@ -27,9 +27,20 @@
 # finding.spec searches for documents it has just filed, which the search index only has once the Indexer has run
 # (every 30 minutes). docker/smoke-test.sh sets it to every 5 seconds before running this; for a run by hand, do the
 # same (Developer Guide, Tests) and set HEALDAN_INDEXER_FAST=1, or finding.spec waits 80 s and fails.
+# The browser container is removed when it ends, and what Playwright kept for the failed tests goes with it. To keep
+# it, set WEB_RESULTS to a folder, empty or not yet there (in a folder that is, and that Docker can mount): when a test
+# fails, each failed test's folder is copied there, with its trace (trace.zip: every action, the page before and after
+# it, the console and each request with its times), its screenshot and its error-context.md. A run that passes leaves
+# no folder. Open a trace with npx playwright show-trace <folder>/trace.zip, or at trace.playwright.dev.
+# The browser tests may run 30 minutes at most, so a run that hangs fails, and keeps what it can, before CI's job limit
+# would cancel it with nothing kept.
 set -euo pipefail
+# Before the cd, so a relative folder is the caller's
+WEB_RESULTS=${WEB_RESULTS:-}
+case $WEB_RESULTS in '' | /*) ;; *) WEB_RESULTS=$PWD/$WEB_RESULTS ;; esac
 cd "$(dirname "$0")/../.."
 . docker/tests/lib.sh
+if [ -n "$WEB_RESULTS" ]; then results_folder WEB_RESULTS "$WEB_RESULTS" || exit 1; fi
 
 BASE=${BASE:-http://127.0.0.1:18080}
 WEB_NETWORK=${WEB_NETWORK:-host}
@@ -73,15 +84,42 @@ lock=healdan-web/web/package-lock.json
 version=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['packages']['node_modules/@playwright/test']['version'])" "$lock")
 
 browsers() {
+  local keep=() status=0
+  if [ -n "$WEB_RESULTS" ]; then
+    # Made here, just before the container that writes to it, and not by Docker, which would make it as root
+    [ "$RESULTS_MADE" = 0 ] || mkdir "$WEB_RESULTS" || return 1
+    # Mounted for the failed tests' results. The container runs as root, so it hands them to this user.
+    keep=(-v "$WEB_RESULTS:/results" -e "RESULTS_OWNER=$(id -u):$(id -g)")
+  fi
   # The workspace is copied in, without node_modules, so npm ci's Linux packages never replace a host's own. The label
   # lets docker/smoke-test.sh's cleanup remove a container a stopped run left on its stack's network.
+  # (An empty array's expansion is spelt for bash 3.2, which takes a plain one as an unset variable.)
+  # Playwright gets 30 minutes, about three times a run in CI, and is then stopped as Ctrl-C stops it, so that it ends
+  # its tests and the results below are still copied; 124 is timeout's status for that.
+  # The container's script is in single quotes from mkdir on: an apostrophe in it, in a comment too, ends them.
   docker run --rm --label healdan.web-browsers --network "$network" --ipc=host -e BASE="$WEB_BROWSER_BASE" -e WEBUSER_PASSWORD -e ADMIN_PASSWORD \
-    -v "$PWD/healdan-web/web:/src:ro" "mcr.microsoft.com/playwright:v${version}-noble" \
+    ${keep[@]+"${keep[@]}"} -v "$PWD/healdan-web/web:/src:ro" "mcr.microsoft.com/playwright:v${version}-noble" \
     bash -c "$PROXY "'mkdir /work && cd /src && tar cf - --exclude=node_modules --exclude=dist --exclude=e2e-results . | tar xf - -C /work \
-      && cd /work && npm ci --ignore-scripts --no-audit --no-fund && { npx playwright test --reporter=line || { status=$?
+      && cd /work && npm ci --ignore-scripts --no-audit --no-fund \
+      && { timeout --signal=INT --kill-after=2m 30m npx playwright test --reporter=line || { status=$?
+        [ "$status" != 124 ] || echo "== the browser tests were stopped after 30 minutes, the longest they may run"
         # The container goes with its results: the page of each failed test, as Playwright saw it, says what was on screen
         for f in e2e-results/*/error-context.md; do [ -f "$f" ] && { echo "== $f"; head -c 8000 "$f"; echo; }; done
-        exit $status; }; }'
+        # And, with WEB_RESULTS, everything it kept for them goes to the host: each failed test has a folder there
+        if [ -d /results ] && [ -d e2e-results ]; then
+          # Not the scratch folders of a run stopped at its tenth failure: they hold no finished test. Whatever was
+          # copied is handed over, a copy cut short too, which the user on the host could not remove otherwise
+          cp -R e2e-results/. /results/
+          rm -rf /results/.playwright-artifacts-*
+          chown -R "$RESULTS_OWNER" /results
+        fi
+        exit $status; }; }' || status=$?
+  if [ -n "$WEB_RESULTS" ]; then
+    results_finish "$WEB_RESULTS" || true
+    [ -z "$(ls -A "$WEB_RESULTS" 2>/dev/null)" ] \
+      || echo "   a folder for each failed test, with its trace: npx playwright show-trace <folder>/trace.zip"
+  fi
+  return "$status"
 }
 check "every spec in healdan-web/web/e2e/, in Chromium and WebKit" browsers
 

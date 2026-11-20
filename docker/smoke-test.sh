@@ -9,7 +9,15 @@
 # Buildx).
 # Two can run on one machine at once, each with a project name and host ports of its own, for example:
 #   SMOKE_PROJECT=smoke-b SMOKE_PORT=28080 SMOKE_KEYCLOAK_PORT=28180 SMOKE_GARAGE_PORT=23900 docker/smoke-test.sh
+# A run that fails prints what it can of the stack's logs, then removes the stack. SMOKE_RESULTS=<folder>, empty or not
+# yet there (in a folder that is, and that Docker can mount), also keeps what can't be printed: under logs/ the
+# server's logs folder whole (Tomcat's access log, dms.log and each log of its own a task writes), the app's output in
+# app-output.log, and under e2e-results/ each failed browser test's trace and screenshot (docker/tests/test-web.sh's
+# WEB_RESULTS). A run that passes leaves no folder. CI sets it, and uploads the folder when the job fails.
 set -euo pipefail
+# Before the cd, so a relative folder is the caller's
+RESULTS=${SMOKE_RESULTS:-}
+case $RESULTS in '' | /*) ;; *) RESULTS=$PWD/$RESULTS ;; esac
 cd "$(dirname "$0")/.."
 . docker/tests/lib.sh
 
@@ -68,6 +76,8 @@ if [ "${SMOKE_BUILD:-1}" = 0 ] && [ -z "${LOGICALDOC_IMAGE:-}" ] && ! docker ima
   echo "or name the image with LOGICALDOC_IMAGE, such as logicaldoc-community:local, which docker compose build tags."
   refused=1
 fi
+# What a failed run keeps goes into a folder with nothing of another run's in it (docker/tests/lib.sh's results_folder)
+if [ -n "$RESULTS" ]; then results_folder SMOKE_RESULTS "$RESULTS" || refused=1; fi
 [ "$refused" = 0 ] || exit 1
 
 WORK=$(mktemp -d)
@@ -82,10 +92,51 @@ export TZ=UTC
 # docker/tests/compose.signin.yaml adds a stand-in sign-in provider, Keycloak, and makes Healdan seed its setup.
 # docker/tests/compose.storage.yaml adds a stand-in S3 server, Garage, and makes Healdan seed a backend and a Store
 # on it.
+# docker/tests/compose.accesslog.yaml gives Tomcat an access log, for a failed run to read (smoke_server_xml below).
 compose() {
   docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f compose.yaml -f docker/tests/compose.smoke.yaml \
-    -f docker/tests/compose.signin.yaml -f docker/tests/compose.storage.yaml "$@"
+    -f docker/tests/compose.signin.yaml -f docker/tests/compose.storage.yaml -f docker/tests/compose.accesslog.yaml "$@"
 }
+# The smoke stack's server.xml: the one in the image under test, with one valve added to its Host, Tomcat's access log.
+# It's made from the image's own file, so the stack still runs what the image ships, and docker/server.xml, which has no
+# access log, can't drift from it. The log goes beside dms.log in the repository volume, which step 8's restart keeps,
+# so it covers the whole run. A line is the request's start and end, the client's port (one connection's requests share
+# it), the thread that served it, the method, the path with its query, or with Tomcat's - for none, the status, the
+# bytes sent and the time taken in microseconds:
+#   2026-11-20 07:15:02.123 07:15:02.180 rp=51234 http-nio-8080-exec-7 GET /api/v1/me- 200 412 57012us
+# Tomcat writes the line when the answer ends, unbuffered, so a failed run reads every request answered so far. A
+# second valve logs a request Tomcat has been serving for 10 seconds while it still runs, with its thread's stack, in
+# the app's output, so a request with no line is one Tomcat never had, or one it was still serving and said so.
+# The file is in the checkout, one a project, as a Docker engine in a VM may not see WORK (Colima shares only the home
+# folder) but sees the checkout, which the stack mounts other files from. docker/tests/.gitignore leaves it out.
+SERVER_XML=$PWD/docker/tests/.smoke-$PROJECT.server.xml
+ACCESS_LOG=/opt/logicaldoc/repository/logs/access.log
+smoke_server_xml() {
+  local target
+  local access='<Valve className="org.apache.catalina.valves.AccessLogValve" directory="/opt/logicaldoc/repository/logs"'
+  access+=' prefix="access" suffix=".log" rotatable="false" buffered="false" encoding="UTF-8"'
+  access+=' pattern="%{begin:yyyy-MM-dd HH:mm:ss.SSS}t %{end:HH:mm:ss.SSS}t rp=%{remote}p %I %m %U%q %s %b %Dus" />'
+  local stuck='<Valve className="org.apache.catalina.valves.StuckThreadDetectionValve" threshold="10" />'
+  # Where compose.accesslog.yaml mounts it, which has to be the file the image's Tomcat reads
+  target=$(compose config --format json | jq -r --arg source "$SERVER_XML" \
+    '.services.app.volumes[] | select(.type == "bind" and .source == $source) | .target')
+  docker run --rm --entrypoint sh "$IMAGE" -c 'if [ "$1" != "$CATALINA_HOME/conf/server.xml" ]; then
+      echo "  Tomcat reads $CATALINA_HOME/conf/server.xml in the image, and docker/tests/compose.accesslog.yaml mounts the file at $1" >&2
+      exit 1
+    fi
+    cat "$1"' sh "$target" > "$WORK/server.image.xml" || { echo "  couldn't read the image's server.xml"; return 1; }
+  awk -v access="$access" -v stuck="$stuck" \
+    '/<\/Host>/ { print "        " access; print "        " stuck; added++ } { print } END { exit added == 1 ? 0 : 1 }' \
+    "$WORK/server.image.xml" > "$SERVER_XML" \
+    || { echo "  the image's server.xml hasn't one </Host> to add the valves before"; return 1; }
+  # Tomcat reads it as the image's user, whatever this shell's umask made of it
+  chmod 644 "$SERVER_XML"
+}
+# The access log's first line, which is the first request Tomcat answered
+access_log_first() { compose exec -T app head -n 1 "$ACCESS_LOG" 2>/dev/null; }
+# The time step 9 began, as the access log writes times, once its browser tests have failed and no step before them
+# had: a failed run then shows that step's slow requests, and otherwise the whole run's
+WEB_FROM=
 # db_query <SQL>: the app's database, as the app's role over TCP, as the app connects; rows tab-separated, no headers
 db_query() {
   compose exec -T db sh -c 'PGPASSWORD="$HEALDAN_DB_PASSWORD" psql -X -q -At -F "$(printf "\t")" -h 127.0.0.1 -U "$HEALDAN_DB_USER" -d "$HEALDAN_DB_NAME" -c "$1"' sh "$1"
@@ -163,14 +214,38 @@ check_db_log() {
 }
 # The app writes its warnings to dms.log in the repository volume, not to stdout, and step 8 replaces the container
 # but keeps the volume, so the log covers the whole run. docker cp reads it from a stopped container too.
+# Tomcat's access log is beside it (smoke_server_xml above). With SMOKE_RESULTS the whole folder goes there, as some
+# loggers write only to a file of their own (the Indexer's to indexertask.log), and so does the app's whole output,
+# where Tomcat's own warnings go, a request it has been serving for 10 seconds among them.
 show_server_log() {
-  local cid dir=$WORK/logs f
+  local cid dir=$WORK/logs
   cid=$(compose ps -aq app 2>/dev/null | head -1)
-  if [ -z "$cid" ] || ! docker cp "$cid:/opt/logicaldoc/repository/logs/." "$dir" >/dev/null 2>&1 \
-    || [ ! -f "$dir/dms.log" ]; then
-    echo "== no dms.log to show"
+  if [ -z "$cid" ] || ! docker cp "$cid:/opt/logicaldoc/repository/logs/." "$dir" >/dev/null 2>&1; then
+    echo "== no dms.log or access.log to show"
     return 0
   fi
+  # Before the lines below add their own files to the folder
+  if [ -n "$RESULTS" ] && mkdir -p "$RESULTS"; then
+    cp -R "$dir" "$RESULTS/logs"
+    compose logs --no-log-prefix app > "$RESULTS/app-output.log" 2>&1
+  fi
+  if [ -f "$dir/dms.log" ]; then show_dms_log "$dir"; else echo "== no dms.log to show"; fi
+  if [ -f "$dir/access.log" ]; then show_slow_requests "$dir/access.log"; else echo "== no access.log to show"; fi
+}
+# show_slow_requests <access log>: the requests Tomcat took 2 seconds or more to answer, the last 40 of them. When
+# step 9 was the first step to fail, those since it began: a browser test that waited on a request finds it here, or
+# learns that the server answered it at once or not at all. Otherwise the whole run's, which has slow requests of its
+# own (a start's first pages, the previews, step 5f's outage).
+show_slow_requests() {
+  local slow=$WORK/slow-requests of="the run's"
+  [ -z "$WEB_FROM" ] || of="those since step 9 began, at ${WEB_FROM#* },"
+  awk -v from="$WEB_FROM" '{ us = $NF; sub(/us$/, "", us) } us + 0 >= 2000000 && ($1 " " $2) >= from' "$1" > "$slow"
+  echo "== access.log: $(wc -l < "$1" | tr -d ' ') requests; of $of $(wc -l < "$slow" | tr -d ' ') took 2 s or more" \
+    "(start, end, client's port, thread, request, status, bytes, time taken; times in UTC)"
+  tail -n 40 "$slow" | cut -c 1-300
+}
+show_dms_log() {
+  local dir=$1 f last
   # It rolls over at 5 MB into dms.log.1, .2, …, the higher the newer.
   for f in "$dir"/dms.log.[0-9] "$dir/dms.log"; do [ -f "$f" ] && cat "$f"; done > "$dir/run.log"
   # An entry starts "dd.MM.yyyy HH:mm:ss,SSS LEVEL". A warning or error keeps its exception's messages and "Caused
@@ -222,6 +297,9 @@ cleanup() {
   compose down -v --remove-orphans >/dev/null 2>&1
   docker rm -f "$CLAIM" >/dev/null 2>&1
   rm -rf "$WORK"
+  rm -f "$SERVER_XML"
+  # SMOKE_RESULTS: a run that kept nothing leaves no folder it made, and one that kept something says where
+  [ -z "$RESULTS" ] || results_finish "$RESULTS"
 }
 # The claim: a container named for the project, which Docker makes only once, so of two runs started together one
 # gets it. Running, it holds the three ports through the build, where another run's check above finds them in use,
@@ -246,6 +324,7 @@ trap cleanup EXIT
 
 printf "DB_PASSWORD='%s'\nLOGICALDOC_IMAGE=%s\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\nSMOKE_GARAGE_PORT=%s\n" \
   "$PW" "$IMAGE" "$PORT" "$KEYCLOAK_PORT" "$GARAGE_PORT" > "$ENV_FILE"
+printf "SMOKE_SERVER_XML='%s'\n" "$SERVER_XML" >> "$ENV_FILE"
 # Asks for the JVM's Base64 intrinsics and has it print its final flags, for step 2's check (Docker spec §17).
 echo "CATALINA_OPTS='-Xmx2g -XX:+UseBASE64Intrinsics -XX:+PrintFlagsFinal'" >> "$ENV_FILE"
 
@@ -308,6 +387,8 @@ if [ "${SMOKE_BUILD:-1}" = 0 ]; then
 else
   compose build
 fi
+check "the image's server.xml with an access log and a stuck-request warning added, for this stack" smoke_server_xml
+[ "$FAILED" = 0 ] || exit 1
 # The claim has held the ports through the build. Stopped, it keeps the project claimed, and the stack takes them.
 docker kill "$CLAIM" >/dev/null 2>&1 || true
 compose up -d --no-build
@@ -325,6 +406,10 @@ echo "Garage started and set up in ${garage_started%%$'\n'*} s"
 
 echo "== 2. login page and the API"
 check "GET /login.jsp is 200" test "$(http_code "$BASE/login.jsp")" = 200
+# A failed run reads Tomcat's access log, so it has to be there, in the form show_slow_requests reads
+access_first=$(access_log_first || true)
+check "Tomcat writes its access log, a request a line with its times" grep -Eq \
+  '^[0-9-]{10} [0-9:.]{12} [0-9:.]{12} rp=[0-9]+ [^ ]+ [A-Z]+ /[^ ]* [0-9]{3} [^ ]+ [0-9]+us$' <<<"$access_first"
 # A fresh stack's first start asks for no restart: DockerInit installs LogicalDOC's plugins before Tomcat starts (Docker
 # spec §15). The sign-in page shows the alerts in the GUIInfo that getInfo answers, and GUIInfo holds GUIMessages only
 # there, so an answer that names no GUIMessage shows none. The phrase itself is no test: the answer's bundle has it.
@@ -714,6 +799,9 @@ check "the conf volume holds the old security.csp" test "$(compose exec -T -e LC
 compose down
 compose up -d
 check "app healthy again" wait_healthy "$(compose ps -q app)" 900
+# The repository volume kept it, and the new container's Tomcat adds to it, so it covers the whole run
+access_log_kept() { [ -n "$access_first" ] && [ "$(access_log_first)" = "$access_first" ]; }
+check "the access log still begins with the first start's first request" access_log_kept
 names=$(api -H 'Accept: application/json' "$BASE/services/rest/document/list?folderId=$doc_folder" | jq -r '.[].fileName')
 check "smoke.pdf still listed" grep -qx smoke.pdf <<<"$names"
 check "smoke.png still listed" grep -qx smoke.png <<<"$names"
@@ -745,7 +833,17 @@ check "the Indexer runs every 5 seconds for the browser's searches" fast_indexer
 # organising, the keyboard walk and the accessibility scans); then curl checks the web session's forgery refusals. Its
 # output carries its own PASS/FAIL lines.
 web_started=$SECONDS
-check "the User app in the browser" env BASE="$BASE" HEALDAN_INDEXER_FAST=1 bash docker/tests/test-web.sh
+web_began=$(date -u '+%Y-%m-%d %H:%M:%S')
+# With SMOKE_RESULTS, each failed browser test's trace and screenshot are kept under it, in a folder made here, as
+# test-web.sh makes only the one it's given
+[ -z "$RESULTS" ] || mkdir -p "$RESULTS"
+# A failed run shows step 9's slow requests only when no step before it had failed: one that had may have broken the
+# stack for step 9 too, and its own slow requests are earlier
+web_test() {
+  env BASE="$BASE" HEALDAN_INDEXER_FAST=1 WEB_RESULTS="${RESULTS:+$RESULTS/e2e-results}" bash docker/tests/test-web.sh \
+    || { [ "$FAILED" != 0 ] || WEB_FROM=$web_began; return 1; }
+}
+check "the User app in the browser" web_test
 echo "step 9 took $((SECONDS - web_started)) s"
 # The db container step 8 made: its log holds steps 8 and 9
 check "PostgreSQL's log, steps 8 and 9, read against $DB_LOG_EXPECTED (unexpected lines reported, not yet failing)" \
