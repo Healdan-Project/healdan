@@ -6,8 +6,8 @@ name: Docker image
 # - Every pull request and push that changes more than docs: per architecture, the init tool's unit tests and
 #   WarParsersTest (target "tools"), then the image, then docker/smoke-test.sh against that image through
 #   compose.yaml. Its step 5d runs the helper's stack tests (clients/helper) against the smoke stack, with the .NET SDK
-#   set up beforehand. A smoke test that fails uploads what it kept (the server's logs, Tomcat's access log and the
-#   failed browser tests' traces) as the artifact smoke-results-<arch>-attempt-<n>, kept 14 days.
+#   set up beforehand. A smoke test that fails uploads what it kept (the server's logs, Tomcat's access log, the app's
+#   output and the failed browser tests' traces) as the artifact smoke-results-<arch>-attempt-<n>, kept 14 days.
 #   A docs-only pull request runs the test job with those steps skipped, so it still reports the required checks.
 #   The Maven build gets its dependencies from an actions/cache copy instead of downloading them each time.
 # - Pushes to master and v* tags, once publishing is switched on: rebuilds each architecture from the test job's
@@ -212,23 +212,26 @@ jobs:
           LOGICALDOC_IMAGE: logicaldoc-community:ci
           SMOKE_BUILD: '0'
           SMOKE_HELPER_TEST: '1'
-          # What a failed run keeps for the next step to upload. A run that passes leaves no folder.
+          # What a failed run keeps for the next step to upload. A run that passes leaves no folder. Named only here:
+          # the step's output hands it to the upload (a job's env can't read the runner context).
           SMOKE_RESULTS: ${{ runner.temp }}/smoke-results
           DOTNET_NOLOGO: '1'
           DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-        run: bash docker/smoke-test.sh
+        run: |
+          echo "results=$SMOKE_RESULTS" >> "$GITHUB_OUTPUT"
+          bash docker/smoke-test.sh
 
-      # What the smoke test's own output can't hold, for saying why it failed once its stack is gone: Tomcat's access
-      # log and the server's log, both whole, and each failed browser test's trace and screenshot. Only when the smoke
-      # test failed, so a run that passes uploads nothing. The attempt is in the name so that a failed job run again
-      # uploads beside its first attempt's artifact, never in its place: when the second attempt passes, the first's
-      # is the only record of the failure.
+      # What the smoke test's own output can't hold, for saying why it failed once its stack is gone: the server's logs
+      # folder whole, Tomcat's access log in it, the app's output, and each failed browser test's trace and screenshot.
+      # Only when the smoke test failed, so a run that passes uploads nothing. The attempt is in the name so that a
+      # failed job run again uploads beside its first attempt's artifact, never in its place: when the second attempt
+      # passes, the first's is the only record of the failure.
       - name: Upload the smoke test's results
         if: failure() && steps.smoke.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
           name: smoke-results-${{ matrix.arch }}-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/smoke-results
+          path: ${{ steps.smoke.outputs.results }}
           # A run that failed before its stack was up kept nothing
           if-no-files-found: ignore
           retention-days: 14

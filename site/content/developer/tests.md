@@ -537,10 +537,10 @@ at the end of the `Smoke test` step of the `Test (amd64)` or `Test (arm64)` job:
   failure.
 - **`dms.log`'s last 40 lines.**
 - **The requests Tomcat took 2 seconds or more to answer,** from [its access log](#the-access-log), the last 40 of
-  them, after a line that counts the log's requests. When step 9 failed, only that step's: a browser test that
-  waited on a request finds it there with its time, or learns that the server answered at once or not at all.
-  When another step failed, the whole run's, which has slow requests of its own (a start's first pages, the
-  previews, step 5f's outage).
+  them, after a line that counts the log's requests. When step 9 was the first step to fail, only that step's: a
+  browser test that waited on a request finds it there with its time, or learns that the server answered at once or
+  not at all. Otherwise the whole run's, which has slow requests of its own (a start's first pages, the previews,
+  step 5f's outage): a step that failed earlier may have broken the stack for step 9 too.
 
 When a browser test in step 9 fails, `docker/tests/test-web.sh` also prints the page of each failed test as Playwright
 saw it (its `error-context.md`), before the container that ran them goes. It's in the step's output, after the line
@@ -557,9 +557,14 @@ each request. The smoke stack's does, so that a failed run can say whether a req
 how long the answer took:
 
 - **`docker/smoke-test.sh` makes the stack's `server.xml` from the image's own** (`smoke_server_xml`): it reads the
-  file out of the image it tests and adds one valve to its `Host`. `docker/tests/compose.accesslog.yaml`, an overlay
+  file out of the image it tests and adds two valves to its `Host`. `docker/tests/compose.accesslog.yaml`, an overlay
   only the smoke test adds, mounts the result over the image's. So the stack still runs the `server.xml` the image
-  ships, the two can't drift, and `docker/server.xml` stays as it is.
+  ships, the two can't drift, and `docker/server.xml` stays as it is. The overlay's mount is the one place that
+  names Tomcat's folder: the script reads the image's file there, and stops when the image's `CATALINA_HOME` isn't
+  that folder.
+- **The file is `docker/tests/.smoke-<project>.server.xml`,** in the checkout, which a Docker engine in a VM shares
+  as the stack mounts other files from it, where the temporary folder may not be shared (Colima shares only the home
+  folder). `docker/tests/.gitignore` leaves it out, and the run removes it at its end.
 - **The log is `repository/logs/access.log`,** beside `dms.log` in the repository volume, which step 8's restart
   keeps. Tomcat writes a request's line when its answer ends, and the log is unbuffered, so a failed run reads every
   request answered so far.
@@ -572,6 +577,9 @@ how long the answer took:
   2026-11-20 07:15:02.201 07:15:02.215 rp=51234 http-nio-8080-exec-3 GET /api/v1/users?q=web 200 388 13544us
   ```
 
+- **A request still being served after 10 seconds is reported while it runs.** The second valve, Tomcat's
+  `StuckThreadDetectionValve`, writes a warning to the app's output with the request and its thread's stack, and
+  another when it ends. So a request the access log has no line for is one Tomcat never had, or one it warned of.
 - **Step 2 checks that the log is written in that form,** and step 8 that it still begins with the first start's
   first request, so a run that needs the log finds it.
 
@@ -585,17 +593,23 @@ can't be printed, in that folder:
 
 | In the folder | What it is |
 |---|---|
-| `access.log` | Tomcat's [access log](#the-access-log), whole |
-| `dms.log` | the server's log, whole, its rolled-over files joined in order |
+| `logs/` | the server's logs folder, whole: Tomcat's [access log](#the-access-log) (`access.log`), `dms.log` and the files it rolled over into (`dms.log.1` to `.5`, the higher the newer), and each log a task writes of its own, such as the Indexer's `indexertask.log`, whose lines `dms.log` doesn't get |
+| `app-output.log` | the app container's whole output, where Tomcat's own warnings go, a request still being served after 10 seconds among them |
 | `e2e-results/` | when a browser test failed: a folder for each failed test, with its `trace.zip`, its screenshot (`test-failed-1.png`) and its `error-context.md` |
+
+LogicalDOC's `log.xml` keeps five rolled-over files of 5 MB each, so a run whose `dms.log` grew past about 30 MB has
+lost its first lines. `app-output.log` is the container step 8 started; the first one's output is gone with it.
 
 ```bash
 SMOKE_RESULTS=/tmp/smoke-results docker/smoke-test.sh
 ```
 
-- **The folder is empty or not there yet, in a folder that is there.** The script refuses one that holds anything,
-  so nothing in it is another run's, and makes only the folder named. A run that passes keeps nothing, and leaves no
-  folder it made.
+- **The folder is empty or not there yet, in a folder that is there and that Docker can mount.** The script refuses
+  one that holds anything, so nothing in it is another run's, and makes only the folder named. It checks Docker can
+  mount the folder it's in by making a file there that a container has to see: a Docker engine in a VM sees only the
+  host's folders it shares (Docker Desktop's `/Users`, `/private`, `/tmp` and `/var/folders` by default, Colima's
+  home folder only). A run that passes keeps nothing, and leaves no folder it made. `docker/tests/lib.sh`'s
+  `results_folder` and `results_finish` hold these rules for both scripts.
 - **A trace is Playwright's record of one test:** every action with the page before and after it, the console, and
   each request the page and the spec made, with its times and its answer. Open it with
   `npx playwright show-trace <folder>/trace.zip` in `healdan-web/web`, or drop it on
@@ -604,10 +618,15 @@ SMOKE_RESULTS=/tmp/smoke-results docker/smoke-test.sh
   `playwright.config.ts`).
 - **A request the page waited on is in both.** The trace has when the browser sent it and whether an answer came; the
   access log has when Tomcat began to serve it and for how long. A request in the trace with no line in the access
-  log was never answered: it didn't reach Tomcat, or Tomcat was still serving it when the run ended.
+  log was never answered: it didn't reach Tomcat, or Tomcat was still serving it when the run ended, which
+  `app-output.log` then has a warning of if it ran 10 seconds.
 - **`docker/tests/test-web.sh` takes `WEB_RESULTS=<folder>`** for a run by hand, on the same terms: empty or not
-  there yet, in a folder that is, each failed test's folder copied into it, and no folder left by a run that passes.
-  The smoke test sets it to `e2e-results` in its own folder.
+  there yet, in a folder that is and that Docker can mount, each failed test's folder copied into it, and no folder
+  left by a run that passes. It makes the folder just before the browsers' container starts. The smoke test sets it
+  to `e2e-results` in its own folder.
+- **The browser tests run 30 minutes at most.** `test-web.sh` then stops Playwright as Ctrl-C does, so it ends its
+  tests and the results are still copied, and says so. A run in CI takes about 8 to 11 minutes, and a hang would
+  otherwise run until the job's limit cancelled it, with nothing kept.
 - **In CI** the image workflow sets `SMOKE_RESULTS` and uploads the folder when the smoke test fails (see
   [The Smoke Test's Results in the Image CI](../continuous-integration/#the-smoke-tests-results-in-the-image-ci)).
 - **Everything in it is the smoke stack's:** invented documents, and accounts whose passwords are in this

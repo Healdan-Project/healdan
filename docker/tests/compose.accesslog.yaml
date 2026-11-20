@@ -1,8 +1,10 @@
 # Smoke test only: Tomcat's access log, so a failed run can say whether a request reached the server and how long it
-# took. The app runs with the image's own server.xml and one valve more, an AccessLogValve that writes
-# repository/logs/access.log in the repository volume, beside dms.log. docker/smoke-test.sh makes that file from the
-# image it tests (smoke_server_xml) and names it in SMOKE_SERVER_XML, so it can't drift from docker/server.xml, which
-# stays without an access log. Tomcat's folder is the image's CATALINA_HOME.
+# took. The app runs with the image's own server.xml and two valves more: an AccessLogValve that writes
+# repository/logs/access.log in the repository volume, beside dms.log, and a StuckThreadDetectionValve that warns of a
+# request still being served after 10 seconds. docker/smoke-test.sh makes that file from the image it tests
+# (smoke_server_xml) and names it in SMOKE_SERVER_XML, so it can't drift from docker/server.xml, which stays without
+# either. The target below is the one place that names Tomcat's folder: smoke_server_xml reads the image's file there,
+# and stops when the image's CATALINA_HOME isn't that folder.
 services:
   app:
     volumes:

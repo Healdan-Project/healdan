@@ -247,21 +247,23 @@ The smoke test removes its stack when it ends, and the browser tests' container 
 run printed was all that was left of it. A single browser test failing now and then couldn't be explained from that:
 nothing said whether the request its page waited on had reached the server. So `docker-image.yml` sets
 `SMOKE_RESULTS` for the smoke test, and when the smoke test fails its next step, "Upload the smoke test's results",
-uploads the folder (see [What a Failed Run Keeps](../tests/#what-a-failed-run-keeps)):
+uploads the folder (see [What a Failed Run Keeps](../tests/#what-a-failed-run-keeps)). The folder is named once, in
+the smoke test's step, which hands it to the upload as its output `results`:
 
 - **The artifact is `smoke-results-<arch>-attempt-<n>`,** such as `smoke-results-amd64-attempt-1`, on the run's
-  page, kept 14 days. It holds Tomcat's access log and the server's log, both whole, and under `e2e-results/` a
-  folder for each failed browser test with its trace and screenshot.
+  page, kept 14 days. It holds the server's logs folder whole under `logs/`, Tomcat's access log among them, the
+  app's output, and under `e2e-results/` a folder for each failed browser test with its trace and screenshot.
   `gh run download <run id> --name smoke-results-amd64-attempt-1` fetches it.
 - **Only a failed smoke test uploads.** A run that passes keeps no folder and uploads nothing, and a failure in
   another step uploads nothing either. A smoke test that failed before its stack was up has nothing to upload,
-  which the step lets pass.
+  which the step lets pass. A job cancelled at its 90-minute limit uploads nothing, so the browser tests, the step
+  most likely to hang, are stopped after 30 minutes, which fails the smoke test in time to keep its results.
 - **The attempt is in the name,** so a failed job run again uploads beside its first attempt's artifact, never in
   its place. When the second attempt passes, the first attempt's artifact is the only record of the failure.
 - **It costs a run that passes nothing** but Tomcat writing a line for each request, about 9,000 in a run.
 - **Artifacts aren't Actions caches,** so they take none of the 10 GB under [Room for the Caches](#room-for-the-caches).
 - **Read it** with `npx playwright show-trace <test's folder>/trace.zip`, and find the request the page waited on in
-  `access.log` by its time and path ([The Access Log](../tests/#the-access-log) has the line's form).
+  `logs/access.log` by its time and path ([The Access Log](../tests/#the-access-log) has the line's form).
 
 ### The Move's Test in the Image CI
 
