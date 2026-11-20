@@ -18,6 +18,7 @@ import { useMe, useTrash } from '../queries'
 import { useApi } from '../services'
 import { Toolbar } from './Toolbar'
 import { deletedFromText, DestroyIn, itemCount, placeText, TrashDetails, trashIcon } from './TrashDetails'
+import { useColumnLayout, type ListKind } from './columnLayouts'
 import { pagedState, type ListingOrder } from './useListing'
 import styles from './views.module.css'
 
@@ -57,11 +58,14 @@ const name: TableColumn<TrashRow> = {
 }
 const docNumber: TableColumn<TrashRow> = { id: 'docNumber', name: t('trash.docNumber'), align: 'end', width: 96, cell: ({ item }) => (item.docNumber === null ? '' : String(item.docNumber)) }
 const deletedFrom: TableColumn<TrashRow> = { id: 'deletedFrom', name: t('trash.deletedFrom'), width: '2fr', cell: ({ item }) => deletedFromText(item) }
-const deleted: TableColumn<TrashRow> = { id: 'deleted', name: t('trash.deleted'), allowsSorting: true, width: 132, cell: ({ item }) => formatDate(item.deletedAt) }
+const deleted: TableColumn<TrashRow> = { id: 'deleted', name: t('trash.deleted'), allowsSorting: true, newestFirst: true, width: 132, cell: ({ item }) => formatDate(item.deletedAt) }
 const deletedBy: TableColumn<TrashRow> = { id: 'deletedBy', name: t('trash.deletedBy'), width: '1fr', cell: ({ item }) => item.deletedBy?.name ?? '' }
 const removedBy: TableColumn<TrashRow> = { id: 'removedBy', name: t('trash.removedBy'), width: '1fr', cell: ({ item }) => item.removedBy?.name ?? t('trash.notRecorded') }
-const removed: TableColumn<TrashRow> = { id: 'removed', name: t('trash.removed'), allowsSorting: true, width: 132, cell: ({ item }) => (item.removedAt ? formatDate(item.removedAt) : '') }
+const removed: TableColumn<TrashRow> = { id: 'removed', name: t('trash.removed'), allowsSorting: true, newestFirst: true, width: 132, cell: ({ item }) => (item.removedAt ? formatDate(item.removedAt) : '') }
 const destroyed: TableColumn<TrashRow> = { id: 'destroyed', name: t('trash.destroyed'), width: 120, cell: ({ item }) => <DestroyIn destroyAfter={item.destroyAfter} /> }
+
+/** The kept widths of each view are its own (spec 4.8): the Trash's columns aren't chosen */
+const kindOf: Record<TrashViewName, ListKind> = { mine: 'trashMine', everyone: 'trashEveryone', removed: 'trashRemoved' }
 
 const columnsOf: Record<TrashViewName, TableColumn<TrashRow>[]> = {
   mine: [name, docNumber, deletedFrom, deleted],
@@ -214,6 +218,7 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
   }
 
   const columns = columnsOf[view]
+  const layout = useColumnLayout(kindOf[view], columns.map((column) => column.id))
   const rows = useMemo(() => items.map(rowOf), [items])
   const byKey = useMemo(() => new Map(items.map((item) => [keyOf(item), item])), [items])
   // What a key acts on: the selection when the row is in it, else the row alone
@@ -307,6 +312,8 @@ export function TrashView({ view: asked, sort, order }: TrashViewProps) {
               rows={rows}
               sort={shown}
               onSort={sortBy}
+              resizing={{ widths: layout.widths, onResizeEnd: layout.resized, onReset: layout.resetWidth }}
+              onResetColumns={layout.reset}
               selectionMode="multiple"
               selection={selection}
               onSelectionChange={setChosen}

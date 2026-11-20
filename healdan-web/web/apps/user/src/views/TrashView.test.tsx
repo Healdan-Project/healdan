@@ -148,6 +148,59 @@ describe('The Trash', () => {
     expect(within(await grid()).getByRole('columnheader', { name: /Deleted From/ }).hasAttribute('aria-sort')).toBe(false)
   })
 
+  it("sorts Deleted newest first at its first click, as the server's own order is", async () => {
+    const { router } = await renderApp('/trash?sort=name&order=asc', routes())
+    await row(/Old Drafts/)
+    fireEvent.click(within(await grid()).getByRole('columnheader', { name: /Deleted$/ }))
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ sort: 'deleted', order: 'desc' }))
+  })
+
+  it("the Trash's columns resize, and keep their sorts", async () => {
+    localStorage.clear()
+    const { api, router } = await renderApp('/trash', routes({ 'GET /v1/me': admin }))
+    await row(/Old Drafts/)
+    const heading = async (name: RegExp) => within(await grid()).getByRole('columnheader', { name })
+    // Every heading carries a resizer
+    for (const one of within(await grid()).getAllByRole('columnheader')) expect(within(one).getByRole('slider')).toBeTruthy()
+    // A kept width is drawn on its column
+    localStorage.setItem('healdan.columns.trashMine', JSON.stringify({ v: 1, widths: { docNumber: 140 } }))
+    await userEvent.click(within(await within(main()).findByRole('radiogroup', { name: 'Show' })).getByRole('radio', { name: "Everyone's" }))
+    await waitFor(async () => expect(await headers()).toContain('Deleted By'))
+    await userEvent.click(within(main()).getByRole('radio', { name: 'Mine' }))
+    await waitFor(async () => expect((await heading(/Doc #/)).style.width).toBe('140px'))
+    // A resize by keys ends with the width kept under this view's name only
+    const slider = within(await heading(/Doc #/)).getByRole('slider')
+    act(() => slider.focus())
+    fireEvent.keyDown(slider, { key: 'Enter' })
+    fireEvent.keyUp(slider, { key: 'Enter' })
+    fireEvent.keyDown(slider, { key: 'ArrowRight' })
+    fireEvent.keyUp(slider, { key: 'ArrowRight' })
+    fireEvent.keyDown(slider, { key: 'Enter' })
+    fireEvent.keyUp(slider, { key: 'Enter' })
+    await waitFor(() => expect(JSON.parse(localStorage.getItem('healdan.columns.trashMine')!).widths.docNumber).toBe(150))
+    expect(localStorage.getItem('healdan.columns.trashEveryone')).toBeNull()
+    expect(localStorage.getItem('healdan.columns.trashRemoved')).toBeNull()
+    // Reset Columns, from a heading's menu, forgets it
+    fireEvent.contextMenu(await heading(/Doc #/))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Reset Columns' }))
+    await waitFor(() => expect(localStorage.getItem('healdan.columns.trashMine')).toBeNull())
+    // The sorts still go to the server
+    fireEvent.click(await heading(/Name/))
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ sort: 'name', order: 'asc' }))
+    await waitFor(() => expect(api.callsTo('GET /v1/trash').at(-1)?.query).toEqual({ view: 'mine', sort: 'name', order: 'asc', offset: 0, limit: 100 }))
+    // Removed keeps its own widths
+    await userEvent.click(within(main()).getByRole('radio', { name: 'Removed' }))
+    await waitFor(async () => expect(await headers()).toContain('Removed By'))
+    const removedSlider = within(await heading(/Doc #/)).getByRole('slider')
+    act(() => removedSlider.focus())
+    for (const key of ['Enter', 'ArrowRight', 'Enter']) {
+      fireEvent.keyDown(removedSlider, { key })
+      fireEvent.keyUp(removedSlider, { key })
+    }
+    await waitFor(() => expect(localStorage.getItem('healdan.columns.trashRemoved')).not.toBeNull())
+    expect(localStorage.getItem('healdan.columns.trashMine')).toBeNull()
+  })
+
   it('says where deleted items go when there are none, and offers nothing to restore', async () => {
     await renderApp('/trash')
     expect(await within(main()).findByText('Nothing in the Trash.')).toBeTruthy()
