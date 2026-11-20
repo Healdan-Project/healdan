@@ -1,13 +1,43 @@
 /* SPDX-FileCopyrightText: 2026 The Healdan Project
    SPDX-License-Identifier: LGPL-3.0-only */
 
+/* Where the list is drawn (useListLayer in ComboBox.tsx): right after the box in the page, but as big as the window and
+   fixed over it, so an element round the box that clips or scrolls (overflow) can't cut the list off, and one that is
+   positioned can't move it (React Aria 1.22 places a list inside a positioned element wrongly, shifting it by its 12-pixel
+   padding). That holds while nothing round the box holds what is fixed inside it: a transform, a filter or backdrop-filter,
+   a perspective, will-change of one of them, or containment (contain: layout or paint, container-type) would shrink the
+   layer to that element and let its overflow cut the list off, so a combo box never goes inside one (the a11y specs check
+   that the layer covers the window). Above the page's own layers (its panes' 20), below a dialog's (100); it takes no
+   clicks itself, only its list does, and while it's empty (the list closed) it isn't drawn at all. */
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+}
+
+.layer:empty {
+  display: none;
+}
+
+/* A column, so the scroller inside it takes what's left of the height React Aria gives it */
 .popover {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
   width: var(--trigger-width);
   max-height: 60vh;
-  overflow: auto;
   border-radius: var(--hd-radius);
   background: var(--hd-window);
   box-shadow: var(--hd-shadow-popup);
+}
+
+/* What scrolls when the options don't fit (ListPopover, whose tabindex keeps it out of the Tab order), clipped to the
+   popover's corners */
+.scroller {
+  min-height: 0;
+  overflow: auto;
+  border-radius: inherit;
 }
 
 .list {

@@ -3,7 +3,7 @@
 
 import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import { expectNoViolations } from './axe'
-import { ADMIN_PASSWORD, ADMIN_USERNAME, signIn } from './helpers'
+import { ADMIN_PASSWORD, ADMIN_USERNAME, expectListUnder, signIn } from './helpers'
 
 // An axe pass on Healdan Admin's Dashboard (admin spec 8.1 and 17.1), with its frame's find, Help and person menus, in the
 // light theme and in the dark one, which Playwright's `colorScheme` switches as the system's setting would, and in a
@@ -63,12 +63,13 @@ for (const scheme of ['light', 'dark'] as const) {
       // Client 1 and matter 1.1, each under its kind's heading
       await expect(found).toContainText('Smoke Client')
       await expect(found).toContainText('Smoke Matter')
-      // The list on its own: while it's open, React Aria's combo box hides the rest of the page from screen readers
-      // (aria-hidden on the top bar's other parts, the left pane and the main area, which hold links), so a check of the
-      // whole page fails axe's aria-hidden-focus and its rules for the page's main landmark and heading, as the User app's
-      // search box, the same component, would. The list sits in a popover outside every landmark, as React Aria draws
-      // it, so axe's `region` isn't run on it. Its options, their headings and their colours are checked.
-      await expectNoViolations(page, `the find's list (${scheme})`, '[role="listbox"]', ['region'])
+      // The whole page with the list open: the list comes right after the box, inside the find's search landmark, and the
+      // page around it stays shown to a screen reader (@healdan/ui's ComboBox), so nothing hidden holds a link
+      // (aria-hidden-focus) and the page keeps its main landmark and heading. Its options, their headings and their colours
+      // are checked with it.
+      await check("the find's list")
+      // Drawn over the window, under the find's field, though the field is positioned and padded
+      await expectListUnder(banner().getByRole('search'))
       await page.keyboard.press('Escape')
       await find.fill('')
       await expect(found).toBeHidden()
