@@ -4,8 +4,8 @@
 import { useContext, useState, type Key } from 'react'
 import { ComboBox as AriaComboBox, ComboBoxStateContext, FieldError, Input, Label, ListBox, ListBoxItem, type InputProps } from 'react-aria-components'
 import { Icon, type IconName } from '../icons'
+import { ListPopover, useListLayer } from './ComboBox'
 import comboStyles from './ComboBox.module.css'
-import { ComboBoxLayer, ComboBoxPopover } from './ComboBoxLayer'
 import { OpensWhenOptionsCome } from './OpensWhenOptionsCome'
 import styles from './Fields.module.css'
 
@@ -53,16 +53,14 @@ function PickInput(props: InputProps) {
 /**
  * A field that picks one of many, found as the person types (a React Aria ComboBox with its label above it, as the
  * other fields have): an option is picked with the arrow keys and Enter, or a click. Text left half typed goes back to
- * what was picked; an emptied box picks nothing. The list comes right after the field, so it is in the caller's form or
- * dialog, and what is round it, a dialog's other fields too, stays shown to a screen reader while it's open
- * (`ComboBoxLayer`, as for `ComboBox`).
+ * what was picked; an emptied box picks nothing. Its list is drawn as ComboBox's is (ListPopover), right after the field,
+ * with the page around it left shown to a screen reader.
  */
 export function PickField({ label, required, error, value, onChange, options, onTextChange }: PickFieldProps) {
+  const [layer, layerElement] = useListLayer()
   const [text, setText] = useState(value?.label ?? '')
   // A value changed from outside (the form opening again) shows its label: set as it draws, not in an effect
   const [shown, setShown] = useState(value)
-  // Where the list is drawn (ComboBoxLayer)
-  const [layer, setLayer] = useState<HTMLDivElement | null>(null)
   if (shown?.id !== value?.id || shown?.label !== value?.label) {
     setShown(value)
     setText(value?.label ?? '')
@@ -131,7 +129,7 @@ export function PickField({ label, required, error, value, onChange, options, on
         <PickInput className={styles.input} onBlur={leave} />
         <OpensWhenOptionsCome text={text} hasOptions={found} />
         <FieldError className={styles.error}>{error}</FieldError>
-        <ComboBoxPopover layer={layer} className={comboStyles.popover} placement="bottom start" offset={4}>
+        <ListPopover layer={layer}>
           <ListBox className={comboStyles.list}>
             {(option: PickFieldOption) => (
               <ListBoxItem id={option.id} textValue={option.label} className={comboStyles.option}>
@@ -149,9 +147,9 @@ export function PickField({ label, required, error, value, onChange, options, on
               </ListBoxItem>
             )}
           </ListBox>
-        </ComboBoxPopover>
+        </ListPopover>
       </AriaComboBox>
-      <ComboBoxLayer onLayer={setLayer} />
+      {layerElement}
     </>
   )
 }

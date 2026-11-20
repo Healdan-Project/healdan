@@ -22,10 +22,14 @@ export async function signIn(page: Page, who: { username: string; password: stri
   // The page keeps hidden copies of its fields, so only the visible ones count.
   const user = page.locator('input[placeholder="username"]:visible')
   const password = page.locator('input[placeholder="password"]:visible')
-  // The smoke stack has a provider set up, so the password form is folded behind a link until it's chosen.
-  const fold = page.getByText('Sign In with a Password')
-  await expect(user.or(fold).first()).toBeVisible()
-  if (!(await user.isVisible())) await fold.click()
+  // The page draws the password form first, then asks the server for its sign-in providers, and with any (the smoke stack
+  // has one) folds the form behind a link when the answer comes. A look at the page can't tell a form that stays from one
+  // about to be folded: a field found visible was folded away before it was filled, and the fill waited until the test's
+  // time ran out, with no sign-in ever sent. So this waits for the mark the page puts on its body once that question is
+  // settled, answered or not (HealdanSignInButtons): `folded` when the form went behind the link, which this then opens.
+  const settled = page.locator('body[data-healdan-signin]')
+  await expect(settled).toBeAttached()
+  if ((await settled.getAttribute('data-healdan-signin')) === 'folded') await page.locator('[data-healdan-signin-link]').click()
   await user.fill(who.username)
   await password.fill(who.password)
   await password.press('Enter')
@@ -167,4 +171,34 @@ export async function tabTo(page: Page, target: Locator, options: { from?: Locat
     await page.keyboard.press('Tab')
   }
   throw new Error(`Tab didn't reach ${target} in ${limit} presses`)
+}
+
+/**
+ * Where @healdan/ui's combo box draws its open list (ComboBox.module.css's `.layer`): in a layer as big as the window, so
+ * nothing round the box holds what is fixed inside it (a transform, a filter or containment there would shrink the layer
+ * and could cut the list off), with the list at the left edge of the field it lines up with, 4 pixels below it and as
+ * wide as the box in it (React Aria's width for it). jsdom has no layout, so this is where it's checked.
+ */
+export async function expectListUnder(field: Locator) {
+  const at = await field.boundingBox()
+  const box = await field.getByRole('combobox').boundingBox()
+  const drawn = await field
+    .page()
+    .getByRole('listbox')
+    .evaluate((list) => {
+      const rect = (element: Element | null) => {
+        const box = element?.getBoundingClientRect()
+        return box ? { x: box.x, y: box.y, width: box.width, height: box.height } : null
+      }
+      let layer = list.parentElement
+      while (layer !== null && getComputedStyle(layer).position !== 'fixed') layer = layer.parentElement
+      const page = document.documentElement
+      return { layer: rect(layer), window: { x: 0, y: 0, width: page.clientWidth, height: page.clientHeight }, list: rect(list.closest('[data-trigger="ComboBox"]')) }
+    })
+  expect(drawn.layer, "the list's layer covers the window").toEqual(drawn.window)
+  expect(at, 'the field is drawn').not.toBeNull()
+  expect(box, 'the box is drawn').not.toBeNull()
+  expect(drawn.list, 'the list is drawn').not.toBeNull()
+  const off = { left: drawn.list!.x - at!.x, top: drawn.list!.y - (at!.y + at!.height + 4), width: drawn.list!.width - box!.width }
+  for (const [what, by] of Object.entries(off)) expect(Math.abs(by), `the list's ${what} against the field's (off by ${by} pixels)`).toBeLessThanOrEqual(1)
 }

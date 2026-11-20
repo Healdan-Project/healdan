@@ -198,6 +198,28 @@ describe('PickField', () => {
     expect(box().value).toBe('Pat Example')
   })
 
+  it("draws its list right after the field, as ComboBox's is, leaving the page around it to a screen reader", async () => {
+    render(
+      <>
+        <header>
+          <a href="/app/">Home</a>
+        </header>
+        <main>
+          <Example />
+        </main>
+      </>,
+    )
+    await userEvent.clear(box())
+    await userEvent.type(box(), 'pa')
+    const list = await screen.findByRole('listbox')
+    expect(screen.getByRole('main').contains(list)).toBe(true)
+    expect(box().compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // Found by role only when nothing hides them
+    expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'After' })).toBeTruthy()
+    expect([...document.querySelectorAll('[aria-hidden="true"]')].filter((element) => !list.contains(element))).toEqual([])
+  })
+
   it('marks a required field and says what is wrong with it, and passes axe', async () => {
     const { container } = render(<Example required error="This needs a value." start={null} />)
     expect(box().getAttribute('aria-required')).toBe('true')
