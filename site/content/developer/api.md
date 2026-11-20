@@ -1017,8 +1017,9 @@ A change is checked in one order, and a refusal changes nothing:
    what a route names, such as an access row's, each in `fields`.
 4. `409 refused` for what Healdan's rules refuse, with the rule's sentence in `detail`, which the Admin app shows as
    it is. An id in a body that names nothing, such as a client or an owner deleted meanwhile, is refused this way
-   too, and so are a matter's move or delete while a document inside is checked out, and its delete while one is
-   immutable, with the sentence the public routes' `checked-out` and `immutable` give, but no `holds`.
+   too, and so are a matter's or a workspace folder's move or delete while a document inside is checked out, and its
+   delete while one is immutable, with the sentence the public routes' `checked-out` and `immutable` give, but no
+   `holds`.
 
 Beside `401` and the two `403`s above, these are the only problems the admin routes answer. A create that loses a
 race for its number, of two creates of one client number, or of one number in one client's matters, at the same
@@ -1120,8 +1121,39 @@ sort by comes last either way. A matter's `number` is text with its client's, su
 
 A workspace is a matter's own folder and everything in it, or a workspace template's top folder, directly in the
 Templates Store, and everything in it. These routes take only those folders and search folders: any other id, such as
-a Store's, an alias, a folder in the Trash or one that doesn't exist, is `404 not-found`.
+a Store's, the Templates Store's, an alias, a folder in the Trash or one that doesn't exist, is `404 not-found`. A
+workspace's top folder is renamed, moved and deleted with its matter or template, through their routes, so the
+folder routes refuse to rename, move or delete it (`409 refused`). A name has the whitespace at either end taken off, and is checked as
+`renameFolder` in `openapi.yaml` checks it (`FolderName`: `422` `required`, `too-long` or `invalid`), and a name
+another folder or search folder in the same folder has, compared without regard to case, is `409 refused`; changing
+only the case of a folder's own name works. Each change is recorded, naming the folder by its path from the
+workspace's top folder, as `1001.1 – Charter Dispute/Documents`.
 
+- **`GET /v1/admin/workspaces/{folderId}/tree`**, with a matter's own folder (its `folderId`) or a template's id: the
+  workspace's top folder as a `WorkspaceNode`, `{ "id", "name", "kind", "ownPermissions", "children" }`, with every
+  live folder and search folder in it, at every level, hidden ones too, each folder's folders first and then its
+  search folders, each by name, ignoring case. `kind` is `folder` or `search-folder`, which has no children, and
+  `ownPermissions` is true for a folder with permissions of its own. A folder alias is left out, as New Matter's copy
+  leaves it out. A folder inside a workspace, rather than its top, is `404`.
+- **`POST /v1/admin/folders/{id}/children`** with `{ "name" }` makes a folder in that one, at any level, its top
+  included, and answers `201` with it as a node with no children, and no `Location`. It follows its parent's
+  permissions and takes what its parent passes down and, in a matter, the matter's client and matter. A search folder
+  holds no folders: `409 refused`. Recorded as `folder.created`.
+- **`PATCH /v1/admin/folders/{id}`** with `{ "name" }` renames a folder or a search folder, the only route that renames
+  a search folder, and answers `204`. Recorded as `folder.renamed`.
+- **`POST /v1/admin/folders/{id}/move`** with `{ "folderId" }` moves a folder or search folder, with everything in it,
+  into another folder of the same workspace, its top included, and answers `204`; inside a matter, a folder that would
+  then grant more than its new parent is narrowed to fit, as on every route. A move into the folder it's in changes
+  nothing. A missing `folderId` is `422` `required`; one that isn't a live folder of a workspace is `409 refused`, as
+  any id in a body that names nothing is, and so are a move into another workspace (a folder moves to another matter
+  through the public `POST /v1/folders/{id}/move`), into a search folder, the folder itself or a folder inside it, and
+  one while a document in it is checked out, by anyone. Recorded as `folder.moved`.
+- **`DELETE /v1/admin/folders/{id}`** moves a folder or search folder, and everything live in it, to the caller's
+  Trash, as the public folder delete does, and answers the Trash item, `DeletedFolder`,
+  `{ "trashItemId", "folders", "documents" }`, as a matter's delete does. `POST /v1/trash/{id}/restore` brings a
+  matter's folder back where it was, and answers a template's, or a folder of one, `409 place-gone`, as it restores
+  into a Store only. A document in it checked out, by anyone, or an immutable one, is `409 refused`, with the
+  sentence the public routes' `checked-out` and `immutable` give. Recorded as `folder.deleted`, straight after.
 - **`GET /v1/admin/folders/{id}/access`** is who can use the folder: `ownPermissions`, true when it has its own, or
   `followsFolderId`, the folder whose permissions it follows, which may be above its parent, or its Store; `rows`,
   groups first and then people, each by name; and `canApplyToSubfolders`. A row has its `groupId` (a person's own
@@ -1148,6 +1180,62 @@ a Store's, an alias, a folder in the Trash or one that doesn't exist, is `404 no
   folder follows: nothing is skipped, moved or deleted, so a restricted folder below stays where it is but is opened
   up, granting exactly what this folder grants. The folder itself doesn't change. A folder with no live folder below
   it is `409 refused`.
+- **`GET /v1/admin/folders/{id}/properties`** is the values a folder sets for what's filed below it: `folderId` and
+  `properties`, each property of the Healdan profile that passes down from folders, in the profile's order, but Client
+  and Matter, which come from the matter. Each has its `name`, `label`, `type`, `value`, `source` (`local`, set here
+  and passed down; `inherited`, from `inheritedFrom`; `default`, the install's default Class; or null for none) and
+  `options`, a Subclass option with its `class`. A search folder sets none: `409 refused`.
+- **`PUT /v1/admin/folders/{id}/properties`** with `{ "values" }`, the whole set by name: a value that differs from what
+  the folder would inherit becomes its own and passes down to what below sets none; one equal to it, null, empty text
+  or left out goes back to inheriting. In a matter what's below takes it at once; in a template, matters made
+  afterwards do. It answers the folder's values. Every wrong value is `422`, by its name, before anything is saved,
+  with the codes `setProperties` in `openapi.yaml` uses (`read-only` for Client and Matter). Recorded as
+  `folder.properties-changed`, with each value of its own that changed, null for one it inherits.
+- **`POST /v1/admin/folders/{id}/search-folders`** with `{ "name", "rule" }` makes a search folder there, through
+  `SearchFolderService.create`, and answers `201` with it and its `Location`; its name is checked as a folder's,
+  before the service runs, so it's stored as sent. A `rule` is `{ "days", "onlyMine", "kind", "docClass",
+  "docSubclass" }`: the window from 1 day, only the changes of whoever opens it or anyone's, `all`, `documents` or
+  `emails`, and a Class and a Subclass, each null for any, whose choices are the `docclass` and `docsubclass` options
+  of any folder's properties in the workspace. A missing `rule` or member is `422` `required`; `days` below 1 and a
+  `docSubclass` without a `docClass` are `409 refused`. A search folder made directly in the Templates Store is
+  `404`, as it's no workspace's. Recorded as `search-folder.created`, with its name, the folder it's in and its rule.
+- **`GET /v1/admin/search-folders/{id}`** is a search folder, `{ "id", "name", "rule" }`, and
+  **`PATCH /v1/admin/search-folders/{id}`** with `{ "rule" }` replaces its rule, through `SearchFolderService.update`
+  with the name it has, and answers it. A `name` in the body is `400`, as any member the route doesn't take is: it's
+  renamed only as a folder is. Recorded as `search-folder.rule-changed`, with the rule's values that changed. A
+  template's search folder changes only the matters made from it afterwards.
+
+### Workspace Templates
+
+A template is a live folder directly in the Templates Store that a matter can be made from, not a search folder or an
+alias. Its `id` is its folder's: New Matter's `templateId`, and the `folderId` of its tree. Its folders are changed
+through the routes above, and its name is checked as a folder's is (`FolderName`, `422`).
+
+- **`GET /v1/admin/templates`**: every template, `{ "id", "name", "folders", "matters" }`, by name, ignoring case, as a
+  plain array, a short list: `folders` counts its live folders and search folders at every level, its own and any
+  folder alias left out, and `matters` the live matters made from it. Empty on a fresh install.
+- **`GET /v1/admin/templates/{id}`**: one template, as the list gives it. Anything else is `404`.
+- **`POST /v1/admin/templates`** with `{ "name", "copyOf" }` makes a template and answers `201` with it and its
+  `Location`. Without `copyOf` it's empty, following the Templates Store's permissions as a folder made there does;
+  with it, it's a copy of that template made as New Matter copies one, in one transaction: its folders and search
+  folders, but folder aliases, each folder's permissions and values, and each search folder's rule, its top folder
+  following what the other's follows or with its own as the other's has. A name another template has, compared
+  without regard to case, and a `copyOf` that isn't a template are `409 refused`. Recorded as `template.created`, with
+  its name and the template it copies.
+- **`PATCH /v1/admin/templates/{id}`** with `{ "name" }` renames it, and answers it. A name another template has is
+  `409 refused`; changing only the case of its own works. Recorded as `template.renamed`.
+- **`DELETE /v1/admin/templates/{id}`** moves the template, with its folders and search folders, to the caller's Trash
+  and answers `DeletedFolder`, as a folder's delete does. The User app's Trash lists it, but answers its restore
+  `409 place-gone`. Matters made from it are unchanged, with `template` null from then on, and New Matter no longer
+  offers it. Recorded as `template.deleted`, straight after.
+- **`GET /v1/admin/templates/{id}/problems`** is what New Matter would refuse in a matter made from the template, as
+  warnings, as nothing checks a template's permissions as it's edited: each a `code`, a `message` to show,
+  `folderId`, `storeId`, `groupId` and `groupName`, as `MatterProblem` has them. `wider-than-parent` comes once for each
+  folder or search folder that grants a group more than the folder it's in, in the tree's order: one with permissions
+  of its own, or one that still follows a folder above the folder it's in, as a folder made while the folder it's in
+  followed that folder goes on doing (LogicalDOC's way). `store-unreadable` comes for each Store, once for each group
+  that could read a matter made from the template but can't read that Store, by Store name and then group name; the
+  owner, not known yet, is left aside. Empty for a clean template.
 
 ### Stores and Groups
 
@@ -1177,7 +1265,7 @@ Store aren't Stores.
   read and the first by name, as in "Group Partners can read the matter 1001.1 – Charter Dispute but would no longer
   read its Store." A matter that already let in a group the Store didn't refuses no other change, so the change that
   puts it right goes through. New Matter's **Let Everyone Read the Store** sends the groups whose rows have `read`, with
-  the problem's group added.
+  the problem's group added, so the `PUT` takes away a `custom` row without `read`, which lets nobody see a Store.
 - **`GET /v1/admin/groups?q=`**: a page of live groups, by name, ignoring case, without people's own groups, each with
   its `id`, `name` and `description` (null for none). `q`, read trimmed, in any case, with `%` and `_` taken as they
   are, keeps the groups whose name contains it; without it, every group.

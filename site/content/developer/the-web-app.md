@@ -129,9 +129,10 @@ takes Esc first).
 - **The find** (`FindBox.tsx`) is `@healdan/ui`'s `ComboBox`, as the User app's search box is. It asks
   `GET /v1/admin/find` once the typing has paused for 150 ms (`FIND_DELAY_MS`), from two characters, or a number of any
   length, as a client's is, sending at most 100 (`FIND_MAX`), and keeps the last answer on screen while the next comes.
-  What's chosen opens where `DESTINATIONS` says for its kind, which is `/frontend.jsp` (`CLASSIC`) for clients, matters
-  and people until their screens ship. A found matter can't open in the User app, whose addresses take its folder's
-  id, which `FoundMatter` doesn't carry. A hidden `role="status"` says "Nothing found." or the error.
+  What's chosen opens where `DESTINATIONS` says for its kind: a client's page at `/admin/clients/{id}` and a
+  matter's at `/admin/matters/{id}`, by the ids `FoundClient` and `FoundMatter` carry, inside the app with the router
+  (`ServerLink.tsx`'s `useFollow`), and a person the Classic Interface (`/frontend.jsp`), with a page load, until
+  Phase 4's screens ship. A hidden `role="status"` says "Nothing found." or the error.
 - **An address no route has** is `views/NotFoundView.tsx`, in the frame, with **Go to the Dashboard**. A view that
   fails as it draws is `RouteError` (`router.tsx`): the catalogue's message and Try Again, never the error's own text.
 
@@ -139,7 +140,8 @@ takes Esc first).
 
 `NAV`, in `frame/LeftPane.tsx`, is the left pane: the Dashboard, then the spec's groups in its order (Firm, People,
 Storage, Search and Monitoring), each a heading from the catalogue and its `NavItem`s. A group with no items isn't
-drawn, so the pane shows only the groups a shipped screen is in: Firm, with Clients and Matters, so far.
+drawn, so the pane shows only the groups a shipped screen is in: Firm, with Clients, Matters and Workspace Templates,
+so far.
 **Classic Interface** is at the pane's foot, apart from `NAV`. A screen joins when its phase ships:
 
 1. Write the view in `views/`. Take its data through `useAdminQuery` (below), and its pieces from `@healdan/ui`.
@@ -150,10 +152,13 @@ drawn, so the pane shows only the groups a shipped screen is in: Firm, with Clie
    `GET /v1/admin/dashboard` only while an entry it shows has a `count`. `aria-current="page"` marks the open entry:
    the Dashboard at `/` only, and any other at its address and the pages under it.
 4. Point what led to the Classic Interface at it: the Dashboard's links, which the server gives (`AttentionItem.link`
-   and `HealthTile.link`, from `healdan-core`'s `DashboardService.Screen`, `/frontend.jsp` until the screen ships),
-   and the find's `DESTINATIONS`. An attention row's
-   link takes its label from `NAV` (`screenAt`: the screen's name, **Classic Interface** for `/frontend.jsp`, or
-   **Open**), so it follows by itself.
+   and `HealthTile.link`, from `healdan-core`'s `DashboardService.Screen`, `/frontend.jsp` until the screen ships;
+   Phase 2 gave Clients, Matters and Workspace Templates theirs, though no row or tile links to them yet), and the
+   find's `DESTINATIONS`. The Dashboard's rows and tiles draw their links with `frame/ServerLink.tsx`: a plain click on
+   a link to one of the app's own addresses (`appAddressOf`) opens it with the router, without a page load, and the
+   Classic Interface, another origin, a click with a modifier or another button and a link with a `target` stay the
+   browser's. An attention row's link takes its label from `NAV` by its path (`linkLabel`, through `screenAt`: the
+   screen's name, **Classic Interface** for `/frontend.jsp`, or **Open**), so it follows by itself.
 5. Add its words to the app's catalogue, and test it with `renderApp`, the fake API and `expectNoAxeViolations`.
 
 ### Asking the Server

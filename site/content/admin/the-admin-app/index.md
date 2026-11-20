@@ -51,7 +51,9 @@ Interface. See [Reverse Proxy](../../install/reverse-proxy/).
   five matters and five people, each under its heading: clients by name or number; matters by name, or by number,
   such as `1001.1`, with a client's number listing that client's matters; and people by username or name, a disabled
   one marked **Disabled**. Each matter shows its client beside it. The arrow keys and Enter, or a click, choose one,
-  and Enter alone chooses the first. For now, choosing one opens the Classic Interface, not the one you found.
+  and Enter alone chooses the first. A client opens [its page](../clients-and-matters/#a-clients-page) and a matter
+  [its page](../clients-and-matters/#a-matters-page), here in the Admin app; a person opens the Classic Interface for
+  now.
 - **Open Healdan** opens the User app.
 - **The ? (Help) button** opens a menu with **Admin Guide**, which opens this page, and **Open-Source Notices**; each
   opens in a new window.

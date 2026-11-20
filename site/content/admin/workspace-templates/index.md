@@ -34,9 +34,16 @@ a template, so make one before the first matter."
 - **Start From:** **Nothing (Empty)**, or a copy of another template, such as **A Copy of Litigation**. For a copy, the
   dialog says "A copy takes its folders, their permissions and values, and its search folders with their rules."
 
+An empty template follows the Templates Store's permissions, as a folder made there does. A copy is made as New Matter
+copies a template into a matter, all of it or none: every folder and search folder, at every level, hidden ones too,
+with each folder's permissions and the values it sets, and each search folder's rule. A folder shortcut isn't copied.
+The copy's own folder follows what the other's follows, or has permissions of its own as the other's has.
+Afterwards the two have nothing to do with each other.
+
 Once it's made, Healdan says "Created the template" with its name, and the template's page opens. Anything Healdan
-refuses shows in the dialog, in Healdan's own words, and while the template is being made, **Cancel** is greyed out
-and Esc does nothing.
+refuses shows in the dialog, in Healdan's own words, such as a name another template took a moment before, and while
+the template is being made, **Cancel** is greyed out and Esc does nothing. Healdan records the new template, with its
+name and the template it copies.
 
 ## A Template's Page
 
@@ -55,12 +62,19 @@ Templates**.
 
 ### Renaming and Deleting a Template
 
-- **Rename** opens Rename Template, which says first when another template has the name, and its **Rename** saves
-  the new one.
+- **Rename** opens Rename Template, which says first when another template has the name, in any case, and its
+  **Rename** saves the new one. Changing only the case of its own name works. Matters already made from it are
+  unchanged, and the Matters list shows the template's new name.
 - **Delete** asks first, as in "Move the Template Litigation to the Trash?" It says the template's folders go with it,
-  and that matters already made from it are unchanged and New Matter won't offer it any more. **Move to Trash** deletes
-  it, and the list opens. The matters made from it then show no template in the Matters list. The Trash lists the
-  deleted template, but can't put it back, so there's no **Undo**.
+  and that matters already made from it are unchanged and New Matter won't offer it any more. **Move to Trash** moves
+  it, with its folders and search folders, to your Trash, and the list opens. The matters made from it then show no
+  template in the Matters list.
+
+Healdan records each rename, with the name before and after, and each delete.
+
+A deleted template is in the Trash like anything else deleted, and so is a folder deleted from a template, but the
+User app's Trash can't put either back in the Templates Store: its **Restore** says the folder it was deleted from is
+gone, as it restores only into Stores. So their deletes have no **Undo**.
 
 ### What New Matter Would Refuse
 
@@ -70,8 +84,12 @@ says "Saving still works: these are refused only when a matter is made from the 
 after each save in the Workspace Editor.
 
 - **A folder that lets a group in more than the folder it's in does,** which a matter's folders can't (see
-  [Folders Narrow, Never Widen](../permissions/#folders-narrow-never-widen)).
-- **A group that could read a matter made from the template, but can't read a Store,** for each Store and group (see
+  [Folders Narrow, Never Widen](../permissions/#folders-narrow-never-widen)), once for each such folder or search
+  folder, in the tree's order. That's one with permissions of its own, or one that still follows a folder further up:
+  a folder made while the folder it's in followed that one goes on following it after the folder it's in gets
+  permissions of its own.
+- **A group that could read a matter made from the template, but can't read a Store,** once for each Store, every one
+  but Default and Templates, and each such group, by the Store's name and then the group's (see
   [A Matter and Its Store](../permissions/#a-matter-and-its-store)). The matter's owner isn't known yet, so New Matter
   checks the owner when you choose one.
 
