@@ -208,6 +208,7 @@ export function matterOf(over: Partial<A['Matter']> = {}): A['Matter'] {
     folderId: 340,
     indexFailed: 0,
     previewsGivenUp: 0,
+    figuresAt: null,
     ...over,
   }
 }
@@ -300,7 +301,7 @@ export function problem(status: number, code: string, detail = 'A server sentenc
 
 /** A matter, for its page: 1001.1 unless `row` and `over` say otherwise */
 export function matterPage(row: A['MatterRow'] = matterRow(), over: Partial<A['Matter']> = {}): A['Matter'] {
-  return { ...row, description: 'Charter party dispute over the MV Northern Star.', indexFailed: 0, previewsGivenUp: 0, ...over }
+  return { ...row, description: 'Charter party dispute over the MV Northern Star.', indexFailed: 0, previewsGivenUp: 0, figuresAt: '2026-11-19T10:41:00Z', ...over }
 }
 
 export const wsEveryone: A['Group'] = { id: 2, name: 'Everyone', description: 'Everyone in the firm' }

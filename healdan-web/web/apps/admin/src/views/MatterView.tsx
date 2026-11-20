@@ -197,6 +197,7 @@ function Overview({ matter }: { matter: A['Matter'] }) {
             {pending ? t('admin.matter.pending') : matter.lastActivity === null ? t('admin.matter.noActivity') : formatDateTime(matter.lastActivity)}
           </Fact>
         </dl>
+        {matter.figuresAt !== null && <p className={page.muted}>{t('admin.matters.figuresAt', { when: formatDateTime(matter.figuresAt) })}</p>}
       </Section>
       <Section title={t('admin.matter.trouble')}>
         {trouble.length === 0 ? (

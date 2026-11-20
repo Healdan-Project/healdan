@@ -65,6 +65,7 @@ describe("A matter's page", () => {
       ['Size', formatSize(matterRows[2]!.bytes!)],
       ['Last Activity', formatDateTime('2026-11-19T10:12:00Z')],
     ])
+    expect(within(overview).getByText(`Documents, Size and Last Activity as of ${formatDateTime('2026-11-19T10:41:00Z')}`)).toBeTruthy()
     expect(within(overview).getByRole('link', { name: '1001 – Saltmarsh Shipping Ltd' }).getAttribute('href')).toBe('/admin/clients/1')
     expect(within(overview).getByText('Nothing in this matter is stuck or failing.')).toBeTruthy()
     await expectNoAxeViolations(view.container)
@@ -81,8 +82,9 @@ describe("A matter's page", () => {
 
   it("says so of an owner whose account has gone, a matter made from no template and figures not worked out yet", async () => {
     await openMatter('/matters/11', {
-      'GET /v1/admin/matters/11': matterPage(matterRow({ owner: null, template: null, documents: null, bytes: null, lastActivity: null }), { description: null }),
+      'GET /v1/admin/matters/11': matterPage(matterRow({ owner: null, template: null, documents: null, bytes: null, lastActivity: null }), { description: null, figuresAt: null }),
     })
+    expect(within(main()).queryByText(/as of/)).toBeNull()
     expect(within(main()).getByText('Saltmarsh Shipping Ltd · Client Work · no owner')).toBeTruthy()
     expect(within(main()).getByText('No description.')).toBeTruthy()
     expect(facts().slice(2)).toEqual([
