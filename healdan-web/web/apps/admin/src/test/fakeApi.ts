@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { ApiError, type adminComponents, type Api, type components } from '@healdan/api'
+import { inOrder, levelOf, permissionsOf, type NamedLevel } from '../workspace/levels'
 
 type S = components['schemas']
 type A = adminComponents['schemas']
@@ -208,12 +209,198 @@ export function problem(status: number, code: string, detail = 'A server sentenc
   return new ApiError(status, code, detail, { status, code, detail })
 }
 
+// A matter's page, its Workspace tab and the workspace templates (Task 20): matter 1001.1's workspace and the Litigation
+// template's, who can use their folders, the values they set and the rules of their search folders.
+
+/** A matter, for its page: 1001.1 unless `row` and `over` say otherwise */
+export function matterOf(row: A['MatterRow'] = matterRow(), over: Partial<A['Matter']> = {}): A['Matter'] {
+  return { ...row, description: 'Charter party dispute over the MV Northern Star.', indexFailed: 0, previewsGivenUp: 0, ...over }
+}
+
+export const everyone: A['Group'] = { id: 2, name: 'Everyone', description: 'Everyone in the firm' }
+export const guest: A['Group'] = { id: 3, name: 'guest', description: null }
+export const partners: A['Group'] = { id: 20, name: 'Partners', description: null }
+export const trainees: A['Group'] = { id: 21, name: 'Trainees', description: null }
+
+/** GET /v1/admin/groups for `q`: the groups whose name holds it, in any case, by name */
+export function groups(q: unknown): A['GroupList'] {
+  const words = String(q ?? '').trim().toLowerCase()
+  const items = [everyone, guest, partners, trainees].filter((one) => one.name.toLowerCase().includes(words))
+  return { items, offset: 0, limit: 20, total: items.length }
+}
+
+/** The level the server gives a row: the spec's three by an exact match, Can See for Read alone, and Custom otherwise */
+function accessLevel(permissions: readonly A['Permission'][]): A['AccessLevel'] {
+  const level = levelOf(permissions)
+  return level === 'custom' && permissions.length === 1 && permissions[0] === 'read' ? 'can-see' : level
+}
+
+const grants = (given: NamedLevel | A['Permission'][]) => (typeof given === 'string' ? permissionsOf(given) : inOrder(given))
+
+/** What a folder grants a group, at a level or as exact permissions */
+export function groupRow(group: A['Group'], given: NamedLevel | A['Permission'][]): A['AccessRow'] {
+  const permissions = grants(given)
+  return { groupId: group.id, name: group.name, person: false, userId: null, level: accessLevel(permissions), permissions, owner: false }
+}
+
+/** What a folder grants a person, through their own group (100 + their id) */
+export function personRow(person: A['PersonBrief'], given: NamedLevel | A['Permission'][], over: Partial<A['AccessRow']> = {}): A['AccessRow'] {
+  const permissions = grants(given)
+  return { groupId: 100 + person.id, name: person.name, person: true, userId: person.id, level: accessLevel(permissions), permissions, owner: false, ...over }
+}
+
+/** A folder's access: its own rows unless `over` says it follows */
+export function folderAccess(folderId: number, rows: A['AccessRow'][], over: Partial<A['FolderAccess']> = {}): A['FolderAccess'] {
+  return { folderId, ownPermissions: true, followsFolderId: null, rows, canApplyToSubfolders: false, ...over }
+}
+
+export function folderNode(id: number, name: string, children: A['WorkspaceNode'][] = [], over: Partial<A['WorkspaceNode']> = {}): A['WorkspaceNode'] {
+  return { id, name, kind: 'folder', ownPermissions: false, children, ...over }
+}
+
+export function searchNode(id: number, name: string): A['WorkspaceNode'] {
+  return { id, name, kind: 'search-folder', ownPermissions: false, children: [] }
+}
+
+/** Matter 1001.1's workspace, from its own folder (110): Evidence and Privileged have permissions of their own */
+export const charterTree = folderNode(
+  110,
+  '1001.1 – Charter Dispute – MV Northern Star',
+  [
+    folderNode(111, 'Correspondence'),
+    folderNode(112, 'Drafts'),
+    folderNode(113, 'Evidence', [], { ownPermissions: true }),
+    folderNode(114, 'Pleadings'),
+    folderNode(115, 'Privileged', [folderNode(116, "Counsel's Advice")], { ownPermissions: true }),
+    searchNode(118, 'Emails in This Matter'),
+    searchNode(119, 'My Recent Docs Here'),
+  ],
+  { ownPermissions: true },
+)
+
+const charterTop = [groupRow(everyone, 'read-write'), groupRow(partners, 'read-write'), personRow(tom, 'full-access', { owner: true })]
+const follows = (folderId: number, of: A['FolderAccess']) => folderAccess(folderId, of.rows, { ownPermissions: false, followsFolderId: of.folderId })
+const charterOwn = folderAccess(110, charterTop, { canApplyToSubfolders: true })
+const privileged = folderAccess(115, [groupRow(partners, 'read-write'), personRow(tom, 'full-access', { owner: true })], { canApplyToSubfolders: true })
+
+/** Who can use each folder of 1001.1's workspace: Evidence grants Everyone only Read (a Store's Can See) and Partners three permissions */
+export const charterAccess: Record<number, A['FolderAccess']> = {
+  110: charterOwn,
+  111: follows(111, charterOwn),
+  112: follows(112, charterOwn),
+  113: folderAccess(113, [groupRow(everyone, ['read']), groupRow(partners, ['read', 'download', 'write']), personRow(tom, 'full-access', { owner: true })]),
+  114: follows(114, charterOwn),
+  115: privileged,
+  116: follows(116, privileged),
+  118: follows(118, charterOwn),
+  119: follows(119, charterOwn),
+}
+
+/** The Classes a folder can set, and their Subclasses, each Subclass naming its Class */
+export const classOptions: A['PropertyOption'][] = ['Correspondence', 'Evidence', 'Pleadings'].map((value) => ({ value, label: value, class: null }))
+export const subclassOptions: A['PropertyOption'][] = [
+  { value: 'Emails', label: 'Emails', class: 'Correspondence' },
+  { value: 'Letters', label: 'Letters', class: 'Correspondence' },
+  { value: 'Witness Statements', label: 'Witness Statements', class: 'Evidence' },
+]
+
+/** A folder's values: Class, Subclass and Confidential, each inheriting nothing unless `over` says so */
+export function folderProperties(folderId: number, over: { docclass?: Partial<A['FolderProperty']>; docsubclass?: Partial<A['FolderProperty']>; confidential?: Partial<A['FolderProperty']> } = {}): A['FolderProperties'] {
+  const none = { value: null, source: null, inheritedFrom: null }
+  return {
+    folderId,
+    properties: [
+      { name: 'docclass', label: 'Class', type: 'string', ...none, options: classOptions, ...over.docclass },
+      { name: 'docsubclass', label: 'Subclass', type: 'string', ...none, options: subclassOptions, ...over.docsubclass },
+      { name: 'confidential', label: 'Confidential', type: 'boolean', ...none, options: null, ...over.confidential },
+    ],
+  }
+}
+
+/** The values each folder of 1001.1 sets: the install's default Class at the top, Correspondence's own, and Counsel's Advice's from Privileged */
+export const charterProperties: Record<number, A['FolderProperties']> = {
+  110: folderProperties(110, { docclass: { value: 'Correspondence', source: 'default' } }),
+  111: folderProperties(111, { docclass: { value: 'Correspondence', source: 'local' }, docsubclass: { value: 'Letters', source: 'local' } }),
+  115: folderProperties(115, { docclass: { value: 'Evidence', source: 'local' }, confidential: { value: true, source: 'local' } }),
+  116: folderProperties(116, {
+    docclass: { value: 'Evidence', source: 'inherited', inheritedFrom: { id: 115, name: 'Privileged' } },
+    confidential: { value: true, source: 'inherited', inheritedFrom: { id: 115, name: 'Privileged' } },
+  }),
+}
+
+export const searchFolders: Record<number, A['SearchFolder']> = {
+  118: { id: 118, name: 'Emails in This Matter', rule: { days: 30, onlyMine: false, kind: 'emails', docClass: null, docSubclass: null } },
+  119: { id: 119, name: 'My Recent Docs Here', rule: { days: 14, onlyMine: true, kind: 'all', docClass: null, docSubclass: null } },
+  2025: { id: 2025, name: 'My Recent Docs Here', rule: { days: 14, onlyMine: true, kind: 'all', docClass: null, docSubclass: null } },
+}
+
+/** GET /v1/admin/templates: by name */
+export const templateInfos: A['TemplateInfo'][] = [
+  { id: 201, name: 'Firm', folders: 4, matters: 2 },
+  { id: 202, name: 'Litigation', folders: 5, matters: 2 },
+  { id: 203, name: 'Transactional', folders: 6, matters: 4 },
+]
+
+/** The Litigation template's workspace (202): Privileged lets Trainees write, which its parent doesn't */
+export const litigationTree = folderNode(
+  202,
+  'Litigation',
+  [folderNode(2021, 'Correspondence'), folderNode(2022, 'Evidence'), folderNode(2023, 'Pleadings'), folderNode(2024, 'Privileged', [], { ownPermissions: true }), searchNode(2025, 'My Recent Docs Here')],
+  { ownPermissions: true },
+)
+
+const litigationOwn = folderAccess(202, [groupRow(everyone, 'read-write'), groupRow(partners, 'read-write')], { canApplyToSubfolders: true })
+
+export const litigationAccess: Record<number, A['FolderAccess']> = {
+  202: litigationOwn,
+  2021: follows(2021, litigationOwn),
+  2022: follows(2022, litigationOwn),
+  2023: follows(2023, litigationOwn),
+  2024: folderAccess(2024, [groupRow(partners, 'read-write'), groupRow(trainees, 'read-write')]),
+  2025: follows(2025, litigationOwn),
+}
+
+/** What New Matter would refuse in a matter made from Litigation */
+export const litigationProblems: A['TemplateProblem'][] = [
+  { code: 'wider-than-parent', message: 'Privileged grants more than its parent (group Trainees: WRITE).', folderId: 2024, storeId: null, groupId: 21 },
+  { code: 'store-unreadable', message: "Trainees could read a matter made from it, but can't read the Store Firm.", folderId: null, storeId: 3, groupId: 21 },
+]
+
+const notFound = () => problem(404, 'not-found')
+
+/**
+ * What a matter's page and a template's read, to spread over the defaults: matter 11 (1001.1), the templates, the
+ * workspaces' trees, their folders' access and values, their search folders, the groups, and what a folder holds.
+ */
+export function workspaceRoutes(): Routes {
+  const trees: Record<number, A['WorkspaceNode']> = { 110: charterTree, 202: litigationTree }
+  const access: Record<number, A['FolderAccess']> = { ...charterAccess, ...litigationAccess }
+  return {
+    'GET /v1/admin/matters/11': matterOf(),
+    'GET /v1/admin/workspaces/*/tree': ({ params }: { params: string[] }) => trees[Number(params[0])] ?? notFound(),
+    'GET /v1/admin/folders/*/access': ({ params }: { params: string[] }) => access[Number(params[0])] ?? notFound(),
+    'GET /v1/admin/folders/*/properties': ({ params }: { params: string[] }) => {
+      const id = Number(params[0])
+      if (searchFolders[id]) return problem(409, 'refused', "A search folder sets no values.")
+      return charterProperties[id] ?? folderProperties(id)
+    },
+    'GET /v1/admin/search-folders/*': ({ params }: { params: string[] }) => searchFolders[Number(params[0])] ?? notFound(),
+    'GET /v1/admin/groups': ({ query }: { query?: Record<string, unknown> }) => groups(query?.q),
+    'GET /v1/admin/templates': templateInfos,
+    'GET /v1/admin/templates/*': ({ params }: { params: string[] }) => templateInfos.find((one) => one.id === Number(params[0])) ?? notFound(),
+    'GET /v1/admin/templates/*/problems': ({ params }: { params: string[] }) => (Number(params[0]) === 202 ? litigationProblems : []),
+    'GET /v1/folders/*/contents': { folders: 8, documents: 412 } satisfies S['TrashContents'],
+  }
+}
+
 export interface Call {
   method: string
   path: string
   query?: Record<string, unknown>
   /** The signal a get was given: a request nobody waits for any more has it aborted */
   signal?: AbortSignal
+  /** What a change sent */
+  body?: unknown
 }
 
 type Handler = (request: { params: string[]; query?: Record<string, unknown>; body?: unknown; signal?: AbortSignal }) => unknown
@@ -256,7 +443,7 @@ export function fakeApi(over: Routes = {}, onSignedOut?: () => void): FakeApi {
   const calls: Call[] = []
 
   async function answer<T>(method: string, path: string, query?: Record<string, unknown>, body?: unknown, signal?: AbortSignal): Promise<T> {
-    calls.push({ method, path, query, signal })
+    calls.push({ method, path, query, signal, body })
     // The newest override wins, so a test's route comes before a default one it also matches.
     for (const key of Object.keys(routes).reverse()) {
       const match = matcher(key).exec(`${method} ${path}`)

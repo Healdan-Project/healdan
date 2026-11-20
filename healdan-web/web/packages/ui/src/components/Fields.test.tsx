@@ -79,6 +79,20 @@ describe('Fields', () => {
     expect(select.selectedOptions[0]?.disabled).toBe(true)
   })
 
+  it('is named by its label without drawing it, when the label is hidden, as in a row whose column heading says what it is', async () => {
+    const options = [
+      { value: 'read-only', label: 'Read Only' },
+      { value: 'read-write', label: 'Read/Write' },
+    ]
+    const { container } = render(<SelectField label="Access for Everyone" labelHidden value="read-only" options={options} onChange={() => {}} />)
+    expect(screen.getByRole('combobox', { name: 'Access for Everyone' })).toBeTruthy()
+    const label = container.querySelector('label')!
+    expect(label.textContent).toBe('Access for Everyone')
+    expect(getComputedStyle(label).position).toBe('absolute')
+    expect(getComputedStyle(label).width).toBe('1px')
+    await expectNoAxeViolations(container)
+  })
+
   it('is a yes or no', async () => {
     const onChange = vi.fn()
     const { container } = render(<CheckField label="Signed" checked={false} onChange={onChange} />)
