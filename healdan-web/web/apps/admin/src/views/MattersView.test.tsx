@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { formatDate, formatDateTime, formatSize, setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
-import { clientList, clientOf, matterList, matterRow, matterRows, problem, saltmarsh, tom } from '../test/fakeApi'
+import { clientList, clientOf, findPeople, matterList, matterRow, matterRows, problem, sally, saltmarsh, tom } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
 import { renderApp } from '../test/renderApp'
 import { TYPING_DELAY_MS } from '../pickers/typing'
@@ -161,20 +161,45 @@ describe('The Matters list', () => {
     await pause()
     await userEvent.keyboard('{ArrowDown}')
     await userEvent.click(await screen.findByRole('option', { name: '1001 – Saltmarsh Shipping Ltd' }))
+    // The pick shows at once, so its list closes, before the address has followed
+    expect(screen.queryByRole('listbox')).toBeNull()
     await waitFor(() => expect(lastQuery(api)).toEqual({ clientId: 1, offset: 0, limit: 100 }))
     expect(router.state.location.search).toEqual({ client: '1' })
     expect(box('Client').value).toBe('1001 – Saltmarsh Shipping Ltd')
   })
 
   it('filters by the owner picked from the people search', async () => {
-    const { api, router } = await renderApp('/matters')
+    const { api, router } = await renderApp('/matters', { 'GET /v1/admin/find': ({ query }: { query?: Record<string, unknown> }) => findPeople(query?.q) })
     await rows()
     await userEvent.type(box('Owner'), 'tom')
     await pause()
     await userEvent.keyboard('{ArrowDown}')
     await userEvent.click(await screen.findByRole('option', { name: 'Tom Reeve tom' }))
+    expect(screen.queryByRole('listbox')).toBeNull()
     await waitFor(() => expect(lastQuery(api)).toEqual({ ownerId: tom.id, offset: 0, limit: 100 }))
     expect(router.state.location.search).toEqual({ owner: String(tom.id) })
+    expect(box('Owner').value).toBe('Tom Reeve')
+  })
+
+  it('finds an owner who has left, as their matters stay theirs, and says they have', async () => {
+    const left = matterRow({ id: 41, number: '1004.1', name: 'Grant Agreement', owner: { id: sally.id, username: sally.username, name: sally.name } })
+    const { api, view } = await renderApp('/matters', {
+      'GET /v1/admin/find': ({ query }: { query?: Record<string, unknown> }) => findPeople(query?.q),
+      'GET /v1/admin/matters': ({ query }: { query?: Record<string, unknown> }) => matterList(query?.ownerId === sally.id ? [left] : matterRows),
+    })
+    await rows()
+    await userEvent.type(box('Owner'), 'oldham')
+    await pause()
+    await userEvent.keyboard('{ArrowDown}')
+    const option = await screen.findByRole('option', { name: 'Sally Oldham sally.old · Disabled' })
+    // The people the admin find gives, those who have left among them; GET /v1/users gives only those who can sign in
+    expect(api.callsTo('GET /v1/admin/find').at(-1)?.query).toEqual({ q: 'oldham' })
+    expect(api.callsTo('GET /v1/users')).toEqual([])
+    await expectNoAxeViolations(view.container)
+    await userEvent.click(option)
+    await waitFor(() => expect(lastQuery(api)).toEqual({ ownerId: sally.id, offset: 0, limit: 100 }))
+    expect(await within(await grid()).findByRole('row', { name: '1004.1 Grant Agreement' })).toBeTruthy()
+    expect(box('Owner').value).toBe('Sally Oldham')
   })
 
   it('filters by the Store picked from its menu, and All Stores takes the filter off', async () => {

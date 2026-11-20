@@ -97,6 +97,8 @@ export const adminEnUS = {
   // The pickers: a client is offered and shown by its number and name
   'admin.client.field': 'Client',
   'admin.client.label': '{number} – {name}',
+  // Beside the name of someone who has left (a disabled account), in a picker that offers them
+  'admin.person.disabled': '{username} · Disabled',
 
   // The Matters list (spec 8.3): its filters, its columns and what it says when it has no rows
   'admin.matters.title': '{matters}',

@@ -9,9 +9,9 @@ import { describe, expect, it, vi } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { createQueryClient, createSignedOut, ServicesProvider } from '@healdan/shell'
 import { expectNoAxeViolations } from '../test/axe'
-import { brightwell, clientList, clientOf, fakeApi, helen, saltmarsh, tom, type FakeApi, type Routes } from '../test/fakeApi'
+import { brightwell, clientList, clientOf, fakeApi, findPeople, helen, saltmarsh, sally, tom, type FakeApi, type Routes } from '../test/fakeApi'
 import { ClientPicker } from './ClientPicker'
-import { PersonPicker } from './PersonPicker'
+import { PersonPicker, type PersonAccounts } from './PersonPicker'
 import { TYPING_DELAY_MS } from './typing'
 import { CLIENT_SEARCH_LIMIT, useClientSearch } from './useClientSearch'
 
@@ -110,11 +110,12 @@ describe('ClientPicker', () => {
   })
 })
 
-function PersonExample({ onChange = vi.fn(), start = null }: { onChange?: (person: A['PersonBrief'] | null) => void; start?: A['PersonBrief'] | null }) {
+function PersonExample({ accounts, onChange = vi.fn(), start = null }: { accounts: PersonAccounts; onChange?: (person: A['PersonBrief'] | null) => void; start?: A['PersonBrief'] | null }) {
   const [value, setValue] = useState<A['PersonBrief'] | null>(start)
   return (
     <PersonPicker
       label="Owner"
+      accounts={accounts}
       value={value}
       onChange={(next) => {
         setValue(next)
@@ -124,24 +125,58 @@ function PersonExample({ onChange = vi.fn(), start = null }: { onChange?: (perso
   )
 }
 
+// The admin find, answering people only, those who have left too
+const findRoutes: Routes = { 'GET /v1/admin/find': ({ query }: { query?: Record<string, unknown> }) => findPeople(query?.q) }
+
+/** The options the list offers once the typing has paused and the arrow key has gone to them */
+async function offered() {
+  await pause()
+  await userEvent.keyboard('{ArrowDown}')
+  const list = await screen.findByRole('listbox')
+  return { list, names: within(list).getAllByRole('option').map((one) => one.textContent) }
+}
+
 describe('PersonPicker', () => {
-  it('is a search over the people: it asks GET /v1/users for what is typed, and offers each by name with the username', async () => {
+  it('for a field that makes someone an owner, offers only people who can be one: GET /v1/users, enabled accounts, by name with the username', async () => {
     const onChange = vi.fn()
-    const { api, view } = renderWith(<PersonExample onChange={onChange} />)
+    const { api, view } = renderWith(<PersonExample accounts="enabled" onChange={onChange} />, findRoutes)
     await userEvent.type(box('Owner'), 'ree')
-    await pause()
-    await userEvent.keyboard('{ArrowDown}')
-    const list = await screen.findByRole('listbox')
-    expect(within(list).getAllByRole('option').map((one) => one.textContent)).toEqual(['Tom Reeve tom'])
+    const { list, names } = await offered()
+    expect(names).toEqual(['Tom Reeve tom'])
     expect(api.callsTo('GET /v1/users').at(-1)?.query).toEqual({ q: 'ree' })
+    expect(api.callsTo('GET /v1/admin/find')).toEqual([])
     await expectNoAxeViolations(view.container)
     await userEvent.click(within(list).getByRole('option', { name: 'Tom Reeve tom' }))
     expect(onChange).toHaveBeenLastCalledWith(tom)
     expect(box('Owner').value).toBe('Tom Reeve')
   })
 
+  it('there, never offers someone who has left', async () => {
+    const { api } = renderWith(<PersonExample accounts="enabled" />, findRoutes)
+    await userEvent.type(box('Owner'), 'old')
+    await pause()
+    expect(api.callsTo('GET /v1/users').at(-1)?.query).toEqual({ q: 'old' })
+    await userEvent.keyboard('{ArrowDown}')
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('for a filter, offers people who have left too, from the admin find, saying so beside their username', async () => {
+    const onChange = vi.fn()
+    const { api, view } = renderWith(<PersonExample accounts="all" onChange={onChange} />, findRoutes)
+    await userEvent.type(box('Owner'), 'o')
+    const { list, names } = await offered()
+    expect(names).toEqual(['Helen Ashcombe helen', 'Tom Reeve tom', 'Sam Okafor sam', 'Sally Oldham sally.old · Disabled'])
+    expect(api.callsTo('GET /v1/admin/find').at(-1)?.query).toEqual({ q: 'o' })
+    expect(api.callsTo('GET /v1/users')).toEqual([])
+    await expectNoAxeViolations(view.container)
+    await userEvent.click(within(list).getByRole('option', { name: 'Sally Oldham sally.old · Disabled' }))
+    // The person, as other objects name one
+    expect(onChange).toHaveBeenLastCalledWith({ id: sally.id, username: sally.username, name: sally.name })
+    expect(box('Owner').value).toBe('Sally Oldham')
+  })
+
   it('shows the person it holds by name', () => {
-    renderWith(<PersonExample start={helen} />)
+    renderWith(<PersonExample accounts="enabled" start={helen} />)
     expect(box('Owner').value).toBe('Helen Ashcombe')
   })
 })

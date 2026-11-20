@@ -6,13 +6,25 @@ import { useState } from 'react'
 import type { adminComponents, components } from '@healdan/api'
 import { useApi, type PageOf } from '@healdan/shell'
 import { PickField, type PickFieldOption } from '@healdan/ui'
+import { useAdminQuery } from '../queries'
+import { t } from '../strings'
 import { typed, useDebounced } from './typing'
 
 type A = adminComponents['schemas']
 type S = components['schemas']
 
+/**
+ * Whose accounts a picker offers, which every caller chooses:
+ * - `enabled`: the people who can sign in, so can own a matter, for a field that makes someone an owner (New Matter's and
+ *   Edit's Owner): `GET /v1/users`, which answers 20 at most.
+ * - `all`: those too who have left (a disabled account), for a filter, as their matters stay theirs (the Matters list's
+ *   Owner): the admin find's people (`GET /v1/admin/find`), 5 at most, each who has left saying so beside the username.
+ */
+export type PersonAccounts = 'enabled' | 'all'
+
 export interface PersonPickerProps {
   label: string
+  accounts: PersonAccounts
   required?: boolean
   error?: string
   /** The person the field holds, or null */
@@ -20,30 +32,42 @@ export interface PersonPickerProps {
   onChange: (person: A['PersonBrief'] | null) => void
 }
 
-function optionOf(person: A['PersonBrief']): PickFieldOption {
-  return { id: String(person.id), label: person.name, icon: 'user', meta: person.username }
-}
+type Person = A['PersonBrief'] & { enabled: boolean }
 
-/**
- * A person, found as it is typed (spec 7.2: anything that can grow long is a search), such as a matter's owner: the
- * people `GET /v1/users` finds for the words, by username, first or last name (one character is enough; the server
- * answers 20 at most, active accounts only), each offered by name with the username beside it.
- */
-export function PersonPicker({ label, required, error, value, onChange }: PersonPickerProps) {
+/** The people found for the words, from the source `accounts` names; the other source is never asked */
+function usePeople(q: string, accounts: PersonAccounts): Person[] {
   const api = useApi()
-  const [text, setText] = useState('')
-  const q = typed(text)
-  const settled = useDebounced(q)
-  const found = useQuery({
+  const canOwn = useQuery({
     // The User app's key for the same question
-    queryKey: ['users', settled],
-    queryFn: ({ signal }) => api.get<PageOf<S['UserHit']>>('/v1/users', { q: settled }, { signal }),
-    enabled: settled !== '',
+    queryKey: ['users', q],
+    queryFn: ({ signal }) => api.get<PageOf<S['UserHit']>>('/v1/users', { q }, { signal }),
+    enabled: accounts === 'enabled' && q !== '',
     staleTime: 30_000,
     placeholderData: (previous) => previous,
   })
-  const people = q === '' ? [] : (found.data?.items ?? [])
-  const picked = value && optionOf(value)
+  // The top bar's find asks the same, so a question asked there and here is asked once
+  const everyone = useAdminQuery('/v1/admin/find', { query: { q }, enabled: accounts === 'all' && q !== '', keepPrevious: true, staleTime: 30_000 })
+  if (accounts === 'enabled') return (canOwn.data?.items ?? []).map((person) => ({ ...person, enabled: true }))
+  return everyone.data?.people ?? []
+}
+
+function optionOf(person: Person): PickFieldOption {
+  return { id: String(person.id), label: person.name, icon: 'user', meta: person.enabled ? person.username : t('admin.person.disabled', { username: person.username }) }
+}
+
+/**
+ * A person, found as it is typed (spec 7.2: anything that can grow long is a search): by username, first or last name (one
+ * character is enough), from the accounts the caller chooses (`accounts`), each offered by name with the username beside
+ * it.
+ */
+export function PersonPicker({ label, accounts, required, error, value, onChange }: PersonPickerProps) {
+  const [text, setText] = useState('')
+  const q = typed(text)
+  const settled = useDebounced(q)
+  const found = usePeople(settled, accounts)
+  const people = q === '' ? [] : found
+  // What the field holds shows by name only, whatever its account
+  const picked: PickFieldOption | null = value && { id: String(value.id), label: value.name, icon: 'user', meta: value.username }
   return (
     <PickField
       label={label}
