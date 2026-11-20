@@ -12,8 +12,9 @@
   on 2026-11-19, rehearsed on the owner's clone that day (§13.2, step 1) and merged on 2026-11-20
   (Healdan-Project/healdan#280), with `mariadb-final` tagged on the commit it merged onto. The owner's server moved
   the same morning and the owner's walkthrough passed (§13.2, steps 2 and 3): the plan's Decision Log 51 to 53 have
-  the results. Where the build departed
-  from this text, the section says so in a "changed in the build" clause, with the plan's Decision Log number.
+  the results. Since the same day the smoke test's check of PostgreSQL's log fails a build on an unexpected line
+  (§10.1; Healdan-Project/healdan#289, the plan's Decision Log 54). Where the build departed from this text, the
+  section says so in a "changed in the build" clause, with the plan's Decision Log number.
 - **Inputs:**
   - the [PostgreSQL recon](../../reference/postgresql-recon.md) of 2026-11-03, re-checked on 2026-11-18, whose
     sections this spec cites as "recon §n" and whose questions Q1 to Q15 it answers (§15);
@@ -713,10 +714,13 @@ held. Healdan's own later migrations aren't part of it, §9.3.)
   only when it couldn't read the log, a failed or empty read or one with no "ready to accept connections" line, or its
   list is missing. An unexpected line prints, and passes, until the list has held for five consecutive runs of the
   draft pull request's CI on each architecture; then, before the pull request is marked ready, a commit of it makes
-  the check fail on one (the plan's Task 23, Decision Log 46). Each `ERROR` line is read with the first line of its
-  statement, never its `DETAIL`. The list holds `StatsCollector`'s two patterns, taken from a stack with its 30-minute
-  delay shortened, as no smoke run lives that long; the two start-up probes are gone, §8.2. The new checks found no
-  fault, and no run's log held an `ERROR` line; plan, Decision Log 38.)
+  the check fail on one (the plan's Task 23, Decision Log 46). That came after the merge, not before it: the switch
+  merged short of five, on the owner's word, `master`'s own runs made up the rest, and a pull request of its own made
+  the check fail on an unexpected line on 2026-11-20 (Healdan-Project/healdan#289; plan, Decision Log 52 and 54).
+  Each `ERROR` line is read with the first line of its statement, never its `DETAIL`. The list holds
+  `StatsCollector`'s two patterns, taken from a stack with its 30-minute delay shortened, as no smoke run lives that
+  long; the two start-up probes are gone, §8.2. The new checks found no fault, and no run's log held an `ERROR` line;
+  plan, Decision Log 38.)
 - **`test-init.sh`'s step that runs Upgrading's SQL** follows the page (§12): with no change listed for PostgreSQL
   yet, it has nothing to run until an upstream sync adds one.
 - **`test-init.sh`, `test-image.sh` and `test-overlays.sh`,** which are run by hand, move to PostgreSQL, with the
