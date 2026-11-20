@@ -130,6 +130,24 @@
   box-shadow: var(--hd-focus-inset);
 }
 
+/* A heading dragged along the heading row: the line where it would go, the accent's, on the edge after the heading it would
+   follow, as the resize line is (React Aria stacks each heading over the next). The header draws nothing past the last
+   heading, so after it the line lies inside it. */
+.column[data-drop-line]::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: -1px;
+  z-index: 1;
+  width: 2px;
+  background: var(--hd-accent-fill);
+  content: '';
+  pointer-events: none;
+}
+
+.column[data-drop-line='end']::after {
+  inset-inline-end: 0;
+}
+
 .end {
   justify-content: flex-end;
   text-align: end;

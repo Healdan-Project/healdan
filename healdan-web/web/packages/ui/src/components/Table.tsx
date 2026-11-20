@@ -25,6 +25,9 @@ import { ContextMenu, type ItemMenu } from './ContextMenu'
 import { headingMenu } from './headingMenu'
 import styles from './Table.module.css'
 import { useColumnResizing } from './useColumnResizing'
+import { useHeadingDrag } from './useHeadingDrag'
+
+export { COLUMN_TYPE } from './useHeadingDrag'
 
 /** One row: what the Table needs to know of it, besides the caller's own fields. */
 export interface TableRow {
@@ -85,7 +88,10 @@ export interface TableResizing {
 
 /** A document list's columns, which the person moves, hides and chooses */
 export interface TableColumnChoice {
-  /** Move Left or Move Right: the index the column ends at among the columns as given, never before Title's */
+  /**
+   * Move Left or Move Right, or the column's heading dropped along the heading row: the index the column ends at among the
+   * columns as given, never before Title's. Never called for a move that would leave the column where it is.
+   */
   onMove: (column: string, to: number) => void
   /** Hide <column> */
   onHide: (column: string) => void
@@ -251,15 +257,19 @@ export function Table<T extends TableRow>({
     }
   }
 
+  const headingDrag = useHeadingDrag(columns, choice)
+
   // A drag that starts on a row carries the selection when the row is in it, and the row alone when it isn't. The browser's
   // own drag and drop, so React Aria's drag and drop code, which is some 140 kB, isn't loaded for it.
   function onDragStart(event: DragEvent<HTMLDivElement>) {
+    // A heading's drag moves its column, and is never a row's
+    if (headingDrag.start(event) || !drag) return
     const target = event.target instanceof Element ? event.target : null
     // Text dragged out of a field in a row is the field's
     if (target?.closest('input, textarea')) return
     const key = target?.closest('[data-row-key]')?.getAttribute('data-row-key')
-    const data = drag && key ? drag.data(selection.has(key) ? [...selection] : [key]) : undefined
-    if (!drag || data === undefined) return event.preventDefault()
+    const data = key ? drag.data(selection.has(key) ? [...selection] : [key]) : undefined
+    if (data === undefined) return event.preventDefault()
     event.dataTransfer.setData(drag.type, data)
     event.dataTransfer.effectAllowed = 'move'
   }
@@ -288,6 +298,7 @@ export function Table<T extends TableRow>({
   }
 
   function onPointerDownCapture(event: PointerEvent<HTMLDivElement>) {
+    headingDrag.pressed(event)
     pressedBy.current = event.pointerType
     if (event.pointerType === 'mouse') press(event)
     else opening.current = undefined
@@ -361,11 +372,13 @@ export function Table<T extends TableRow>({
         onRowAction={onOpen && ((key: Key) => onOpen(String(key)))}
       >
         {/* React Aria keeps each heading's element until a dependency changes, so what a heading draws from is one */}
-        <TableHeader columns={columns} dependencies={[columns, resizing === undefined, edges, resizing?.widths, resize.resized]}>
+        <TableHeader columns={columns} dependencies={[columns, resizing === undefined, edges, resizing?.widths, resize.resized, choice === undefined, headingDrag.lineAfter]}>
           {(column) => (
             <Column
+              ref={headingDrag.headingRef(column)}
               id={column.id}
               data-column-key={column.id}
+              data-drop-line={headingDrag.lineAfter === column.id ? (column.id === lastColumn ? 'end' : 'edge') : undefined}
               isRowHeader={column.isRowHeader}
               allowsSorting={column.allowsSorting && onSort !== undefined}
               width={resize.widthOf(column)}
@@ -436,7 +449,8 @@ export function Table<T extends TableRow>({
         onMouseDownCapture={onMouseDownCapture}
         onClickCapture={onClickCapture}
         onDoubleClickCapture={onDoubleClickCapture}
-        onDragStart={drag ? onDragStart : undefined}
+        onDragStart={drag || choice ? onDragStart : undefined}
+        {...headingDrag.frameProps}
         aria-busy={busy || undefined}
       >
         {resizing ? (

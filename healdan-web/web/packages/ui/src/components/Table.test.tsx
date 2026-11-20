@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -9,7 +9,7 @@ import { expectNoAxeViolations } from '../test/axe'
 import { bringObservedIntoView } from '../test/intersection'
 import '../tokens.css'
 import { Icon } from '../icons'
-import { Table, type TableColumn, type TableProps, type TableResizing, type TableRow, type TableSort } from './Table'
+import { COLUMN_TYPE, Table, type TableColumn, type TableProps, type TableResizing, type TableRow, type TableSort } from './Table'
 import tableCss from './Table.module.css?raw'
 import { MenuItem } from './Menu'
 
@@ -30,6 +30,9 @@ const sized: TableColumn<Item>[] = [
   { ...columns[1]!, width: 100 },
   { ...columns[2]!, width: 120 },
 ]
+
+// A document list's columns: Author comes after Title, so Doc # can move either way
+const listColumns: TableColumn<Item>[] = [columns[0]!, { id: 'author', name: 'Author', allowsSorting: true, cell: () => 'Ann' }, columns[1]!, columns[2]!]
 
 function items(count: number): Item[] {
   return Array.from({ length: count }, (_, i) => ({ id: `d${i + 1}`, textValue: `Letter ${i + 1}`, name: `Letter ${i + 1}`, number: 10000 + i }))
@@ -703,9 +706,6 @@ describe('Table right-click menu', () => {
 describe('Table heading menu', () => {
   const header = (name: RegExp | string) => screen.getByRole('columnheader', { name })
 
-  // A document list's columns: Author comes after Title, so Doc # can move either way
-  const listColumns: TableColumn<Item>[] = [columns[0]!, { id: 'author', name: 'Author', allowsSorting: true, cell: () => 'Ann' }, columns[1]!, columns[2]!]
-
   // What every list can switch on
   function options() {
     return {
@@ -886,6 +886,276 @@ describe('Table heading menu', () => {
     rerender(<Harness onSort={vi.fn()} />)
     expect(fireEvent.contextMenu(header('Note'))).toBe(true)
     expect(fireEvent.contextMenu(header('Doc #'))).toBe(false)
+  })
+})
+
+describe('Table heading drag', () => {
+  const header = (name: RegExp | string) => screen.getByRole('columnheader', { name })
+  const choice = () => ({ onMove: vi.fn<(column: string, to: number) => void>(), onHide: vi.fn<(column: string) => void>(), panel: null })
+  const rowDrag = () => ({ type: 'application/x-test-rows', data: vi.fn((keys: string[]) => keys.join(',')) })
+  // A press of the mouse's main button that React Aria takes as one: jsdom's pointer events would otherwise read as a screen
+  // reader's, which React Aria leaves to the click
+  const down = { button: 0, pointerType: 'mouse', pointerId: 1, pressure: 0.5 }
+
+  /** What a browser's DataTransfer does in a drag, which jsdom lacks: one is carried from the dragstart to the dragend */
+  function transfer(types: string[] = []) {
+    const data = new Map(types.map((type) => [type, '']))
+    return {
+      get types() {
+        return [...data.keys()]
+      },
+      setData: (type: string, value: string) => void data.set(type, value),
+      getData: (type: string) => data.get(type) ?? '',
+      effectAllowed: 'uninitialized',
+      dropEffect: 'none',
+    }
+  }
+  type Transfer = ReturnType<typeof transfer>
+
+  /**
+   * A drag event on `target`, with the pointer at `clientX`: jsdom has no DragEvent, so the place is set on the event. False
+   * when it was cancelled, as a dragover is where the browser would drop.
+   */
+  function dragEvent(type: 'dragStart' | 'dragEnter' | 'dragOver' | 'dragLeave' | 'drop' | 'dragEnd', target: Element, dataTransfer: Transfer, clientX = 0) {
+    const event = createEvent[type](target, { dataTransfer })
+    Object.defineProperty(event, 'clientX', { value: clientX })
+    return fireEvent(target, event)
+  }
+
+  // jsdom lays nothing out: the headings are given their boxes, Title 0 to 220, Author to 320, Doc # to 420 and Note to 540
+  function layOut() {
+    let left = 0
+    for (const [name, width] of [['Title', 220], ['Author', 100], ['Doc #', 100], ['Note', 120]] as const) {
+      const box = new DOMRect(left, 0, width, 34)
+      header(name).getBoundingClientRect = () => box
+      left += width
+    }
+  }
+
+  /** Drags the heading named `from` and drops it over the heading named `over`, at `clientX`, as a browser does */
+  function dragHeading(from: string, over: string, clientX: number) {
+    const data = transfer()
+    dragEvent('dragStart', header(from), data)
+    dragEvent('dragEnter', header(over), data, clientX)
+    dragEvent('dragOver', header(over), data, clientX)
+    dragEvent('drop', header(over), data, clientX)
+    dragEvent('dragEnd', header(from), data)
+  }
+
+  /** The headings the drop line is drawn on, and where on them */
+  const lines = () => screen.getAllByRole('columnheader').flatMap((one) => (one.hasAttribute('data-drop-line') ? [`${one.textContent} ${one.getAttribute('data-drop-line')}`] : []))
+
+  it('drags a heading between two others and reports the move', () => {
+    const chosen = choice()
+    // A drop zone around the list, as a folder's view has, which would take a drop it heard of as one with no files
+    const zone = vi.fn()
+    render(
+      <div onDrop={zone}>
+        <Harness columns={listColumns} choice={chosen} />
+      </div>,
+    )
+    layOut()
+    // Author past Doc #'s midpoint (370) goes after Doc #, so it ends where Doc # is now
+    dragHeading('Author', 'Doc #', 390)
+    expect(chosen.onMove).toHaveBeenCalledExactlyOnceWith('author', 2)
+    // Note before Author's midpoint (270) goes before Author
+    dragHeading('Note', 'Author', 240)
+    expect(chosen.onMove).toHaveBeenLastCalledWith('note', 1)
+    expect(chosen.onMove).toHaveBeenCalledTimes(2)
+    expect(zone).not.toHaveBeenCalled()
+  })
+
+  it('carries only the column\'s type, never the rows\'', () => {
+    const rows = rowDrag()
+    render(<Harness columns={listColumns} choice={choice()} drag={rows} />)
+    const data = transfer()
+    expect(dragEvent('dragStart', header('Author'), data)).toBe(true)
+    expect(data.types).toEqual([COLUMN_TYPE])
+    expect(data.getData(COLUMN_TYPE)).toBe('author')
+    expect(data.effectAllowed).toBe('move')
+    expect(rows.data).not.toHaveBeenCalled()
+    // A row's drag is as it was
+    const fromRow = transfer()
+    dragEvent('dragStart', row(/Letter 1/), fromRow)
+    expect(fromRow.types).toEqual(['application/x-test-rows'])
+  })
+
+  it('makes the headings draggable only with `choice`, and Title never', () => {
+    const draggable = () => screen.getAllByRole('columnheader').map((one) => one.getAttribute('draggable'))
+    const { rerender } = render(<Harness columns={listColumns} onSort={vi.fn()} />)
+    expect(draggable()).toEqual([null, null, null, null])
+    // Nor do its headings take a heading's drag
+    expect(dragEvent('dragOver', header('Doc #'), transfer([COLUMN_TYPE]), 390)).toBe(true)
+    rerender(<Harness columns={listColumns} onSort={vi.fn()} choice={choice()} />)
+    expect(draggable()).toEqual([null, 'true', 'true', 'true'])
+    rerender(<Harness columns={listColumns} onSort={vi.fn()} />)
+    expect(draggable()).toEqual([null, null, null, null])
+  })
+
+  it('can\'t drag Title, nor drop before it', () => {
+    const chosen = choice()
+    render(<Harness columns={listColumns} choice={chosen} />)
+    layOut()
+    const data = transfer()
+    expect(dragEvent('dragStart', header('Title'), data)).toBe(false)
+    expect(data.types).toEqual([])
+    // Doc # before Title's midpoint (110) goes after Title, as nothing goes before it
+    dragHeading('Doc #', 'Title', 20)
+    expect(chosen.onMove).toHaveBeenCalledExactlyOnceWith('docNumber', 1)
+  })
+
+  it('a drag that ends where it began moves nothing, and sorts nothing', async () => {
+    const chosen = choice()
+    const onSort = vi.fn()
+    render(<Harness columns={listColumns} choice={chosen} onSort={onSort} />)
+    layOut()
+    // On Author itself, either side of its midpoint, and past Title's, where Author already is
+    for (const [over, clientX] of [['Author', 230], ['Author', 310], ['Title', 200]] as const) {
+      fireEvent.pointerDown(header('Author'), down)
+      dragHeading('Author', over, clientX)
+      // A release after the drag, should a browser send one, is no click: React Aria ended the press when the drag started
+      fireEvent.pointerUp(header('Author'), down)
+    }
+    // Nor a drag that ends with no drop: let go outside the list, or cancelled with Esc
+    const data = transfer()
+    dragEvent('dragStart', header('Author'), data)
+    dragEvent('dragEnter', header('Note'), data, 500)
+    dragEvent('dragOver', header('Note'), data, 500)
+    dragEvent('dragEnd', header('Author'), data)
+    // React Aria clicks a released press itself after 80 ms where no click came, so the check waits that out
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(chosen.onMove).not.toHaveBeenCalled()
+    expect(onSort).not.toHaveBeenCalled()
+  })
+
+  it('a press that doesn\'t move sorts as a click does, and the keys sort as before', async () => {
+    const user = userEvent.setup()
+    const onSort = vi.fn()
+    render(<Harness columns={listColumns} choice={choice()} onSort={onSort} />)
+    const author = header('Author')
+    expect(author.getAttribute('draggable')).toBe('true')
+    // Nothing takes the press's default, from which the browser starts its drag (only a browser drags: Task 12's test does)
+    expect(fireEvent.pointerDown(author, down)).toBe(true)
+    expect(fireEvent.mouseDown(author, { button: 0 })).toBe(true)
+    fireEvent.pointerCancel(author, down)
+    expect(onSort).not.toHaveBeenCalled()
+    await user.click(author)
+    expect(onSort).toHaveBeenCalledExactlyOnceWith({ column: 'author', direction: 'ascending' })
+    act(() => author.focus())
+    press(author, 'Enter')
+    expect(onSort).toHaveBeenCalledTimes(2)
+    expect(onSort).toHaveBeenLastCalledWith({ column: 'author', direction: 'ascending' })
+  })
+
+  it('starts nothing from a heading\'s edge, which resizes', () => {
+    const resizing = { widths: {}, onResizeEnd: vi.fn(), onReset: vi.fn() }
+    render(<Harness columns={listColumns} choice={choice()} resizing={resizing} />)
+    const author = header('Author')
+    const edge = author.querySelector<HTMLElement>('.resizer')!
+    // The edge lies over the next heading's first 12 pixels too, so a drag from it is a resize's, whichever heading it's on
+    const fromEdge = transfer()
+    expect(dragEvent('dragStart', edge, fromEdge)).toBe(false)
+    expect(fromEdge.types).toEqual([])
+    // A browser fires the drag at the heading, the element that drags, whatever in it was pressed: the press says where it began
+    const pressed = transfer()
+    fireEvent.pointerDown(edge, down)
+    expect(dragEvent('dragStart', author, pressed)).toBe(false)
+    fireEvent.pointerUp(edge, down)
+    expect(pressed.types).toEqual([])
+    // A press on the heading's name drags it
+    const fromName = transfer()
+    fireEvent.pointerDown(author.querySelector('.heading')!, down)
+    expect(dragEvent('dragStart', author, fromName)).toBe(true)
+    expect(fromName.types).toEqual([COLUMN_TYPE])
+    dragEvent('dragEnd', author, fromName)
+    expect(resizing.onResizeEnd).not.toHaveBeenCalled()
+  })
+
+  it('takes neither a row\'s drag nor files over the headings, and a heading\'s drag is taken nowhere but its own headings', () => {
+    const chosen = choice()
+    render(<Harness columns={listColumns} choice={chosen} drag={rowDrag()} />)
+    layOut()
+    // A row's drag: no cancelled dragover, so no drop there, and no line
+    const rows = transfer()
+    dragEvent('dragStart', row(/Letter 1/), rows)
+    dragEvent('dragEnter', header('Doc #'), rows, 390)
+    expect(dragEvent('dragOver', header('Doc #'), rows, 390)).toBe(true)
+    expect(lines()).toEqual([])
+    dragEvent('dragEnd', row(/Letter 1/), rows)
+    // Files from the computer
+    expect(dragEvent('dragOver', header('Doc #'), transfer(['Files']), 390)).toBe(true)
+    expect(lines()).toEqual([])
+    // A heading's drag over a row
+    const heading = transfer()
+    dragEvent('dragStart', header('Author'), heading)
+    expect(dragEvent('dragOver', row(/Letter 1/), heading, 390)).toBe(true)
+    expect(lines()).toEqual([])
+    // Over its own headings it is taken
+    expect(dragEvent('dragOver', header('Doc #'), heading, 390)).toBe(false)
+    dragEvent('dragEnd', header('Author'), heading)
+    expect(chosen.onMove).not.toHaveBeenCalled()
+  })
+
+  it('takes no heading dragged from another list', () => {
+    const documents = choice()
+    const folders = choice()
+    render(
+      <>
+        <Harness aria-label="Documents" columns={listColumns} choice={documents} />
+        <Harness aria-label="Folders" columns={listColumns} choice={folders} />
+      </>,
+    )
+    const headingOf = (list: string, name: string) => within(screen.getByRole('grid', { name: list })).getByRole('columnheader', { name })
+    const data = transfer()
+    dragEvent('dragStart', headingOf('Documents', 'Author'), data)
+    expect(dragEvent('dragOver', headingOf('Folders', 'Note'), data, 500)).toBe(true)
+    dragEvent('drop', headingOf('Folders', 'Note'), data, 500)
+    dragEvent('dragEnd', headingOf('Documents', 'Author'), data)
+    expect(folders.onMove).not.toHaveBeenCalled()
+    expect(documents.onMove).not.toHaveBeenCalled()
+  })
+
+  it('draws a line where the heading would go while it\'s over the headings, gone once it leaves them, drops or ends', () => {
+    render(<Harness columns={listColumns} choice={choice()} />)
+    layOut()
+    const data = transfer()
+    dragEvent('dragStart', header('Author'), data)
+    dragEvent('dragEnter', header('Author'), data, 270)
+    dragEvent('dragOver', header('Author'), data, 270)
+    // Where it is, it would go nowhere: no line
+    expect(lines()).toEqual([])
+    dragEvent('dragEnter', header('Doc #'), data, 390)
+    dragEvent('dragLeave', header('Author'), data, 390)
+    dragEvent('dragOver', header('Doc #'), data, 390)
+    // On the edge between Doc # and Note
+    expect(lines()).toEqual(['Doc # edge'])
+    dragEvent('dragEnter', header('Note'), data, 500)
+    dragEvent('dragLeave', header('Doc #'), data, 500)
+    dragEvent('dragOver', header('Note'), data, 500)
+    // After the last heading, at the list's edge
+    expect(lines()).toEqual(['Note end'])
+    // Down out of the headings, onto a row
+    dragEvent('dragEnter', row(/Letter 1/), data, 500)
+    dragEvent('dragLeave', header('Note'), data, 500)
+    expect(lines()).toEqual([])
+    // Back, and dropped
+    dragEvent('dragEnter', header('Doc #'), data, 390)
+    dragEvent('dragOver', header('Doc #'), data, 390)
+    expect(lines()).toEqual(['Doc # edge'])
+    dragEvent('drop', header('Doc #'), data, 390)
+    expect(lines()).toEqual([])
+    dragEvent('dragEnd', header('Author'), data)
+    // A drag that ends with no drop
+    const again = transfer()
+    dragEvent('dragStart', header('Author'), again)
+    dragEvent('dragEnter', header('Doc #'), again, 390)
+    dragEvent('dragOver', header('Doc #'), again, 390)
+    expect(lines()).toEqual(['Doc # edge'])
+    dragEvent('dragEnd', header('Author'), again)
+    expect(lines()).toEqual([])
+    // jsdom draws nothing, so the rules are read: 2 pixels of the accent on the edge, and inside the last heading
+    expect(tableCss).toMatch(/\.column\[data-drop-line\]::after \{[^}]*inset-inline-end: -1px;[^}]*width: 2px;[^}]*background: var\(--hd-accent-fill\)/)
+    expect(tableCss).toMatch(/\.column\[data-drop-line='end'\]::after \{[^}]*inset-inline-end: 0/)
   })
 })
 
