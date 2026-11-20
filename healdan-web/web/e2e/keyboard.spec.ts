@@ -296,8 +296,6 @@ test('row 6: an email reads in Quick Look, Show Pictures and Save to Matter are 
   const body = dialog.frameLocator('iframe[title="Message Body"]')
   await expect(body.getByText(`Hello from the run ${RUN}`)).toBeVisible()
   expect(trackers).toEqual([])
-  // THROWAWAY: fails on purpose, to show what a failed run keeps. Removed before review.
-  await expect(dialog.getByRole('button', { name: 'No Such Button' })).toBeVisible()
 
   await tabTo(page, dialog.getByRole('button', { name: 'Show Pictures' }))
   await page.keyboard.press('Enter')
