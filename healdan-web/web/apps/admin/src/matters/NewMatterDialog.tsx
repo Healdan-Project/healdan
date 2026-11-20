@@ -294,7 +294,7 @@ export function NewMatterDialog({ client: preset, onClose }: NewMatterDialogProp
               </div>
               <WillContain templateId={templateId} folderName={folderName} />
             </div>
-            <Problems problems={elsewhere} storeName={(id) => stores.find((store) => store.id === id)?.name} onFixed={check.recheck} />
+            <Problems problems={elsewhere} current={check.current} storeName={(id) => stores.find((store) => store.id === id)?.name} onFixed={check.recheck} />
             {refusal !== undefined && (
               <p className={formStyles.refusal} role="alert">
                 {refusal}
@@ -390,13 +390,27 @@ interface Fix {
  * The check's problems that are about no one field, each in the server's words: a folder of the template that grants more
  * than its parent, and a group the template lets in, or the owner, who can't read the Store. That one has Let {group}
  * Read the Store, which adds the group to those who can see the Store, keeping every one whose row grants Read, then asks
- * for the check again.
+ * for the check again. It's offered only while the check is of the form as it is (`current`), so it never grants Read on
+ * a Store the form no longer names, and one at a time, so a second never reads who can see the Store before the first
+ * has saved, which it would then take away.
  */
-function Problems({ problems, storeName, onFixed }: { problems: A['MatterProblem'][]; storeName: (id: number) => string | undefined; onFixed: () => Promise<void> }) {
+function Problems({
+  problems,
+  current,
+  storeName,
+  onFixed,
+}: {
+  problems: A['MatterProblem'][]
+  current: boolean
+  storeName: (id: number) => string | undefined
+  onFixed: () => Promise<void>
+}) {
   const api = useApi()
   const queryClient = useQueryClient()
   const refusalFor = useRefusalFor()
   const [fix, setFix] = useState<Fix>()
+  // The one on its way keeps its focus, pending; every other waits
+  const waiting = !current || fix?.pending === true
 
   async function grant(storeId: number, groupId: number, groupName: string, key: string) {
     setFix({ key, pending: true })
@@ -433,7 +447,7 @@ function Problems({ problems, storeName, onFixed }: { problems: A['MatterProblem
                   <p className={styles.problemLine}>{refusalFor(problem)}</p>
                   {canGrant && (
                     <p className={styles.problemLine}>
-                      <Button isPending={mine?.pending} onPress={() => void grant(storeId, groupId, groupName, key)}>
+                      <Button isPending={mine?.pending} isDisabled={waiting && mine?.pending !== true} onPress={() => void grant(storeId, groupId, groupName, key)}>
                         {t('admin.newMatter.grant', { group: groupName })}
                       </Button>{' '}
                       <span>{t('admin.newMatter.orAnotherStore')}</span>

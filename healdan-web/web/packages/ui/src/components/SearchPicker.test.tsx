@@ -3,6 +3,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import '../tokens.css'
@@ -92,6 +93,27 @@ describe('SearchPicker', () => {
     expect(container.querySelector('mark')).toBeNull()
     expect(search).not.toHaveBeenCalled()
     await expectNoAxeViolations(container)
+  })
+
+  it('hands its field to the caller, which can move the focus to it', () => {
+    const { search } = controlled()
+    const inputRef = createRef<HTMLInputElement>()
+    render(
+      <SearchPicker<Matter>
+        label="Find a Matter"
+        placeholder="Number, name or client"
+        initialHeading="Recent Matters"
+        initial={[]}
+        search={search}
+        id={(matter) => String(matter.id)}
+        render={(matter) => matter.name}
+        onPick={() => {}}
+        inputRef={inputRef}
+      />,
+    )
+    expect(inputRef.current).toBe(field())
+    act(() => inputRef.current?.focus())
+    expect(document.activeElement).toBe(field())
   })
 
   it('shows no heading or list when there are no starting rows', () => {

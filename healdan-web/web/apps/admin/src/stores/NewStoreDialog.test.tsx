@@ -86,6 +86,15 @@ describe('New Store', () => {
     // The focus goes to the next group's Remove, as the one pressed has gone
     expect(document.activeElement).toBe(within(dialog()).getByRole('button', { name: 'Remove Partners' }))
     expect(offered()).toEqual(['Everyone Everyone in the firm', 'Trainees Trainee solicitors'])
+    // With no group after it, to Add a Group
+    await userEvent.click(within(dialog()).getByRole('option', { name: 'Trainees Trainee solicitors' }))
+    expect(seeing()).toEqual(['Partners', 'Trainees'])
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Remove Trainees' }))
+    expect(document.activeElement).toBe(within(dialog()).getByRole('textbox', { name: 'Add a Group' }))
+    await userEvent.click(within(dialog()).getByRole('button', { name: 'Remove Partners' }))
+    expect(seeing()).toEqual([])
+    expect(document.activeElement).toBe(within(dialog()).getByRole('textbox', { name: 'Add a Group' }))
+    await userEvent.click(within(dialog()).getByRole('option', { name: 'Partners' }))
 
     // Nothing to make without a name
     expect(isDisabled(create())).toBe(true)

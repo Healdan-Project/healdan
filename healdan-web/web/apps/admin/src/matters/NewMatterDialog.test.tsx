@@ -261,10 +261,64 @@ describe('New Matter', () => {
       'PUT /v1/admin/stores/5/access': problem(409, 'refused', 'The group Everyone no longer exists.'),
     })
     await fillIn(dialog)
-    await userEvent.click(await within(dialog).findByRole('button', { name: 'Let Everyone Read the Store' }))
+    const grant = await within(dialog).findByRole('button', { name: 'Let Everyone Read the Store' })
+    // Offered once the check is of the form as it is
+    await waitFor(() => expect(isDisabled(grant)).toBe(false))
+    await userEvent.click(grant)
     expect((await within(dialog).findByRole('alert')).textContent).toBe('The group Everyone no longer exists.')
     expect(within(dialog).getByText("Everyone can't read the Store Regional Office.")).toBeTruthy()
     expect(isDisabled(create(dialog))).toBe(true)
+  })
+
+  it('offers no grant while the check is of the form as it was, as the Store it names may no longer be the form’s', async () => {
+    const { dialog } = await openNewMatter({
+      'GET /v1/admin/stores': [clientWork, firmStore, regionalOffice],
+      'POST /v1/admin/matters/check': { problems: [unreadable] },
+    })
+    await fillIn(dialog)
+    const grant = await within(dialog).findByRole('button', { name: 'Let Everyone Read the Store' })
+    await waitFor(() => expect(isDisabled(grant)).toBe(false))
+    await userEvent.type(field(dialog, 'Name'), 's')
+    expect(isDisabled(within(dialog).getByRole('button', { name: 'Let Everyone Read the Store' }))).toBe(true)
+    await pause()
+    await waitFor(() => expect(isDisabled(within(dialog).getByRole('button', { name: 'Let Everyone Read the Store' }))).toBe(false))
+  })
+
+  it('lets one group read the Store at a time, so a second grant never reads who can see it before the first is saved', async () => {
+    const traineesUnreadable: A['MatterProblem'] = { ...unreadable, message: "Trainees can't read the Store Regional Office.", groupId: trainees.id, groupName: trainees.name }
+    const readers: A['AccessRow'][] = []
+    const puts: unknown[] = []
+    let answer!: () => void
+    const { dialog } = await openNewMatter({
+      'GET /v1/admin/stores': [clientWork, firmStore, regionalOffice],
+      'POST /v1/admin/matters/check': () => ({ problems: [unreadable, traineesUnreadable].filter((one) => !readers.some((row) => row.groupId === one.groupId)) }),
+      'GET /v1/admin/stores/5/access': () => ({ storeId: regionalOffice.id, rows: [...readers] }) satisfies A['StoreAccess'],
+      'PUT /v1/admin/stores/5/access': ({ body }: Sent) => {
+        puts.push(body)
+        return new Promise<A['StoreAccess']>((resolve) => {
+          answer = () => {
+            for (const id of (body as A['StoreAccessChange']).groupIds) if (!readers.some((row) => row.groupId === id)) readers.push(accessRow(id, String(id), ['read']))
+            resolve({ storeId: regionalOffice.id, rows: [...readers] })
+          }
+        })
+      },
+    })
+    await fillIn(dialog)
+    await userEvent.selectOptions(select(dialog, 'Store'), 'Regional Office')
+    const everyoneGrant = await within(dialog).findByRole('button', { name: 'Let Everyone Read the Store' })
+    await waitFor(() => expect(isDisabled(everyoneGrant)).toBe(false))
+    await userEvent.click(everyoneGrant)
+    await waitFor(() => expect(puts).toHaveLength(1))
+    // The other waits while the first is on its way
+    expect(isDisabled(within(dialog).getByRole('button', { name: 'Let Trainees Read the Store' }))).toBe(true)
+    answer()
+    await waitFor(() => expect(within(dialog).queryByRole('button', { name: 'Let Everyone Read the Store' })).toBeNull())
+    const traineesGrant = within(dialog).getByRole('button', { name: 'Let Trainees Read the Store' })
+    await waitFor(() => expect(isDisabled(traineesGrant)).toBe(false))
+    await userEvent.click(traineesGrant)
+    await waitFor(() => expect(puts).toHaveLength(2))
+    // Read after the first was saved, so it keeps Everyone
+    expect(puts[1]).toEqual({ groupIds: [everyone.id, trainees.id] })
   })
 
   it("creates the matter, then goes to the matter's page", async () => {

@@ -57,9 +57,10 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
   const [chosen, setChosen] = useState<A['Group'][]>([])
   const [failure, setFailure] = useState<unknown>()
   const [busy, setBusy] = useState(false)
-  // Where the focus goes once a group is removed and its button with it: the next group's Remove, or the last one's
+  // Where the focus goes once a group is removed and its button with it: the next group's Remove, or Add a Group
   const removeButtons = useRef(new Map<number, HTMLButtonElement>())
-  const refocus = useRef<number | undefined>(undefined)
+  const addField = useRef<HTMLInputElement>(null)
+  const refocus = useRef<number | 'add' | undefined>(undefined)
 
   const listed = useAdminQuery('/v1/admin/groups', { query: { limit: GROUPS_SHOWN } })
   const search = useCallback(
@@ -79,7 +80,7 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
   // Once the list is drawn without the group removed
   useEffect(() => {
     if (refocus.current === undefined) return
-    removeButtons.current.get(refocus.current)?.focus()
+    ;(refocus.current === 'add' ? addField.current : removeButtons.current.get(refocus.current))?.focus()
     refocus.current = undefined
   })
 
@@ -106,7 +107,7 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
     const index = chosen.findIndex((one) => one.id === group.id)
     const rest = chosen.filter((one) => one.id !== group.id)
     setChosen(rest)
-    refocus.current = rest[Math.min(index, rest.length - 1)]?.id
+    refocus.current = rest[index]?.id ?? 'add'
     change()
   }
 
@@ -201,6 +202,7 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
             )}
             onPick={add}
             leaveOut={(group) => chosenIds.has(group.id)}
+            inputRef={addField}
           />
           <p className={formStyles.note}>{t('admin.newStore.backend')}</p>
           {refusal !== undefined && (
