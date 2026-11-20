@@ -52,9 +52,6 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 			// Task 15: Stores, and the groups a form needs
 			"GET /v1/admin/stores", "POST /v1/admin/stores", "GET /v1/admin/stores/{id}/access",
 			"PUT /v1/admin/stores/{id}/access", "GET /v1/admin/groups",
-			// Task 16: folder access
-			"GET /v1/admin/folders/{id}/access", "PUT /v1/admin/folders/{id}/access",
-			"POST /v1/admin/folders/{id}/apply-access",
 			// Task 17: workspace folders, search folders and templates
 			"GET /v1/admin/workspaces/{folderId}/tree", "POST /v1/admin/folders/{id}/children",
 			"PATCH /v1/admin/folders/{id}", "DELETE /v1/admin/folders/{id}", "POST /v1/admin/folders/{id}/move",

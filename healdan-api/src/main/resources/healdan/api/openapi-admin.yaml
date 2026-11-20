@@ -1091,6 +1091,10 @@ paths:
         (`followsFolderId`), each row with its access level. Whether
         **Apply to Subfolders** is offered is `canApplyToSubfolders`.
 
+        A group or person the folder grants nothing isn't listed, though
+        LogicalDOC can keep a row for one, so every row can be sent back to
+        `PUT` as it is.
+
         A folder outside a workspace is `404 not-found`.
       tags: [Matters]
       parameters:
@@ -1118,32 +1122,46 @@ paths:
         `FolderAccessService`, and answers its access after (Admin app spec
         section 8.4). Either `rows`, the folder's own permissions from then
         on (**Set Own Permissions**, and **Save**): each group or person
-        gets exactly the permissions its row gives, and one left out gets
-        none here; or `followParent: true`, which gives them up for its
-        parent's (**Follow Parent**). Inside a matter, the folders below it
-        that would grant more than it then narrow with it, as on every
-        route.
+        gets exactly the permissions its row gives, every row the folder had
+        goes, and one left out gets none here; an empty list leaves the
+        folder to administrators. Or `followParent: true`, which gives them
+        up for its parent's (**Follow Parent**), and the folders that
+        followed it then follow what it follows, as LogicalDOC's
+        `updateSecurityRef` does. Inside a matter, the folders below it that
+        would grant more than it then narrow with it, as on every route.
 
+        - `400 bad-request`, besides the body's own rules, for a permission
+          that isn't one of `Permission`'s names, or is named twice in a row.
         - `404 not-found` for a folder outside a workspace.
         - `422 validation`: `rows` (`required`) when neither `rows` nor
           `followParent: true` is sent, and (`invalid`) when both are; a row
           (`rows[2]`) with neither `groupId` nor `userId` (`required`), with
           both (`invalid`), or naming a group or person an earlier row named
-          (`duplicate`); and a row's empty `permissions`
-          (`rows[2].permissions`, `required`).
-        - `409 refused` for a group or person that no longer exists; for
+          (`duplicate`), a person named by `userId` and by their own group's
+          `groupId` being the same; and a row's missing or empty
+          `permissions` (`rows[2].permissions`, `required`).
+        - `409 refused`, with the rule's sentence, for a group or person that
+          no longer exists (but for a deleted group the folder grants
+          something now, as LogicalDOC still lets its members in); for
           `guest`, or a read-only person's own group, given anything beyond
-          Read Only, which LogicalDOC doesn't check when a folder's
-          permissions are saved; for leaving out the owner's row on a
-          matter's own folder, or making that folder follow its Store; and,
-          inside a matter, for a folder that would grant more than its
-          parent (P1) or, on its own folder, a group that could read the
-          matter but can't read its Store (P2). In a template P1 and P2
-          aren't checked as it's edited: the save works, and
-          `GET /v1/admin/templates/{id}/problems` lists what New Matter would
-          refuse.
+          Read Only's five permissions, which LogicalDOC doesn't check when a
+          folder's permissions are saved (it quietly drops some of them but
+          keeps Subscription and Store); on a matter's own folder, for leaving
+          out its owner's row or giving it less than Full Access, or making
+          that folder follow its Store; and, inside a matter, for a folder
+          that would grant more than its parent (P1) or, on its own folder, a
+          group that could read the matter but can't read its Store (P2). In
+          a template P1 and P2 aren't checked as it's edited: the save works,
+          and `GET /v1/admin/templates/{id}/problems` lists what New Matter
+          would refuse. Below a matter's own folder the owner's row may go,
+          as a restricted folder may keep anyone out.
 
-        Recorded as `folder.access-changed`, with the rows before and after.
+        Recorded as `folder.access-changed`, with the folder it followed
+        before and follows after (`follows`, by its path from its workspace's
+        top folder; null with its own), and each row that changed, named as
+        `group Partners` or `user jdoe`, with its permissions before and
+        after (null for no row). A save or Follow Parent that would change
+        nothing is neither written nor recorded.
       tags: [Matters]
       parameters:
         - $ref: '#/components/parameters/FolderPath'
@@ -1179,19 +1197,29 @@ paths:
       operationId: adminApplyFolderAccess
       summary: Give the folders below a folder its permissions
       description: |
-        **Apply to Subfolders** (Admin app spec section 8.4): every folder
-        and search folder below this one, at every level, deleted ones too,
-        gives up permissions of its own and follows this folder, through
+        **Apply to Subfolders** (Admin app spec section 8.4), through
         LogicalDOC's `applySecurityToTree`, as the Classic Interface's Apply
-        to Subfolders does. A folder below that was restricted is opened up
-        to this folder's permissions. Answers `204`.
+        to Subfolders does: every folder and search folder below this one, at
+        every level, those in the Trash too, loses its own rows and follows
+        what this folder follows (this folder, when it has its own; when it
+        follows, the folder it follows). Nothing below is skipped and nothing
+        is moved or deleted: a restricted folder below stays where it is,
+        opened up, granting exactly what this folder grants, so anyone it
+        kept out can use it; one in the Trash comes back so if it's restored.
+        The folder itself doesn't change. Answers `204`.
 
         - `404 not-found` for a folder outside a workspace.
         - `409 refused` where `canApplyToSubfolders` is false: a folder with
-          no folder below it, and where Healdan's rules don't allow it
-          (`checkApplyToTree`).
+          no live folder below it, and where Healdan's rules don't allow it
+          (`checkApplyToTree`, which needs the security permission on every
+          folder below with its own rows, and always allows an
+          administrator).
 
-        Recorded as `folder.access-applied`, after it's done.
+        Recorded as `folder.access-applied`, after it's done, with how many
+        folders below, the Trash's included, had their own permissions
+        (`foldersWithOwnPermissions`) and followed what this folder follows
+        (`foldersFollowing`), before and after. Applied again, it changes
+        nothing and isn't recorded.
       tags: [Matters]
       parameters:
         - $ref: '#/components/parameters/FolderPath'
@@ -3001,7 +3029,8 @@ components:
           $ref: '#/components/schemas/AccessLevel'
         permissions:
           type: array
-          description: What it grants, in the order `Permission` lists them
+          description: What it grants, at least one, in the order `Permission` lists them
+          minItems: 1
           uniqueItems: true
           items:
             $ref: '#/components/schemas/Permission'
@@ -3030,14 +3059,17 @@ components:
             be above its parent, or its Store; null with its own
         rows:
           type: array
-          description: What it grants, groups first, then people, each by name, ignoring case
+          description: |
+            What it grants, groups first, then people, each by name, ignoring
+            case; a group or person it grants nothing isn't listed
           items:
             $ref: '#/components/schemas/AccessRow'
         canApplyToSubfolders:
           type: boolean
           description: |
-            Whether **Apply to Subfolders** is offered: it has a folder below
-            it, and Healdan's rules allow it (`checkApplyToTree`)
+            Whether **Apply to Subfolders** is offered: it has a live folder
+            below it (one in the Trash doesn't count), and Healdan's rules
+            allow it (`checkApplyToTree`)
     FolderAccessChange:
       type: object
       description: |
@@ -3057,16 +3089,21 @@ components:
       type: object
       description: |
         What a folder grants a group, by `groupId`, or a person, by `userId`,
-        whose own group gets it: one of the two
+        whose own group gets it: one of the two. A person's own group may be
+        named by its `groupId` too, as `AccessRow` gives it, so a row can be
+        sent back as it came; naming a person by `userId` and by their own
+        group's `groupId` names them twice (`duplicate`).
       additionalProperties: false
       required: [permissions]
       properties:
         groupId:
           type: integer
           format: int64
+          description: A group, or a person's own group
         userId:
           type: integer
           format: int64
+          description: A person, whose own group gets the row
         permissions:
           type: array
           description: Exactly what it grants, at least one; `AccessLevel` lists each level's
