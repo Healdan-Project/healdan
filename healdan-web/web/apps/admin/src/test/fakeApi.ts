@@ -187,7 +187,17 @@ export function matterList(items: A['MatterRow'][], over: Partial<A['MatterList'
   return { items, offset: 0, limit: 100, total: items.length, figuresAt: '2026-11-19T10:41:00Z', ...over }
 }
 
-/** GET /v1/users, the people picker's: anyone whose name or username holds `q` */
+/** Someone who has left: a disabled account, which GET /v1/users leaves out and the admin find keeps */
+export const sally: A['FoundPerson'] = { id: 8, username: 'sally.old', name: 'Sally Oldham', enabled: false }
+
+/** GET /v1/admin/find for `q`: only people, those who have left too, whose name or username holds it */
+export function findPeople(q: unknown): A['Found'] {
+  const words = String(q ?? '').toLowerCase()
+  const everyone: A['FoundPerson'][] = [...[helen, tom, sam].map((one) => ({ ...one, enabled: true })), sally]
+  return { clients: [], matters: [], people: everyone.filter((one) => one.name.toLowerCase().includes(words) || one.username.includes(words)) }
+}
+
+/** GET /v1/users, the people picker's: anyone whose name or username holds `q`, enabled accounts only */
 export function people(q: unknown): S['UserHitPage'] {
   const words = String(q ?? '').toLowerCase()
   const items = [helen, tom, sam].filter((one) => one.name.toLowerCase().includes(words) || one.username.includes(words))

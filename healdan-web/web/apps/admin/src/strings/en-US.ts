@@ -98,6 +98,8 @@ export const adminEnUS = {
   // The pickers: a client is offered and shown by its number and name
   'admin.client.field': 'Client',
   'admin.client.label': '{number} – {name}',
+  // Beside the name of someone who has left (a disabled account), in a picker that offers them
+  'admin.person.disabled': '{username} · Disabled',
 
   // A page's way back to its list, above its title
   'admin.crumbs.label': 'Breadcrumb',

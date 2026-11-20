@@ -70,16 +70,19 @@ export function MattersView({ search }: { search: MattersSearch }) {
 
   // The client and the owner the address filters by, by name: as picked here, else as a row names them, else (a client
   // only) as the server does. Nothing names an owner the list has no row of, as the server has no person by id here.
-  const [picked, setPicked] = useState<{ client?: A['ClientBrief']; owner?: A['PersonBrief'] }>({})
+  const [chosenClient, chooseClient] = useChosen<A['ClientBrief']>(search.client)
+  const [chosenOwner, chooseOwner] = useChosen<A['PersonBrief']>(search.owner)
   const rowClient = search.client === undefined ? undefined : listing.matters.find((matter) => matter.client.id === search.client)?.client
-  const knownClient = picked.client?.id === search.client ? picked.client : rowClient
   // Asked only once the rows for these filters have come, and none of them names it
-  const asked = useClient(search.client, knownClient === undefined && !listing.isPending && !listing.isStale)
-  const client = search.client === undefined ? null : (knownClient ?? (asked.data?.id === search.client ? asked.data : undefined) ?? null)
+  const asked = useClient(search.client, chosenClient === undefined && rowClient === undefined && !listing.isPending && !listing.isStale)
+  const client =
+    chosenClient !== undefined ? chosenClient : search.client === undefined ? null : (rowClient ?? (asked.data?.id === search.client ? asked.data : undefined) ?? null)
   const owner =
-    search.owner === undefined
-      ? null
-      : ((picked.owner?.id === search.owner ? picked.owner : listing.matters.find((matter) => matter.owner?.id === search.owner)?.owner) ?? null)
+    chosenOwner !== undefined
+      ? chosenOwner
+      : search.owner === undefined
+        ? null
+        : (listing.matters.find((matter) => matter.owner?.id === search.owner)?.owner ?? null)
 
   // Built when the list first draws, so the firm's own word for a matter heads its column, and kept, so typing in the
   // filters doesn't draw every row again
@@ -110,20 +113,22 @@ export function MattersView({ search }: { search: MattersSearch }) {
         onTextChange={words.type}
         client={client}
         onClientChange={(next) => {
-          setPicked((now) => ({ ...now, client: next ?? undefined }))
+          chooseClient(next)
           change({ client: next?.id })
         }}
         storeId={search.store}
         onStoreChange={(store) => change({ store })}
         owner={owner}
         onOwnerChange={(next) => {
-          setPicked((now) => ({ ...now, owner: next ?? undefined }))
+          chooseOwner(next)
           change({ owner: next?.id })
         }}
         onClear={
           filtered
             ? () => {
                 words.clear()
+                chooseClient(null)
+                chooseOwner(null)
                 change({ q: undefined, client: undefined, store: undefined, owner: undefined })
               }
             : undefined
@@ -152,4 +157,19 @@ export function MattersView({ search }: { search: MattersSearch }) {
       )}
     </div>
   )
+}
+
+/**
+ * What the person picked for a filter here (null for none), shown at once: the address, which names it by id, follows a
+ * moment later, and a picker that waited for it would leave its list open. It's forgotten when the address names anything
+ * else, as the pane's Matters does, and undefined until something is picked.
+ */
+function useChosen<T extends { id: number }>(id: number | undefined) {
+  const [chosen, setChosen] = useState<T | null | undefined>(undefined)
+  const [seen, setSeen] = useState(id)
+  if (id !== seen) {
+    setSeen(id)
+    if (chosen !== undefined && chosen?.id !== id) setChosen(undefined)
+  }
+  return [chosen, setChosen] as const
 }

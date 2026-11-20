@@ -28,7 +28,7 @@ export interface MatterFiltersProps {
 
 /**
  * The filters above the Matters list (spec 8.3, 7.2): the number or name, typed; Client and Owner, searches, as either
- * can grow long; and Store, a plain menu of every Store, as there are few.
+ * can grow long, Owner finding people who have left too; and Store, a plain menu of every Store, as there are few.
  */
 export function MatterFilters({ text, onTextChange, client, onClientChange, storeId, onStoreChange, owner, onOwnerChange, onClear }: MatterFiltersProps) {
   const stores = useStores().data ?? []
@@ -50,7 +50,8 @@ export function MatterFilters({ text, onTextChange, client, onClientChange, stor
         />
       </div>
       <div className={styles.filter}>
-        <PersonPicker label={t('admin.matters.owner')} value={owner} onChange={onOwnerChange} />
+        {/* People who have left too: their matters stay theirs, and finding those is what the filter is often for */}
+        <PersonPicker label={t('admin.matters.owner')} accounts="all" value={owner} onChange={onOwnerChange} />
       </div>
       {onClear && <Button onPress={onClear}>{t('admin.matters.clear')}</Button>}
     </div>
