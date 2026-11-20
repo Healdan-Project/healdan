@@ -747,22 +747,26 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     connections for later requests, for as long as they stay open, and Tomcat closes one that has waited 20 seconds: a
     request sent on one at that moment fails with `socket hang up`, as `keyboard.spec.ts`'s sign-out after its tests
     did. A new spec makes its context with `apiContext` too.
-  - Each spec signs in through `signIn` in `helpers.ts`, which asks the server for its sign-in providers
-    (`GET /api/v1/server`) before it touches the page. The sign-in page draws the password form first, asks the same
-    question itself, and with a provider folds the form behind a link when the answer comes, so a helper that looks at
-    the page can find the field a moment before it is folded away, then wait to fill it until the test's time runs out,
-    with no sign-in sent. With a provider, the helper waits for the link, which only the fold draws. A new spec signs
-    in with `signIn` too.
+  - Each spec signs in through `signIn` in `helpers.ts`, which waits for the sign-in page to mark its body before it
+    touches the form. The page draws the password form first, asks the server for its sign-in providers, and with one
+    folds the form behind a link when the answer comes, so a helper that looks at the page can find the field a moment
+    before it is folded away, then wait to fill it until the test's time runs out, with no sign-in sent. Once the
+    question is settled, answered or not, the page's `HealdanSignInButtons` sets the body's `data-healdan-signin` to
+    `form` or `folded`, and with `folded` the helper opens the form with the link (`data-healdan-signin-link`). A new
+    spec signs in with `signIn` too.
   - It runs in `docker/smoke-test.sh` as step 9, on amd64 and arm64. On a Mac, Docker Desktop doesn't reach the
     host's ports from the default `--network host`: set `WEB_NETWORK=bridge`. The browser's container then joins the
-    network of the container that publishes the stack's port, and the browser still opens `http://127.0.0.1:<port>`,
-    which a small proxy in its container forwards to that container's own address, because the web session refuses a
-    request whose `Origin` isn't the server's own address. The proxy never goes through the host
-    (`host.docker.internal`). Docker Desktop's network remembers a connection's source port for 60 seconds when the
+    network of the container that publishes the stack's port (another `WEB_NETWORK` names the network to join), and
+    the browser still opens `http://127.0.0.1:<port>`, which a small proxy in its container forwards to that
+    container's own address, because the web session refuses a request whose `Origin` isn't the server's own address.
+    The proxy goes through the host (`host.docker.internal`) only when no container publishes the port, as for a
+    server running on the Mac itself, and the script then warns. Docker Desktop's network remembers a connection's source port for 60 seconds when the
     server was the first to close it, as Tomcat is after each of `apiContext`'s calls, and answers no new connection
     from that port meanwhile; Linux uses a source port again within that time, so about one connection in 700 opened
     11 to 67 seconds late. WebKit sends every `POST` and `PATCH` on a new connection, so a save sometimes waited and
-    its test failed at 30 seconds, a different test each run, in WebKit only. A failing spec leaves its trace and
+    its test failed at 30 seconds, a different test each run, in WebKit only. The browser's container has the label
+    `healdan.web-browsers`, so `docker/smoke-test.sh`'s cleanup removes one that a stopped run left on its stack's
+    network, which Compose couldn't remove otherwise. A failing spec leaves its trace and
     screenshot in the container, which is removed, so reproduce it with `npx playwright test` against the stack, using
     a Playwright version's browsers installed with `npx playwright install`.
 

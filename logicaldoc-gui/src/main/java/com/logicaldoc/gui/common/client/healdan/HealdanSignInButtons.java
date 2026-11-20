@@ -10,6 +10,7 @@ import com.google.gwt.core.client.GWT;
 import com.google.gwt.core.client.JavaScriptObject;
 import com.google.gwt.core.client.JsArray;
 import com.google.gwt.core.client.JsonUtils;
+import com.google.gwt.dom.client.Document;
 import com.google.gwt.http.client.Request;
 import com.google.gwt.http.client.RequestBuilder;
 import com.google.gwt.http.client.RequestCallback;
@@ -32,6 +33,8 @@ import com.smartgwt.client.widgets.layout.VLayout;
  * for its providers. With none, the page stays the password form. With some, it
  * gets one button per provider, the password form goes behind a link, and a
  * refusal that sent the person back here (spec section 5.3) shows its message.
+ * Once the question is settled, answered or not, the page's body says what the
+ * page shows from then on, for the browser tests to wait for.
  * <p>
  * It lives in the common module because the login module can't see the
  * frontend's Healdan package. English only, like the rest of Healdan's GUI
@@ -65,6 +68,18 @@ public final class HealdanSignInButtons {
 	/** Where the buttons go in the page's panel: after the logo and its spacer */
 	private static final int BUTTONS_POSITION = 2;
 
+	/**
+	 * The attribute the page's body gets once the providers' question is settled:
+	 * {@link #FORM} or {@link #FOLDED}. The browser tests sign in once it's there.
+	 */
+	private static final String SETTLED_ATTRIBUTE = "data-healdan-signin";
+
+	/** The page shows the password form, and keeps it */
+	private static final String FORM = "form";
+
+	/** The page has the password form behind its link */
+	private static final String FOLDED = "folded";
+
 	private HealdanSignInButtons() {
 	}
 
@@ -88,18 +103,34 @@ public final class HealdanSignInButtons {
 
 				@Override
 				public void onResponseReceived(Request request, Response response) {
-					if (response.getStatusCode() == Response.SC_OK)
-						show(inputsPanel, credentialsPanel, response.getText());
+					boolean folded = false;
+					try {
+						if (response.getStatusCode() == Response.SC_OK)
+							folded = show(inputsPanel, credentialsPanel, response.getText());
+					} finally {
+						settled(folded);
+					}
 				}
 
 				@Override
 				public void onError(Request request, Throwable exception) {
 					// No answer: the page stays the password form
+					settled(false);
 				}
 			});
 		} catch (RequestException e) {
 			// The request didn't go: the page stays the password form
+			settled(false);
 		}
+	}
+
+	/**
+	 * Marks the page's body with what it shows from now on
+	 *
+	 * @param folded whether the password form went behind its link
+	 */
+	private static void settled(boolean folded) {
+		Document.get().getBody().setAttribute(SETTLED_ATTRIBUTE, folded ? FOLDED : FORM);
 	}
 
 	/**
@@ -133,18 +164,23 @@ public final class HealdanSignInButtons {
 		}
 	}
 
-	private static void show(VLayout inputsPanel, VLayout credentialsPanel, String json) {
+	/**
+	 * Shows the server's providers, if it has any
+	 *
+	 * @return whether the password form went behind its link
+	 */
+	private static boolean show(VLayout inputsPanel, VLayout credentialsPanel, String json) {
 		List<Provider> providers = new ArrayList<>();
 		String passwordLabel;
 		try {
 			passwordLabel = read(json, providers);
 		} catch (RuntimeException e) {
 			// An answer that isn't what the server sends: the page stays the password form
-			return;
+			return false;
 		}
 
 		if (providers.isEmpty())
-			return;
+			return false;
 
 		// Everything is built before the page changes, so nothing half-done can hide the password form
 		VLayout panel = new VLayout();
@@ -173,6 +209,7 @@ public final class HealdanSignInButtons {
 		credentialsPanel.setVisible(false);
 		if (notice != null)
 			fitWhenFontsLoad(notice);
+		return true;
 	}
 
 	/**
@@ -249,11 +286,12 @@ public final class HealdanSignInButtons {
 
 	/**
 	 * The link that shows the password form. It can take the keyboard's focus, as
-	 * the page's other links are anchors and this one isn't.
+	 * the page's other links are anchors and this one isn't. The browser tests find
+	 * it by its attribute, as its label is the server's.
 	 */
 	private static HTMLFlow passwordLink(String label) {
-		HTMLFlow link = new HTMLFlow("<div style='text-align: center; font-size: 13px; color: #0b5dab; "
-				+ "text-decoration: underline'>" + SafeHtmlUtils.htmlEscape(label) + "</div>");
+		HTMLFlow link = new HTMLFlow("<div data-healdan-signin-link style='text-align: center; font-size: 13px; "
+				+ "color: #0b5dab; text-decoration: underline'>" + SafeHtmlUtils.htmlEscape(label) + "</div>");
 		link.setWidth100();
 		link.setCursor(Cursor.HAND);
 		link.setCanFocus(true);
