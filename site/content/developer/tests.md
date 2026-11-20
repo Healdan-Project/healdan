@@ -507,13 +507,20 @@ PostgreSQL's log, steps 1 to 7: 62 lines read, 0 ERROR lines, 0 expected and 0 u
   and the patterns were taken from a stack with the task's delay shortened. Nothing
   Healdan does in the ordinary way may be on the list: a line no pattern matches is a finding, not a pattern to add.
   A line's `DETAIL`, which can quote a row's values, is left out.
-- **It fails** when it can't read the log, when the log is empty or isn't PostgreSQL's (it has no `database system
-  is ready to accept connections`), and when the list can't be read, so a clean log is one it read.
-- **An unexpected line doesn't fail the run yet.** It prints every one, and passes, until the list has held for five
-  consecutive runs of CI on each architecture, each run's `PostgreSQL's log` lines reporting 0 unexpected. The switch
-  merged with four such runs on arm64 and two on amd64, on the owner's word, so `master`'s own runs make up the rest.
-  Then a pull request of its own makes the check fail on one: the function's last line, `return 0`, becomes
-  `[ "$unexpected" = 0 ]`.
+- **A line no pattern matches fails the run.** After how many lines each pattern matched (the `…` here), the check
+  prints each unexpected line, the first 50, with the first line of its statement:
+
+  ```text
+  PostgreSQL's log, steps 1 to 7: 70 lines read, 4 ERROR lines, 3 expected and 1 unexpected
+    …
+    unexpected, which fail the run:
+      2026-11-20 17:05:43.256 UTC [107] ERROR:  relation "hd_no_such_table" does not exist at character 21 STATEMENT:  select hd_name from hd_no_such_table where hd_id = 1
+  FAIL  PostgreSQL's log, steps 1 to 7, has no ERROR line but those docker/tests/db-log-expected.txt expects (17:05:43 UTC)
+  ```
+
+  The statement is the place to start: find the code that sent it, and put it right there.
+- **It fails too** when it can't read the log, when the log is empty or isn't PostgreSQL's (it has no `database
+  system is ready to accept connections`), and when the list can't be read, so a clean log is one it read.
 
 The start-up tool asks whether a table exists with `to_regclass`, never by reading it, so a start leaves no `ERROR`
 line, and `test-move.sh` checks the moves left none either.
