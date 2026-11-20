@@ -11,6 +11,7 @@ import '../tokens.css'
 import { Icon } from '../icons'
 import { COLUMN_TYPE, Table, type TableColumn, type TableProps, type TableResizing, type TableRow, type TableSort } from './Table'
 import tableCss from './Table.module.css?raw'
+import { ColumnsPanel } from './ColumnsPanel'
 import { MenuItem } from './Menu'
 
 interface Item extends TableRow {
@@ -804,7 +805,7 @@ describe('Table heading menu', () => {
     expect(entries(await openMenu('Note'))).toEqual(['Resize Column', '—', 'Move Left', 'Hide Note', '—', 'Choose Columns…', 'Reset Columns'])
   })
 
-  it('moves a column to the place it ends at, hides it and resets the columns, and Choose Columns… gives the focus back to the heading', async () => {
+  it('moves a column to the place it ends at, hides it and resets the columns, and the panel Choose Columns… opens gives the focus back to the heading', async () => {
     const user = userEvent.setup()
     const chosen = choice()
     const given = { onSort: vi.fn(), onResetColumns: vi.fn() }
@@ -819,6 +820,10 @@ describe('Table heading menu', () => {
     expect(given.onResetColumns).toHaveBeenCalledOnce()
     await user.click(within(await openMenu('Doc #')).getByRole('menuitem', { name: 'Choose Columns…' }))
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    // The Columns panel (which this list leaves empty), until Esc closes it
+    await screen.findByRole('dialog')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     await waitFor(() => expect(document.activeElement).toBe(header('Doc #')))
     expect(chosen.onMove).toHaveBeenCalledTimes(2)
     expect(given.onSort).not.toHaveBeenCalled()
@@ -963,6 +968,59 @@ describe('Table heading drag', () => {
     expect(chosen.onMove).toHaveBeenLastCalledWith('note', 1)
     expect(chosen.onMove).toHaveBeenCalledTimes(2)
     expect(zone).not.toHaveBeenCalled()
+  })
+
+  it('drops a heading past the last one\'s midpoint at the end', () => {
+    const chosen = choice()
+    render(<Harness columns={listColumns} choice={chosen} />)
+    layOut()
+    // Past Note's midpoint (480), after Note: the last place
+    dragHeading('Author', 'Note', 500)
+    expect(chosen.onMove).toHaveBeenCalledExactlyOnceWith('author', listColumns.length - 1)
+  })
+
+  it('keeps each heading\'s ref while the headings draw again, as at each step of a drag over them, so React doesn\'t set it again', () => {
+    render(<Harness columns={listColumns} choice={choice()} />)
+    layOut()
+    const author = header('Author')
+    const set = vi.spyOn(author, 'draggable', 'set')
+    const data = transfer()
+    dragEvent('dragStart', author, data)
+    dragEvent('dragEnter', header('Doc #'), data, 390)
+    dragEvent('dragOver', header('Doc #'), data, 390)
+    // The headings drew again, each time for the line
+    expect(lines()).toEqual(['Doc # edge'])
+    dragEvent('dragOver', header('Note'), data, 500)
+    expect(lines()).toEqual(['Note end'])
+    dragEvent('dragEnd', author, data)
+    expect(lines()).toEqual([])
+    expect(set).not.toHaveBeenCalled()
+    expect(author.getAttribute('draggable')).toBe('true')
+  })
+
+  it('starts nothing from the Columns button, which is no heading, and takes no heading dropped on it', () => {
+    const chosen = choice()
+    const onSort = vi.fn()
+    render(<Harness columns={listColumns} choice={chosen} onSort={onSort} />)
+    layOut()
+    const button = screen.getByRole('button', { name: 'Columns' })
+    const fromButton = transfer()
+    expect(dragEvent('dragStart', button, fromButton)).toBe(false)
+    expect(fromButton.types).toEqual([])
+    // Nor from the place it sits in, round it
+    const fromPlace = transfer()
+    expect(dragEvent('dragStart', button.parentElement!, fromPlace)).toBe(false)
+    expect(fromPlace.types).toEqual([])
+    // A heading dragged over it isn't dropped there
+    const heading = transfer()
+    dragEvent('dragStart', header('Author'), heading)
+    dragEvent('dragEnter', button, heading, 530)
+    expect(dragEvent('dragOver', button, heading, 530)).toBe(true)
+    expect(lines()).toEqual([])
+    dragEvent('drop', button, heading, 530)
+    dragEvent('dragEnd', header('Author'), heading)
+    expect(chosen.onMove).not.toHaveBeenCalled()
+    expect(onSort).not.toHaveBeenCalled()
   })
 
   it('carries only the column\'s type, never the rows\'', () => {
@@ -1156,6 +1214,250 @@ describe('Table heading drag', () => {
     // jsdom draws nothing, so the rules are read: 2 pixels of the accent on the edge, and inside the last heading
     expect(tableCss).toMatch(/\.column\[data-drop-line\]::after \{[^}]*inset-inline-end: -1px;[^}]*width: 2px;[^}]*background: var\(--hd-accent-fill\)/)
     expect(tableCss).toMatch(/\.column\[data-drop-line='end'\]::after \{[^}]*inset-inline-end: 0/)
+  })
+})
+
+describe('Table Columns button and panel', () => {
+  const header = (name: RegExp | string) => screen.getByRole('columnheader', { name })
+  const columnsButton = () => screen.getByRole('button', { name: 'Columns' })
+  // While the panel is open React Aria hides the rest of the page from a screen reader, so the list is read past that
+  const headings = () => [...document.querySelectorAll('[data-column-key]')].map((one) => one.getAttribute('data-column-key'))
+  const offered: TableColumn<Item>[] = [...listColumns, { id: 'client', name: 'Client', cell: () => 'Mason Holdings' }]
+  const DEFAULT = listColumns.map((column) => column.id)
+
+  /** A document list that keeps its columns, as a view does: what the panel changes comes back as the list's columns, at once */
+  function Chosen(props: HarnessProps) {
+    const [shown, setShown] = useState(DEFAULT)
+    const move = (id: string, to: number) =>
+      setShown((before) => {
+        const others = before.filter((other) => other !== id)
+        others.splice(to, 0, id)
+        return others
+      })
+    const hide = (id: string) => setShown((before) => before.filter((other) => other !== id))
+    return (
+      <Harness
+        onSort={() => undefined}
+        {...props}
+        columns={shown.map((id) => offered.find((column) => column.id === id)!)}
+        choice={{
+          onMove: move,
+          onHide: hide,
+          panel: <ColumnsPanel forLabel="For Correspondence" offered={offered} shown={shown} onShow={(id) => setShown((before) => [...before, id])} onHide={hide} onMove={move} onReset={() => setShown(DEFAULT)} />,
+        }}
+      />
+    )
+  }
+
+  /** Where the panel's popover is placed: jsdom lays nothing out, so by the box a test gives the button */
+  const placeOf = (dialog: HTMLElement) => {
+    const popover = dialog.closest<HTMLElement>('.popover')!
+    return { placement: popover.getAttribute('data-placement'), left: popover.style.left, top: popover.style.top }
+  }
+
+  async function chooseColumnsFrom(heading: string) {
+    expect(fireEvent.contextMenu(header(heading))).toBe(false)
+    await userEvent.click(within(await screen.findByRole('menu', { name: `${heading} Column` })).getByRole('menuitem', { name: 'Choose Columns…' }))
+    return screen.findByRole('dialog', { name: 'Columns', description: 'For Correspondence' })
+  }
+
+  async function closeWithEscape() {
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  }
+
+  it('the Columns button and Choose Columns… open the same panel, and Esc gives the focus back to what opened it', async () => {
+    const user = userEvent.setup()
+    render(<Chosen />)
+    const button = columnsButton()
+    expect([button.getAttribute('aria-haspopup'), button.getAttribute('aria-expanded')]).toEqual(['dialog', 'false'])
+    // At the heading row's end
+    button.getBoundingClientRect = () => new DOMRect(600, 4, 26, 26)
+    await user.click(button)
+    // Named by the panel's title, and described by the list it's for
+    const dialog = await screen.findByRole('dialog', { name: 'Columns', description: 'For Correspondence' })
+    expect(within(dialog).getByRole('group', { name: 'Shown' })).toBeTruthy()
+    expect(button.getAttribute('aria-expanded')).toBe('true')
+    // Below the button, at its end
+    const place = placeOf(dialog)
+    expect(place).toEqual({ placement: 'bottom', left: '626px', top: '38px' })
+    await closeWithEscape()
+    expect(document.activeElement).toBe(button)
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+
+    // From a heading's menu: the same panel, by the button
+    const again = await chooseColumnsFrom('Doc #')
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(within(again).getByRole('group', { name: 'Shown' })).toBeTruthy()
+    expect(placeOf(again)).toEqual(place)
+    expect(button.getAttribute('aria-expanded')).toBe('true')
+    await closeWithEscape()
+    expect(document.activeElement).toBe(header('Doc #'))
+  })
+
+  it('gives the focus back to a resizable heading\'s edge, where its focus is, and to the button once the heading has gone', async () => {
+    const user = userEvent.setup()
+    render(<Chosen resizing={{ widths: {}, onResizeEnd: vi.fn(), onReset: vi.fn() }} />)
+    // The arrows reach the headings from the rows; a resizable heading's focus is its edge's slider
+    const first = row(/Letter 1/)
+    act(() => first.focus())
+    press(first, 'ArrowUp')
+    const slider = within(header('Title')).getByRole('slider')
+    expect(document.activeElement).toBe(slider)
+    fireEvent.keyDown(slider, { key: 'F10', shiftKey: true })
+    const menu = await screen.findByRole('menu', { name: 'Title Column' })
+    await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true))
+    // Its last item, as this list has no Reset Columns
+    await user.keyboard('{End}')
+    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Choose Columns…' }))
+    await user.keyboard('{Enter}')
+    await screen.findByRole('dialog', { name: 'Columns' })
+    await closeWithEscape()
+    expect(document.activeElement).toBe(slider)
+
+    // The panel hides the column whose heading opened it: the focus goes to the Columns button
+    const dialog = await chooseColumnsFrom('Author')
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Author' }))
+    expect(headings()).toEqual(['title', 'docNumber', 'note'])
+    await closeWithEscape()
+    expect(document.activeElement).toBe(columnsButton())
+  })
+
+  it('draws no Columns button without `choice`', () => {
+    const given = { onSort: vi.fn(), onResetColumns: vi.fn() }
+    const { container, rerender } = render(<Harness columns={listColumns} {...given} />)
+    // What the frame draws, besides React Aria's own markers round the list (a template and its focus scope's ends)
+    const frame = container.querySelector('.frame')!
+    const drawn = () => [...frame.children].filter((one) => one.className !== '').map((one) => one.className)
+    // The frame holds the list alone, as before, and no heading makes room for a button
+    expect(drawn()).toEqual(['table'])
+    expect(screen.queryByRole('button', { name: 'Columns' })).toBeNull()
+    expect(container.querySelector('.beforeButton')).toBeNull()
+
+    rerender(<Harness columns={listColumns} {...given} choice={{ onMove: vi.fn(), onHide: vi.fn(), panel: null }} />)
+    expect(drawn()).toEqual(['table', 'columnsButton'])
+    rerender(<Harness columns={listColumns} {...given} />)
+    expect(drawn()).toEqual(['table'])
+    expect(screen.queryByRole('button', { name: 'Columns' })).toBeNull()
+    expect(container.querySelector('.beforeButton')).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('keeps the panel open with its focus while the list behind it changes, and through a refetch\'s new rows', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<Chosen />)
+    await user.click(columnsButton())
+    const dialog = await screen.findByRole('dialog', { name: 'Columns' })
+    // Title's box is the columns' stop for Tab; End goes to Client, the last of More Columns, and Space ticks it
+    await user.tab()
+    await user.keyboard('{End}')
+    expect(document.activeElement).toBe(within(dialog).getByRole('checkbox', { name: 'Client' }))
+    await user.keyboard(' ')
+    // The list behind shows it at once, at its end, and the panel stays open with its focus on the column, now in Shown
+    expect(headings()).toEqual([...DEFAULT, 'client'])
+    const client = within(within(dialog).getByRole('group', { name: 'Shown' })).getByRole('checkbox', { name: 'Client' }) as HTMLInputElement
+    expect(client.checked).toBe(true)
+    expect(document.activeElement).toBe(client)
+    expect(screen.getByRole('dialog', { name: 'Columns' })).toBe(dialog)
+
+    // A refetch draws the list again with new rows
+    rerender(<Chosen rows={items(5)} />)
+    expect(document.querySelectorAll('[data-row-key]')).toHaveLength(5)
+    expect(screen.getByRole('dialog', { name: 'Columns' })).toBe(dialog)
+    expect(document.activeElement).toBe(client)
+    // And moving the column draws the list's columns in the new order, the panel still open
+    await user.click(within(dialog).getByRole('button', { name: 'Move Up' }))
+    expect(headings()).toEqual(['title', 'author', 'docNumber', 'client', 'note'])
+    expect(screen.getByRole('dialog', { name: 'Columns' })).toBe(dialog)
+  })
+
+  it('closes on a click outside, and gives the focus back to what opened it', async () => {
+    const user = userEvent.setup()
+    render(<Chosen />)
+    await user.click(columnsButton())
+    await screen.findByRole('dialog', { name: 'Columns' })
+    // The page under the popover, which a click outside it lands on
+    await user.click(screen.getByTestId('underlay'))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(document.activeElement).toBe(columnsButton())
+
+    await chooseColumnsFrom('Doc #')
+    await user.click(screen.getByTestId('underlay'))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(document.activeElement).toBe(header('Doc #'))
+  })
+
+  it('sits at the heading row\'s end outside every heading and the list, comes after the list for Tab, and has its name as its tooltip', async () => {
+    const user = userEvent.setup()
+    const { container } = render(
+      <>
+        <Chosen />
+        <button>After</button>
+      </>,
+    )
+    const button = columnsButton()
+    // Not a column of the list, nor in a heading or a row
+    expect(button.closest('[data-column-key], [role="grid"], [role="row"]')).toBeNull()
+    expect(screen.getAllByRole('columnheader').map((one) => one.textContent)).toEqual(['Title', 'Author', 'Doc #', 'Note'])
+    expect(button.closest('[title]')?.getAttribute('title')).toBe('Columns')
+    // A right-click on it keeps the browser's menu
+    expect(fireEvent.contextMenu(button)).toBe(true)
+    expect(screen.queryByRole('menu')).toBeNull()
+    await expectNoAxeViolations(container)
+    await user.tab()
+    expect(document.activeElement).toBe(row(/Letter 1/))
+    await user.tab()
+    expect(document.activeElement).toBe(button)
+    await user.tab()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'After' }))
+  })
+
+  it('stays at the visible end of the heading row, before a scrollbar that takes room, and the last heading keeps clear of it', () => {
+    // jsdom has no ResizeObserver: these are called back by hand, as a browser calls them when a box changes
+    const observers: ((entries: unknown[]) => void)[] = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: (entries: unknown[]) => void) {
+          observers.push(callback)
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    )
+    try {
+      render(<Chosen resizing={{ widths: {}, onResizeEnd: vi.fn(), onReset: vi.fn() }} />)
+      const place = columnsButton().parentElement!
+      expect(place.className).toBe('columnsButton')
+      // A scrollbar 15 pixels wide, beside the heading row as beside the rows
+      const grid = screen.getByRole('grid')
+      Object.defineProperty(grid, 'offsetWidth', { configurable: true, value: 815 })
+      Object.defineProperty(grid, 'clientWidth', { configurable: true, value: 800 })
+      act(() => observers.forEach((observer) => observer([])))
+      expect(place.style.insetInlineEnd).toBe('15px')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+    // Only the last heading, and its cells, make room for the button
+    expect(screen.getAllByRole('columnheader').map((one) => one.classList.contains('beforeButton'))).toEqual([false, false, false, true])
+    expect(within(row(/Letter 1/)).getAllByRole('gridcell').map((one) => one.classList.contains('beforeButton'))).toEqual([false, false, true])
+    // jsdom draws nothing, so the rules are read: a square the heading row's height over its end, on the heading's surface,
+    // shown pressed while its panel is open; the last heading's name ends before it, a column of numbers' cells in line with
+    // it, and the last edge and the drop line after the last heading are drawn where the button begins
+    expect(tableCss).toMatch(/\.columnsButton \{[^}]*position: absolute;[^}]*inset-block-start: 0;[^}]*inset-inline-end: 0;[^}]*width: var\(--row-height\);[^}]*height: var\(--row-height\);[^}]*border-bottom: 1px solid var\(--hd-line\);[^}]*background: var\(--hd-window\);[^}]*color: var\(--hd-text-secondary\)/)
+    expect(tableCss).toMatch(/\.columnsButton > button\[aria-expanded='true'\] \{[^}]*border-color: var\(--hd-pressed-edge\);[^}]*background: var\(--hd-pressed\);[^}]*color: var\(--hd-text\)/)
+    expect(tableCss).toMatch(/\.column\.beforeButton,\s*\.cell\.end\.beforeButton \{[^}]*padding-inline-end: var\(--row-height\)/)
+    expect(tableCss).toMatch(/\.beforeButton > \.resizer\[data-last\] \{[^}]*inset-inline-end: var\(--row-height\)/)
+    expect(tableCss).toMatch(/\.column\.beforeButton\[data-drop-line='end'\]::after \{[^}]*inset-inline-end: var\(--row-height\)/)
+  })
+
+  it('passes axe with the panel open', async () => {
+    const user = userEvent.setup()
+    render(<Chosen />)
+    await user.click(columnsButton())
+    const dialog = await screen.findByRole('dialog', { name: 'Columns' })
+    await expectNoAxeViolations(dialog.closest('.popover')!)
   })
 })
 

@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { COLUMN_TYPE } from '@healdan/ui'
 import { describe, expect, it } from 'vitest'
-import { carriesFiles, carriesRows, droppedFiles, refusalOf, ROWS_TYPE } from './dropTargets'
+import { carriesFiles, carriesRows, droppedFiles, refusalOf, ROWS_TYPE, takesDrag } from './dropTargets'
 
 describe('dropTargets', () => {
   it('tells files from the app\'s own rows by the data transfer\'s types', () => {
@@ -11,6 +12,16 @@ describe('dropTargets', () => {
     expect(carriesRows([ROWS_TYPE])).toBe(true)
     expect(carriesRows(['Files'])).toBe(false)
     expect(ROWS_TYPE).toBe('application/x-healdan-documents')
+  })
+
+  it('takes no list heading\'s drag, which moves the list\'s column: neither the filing nor the move takes it', () => {
+    expect(COLUMN_TYPE).toBe('application/x-healdan-column')
+    expect(takesDrag([COLUMN_TYPE])).toBe(false)
+    expect(carriesRows([COLUMN_TYPE])).toBe(false)
+    expect(carriesFiles([COLUMN_TYPE])).toBe(false)
+    // Files and the app's own rows as before
+    expect(takesDrag(['Files'])).toBe(true)
+    expect(takesDrag([ROWS_TYPE])).toBe(false)
   })
 
   it('refuses a matter\'s top level, a search folder and a Store, which hold no documents', () => {

@@ -10,6 +10,13 @@ export const COLUMN_TYPE = 'application/x-healdan-column'
 
 const headingOf = (event: { target: EventTarget }) => (event.target instanceof Element ? event.target.closest('[data-column-key]') : null)
 
+// A heading's ref: draggable while its column can move. One function for each, the same at every render, so React sets a
+// heading's ref again only when its column's movability changes, not each time the headings draw, as at each step of a drag.
+const movableHeading = (element: HTMLElement | null) => {
+  if (element) element.draggable = true
+}
+const fixedHeading = (element: HTMLElement | null) => element?.removeAttribute('draggable')
+
 /**
  * Moving a document list's columns by dragging their headings along the heading row (spec §4.6), with the browser's own drag
  * and drop, as the rows are dragged: React Aria's drag and drop code isn't loaded for it. Only with `choice`. Title, the row
@@ -113,11 +120,7 @@ export function useHeadingDrag<T extends TableRow>(columns: TableColumn<T>[], ch
     /** For the element round the Table: the heading row's drop */
     frameProps,
     /** For a heading's ref: draggable while its column can move. React Aria's Column passes on no `draggable`. */
-    headingRef: (column: TableColumn<T>) => (element: HTMLElement | null) => {
-      if (!element) return
-      if (movable(column)) element.draggable = true
-      else element.removeAttribute('draggable')
-    },
+    headingRef: (column: TableColumn<T>) => (movable(column) ? movableHeading : fixedHeading),
     /** The column after whose heading the drop line is drawn, while one is */
     lineAfter: gap === undefined ? undefined : columns[gap - 1]?.id,
   }

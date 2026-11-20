@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useId, useLayoutEffect, useRef, useState, type DragEvent, type FocusEvent, type KeyboardEvent, type RefObject } from 'react'
-import { Checkbox, CheckboxGroup, Heading, Label } from 'react-aria-components'
+import { Checkbox, CheckboxGroup, Heading, Label, Text } from 'react-aria-components'
 import { announcePolitely } from '../announcer'
 import { Icon } from '../icons'
 import { t } from '../strings'
@@ -47,11 +47,12 @@ function focusOn(element: HTMLElement | undefined | null) {
 }
 
 /**
- * The content of a list's Columns popover (spec §4.5), a dialog's: Shown, the shown columns in their order, Title first
- * and always shown, then More Columns, the rest the list offers, in its order. A tick shows a column at the end of Shown
- * and an untick hides it, at once: the caller keeps the columns, and the panel draws what it is given. Move Up and Move
- * Down move the column the keys are on (or were last on); a shown column but Title also drags within Shown, by the
- * browser's own drag and drop, so React Aria's isn't loaded for it.
+ * The content of a list's Columns popover (spec §4.5), a dialog's: its title names the dialog, and the line under it, the
+ * list it's for, describes it as the `description` slot wherever the dialog gives that slot an id, as Table's does. Shown,
+ * the shown columns in their order, Title first and always shown, then More Columns, the rest the list offers, in its
+ * order. A tick shows a column at the end of Shown and an untick hides it, at once: the caller keeps the columns, and the
+ * panel draws what it is given. Move Up and Move Down move the column the keys are on (or were last on); a shown column
+ * but Title also drags within Shown, by the browser's own drag and drop, so React Aria's isn't loaded for it.
  *
  * The columns are two groups of tick boxes, one stop for Tab across both: the column last focused, Title at first.
  * The arrow keys, Home and End move through both groups, and Space ticks. A tick box rather than a list box's options, as
@@ -220,7 +221,9 @@ export function ColumnsPanel({ forLabel, offered, shown, onShow, onHide, onMove,
         <Heading slot="title" className={styles.title}>
           {t('columns.title')}
         </Heading>
-        <p className={styles.for}>{forLabel}</p>
+        <Text slot="description" elementType="p" className={styles.for}>
+          {forLabel}
+        </Text>
       </div>
       {/* The handler only reads the keys that move between the tick boxes inside; the wrapper isn't a control of its own. */}
       <div className={styles.columns} onKeyDown={onKeyDown}>

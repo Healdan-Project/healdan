@@ -1,11 +1,14 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import {
   Cell,
   Collection,
   Column,
+  DEFAULT_SLOT,
+  Dialog as AriaDialog,
+  Popover,
   ResizableTableContainer,
   Row,
   Table as AriaTable,
@@ -13,6 +16,7 @@ import {
   TableHeader,
   TableLayout,
   TableLoadMoreItem,
+  TextContext,
   Virtualizer,
   type Key,
   type Selection,
@@ -20,9 +24,11 @@ import {
 } from 'react-aria-components'
 import { Icon } from '../icons'
 import { t } from '../strings'
+import { Button } from './Button'
 import { ColumnEdge } from './ColumnEdge'
 import { ContextMenu, type ItemMenu } from './ContextMenu'
 import { headingMenu } from './headingMenu'
+import menuStyles from './Menu.module.css'
 import styles from './Table.module.css'
 import { useColumnResizing } from './useColumnResizing'
 import { useHeadingDrag } from './useHeadingDrag'
@@ -95,7 +101,10 @@ export interface TableColumnChoice {
   onMove: (column: string, to: number) => void
   /** Hide <column> */
   onHide: (column: string) => void
-  /** The Columns panel, which Choose Columns… opens */
+  /**
+   * The Columns panel, which the Columns button at the heading row's end and Choose Columns… open, in a popover by the
+   * button: a dialog its `Heading slot="title"` names and its `Text slot="description"` describes (ColumnsPanel's)
+   */
   panel: ReactNode
 }
 
@@ -262,9 +271,11 @@ export function Table<T extends TableRow>({
   // A drag that starts on a row carries the selection when the row is in it, and the row alone when it isn't. The browser's
   // own drag and drop, so React Aria's drag and drop code, which is some 140 kB, isn't loaded for it.
   function onDragStart(event: DragEvent<HTMLDivElement>) {
+    const target = event.target instanceof Element ? event.target : null
+    // Nothing drags from the Columns button, which is no heading
+    if (target?.closest(`.${styles.columnsButton}`)) return event.preventDefault()
     // A heading's drag moves its column, and is never a row's
     if (headingDrag.start(event) || !drag) return
-    const target = event.target instanceof Element ? event.target : null
     // Text dragged out of a field in a row is the field's
     if (target?.closest('input, textarea')) return
     const key = target?.closest('[data-row-key]')?.getAttribute('data-row-key')
@@ -342,10 +353,57 @@ export function Table<T extends TableRow>({
   // as a resize going on: the hidden slider the focus first comes to would then keep Tab. The list takes the focus itself.
   const edges = resizing !== undefined && rows.length > 0
   const lastColumn = columns[columns.length - 1]?.id
+  // A document list has the Columns button, over the end of its last heading, which keeps clear of it
+  const hasButton = choice !== undefined
+  const besideButton = hasButton ? lastColumn : undefined
+  const clearOfButton = (column: TableColumn<T>) => (column.id === besideButton ? styles.beforeButton : '')
 
-  // The Columns panel, which Choose Columns… opens, and the Columns button at the heading row's end
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the panel's popover, which isn't drawn yet, reads it
+  // The Columns panel, which the Columns button at the heading row's end and Choose Columns… open: one popover, by the button
   const [panelOpen, setPanelOpen] = useState(false)
+  // A list whose columns are no longer chosen has no panel to keep open
+  if (panelOpen && !choice) setPanelOpen(false)
+  const columnsButton = useRef<HTMLButtonElement>(null)
+  const panelDescription = useId()
+  // The column whose heading's menu opened the panel; none when the button did
+  const opener = useRef<string | undefined>(undefined)
+  function openPanel(column?: string) {
+    opener.current = column
+    setPanelOpen(true)
+  }
+
+  // As the panel closes the focus goes back to what opened it: the heading, whose focus is its edge's slider on a resizable
+  // list (where the heading's own menu gives it back), or the button, as for a heading whose column the panel hid. Done once
+  // the popover has gone, which contains the focus until then: React Aria would give it to what had it as the popover
+  // opened, which for Choose Columns… is the menu's item, gone with its menu.
+  const wasOpen = useRef(false)
+  useLayoutEffect(() => {
+    if (wasOpen.current && !panelOpen) {
+      const column = opener.current
+      const headings = column === undefined ? [] : [...(frame.current?.querySelectorAll<HTMLElement>('[data-column-key]') ?? [])]
+      const heading = headings.find((element) => element.getAttribute('data-column-key') === column)
+      ;(heading?.querySelector<HTMLElement>('input[type="range"]') ?? heading ?? columnsButton.current)?.focus()
+    }
+    wasOpen.current = panelOpen
+  }, [panelOpen])
+
+  // The button stays at the visible end of the heading row, before a scrollbar that takes room (Windows', or a Mac's with a
+  // mouse), which runs beside the heading row as beside the rows, and which the button would otherwise cover. The list is
+  // drawn anew when resizing comes or goes, with React Aria's container round it or not.
+  const buttonPlace = useRef<HTMLDivElement>(null)
+  const resizable = resizing !== undefined
+  useLayoutEffect(() => {
+    const list = frame.current?.querySelector<HTMLElement>('[role="grid"]')
+    const place = buttonPlace.current
+    if (!list || !place || typeof ResizeObserver === 'undefined') return
+    const follow = () => {
+      place.style.insetInlineEnd = `${list.offsetWidth - list.clientWidth}px`
+    }
+    follow()
+    const observer = new ResizeObserver(follow)
+    observer.observe(list)
+    return () => observer.disconnect()
+  }, [hasButton, resizable])
+
   const menuOf = (column: string) =>
     headingMenu(columns, column, {
       sort,
@@ -353,7 +411,7 @@ export function Table<T extends TableRow>({
       relevance,
       startResize: edges ? resize.startResize : undefined,
       choice,
-      onChoose: () => setPanelOpen(true),
+      onChoose: () => openPanel(column),
       onResetColumns,
     })
   const grid = (
@@ -384,7 +442,7 @@ export function Table<T extends TableRow>({
               width={resize.widthOf(column)}
               minWidth={column.minWidth}
               textValue={column.name}
-              className={`${styles.column} ${column.align === 'end' ? styles.end : ''}`}
+              className={`${styles.column} ${column.align === 'end' ? styles.end : ''} ${clearOfButton(column)}`}
             >
               {({ sortDirection, isResizing, startResize }) => (
                 <>
@@ -408,10 +466,10 @@ export function Table<T extends TableRow>({
           )}
         </TableHeader>
         <TableBody renderEmptyState={() => <div className={styles.empty}>{empty}</div>}>
-          <Collection items={rows} dependencies={[columns]}>
+          <Collection items={rows} dependencies={[columns, besideButton]}>
             {(row) => (
-              <Row ref={draggable(row)} id={row.id} textValue={row.textValue} columns={columns} dependencies={[columns]} className={styles.row} data-row-key={row.id} data-flash={row.flash || undefined} data-dropping={row.dropping || undefined}>
-                {(column) => <Cell className={`${styles.cell} ${column.align === 'end' ? styles.end : ''}`}>{textual(column.cell(row))}</Cell>}
+              <Row ref={draggable(row)} id={row.id} textValue={row.textValue} columns={columns} dependencies={[columns, besideButton]} className={styles.row} data-row-key={row.id} data-flash={row.flash || undefined} data-dropping={row.dropping || undefined}>
+                {(column) => <Cell className={`${styles.cell} ${column.align === 'end' ? styles.end : ''} ${clearOfButton(column)}`}>{textual(column.cell(row))}</Cell>}
               </Row>
             )}
           </Collection>
@@ -426,41 +484,60 @@ export function Table<T extends TableRow>({
   )
 
   return (
-    <ContextMenu<MenuSubject>
-      target="[data-row-key], [data-column-key]"
-      subjectOf={(element) => {
-        const row = element.getAttribute('data-row-key')
-        if (row !== null) return contextMenu?.items(row) === undefined ? undefined : { row }
-        const column = element.getAttribute('data-column-key')
-        return column !== null && menuOf(column) ? { column } : undefined
-      }}
-      label={(subject) => ('row' in subject ? (contextMenu?.label(subject.row) ?? '') : (menuOf(subject.column)?.label ?? ''))}
-      items={(subject) => ('row' in subject ? contextMenu?.items(subject.row) : menuOf(subject.column)?.items)}
-      onOpen={(subject) => {
-        if ('row' in subject) contextMenu?.onOpen?.(subject.row)
-      }}
-    >
-      {/* The handler only reads keys the rows inside already take; the wrapper isn't a control of its own. */}
-      <div
-        ref={frame}
-        className={styles.frame}
-        onKeyDownCapture={onKeyDownCapture}
-        onPointerDownCapture={onPointerDownCapture}
-        onMouseDownCapture={onMouseDownCapture}
-        onClickCapture={onClickCapture}
-        onDoubleClickCapture={onDoubleClickCapture}
-        onDragStart={drag || choice ? onDragStart : undefined}
-        {...headingDrag.frameProps}
-        aria-busy={busy || undefined}
+    <>
+      <ContextMenu<MenuSubject>
+        target="[data-row-key], [data-column-key]"
+        subjectOf={(element) => {
+          const row = element.getAttribute('data-row-key')
+          if (row !== null) return contextMenu?.items(row) === undefined ? undefined : { row }
+          const column = element.getAttribute('data-column-key')
+          return column !== null && menuOf(column) ? { column } : undefined
+        }}
+        label={(subject) => ('row' in subject ? (contextMenu?.label(subject.row) ?? '') : (menuOf(subject.column)?.label ?? ''))}
+        items={(subject) => ('row' in subject ? contextMenu?.items(subject.row) : menuOf(subject.column)?.items)}
+        onOpen={(subject) => {
+          if ('row' in subject) contextMenu?.onOpen?.(subject.row)
+        }}
       >
-        {resizing ? (
-          <ResizableTableContainer className={styles.resizable} {...resize.handlers}>
-            {grid}
-          </ResizableTableContainer>
-        ) : (
-          grid
-        )}
-      </div>
-    </ContextMenu>
+        {/* The handler only reads keys the rows inside already take; the wrapper isn't a control of its own. */}
+        <div
+          ref={frame}
+          className={styles.frame}
+          onKeyDownCapture={onKeyDownCapture}
+          onPointerDownCapture={onPointerDownCapture}
+          onMouseDownCapture={onMouseDownCapture}
+          onClickCapture={onClickCapture}
+          onDoubleClickCapture={onDoubleClickCapture}
+          onDragStart={drag || choice ? onDragStart : undefined}
+          {...headingDrag.frameProps}
+          aria-busy={busy || undefined}
+        >
+          {resizing ? (
+            <ResizableTableContainer className={styles.resizable} {...resize.handlers}>
+              {grid}
+            </ResizableTableContainer>
+          ) : (
+            grid
+          )}
+          {/* After the list, as Tab reaches it, and outside every heading: it isn't a column, and nothing drags from it */}
+          {choice && (
+            <div ref={buttonPlace} className={styles.columnsButton} title={t('columns.button')}>
+              <Button ref={columnsButton} variant="quiet" aria-label={t('columns.button')} aria-haspopup="dialog" aria-expanded={panelOpen} onPress={() => openPanel()}>
+                <Icon name="columns" size={14} />
+              </Button>
+            </div>
+          )}
+        </div>
+      </ContextMenu>
+      {/* Outside the list's menus and its handlers, which the panel's events would otherwise reach through React's tree. The
+          panel changes the list at once, so the popover stays open, its focus where it was, as the list is drawn again. */}
+      {choice && (
+        <Popover className={`${menuStyles.popover} ${styles.panelPopover}`} triggerRef={columnsButton} isOpen={panelOpen} onOpenChange={setPanelOpen} placement="bottom end">
+          <AriaDialog aria-describedby={panelDescription} className={styles.panelDialog}>
+            <TextContext.Provider value={{ slots: { [DEFAULT_SLOT]: {}, description: { id: panelDescription } } }}>{choice.panel}</TextContext.Provider>
+          </AriaDialog>
+        </Popover>
+      )}
+    </>
   )
 }

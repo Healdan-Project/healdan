@@ -290,3 +290,53 @@
     animation: none;
   }
 }
+
+/* A document list's Columns button, at the heading row's end: a square the row's height, on the headings' surface, over the
+   row's end, where it stays as the list scrolls sideways. It's in no heading, nor in the list. Table.tsx keeps it before a
+   scrollbar that takes room. */
+.columnsButton {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--row-height);
+  height: var(--row-height);
+  border-bottom: 1px solid var(--hd-line);
+  background: var(--hd-window);
+  color: var(--hd-text-secondary);
+}
+
+/* While its panel is open it shows pressed, as a pressed button does (Button.module.css) */
+.columnsButton > button[aria-expanded='true'] {
+  border-color: var(--hd-pressed-edge);
+  background: var(--hd-pressed);
+  color: var(--hd-text);
+}
+
+/* The last column keeps clear of the button over its heading's end: the heading's name ends before it, and a column of
+   numbers keeps its cells in line with its heading. Its edge, and the drop line after it, are drawn where the button begins. */
+.column.beforeButton,
+.cell.end.beforeButton {
+  padding-inline-end: var(--row-height);
+}
+
+.beforeButton > .resizer[data-last] {
+  inset-inline-end: var(--row-height);
+}
+
+.column.beforeButton[data-drop-line='end']::after {
+  inset-inline-end: var(--row-height);
+}
+
+/* The panel draws its own padding and width; its popover scrolls in a window too short for it */
+.panelPopover {
+  overflow: auto;
+}
+
+.panelDialog {
+  outline: none;
+}
