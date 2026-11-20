@@ -102,13 +102,17 @@ export function useStores() {
   return useAdminQuery('/v1/admin/stores')
 }
 
-/** A client, for its page and to name the client a filter holds; nothing is asked without an id, or while `enabled` is false */
+/**
+ * A client, for its page and to name the client a filter holds; nothing is asked without an id, or while `enabled` is
+ * false. Each return to the window asks again however fresh it is, as its page's matters are (spec 7.2).
+ */
 export function useClient(id: number | undefined, enabled = true) {
   const api = useApi()
   return useQuery({
     queryKey: adminKeys.client(id ?? -1),
     queryFn: ({ signal }) => api.get<A['Client']>(apiPath`/v1/admin/clients/${id ?? -1}`, undefined, { signal }),
     enabled: enabled && id !== undefined,
+    meta: ASK_ON_RETURN,
   })
 }
 
