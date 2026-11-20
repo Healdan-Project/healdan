@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import {
   Cell,
   Collection,
@@ -359,13 +359,36 @@ export function Table<T extends TableRow>({
   // The Columns panel, which the Columns button at the heading row's end and Choose Columns… open: one popover, by the button
   const panel = useColumnsPanel(frame, { hasButton, resizable: resizing !== undefined, resizeLasts: resize.resized !== null })
 
+  // Hide in a heading's menu takes away the heading the menu would give the focus back to, and React Aria's grid would give
+  // it to a cell of the first row. The heading now in its place takes it, or the one before it when the last was hidden:
+  // the heading itself, whose focus sets the list's own, which React Aria then puts on its edge on a list whose columns
+  // resize (its slider's focus alone wouldn't). Only at the Table's next commit, which the caller's hide makes as the menu
+  // closes, and before React Aria gives the focus back in the frame after: a hide the caller doesn't make is forgotten there.
+  const afterHide = useRef<{ hidden: string; next: string } | undefined>(undefined)
+  useLayoutEffect(() => {
+    const pending = afterHide.current
+    afterHide.current = undefined
+    if (!pending || columns.some((column) => column.id === pending.hidden)) return
+    const headings = [...(frame.current?.querySelectorAll<HTMLElement>('[data-column-key]') ?? [])]
+    headings.find((element) => element.getAttribute('data-column-key') === pending.next)?.focus()
+  })
+  const menuChoice = choice && {
+    ...choice,
+    onHide: (column: string) => {
+      const at = columns.findIndex((one) => one.id === column)
+      const next = columns[at + 1] ?? columns[at - 1]
+      afterHide.current = next && { hidden: column, next: next.id }
+      choice.onHide(column)
+    },
+  }
+
   const menuOf = (column: string) =>
     headingMenu(columns, column, {
       sort,
       onSort,
       relevance,
       startResize: edges ? resize.startResize : undefined,
-      choice,
+      choice: menuChoice,
       onChoose: () => panel.open(column),
       onResetColumns,
     })

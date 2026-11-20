@@ -845,6 +845,87 @@ describe('Table heading menu', () => {
     expect(given.onSort).not.toHaveBeenCalled()
   })
 
+  /** A document list that applies its headings' moves and hides to its own columns, as a view does */
+  function Applied(props: HarnessProps) {
+    const [shown, setShown] = useState(listColumns)
+    const choice = {
+      onMove: (id: string, to: number) =>
+        setShown((before) => {
+          const others = before.filter((column) => column.id !== id)
+          others.splice(to, 0, before.find((column) => column.id === id)!)
+          return others
+        }),
+      onHide: (id: string) => setShown((before) => before.filter((column) => column.id !== id)),
+      panel: null,
+    }
+    return <Harness onSort={() => undefined} {...props} columns={shown} choice={choice} />
+  }
+
+  /** Where a heading's focus is: the heading, or its edge's slider on a list whose columns resize */
+  const focusOf = (name: string, resizable: boolean) => (resizable ? within(header(name)).getByRole('slider') : header(name))
+  const headingKeys = () => screen.getAllByRole('columnheader').map((one) => one.getAttribute('data-column-key'))
+
+  /** Opens a heading's menu by Shift+F10, from where its focus is, and presses Enter on the item */
+  async function pickByKeys(heading: string, item: string, resizable: boolean) {
+    const user = userEvent.setup()
+    expect(document.activeElement).toBe(focusOf(heading, resizable))
+    fireEvent.keyDown(document.activeElement!, { key: 'F10', shiftKey: true })
+    const menu = await screen.findByRole('menu', { name: `${heading} Column` })
+    await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true))
+    act(() => within(menu).getByRole('menuitem', { name: item }).focus())
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    // React Aria gives the focus back in the frame after the menu has gone: what has it then is where it stays
+    await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  }
+
+  for (const resizable of [false, true]) {
+    const where = resizable ? ' (its edge\'s slider, on a list whose columns resize)' : ''
+    const given = () => (resizable ? { resizing: options().resizing } : {})
+
+    it(`Hide from a heading's menu leaves the focus on the heading in its place, or the one before it for the last${where}, and selects nothing`, async () => {
+      const onSelectionChange = vi.fn()
+      render(<Applied {...given()} onSelectionChange={onSelectionChange} />)
+      // The arrows reach the headings from the rows
+      act(() => row(/Letter 1/).focus())
+      press(row(/Letter 1/), 'ArrowUp')
+      press(document.activeElement!, 'ArrowRight')
+      press(document.activeElement!, 'ArrowRight')
+      await pickByKeys('Doc #', 'Hide Doc #', resizable)
+      expect(headingKeys()).toEqual(['title', 'author', 'note'])
+      expect(document.activeElement).toBe(focusOf('Note', resizable))
+      // The list's own focus is there too: the arrows go on from it
+      press(document.activeElement!, 'ArrowLeft')
+      expect(document.activeElement).toBe(focusOf('Author', resizable))
+      press(document.activeElement!, 'ArrowRight')
+
+      // The last heading: the one before it takes the focus
+      await pickByKeys('Note', 'Hide Note', resizable)
+      expect(headingKeys()).toEqual(['title', 'author'])
+      expect(document.activeElement).toBe(focusOf('Author', resizable))
+      expect(onSelectionChange).not.toHaveBeenCalled()
+    })
+
+    it(`Move Left and Move Right leave the focus on the heading moved${where}`, async () => {
+      const onSelectionChange = vi.fn()
+      render(<Applied {...given()} onSelectionChange={onSelectionChange} />)
+      act(() => row(/Letter 1/).focus())
+      press(row(/Letter 1/), 'ArrowUp')
+      press(document.activeElement!, 'ArrowRight')
+      press(document.activeElement!, 'ArrowRight')
+      await pickByKeys('Doc #', 'Move Left', resizable)
+      expect(headingKeys()).toEqual(['title', 'docNumber', 'author', 'note'])
+      expect(document.activeElement).toBe(focusOf('Doc #', resizable))
+      await pickByKeys('Doc #', 'Move Right', resizable)
+      await pickByKeys('Doc #', 'Move Right', resizable)
+      expect(headingKeys()).toEqual(['title', 'author', 'note', 'docNumber'])
+      expect(document.activeElement).toBe(focusOf('Doc #', resizable))
+      press(document.activeElement!, 'ArrowLeft')
+      expect(document.activeElement).toBe(focusOf('Note', resizable))
+      expect(onSelectionChange).not.toHaveBeenCalled()
+    })
+  }
+
   it('offers Sort by Relevance only while sorted, and calls relevance.onSelect', async () => {
     const user = userEvent.setup()
     const relevance = { onSelect: vi.fn() }
