@@ -109,7 +109,7 @@ its tables are made by its generic ones. These make LogicalDOC's code, and Heald
   [Desktop Clients](../desktop-clients/)).
 - **Eight of LogicalDOC's columns are widened.** LogicalDOC's generic script gives eight text columns a `varchar`
   that PostgreSQL enforces, where its MariaDB script has `mediumtext`, so an avatar over 4,000 characters wouldn't
-  save. Healdan's migration `V12__widen_logicaldoc_text.sql` makes them `text`: `ld_user.ld_avatar`,
+  save. Healdan's migration `V13__widen_logicaldoc_text.sql` makes them `text`: `ld_user.ld_avatar`,
   `ld_systemmessage.ld_messagetext`, `ld_filler.ld_automation` and `ld_automationbefore`, `ld_folder.ld_tile`,
   `ld_menu.ld_automation`, `ld_generic.ld_text1` and `ld_legal.ld_content`. It's the one change Healdan makes to the
   structure of LogicalDOC's tables.
@@ -293,15 +293,15 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `<module>` are the only upstream files it edits.
 - **Its own tables.** Flyway owns the tables whose names start `hd_`, and only those. A change ships as a new
   script under `healdan-core/src/main/resources/healdan/db/migration/postgresql/`, never as an edit to one that has
-  shipped. Healdan never changes the structure of LogicalDOC's `ld_` tables, with one exception: V12 widens eight of
+  shipped. Healdan never changes the structure of LogicalDOC's `ld_` tables, with one exception: V13 widens eight of
   their text columns to `text` (see [PostgreSQL](#postgresql)). That list is fixed, a column is only widened, and
   nothing of LogicalDOC's is added, renamed or dropped.
   - **One folder of scripts.** `HealdanMigrator` reads which database it's on from the connection and runs the
     scripts in `postgresql/`. It refuses MariaDB with a message that names the Install manual's
     [Moving from MariaDB to PostgreSQL](../../install/moving-from-mariadb/), and any other database, MySQL and HSQLDB
-    included, with `Healdan's tables support PostgreSQL only; found …`. V1 to V11 are the scripts Healdan ran on
+    included, with `Healdan's tables support PostgreSQL only; found …`. V1 to V12 are the scripts Healdan ran on
     MariaDB, translated one for one, with the same versions and names, so a version means the same on both sides of a
-    move. The move makes them at V12, the version that goes with a MariaDB install's 11, and no later one
+    move. The move makes them at V13, the version that goes with a MariaDB install's 12, and no later one
     (`HealdanMigrator.migrateTo`), so the app's first start applies any later script to the moved rows, as on any
     upgrade. PostgreSQL rolls a failed script back whole, and the start stops. The history table, `hd_schema_history`,
     starts with Flyway's version `0` baseline, as LogicalDOC's tables are there first.

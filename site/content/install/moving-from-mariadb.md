@@ -216,18 +216,18 @@ This stops the MariaDB the move used and removes its container. Its volume stays
 A move of a small install, with most of the tables' lines left out:
 
 ```text
-[move] Source: MariaDB 11.4.13, Healdan schema version 11, time zone UTC (the server's, +00:00) ... ok
+[move] Source: MariaDB 11.4.13, Healdan schema version 12, time zone UTC (the server's, +00:00) ... ok
 [move] Target: PostgreSQL 18.4, empty ... ok
-[move] Schema: made as a fresh install's, by LogicalDOC's scripts and Healdan's migrations to version 12 (77 tables) ... ok
-[move] Copying 75 tables ...
-[move]   hd_api_token: 2 rows
-[move]   hd_client: 1 row
+[move] Schema: made as a fresh install's, by LogicalDOC's scripts and Healdan's migrations to version 13 (80 tables) ... ok
+[move] Copying 78 tables ...
+[move]   hd_admin_event: 4 rows
+[move]   hd_api_token: 1 row
          …
 [move]   ld_workingtime: 0 rows
-[move] Copied 75 tables, 483 rows ... ok
-[move] Sequences 40 of 40, identity counters 1 of 1 ... ok
+[move] Copied 78 tables, 742 rows ... ok
+[move] Sequences 40 of 40, identity counters 3 of 3 ... ok
 [move] Foreign keys rebuilt: 37 of 37
-[move] Comparing: rows and checksums match in 75 of 75 tables
+[move] Comparing: rows and checksums match in 78 of 78 tables
 [move] Counters: none can hand out an id its table already holds ... ok
 [move] Only the source has these, which weren't copied:
 [move]   column ld_uniquetag.ld_int1
@@ -238,9 +238,9 @@ Compose's own lines, about the containers it starts, come before it.
 
 | Line | What it says |
 |---|---|
-| `Source:` | MariaDB's version, the version of Healdan's tables (11, the last on MariaDB), and the time zone the dates were read in. Check that zone, as [Checking the Time Zone](#checking-the-time-zone) says |
+| `Source:` | MariaDB's version, the version of Healdan's tables (12, the last on MariaDB), and the time zone the dates were read in. Check that zone, as [Checking the Time Zone](#checking-the-time-zone) says |
 | `Target:` | PostgreSQL's version, and that its database was empty. After a move that stopped part-way, it says `an unfinished move's tables removed` |
-| `Schema:` | PostgreSQL's tables, made as a new install's are, with Healdan's own at version 12, the one that goes with MariaDB's 11. Healdan's first start brings them up to date |
+| `Schema:` | PostgreSQL's tables, made as a new install's are, with Healdan's own at version 13, the one that goes with MariaDB's 12. Healdan's first start brings them up to date |
 | `Copying` | each table, with its rows. A large table also says how many it has copied every 100,000 rows |
 | `Copied` | the tables and rows in all |
 | `Sequences`, `identity counters` | the counters that hand out ids, each set to carry on after the ids MariaDB handed out |
@@ -300,7 +300,7 @@ didn't finish, which Healdan won't start on. Either way, put the cause right, th
 
 | The error says | What to do |
 |---|---|
-| `the source's Healdan schema is at version …, and the move takes only version 11` | The install isn't at the last MariaDB version. Go back to it, as below, follow [Upgrade to the Last MariaDB Version](#upgrade-to-the-last-mariadb-version), and move again |
+| `the source's Healdan schema is at version …, and the move takes only version 12` | The install isn't at the last MariaDB version. Go back to it, as below, follow [Upgrade to the Last MariaDB Version](#upgrade-to-the-last-mariadb-version), and move again |
 | `the source's Healdan schema history has a migration that didn't succeed (version …)` | An upgrade of Healdan's tables failed on MariaDB. Go back, and start `mariadb-final`: it stops with `Healdan's database migration failed: …`, and that version's own Troubleshooting page, `site/content/install/troubleshooting.md` in its checkout, says what to do. Once it starts, move again |
 | `the source has no hd_schema_history table, …` | The move's MariaDB isn't the install's. On a stack with [host folders](#if-mariadbs-data-is-in-a-host-folder) or [a MariaDB of your own](#a-mariadb-of-your-own), see those sections. Otherwise, check `DB_NAME` in `.env` |
 | `the source, …, is …, not MariaDB: the move reads only a Healdan install's MariaDB` | `MOVE_SOURCE_HOST` or `MOVE_SOURCE_PORT` names another kind of server: see [A MariaDB of Your Own](#a-mariadb-of-your-own) |
@@ -345,8 +345,8 @@ Its first start on PostgreSQL:
 - **Puts the configuration's database settings right,** as the log says:
   `set Healdan's own: hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect, jdbc.dbms=postgresql, jdbc.driver=org.postgresql.Driver`.
 - **Checks LogicalDOC's tables,** as every start does.
-- **Brings Healdan's own tables up to date.** The move made them at version 12, the one that goes with MariaDB's
-  11, and the first start makes any later version's changes on the moved rows, as every upgrade does. On a version
+- **Brings Healdan's own tables up to date.** The move made them at version 13, the one that goes with MariaDB's
+  12, and the first start makes any later version's changes on the moved rows, as every upgrade does. On a version
   with none, it has nothing to do.
 - **Runs no setup step again.** The move brought the record of every step that had run.
 - **Finds everything else as it was:** the documents' files, the storage backends and their markers, the

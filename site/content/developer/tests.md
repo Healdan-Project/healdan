@@ -551,11 +551,12 @@ PostgreSQL](../../install/moving-from-mariadb/) gives it: `docker compose run` w
 moves a frozen install, the fixture in `docker/tests/move-fixture/`.
 
 - **The fixture** is a MariaDB-era install: its database's dump (`mariadb.sql.gz`), its conf and repository volumes
-  (`volumes.tgz`) and what the test expects of them (`expected.env`), about 53 KB in all. `make.sh` made it once, from
-  `84c802acb`, `master`'s tip that day, which runs on MariaDB, with that commit's own image, and added rows that
-  try the move: an avatar of 6,000 characters, dates at fractions of a second, an accented matter in a Store on an
-  encrypted local storage backend with a file on it, a sealed sign-in secret, a Trash item, and counters past their
-  first values. Its `README.md` says what's in it and when it's made again. It holds only invented data and the smoke
+  (`volumes.tgz`) and what the test expects of them (`expected.env`), about 55 KB in all. `make.sh` made it from
+  `3390247e0`, `master`'s tip then, which runs on MariaDB at schema version 12, with that commit's own image, and
+  added rows that try the move: an avatar of 6,000 characters, dates at fractions of a second, an accented matter in
+  a Store on an encrypted local storage backend with a file on it, a sealed sign-in secret, a Trash item, an error in
+  the Admin app's tables beside the app's own rows there, and counters past their first values. Its `README.md` says
+  what's in it and when it's made again. It holds only invented data and the smoke
   stack's published test passwords, and `make.sh` checks it names no address but loopback's and LogicalDOC's own
   multicast default, `228.8.8.8`.
 - **The cases,** in the order a move would meet them: the app started on the fixture before any move, which the
@@ -567,7 +568,8 @@ moves a frozen install, the fixture in `docker/tests/move-fixture/`.
   command's own lines and nothing else, so a stack trace fails it.
 - **Then the result:** the report; every table's rows counted on both sides, by one query a side made from each
   database's catalogue, and the two lists compared; the rows read back with `psql` (the avatar whole, the dates to the
-  millisecond, the NUL a space, the accented name, the documents' sequence going on from MariaDB's); MariaDB untouched
+  millisecond, the NUL a space, the accented name, the Admin app's error with its counts for each hour, the documents'
+  sequence going on from MariaDB's and the Admin app's identity columns past the ids moved); MariaDB untouched
   by every run, its sequences included; PostgreSQL's log with no `ERROR` line; and the app on the moved database,
   where `apiuser` signs in, a file reads back from Original's folder and one through the encrypted backend's key and
   marker, the sign-in provider's sealed secret opens, a new document takes the next doc # and ids after the fixture's,
@@ -582,8 +584,8 @@ The command and its test are kept for a while after the switch to PostgreSQL, an
 an upstream sync that adds, drops or renames a table or a column in LogicalDOC's scripts fails this test: the move
 makes LogicalDOC's tables with the new scripts and refuses a table or column that its MariaDB source lacks, and the
 report's last lines, which the test checks, list one only the source has. Hold such a sync, and ask the owner.
-Healdan's own migrations don't trip it: the move takes Healdan's tables to version 12, the one that goes with its
-source's 11, and no further, and the app's first start applies any later one to the moved rows, as on every upgrade,
+Healdan's own migrations don't trip it: the move takes Healdan's tables to version 13, the one that goes with its
+source's 12, and no further, and the app's first start applies any later one to the moved rows, as on every upgrade,
 which this test's start of the app checks.
 
 ## The Web Apps' Tests
