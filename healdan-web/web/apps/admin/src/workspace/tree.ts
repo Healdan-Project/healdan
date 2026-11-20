@@ -41,3 +41,11 @@ export function below(node: WorkspaceNode): WorkspaceNode[] {
 export function holding(root: WorkspaceNode): Set<string> {
   return new Set(placed(root).filter((one) => one.node.children.length > 0).map((one) => String(one.node.id)))
 }
+
+/**
+ * The folders and search folders below a folder that take its permissions: each that has none of its own, and what
+ * follows it in turn, stopping at a folder with permissions of its own
+ */
+export function followersOf(node: WorkspaceNode): WorkspaceNode[] {
+  return node.children.flatMap((child) => (child.ownPermissions ? [] : [child, ...followersOf(child)]))
+}

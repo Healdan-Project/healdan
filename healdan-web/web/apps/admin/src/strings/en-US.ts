@@ -252,6 +252,10 @@ export const adminEnUS = {
   'admin.workspace.matterTop': "This is the {matterLower}'s own folder: Edit renames the {matterLower}, and Delete moves it to the Trash.",
   'admin.workspace.templateTop': "This is the template's own folder: Rename and Delete above change the template.",
   'admin.workspace.searchFolder': 'Search Folder',
+  // Choosing another folder while the chosen one's changes aren't saved, or are being saved
+  'admin.workspace.leaveTitle': 'Leave the Changes to {name}?',
+  'admin.workspace.leaveLine': "The changes to {name} aren't saved. Opening {next} discards them.",
+  'admin.workspace.waiting': 'Opens {name} once the changes are saved.',
 
   // Who Can Use This Folder (spec 8.4, P2-R8, P2-R14, P2-R15)
   'admin.access.title': 'Who Can Use This Folder',
@@ -440,6 +444,8 @@ export const adminPlurals = {
     other: "{n} documents couldn't be indexed, so search won't find their text",
   },
   'admin.matter.previewsGivenUp': { one: '{n} preview was given up on', other: '{n} previews were given up on' },
+  // Follow Parent's question: what below the folder follows it, and so takes its parent's permissions too
+  'admin.access.followBelow': { one: '{names} follows it, so it takes them too.', other: '{names} follow it, so they take them too.' },
 } as const satisfies Record<`admin.${string}`, PluralForms>
 
 export type AdminStringKey = keyof typeof adminEnUS

@@ -8,6 +8,7 @@ import { ErrorPanel, idFrom, useApi } from '@healdan/shell'
 import { Button, CheckField, SelectField, TextField, toast } from '@healdan/ui'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
+import { useEditState } from './edits'
 import { useFolderProperties, useSearchFolder, workspaceChanged, workspaceKeys } from './queries'
 import type { WorkspaceNode } from './tree'
 import styles from './Workspace.module.css'
@@ -149,6 +150,7 @@ function RuleForm({ folder, node, root, kind }: { folder: A['SearchFolder'] } & 
   const shown = draft ?? initial
   const rule = ruleOf(shown)
   const dirty = draft !== null && JSON.stringify(ruleOf(draft) ?? draft) !== JSON.stringify(ruleOf(initial))
+  useEditState('rule', dirty, busy)
 
   async function save() {
     if (rule === undefined) return

@@ -205,6 +205,22 @@ describe('Who Can Use This Folder', () => {
     expect((putsTo(api, 111)[0] as A['FolderAccessChange']).rows![0]).toEqual({ groupId: 2, permissions: permissionsOf('read-only') })
   })
 
+  it('names the folders below that follow the one giving up its own permissions, as they take its parent’s too', async () => {
+    await openWorkspace()
+    await choose('Privileged')
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Follow Parent' }))
+    const dialog = await screen.findByRole('alertdialog', { name: `Follow the Permissions of ${LABEL}?` })
+    expect(within(dialog).getByText(`Privileged gives up its own permissions, and takes those of ${LABEL} from then on.`)).toBeTruthy()
+    expect(within(dialog).getByText("Counsel's Advice follows it, so it takes them too.")).toBeTruthy()
+    await expectNoAxeViolations(dialog)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    // A folder with nothing below it says nothing of what's below
+    await choose('Evidence')
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Follow Parent' }))
+    const evidence = await screen.findByRole('alertdialog', { name: `Follow the Permissions of ${LABEL}?` })
+    expect(within(evidence).queryByText(/follows? it, so/)).toBeNull()
+  })
+
   it("asks before Follow Parent, which gives up the folder's own permissions, and isn't offered on the matter's own folder", async () => {
     const { api } = await openWorkspace({ 'PUT /v1/admin/folders/113/access': { ...charterAccess[111]!, folderId: 113 } })
     expect(within(panel()).queryByRole('button', { name: 'Follow Parent' })).toBeNull()
@@ -514,5 +530,144 @@ describe('The Workspace Editor by keyboard', () => {
     expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['New Folder', 'New Search Folder', 'Rename', 'Move To…', 'Delete'])
     await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}')
     expect(await screen.findByRole('dialog', { name: 'Rename Pleadings' })).toBeTruthy()
+  })
+})
+
+/** A request that waits until the test answers it, or refuses it */
+function held<T>() {
+  let answer!: (value: T) => void
+  let refuse!: (error: unknown) => void
+  const promise = new Promise<T>((resolve, reject) => {
+    answer = resolve
+    refuse = reject
+  })
+  return { promise, answer, refuse }
+}
+
+const level = (name: string) => {
+  const select = within(access()).getByRole('combobox', { name: `Access for ${name}` }) as HTMLSelectElement
+  return select.options[select.selectedIndex]!.textContent
+}
+
+describe("The Workspace Editor keeps what's being edited", () => {
+  it("keeps an unsaved change, and a refusal that came meanwhile, across a visit to the Overview, which never asked for the tree before the Workspace tab", async () => {
+    const answer = held<A['FolderAccess']>()
+    const { api } = await renderApp('/matters/11', { ...workspaceRoutes(), 'PUT /v1/admin/folders/110/access': () => answer.promise })
+    await screen.findByRole('heading', { level: 1, name: '1001.1 Charter Dispute – MV Northern Star' })
+    expect(api.callsTo('GET /v1/admin/workspaces/*/tree')).toEqual([])
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Workspace' }))
+    await within(main()).findByRole('table', { name: `Who Can Use ${LABEL}` })
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Overview' }))
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Workspace' }))
+    expect(level('Everyone')).toBe('Read Only')
+    expect(within(panel()).getByRole('button', { name: 'Save' }).hasAttribute('disabled')).toBe(false)
+
+    // Saved, then off to the Overview before the server answers: its refusal is there on the way back
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(putsTo(api, 110)).toHaveLength(1))
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Overview' }))
+    answer.refuse(problem(409, 'refused', 'guest can be given Read Only at most.'))
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Workspace' }))
+    expect((await within(panel()).findByRole('alert')).textContent).toBe('guest can be given Read Only at most.')
+    expect(level('Everyone')).toBe('Read Only')
+  })
+
+  it('asks before choosing another folder while who can use it is changed and unsaved, and Cancel keeps the change', async () => {
+    const { api, view } = await openWorkspace()
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
+    fireEvent.click(row(/^Correspondence/))
+    let dialog = await screen.findByRole('alertdialog', { name: `Leave the Changes to ${LABEL}?` })
+    expect(within(dialog).getByText(`The changes to ${LABEL} aren't saved. Opening Correspondence discards them.`)).toBeTruthy()
+    await expectNoAxeViolations(view.container)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(row(new RegExp(`^${LABEL}`)).getAttribute('aria-current')).toBe('page')
+    expect(level('Everyone')).toBe('Read Only')
+
+    fireEvent.click(row(/^Correspondence/))
+    dialog = await screen.findByRole('alertdialog', { name: `Leave the Changes to ${LABEL}?` })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard Changes' }))
+    expect(await within(main()).findByRole('table', { name: 'Who Can Use Correspondence' })).toBeTruthy()
+    expect(row(/^Correspondence/).getAttribute('aria-current')).toBe('page')
+    expect(putsTo(api, 110)).toEqual([])
+  })
+
+  it('asks too while the values it sets, or a search folder’s rule, are changed and unsaved', async () => {
+    await openWorkspace()
+    await choose('Correspondence')
+    const values = await within(panel()).findByRole('region', { name: 'Values It Sets' })
+    await waitFor(() => expect((within(values).getByRole('combobox', { name: 'Subclass' }) as HTMLSelectElement).value).toBe('Letters'))
+    await userEvent.selectOptions(within(values).getByRole('combobox', { name: 'Subclass' }), 'Emails')
+    fireEvent.click(row(/^Drafts/))
+    let dialog = await screen.findByRole('alertdialog', { name: 'Leave the Changes to Correspondence?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard Changes' }))
+    await within(main()).findByRole('table', { name: 'Who Can Use Drafts' })
+
+    await choose('My Recent Docs Here')
+    const rule = await within(panel()).findByRole('region', { name: 'Rule' })
+    const days = within(rule).getByRole('textbox', { name: /Changed Within/ }) as HTMLInputElement
+    await waitFor(() => expect(days.value).toBe('14'))
+    await userEvent.type(days, '0')
+    fireEvent.click(row(/^Drafts/))
+    dialog = await screen.findByRole('alertdialog', { name: 'Leave the Changes to My Recent Docs Here?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect((within(panel()).getByRole('textbox', { name: /Changed Within/ }) as HTMLInputElement).value).toBe('140')
+  })
+
+  it('holds the folder chosen while a save is on its way, and opens it once saved', async () => {
+    const answer = held<A['FolderAccess']>()
+    const { api } = await openWorkspace({ 'PUT /v1/admin/folders/110/access': () => answer.promise })
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(putsTo(api, 110)).toHaveLength(1))
+    fireEvent.click(row(/^Correspondence/))
+    // Said where a screen reader hears it, in the region that's there all along
+    await waitFor(() => expect(within(panel()).getByRole('status').textContent).toBe('Opens Correspondence once the changes are saved.'))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(row(new RegExp(`^${LABEL}`)).getAttribute('aria-current')).toBe('page')
+    answer.answer(charterAccess[110]!)
+    expect(await within(main()).findByRole('table', { name: 'Who Can Use Correspondence' })).toBeTruthy()
+    expect(await screen.findByText(`Saved who can use ${LABEL}`)).toBeTruthy()
+  })
+
+  it("stays with the refusal of a save on its way, and forgets the folder chosen meanwhile", async () => {
+    const answer = held<A['FolderAccess']>()
+    await openWorkspace({ 'PUT /v1/admin/folders/110/access': () => answer.promise })
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'full-access')
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Save' }))
+    fireEvent.click(row(/^Correspondence/))
+    await waitFor(() => expect(within(panel()).getByRole('status').textContent).toBe('Opens Correspondence once the changes are saved.'))
+    answer.refuse(problem(409, 'refused', 'guest can be given Read Only at most.'))
+    expect((await within(panel()).findByRole('alert')).textContent).toBe('guest can be given Read Only at most.')
+    // The panel tells the editor a render after it draws its refusal
+    await waitFor(() => expect(within(panel()).getByRole('status').textContent).toBe(''))
+    expect(row(new RegExp(`^${LABEL}`)).getAttribute('aria-current')).toBe('page')
+    expect(level('Everyone')).toBe('Full Access')
+  })
+
+  it('keeps the folder chosen, change and all, when a folder is made, or another deleted from its row', async () => {
+    const { api } = await openWorkspace({
+      'POST /v1/admin/folders/110/children': folderNode(120, 'Exhibits'),
+      'DELETE /v1/admin/folders/112': undefined,
+      'GET /v1/folders/112/contents': { folders: 0, documents: 0 },
+    })
+    await userEvent.selectOptions(within(access()).getByRole('combobox', { name: 'Access for Everyone' }), 'read-only')
+    await userEvent.click(within(main()).getByRole('button', { name: 'New Folder' }))
+    const dialog = await screen.findByRole('dialog', { name: `New Folder in ${LABEL}` })
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /Name/ }), 'Exhibits')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(api.callsTo('POST /v1/admin/folders/110/children')).toHaveLength(1))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(within(panel()).getByRole('heading', { level: 2 }).textContent).toBe(LABEL)
+    expect(level('Everyone')).toBe('Read Only')
+
+    fireEvent.keyDown(row(/^Drafts/), { key: 'Delete' })
+    const question = await screen.findByRole('alertdialog', { name: 'Move Drafts to the Trash?' })
+    await userEvent.click(within(question).getByRole('button', { name: 'Move to Trash' }))
+    await waitFor(() => expect(api.callsTo('DELETE /v1/admin/folders/112')).toHaveLength(1))
+    await waitFor(() => expect(screen.queryByRole('alertdialog', { name: 'Move Drafts to the Trash?' })).toBeNull())
+    expect(within(panel()).getByRole('heading', { level: 2 }).textContent).toBe(LABEL)
+    expect(level('Everyone')).toBe('Read Only')
   })
 })

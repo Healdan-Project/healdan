@@ -7,15 +7,16 @@ import { apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Icon, SelectField, toast, VisuallyHidden } from '@healdan/ui'
 import { Confirm } from '../dialogs/Confirm'
-import { t } from '../strings'
+import { plural, t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 import { AddPersonOrGroup } from './AddPersonOrGroup'
+import { useEditState } from './edits'
 import { EveryPermission } from './EveryPermission'
 import { bodyOf, grantOf, sameGrants, sortGrants, type Grant } from './grants'
 import { levelOf, NAMED_LEVELS, permissionsOf, type FolderLevel, type NamedLevel } from './levels'
 import { useFolderAccess, workspaceChanged, workspaceKeys } from './queries'
 import { andList } from './text'
-import { below, findNode, type WorkspaceNode } from './tree'
+import { below, findNode, followersOf, type WorkspaceNode } from './tree'
 import page from '../matters/MatterPage.module.css'
 import styles from './Workspace.module.css'
 
@@ -90,6 +91,9 @@ function AccessEditor({ node, root, parent, kind, warnings, access, headingId }:
   const ownerStays = kind === 'matter' && isTop
   const followed = access.followsFolderId === null ? undefined : findNode(root, access.followsFolderId)
   const restricted = below(node).filter((one) => one.ownPermissions)
+  // What follows this folder, and so takes its parent's permissions with it, should it follow its parent
+  const followers = followersOf(node)
+  useEditState('access', dirty, busy)
 
   function change(next: Grant[]) {
     setDraft(sortGrants(next))
@@ -274,6 +278,7 @@ function AccessEditor({ node, root, parent, kind, warnings, access, headingId }:
       {asking === 'follow' && parent && (
         <Confirm title={t('admin.access.followTitle', { parent: parent.name })} confirm={t('admin.access.followParent')} run={followParent} onClose={() => setAsking(null)}>
           <p className={page.line}>{t('admin.access.followLine', { name: node.name, parent: parent.name })}</p>
+          {followers.length > 0 && <p className={page.line}>{plural('admin.access.followBelow', followers.length, { names: andList(followers.map((one) => one.name)) })}</p>}
         </Confirm>
       )}
       {asking === 'apply' && (

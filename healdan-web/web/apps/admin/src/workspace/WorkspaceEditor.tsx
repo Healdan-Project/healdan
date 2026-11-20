@@ -2,18 +2,21 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useId, useState } from 'react'
+import { useCallback, useId, useRef, useState } from 'react'
 import { apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Icon, toast } from '@healdan/ui'
+import { Confirm } from '../dialogs/Confirm'
 import { t } from '../strings'
 import { AccessPanel } from './AccessPanel'
+import { EditsContext, type EditState } from './edits'
 import { DeleteFolderDialog, FolderNameDialog, MoveFolderDialog, namesBeside } from './FolderDialogs'
 import { actionsOf, FolderTree, type FolderAction } from './FolderTree'
 import { PropertiesPanel } from './PropertiesPanel'
 import { useTemplateProblems, useWorkspaceTree, workspaceChanged } from './queries'
 import { SearchFolderPanel } from './SearchFolderPanel'
-import { findNode, holding, parentOf, type WorkspaceNode } from './tree'
+import { below, findNode, holding, parentOf, type WorkspaceNode } from './tree'
+import page from '../matters/MatterPage.module.css'
 import styles from './Workspace.module.css'
 
 type A = adminComponents['schemas']
@@ -49,6 +52,41 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
   const [selected, setSelected] = useState(root.id)
   const [expanded, setExpanded] = useState(() => holding(root))
   const [open, setOpen] = useState<Open | null>(null)
+  // Where each panel of the chosen folder stands (edits.ts), and the folder chosen over an unsaved change, asked about,
+  // or over a save on its way, which opens once it's saved
+  const parts = useRef(new Map<string, EditState>())
+  const [leaving, setLeaving] = useState<number | null>(null)
+  const [waiting, setWaiting] = useState<number | null>(null)
+  const waitingFor = useRef<number | null>(null)
+
+  const wait = (id: number | null) => {
+    waitingFor.current = id
+    setWaiting(id)
+  }
+
+  const report = useCallback((part: string, state: EditState) => {
+    const was = parts.current.get(part)
+    if (state === 'clean') parts.current.delete(part)
+    else parts.current.set(part, state)
+    const next = waitingFor.current
+    if (was !== 'saving' || state === 'saving' || next === null) return
+    // Refused: the panel says why, and the folder chosen meanwhile is forgotten
+    if (state === 'dirty') return wait(null)
+    const states = [...parts.current.values()]
+    if (states.includes('saving')) return
+    wait(null)
+    if (states.includes('dirty')) setLeaving(next)
+    else setSelected(next)
+  }, [])
+
+  /** Another folder chosen: at once, after asking over an unsaved change, or once a save on its way is saved */
+  function choose(id: number) {
+    if (id === selected) return wait(null)
+    const states = [...parts.current.values()]
+    if (states.includes('saving')) return wait(id)
+    if (states.includes('dirty')) return setLeaving(id)
+    setSelected(id)
+  }
 
   // A folder that has gone, from here or elsewhere, gives way to the top
   const node = findNode(root, selected) ?? root
@@ -77,7 +115,8 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
       : await api.send<A['WorkspaceNode']>('POST', apiPath`/v1/admin/folders/${into.id}/children`, { name } satisfies A['NewWorkspaceFolder'])
     changed()
     setExpanded((was) => new Set([...was, String(into.id)]))
-    setSelected(made.id)
+    // The new folder is chosen, unless that would drop a change to the chosen one
+    if (parts.current.size === 0) setSelected(made.id)
     toast(t('admin.folderDialog.created', { name: made.name }))
   }
 
@@ -96,108 +135,131 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
   async function remove(on: WorkspaceNode, from: WorkspaceNode | undefined) {
     await api.send('DELETE', apiPath`/v1/admin/folders/${on.id}`)
     changed()
-    setSelected((from ?? root).id)
+    // Only a chosen folder that went with it gives way, to the folder it was in
+    if (on.id === node.id || below(on).some((one) => one.id === node.id)) {
+      parts.current.clear()
+      setSelected((from ?? root).id)
+    }
     toast(t('admin.deleteFolder.done', { name: on.name }))
   }
 
   return (
-    <div className={styles.editor}>
-      <section aria-labelledby={foldersId} className={styles.treePane}>
-        <div className={styles.paneHead}>
-          <h2 id={foldersId} className={styles.paneTitle}>
-            {t('admin.workspace.folders')}
-          </h2>
-          <Button onPress={() => setOpen({ action: 'new-folder', node: making, parent: parentOf(root, making.id) })}>
-            <span className={styles.withIcon}>
-              <Icon name="folderPlus" size={14} />
-              {t('admin.workspace.newFolder')}
-            </span>
-          </Button>
-          <Button onPress={() => setOpen({ action: 'new-search-folder', node: making, parent: parentOf(root, making.id) })}>
-            <span className={styles.withIcon}>
-              <Icon name="folderSearch" size={14} />
-              {t('admin.workspace.newSearchFolder')}
-            </span>
-          </Button>
-        </div>
-        <FolderTree root={root} kind={kind} selected={node.id} onSelect={setSelected} expanded={expanded} onExpandedChange={setExpanded} onAction={act} />
-      </section>
-      <section aria-label={t('admin.workspace.chosen')} className={styles.panel}>
-        <div className={styles.panelHead}>
-          <h2 className={styles.folderName}>
-            {isTop && kind === 'matter' ? (
-              <Icon name="briefcase" kind="matter" />
-            ) : isTop ? (
-              <Icon name="template" />
-            ) : (
-              <Icon name={node.kind === 'search-folder' ? 'folderSearch' : 'folder'} kind="folder" />
+    <EditsContext.Provider value={report}>
+      <div className={styles.editor}>
+        <section aria-labelledby={foldersId} className={styles.treePane}>
+          <div className={styles.paneHead}>
+            <h2 id={foldersId} className={styles.paneTitle}>
+              {t('admin.workspace.folders')}
+            </h2>
+            <Button onPress={() => setOpen({ action: 'new-folder', node: making, parent: parentOf(root, making.id) })}>
+              <span className={styles.withIcon}>
+                <Icon name="folderPlus" size={14} />
+                {t('admin.workspace.newFolder')}
+              </span>
+            </Button>
+            <Button onPress={() => setOpen({ action: 'new-search-folder', node: making, parent: parentOf(root, making.id) })}>
+              <span className={styles.withIcon}>
+                <Icon name="folderSearch" size={14} />
+                {t('admin.workspace.newSearchFolder')}
+              </span>
+            </Button>
+          </div>
+          <FolderTree root={root} kind={kind} selected={node.id} onSelect={choose} expanded={expanded} onExpandedChange={setExpanded} onAction={act} />
+        </section>
+        <section aria-label={t('admin.workspace.chosen')} className={styles.panel}>
+          <div className={styles.panelHead}>
+            <h2 className={styles.folderName}>
+              {isTop && kind === 'matter' ? (
+                <Icon name="briefcase" kind="matter" />
+              ) : isTop ? (
+                <Icon name="template" />
+              ) : (
+                <Icon name={node.kind === 'search-folder' ? 'folderSearch' : 'folder'} kind="folder" />
+              )}
+              <span>{node.name}</span>
+            </h2>
+            {!isTop && (
+              <div className={styles.buttons}>
+                <Button onPress={() => act('rename', node)}>
+                  <span className={styles.withIcon}>
+                    <Icon name="pencil" size={14} />
+                    {t('admin.workspace.rename')}
+                  </span>
+                </Button>
+                <Button onPress={() => act('move', node)}>
+                  <span className={styles.withIcon}>
+                    <Icon name="arrowRight" size={14} />
+                    {t('admin.workspace.move')}
+                  </span>
+                </Button>
+                <Button onPress={() => act('delete', node)}>
+                  <span className={styles.withIcon}>
+                    <Icon name="trash" size={14} />
+                    {t('admin.workspace.delete')}
+                  </span>
+                </Button>
+              </div>
             )}
-            <span>{node.name}</span>
-          </h2>
-          {!isTop && (
-            <div className={styles.buttons}>
-              <Button onPress={() => act('rename', node)}>
-                <span className={styles.withIcon}>
-                  <Icon name="pencil" size={14} />
-                  {t('admin.workspace.rename')}
-                </span>
-              </Button>
-              <Button onPress={() => act('move', node)}>
-                <span className={styles.withIcon}>
-                  <Icon name="arrowRight" size={14} />
-                  {t('admin.workspace.move')}
-                </span>
-              </Button>
-              <Button onPress={() => act('delete', node)}>
-                <span className={styles.withIcon}>
-                  <Icon name="trash" size={14} />
-                  {t('admin.workspace.delete')}
-                </span>
-              </Button>
-            </div>
+          </div>
+          {/* Always there, so a screen reader hears it as it changes */}
+          <p role="status" className={styles.note}>
+            {waiting !== null && t('admin.workspace.waiting', { name: findNode(root, waiting)?.name ?? '' })}
+          </p>
+          {isTop && <p className={styles.note}>{topNote}</p>}
+          {node.kind === 'search-folder' && <p className={styles.note}>{t('admin.workspace.searchFolder')}</p>}
+          {/* Keyed by the folder, so what was being changed in one is never carried to another */}
+          <AccessPanel key={`access-${node.id}`} node={node} root={root} parent={parent} kind={kind} warnings={problems.filter((one) => one.folderId === node.id)} />
+          {node.kind === 'search-folder' ? (
+            <SearchFolderPanel key={`rule-${node.id}`} node={node} root={root} kind={kind} />
+          ) : (
+            <PropertiesPanel key={`values-${node.id}`} node={node} root={root} kind={kind} />
           )}
-        </div>
-        {isTop && <p className={styles.note}>{topNote}</p>}
-        {node.kind === 'search-folder' && <p className={styles.note}>{t('admin.workspace.searchFolder')}</p>}
-        {/* Keyed by the folder, so what was being changed in one is never carried to another */}
-        <AccessPanel key={`access-${node.id}`} node={node} root={root} parent={parent} kind={kind} warnings={problems.filter((one) => one.folderId === node.id)} />
-        {node.kind === 'search-folder' ? (
-          <SearchFolderPanel key={`rule-${node.id}`} node={node} root={root} kind={kind} />
-        ) : (
-          <PropertiesPanel key={`values-${node.id}`} node={node} root={root} kind={kind} />
+        </section>
+        {open?.action === 'new-folder' && (
+          <FolderNameDialog
+            title={t('admin.folderDialog.newTitle', { name: open.node.name })}
+            submit={t('admin.folderDialog.create')}
+            taken={namesBeside(open.node)}
+            send={(name) => create(open.node, name)}
+            onClose={close}
+          />
         )}
-      </section>
-      {open?.action === 'new-folder' && (
-        <FolderNameDialog
-          title={t('admin.folderDialog.newTitle', { name: open.node.name })}
-          submit={t('admin.folderDialog.create')}
-          taken={namesBeside(open.node)}
-          send={(name) => create(open.node, name)}
-          onClose={close}
-        />
-      )}
-      {open?.action === 'new-search-folder' && (
-        <FolderNameDialog
-          title={t('admin.folderDialog.newSearchTitle', { name: open.node.name })}
-          submit={t('admin.folderDialog.create')}
-          taken={namesBeside(open.node)}
-          rule={{ rootFolderId: root.id }}
-          send={(name, rule) => create(open.node, name, rule)}
-          onClose={close}
-        />
-      )}
-      {open?.action === 'rename' && (
-        <FolderNameDialog
-          title={t('admin.folderDialog.renameTitle', { name: open.node.name })}
-          submit={t('admin.folderDialog.rename')}
-          initial={open.node.name}
-          taken={namesBeside(open.parent, open.node.id)}
-          send={(name) => rename(open.node, name)}
-          onClose={close}
-        />
-      )}
-      {open?.action === 'move' && open.parent && <MoveFolderDialog node={open.node} parent={open.parent} root={root} send={(into) => move(open.node, into)} onClose={close} />}
-      {open?.action === 'delete' && <DeleteFolderDialog node={open.node} kind={kind} run={() => remove(open.node, open.parent)} onClose={close} />}
-    </div>
+        {open?.action === 'new-search-folder' && (
+          <FolderNameDialog
+            title={t('admin.folderDialog.newSearchTitle', { name: open.node.name })}
+            submit={t('admin.folderDialog.create')}
+            taken={namesBeside(open.node)}
+            rule={{ rootFolderId: root.id }}
+            send={(name, rule) => create(open.node, name, rule)}
+            onClose={close}
+          />
+        )}
+        {open?.action === 'rename' && (
+          <FolderNameDialog
+            title={t('admin.folderDialog.renameTitle', { name: open.node.name })}
+            submit={t('admin.folderDialog.rename')}
+            initial={open.node.name}
+            taken={namesBeside(open.parent, open.node.id)}
+            send={(name) => rename(open.node, name)}
+            onClose={close}
+          />
+        )}
+        {open?.action === 'move' && open.parent && <MoveFolderDialog node={open.node} parent={open.parent} root={root} send={(into) => move(open.node, into)} onClose={close} />}
+        {open?.action === 'delete' && <DeleteFolderDialog node={open.node} kind={kind} run={() => remove(open.node, open.parent)} onClose={close} />}
+        {leaving !== null && (
+          <Confirm
+            title={t('admin.workspace.leaveTitle', { name: node.name })}
+            confirm={t('admin.access.discard')}
+            run={async () => {
+              parts.current.clear()
+              setSelected(leaving)
+            }}
+            onClose={() => setLeaving(null)}
+          >
+            <p className={page.line}>{t('admin.workspace.leaveLine', { name: node.name, next: findNode(root, leaving)?.name ?? '' })}</p>
+          </Confirm>
+        )}
+      </div>
+    </EditsContext.Provider>
   )
 }

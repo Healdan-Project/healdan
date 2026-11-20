@@ -9,6 +9,7 @@ import { Button, DatePicker, formatDay, SelectField, TextField, toast } from '@h
 import { PersonPicker } from '../pickers/PersonPicker'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
+import { useEditState } from './edits'
 import { useFolderProperties, workspaceChanged, workspaceKeys } from './queries'
 import type { WorkspaceNode } from './tree'
 import styles from './Workspace.module.css'
@@ -107,6 +108,7 @@ function ValuesForm({ values, node, root, kind }: { values: A['FolderProperties'
   const [busy, setBusy] = useState(false)
   const shown = draft ?? initial
   const dirty = draft !== null && properties.some((property) => draft[property.name] !== initial[property.name])
+  useEditState('values', dirty, busy)
 
   // The Class a Subclass is offered within: the one set here, or else the one the folder inherits
   const classProperty = properties.find((property) => property.name === CLASS)

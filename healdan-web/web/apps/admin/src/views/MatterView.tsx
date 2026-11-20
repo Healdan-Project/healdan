@@ -81,6 +81,10 @@ function Matter({ matter, tab }: { matter: A['Matter']; tab: MatterTab }) {
   const navigate = useNavigate({ from: routes.matter })
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const close = () => setDialog(null)
+  // Once opened, the Workspace stays mounted behind the Overview, with what's being changed in it and the answer to a
+  // save still on its way, as the User app's open properties form does; the tree isn't asked for until it's opened
+  const [workspaceOpened, setWorkspaceOpened] = useState(tab === 'workspace')
+  if (tab === 'workspace' && !workspaceOpened) setWorkspaceOpened(true)
 
   function choose(next: string) {
     // A tab isn't a step of its own, as an order isn't
@@ -133,7 +137,7 @@ function Matter({ matter, tab }: { matter: A['Matter']; tab: MatterTab }) {
         onSelect={choose}
         tabs={[
           { id: 'overview', label: t('admin.matter.tab.overview'), content: <Overview matter={matter} /> },
-          { id: 'workspace', label: t('admin.matter.tab.workspace'), content: <WorkspaceEditor rootFolderId={matter.folderId} kind="matter" /> },
+          { id: 'workspace', label: t('admin.matter.tab.workspace'), keepMounted: workspaceOpened, content: <WorkspaceEditor rootFolderId={matter.folderId} kind="matter" /> },
         ]}
       />
       {dialog === 'edit' && <EditMatterDialog matter={matter} onClose={close} />}
