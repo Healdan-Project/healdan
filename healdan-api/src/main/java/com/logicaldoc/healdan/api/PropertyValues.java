@@ -266,7 +266,7 @@ public final class PropertyValues {
 	 * @param type CE's attribute type
 	 * @return the API's name for it
 	 */
-	static String typeName(Attribute.Type type) {
+	public static String typeName(Attribute.Type type) {
 		return switch (type) {
 		case Attribute.Type.INTEGER -> "integer";
 		case Attribute.Type.DOUBLE -> "decimal";

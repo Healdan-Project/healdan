@@ -38,8 +38,11 @@ import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
  * folder's own name, sent back, changes nothing, whatever the rules for a new
  * name say of it. A veto of Healdan's
  * listeners is {@code 409 refused}, as the ProblemMapper answers one.
+ * <p>
+ * The Admin app's workspace routes check a folder's, a search folder's and a
+ * template's name with {@link #name}, so every folder name follows one rule.
  */
-final class FolderRenames {
+public final class FolderRenames {
 
 	/**
 	 * One lock per parent folder, so two renames to one name can't both pass
@@ -134,7 +137,7 @@ final class FolderRenames {
 	 *         reference such as {@code &amp;}, which CE's folder DAO would turn
 	 *         into its character)
 	 */
-	static String name(String requested) {
+	public static String name(String requested) {
 		String sent = StringUtils.strip(requested);
 		// Spaces alone, or characters that show nothing (such as U+200B and U+FEFF), make no name
 		if (sent.codePoints().allMatch(c -> Character.isWhitespace(c) || Character.isSpaceChar(c)

@@ -878,7 +878,9 @@ paths:
         level, hidden ones too, with `ownPermissions` on each folder that
         has permissions of its own, which the editor shows with a lock. Each
         folder's `children` are its folders, then its search folders, each
-        by name, ignoring case; a search folder has none.
+        by name, ignoring case; a search folder has none. A folder alias,
+        which LogicalDOC can keep from before Healdan, is left out, as New
+        Matter's copy leaves it out.
 
         Any other id is `404 not-found`: a folder inside a workspace (ask
         for its workspace's tree), a Store, and the others the Matters tag
@@ -963,8 +965,12 @@ paths:
         Moves a folder or search folder of a workspace, below its top
         folder, and everything live in it, to the caller's Trash, through
         LogicalDOC's folder delete, as the User app's delete does (Admin app
-        spec section 8.4). Answers `204`. A matter made from a template
-        keeps its own copy of a folder deleted from the template.
+        spec section 8.4), and answers the Trash item the delete made, as
+        a matter's delete does, so the app can say what went. A matter's
+        folder comes back with `POST /v1/trash/{id}/restore`; a template's
+        doesn't, as the User app's Trash restores into a Store only
+        (`409 place-gone`). A matter made from a template keeps its own copy
+        of a folder deleted from the template.
 
         - `404 not-found` for a folder outside a workspace.
         - `409 refused` for the workspace's top folder (a matter's is
@@ -978,8 +984,12 @@ paths:
       parameters:
         - $ref: '#/components/parameters/FolderPath'
       responses:
-        '204':
+        '200':
           description: In the Trash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedFolder'
         '401':
           $ref: '#/components/responses/Problem'
         '403':
@@ -1052,15 +1062,16 @@ paths:
         more than its new parent is narrowed to fit, as on every route
         (P1). A move into the folder it's in changes nothing. Answers `204`.
 
-        - `404 not-found` for a folder outside a workspace, or a `folderId`
-          that isn't a folder of one.
+        - `404 not-found` for a folder outside a workspace.
         - `422 validation` for a missing `folderId` (`required`).
-        - `409 refused` for the workspace's top folder; into another
-          workspace (a folder moves to another matter in the User app); into
-          a search folder, the folder itself or a folder inside it; while a
-          document in it is checked out, by anyone; for a name another folder
-          or search folder there has, compared without regard to case; and
-          for what Healdan's rules refuse.
+        - `409 refused` for the workspace's top folder; for a `folderId`
+          that isn't a live folder of a workspace, as the body names it (the
+          check order's step 4); into another workspace (a folder moves to
+          another matter in the User app); into a search folder, the folder
+          itself or a folder inside it; while a document in it is checked
+          out, by anyone; for a name another folder or search folder there
+          has, compared without regard to case; and for what Healdan's rules
+          refuse.
 
         Recorded as `folder.moved`, with the folder it was in before and
         after.
@@ -1285,8 +1296,10 @@ paths:
         - `409 refused` for a search folder, and for what Healdan's rules
           refuse.
 
-        Recorded as `folder.properties-changed`, with each value before and
-        after.
+        Recorded as `folder.properties-changed`, with each value the folder
+        sets of its own that changed, by the property's name, before and
+        after (null for one it inherits). A change that leaves the folder's
+        own values as they were isn't recorded.
       tags: [Matters]
       parameters:
         - $ref: '#/components/parameters/FolderPath'
@@ -1427,8 +1440,9 @@ paths:
         - `409 refused` for `rule.days` below 1; for a `docSubclass` without
           a `docClass`; and for what Healdan's rules refuse.
 
-        Recorded as `search-folder.changed`, with the rule's values before
-        and after. A change that changes nothing isn't recorded.
+        Recorded as `search-folder.rule-changed`, with the rule's values
+        that changed, before and after. A change that changes nothing isn't
+        recorded.
       tags: [Matters]
       parameters:
         - $ref: '#/components/parameters/SearchFolderPath'
@@ -1616,9 +1630,11 @@ paths:
       description: |
         Moves the template's folder, with its folders and search folders, to
         the caller's Trash, through LogicalDOC's folder delete, and answers
-        `204` (Admin app spec section 8.5). Matters already made from it are
-        unchanged; their `template` is null from then on. New Matter no
-        longer offers it.
+        the Trash item the delete made, as a folder's delete does (Admin app
+        spec section 8.5). The User app's Trash lists the item, but doesn't
+        restore it, as it restores into a Store only (`409 place-gone`).
+        Matters already made from it are unchanged; their `template` is null
+        from then on. New Matter no longer offers it.
 
         - `404 not-found` for anything but a template.
         - `409 refused` for what Healdan's rules refuse.
@@ -1628,8 +1644,12 @@ paths:
       parameters:
         - $ref: '#/components/parameters/TemplatePath'
       responses:
-        '204':
+        '200':
           description: In the Trash
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedFolder'
         '401':
           $ref: '#/components/responses/Problem'
         '403':
@@ -1651,8 +1671,12 @@ paths:
         `PermissionRules`); saving the template still works (Admin app spec
         section 8.4). Empty for a clean template.
 
-        - `wider-than-parent`, once for each folder that grants a group
-          something its parent doesn't (P1), in the tree's order.
+        - `wider-than-parent`, once for each folder or search folder that
+          grants a group something the folder it's in doesn't (P1), in the
+          tree's order: one with permissions of its own, or one that still
+          follows a folder above the folder it's in, as a folder made while
+          the folder it's in followed that folder does once the folder it's
+          in has permissions of its own (LogicalDOC's way).
         - `store-unreadable`, for each Store, once for each group that could
           read a matter made from the template but can't read that Store
           (P2), by Store name and then group name. The matter's owner, not
@@ -2916,6 +2940,31 @@ components:
           format: int64
           minimum: 0
           description: The documents that went with it
+    DeletedFolder:
+      type: object
+      description: The Trash item a workspace folder's or a template's delete made
+      additionalProperties: false
+      required: [trashItemId, folders, documents]
+      properties:
+        trashItemId:
+          type: integer
+          format: int64
+          description: |
+            The item in the caller's Trash that holds the folder, which the
+            User app's Trash lists. `POST /v1/trash/{id}/restore` restores a
+            matter's folder back where it was; a template's, or a folder of
+            one, it answers `409 place-gone`, as it restores into a Store
+            only
+        folders:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The folders and search folders in it that went with it, at every level, its own left out
+        documents:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The documents that went with it; none in a template
     WorkspaceNode:
       type: object
       description: A folder or search folder of a workspace, with what's in it
@@ -3241,10 +3290,17 @@ components:
           enum: [all, documents, emails]
         docClass:
           type: [string, 'null']
-          description: The Class the documents must have; null for any
+          description: |
+            The Class the documents must have; null for any. The editor offers
+            the `docclass` property's `options`, which
+            `GET /v1/admin/folders/{id}/properties` gives for any folder of
+            the workspace, the search folder's own being refused
         docSubclass:
           type: [string, 'null']
-          description: The Subclass the documents must have, only with a `docClass`; null for any
+          description: |
+            The Subclass the documents must have, only with a `docClass`; null
+            for any. The editor offers the `docsubclass` property's `options`
+            whose `class` is the chosen Class
     SearchFolder:
       type: object
       description: A search folder of a workspace, with its rule
@@ -3296,7 +3352,7 @@ components:
           type: integer
           format: int64
           minimum: 0
-          description: The live folders and search folders in it, at every level, its own left out
+          description: The live folders and search folders in it, at every level, its own and any folder alias left out
         matters:
           type: integer
           format: int64
@@ -3318,7 +3374,7 @@ components:
       type: object
       description: Something New Matter would refuse in a matter made from the template
       additionalProperties: false
-      required: [code, message, folderId, storeId, groupId]
+      required: [code, message, folderId, storeId, groupId, groupName]
       properties:
         code:
           type: string
@@ -3343,6 +3399,12 @@ components:
           type: [integer, 'null']
           format: int64
           description: The group it's about, a person's own group for a person; null when it names none
+        groupName:
+          type: [string, 'null']
+          description: |
+            That group's name, or that person's first and last name (the
+            username when both are blank), as `MatterProblem.groupName`; null
+            with no `groupId`
     Store:
       type: object
       description: A Store

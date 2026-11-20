@@ -50,15 +50,7 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 			"PUT /v1/admin/stores/{id}/access", "GET /v1/admin/groups",
 			// Task 16: folder access
 			"GET /v1/admin/folders/{id}/access", "PUT /v1/admin/folders/{id}/access",
-			"POST /v1/admin/folders/{id}/apply-access",
-			// Task 17: workspace folders, search folders and templates
-			"GET /v1/admin/workspaces/{folderId}/tree", "POST /v1/admin/folders/{id}/children",
-			"PATCH /v1/admin/folders/{id}", "DELETE /v1/admin/folders/{id}", "POST /v1/admin/folders/{id}/move",
-			"GET /v1/admin/folders/{id}/properties", "PUT /v1/admin/folders/{id}/properties",
-			"POST /v1/admin/folders/{id}/search-folders", "GET /v1/admin/search-folders/{id}",
-			"PATCH /v1/admin/search-folders/{id}", "GET /v1/admin/templates", "POST /v1/admin/templates",
-			"GET /v1/admin/templates/{id}", "PATCH /v1/admin/templates/{id}", "DELETE /v1/admin/templates/{id}",
-			"GET /v1/admin/templates/{id}/problems");
+			"POST /v1/admin/folders/{id}/apply-access");
 
 	@Test
 	public void testEveryRouteIsDescribed() {
