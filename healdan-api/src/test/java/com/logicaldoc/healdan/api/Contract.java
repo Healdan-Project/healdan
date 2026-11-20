@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,8 +26,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 /**
  * Checks every response a test receives against {@code openapi.yaml} (spec
- * section 4.6). A route the file doesn't describe, such as an unknown path or
- * a test-only resource, must answer with a problem. The docs page under
+ * section 4.6), or, for {@code /api/v1/admin} and under it, against
+ * {@code openapi-admin.yaml}, the admin API's (Admin app spec section 9.2). A
+ * route its file doesn't describe, such as an unknown path or a test-only
+ * resource, must answer with a problem. The docs page under
  * {@code /api/docs}, the Office add-in's files under {@code /api/addin/} and
  * the sign-in pages under {@code /api/signin/} aren't described, so they
  * aren't checked. A {@code HEAD}
@@ -37,10 +40,17 @@ public final class Contract {
 	/** The description file, as a classpath resource */
 	public static final String OPENAPI = "healdan/api/openapi.yaml";
 
+	/** The admin API's description file, as a classpath resource */
+	public static final String OPENAPI_ADMIN = "healdan/api/openapi-admin.yaml";
+
+	/** The admin API's paths, which {@link #OPENAPI_ADMIN} describes, are this and those under it */
+	private static final String ADMIN = "/api/v1/admin";
+
 	private static final Set<String> UNDESCRIBED = Set.of("validation.request.path.missing",
 			"validation.request.operation.notAllowed");
 
-	private static OpenApiInteractionValidator validator;
+	/** A validator for each file, made when first needed */
+	private static final Map<String, OpenApiInteractionValidator> validators = new HashMap<>();
 
 	private Contract() {
 	}
@@ -62,7 +72,8 @@ public final class Contract {
 		if (head)
 			assertEquals(method + " " + path + " answered with a body", 0, response.body().length);
 		// A method in another case is the same operation, as CXF matches it
-		ValidationReport report = validator().validateResponse(path,
+		String file = file(path);
+		ValidationReport report = validator(file).validateResponse(path,
 				Request.Method.valueOf(head ? "GET" : method.toUpperCase(Locale.ROOT)), toValidatorResponse(response));
 		if (head)
 			report = ValidationReport.from(report.getMessages().stream()
@@ -74,8 +85,9 @@ public final class Contract {
 		if (String.valueOf(response.header("Content-Type")).startsWith("application/problem+json"))
 			checkProblem(method, path, response);
 		if (report.hasErrors())
-			fail("%s %s answered %d, which openapi.yaml doesn't allow:%n%s%nBody: %s".formatted(method, path,
-					response.status(), report.getMessages().stream().map(m -> m.getKey() + ": " + m.getMessage())
+			fail("%s %s answered %d, which %s doesn't allow:%n%s%nBody: %s".formatted(method, path,
+					response.status(), file.substring(file.lastIndexOf('/') + 1),
+					report.getMessages().stream().map(m -> m.getKey() + ": " + m.getMessage())
 							.collect(Collectors.joining("\n")),
 					response.text()));
 	}
@@ -109,20 +121,40 @@ public final class Contract {
 		return builder.build();
 	}
 
-	private static synchronized OpenApiInteractionValidator validator() {
-		if (validator == null)
-			validator = OpenApiInteractionValidator.createForInlineApiSpecification(openApi())
-					.withBasePathOverride("/api").build();
-		return validator;
+	/**
+	 * @param path a request path, without the query string
+	 * @return the description file that describes it: {@link #OPENAPI_ADMIN}
+	 *         for {@code /api/v1/admin} and under it, as
+	 *         {@link RouteCoverageTest#admin} tells the admin API's paths
+	 *         apart, otherwise {@link #OPENAPI}
+	 */
+	static String file(String path) {
+		return path.equals(ADMIN) || path.startsWith(ADMIN + "/") ? OPENAPI_ADMIN : OPENAPI;
+	}
+
+	private static synchronized OpenApiInteractionValidator validator(String file) {
+		return validators.computeIfAbsent(file, f -> OpenApiInteractionValidator
+				.createForInlineApiSpecification(read(f)).withBasePathOverride("/api").build());
 	}
 
 	/**
 	 * @return the content of {@code openapi.yaml}
 	 */
 	public static String openApi() {
-		try (InputStream in = Contract.class.getClassLoader().getResourceAsStream(OPENAPI)) {
+		return read(OPENAPI);
+	}
+
+	/**
+	 * @return the content of {@code openapi-admin.yaml}
+	 */
+	public static String openApiAdmin() {
+		return read(OPENAPI_ADMIN);
+	}
+
+	private static String read(String file) {
+		try (InputStream in = Contract.class.getClassLoader().getResourceAsStream(file)) {
 			if (in == null)
-				throw new IllegalStateException("No " + OPENAPI + " on the classpath");
+				throw new IllegalStateException("No " + file + " on the classpath");
 			return new String(in.readAllBytes(), StandardCharsets.UTF_8);
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);

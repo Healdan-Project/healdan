@@ -40,14 +40,15 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.HealdanRuleException;
+import com.logicaldoc.healdan.admin.AdminContext;
 import com.logicaldoc.healdan.profile.LocalValueDAO;
 import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
 import com.logicaldoc.healdan.searchfolder.SearchFolderRule;
 import com.logicaldoc.healdan.searchfolder.SearchFolderRuleDAO;
 
 /**
- * Spec §5.3: an admin creates a matter from a workspace template, and edits,
- * deletes and restores it. The template is the owner's demo (spec §5.3 table):
+ * Spec \u00a75.3: an admin creates a matter from a workspace template, and edits,
+ * deletes and restores it. The template is the owner's demo (spec \u00a75.3 table):
  * Everyone reads the workspace, IT reads and modifies it; Documents inherits
  * it, and its Invoices folder sets Class = Financial; Secured Documents and
  * Emails are IT only; Recent Work and My Recent Work are search folders.
@@ -335,38 +336,44 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 
 	@Test
 	public void testRefusesNamesTheDatabaseCannotStore() throws Exception {
-		// MariaDB's utf8 tables hold no character beyond the Basic Multilingual Plane, such as an emoji (R33)
-		String message = "A matter name can't contain emoji or other characters the database can't store.";
-		assertRefused(message, () -> create(2, "Party \uD83C\uDF89", alice, demo));
+		// PostgreSQL stores no NUL, and a lone surrogate isn't a character (PostgreSQL spec section 7.5)
+		String message = "A matter name can't contain characters Healdan can't keep.";
+		assertRefused(message, () -> create(2, "Party\u0000Time", alice, demo));
 		assertRefused(message, () -> create(2, "Half \uD83C", alice, demo));
 		assertNoMatter(2);
 		assertRefused(message,
-				() -> service.update(matter.getId(), "Demo \uD83C\uDF89", null, matter.getOwnerId(), admin));
+				() -> service.update(matter.getId(), "Demo\u0000", null, matter.getOwnerId(), admin));
 		assertEquals("Healdan Demo", MatterDAO.get().findById(matter.getId()).getName());
 
-		// Every character of the plane is fine
+		// Every other character is fine, an emoji too
 		Matter fine = create(2, "Caf\u00e9 \u4e2d\u6587", alice, demo);
 		assertEquals("998.2 \u2013 Caf\u00e9 \u4e2d\u6587", workspace(fine).getName());
+		Matter party = create(3, "Party \ud83c\udf89", alice, demo);
+		assertEquals("Party \ud83c\udf89", MatterDAO.get().findById(party.getId()).getName());
+		assertEquals("998.3 \u2013 Party \ud83c\udf89", workspace(party).getName());
 	}
 
 	@Test
 	public void testRefusesDescriptionsTheDatabaseCannotStore() throws Exception {
-		// The description goes into hd_matter and ld_folder, both utf8 on MariaDB, as names do (R33)
-		String message = "A matter description can't contain emoji or other characters the database can't store.";
-		assertRefused(message, () -> create(2, "Party", alice, demo, "Launch \ud83c\udf89"));
+		// The description goes into hd_matter and ld_folder, as names do (PostgreSQL spec section 7.5)
+		String message = "A matter description can't contain characters Healdan can't keep.";
+		assertRefused(message, () -> create(2, "Party", alice, demo, "Launch\u0000"));
 		assertRefused(message, () -> create(2, "Party", alice, demo, "Half \uD83C"));
 		assertNoMatter(2);
 
 		Matter described = create(2, "Party", alice, demo, "Launch");
 		assertRefused(message,
-				() -> service.update(described.getId(), "Party", "Launch \ud83c\udf89", alice.getId(), admin));
+				() -> service.update(described.getId(), "Party", "Launch\u0000", alice.getId(), admin));
 		assertEquals("Launch", MatterDAO.get().findById(described.getId()).getDescription());
 		assertEquals("Launch", workspace(described).getDescription());
 
-		// Every character of the plane is fine
+		// Every other character is fine, an emoji too
 		service.update(described.getId(), "Party", "Caf\u00e9 \u4e2d\u6587", alice.getId(), admin);
 		assertEquals("Caf\u00e9 \u4e2d\u6587", MatterDAO.get().findById(described.getId()).getDescription());
 		assertEquals("Caf\u00e9 \u4e2d\u6587", workspace(described).getDescription());
+		service.update(described.getId(), "Party", "Launch \ud83c\udf89", alice.getId(), admin);
+		assertEquals("Launch \ud83c\udf89", MatterDAO.get().findById(described.getId()).getDescription());
+		assertEquals("Launch \ud83c\udf89", workspace(described).getDescription());
 	}
 
 	@Test
@@ -451,6 +458,51 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testCreateAndEditAreRecorded() throws Exception {
+		int layout = ClientServiceTest.events().size();
+
+		Matter created = create(2, "Smith v Jones", alice, demo, "First description");
+
+		String event = "%d admin %s MATTERS matter.%s matter " + created.getId() + " 998.2 \u2013 %s %s";
+		// Every field the create set
+		assertEquals(List.of(event.formatted(admin.getId(), null, "created", "Smith v Jones",
+				"{\"client\":{\"before\":null,\"after\":\"998 \u2013 Healdan\"},"
+						+ "\"description\":{\"before\":null,\"after\":\"First description\"},"
+						+ "\"name\":{\"before\":null,\"after\":\"Smith v Jones\"},"
+						+ "\"number\":{\"before\":null,\"after\":\"2\"},"
+						+ "\"owner\":{\"before\":null,\"after\":\"alice alice\"},"
+						+ "\"store\":{\"before\":null,\"after\":\"Main\"},"
+						+ "\"template\":{\"before\":null,\"after\":\"Demo\"}}")),
+				eventsSince(layout));
+
+		// Only the fields an edit changed, each with its old and new value; an owner by name
+		service.update(created.getId(), " Smith v Brown ", "First description", alice.getId(), admin);
+		AdminContext.set("192.0.2.30");
+		try {
+			service.update(created.getId(), "Smith v Brown", null, alice.getId(), admin);
+		} finally {
+			AdminContext.clear();
+		}
+		service.update(created.getId(), "Smith v Brown", null, bob.getId(), admin);
+		// No change, no record; nor a refusal
+		service.update(created.getId(), "Smith v Brown ", null, bob.getId(), admin);
+		User erin = fx.user("erin", lawyers.getName());
+		erin.setEnabled(false);
+		UserDAO.get().store(erin);
+		assertRefused("The owner erin is disabled.",
+				() -> service.update(created.getId(), "Smith v Brown", null, erin.getId(), admin));
+
+		assertEquals(List.of(
+				event.formatted(admin.getId(), null, "updated", "Smith v Brown",
+						"{\"name\":{\"before\":\"Smith v Jones\",\"after\":\"Smith v Brown\"}}"),
+				event.formatted(admin.getId(), "192.0.2.30", "updated", "Smith v Brown",
+						"{\"description\":{\"before\":\"First description\",\"after\":null}}"),
+				event.formatted(admin.getId(), null, "updated", "Smith v Brown",
+						"{\"owner\":{\"before\":\"alice alice\",\"after\":\"bob bob\"}}")),
+				eventsSince(layout + 1));
+	}
+
+	@Test
 	public void testOwnerChangeSwapsEntries() throws Exception {
 		Matter created = create(2, "Demo", alice, demo);
 		Folder ws = workspace(created);
@@ -522,9 +574,14 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 				jdbc.queryForObject("select ld_deleted from ld_group where ld_id = ?", Integer.class, lenasGroup));
 		assertTrue(acl(ws).containsKey(lenasGroup));
 
+		int events = ClientServiceTest.events().size();
 		service.update(created.getId(), "Demo", null, bob.getId(), admin);
 
 		assertEquals(bob.getId(), MatterDAO.get().findById(created.getId()).getOwnerId());
+		// The record names the deleted owner as she was
+		List<String> recorded = eventsSince(events);
+		assertEquals(1, recorded.size());
+		assertTrue(recorded.get(0), recorded.get(0).endsWith(" {\"owner\":{\"before\":\"lena lena\",\"after\":\"bob bob\"}}"));
 		Map<Long, Set<Permission>> acl = acl(ws);
 		assertFalse(acl.containsKey(lenasGroup));
 		assertEquals(set(Permission.values()), acl.get(bobsGroup.getId()));
@@ -652,6 +709,15 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 			throws Exception {
 		return service.create(new NewMatter(healdan.getId(), number, name, description, store.getId(), owner.getId(),
 				template.getId()), admin);
+	}
+
+	/**
+	 * @return the administration record's rows after the first ones, as
+	 *         {@link ClientServiceTest#events()} gives them
+	 */
+	private static List<String> eventsSince(int first) {
+		List<String> events = ClientServiceTest.events();
+		return events.subList(first, events.size());
 	}
 
 	private NewMatter request(Client client, long number, String name, User owner, Folder template) {

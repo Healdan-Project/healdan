@@ -344,7 +344,7 @@ public class DeviceHolds {
 	 */
 	private static Date latestCheckout(long docId) {
 		try {
-			// A missing date last, where MariaDB puts it; PostgreSQL would put it first
+			// A missing date last, where PostgreSQL would put it first in a descending sort
 			List<DocumentHistory> latest = DocumentHistoryDAO.get().findByWhere(
 					"_entity.docId = :docId and _entity.event = :event",
 					Map.of("docId", docId, "event", DocumentEvent.CHECKEDOUT.toKey()),

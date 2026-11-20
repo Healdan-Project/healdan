@@ -4,10 +4,11 @@
 package com.logicaldoc.healdan.listing;
 
 /**
- * The pieces of listing SQL that MariaDB and PostgreSQL each write their own
- * way, written once in a form both take (the S3 plan's Global
- * Constraints): no {@code ::} casts, no {@code IFNULL} or {@code LIMIT a, b},
- * and no cast to {@code bigint}, which MariaDB refuses (11.4, 2026-11-10).
+ * The pieces of listing SQL several queries share, written once in the plain
+ * SQL CE's DAO helpers take: no {@code ::} casts, which CE's
+ * {@code NamedParameterStatement} reads as a parameter, so
+ * {@code cast(x as ...)} instead; and a number to sort by is a
+ * {@code decimal(n,0)}, which holds the longest doc # the API takes.
  * <p>
  * {@code AND} and {@code OR} may run their sides in any order, so a value that
  * could fail a cast or a substring is only reached through {@code CASE}.
@@ -73,8 +74,8 @@ public final class ListingSql {
 	/**
 	 * @param expression a value
 	 * @return 1 when it's null and 0 otherwise, to sort by first so that
-	 *         nulls come last, where MariaDB and PostgreSQL would put them at
-	 *         opposite ends
+	 *         nulls come last in either direction: PostgreSQL puts them last
+	 *         in an ascending sort and first in a descending one
 	 */
 	public static String nullsLast(String expression) {
 		return "case when %s is null then 1 else 0 end".formatted(expression);
@@ -83,8 +84,8 @@ public final class ListingSql {
 	/**
 	 * @return a condition that holds when the text is 1 to {@code max} digits
 	 *         and nothing else. It measures what is left once the digits are
-	 *         taken out, as MariaDB's comparison of text ignores trailing
-	 *         spaces.
+	 *         taken out, in plain SQL with no pattern: a space or any other
+	 *         character is left, and fails it.
 	 */
 	static String digits(String expression, int max) {
 		String stripped = expression;

@@ -124,7 +124,7 @@ public class HibernateMatterDAO extends HibernatePersistentObjectDAO<Matter> imp
 	public List<Matter> findByStore(long storeId, int offset, int limit) throws PersistenceException {
 		if (limit <= 0)
 			return List.of();
-		// The page alone; MariaDB and PostgreSQL, the databases Healdan runs on, both take LIMIT and OFFSET
+		// The page alone, with PostgreSQL's LIMIT and OFFSET
 		List<Long> ids = queryForList("select m.ld_id" + IN_STORE
 				+ " order by c.hd_number, m.hd_number, m.ld_id limit %d offset %d".formatted(limit, Math.max(offset, 0)),
 				Map.of("store", storeId), Long.class, null);

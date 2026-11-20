@@ -25,17 +25,19 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * and the row locks of what it wrote last until then. So the mover and the purge, which write rows holding a file's
  * lock, never do while a transaction still open wrote that file's rows ({@link #writtenByOpenTransaction}): they would
  * wait for the row lock holding the file's lock, which that transaction may want again, through a shared stripe, until
- * the database's lock-wait timeout. The purge would also miss what that transaction did: a hold it made afresh, which
+ * the database's lock timeout. The purge would also miss what that transaction did: a hold it made afresh, which
  * the purge's read doesn't see until it commits. Nor does the mover give a document's rows a Store from its own threads
  * while an open transaction wrote any of them ({@link #documentWrittenByOpenTransaction}).
  * <p>
  * One cycle remains, through a third transaction rather than a holder of the lock: {@code StoreTracking}'s update of
  * several documents' rows ({@code StoredFiles.setStore}, in a transaction of its own, holding no file's lock) can wait
  * for a row an open CE transaction holds while it holds a row the mover's commit then waits for; if that CE
- * transaction next wants the stripe the mover holds, the three wait in a circle, which only InnoDB's lock-wait timeout
- * ends, failing one of them. It takes a stripe shared with that transaction's next file (1 in 1,024) as well as the
- * coincidence, and the failed one is retried: the mover's commit counts a failure, and the Store update is mended by
- * the nightly check.
+ * transaction next wants the stripe the mover holds, the three wait in a circle. PostgreSQL's deadlock detector can't
+ * see it, as one of the waits is for a lock in the JVM: only the database's lock timeout ends it, 50 seconds, which the
+ * start-up tool gives the app's role ({@code lock_timeout}), failing one of the two that wait for a row. On PostgreSQL
+ * the timeout fails the waiting statement's whole transaction. It takes a stripe shared with that transaction's next
+ * file (1 in 1,024) as well as the coincidence, and the failed one is retried: the mover's commit counts a failure, and
+ * the Store update is mended by the nightly check.
  */
 public final class FileLocks {
 

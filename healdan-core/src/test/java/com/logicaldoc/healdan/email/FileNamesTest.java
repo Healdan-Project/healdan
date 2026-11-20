@@ -4,7 +4,6 @@
 package com.logicaldoc.healdan.email;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -38,30 +37,31 @@ public class FileNamesTest {
 	}
 
 	@Test
-	public void testCharactersBeyondTheBasicPlaneBecomeReplacementCharacters() {
-		// MariaDB's utf8 tables hold none of them (R33): an emoji, and a lone surrogate
-		assertEquals("Re_ \ufffd Sale.eml", name("Re: " + new String(Character.toChars(0x1F389)) + " Sale"));
+	public void testCharactersBeyondTheBasicPlaneAreKept() {
+		// An emoji is kept (PostgreSQL spec section 7.5); a lone surrogate isn't a character, and becomes U+FFFD
+		assertEquals("Re_ \ud83c\udf89 Sale.eml", name("Re: " + new String(Character.toChars(0x1F389)) + " Sale"));
 		assertEquals("a\ufffdb.eml", name("a\uD83Cb"));
-		assertEquals("\ufffd.eml", name(new String(Character.toChars(0x1F600))));
+		assertEquals("\ud83d\ude00.eml", name(new String(Character.toChars(0x1F600))));
 	}
 
 	@Test
-	public void testLongSubjectCutAfterTheReplacement() {
+	public void testALongSubjectIsNeverCutInsideAnEmoji() {
 		String emoji = new String(Character.toChars(0x1F600));
-		// 255 - ".eml" = 251: one character for the emoji, so the cut falls after it
-		String result = name("x".repeat(250) + emoji + "yy");
-		assertEquals("x".repeat(250) + "\ufffd.eml", result);
-		for (int i = 0; i < result.length(); i++)
-			assertFalse(Character.isSurrogate(result.charAt(i)));
+		// 255 - ".eml" = 251: two chars for the emoji, which fits whole after 249 others
+		assertEquals("x".repeat(249) + emoji + ".eml", name("x".repeat(249) + emoji + "yy"));
+		// After 250 the cut would fall inside it, so it goes whole, and no half of it is left
+		assertEquals("x".repeat(250) + ".eml", name("x".repeat(250) + emoji + "yy"));
 	}
 
 	@Test
-	public void testTheFallbackFitsTheDatabaseToo() {
-		// A blank subject keeps the name the email came with, which mustn't fail the insert either (R33)
+	public void testTheFallbackIsKeptToo() {
+		// A blank subject keeps the name the email came with, emoji and all
 		String party = "Party " + new String(Character.toChars(0x1F389)) + ".eml";
-		assertEquals("Party \ufffd.eml", FileNames.fromSubject(null, "eml", party));
-		assertEquals("Party \ufffd.eml", FileNames.fromSubject("   ", "eml", party));
-		assertEquals("Party \ufffd.eml", FileNames.fromSubject("...", "eml", party));
+		assertEquals(party, FileNames.fromSubject(null, "eml", party));
+		assertEquals(party, FileNames.fromSubject("   ", "eml", party));
+		assertEquals(party, FileNames.fromSubject("...", "eml", party));
+		// but for what Healdan can't keep
+		assertEquals("Half \ufffd.eml", FileNames.fromSubject(null, "eml", "Half \uD83C.eml"));
 	}
 
 	@Test
@@ -95,9 +95,14 @@ public class FileNamesTest {
 	}
 
 	@Test
-	public void testAnAttachmentsNameFitsTheDatabase() {
+	public void testAnAttachmentsNameKeepsItsEmoji() {
 		String party = new String(Character.toChars(0x1F389));
-		assertEquals("Party \ufffd.pdf", FileNames.fromFileName("Party " + party + ".pdf", "f"));
-		assertEquals("Party \ufffd.eml", FileNames.fromFileName(null, "Party " + party + ".eml"));
+		assertEquals("Party " + party + ".pdf", FileNames.fromFileName("Party " + party + ".pdf", "f"));
+		assertEquals("Party " + party + ".eml", FileNames.fromFileName(null, "Party " + party + ".eml"));
+		assertEquals("Half \ufffd.pdf", FileNames.fromFileName("Half \uD83C.pdf", "f"));
+		// Shortened, it loses an emoji the cut would split whole: 255 - ".docx" leaves 250 for the stem
+		assertEquals("x".repeat(249) + ".docx", FileNames.fromFileName("x".repeat(249) + party + "y.docx", "f"));
+		assertEquals("x".repeat(248) + party + ".docx",
+				FileNames.fromFileName("x".repeat(248) + party + "y.docx", "f"));
 	}
 }

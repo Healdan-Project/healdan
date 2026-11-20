@@ -7,7 +7,7 @@ weight: 2
 
 | Service | What it is | Where its data lives |
 |---|---|---|
-| `db` | MariaDB 11.4 | the volume `logicaldoc_db-data` |
+| `db` | PostgreSQL 18 | the volume `logicaldoc_pg-data` |
 | `app` | Tomcat 11 running Healdan | the volumes `logicaldoc_logicaldoc-conf` (configuration: `context.properties`, `log.xml`, `allowed-commands.txt`), `logicaldoc_logicaldoc-repository` (documents, the search index, user data and logs) and `logicaldoc_logicaldoc-cache` (the [read cache](../../admin/storage-backends/the-read-cache/): copies of the files kept in S3 buckets, so they open faster the next time and during an outage, 20 GB at most to begin with) |
 
 [Backup and Restore](../backup-and-restore/) covers the database and the configuration and repository volumes. The
@@ -16,23 +16,51 @@ these volumes: see [Cloud Storage](../cloud-storage/).
 
 ## Supported Databases
 
-Healdan runs on MariaDB: the stack's own `db` service, or a MariaDB server of your own, which `DB_HOST` and
+Healdan runs on PostgreSQL 18: the stack's own `db` service, or a PostgreSQL server of your own, which `DB_HOST` and
 `DB_PORT` point at (see [Configuration](../configuration/)). It supports only open-source databases, and of those
-only MariaDB so far: on any other database it stops when it starts.
+only PostgreSQL: on any other database it stops when it starts.
 
-- **MySQL isn't supported,** although MariaDB grew out of it. Healdan's own tables use sequences, which MySQL
-  doesn't have.
-- **Oracle and SQL Server aren't supported.** Healdan doesn't include their drivers, so it can't connect to either.
-- **PostgreSQL** support comes later.
+- **MariaDB isn't supported any more.** Healdan ran on it until November 2026. An install made then moves its data
+  to PostgreSQL once: see [Moving from MariaDB to PostgreSQL](../moving-from-mariadb/).
+- **MySQL, Oracle and SQL Server aren't supported.** Healdan doesn't include Oracle's or SQL Server's driver, so it
+  can't connect to either.
+- **A PostgreSQL older than 18 is refused.** A newer one works, but Healdan is tested on 18, and its log says so as
+  it starts.
+
+### A PostgreSQL of Your Own
+
+Healdan connects as an ordinary role that owns its database, never as the server's administrator. Make both on your
+server, as its administrator, with the database made as the stack makes its own: UTF-8, with PostgreSQL's built-in
+`C.UTF-8` locale, which sorts text by its characters' code points whatever the server's operating system:
+
+```sql
+create role logicaldoc login password 'choose-a-strong-password';
+create database logicaldoc owner logicaldoc template template0 encoding 'UTF8' locale_provider builtin builtin_locale 'C.UTF-8' locale 'C';
+```
+
+Then set `DB_HOST` and `DB_PORT` in `.env` to the server, and `DB_NAME`, `DB_USER` and `DB_PASSWORD` to the database,
+the role and its password. The server must accept the app's container's connections with a password.
+
+Healdan checks the database each time it starts. It stops on a database that isn't UTF-8, or a role that can't
+create tables in it, and its log says what to change. On a database that sorts text another way, it starts, with a
+warning that lists may sort in another order, and that LogicalDOC's folder lookups can't use their index. A
+database's encoding and locale can't be changed afterwards: only a dump and a restore into a new one change them.
+
+The stack's `db` service still starts, as the app waits for it, but holds none of Healdan's data.
 
 ## What the App Does When It Starts
 
-- **On the first start** it writes `context.properties`, waits for MariaDB, and creates the database schema.
+- **Before it changes anything,** it checks that it isn't about to start an install empty. It stops, and changes
+  nothing, when the configuration volume says the install's data is in MariaDB, when the database holds a move from
+  MariaDB that didn't finish, or when the database is empty while the repository volume holds an install's files.
+  [Troubleshooting](../troubleshooting/) has each message.
+- **On the first start** it writes `context.properties`, waits for PostgreSQL, and creates the database schema.
   Then it installs LogicalDOC's plugins, before the app starts, so the first start doesn't ask for a restart.
 - **On every later start** it re-applies the settings that come from `.env` (see
-  [Configuration](../configuration/)), and one of Healdan's own: `store`, which makes Healdan's storage keep the
-  documents' files. Healdan sets it whatever `context.properties` holds, so changing it yourself does nothing. It
-  also installs any plugin a new release adds, which can add that plugin's own settings to `context.properties`.
+  [Configuration](../configuration/)), and four of Healdan's own: `store`, which makes Healdan's storage keep the
+  documents' files, and `jdbc.driver`, `jdbc.dbms` and `hibernate.dialect`, which name PostgreSQL. Healdan sets them
+  whatever `context.properties` holds, so changing them yourself does nothing. It also installs any plugin a new
+  release adds, which can add that plugin's own settings to `context.properties`.
 - **It checks LogicalDOC's tables.** On every start but the first, it checks that the database has every one of
   LogicalDOC's tables and columns that a new database would get. If one is missing, the app stops before it starts,
   and the log names each table and the columns it lacks. Healdan never changes LogicalDOC's tables itself: make the
@@ -40,9 +68,9 @@ only MariaDB so far: on any other database it stops when it starts.
   and columns the database has besides, such as one an older version used, are left alone.
 - **It adds new default settings.** A setting that's in the image's defaults but missing from your
   `context.properties`, such as one a new release introduces, is added. A value you already have is never changed,
-  except `store` (above), the release number and copyright years (`product.release` and `product.year`), which
-  always come from the image, and an older image's default that the new image replaces (so far only
-  `cachecontrol`), unless you changed it yourself. Non-breaking spaces in the Content-Security-Policy
+  except Healdan's own four (above), the release number and copyright years (`product.release` and
+  `product.year`), which always come from the image, and an older image's default that the new image replaces (so
+  far only `cachecontrol`), unless you changed it yourself. Non-breaking spaces in the Content-Security-Policy
   (`security.csp`) also become ordinary ones, in a policy you changed too.
 - **The setup wizard is switched off.** `/setup` answers with HTTP 403, because `.env` configures the database.
 

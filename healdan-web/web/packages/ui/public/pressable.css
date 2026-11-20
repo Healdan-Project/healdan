@@ -1,0 +1,12 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The rule React Aria's usePress injects as a <style> (react-aria 1.22.1), which style-src 'self' blocks. Each app's
+   index.html links this file under the id usePress looks for, so it injects nothing; this folder is each app's Vite
+   publicDir, so the build puts the file at the app's base. apps/user's pressable.test.ts checks the rule and the id still
+   match the installed react-aria, and scripts/check-dist.mjs that each app's build links it. */
+@layer {
+  [data-react-aria-pressable] {
+    touch-action: pan-x pan-y pinch-zoom;
+  }
+}

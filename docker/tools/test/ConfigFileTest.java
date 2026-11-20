@@ -24,6 +24,19 @@ public class ConfigFileTest {
 
     private static final String HEALDAN_STORAGE = "com.logicaldoc.healdan.storage.HealdanStorage";
 
+    /** The database keys every start sets, as PostgreSQL's */
+    private static final Map<String, String> POSTGRESQL = Map.of(
+            "jdbc.driver", "org.postgresql.Driver",
+            "jdbc.dbms", "postgresql",
+            "hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
+
+    /** The same keys, and the URL, as a conf volume a MariaDB install wrote holds them */
+    private static final Map<String, String> MARIADB = Map.of(
+            "jdbc.driver", "org.mariadb.jdbc.Driver",
+            "jdbc.dbms", "mariadb",
+            "hibernate.dialect", "org.hibernate.dialect.MariaDBDialect",
+            "jdbc.url", "jdbc:mariadb://db:3306/logicaldoc");
+
     public static void main(String[] args) throws Exception {
         File defaults = new File(args[0]);
         File conf = new File(Files.createTempDirectory("configfile").toFile(), "context.properties");
@@ -46,7 +59,10 @@ public class ConfigFileTest {
                 .filter(l -> l.matches("^id\\s*[=:].*")).count();
         Check.eq(1L, idLines, "id appears exactly once");
         Check.eq("/opt/logicaldoc/repository/index/", reread.getProperty("index.dir"), "index.dir seeded");
-        Check.eq("jdbc:mariadb://db:3306/logicaldoc", reread.getProperty("jdbc.url"), "jdbc.url applied");
+        Check.eq("jdbc:postgresql://db:5432/logicaldoc?logServerErrorDetail=false", reread.getProperty("jdbc.url"),
+                "jdbc.url applied");
+        POSTGRESQL.forEach((key, value) -> Check.eq(value, reread.getProperty(key),
+                key + " is PostgreSQL's from the first start"));
         Check.eq("https://docs.example.org/", reread.getProperty("server.url"), "server.url applied");
         Check.eq("true", reread.getProperty("webservice.enabled"), "unmanaged key preserved");
         Check.eq(HEALDAN_STORAGE, reread.getProperty("store"), "store is HealdanStorage after the first start");
@@ -143,6 +159,20 @@ public class ConfigFileTest {
                     "store=" + store + " becomes HealdanStorage");
             Check.eq(Set.of(), differing(expected, raw(conf)), "store=" + store + ": the other keys that changed");
         }
+
+        // A conf volume a MariaDB install wrote names MariaDB's driver, dbms and dialect, which LogicalDOC would start
+        // on: every start sets PostgreSQL's, as it sets the URL from the environment, and nothing else changes.
+        ContextProperties fromMariaDb = new ContextProperties(conf);
+        MARIADB.forEach(fromMariaDb::setProperty);
+        fromMariaDb.write();
+        Properties expected = raw(conf);
+        POSTGRESQL.forEach(expected::setProperty);
+        expected.setProperty("jdbc.url", "jdbc:postgresql://db:5432/logicaldoc?logServerErrorDetail=false");
+        DockerInit.applyConfig(conf, defaults, ConfigPlan.envKeys(Map.of("DB_PASSWORD", "rotated")));
+        ContextProperties moved = new ContextProperties(conf);
+        POSTGRESQL.forEach((key, value) -> Check.eq(value, moved.getProperty(key),
+                key + " from MariaDB's to PostgreSQL's"));
+        Check.eq(Set.of(), differing(expected, raw(conf)), "a MariaDB install's conf: the other keys that changed");
 
         // context.properties is written byte-per-char (Latin-1): anything it cannot hold must be refused, not
         // silently corrupted into a value that only fails later when Tomcat logs in.

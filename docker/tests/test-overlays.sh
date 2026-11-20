@@ -3,15 +3,23 @@
 # SPDX-License-Identifier: LGPL-3.0-only
 
 # Checks compose.dev.yaml and compose.proxy.yaml: the rendered config, then a live stack with each.
+# So that two runs can share a machine, OVERLAYS_PROJECT names the Compose project (logicaldoc-overlays),
+# OVERLAYS_NETWORK the proxy's network it makes (ldtest-proxy), and OVERLAYS_PORT and OVERLAYS_DB_PORT the app's and
+# PostgreSQL's host ports (18081 and 15432); LOGICALDOC_IMAGE, as compose.yaml reads it, names the image the stack builds
+# and runs (logicaldoc-community:local). The dev overlay's debugger port is 5005, which it doesn't take from the
+# environment. Usage: docker/tests/test-overlays.sh
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 . docker/tests/lib.sh
 
-PROJECT=logicaldoc-overlays
-NET=ldtest-proxy
+PROJECT=${OVERLAYS_PROJECT:-logicaldoc-overlays}
+NET=${OVERLAYS_NETWORK:-ldtest-proxy}
+PORT=${OVERLAYS_PORT:-18081}
+DB_PORT=${OVERLAYS_DB_PORT:-15432}
 WORK=$(mktemp -d)
 ENV_FILE=$WORK/test.env
-printf "DB_PASSWORD='overlay test'\nPROXY_NETWORK=%s\nLOGICALDOC_PORT=18081\nDEV_DB_PORT=13306\n" "$NET" > "$ENV_FILE"
+printf "DB_PASSWORD='overlay test'\nPROXY_NETWORK=%s\nLOGICALDOC_PORT=%s\nDEV_DB_PORT=%s\n" "$NET" "$PORT" "$DB_PORT" \
+  > "$ENV_FILE"
 
 compose() { docker compose -p "$PROJECT" --env-file "$ENV_FILE" "$@"; }
 remove_stack() {
@@ -27,11 +35,11 @@ echo "== rendered config: dev overlay"
 dev=$(compose -f compose.yaml -f compose.dev.yaml config --format json)
 check "app ports are LAN UI + local debugger" test \
   "$(jq -c '[.services.app.ports[] | "\(.host_ip):\(.published):\(.target)"] | sort' <<<"$dev")" = \
-  '["0.0.0.0:18081:8080","127.0.0.1:5005:5005"]'
+  "[\"0.0.0.0:$PORT:8080\",\"127.0.0.1:5005:5005\"]"
 check "Tomcat started with jpda" test "$(jq -c .services.app.command <<<"$dev")" = '["catalina.sh","jpda","run"]'
 check "JPDA_ADDRESS set" test "$(jq -r .services.app.environment.JPDA_ADDRESS <<<"$dev")" = '*:5005'
 check "db published on localhost" test \
-  "$(jq -c '[.services.db.ports[] | "\(.host_ip):\(.published):\(.target)"]' <<<"$dev")" = '["127.0.0.1:13306:3306"]'
+  "$(jq -c '[.services.db.ports[] | "\(.host_ip):\(.published):\(.target)"]' <<<"$dev")" = "[\"127.0.0.1:$DB_PORT:5432\"]"
 
 echo "== rendered config: proxy overlay"
 proxy=$(compose -f compose.yaml -f compose.proxy.yaml config --format json)
@@ -45,18 +53,24 @@ compose -f compose.yaml -f compose.proxy.yaml up -d --build
 check "app healthy" wait_healthy "$(compose -f compose.yaml ps -q app)" 900
 check "reachable as logicaldoc:8080 from the proxy network" test \
   "$(docker run --rm --network "$NET" curlimages/curl:8.11.1 -s -o /dev/null -w '%{http_code}' http://logicaldoc:8080/login.jsp)" = 200
-check "nothing published on the host" test "$(http_code http://127.0.0.1:18081/login.jsp || true)" = 000
+check "nothing published on the host" test "$(http_code "http://127.0.0.1:$PORT/login.jsp" || true)" = 000
 
 echo "== live: dev overlay"
 compose -f compose.yaml -f compose.dev.yaml up -d
 check "app healthy" wait_healthy "$(compose -f compose.yaml ps -q app)" 900
-check "UI on the published port" test "$(http_code http://127.0.0.1:18081/login.jsp)" = 200
+check "UI on the published port" test "$(http_code "http://127.0.0.1:$PORT/login.jsp")" = 200
 check "JDWP handshake on 5005" python3 - <<'PY'
 import socket, sys
 s = socket.create_connection(("127.0.0.1", 5005), timeout=10)
 s.sendall(b"JDWP-Handshake")
 sys.exit(0 if s.recv(14) == b"JDWP-Handshake" else 1)
 PY
-check "MariaDB on 127.0.0.1:13306" python3 -c 'import socket; socket.create_connection(("127.0.0.1", 13306), timeout=5)'
+# PostgreSQL itself answers, not only the port: it answers an SSLRequest with S or N, before any sign-in
+check "PostgreSQL on 127.0.0.1:$DB_PORT" python3 - "$DB_PORT" <<'PY'
+import socket, struct, sys
+s = socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=5)
+s.sendall(struct.pack(">ii", 8, 80877103))
+sys.exit(0 if s.recv(1) in (b"S", b"N") else 1)
+PY
 
 finish

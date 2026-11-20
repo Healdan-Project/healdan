@@ -88,6 +88,37 @@ describe('PickField', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
+  it('shows an option\'s icon and its secondary text beside its label, in the option\'s name, and only the label once picked', async () => {
+    const onChange = vi.fn()
+    function WithMeta() {
+      const [value, setValue] = useState<PickFieldOption | null>(null)
+      const options: PickFieldOption[] = [{ id: '7', label: 'Pat Example', meta: 'pexample', icon: 'briefcase' }]
+      return (
+        <PickField
+          label="Author"
+          value={value}
+          options={options}
+          onTextChange={() => {}}
+          onChange={(next) => {
+            setValue(next)
+            onChange(next)
+          }}
+        />
+      )
+    }
+    render(<WithMeta />)
+    await userEvent.type(box(), 'pa')
+    const option = await screen.findByRole('option', { name: 'Pat Example pexample' })
+    // Smaller and muted, after the label (ComboBox.module.css)
+    expect(within(option).getByText('pexample').className).toContain('meta')
+    // The icon is decoration: the label and its secondary text name the option
+    expect(option.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true')
+    await expectNoAxeViolations(screen.getByRole('listbox'))
+    await userEvent.keyboard('{ArrowDown}{Enter}')
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ id: '7' }))
+    expect(box().value).toBe('Pat Example')
+  })
+
   it('marks a required field and says what is wrong with it, and passes axe', async () => {
     const { container } = render(<Example required error="This needs a value." start={null} />)
     expect(box().getAttribute('aria-required')).toBe('true')

@@ -238,7 +238,7 @@ export const enUS = {
   'favorites.renameField': 'Name of Favorite {name}',
   'favorites.where': '{name} · {where}',
   'favorites.tooLong': "A favorite's name can't be longer than 255 characters.",
-  'favorites.invalid': "The name has a character Healdan can't keep, such as an emoji.",
+  'favorites.invalid': "The name has a character Healdan can't keep.",
   'folder.actions': 'Folder Actions',
   'folder.empty': 'This folder is empty.',
   'folder.more': 'More for {name}',
@@ -279,6 +279,8 @@ export const enUS = {
   'help.notices': 'Open-Source Notices',
   'person.menu': 'Account',
   'person.devices': 'Signed-in Devices',
+  // Healdan Admin, in the User app's person menu for administrators (admin spec 6.4)
+  'person.admin': 'Admin',
   'person.classic': 'Classic Interface',
   'person.signOut': 'Sign Out',
   'devices.intro': "Each Mac where the Healdan Helper is signed in is listed here, and any other program you've signed in to Healdan's API with a password. This web page's own sign-in isn't listed: Sign Out ends it.",
@@ -299,6 +301,8 @@ export const enUS = {
   'insecure.detail': 'Open it at an address that starts with https://, or use the Classic Interface, which works at this one.',
   'signedOut.message': "You've been signed out.",
   'signedOut.signIn': 'Sign In',
+  'noAdminAccess.message': "You don't have access to Healdan Admin.",
+  'noAdminAccess.open': 'Open Healdan',
   'notFound.message': "Not found, or you can't see it.",
   'storage.unreachable': 'Files are unavailable for now. Try again in a few minutes.',
   'filing.chooseFolder': 'Choose a folder inside the {matterLower}',
@@ -550,6 +554,10 @@ export const enUSPlurals = {
   'trash.days': { one: '{n} day', other: '{n} days' },
   'holds.folders': { one: '{n} folder', other: '{n} folders' },
   'holds.documents': { one: '{n} document', other: '{n} documents' },
+  // A progress bar's count, "212 of 412": a plural for the numbers' grouping (1,234)
+  'progress.count': { one: '{value} of {n}', other: '{value} of {n}' },
+  // Above what a search picker found
+  'searchPicker.results': { one: '{n} Result', other: '{n} Results' },
 } as const
 
 export type PluralKey = keyof typeof enUSPlurals

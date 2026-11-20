@@ -15,7 +15,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import com.logicaldoc.healdan.util.Savepoints;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -62,15 +61,16 @@ public class PreviewJobs {
 
 	/**
 	 * Queues a file version, due at once. A job already queued stays as it is:
-	 * its insert fails inside a savepoint, so a transaction it joins goes on.
+	 * the insert does nothing on a duplicate key, so a transaction it joins goes on.
 	 *
 	 * @param docId the document
 	 * @param fileVersion the file version
 	 * @param now the current time
 	 */
 	public void add(long docId, String fileVersion, Instant now) {
-		Savepoints.insertIfAbsent(jdbc,
-				"insert into hd_preview_job (hd_docid, hd_fileversion, hd_attempts, hd_nexttry, hd_created) values (?, ?, 0, ?, ?)",
+		jdbc.update(
+				"insert into hd_preview_job (hd_docid, hd_fileversion, hd_attempts, hd_nexttry, hd_created) values (?, ?, 0, ?, ?) "
+						+ "on conflict (hd_docid, hd_fileversion) do nothing",
 				docId, fileVersion, Timestamp.from(now), Timestamp.from(now));
 	}
 
@@ -169,6 +169,23 @@ public class PreviewJobs {
 	public void postpone(long docId, String fileVersion, String error, Instant nextTry) {
 		jdbc.update("update hd_preview_job set hd_nexttry = ?, hd_lasterror = ? where hd_docid = ? and hd_fileversion = ?",
 				Timestamp.from(nextTry), truncate(error), docId, fileVersion);
+	}
+
+	/**
+	 * @return how many jobs wait for a try, those backing off after a failure included
+	 */
+	public long countWaiting() {
+		return jdbc.queryForObject("select count(*) from hd_preview_job where hd_attempts < ?", Long.class,
+				MAX_ATTEMPTS);
+	}
+
+	/**
+	 * @return how many jobs were given up on after their last try, until their file is replaced or, for a timeout,
+	 *         the timeout is raised
+	 */
+	public long countGivenUp() {
+		return jdbc.queryForObject("select count(*) from hd_preview_job where hd_attempts >= ?", Long.class,
+				MAX_ATTEMPTS);
 	}
 
 	/**

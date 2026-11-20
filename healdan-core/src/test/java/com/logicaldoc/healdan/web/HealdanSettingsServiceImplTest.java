@@ -223,14 +223,23 @@ public class HealdanSettingsServiceImplTest extends AbstractHealdanTestCase {
 		assertRefused("The plural label cannot be empty.", s -> s.setMatterLabelPlural(null));
 		assertRefused("The singular label cannot be longer than 50 characters.",
 				s -> s.setMatterLabel("x".repeat(51)));
-		assertRefused("The plural label cannot contain emoji or other characters the database can't store.",
-				s -> s.setMatterLabelPlural("Matters \uD83C\uDF89"));
+		// PostgreSQL stores no NUL, and a lone surrogate isn't a character (PostgreSQL spec section 7.5)
+		assertRefused("The plural label cannot contain characters Healdan can't keep.",
+				s -> s.setMatterLabelPlural("Mat\u0000ters"));
+		assertRefused("The singular label cannot contain characters Healdan can't keep.",
+				s -> s.setMatterLabel("Matter \uD83C"));
 		assertRefused("Unknown numbering mode: SOMETIMES", s -> s.setNumberingMode("SOMETIMES"));
 		assertRefused("The default Class must be one of the Class options.", s -> s.setDefaultClass("Nonsense"));
 		assertRefused("The Recent Matters window must be between 1 and 3650 days.",
 				s -> s.setRecentMattersDays(0));
 		assertRefused("The Recent Matters window must be between 1 and 3650 days.",
 				s -> s.setRecentMattersDays(3651));
+
+		// An emoji is kept
+		GUIHealdanSettings settings = as(boss).load();
+		settings.setMatterLabelPlural("Matters \ud83c\udf89");
+		as(boss).save(settings);
+		assertEquals("Matters \ud83c\udf89", as(boss).load().getMatterLabelPlural());
 	}
 
 	private interface Change {

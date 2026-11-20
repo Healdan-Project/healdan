@@ -12,6 +12,13 @@ The app doesn't have everything yet, so the Classic Interface is still there for
 Everything the app doesn't do yet is in the Classic Interface, such as the screens for notes, tags, sharing a
 document, locking, permissions and your messages.
 
+## For Administrators
+
+Administrators now start their work in the Admin app, at `/admin/`, which **Admin** in the app's menu opens. Its
+Dashboard shows what needs their attention, the server's health and how Healdan is used. Administration's other
+screens are still in the Classic Interface, and the Admin app's **Classic Interface**, at the foot of its left pane,
+opens them. See the Admin Guide's [The Admin App](../../admin/the-admin-app/).
+
 ## Getting There and Back
 
 - **To the Classic Interface:** in the app, open your menu, under your initials in the top bar, and choose

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 export type { paths, components } from './schema'
+export type { paths as adminPaths, components as adminComponents } from './admin-schema'
 export { ApiError } from './problems'
 export { apiPath, createApi } from './client'
 export type { Api, ApiOptions, RequestOptions } from './client'

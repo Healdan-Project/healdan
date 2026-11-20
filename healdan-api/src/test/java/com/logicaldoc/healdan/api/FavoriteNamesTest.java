@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.api;
 import static org.junit.Assert.assertEquals;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
@@ -141,10 +142,20 @@ public class FavoriteNamesTest extends ApiTestCase {
 		assertField(rename(id, "x".repeat(256), clerk), "too-long");
 		assertField(rename(id, "Smith\u0007Docs", clerk), "invalid");
 		assertField(rename(id, "Smith\nDocs", clerk), "invalid");
-		assertField(rename(id, "Smith Docs 📁", clerk), "invalid");
+		// PostgreSQL stores no NUL, and a lone surrogate isn't a character: refused as the body is read (spec 7.5)
+		for (String unkept : List.of("Smith\u0000Docs", "Smith Docs \uD83D")) {
+			ApiResponse response = rename(id, unkept, clerk);
+			assertEquals(response.toString(), 400, response.status());
+			assertEquals("bad-request", response.code());
+			assertEquals("The field name has a character Healdan can't keep.",
+					response.json().path("detail").textValue());
+		}
 		assertEquals("Documents", nameIn(id, clerk));
 
 		assertEquals("x".repeat(255), renamed(id, "x".repeat(255), clerk));
+		// An emoji is kept
+		assertEquals("Smith Docs \uD83D\uDCC1", renamed(id, "Smith Docs \uD83D\uDCC1", clerk));
+		assertEquals("Smith Docs \uD83D\uDCC1", nameIn(id, clerk));
 	}
 
 	@Test

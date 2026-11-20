@@ -38,7 +38,7 @@ import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.rules.FilingRules;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.util.StorableText;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
@@ -78,7 +78,7 @@ public class SearchFolderService {
 
 	static final String BAD_NAME = "A search folder name can't be empty or longer than %d characters.";
 
-	static final String OUTSIDE_PLANE_NAME = "A search folder name can't contain emoji or other characters the database can't store.";
+	static final String CANT_KEEP_NAME = "A search folder name can't contain " + StorableText.CANT_KEEP + ".";
 
 	static final String BAD_DAYS = "A search folder's window must be at least 1 day.";
 
@@ -333,7 +333,12 @@ public class SearchFolderService {
 
 	/**
 	 * Restricts the query to the documents whose attribute has the value, if
-	 * there is a value
+	 * there is a value. The stored value is compared without the spaces at its
+	 * ends, {@code trim()}, as the legacy doc # lookup compares (PostgreSQL
+	 * plan, Decision Log 27): the rule's is stripped when it's saved, and
+	 * PostgreSQL compares trailing spaces, which MariaDB, where the value may
+	 * have been stored, ignored. A folder's listing filters and counts the
+	 * stored value as it is.
 	 */
 	private static void appendValue(StringBuilder sql, MapSqlParameterSource params, String param,
 			String attribute, String value) {
@@ -341,7 +346,7 @@ public class SearchFolderService {
 			return;
 		sql.append("""
 				 and exists (select 1 from ld_document_ext x where x.ld_docid = d.ld_id
-				                and x.ld_name = :%1$sname and x.ld_stringvalue = :%1$s)
+				                and x.ld_name = :%1$sname and trim(x.ld_stringvalue) = :%1$s)
 				""".formatted(param));
 		params.addValue(param + "name", attribute).addValue(param, value);
 	}
@@ -366,15 +371,15 @@ public class SearchFolderService {
 	/**
 	 * @return the name, trimmed
 	 * @throws HealdanRuleException if it is empty or too long for a folder
-	 *         name, or holds a character beyond the Basic Multilingual Plane,
-	 *         which would fail the insert on MariaDB (R33)
+	 *         name, or holds a character Healdan can't keep
+	 *         ({@link StorableText})
 	 */
 	private static String cleanName(String name) throws HealdanRuleException {
 		String clean = StringUtils.strip(name);
 		if (StringUtils.isEmpty(clean) || clean.length() > MAX_NAME_LENGTH)
 			throw new HealdanRuleException(BAD_NAME.formatted(MAX_NAME_LENGTH));
-		if (!BasicPlane.holds(clean))
-			throw new HealdanRuleException(OUTSIDE_PLANE_NAME);
+		if (!StorableText.holds(clean))
+			throw new HealdanRuleException(CANT_KEEP_NAME);
 		return clean;
 	}
 

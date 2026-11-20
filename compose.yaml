@@ -5,24 +5,33 @@ name: logicaldoc
 
 services:
   db:
-    image: mariadb:11.4
+    image: postgres:18
     restart: unless-stopped
     environment:
-      MARIADB_DATABASE: ${DB_NAME:-logicaldoc}
-      MARIADB_USER: ${DB_USER:-logicaldoc}
-      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
-      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+      # The image's superuser. The role script leaves it without a password, so it's reachable only from inside
+      # this container (docker compose exec db psql -U postgres). The app connects as HEALDAN_DB_USER.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      POSTGRES_DB: postgres
+      # The built-in provider's C.UTF-8: code-point order, Unicode lower(), LIKE prefixes on their index, and no
+      # change with the image's operating system. --locale=C goes with it, or datcollate reads en_US.utf8.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale-provider=builtin --builtin-locale=C.UTF-8 --locale=C --auth-host=scram-sha-256 --auth-local=trust"
+      HEALDAN_DB_NAME: ${DB_NAME:-logicaldoc}
+      HEALDAN_DB_USER: ${DB_USER:-logicaldoc}
+      HEALDAN_DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       TZ: ${TZ:-UTC}
-    # LogicalDOC's MariaDB scripts declare utf8/utf8_bin per table; this is the default for anything else.
-    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      # Over TCP first: the image's first start runs a temporary server on its socket only, which a check on the
+      # socket would take for the real one. Then the app's role must be able to use its database (over the socket,
+      # which needs no password), as a refused first start leaves a data folder the image never initialises again.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$HEALDAN_DB_USER\" -d \"$$HEALDAN_DB_NAME\" && psql -U \"$$HEALDAN_DB_USER\" -d \"$$HEALDAN_DB_NAME\" -Atc 'select 1' >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 30
       start_period: 30s
     volumes:
-      - db-data:/var/lib/mysql
+      - pg-data:/var/lib/postgresql
+      - ./docker/postgres/10-healdan-role.sh:/docker-entrypoint-initdb.d/10-healdan-role.sh:ro
 
   app:
     build:
@@ -37,7 +46,7 @@ services:
         condition: service_healthy
     environment:
       DB_HOST: ${DB_HOST:-db}
-      DB_PORT: ${DB_PORT:-3306}
+      DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:-logicaldoc}
       DB_USER: ${DB_USER:-logicaldoc}
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
@@ -56,7 +65,7 @@ services:
     stop_grace_period: 60s
 
 volumes:
-  db-data:
+  pg-data:
   logicaldoc-conf:
   logicaldoc-repository:
   logicaldoc-cache:

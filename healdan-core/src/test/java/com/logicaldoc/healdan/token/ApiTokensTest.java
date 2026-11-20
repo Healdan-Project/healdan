@@ -281,7 +281,18 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		assertFalse(ApiTokens.nameTooLong(" " + "a".repeat(100) + " "));
 		assertFalse(ApiTokens.nameTooLong(null));
 
-		assertThrows(HealdanRuleException.class, () -> tokens().issue(clerk, "Phone \uD83D\uDE00", null));
+		// PostgreSQL stores no NUL, and a lone surrogate isn't a character (PostgreSQL spec section 7.5)
+		HealdanRuleException unkept = assertThrows(HealdanRuleException.class,
+				() -> tokens().issue(clerk, "Pho\u0000ne", null));
+		assertEquals("A device name can't contain characters Healdan can't keep.", unkept.getMessage());
+		unkept = assertThrows(HealdanRuleException.class, () -> tokens().issue(clerk, "Phone \uD83D", null));
+		assertEquals("A device name can't contain characters Healdan can't keep.", unkept.getMessage());
+		assertFalse(ApiTokens.nameTooLong("Pho\u0000ne"));
+
+		// An emoji is kept
+		long phone = tokens().issue(clerk, "Phone \uD83D\uDE00", null).row().getId();
+		assertEquals("Phone \uD83D\uDE00", tokens().list(clerk.getId()).stream().filter(t -> t.getId() == phone)
+				.findFirst().orElseThrow().getName());
 	}
 
 	@Test

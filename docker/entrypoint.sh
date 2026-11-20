@@ -4,7 +4,8 @@
 
 # Container entrypoint: repairs volume ownership, seeds config from the image defaults, runs DockerInit
 # (container-managed config keys, wait for the DB, first-boot schema, LogicalDOC's plugins installed) and then
-# replaces itself with tini, which runs Tomcat, both as the logicaldoc user.
+# replaces itself with tini, which runs Tomcat, both as the logicaldoc user. Given move-from-mariadb, it runs the move
+# from MariaDB (MoveFromMariaDb) instead, and nothing else.
 set -euo pipefail
 
 readonly LDOC_HOME=/opt/logicaldoc
@@ -20,6 +21,20 @@ die() { echo "[entrypoint] ERROR: $*" >&2; exit 1; }
 [ -n "${DB_PASSWORD:-}" ] || die "DB_PASSWORD is not set; copy .env.example to .env and set it"
 
 export HOME=$LDOC_HOME
+
+# A move reads one database and writes another: it never touches the volumes, so it runs before anything here does,
+# as the app user, in place of DockerInit and Tomcat, and the container exits with its status. Without the conf
+# folder on its classpath: it reads nothing there.
+if [ "${1:-}" = move-from-mariadb ]; then
+  shift
+  if [ "$(id -u)" = 0 ]; then
+    run_as=(setpriv --reuid="$APP_UID" --regid="$APP_GID" --init-groups)
+  else
+    run_as=(env)
+  fi
+  exec "${run_as[@]}" java -cp "$CATALINA_HOME/webapps/ROOT/WEB-INF/lib/*:$LDOC_HOME/lib/docker-init.jar" \
+    MoveFromMariaDb "$@"
+fi
 
 # Runs a command as the app user. app_prefix is also used on its own where the command must be bash's direct child.
 as_app() { "${app_prefix[@]}" "$@"; }

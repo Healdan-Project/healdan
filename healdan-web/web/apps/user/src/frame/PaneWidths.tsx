@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { createContext, useContext, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
+import { useNarrow } from '@healdan/shell'
 import { Splitter } from '@healdan/ui'
 import { forget, keepNumber, readNumber } from '../preferences'
-import { useNarrow } from './narrow'
 import { layoutFor, type Chosen, type PaneLayout, type PaneName } from './paneLayout'
 
 /** What the frame's dividers work with: the panes' widths now, and how a divider changes one */

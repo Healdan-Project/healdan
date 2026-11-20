@@ -1,0 +1,56 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+  min-width: 0;
+}
+
+.top {
+  display: flex;
+  align-items: baseline;
+  gap: var(--hd-space-3);
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--hd-weight-medium);
+}
+
+.count {
+  flex: none;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The fill is the accent's text colour, which shows at 3:1 on the track and on every plain surface in both themes
+   (tokens.test.ts); the accent fill itself is too dark on the dark track. */
+.track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--hd-line);
+}
+
+.fill {
+  height: 100%;
+  background: var(--hd-accent-text);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fill {
+    transition: width 0.3s ease-out;
+  }
+}
+
+.detail {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}

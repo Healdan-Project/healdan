@@ -1,5 +1,10 @@
 # PostgreSQL as the First-Class Database: Recon
 
+- **What became of it:** built. Healdan runs on PostgreSQL 18 alone since 2026-11-20
+  (Healdan-Project/healdan#277 and #280), by the design in
+  [`docs/superpowers/specs/2026-11-18-postgresql-design.md`](../superpowers/specs/2026-11-18-postgresql-design.md) and
+  the plan beside it, whose Decision Log says where the build found these facts wrong or incomplete. What follows is
+  as it was written, before any of it was built.
 - **Date:** 2026-11-03, re-checked on 2026-11-18.
 - **Tracking issue:** [Healdan-Project/healdan#110](https://github.com/Healdan-Project/healdan/issues/110), and the
   roadmap's backlog row "PostgreSQL as the first-class database" ([`docs/ROADMAP.md`](../ROADMAP.md) §5, principle 9).
@@ -665,6 +670,11 @@ databases (75 tables and 41 sequences, the identity's among them):
 ```bash
 docker compose exec db sh -c 'pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB"' > logicaldoc-db.dump
 ```
+
+(Corrected after the build, 2026-11-19: on the stack as built, `$POSTGRES_DB` is `postgres`, the empty maintenance
+database, and Healdan's database is `$HEALDAN_DB_NAME`, owned by the app's role. The Install manual's
+[Backup and Restore](../../site/content/install/backup-and-restore.md) has the commands that were run: a dump of
+`$HEALDAN_DB_NAME`, and a restore as the app's role.)
 
 ```bash
 docker compose exec -T db sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --exit-on-error' < logicaldoc-db.dump

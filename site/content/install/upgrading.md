@@ -8,6 +8,12 @@ These docs describe Healdan as it is on its `master` branch. If your server runs
 describe features or settings it doesn't have yet.
 {{< /callout >}}
 
+{{< callout type="warning" >}}
+**An install still on MariaDB** moves its data to PostgreSQL before it upgrades: see
+[Moving from MariaDB to PostgreSQL](../moving-from-mariadb/), whose first section says how to tell. Upgrading as
+below without moving stops as the app starts, and changes nothing.
+{{< /callout >}}
+
 [Back up](../backup-and-restore/) first. Then, from the folder you cloned Healdan into, fetch the new version:
 
 ```bash
@@ -22,8 +28,10 @@ docker pull tomcat:11.0-jre25-temurin
 docker compose up -d --build
 ```
 
-To update MariaDB too, run `docker compose pull --ignore-buildable` before that. A plain `docker compose pull`
-fails, because the app's image is built here and can't be pulled.
+To update PostgreSQL to the newest release of its version, 18, too, run `docker compose pull --ignore-buildable`
+before that. A plain `docker compose pull` fails, because the app's image is built here and can't be pulled. A new
+major version of PostgreSQL is another matter: see
+[Moving to a New PostgreSQL Major Version](#moving-to-a-new-postgresql-major-version).
 
 ## What an Upgrade Changes
 
@@ -40,7 +48,8 @@ fails, because the app's image is built here and can't be pulled.
   - `store`, which says what keeps the documents' files. Healdan sets it to its own storage on every start, whatever
     the file holds, so changing it yourself does nothing. Until November 2026 it was LogicalDOC's. The first start
     after the upgrade that changes it moves nothing: the files stay in the repository volume, where Healdan's
-    storage reads them.
+    storage reads them. Healdan sets three more on every start the same way: `jdbc.driver`, `jdbc.dbms` and
+    `hibernate.dialect`, which name PostgreSQL.
 - **Browsers load the new interface** the next time they open Healdan. A tab left open during the upgrade keeps the
   old one until it's reloaded.
 - **The User app arrives,** Healdan's browser app at `/app/`. Signing in lands there from now on, by password or
@@ -48,8 +57,8 @@ fails, because the app's image is built here and can't be pulled.
   keep an install landing in LogicalDOC's screens, an administrator sets **Start In** to **Classic Interface** under
   **Administration → Healdan → Settings** (see [Healdan Settings](../../admin/healdan-settings/)). The setting is
   `ui.start`, and anything but `classic` means the app.
-- **Healdan's own tables are upgraded** when the app starts. If an upgrade step fails, the app stops instead of
-  running on a half-upgraded database, and the log says which step failed. See
+- **Healdan's own tables are upgraded** when the app starts. If an upgrade step fails, PostgreSQL undoes it, and the
+  app stops instead of running on a half-upgraded database, and the log says which step failed. See
   [Troubleshooting](../troubleshooting/).
 - **LogicalDOC's tables aren't.** A change to them is made by hand, before the new version's first start: see
   [Changes to LogicalDOC's Tables](#changes-to-logicaldocs-tables). If one is missing, the app stops as it starts,
@@ -106,6 +115,85 @@ and run `docker compose up -d`. If `.env` doesn't set it, its value is `-Xmx2g`,
 CATALINA_OPTS="-Xmx2g -XX:-UseBASE64Intrinsics"
 ```
 
+## Moving to a New PostgreSQL Major Version
+
+Healdan's `compose.yaml` names PostgreSQL's major version, `postgres:18`, and
+`docker compose pull --ignore-buildable` brings only that version's newest release. A new major version, such as 19,
+can't open an older one's data. So when a new version of Healdan names a newer one, the database moves across by a
+dump and a restore, never by the change of image alone: the new PostgreSQL would start on an empty database, and
+Healdan would refuse to start on that beside your documents.
+
+PostgreSQL's image keeps each major version's data in a folder of its own in the `db` service's volume, such as
+`/var/lib/postgresql/18/docker` for 18. So the new version starts on a new, empty folder, and the old one stays as it
+was, beside it, until you remove it. Run these from the folder with Healdan's `compose.yaml`.
+
+{{% steps %}}
+
+### Back Up the Database, and Take the Stack Down
+
+```bash
+docker compose stop app
+docker compose exec -T db sh -c 'pg_dump -U postgres -Fc "$HEALDAN_DB_NAME"' > logicaldoc-db.dump
+docker compose down
+```
+
+That's [Backup and Restore](../backup-and-restore/)'s database backup, with the app left stopped. If you haven't
+backed up the files lately, do that too.
+
+### Fetch the New Version
+
+```bash
+git pull
+docker pull tomcat:11.0-jre25-temurin
+docker compose build
+```
+
+### Start the New Database
+
+```bash
+docker compose up -d db
+```
+
+Wait until `docker compose ps` shows it healthy. Its first start makes the app's role and an empty database, in the
+new version's folder.
+
+### Load the Database
+
+```bash
+docker compose exec -T db sh -c 'pg_restore -U "$HEALDAN_DB_USER" -d "$HEALDAN_DB_NAME" --no-owner --exit-on-error --single-transaction' < logicaldoc-db.dump
+```
+
+It prints nothing when it works, as in [Restoring onto a Fresh Stack](../backup-and-restore/#restoring-onto-a-fresh-stack).
+
+### Start Everything
+
+```bash
+docker compose up -d
+```
+
+### Remove the Old Version's Data
+
+When Healdan has run well on the new version for a while, and a backup of it works, remove the old version's folder.
+First see which folders there are, and which version the database runs:
+
+```bash
+docker compose exec db ls /var/lib/postgresql
+docker compose exec db psql -U postgres -Atc 'show server_version'
+```
+
+The first lists a folder for each major version the volume has held, such as `18  19`. The second prints the
+version that runs, in the form `18.4 (Debian 18.4-1.pgdg13+1)`: the number before the first dot names the live
+database's folder, `18` there, and after a move to 19 it begins `19.`. Only when the list shows two folders,
+remove the one that isn't the running version's, here 18's:
+
+```bash
+docker compose exec db rm -rf /var/lib/postgresql/18
+```
+
+Never remove the folder of the version that runs: that deletes the database.
+
+{{% /steps %}}
+
 ## Changes to LogicalDOC's Tables
 
 Healdan upgrades its own tables when it starts, but never LogicalDOC's. So when a new version needs a change to them,
@@ -123,44 +211,20 @@ docker compose stop app
 docker compose up -d db
 ```
 
-The commands reach the stack's own `db` service. If `DB_HOST` points at a MariaDB of your own (see
+Each change gives its SQL to `psql`, PostgreSQL's own client, in the `db` service's container, signed in as the
+app's role, whose tables they are. If `DB_HOST` points at a PostgreSQL of your own (see
 [Supported Databases](../what-runs/#supported-databases)), run each change's SQL there instead, in Healdan's
-database. The stack's `db` then holds none of Healdan's tables, so a check there prints `0`, and a change fails with
-`Table '…ld_tenant' doesn't exist`.
+database, as that role. The stack's `db` then holds none of Healdan's tables, so a check there prints `0`, and a
+change fails with `relation "ld_tenant" does not exist`.
 
-### Quota Thresholds, November 2026
+**No change is listed yet.** Every PostgreSQL database was made by a version that already had every change before it:
+a new install's by its first start, and one moved from MariaDB by the move, which makes the tables as a new install's
+are. An install still on MariaDB makes those it lacks before it moves: see
+[Changes to LogicalDOC's Tables Before That Version](../moving-from-mariadb/#changes-to-logicaldocs-tables-before-that-version).
 
-Versions of `master` from 9 November 2026 on have 14 more columns on LogicalDOC's `ld_tenant` table, for quota
-thresholds. Without them, LogicalDOC can't read that table, and nobody could sign in, so the new version stops as
-it starts.
-
-To see whether your database has them:
-
-```bash
-echo "select count(*) from information_schema.columns where table_schema = database() and table_name = 'ld_tenant' and column_name like '%quotathr'" | docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -N -u"$MARIADB_USER" "$MARIADB_DATABASE"'
-```
-
-It prints `14` when the database has them all, as one made since then does. Anything less means it needs them. To
-add the ones it lacks:
-
-```bash
-docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE"' <<'SQL'
-alter table ld_tenant
-  add column if not exists ld_formsquotathr int, add column if not exists ld_usersquotathr int,
-  add column if not exists ld_sessionsquotathr int, add column if not exists ld_documentsquotathr int,
-  add column if not exists ld_workflowsquotathr int, add column if not exists ld_storagequotathr int,
-  add column if not exists ld_rousersquotathr int, add column if not exists ld_reportsquotathr int,
-  add column if not exists ld_apicallsquotathr int, add column if not exists ld_ticketsquotathr int,
-  add column if not exists ld_stampsquotathr int, add column if not exists ld_importfoldersquotathr int,
-  add column if not exists ld_emailaccountsquotathr int, add column if not exists ld_pagesquotathr int;
-SQL
-```
-
-It prints nothing when it works. The check then prints `14`.
-
-If the new version has already tried to start without them, it stopped, and its log says
-`table ld_tenant lacks columns …`. Docker starts it again and again until they're there. Add them the same way, the
-app stopped first, then start it again:
+If the new version has already tried to start without a change, it stopped, and its log says what the database
+lacks. Docker starts it again and again until it's there. Make the change the same way, the app stopped first, then
+start it again:
 
 ```bash
 docker compose start app
@@ -173,8 +237,8 @@ own storage, as above. Its first start does a few things once:
 
 - **It records every file already in the repository,** with its size and its document's Store, so that Healdan knows
   where each file is. This adds to that start's time on a large repository: on the tests' database it recorded about
-  9,450 small files a second, so 100,000 files took about 11 seconds. MariaDB on your server will differ, so take that
-  as a rough guide. A start that's stopped part-way records the rest at the next.
+  9,450 small files a second, so 100,000 files took about 11 seconds. Your server will differ, so take that as a rough
+  guide. A start that's stopped part-way records the rest at the next.
 - **It writes a marker, `.healdan-backend`,** in Original's folder, `/opt/logicaldoc/repository/docs`. If that folder
   has neither a marker nor any file while the database has documents, as when a [host folder](../host-folders/)
   didn't mount, the app stops instead of marking an empty folder: see [Troubleshooting](../troubleshooting/).
@@ -256,7 +320,7 @@ theirs in the background:
   folder with Healdan's `compose.yaml`:
 
   ```bash
-  echo "select name, value from hd_setting where name like 'email.index%'" | docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE"'
+  echo "select name, value from hd_setting where name like 'email.index%'" | docker compose exec -T db sh -c 'psql -U "$HEALDAN_DB_USER" -d "$HEALDAN_DB_NAME"'
   ```
 
   `email.index` is `done` once every email filed before the upgrade has been read, and `email.index.cursor` is the

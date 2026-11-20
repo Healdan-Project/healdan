@@ -1,6 +1,6 @@
 ---
 title: Known Limitations
-weight: 12
+weight: 13
 ---
 
 - **LogicalDOC's database schema is never migrated.** Healdan upgrades its own tables on every start, but not
@@ -8,8 +8,12 @@ weight: 12
   hand, after a backup and before the new version's first start. Upgrading's
   [Changes to LogicalDOC's Tables](../upgrading/#changes-to-logicaldocs-tables) gives it for each change. The app
   checks as it starts, and stops if a table or column is missing.
-- **MariaDB only.** Healdan runs on MariaDB. MySQL, Oracle and SQL Server aren't supported, and PostgreSQL support
-  comes later. See [Supported Databases](../what-runs/#supported-databases).
+- **PostgreSQL only.** Healdan runs on PostgreSQL 18. MariaDB, MySQL, Oracle and SQL Server aren't supported. See
+  [Supported Databases](../what-runs/#supported-databases). An install made on MariaDB, before November 2026, moves
+  its data across once: see [Moving from MariaDB to PostgreSQL](../moving-from-mariadb/).
+- **An administrator's tag search misses tags with a backslash.** In the Classic Interface, a search by a tag that
+  holds a `\`, run by an administrator, finds no document: LogicalDOC writes each `\` into its query twice, and
+  PostgreSQL looks for both. Others' tag searches find them.
 - **No HTTPS on its own.** The app speaks plain HTTP, so anything beyond the machine running Docker goes through a
   [reverse proxy](../reverse-proxy/).
 - **Signed-in Devices lists device sign-ins only.** The app's **Signed-in Devices** shows a person the sign-ins of
@@ -159,7 +163,7 @@ weight: 12
   - tags, and a bookmark's own name and description (the Bookmarks section; the app's My Favorites adds and removes
     them).
 
-  Administration is there as well: the app has no screens for it yet.
+  Administration is there as well, apart from [the Admin app](#the-admin-app)'s Dashboard.
 - **The Classic Interface's Trash lists a deleted folder's contents as rows of their own.** Healdan records a folder
   and what it held as one item, but LogicalDOC's Trash screen lists every deleted row, so a deleted folder's documents
   and subfolders show beside it. It also restores into the folder open in its tree, not where the item was deleted
@@ -183,6 +187,18 @@ weight: 12
 - **English only.** The app's words are US English, whatever language a person chose for the Classic Interface.
 - **The helper's state isn't shown.** The app doesn't say whether Healdan Helper is running. Open in App hands
   the document to it, and says what to do if nothing opened.
+
+## The Admin App
+
+- **Only the Dashboard so far.** The Admin app at `/admin/` has its Dashboard and nothing else yet. Stores, clients
+  and matters, workspace templates, users and groups, permissions, Healdan Settings, storage backends, scheduled
+  tasks, search and indexing and the server's log are all in the Classic Interface, which the Admin app's left pane
+  and its links open. Its find opens the Classic Interface too, not the client, matter or person it found. See
+  [The Admin App](../../admin/the-admin-app/).
+- **For the `admin` group only.** A group given Administration screens through the Classic Interface's menus doesn't
+  get the Admin app, and keeps using those screens there.
+- **As the User app,** it needs a [secure address](#the-user-app) and a host name of its own, is made for current
+  browsers, works on a tablet but not a phone, and is in US English.
 
 ## Storage Backends
 

@@ -190,8 +190,10 @@ public class DocumentChangesTest extends ApiTestCase {
 
 		assertField(rename(d, "x".repeat(251) + ".docx", token), "name", "too-long");
 		assertField(rename(d, "a/b.docx", token), "name", "invalid");
-		// MariaDB's utf8 tables can't store it, which HSQLDB would take
-		assertField(rename(d, "Lease 📄.docx", token), "name", "invalid");
+		// PostgreSQL stores no NUL: refused as the body is read (PostgreSQL spec section 7.5)
+		ApiResponse nul = rename(d, "Lease\u0000.docx", token);
+		assertEquals(nul.toString(), 400, nul.status());
+		assertEquals("The field name has a character Healdan can't keep.", nul.json().path("detail").textValue());
 		// The name sent fits, and only the extension the document keeps makes it too long
 		ApiResponse long_ = rename(d, "x".repeat(252), token);
 		assertField(long_, "name", "too-long");
@@ -201,6 +203,10 @@ public class DocumentChangesTest extends ApiTestCase {
 		ApiResponse none = patch(path(d)).token(token).json(Map.of()).send();
 		assertEquals(none.toString(), 400, none.status());
 		before.assertUnchanged();
+
+		// An emoji is kept
+		assertName(d, "Lease \uD83D\uDCC4.docx", "Lease \uD83D\uDCC4.docx");
+		assertEquals("Lease \uD83D\uDCC4.docx", DocumentDAO.get().findById(d.getId()).getFileName());
 	}
 
 	@Test

@@ -15,9 +15,10 @@ server you're talking to.
 
 ## The Description File and the Docs Page
 
-- **`/api/v1/openapi.yaml`** describes every endpoint, in OpenAPI 3.1. It's the contract: Healdan's tests check
-  every answer an endpoint gives them against it, and fail on an endpoint it leaves out. Generate your client's
-  types from it. Its paths start at `/api`, so `/v1/server` in the file is `/api/v1/server`.
+- **`/api/v1/openapi.yaml`** describes every endpoint, in OpenAPI 3.1, but the Admin app's (see
+  [The Admin App's Routes](#the-admin-apps-routes)). It's the contract: Healdan's tests check every answer an
+  endpoint gives them against it, and fail on an endpoint it leaves out. Generate your client's types from it. Its
+  paths start at `/api`, so `/v1/server` in the file is `/api/v1/server`.
 - **`/api/docs/`** shows the file as a page you can browse, with **Try it out** on each endpoint. Healdan serves the
   page itself, so it loads nothing from the internet. To call an endpoint that needs a sign-in, sign in with
   `POST /v1/auth/tokens` first, then paste the token into **Authorize**.
@@ -225,14 +226,14 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 
 | Status | `code` | When |
 |---|---|---|
-| 400 | `bad-request` | The request is malformed: bad JSON, a field the server doesn't know, a bad `offset` or `limit` |
+| 400 | `bad-request` | The request is malformed: bad JSON, a field the server doesn't know, a bad `offset` or `limit`, or a NUL or a lone surrogate in a query parameter or in a JSON body's text |
 | 401 | `unauthenticated` | No token and no web session the API lets in, or a token that no longer works |
 | 401 | `sign-in-failed` | A wrong username or password, or an account that can't sign in |
 | 401 | `password-expired` | The password has to be changed in the web page first |
 | 403 | `forbidden` | You can see the object, but may not do this to it |
 | 403 | `token-only` | `DELETE /auth/tokens/current` on the web session, which has no token |
-| 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current` |
-| 403 | `admins-only` | Only an administrator may do this: a folder directly in a matter's workspace, search folders included, or anything in the Templates Store, to rename, move or delete, or into a matter's top level; `GET /trash` with `view=everyone` or `view=removed` |
+| 403 | `web-session-only` | `DELETE /session` with a token, which signs out with `DELETE /auth/tokens/current`; a token on an `/admin` route (see [The Admin App's Routes](#the-admin-apps-routes)) |
+| 403 | `admins-only` | Only an administrator may do this: a folder directly in a matter's workspace, search folders included, or anything in the Templates Store, to rename, move or delete, or into a matter's top level; `GET /trash` with `view=everyone` or `view=removed`; an `/admin` route |
 | 403 | `items-not-allowed` | A folder delete or move that needs a permission on something inside that you lack, hidden or not. The detail names nothing |
 | 403 | `web-session-refused` | A same-origin request on the web session that breaks one of its rules, such as a change without `X-Healdan-Client: web` (see [Two Ways In](#two-ways-in)). Signing in again doesn't mend it |
 | 404 | `not-found` | It doesn't exist, **or you can't read it**: the two get the same answer |
@@ -301,6 +302,11 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
   the search results read their page's Authors in one query.
 - **Field names are camelCase.** A field with no value is `null`, never left out, but for a list's `facets`,
   which is there only when asked for, and a search's `totalAtLeast`, there only when `total` isn't. Timestamps are ISO 8601 in UTC, such as `2026-10-23T14:05:00Z`.
+- **Text can hold any character but NUL,** emoji included, and a lone surrogate isn't a character. A query
+  parameter, or a text value anywhere in a JSON body, a property's value or a favourite's name included, that holds
+  either is `400 bad-request`. For a body, `detail` names the field where it can, as in "The field name has a
+  character Healdan can't keep." A query parameter is checked before the token, so a request that isn't signed in
+  gets the `400` too.
 - **A doc ID is `#<doc #> v<version>`,** the form of the title bar and the filed files: `#1234 v2.1`.
 - **Nothing caches the answers:** Healdan sends them with `no-store` in `Cache-Control`.
 
@@ -465,9 +471,9 @@ refused` for an immutable document, unless the caller is an administrator, as CE
 - **`PATCH /documents/{docNumber}`** with `{"name": "Lease"}` answers `200` with the document. A name that doesn't
   end in the document's extension keeps it, so `Lease` is `Lease.docx` and `Lease v1.2` is `Lease v1.2.docx`; one that
   ends in another extension (`Lease.pdf`) is `422 validation` with `extension` for `name`, as a save's name is. A name
-  with a `/`, a `\`, a control character or a character the database can't store, such as an emoji, is `invalid`, checked
-  first; one over 255 characters, with the extension it keeps, is `too-long`, and a blank one `required`. The same name
-  changes nothing and makes no version. Once a deleted document is in the trash the answer is `204`, and a shortcut that
+  with a `/`, a `\` or a control character is `invalid`, checked first, and an emoji is kept; one over 255
+  characters, with the extension it keeps, is `too-long`, and a blank one `required`. The same name changes nothing
+  and makes no version. Once a deleted document is in the trash the answer is `204`, and a shortcut that
   can't follow it is left and logged.
 - **`POST /documents/{docNumber}/move`** with `{"folderId": 1234}` answers `200` with the document. Into another matter
   it takes that matter's Client and Matter and the values its folders pass down; a matter that holds the same email
@@ -483,10 +489,10 @@ this order: `400 bad-request` for a body that isn't the JSON expected; `404` for
 not-renamable` for a Store or a matter's own folder, which takes the matter's name through Edit Matter; `403 forbidden`
 without the Rename permission; `403 admins-only` for a folder directly in a matter's workspace, search folders
 included, unless you're an administrator; `422 validation` for the name (`required`, also for a name of characters that
-show nothing, such as U+200B; `too-long`; `invalid`: `/`, `\`, a control character, an emoji or another character the
-database can't store, a character that changes the text's direction, HTML tags, or a character reference such as
-`&amp;`); `409 name-taken` when another folder beside it that you can see has the name, without regard to case (a hidden
-folder, or one you can't read, doesn't count); and `409 refused` when one of Healdan's rules refuses, or when the folder
+show nothing, such as U+200B; `too-long`; `invalid`: `/`, `\`, a control character, a character that changes the
+text's direction, HTML tags, or a character reference such as `&amp;`; an emoji is fine); `409 name-taken` when
+another folder beside it that you can see has the name, without regard to case (a hidden folder, or one you can't
+read, doesn't count); and `409 refused` when one of Healdan's rules refuses, or when the folder
 moved to another folder while it was being renamed (try again). The folder's own name, sent back, changes nothing and
 answers `200`, even one a new name couldn't have.
 Every folder carries `canRename`, which says whether the call would rename it for you.
@@ -591,8 +597,8 @@ and what the user can't read is `404`.
 - **`PATCH /me/favorites/{id}`** with `{ "name": "Smith Real Estate Docs" }` gives it one and answers `200` with the
   favourite. A `name` that is `null`, empty or only spaces puts back the item's own name; a body without `name` is
   `400`. Another user's favourite, one that doesn't exist and one whose item the user can no longer read are `404`.
-  A name over 255 characters is `422 validation` with `too-long`, and one with a control character, or a character
-  the database can't store such as an emoji, is `invalid`. A `/` is fine: it's a label, not a file name.
+  A name over 255 characters is `422 validation` with `too-long`, and one with a control character is `invalid`. A
+  `/` is fine: it's a label, not a file name, and so is an emoji.
 - **Renames follow.** A favourite whose name is still its item's takes the item's new name when the folder or
   document is renamed, by any route: the API, the Classic Interface, a check-in under another file name, WebDAV, CMIS
   or REST. Every one of them stores the folder or document through LogicalDOC's DAO, whose listeners
@@ -985,6 +991,49 @@ comes to another host name than `LOGICALDOC_PUBLIC_URL`'s, such as the server's 
 sent to the same path and query at the public address first, with nothing kept and no cookie set: the cookie
 belongs to the name the browser asked for, and the provider sends the browser back to the public address. Only
 the host name is compared, as a cookie ignores the scheme and port.
+
+## The Admin App's Routes
+
+The routes under `/api/v1/admin` are the [Admin app's](../the-web-app/#the-admin-app), and aren't for other clients.
+`openapi.yaml` doesn't list them: they're described in a file of their own, `openapi-admin.yaml`, beside it in
+`healdan-api`'s source, which the server doesn't serve. Healdan's tests check every answer under `/api/v1/admin`
+against it, as they check the others against `openapi.yaml`.
+
+- **Only the browser's web session signs in there.** A device token is `403 web-session-only`, so a stolen token
+  can't administer anything. No session is `401 unauthenticated`.
+- **Only members of the `admin` group get in.** Anyone else is `403 admins-only`, asked again at every request, so
+  someone taken out of `admin` is refused at their next one.
+
+The server answers three routes there:
+
+- **`GET /v1/admin/dashboard`** is the Dashboard's Needs Attention and Server Health: `attention`, what an
+  administrator should act on, each with its `code`, a `count`, a `detail` line and a `link`; `unchecked`, the codes
+  whose source couldn't be read this time; and `health`, the ten tiles, each `ok`, `attention` or `off`, with a
+  `detail` line, `used` and `total` bytes for the disk and the memory (`used` alone, the size, for the database),
+  its `link`, and `problem` in place of the detail when its source couldn't be read; and `readAt`, when the oldest
+  answer it gives was read. Each link is the Admin app's
+  screen once it has shipped, and `/frontend.jsp` until then. The server keeps each source's answer for a minute
+  (the database's for five), so asking again within that costs almost nothing, and a source with no recent answer
+  makes the request wait for it, 5 seconds at most, after which its codes are `unchecked` and its tiles say it's
+  still being worked out. A read of a source still running after its minute isn't waited for: its tiles say it
+  couldn't be read (see
+  [How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/#healdans-code)).
+- **`GET /v1/admin/dashboard/usage`** is the Dashboard's Usage, from one summary the server keeps in memory and works
+  out on a thread of its own, at the start and then 15 minutes after the last one ended, never for a request (see
+  [How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/#healdans-code)). It has the documents, their
+  storage, the matters, the clients and the people, each as a total with how much of it came in the last 7 and 30
+  days, how many people are signed in now, the documents filed on each of the last 30 days, each Store but Default
+  and Templates with its documents, bytes and backend, and up to five matters most documents were filed in in the last
+  7 days. Its days start at midnight in `zone`, the browser's IANA time zone, as the User app's do (the server's
+  without it; one it doesn't know is `400 bad-request`). The server keeps a summary for its own zone and the four
+  asked for most recently, and a zone asked for the first time gets the empty one while its own is worked out.
+  `computedAt` says when it was worked out, and is null, with the totals, until the first summary after a
+  start. `failedAt` says when the last try failed, until a try works again: beside the last summary that worked, or,
+  with `computedAt` null, when no try has worked since the start. The error itself is only in the server's log.
+- **`GET /v1/admin/find?q=`** is the top bar's find: at most five each of clients (by name or number), live matters
+  (by name, by a number such as `1001.1`, or all of a client's for a bare client number) and people (by username or
+  name, disabled ones too, never a system account). `%` and `_` in `q` are taken as they are, and a blank `q` is
+  `422 validation`.
 
 ## Healdan's Own Client
 

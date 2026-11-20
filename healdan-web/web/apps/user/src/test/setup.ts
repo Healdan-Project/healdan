@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { cleanup } from '@testing-library/react'
-import { clearToasts, setLabels } from '@healdan/ui'
+import { clearToasts, resetAnnouncer, setLabels } from '@healdan/ui'
 import { afterEach, vi } from 'vitest'
 import { installIntersectionObserver } from './intersection'
 import { resetViewport } from './viewport'
@@ -18,6 +18,8 @@ window.scrollTo = () => {}
 // Vitest has no globals here, so Testing Library can't register its own cleanup.
 afterEach(() => {
   cleanup()
+  // React Aria's first announcement waits 100 ms, which can outlast the test file's page
+  resetAnnouncer()
   clearToasts()
   resetViewport()
   // What a test kept as a preference (the panes' widths) isn't the next one's

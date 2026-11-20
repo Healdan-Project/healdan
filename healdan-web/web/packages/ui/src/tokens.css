@@ -56,6 +56,8 @@
   --hd-star: #f59f00;
   /* The filled star's edge: the amber alone is 2:1 on a light page, too pale to show the state (tokens.test.ts). */
   --hd-star-edge: #b35c00;
+  /* What a search matched, marked in what it found (SearchPicker's Highlight): a tint that holds --hd-text only (tokens.test.ts) */
+  --hd-mark: #ffe9a8;
 
   /* The colours of the icons that stand for a kind of item (icons.ts): a file's kind, from its extension, with
      LibreOffice's formats in their Office counterparts' colours, then folders, matters and clients. They are icons, not
@@ -135,6 +137,7 @@
     --hd-required: #ff6961;
     --hd-star: #fcc419;
     --hd-star-edge: #fcc419;
+    --hd-mark: #6b5310;
 
     --hd-kind-word-processing: #7aa7ec;
     --hd-kind-spreadsheet: #5cc489;

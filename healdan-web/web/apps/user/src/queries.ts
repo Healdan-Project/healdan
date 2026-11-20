@@ -3,27 +3,31 @@
 
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo } from 'react'
-import { apiPath, type Api, type components } from '@healdan/api'
+import { apiPath, type components } from '@healdan/api'
+import { shellKeys } from '@healdan/shell'
 import { listTrash, type TrashSort, type TrashViewName } from './actions/trash'
 import type { PageOf } from './pages'
 import { ASK_ON_RETURN } from './queryClient'
 import { useApi } from './services'
+
+// Moved to @healdan/shell, for the apps to share, and re-exported here for their many importers
+export { fetchSubfolders, idFrom, useFolder, useMe, useRecentMatters } from '@healdan/shell'
 
 type S = components['schemas']
 
 // Each list has a key of its own. Folder children are keyed by folder, so opening one matter in the tree asks once, and
 // everything of a folder's starts with ['folders', id], so one invalidation refreshes it all.
 export const keys = {
-  me: ['me'] as const,
+  me: shellKeys.me,
   recentDocuments: ['documents', 'recent'] as const,
   checkouts: ['documents', 'checkouts'] as const,
   recentEmails: ['documents', 'recent', 'email'] as const,
   recentFolders: ['folders', 'recent'] as const,
   recentClients: ['clients', 'recent'] as const,
-  recentMatters: ['matters', 'recent'] as const,
+  recentMatters: shellKeys.recentMatters,
   myMatters: ['matters', 'mine'] as const,
   favorites: ['favorites'] as const,
-  folder: (id: number) => ['folders', id] as const,
+  folder: shellKeys.folder,
   // The properties a new document filed into the folder would have
   form: (id: number) => ['folders', id, 'form'] as const,
   subfolders: (id: number) => ['folders', id, 'subfolders'] as const,
@@ -48,31 +52,6 @@ export const keys = {
   trash: (view: TrashViewName, sort?: TrashSort, order?: 'asc' | 'desc') => ['trash', view, sort, order] as const,
   suggest: (q: string) => ['suggest', q] as const,
   users: (q: string) => ['users', q] as const,
-}
-
-/**
- * An id or doc # from an address, or undefined when it isn't one: digits only, and no bigger than a number keeps
- * exactly (2^53 - 1), as a bigger one would turn into another number.
- */
-export function idFrom(text: string | undefined): number | undefined {
-  if (text === undefined || !/^\d{1,16}$/.test(text)) return undefined
-  const id = Number(text)
-  return Number.isSafeInteger(id) ? id : undefined
-}
-
-/** A folder, with its matter and its path from the Store; nothing is asked without an id. */
-export function useFolder(id: number | undefined) {
-  const api = useApi()
-  return useQuery({
-    queryKey: keys.folder(id ?? -1),
-    queryFn: () => api.get<S['FolderView']>(apiPath`/v1/folders/${id ?? -1}`),
-    enabled: id !== undefined,
-  })
-}
-
-export function useMe() {
-  const api = useApi()
-  return useQuery({ queryKey: keys.me, queryFn: () => api.get<S['UserView']>('/v1/me') })
 }
 
 /** The documents the person worked on lately, or only the emails among them. */
@@ -104,11 +83,6 @@ export function useRecentFolders() {
 export function useRecentClients() {
   const api = useApi()
   return useQuery({ queryKey: keys.recentClients, queryFn: () => api.get<S['RecentClient'][]>('/v1/clients/recent') })
-}
-
-export function useRecentMatters() {
-  const api = useApi()
-  return useQuery({ queryKey: keys.recentMatters, queryFn: () => api.get<PageOf<S['MatterView']>>('/v1/matters/recent') })
 }
 
 export function useMyMatters() {
@@ -180,24 +154,6 @@ export function useLookup(ref: string) {
     // A missing or unreadable document answers 404 for good, and retrying a 400 only repeats it
     retry: false,
   })
-}
-
-// The API gives at most 200 children at a time (50 unless asked), so a folder with more is read page by page.
-const CHILDREN_PAGE = 200
-
-/** A folder's subfolders, search folders included: the tree's, and the move picker's. */
-export async function fetchSubfolders(api: Api, id: string): Promise<S['FolderView'][]> {
-  const all: S['FolderView'][] = []
-  for (let offset = 0; ; ) {
-    const page = await api.get<PageOf<S['FolderView'] | S['DocumentView']>>(`/v1/folders/${encodeURIComponent(id)}/children`, {
-      type: 'folder',
-      limit: CHILDREN_PAGE,
-      offset,
-    })
-    all.push(...page.items.filter((item): item is S['FolderView'] => item.type === 'folder'))
-    offset += page.items.length
-    if (page.items.length < CHILDREN_PAGE || (page.total != null && offset >= page.total)) return all
-  }
 }
 
 /**

@@ -25,6 +25,26 @@ describe('Fields', () => {
     expect(onChange).toHaveBeenCalledWith('a')
   })
 
+  it('takes several lines when multiline, under its label, and reports the line breaks typed', async () => {
+    const onChange = vi.fn()
+    const { container } = render(<TextField label="Description" value="" onChange={onChange} multiline rows={4} required />)
+    const box = screen.getByRole('textbox', { name: /Description/ })
+    expect(box.tagName).toBe('TEXTAREA')
+    expect(box.getAttribute('rows')).toBe('4')
+    expect(box.getAttribute('aria-required')).toBe('true')
+    expect(container.querySelector('input')).toBeNull()
+    await userEvent.type(box, '{Enter}')
+    expect(onChange).toHaveBeenLastCalledWith('\n')
+    await expectNoAxeViolations(container)
+  })
+
+  it('takes three lines when multiline with no rows given', () => {
+    render(<TextField label="Notes" value={'One\nTwo'} onChange={() => {}} multiline />)
+    const box = screen.getByRole('textbox', { name: 'Notes' }) as HTMLTextAreaElement
+    expect(box.getAttribute('rows')).toBe('3')
+    expect(box.value).toBe('One\nTwo')
+  })
+
   it('offers only its options, and none unless it may have none', async () => {
     const options = [
       { value: 'Letters', label: 'Letters' },

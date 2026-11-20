@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -39,6 +40,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.logicaldoc.healdan.admin.jobs.JobStatus;
 import com.logicaldoc.healdan.storage.BackendHealth;
 import com.logicaldoc.healdan.storage.Backends;
 import com.logicaldoc.healdan.storage.FileLocks;
@@ -72,9 +74,18 @@ import jakarta.annotation.PreDestroy;
  * Each file's move is logged at debug, and each failure at warn by the transfer. What the transfers did is logged at
  * info by the coordinator, at most once a minute: the files moved and their size, the failures, and how many files
  * wait. Does nothing unless CE's Store is a {@code HealdanStorage}.
+ * <p>
+ * Each of the coordinator's passes that lists the rows, and each {@link #runOnce}, reports to {@link JobStatus} as
+ * the {@value #JOB} job (Admin app spec section 9.5): the pass's listing and hand-out, not the transfers it starts,
+ * whose failures each warn. A pass's next run is the next sweep's, at the latest. A running coordinator makes a pass
+ * now when asked ({@link #runNow}, which {@link #wake}s it). Where CE's Store isn't a {@code HealdanStorage}, the
+ * job is switched off ({@link StorageJob}).
  */
 @Component
-public class Mover {
+public class Mover extends StorageJob {
+
+	/** Its name among the background jobs */
+	public static final String JOB = "storage-mover";
 
 	private static final Logger log = LoggerFactory.getLogger(Mover.class);
 
@@ -143,7 +154,8 @@ public class Mover {
 	/** When the last summary was logged, or the coordinator started */
 	private long summarisedAt;
 
-	private Thread coordinator;
+	/** Set and cleared holding the mover's monitor; volatile for {@link #canRunNow}, which reads it without */
+	private volatile Thread coordinator;
 
 	private ExecutorService threads;
 
@@ -195,6 +207,28 @@ public class Mover {
 	 */
 	public static Mover get() {
 		return Context.get(Mover.class);
+	}
+
+	@Override
+	public String name() {
+		return JOB;
+	}
+
+	@Override
+	public String label() {
+		return "Storage Mover";
+	}
+
+	/** @return whether the coordinator runs, which a wake makes list at once; never waits for a start or a stop */
+	@Override
+	public boolean canRunNow() {
+		return coordinator != null;
+	}
+
+	/** Asks the coordinator for a pass at once ({@link #wake}) */
+	@Override
+	public void runNow() {
+		wake();
 	}
 
 	/**
@@ -316,13 +350,28 @@ public class Mover {
 
 	/**
 	 * One pass, for tests, so none waits on the sweep: lists the misplaced rows, hands them to the transfers, a free one
-	 * at a time, and waits for them.
+	 * at a time, and waits for them. It reports to {@link JobStatus}, with no next run, as nothing schedules one.
 	 *
 	 * @return how many files it moved
 	 */
 	public int runOnce() {
 		if (!StoreTracking.active())
 			return 0;
+		JobStatus status = JobStatus.get();
+		status.started(JOB);
+		int moved;
+		try {
+			moved = pass();
+		} catch (RuntimeException | Error e) {
+			status.failed(JOB, e, null);
+			throw e;
+		}
+		status.finished(JOB, null);
+		return moved;
+	}
+
+	/** {@link #runOnce}'s pass, which reports nothing */
+	private int pass() {
 		int transfers = settings.transfers();
 		synchronized (monitor) {
 			if (limit == 0)
@@ -496,6 +545,10 @@ public class Mover {
 				summarise(summary);
 				continue;
 			}
+			// A pass that lists is a run of the job; one that only hands out what was listed isn't
+			JobStatus status = list ? JobStatus.get() : null;
+			if (status != null)
+				status.started(JOB);
 			try {
 				if (list) {
 					listed = System.currentTimeMillis();
@@ -516,6 +569,8 @@ public class Mover {
 						break;
 					free--;
 				}
+				if (status != null)
+					status.finished(JOB, Instant.ofEpochMilli(listed + sweep));
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				return;
@@ -523,6 +578,8 @@ public class Mover {
 				// An Error too, such as a missing class: this thread is the only coordinator, and nothing starts another
 				queue.clear();
 				log.warn("The storage mover's pass failed, and runs again at the next sweep: {}", e.getMessage(), e);
+				if (status != null)
+					status.failed(JOB, e, Instant.ofEpochMilli(listed + sweep));
 			}
 		}
 	}

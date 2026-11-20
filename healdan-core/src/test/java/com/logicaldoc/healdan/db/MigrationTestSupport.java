@@ -5,7 +5,7 @@ package com.logicaldoc.healdan.db;
 
 import javax.sql.DataSource;
 
-import org.flywaydb.core.Flyway;
+import com.logicaldoc.healdan.db.HealdanMigrator.Status;
 
 /**
  * Helpers for tests that need a database at an earlier schema version: the
@@ -18,13 +18,15 @@ public final class MigrationTestSupport {
 	}
 
 	/**
-	 * Applies Healdan's migrations up to, and including, a version.
-	 * 
-	 * @param dataSource the database to migrate
+	 * Applies Healdan's migrations up to, and including, a version, through
+	 * {@link HealdanMigrator#migrateTo}, which the move from MariaDB uses too.
+	 *
+	 * @param dataSource the database to migrate, which has LogicalDOC's schema
 	 * @param version the last version to apply, e.g. {@code "1"}
 	 */
 	public static void migrateTo(DataSource dataSource, String version) {
-		HealdanMigrator.configure(dataSource, "classpath:healdan/db/migration/postgresql").target(version).load()
-				.migrate();
+		Status status = new HealdanMigrator(dataSource).migrateTo(version);
+		if (status != Status.MIGRATED)
+			throw new IllegalStateException("Healdan's migrations didn't run (" + status + ")");
 	}
 }
