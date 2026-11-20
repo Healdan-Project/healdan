@@ -234,3 +234,19 @@ describe('Renaming a client', () => {
     expect(screen.getByRole('heading', { level: 1, name: '1001 – Saltmarsh Shipping Ltd' })).toBeTruthy()
   })
 })
+
+describe("A client's page's New Matter", () => {
+  it('is set to the client, with its next free number, and the name to type next', async () => {
+    const { api, view } = await renderApp('/clients/1', PAGE)
+    await screen.findByRole('heading', { level: 1, name: '1001 – Saltmarsh Shipping Ltd' })
+    await userEvent.click(within(main()).getByRole('button', { name: 'New Matter' }))
+    const dialog = await screen.findByRole('dialog', { name: 'New Matter' })
+    const client = within(dialog).getByRole('combobox', { name: 'Client' }) as HTMLInputElement
+    expect(client.value).toBe('1001 – Saltmarsh Shipping Ltd')
+    await waitFor(() => expect((within(dialog).getByRole('textbox', { name: 'Number' }) as HTMLInputElement).value).toBe('3'))
+    expect(api.callsTo('GET /v1/admin/matters/next-number').map((call) => call.query)).toEqual([{ clientId: saltmarsh.id }])
+    // Its name is the next thing to type
+    expect(document.activeElement).toBe(within(dialog).getByRole('textbox', { name: 'Name' }))
+    await expectNoAxeViolations(view.baseElement)
+  })
+})

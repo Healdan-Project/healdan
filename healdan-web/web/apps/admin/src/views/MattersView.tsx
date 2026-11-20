@@ -5,10 +5,11 @@ import { useNavigate } from '@tanstack/react-router'
 import { useId, useMemo, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom } from '@healdan/shell'
-import { formatDateTime, Table, type TableSort } from '@healdan/ui'
+import { Button, formatDateTime, Icon, Table, type TableSort } from '@healdan/ui'
 import { matterHref, routes } from '../addresses'
 import { matterColumns, matterRowOf } from '../matters/columns'
 import { MatterFilters } from '../matters/MatterFilters'
+import { NewMatterDialog } from '../matters/NewMatterDialog'
 import { isMatterSort, useMatterList, type MatterListQuery, type MatterSort, type SortOrder } from '../matters/useMatterList'
 import { useWords } from '../lists/useWords'
 import { typed } from '../pickers/typing'
@@ -52,11 +53,12 @@ export function mattersSearch(search: Record<string, unknown>): MattersSearch {
  * The Matters list, at /admin/matters (spec 8.3), the one place that lists every matter: each with its number, name,
  * client, Store, owner, template and figures, sorted by any column, filtered by the words typed, a client, a Store and an
  * owner, 100 rows at a time. The address keeps the order and the filters, by id, so Back from a matter's page comes back
- * to the same list. Selecting a row opens the matter's page.
+ * to the same list. Selecting a row opens the matter's page, and New Matter makes one, then opens its page.
  */
 export function MattersView({ search }: { search: MattersSearch }) {
   const navigate = useNavigate({ from: routes.matters })
   const headingId = useId()
+  const [adding, setAdding] = useState(false)
   const query: MatterListQuery = { q: search.q, clientId: search.client, storeId: search.store, ownerId: search.owner, sort: search.sort, order: search.order }
   const listing = useMatterList(query)
   const filtered = search.q !== undefined || search.client !== undefined || search.store !== undefined || search.owner !== undefined
@@ -104,6 +106,11 @@ export function MattersView({ search }: { search: MattersSearch }) {
           {t('admin.matters.title')}
         </h1>
         {!listing.isStale && listing.total !== undefined && <span className={styles.count}>{plural('matters', listing.total)}</span>}
+        <div className={styles.actions}>
+          <Button variant="default" onPress={() => setAdding(true)}>
+            <Icon name="plus" size={14} /> {t('admin.matters.new')}
+          </Button>
+        </div>
       </div>
       {listing.figuresAt !== undefined && (
         <p className={styles.figures}>{listing.figuresAt === null ? t('admin.matters.figuresPending') : t('admin.matters.figuresAt', { when: formatDateTime(listing.figuresAt) })}</p>
@@ -155,6 +162,7 @@ export function MattersView({ search }: { search: MattersSearch }) {
           busy={listing.isStale}
         />
       )}
+      {adding && <NewMatterDialog onClose={() => setAdding(false)} />}
     </div>
   )
 }

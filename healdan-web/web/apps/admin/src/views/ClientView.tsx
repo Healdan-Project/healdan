@@ -10,6 +10,7 @@ import { matterHref, routes } from '../addresses'
 import { ClientDialog } from '../clients/ClientDialog'
 import type { SortOrder } from '../lists/usePagedList'
 import { matterColumns, matterRowOf } from '../matters/columns'
+import { NewMatterDialog } from '../matters/NewMatterDialog'
 import { isMatterSort, useMatterList, type MatterSort } from '../matters/useMatterList'
 import { useClient } from '../queries'
 import { plural, t } from '../strings'
@@ -85,6 +86,7 @@ function Client({ client, search }: { client: A['Client']; search: ClientSearch 
   const navigate = useNavigate()
   const mattersId = useId()
   const [renaming, setRenaming] = useState(false)
+  const [adding, setAdding] = useState(false)
   const listing = useMatterList({ clientId: client.id, sort: search.sort, order: search.order })
 
   // Built when the page first draws, so the firm's own word for a matter heads its column, and kept
@@ -120,6 +122,10 @@ function Client({ client, search }: { client: A['Client']; search: ClientSearch 
         <div className={styles.actions}>
           <Button onPress={() => setRenaming(true)}>
             <Icon name="pencil" size={14} /> {t('admin.client.rename')}
+          </Button>
+          {/* Set to this client (spec 8.2) */}
+          <Button variant="default" onPress={() => setAdding(true)}>
+            <Icon name="plus" size={14} /> {t('admin.matters.new')}
           </Button>
         </div>
       </div>
@@ -162,6 +168,7 @@ function Client({ client, search }: { client: A['Client']; search: ClientSearch 
         />
       )}
       {renaming && <ClientDialog client={client} onClose={() => setRenaming(false)} />}
+      {adding && <NewMatterDialog client={{ id: client.id, number: client.number, name: client.name }} onClose={() => setAdding(false)} />}
     </div>
   )
 }

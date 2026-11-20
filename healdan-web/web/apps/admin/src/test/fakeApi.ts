@@ -119,9 +119,9 @@ export const helen: A['PersonBrief'] = { id: 5, username: 'helen', name: 'Helen 
 export const tom: A['PersonBrief'] = { id: 6, username: 'tom', name: 'Tom Reeve' }
 export const sam: A['PersonBrief'] = { id: 10, username: 'sam', name: 'Sam Okafor' }
 
-const firmTemplate: A['TemplateBrief'] = { id: 201, name: 'Firm' }
-const litigation: A['TemplateBrief'] = { id: 202, name: 'Litigation' }
-const transactional: A['TemplateBrief'] = { id: 203, name: 'Transactional' }
+export const firmTemplate: A['TemplateBrief'] = { id: 201, name: 'Firm' }
+export const litigation: A['TemplateBrief'] = { id: 202, name: 'Litigation' }
+export const transactional: A['TemplateBrief'] = { id: 203, name: 'Transactional' }
 
 /** A client as the Clients list and its search give it */
 export function clientOf(brief: A['ClientBrief'], over: Partial<A['Client']> = {}): A['Client'] {
@@ -187,6 +187,96 @@ export function matterList(items: A['MatterRow'][], over: Partial<A['MatterList'
   return { items, offset: 0, limit: 100, total: items.length, figuresAt: '2026-11-19T10:41:00Z', ...over }
 }
 
+/** GET /v1/admin/matters/next-number, by the client's id: the highest of its matters' numbers plus one, 1 for none */
+export const nextMatterNumbers: Record<number, number> = { [ashcombe.id]: 4, [saltmarsh.id]: 3, [brightwell.id]: 3, [kestrel.id]: 3, [marshLane.id]: 1 }
+
+/** A matter, as its page and Create Matter's answer give it: 1004.1, just made, unless `over` says otherwise */
+export function matterOf(over: Partial<A['Matter']> = {}): A['Matter'] {
+  return {
+    id: 34,
+    number: '1004.1',
+    name: 'Community Hall Lease',
+    description: 'Lease of the hall on Marsh Lane',
+    client: marshLane,
+    store: clientWork,
+    owner: helen,
+    template: transactional,
+    documents: null,
+    bytes: null,
+    lastActivity: null,
+    folderId: 340,
+    indexFailed: 0,
+    previewsGivenUp: 0,
+    ...over,
+  }
+}
+
+/** A Store no group the templates let in can read yet */
+export const regionalOffice: A['Store'] = { id: 5, name: 'Regional Office' }
+
+/** GET /v1/admin/templates: by name, each with its folders and the matters made from it */
+export const templates: A['TemplateInfo'][] = [
+  { ...firmTemplate, folders: 1, matters: 3 },
+  { ...litigation, folders: 6, matters: 3 },
+  { ...transactional, folders: 7, matters: 4 },
+]
+
+function folderNode(id: number, name: string, children: A['WorkspaceNode'][] = [], over: Partial<A['WorkspaceNode']> = {}): A['WorkspaceNode'] {
+  return { id, name, kind: 'folder', ownPermissions: false, children, ...over }
+}
+
+function searchFolderNode(id: number, name: string): A['WorkspaceNode'] {
+  return { id, name, kind: 'search-folder', ownPermissions: false, children: [] }
+}
+
+/** GET /v1/admin/workspaces/{id}/tree for each template: each folder's folders, then its search folders, by name */
+export const templateTrees: Record<number, A['WorkspaceNode']> = {
+  [firmTemplate.id]: folderNode(firmTemplate.id, 'Firm', [folderNode(2011, 'Policies')], { ownPermissions: true }),
+  [litigation.id]: folderNode(
+    litigation.id,
+    'Litigation',
+    [
+      folderNode(2021, 'Correspondence'),
+      folderNode(2022, 'Evidence', [folderNode(2026, 'Witness Statements')]),
+      folderNode(2023, 'Pleadings'),
+      folderNode(2024, 'Privileged', [], { ownPermissions: true }),
+      searchFolderNode(2025, 'My Recent Docs Here'),
+    ],
+    { ownPermissions: true },
+  ),
+  [transactional.id]: folderNode(
+    transactional.id,
+    'Transactional',
+    [
+      folderNode(2031, 'Correspondence'),
+      folderNode(2032, 'Drafts'),
+      folderNode(2033, 'Due Diligence'),
+      folderNode(2034, 'Emails'),
+      folderNode(2035, 'Executed'),
+      searchFolderNode(2036, 'Emails in This Matter'),
+      searchFolderNode(2037, 'My Recent Docs Here'),
+    ],
+    { ownPermissions: true },
+  ),
+}
+
+export const everyone: A['Group'] = { id: 2, name: 'Everyone', description: 'Everyone in the firm' }
+export const partners: A['Group'] = { id: 3, name: 'Partners', description: null }
+export const trainees: A['Group'] = { id: 4, name: 'Trainees', description: 'Trainee solicitors' }
+
+/** GET /v1/admin/groups: by name, those whose name holds `q`, in any case */
+export function groups(query?: Record<string, unknown>): A['GroupList'] {
+  const q = String(query?.q ?? '').trim().toLowerCase()
+  const items = [everyone, partners, trainees].filter((one) => one.name.toLowerCase().includes(q))
+  return { items, offset: 0, limit: Number(query?.limit ?? 50), total: items.length }
+}
+
+/** A row of who can see a Store: a group's, or a person's own group's with `userId` */
+export function accessRow(groupId: number, name: string, permissions: A['Permission'][], userId: number | null = null): A['AccessRow'] {
+  const level: A['AccessLevel'] = permissions.length === 1 && permissions[0] === 'read' ? 'can-see' : 'custom'
+  return { groupId, name, person: userId !== null, userId, level, permissions, owner: false }
+}
+
 /** Someone who has left: a disabled account, which GET /v1/users leaves out and the admin find keeps */
 export const sally: A['FoundPerson'] = { id: 8, username: 'sally.old', name: 'Sally Oldham', enabled: false }
 
@@ -214,6 +304,8 @@ export interface Call {
   query?: Record<string, unknown>
   /** The signal a get was given: a request nobody waits for any more has it aborted */
   signal?: AbortSignal
+  /** What a POST, PATCH or PUT sent */
+  body?: unknown
 }
 
 type Handler = (request: { params: string[]; query?: Record<string, unknown>; body?: unknown; signal?: AbortSignal }) => unknown
@@ -233,6 +325,12 @@ export function defaultRoutes(): Routes {
     'GET /v1/admin/clients': clientList([]),
     'GET /v1/admin/clients/next-number': { number: 1005 } satisfies A['NextNumber'],
     'GET /v1/users': ({ query }: { query?: Record<string, unknown> }) => people(query?.q),
+    'GET /v1/admin/matters/next-number': ({ query }: { query?: Record<string, unknown> }) => ({ number: nextMatterNumbers[Number(query?.clientId)] ?? 1 }) satisfies A['NextNumber'],
+    'POST /v1/admin/matters/check': { problems: [] } satisfies A['MatterCheck'],
+    'GET /v1/admin/templates': templates,
+    'GET /v1/admin/workspaces/*/tree': ({ params }: { params: string[] }) => templateTrees[Number(params[0])] ?? problem(404, 'not-found'),
+    'GET /v1/admin/groups': ({ query }: { query?: Record<string, unknown> }) => groups(query),
+    'GET /v1/admin/stores/*/access': ({ params }: { params: string[] }) => ({ storeId: Number(params[0]), rows: [] }) satisfies A['StoreAccess'],
   }
 }
 
@@ -256,7 +354,7 @@ export function fakeApi(over: Routes = {}, onSignedOut?: () => void): FakeApi {
   const calls: Call[] = []
 
   async function answer<T>(method: string, path: string, query?: Record<string, unknown>, body?: unknown, signal?: AbortSignal): Promise<T> {
-    calls.push({ method, path, query, signal })
+    calls.push({ method, path, query, signal, ...(body === undefined ? {} : { body }) })
     // The newest override wins, so a test's route comes before a default one it also matches.
     for (const key of Object.keys(routes).reverse()) {
       const match = matcher(key).exec(`${method} ${path}`)

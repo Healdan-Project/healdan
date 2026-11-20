@@ -17,6 +17,8 @@ export interface ClientPickerProps {
   /** The client the field holds, or null */
   value: A['ClientBrief'] | null
   onChange: (client: A['ClientBrief'] | null) => void
+  /** What is typed as a search, as it changes ('' while the box shows the client it holds), as New Client… starts from it */
+  onTextChange?: (text: string) => void
 }
 
 /** A client as a picker names it: its number, then its name */
@@ -32,7 +34,7 @@ function optionOf(client: A['ClientBrief']): PickFieldOption {
  * A client, found as it is typed (spec 7.2: anything that can grow long is a search): by its number or its name, each
  * offered as `1001 – Saltmarsh Shipping Ltd`, through useClientSearch.
  */
-export function ClientPicker({ label = t('admin.client.field'), required, error, value, onChange }: ClientPickerProps) {
+export function ClientPicker({ label = t('admin.client.field'), required, error, value, onChange, onTextChange }: ClientPickerProps) {
   const [text, setText] = useState('')
   const picked = value && optionOf(value)
   const { clients } = useClientSearch(text)
@@ -45,7 +47,11 @@ export function ClientPicker({ label = t('admin.client.field'), required, error,
       value={picked}
       options={clients.map(optionOf)}
       // The box shows the label of what is picked, which is no search
-      onTextChange={(next) => setText(next === picked?.label ? '' : next)}
+      onTextChange={(next) => {
+        const searched = next === picked?.label ? '' : next
+        setText(searched)
+        onTextChange?.(searched)
+      }}
       // PickField hands on only an option it offered, other than the one it holds
       onChange={(next) => {
         if (next === null) return onChange(null)

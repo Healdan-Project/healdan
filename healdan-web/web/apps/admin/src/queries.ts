@@ -53,9 +53,19 @@ export const adminKeys = {
   client: (id: number) => [...adminKey('/v1/admin/clients'), id] as const,
   /** The number New Client suggests, under `clients` too */
   nextClientNumber: adminKey('/v1/admin/clients/next-number'),
-  /** Every page of the Matters list, whatever its filters and order */
+  /** Every page of the Matters list, whatever its filters and order, and New Matter's number and checks */
   matters: adminKey('/v1/admin/matters'),
+  /** The number New Matter suggests for a client, under `matters` too */
+  nextMatterNumber: (clientId: number) => adminKey('/v1/admin/matters/next-number', { clientId }),
+  /** New Matter's checks of its form, each by the form it checked, under `matters` too */
+  matterCheck: [...adminKey('/v1/admin/matters'), 'check'] as const,
+  /** Every Store menu, and who can see each Store */
   stores: adminKey('/v1/admin/stores'),
+  storeAccess: (id: number) => [...adminKey('/v1/admin/stores'), id, 'access'] as const,
+  templates: adminKey('/v1/admin/templates'),
+  /** A workspace's tree, a template's or a matter's, by its top folder */
+  workspaceTree: (folderId: number) => ['admin', 'workspaces', folderId, 'tree'] as const,
+  groups: adminKey('/v1/admin/groups'),
 }
 
 /**
@@ -112,6 +122,36 @@ export function useNextClientNumber(enabled = true) {
     queryKey: adminKeys.nextClientNumber,
     queryFn: ({ signal }) => api.get<AdminAnswer<'/v1/admin/clients/next-number'>>('/v1/admin/clients/next-number', undefined, { signal }),
     enabled,
+    staleTime: 0,
+    gcTime: 0,
+  })
+}
+
+/** Every workspace template, by name: a short list, for New Matter's Template menu (spec 7.2) */
+export function useTemplates() {
+  return useAdminQuery('/v1/admin/templates')
+}
+
+/** A workspace's folders, a template's or a matter's, by its top folder; nothing is asked without one */
+export function useWorkspaceTree(folderId: number | undefined) {
+  const api = useApi()
+  return useQuery({
+    queryKey: adminKeys.workspaceTree(folderId ?? -1),
+    queryFn: ({ signal }) => api.get<A['WorkspaceNode']>(apiPath`/v1/admin/workspaces/${folderId ?? -1}/tree`, undefined, { signal }),
+    enabled: folderId !== undefined,
+  })
+}
+
+/**
+ * The number New Matter suggests for the client's next matter: asked afresh for each client picked, and forgotten once
+ * nothing shows it, as another administrator may take it meanwhile. Nothing is asked without a client.
+ */
+export function useNextMatterNumber(clientId: number | undefined) {
+  const api = useApi()
+  return useQuery({
+    queryKey: adminKeys.nextMatterNumber(clientId ?? -1),
+    queryFn: ({ signal }) => api.get<AdminAnswer<'/v1/admin/matters/next-number'>>('/v1/admin/matters/next-number', { clientId: clientId ?? -1 }, { signal }),
+    enabled: clientId !== undefined,
     staleTime: 0,
     gcTime: 0,
   })

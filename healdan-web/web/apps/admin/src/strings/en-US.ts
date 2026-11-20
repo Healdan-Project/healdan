@@ -171,6 +171,51 @@ export const adminEnUS = {
   'admin.matters.figuresPending': "Documents, Size and Last Activity haven't been worked out since the server started. They show here within a few minutes.",
   'admin.matters.none': 'No {matterLower} has been made yet.',
   'admin.matters.noneMatch': 'No {matterLower} matches the filters.',
+  // On the Matters list and a client's page
+  'admin.matters.new': 'New {matter}',
+
+  // New Matter (spec 8.3): its fields, what it will contain, and what its check finds
+  'admin.newMatter.title': 'New {matter}',
+  'admin.newMatter.newClient': 'New Client…',
+  'admin.newMatter.number': 'Number',
+  'admin.newMatter.numberNext': 'The next free number is {number}.',
+  'admin.newMatter.numberInvalid': 'The number has to be a whole number, 1 or more.',
+  'admin.newMatter.store': 'Store',
+  'admin.newMatter.newStore': 'New Store…',
+  'admin.newMatter.name': 'Name',
+  'admin.newMatter.description': 'Description',
+  'admin.newMatter.owner': 'Owner',
+  'admin.newMatter.template': 'Template',
+  'admin.newMatter.noTemplates': "There's no workspace template yet. A {matterLower} is made from one, so one is needed first.",
+  'admin.newMatter.contains': 'It Will Contain',
+  'admin.newMatter.chooseTemplate': 'Choose a template to see what it will contain.',
+  // The matter's own folder, as it will be named, while its client, number or name is still to come
+  'admin.newMatter.folder': '{number} – {name}',
+  'admin.newMatter.unnamed': 'New {matter}',
+  // After a search folder's name, for a screen reader, as its icon says it to the eye
+  'admin.newMatter.searchFolder': ', Search Folder',
+  'admin.newMatter.emptyTemplate': 'The template holds no folders.',
+  'admin.newMatter.grant': 'Let {group} Read the Store',
+  'admin.newMatter.orAnotherStore': 'Or choose another Store.',
+  'admin.newMatter.granted': '{group} can now see {store}.',
+  'admin.newMatter.theStore': 'the Store',
+  'admin.newMatter.create': 'Create {matter}',
+  // Once a matter is made: its number and name
+  'admin.newMatter.created': 'Created {number} – {name}',
+
+  // New Store (spec 8.6): its name and who can see it; a new Store keeps its files on Original (the plan's Spec Correction 1)
+  'admin.newStore.title': 'New Store',
+  'admin.newStore.name': 'Name',
+  'admin.newStore.who': 'Who Can See It',
+  'admin.newStore.nobody': 'Only administrators can see it until a group is added.',
+  'admin.newStore.remove': 'Remove {name}',
+  'admin.newStore.add': 'Add a Group',
+  'admin.newStore.find': 'Find a group',
+  'admin.newStore.hint': 'Find a group by its name. Each group added can see the Store.',
+  'admin.newStore.groups': 'Groups',
+  'admin.newStore.backend': "Its files are kept on Original, the server's own storage, until its storage backend is changed.",
+  'admin.newStore.create': 'Create Store',
+  'admin.newStore.created': 'Created {name}',
 } as const satisfies Record<`admin.${string}`, string>
 
 export const adminPlurals = {
