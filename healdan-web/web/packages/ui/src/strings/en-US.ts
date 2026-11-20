@@ -274,6 +274,8 @@ export const enUS = {
   'list.matter': '{matter}',
   'list.client': 'Client',
   'list.clientNumber': 'Number',
+  // A heading's edge, which resizes its column. React Aria names it by this and the heading it's in: "Resize Doc #"
+  'columns.resizer': 'Resize',
   'help.menu': 'Help',
   'help.guide': 'User Guide',
   'help.notices': 'Open-Source Notices',
