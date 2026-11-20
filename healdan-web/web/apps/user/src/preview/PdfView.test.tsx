@@ -52,7 +52,7 @@ describe('PdfView', () => {
     vi.unstubAllGlobals()
   })
 
-  it('keeps the page as it was drawn while its width changes, and draws it at the width it settles at', async () => {
+  it('draws the page again at each width it is given, as it comes', async () => {
     let room = 632
     vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => room)
     const observers: (() => void)[] = []
@@ -72,15 +72,17 @@ describe('PdfView', () => {
     await screen.findByText('Page 1 of 3')
     // Pages are 600 wide, and 32 is left round them
     await waitFor(() => expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(1))
-    // A divider dragged or the window's edge: widths come one after another, and the page waits for the last
-    for (const next of [700, 800, 932]) {
+    // A divider dragged or the window's edge: each width is drawn as it comes, with no wait for the last, as the engine keeps
+    // the page shown until the new one is drawn
+    for (const { next, scale } of [
+      { next: 700, scale: (700 - 32) / 600 },
+      { next: 800, scale: (800 - 32) / 600 },
+      { next: 932, scale: 1.5 },
+    ]) {
       room = next
       act(() => observers.forEach((callback) => callback()))
-      await new Promise((done) => setTimeout(done, 50))
-      expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(1)
+      await waitFor(() => expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(scale))
     }
-    await waitFor(() => expect(pdf.drawn.at(-1)?.scale).toBeCloseTo(1.5))
-    expect(pdf.drawn.map((drawn) => drawn.scale).filter((scale) => scale > 1.01 && scale < 1.49)).toEqual([])
   })
 
   it('moves between pages, and stops at the first and the last', async () => {

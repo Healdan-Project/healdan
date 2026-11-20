@@ -21,8 +21,8 @@ const SCROLLBAR = 17
 
 /**
  * The least the list between them keeps: room for the three columns a list keeps beside the reading pane (spec section
- * 6.4), which for a search's hits are at least 416 pixels, the view's padding of 24 on each side, and the list's scrollbar.
- * The right region's border is inside its width (RightRegion.module.css).
+ * 6.4), which for a search's hits are at least 416 pixels, the view's gutter of 24 on each side (--hd-gutter in
+ * tokens.css), and the list's scrollbar. The right region's border is inside its width (RightRegion.module.css).
  */
 export const MAIN_MIN = 416 + 2 * 24 + SCROLLBAR
 

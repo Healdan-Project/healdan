@@ -14,6 +14,8 @@ vi.mock('../actions/launch', () => ({ launch: vi.fn() }))
 installIntersectionObserver()
 // The router scrolls to the top on each address, which jsdom doesn't do and says so on every test.
 window.scrollTo = () => {}
+// The first test of a file has the width every later one has after the reset below, not jsdom's layout width of 0
+resetViewport()
 
 // Vitest has no globals here, so Testing Library can't register its own cleanup.
 afterEach(() => {

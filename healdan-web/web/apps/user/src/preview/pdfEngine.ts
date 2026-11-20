@@ -27,8 +27,9 @@ export interface PdfFile {
   /** A page's size at scale 1, in CSS pixels */
   size(page: number): Promise<{ width: number; height: number }>
   /**
-   * Draws a page into the canvas at the scale (1 is the page's own size in CSS pixels), sharp on a dense screen. The
-   * promise ends when it is drawn, and a draw that is cancelled ends quietly.
+   * Draws a page into the canvas at the scale (1 is the page's own size in CSS pixels), sharp on a dense screen. It's drawn
+   * apart and copied in once done, so the canvas shows the page it had until then, never a blank one. The promise ends when
+   * it is drawn, and a draw that is cancelled ends quietly and leaves the canvas as it was.
    */
   draw(page: number, canvas: HTMLCanvasElement, scale: number): { done: Promise<void>; cancel: () => void }
   close(): void
@@ -73,17 +74,25 @@ export async function openPdf(bytes: ArrayBuffer): Promise<PdfFile> {
         if (cancelled) return
         const density = window.devicePixelRatio || 1
         const viewport = proxy.getViewport({ scale: scale * density })
-        canvas.width = Math.floor(viewport.width)
-        canvas.height = Math.floor(viewport.height)
-        canvas.style.width = `${Math.floor(viewport.width / density)}px`
-        canvas.style.height = `${Math.floor(viewport.height / density)}px`
-        task = proxy.render({ canvas, viewport })
+        // A canvas of its own: setting the shown canvas's size clears it, which would blank the page until the render ended
+        const apart = document.createElement('canvas')
+        apart.width = Math.floor(viewport.width)
+        apart.height = Math.floor(viewport.height)
+        task = proxy.render({ canvas: apart, viewport })
         try {
           await task.promise
         } catch (error) {
-          // A render that was cancelled (another page or zoom came) is not a failure
+          // A render that was cancelled (another page, zoom or width came) is not a failure
           if (!(cancelled && error instanceof Error && error.name === 'RenderingCancelledException')) throw error
+          return
         }
+        if (cancelled) return
+        // Sized and drawn in one go, before the browser paints again
+        canvas.width = apart.width
+        canvas.height = apart.height
+        canvas.style.width = `${Math.floor(viewport.width / density)}px`
+        canvas.style.height = `${Math.floor(viewport.height / density)}px`
+        canvas.getContext('2d')?.drawImage(apart, 0, 0)
       })()
       return {
         done,

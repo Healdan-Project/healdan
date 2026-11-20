@@ -14,6 +14,10 @@ export const RESIZING_ATTRIBUTE = 'data-hd-resizing'
 const SPLITTER_STEP = 16
 const SPLITTER_BIG_STEP = 64
 
+/** How far a pointer goes sideways before a press on the divider is a drag: a click drifts a little, and a tap more */
+const DRAG_THRESHOLD = 4
+const TOUCH_DRAG_THRESHOLD = 8
+
 export interface SplitterProps {
   /** What it resizes, as "Resize Navigation" */
   'aria-label': string
@@ -53,12 +57,24 @@ function signOf(element: Element | null, pane: 'start' | 'end'): number {
 }
 
 /**
- * On iOS, useMove's start keeps the whole page from selecting text until its end, which a drag cut short never reaches: give
- * it back, as its end would
+ * Whether the browser's drag and drop is under way over the page (files from the desktop, or the list's rows): from a drag's
+ * first dragenter until it's dropped or ends. A drag that leaves the window ends with no event here, so the pointer's next
+ * move, which the browser sends only when no drag is under way, ends it too.
  */
-function restoreTextSelection() {
-  const root = document.documentElement.style
-  if (root.webkitUserSelect === 'none') root.webkitUserSelect = ''
+function useDragOverPage(): boolean {
+  const [over, setOver] = useState(false)
+  useEffect(() => {
+    const start = () => setOver(true)
+    const end = () => setOver(false)
+    const ends = ['drop', 'dragend', 'pointermove'] as const
+    window.addEventListener('dragenter', start, true)
+    for (const type of ends) window.addEventListener(type, end, true)
+    return () => {
+      window.removeEventListener('dragenter', start, true)
+      for (const type of ends) window.removeEventListener(type, end, true)
+    }
+  }, [])
+  return over
 }
 
 interface Drag {
@@ -77,8 +93,10 @@ interface Drag {
  * moves: Left and Right by 16 pixels, 64 with Shift, Home and End to the limits, and Enter (or a double-click) back to the
  * default. It's a focusable `separator` whose value is the pane's width (the window splitter pattern of the ARIA Authoring
  * Practices). A drag reports each width with `onResize`, which a caller can draw without rendering anything again, and the
- * last with `onResizeEnd`; a key reports only `onResizeEnd`. Neither reports a width the pane is already drawn at. The visible
- * line is a hairline, and the target 24 pixels wide (WCAG 2.5.8), most of it on the side away from the pane.
+ * last with `onResizeEnd`; a key reports only `onResizeEnd`. Neither reports a width the pane is already drawn at, and a press
+ * is a drag only once the pointer has gone 4 pixels sideways (8 for a finger or a pen). The visible line is a hairline, and
+ * the target 24 pixels wide (WCAG 2.5.8), most of it on the side away from the pane. While something is dragged over the
+ * page, the drag passes through the divider to what's under it.
  */
 export function Splitter({ pane, value, minValue, maxValue, onResize, onResizeEnd, onReset, controls, className, ...labels }: SplitterProps) {
   // The focus ring shows for the keyboard, as React Aria's components show theirs, and not after a drag
@@ -89,28 +107,27 @@ export function Splitter({ pane, value, minValue, maxValue, onResize, onResizeEn
   // The width while a drag is under way, which the separator says as its value; the caller draws the pane from onResize
   const [dragged, setDragged] = useState<number>()
   const drag = useRef<Drag | null>(null)
-  const latest = useRef({ onResizeEnd, drawn })
-  useEffect(() => {
-    latest.current = { onResizeEnd, drawn }
-  })
+  // The pointer pressed on the divider, which useMove follows, until it's let go
+  const pressed = useRef<number | undefined>(undefined)
+  // A file or a row dragged over the page goes through to the list's gutter under the divider, which takes a drop as the list does
+  const passing = useDragOverPage()
 
   function stop() {
     document.documentElement.removeAttribute(RESIZING_ATTRIBUTE)
     const ended = drag.current
     drag.current = null
+    pressed.current = undefined
     setDragged(undefined)
     return ended
   }
 
-  // A drag the divider doesn't see the end of, as when the window narrows and the divider goes, still keeps its width
+  // A press the divider doesn't see the end of, as when the window narrows and the divider goes: useMove is told the pointer
+  // was cancelled, so it ends the press as a pointer let go would. React Aria gives text selection back (iOS takes it from the
+  // whole page at a press), and a drag keeps its width (onMoveEnd).
   useEffect(
     () => () => {
-      const ended = drag.current
-      if (!ended) return
-      drag.current = null
-      document.documentElement.removeAttribute(RESIZING_ATTRIBUTE)
-      restoreTextSelection()
-      if (ended.width !== latest.current.drawn) latest.current.onResizeEnd(ended.width)
+      if (pressed.current === undefined || typeof PointerEvent === 'undefined') return
+      window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: pressed.current }))
     },
     [],
   )
@@ -133,10 +150,12 @@ export function Splitter({ pane, value, minValue, maxValue, onResize, onResizeEn
       drag.current = { from: drawn, sign: signOf(element.current, pane), moved: 0, width: drawn, reported: false }
       document.documentElement.setAttribute(RESIZING_ATTRIBUTE, '')
     },
-    onMove({ deltaX }) {
+    onMove({ deltaX, pointerType }) {
       const now = drag.current
       if (!now) return
       now.moved += deltaX
+      // A press is a drag only once the pointer has gone a few pixels sideways, so a click or a tap that drifts keeps nothing
+      if (!now.reported && Math.abs(now.moved) < (pointerType === 'mouse' ? DRAG_THRESHOLD : TOUCH_DRAG_THRESHOLD)) return
       // Only a width that changes is reported: a pointer that jitters, or moves only up and down, resizes nothing
       const width = reached(now)
       if (width === now.width) return
@@ -155,12 +174,20 @@ export function Splitter({ pane, value, minValue, maxValue, onResize, onResizeEn
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     moveProps.onPointerDown?.(event)
+    // useMove follows only the main button's press
+    if (event.button !== 0) return
+    pressed.current = event.pointerId
     // Every move then comes here, even over a frame such as an email's body, which would otherwise keep the pointer's moves
     try {
       event.currentTarget.setPointerCapture?.(event.pointerId)
     } catch {
       // A pointer the browser no longer tracks: the window's listeners still follow it
     }
+  }
+
+  // The pointer is let go: there's no press left to end for it
+  function released(event: PointerEvent<HTMLDivElement>) {
+    if (event.pointerId === pressed.current) pressed.current = undefined
   }
 
   // The keys, in place of useMove's own (which move a pixel at a time and know no Home, End or Enter)
@@ -190,6 +217,9 @@ export function Splitter({ pane, value, minValue, maxValue, onResize, onResizeEn
       {...focusProps}
       ref={element}
       onPointerDown={onPointerDown}
+      onPointerUp={released}
+      onPointerCancel={released}
+      onLostPointerCapture={released}
       onKeyDown={onKeyDown}
       onDoubleClick={() => onReset()}
       role="separator"
@@ -203,6 +233,7 @@ export function Splitter({ pane, value, minValue, maxValue, onResize, onResizeEn
       aria-valuetext={t('splitter.value', { n: now })}
       data-pane={pane}
       data-dragging={dragged !== undefined || undefined}
+      data-passing={passing || undefined}
       data-focus-visible={isFocusVisible || undefined}
       className={`${styles.splitter} ${className ?? ''}`}
     />

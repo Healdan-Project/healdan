@@ -672,17 +672,25 @@ the list takes the rest.
   the direction the divider is drawn in (its computed `direction`), not React Aria's locale, which is the browser's
   language: the app is drawn left to right whatever language the browser asks for. A drag reports each width with
   `onResize` and the last with `onResizeEnd`, and a key only `onResizeEnd`, and neither reports the width the pane is
-  drawn at, so a press that only jitters keeps nothing. When the frame renders while a drag lasts (the window resized),
-  it draws the widths it kept, and the divider reports the drag's width again before the page is painted. While a drag
-  lasts, the page's root has `data-hd-resizing`, which keeps the cursor and stops text being selected. The visible line
-  is the pane's own hairline edge, drawn over in the accent while dragged or focused. The target is 24 pixels wide: the
-  left pane's divider covers only the pane's 1-pixel border, not its scrollbar, and 23 pixels of the main area's
-  gutter, which the views' padding and the storage banner's, 24 each, keep clear; the right region's covers 4 pixels of
-  the region and 20 of the list's gutter.
+  drawn at. A press is a drag only once the pointer has gone 4 pixels sideways (`DRAG_THRESHOLD`), or 8 for a finger or
+  a pen, so a click or a tap that drifts keeps nothing. When the frame renders while a drag lasts (the window resized),
+  it draws the widths it kept, and the divider reports the drag's width again before the page is painted. A press the
+  divider doesn't see the end of, as when the window narrows and the divider goes, is ended through `useMove` itself,
+  with a `pointercancel` for its pointer: React Aria then gives text selection back (on iOS it takes it from the whole
+  page while a press lasts), and a drag keeps its width. While a drag lasts, the page's root has `data-hd-resizing`,
+  which keeps the cursor and stops text being selected. While the browser's drag and drop is under way over the page
+  (files, or the list's rows), each divider has `data-passing`, which lets the drag through to what's under it, so a
+  file dropped on the list's gutter there files into the folder as anywhere else on the list. The visible line is the
+  pane's own hairline edge, drawn over in the accent while dragged or focused. The target is as wide as the main area's
+  gutter, `--hd-gutter` in `tokens.css` (24 pixels), which the views' padding and the storage banner's are too: the left
+  pane's divider covers only the pane's 1-pixel border, not its scrollbar, and the rest of the gutter beside it; the
+  right region's covers 4 pixels of the region and the rest of the list's gutter. So nothing a view draws inside its
+  gutter is under a divider.
 - **The widths** are `frame/PaneWidths.tsx`'s. `PaneFrame` is the frame's element: it holds each pane's width as a
   custom property, `--left-width`, `--right-width` (the details and Filters) and `--preview-width` (the docked reading
-  pane), which `Frame.module.css`, `RightRegion.module.css` and the top bar's brand read, each with its old width as the
-  fallback. A drag sets them on the element as it goes, so neither the frame nor a view renders again, and React Aria's
+  pane), which `Frame.module.css`, `RightRegion.module.css` and the top bar's brand read. `.frame` in
+  `Frame.module.css` gives each its default, which `paneLayout.ts` matches and a narrow window's folded panes are drawn
+  at. A drag sets them on the element as it goes, so neither the frame nor a view renders again, and React Aria's
   virtualiser measures the list's new width itself (its scroll view watches its own size). Only the drag's end changes
   state. In a narrow window it sets none, and `PaneSplitter` draws nothing. The left pane's divider sits in `<main>`,
   fixed to the window, since axe wants all content in a landmark and the main area scrolls; the right region's is in a
@@ -699,14 +707,17 @@ the list takes the rest.
   `healdan.pane.right` and `healdan.pane.preview`, each call in `try`, so a browser that refuses storage (or whose
   `localStorage` getter throws) gets the defaults. Enter forgets the pane's, so the reading pane follows the window again. Preferences are
   the only thing the browser keeps (M6's spec §2.3).
-- **A PDF waits:** `PdfView` draws its page at the first width it's given, and again only once a new width has stayed
-  put for 150 milliseconds, as a canvas drawn again at each step of a resize would be blank for most of it. That holds
-  for a divider dragged, the window's edge and the window snapped alike.
+- **A PDF never blanks:** `pdfEngine`'s `draw` renders a page into a canvas of its own and copies it into the one
+  shown once it's done, as setting a canvas's size clears it. So while a divider is dragged, the window's edge moves or
+  the zoom or page changes, the page shown stays until the new one is drawn, and `PdfView` draws at each width as it
+  comes.
 - **The window's width** is the root element's `clientWidth`, the layout width the frame's grid has, not
-  `window.innerWidth`, which mobile Safari gives as the visual viewport's, smaller while the page is pinch-zoomed.
+  `window.innerWidth`, which mobile Safari gives as the visual viewport's, smaller while the page is pinch-zoomed. It's
+  measured when the frame is first drawn and at each `resize` event, never at a later render, as reading it makes the
+  browser lay the page out there and then.
 - **To test it,** `test/viewport.ts` also sets the root element's `clientWidth` and `window.innerWidth`, and sends the
-  window's `resize` event, and the test
-  setup clears `localStorage` after each test. `frame/paneLayout.test.ts` has the limits, `preferences.test.ts` storage
+  window's `resize` event, and the test setup gives the root element jsdom's 1,024 pixels before the first test too
+  and clears `localStorage` after each test. `frame/paneLayout.test.ts` has the limits, `preferences.test.ts` storage
   that throws, `frame/Resizing.test.tsx` the dividers in the app, and `e2e/resizing.spec.ts` drags them in a real
   browser and reloads.
 

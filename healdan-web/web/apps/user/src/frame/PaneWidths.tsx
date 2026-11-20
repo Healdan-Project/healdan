@@ -36,9 +36,27 @@ function remembered(): Chosen {
   return chosen
 }
 
+/**
+ * The page's layout width as last measured: when the frame is first drawn, when it starts listening, and at each resize. A
+ * render never measures it again, as reading it makes the browser lay the page out there and then, and useSyncExternalStore
+ * asks again after each commit, just after a new view's elements went in.
+ */
+let measured: number | undefined
+const layoutWidth = () => document.documentElement.clientWidth
+
 function subscribe(onChange: () => void): () => void {
-  window.addEventListener('resize', onChange)
-  return () => window.removeEventListener('resize', onChange)
+  const measure = () => {
+    measured = layoutWidth()
+    onChange()
+  }
+  // A resize between the first drawing and now: React asks again once this returns
+  measured = layoutWidth()
+  window.addEventListener('resize', measure)
+  return () => {
+    window.removeEventListener('resize', measure)
+    // Measured afresh when a frame is drawn again, as the window may have changed while none listened
+    measured = undefined
+  }
 }
 
 /**
@@ -46,7 +64,7 @@ function subscribe(onChange: () => void): () => void {
  * mobile Safari gives as the visual viewport's, smaller while the page is pinch-zoomed.
  */
 function useWindowWidth(): number {
-  return useSyncExternalStore(subscribe, () => document.documentElement.clientWidth, () => 1280)
+  return useSyncExternalStore(subscribe, () => (measured ??= layoutWidth()), () => 1280)
 }
 
 const NOT_RESIZABLE: PaneWidths = {

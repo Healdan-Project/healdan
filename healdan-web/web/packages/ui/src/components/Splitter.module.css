@@ -1,10 +1,11 @@
 /* SPDX-FileCopyrightText: 2026 The Healdan Project
    SPDX-License-Identifier: LGPL-3.0-only */
 
-/* A target 24 pixels wide (WCAG 2.5.8) laid over the pane's edge, so it takes no click from the tree's rows, the pane's
-   scrollbar or the list's. A pane before it (the left pane) scrolls with its scrollbar at that edge, inside its 1-pixel
-   border, so the divider covers only the border and lies 23 pixels over the gutter beside it. A pane after it (the right
-   region) has its scrollbar at its far edge, so the divider lies 4 pixels over the pane, inside its padding, and 20 over the
+/* A target as wide as the gutter beside the pane, --hd-gutter's 24 pixels (WCAG 2.5.8), laid over the pane's edge, so it
+   takes no click from the tree's rows, the pane's scrollbar or the list's, nor from a view's content, which keeps inside the
+   gutter. A pane before it (the left pane) scrolls with its scrollbar at that edge, inside its 1-pixel border, so the divider
+   covers only the border and lies the rest of its width over the gutter beside it. A pane after it (the right region) has
+   its scrollbar at its far edge, so the divider lies 4 pixels over the pane, inside its padding, and the rest over the
    gutter. It sits in a box whose inline end (a pane before it) or inline start (a pane after it) is the pane's edge, and
    takes no room of its own. */
 .splitter {
@@ -12,7 +13,7 @@
   inset-block: 0;
   z-index: 1;
   box-sizing: border-box;
-  width: 24px;
+  width: var(--hd-gutter);
   outline: none;
   cursor: col-resize;
   /* A finger or a pen on it drags it, rather than scrolling the page */
@@ -20,11 +21,17 @@
 }
 
 .splitter[data-pane='start'] {
-  inset-inline-end: -23px;
+  inset-inline-end: calc(1px - var(--hd-gutter));
 }
 
 .splitter[data-pane='end'] {
-  inset-inline-start: -20px;
+  inset-inline-start: calc(4px - var(--hd-gutter));
+}
+
+/* While something is dragged over the page (files, or the list's rows), the drag goes through to what's under the divider:
+   the list's gutter, which takes a drop as the list does */
+.splitter[data-passing] {
+  pointer-events: none;
 }
 
 /* The line drawn over the pane's own hairline edge while the divider is pointed at, dragged or focused */

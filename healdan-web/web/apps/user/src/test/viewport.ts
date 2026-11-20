@@ -52,7 +52,7 @@ export function resize(pixels: number) {
   })
 }
 
-/** Back to a window with no matchMedia and the wide default, which is what jsdom has */
+/** Back to a window with no matchMedia and the wide default, which is what jsdom has; the setup calls it before the first test too */
 export function resetViewport() {
   width = 1280
   listeners.clear()

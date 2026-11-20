@@ -89,6 +89,8 @@
   --hd-space-5: 16px;
   --hd-space-6: 24px;
   --hd-space-7: 32px;
+  /* A view's padding at each side of the main area, which the panes' dividers lie over (Splitter.module.css) */
+  --hd-gutter: var(--hd-space-6);
 
   --hd-radius-small: 4px;
   --hd-radius: 6px;

@@ -3,7 +3,7 @@
 
 /* The views' gutter at each side, which the left pane's divider lies over */
 .banner {
-  padding: var(--hd-space-3) var(--hd-space-6);
+  padding: var(--hd-space-3) var(--hd-gutter);
   border-bottom: 1px solid var(--hd-caution);
   background: var(--hd-bar);
   color: var(--hd-text);

@@ -1,13 +1,16 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { I18nProvider } from 'react-aria-components'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectNoAxeViolations } from '../test/axe'
 import { RESIZING_ATTRIBUTE, Splitter, type SplitterProps } from './Splitter'
+
+// A test that plays iOS stops playing it, whether or not it passed
+afterEach(() => vi.restoreAllMocks())
 
 type Props = Omit<SplitterProps, 'value' | 'onResizeEnd' | 'onReset' | 'aria-label'> & Partial<Pick<SplitterProps, 'onResizeEnd' | 'onReset'>>
 
@@ -198,6 +201,43 @@ describe('Splitter', () => {
     expect(document.documentElement.hasAttribute(RESIZING_ATTRIBUTE)).toBe(false)
   })
 
+  it('takes a press that drifts a few pixels sideways for a click, keeping nothing, and drags from where it began once past them', () => {
+    const moved = vi.fn()
+    const kept = vi.fn()
+    render(<Pane pane="start" minValue={180} maxValue={420} onResize={moved} onResizeEnd={kept} />)
+    // A mouse that drifts 3 pixels, and a finger 7
+    fireEvent.pointerDown(separator(), { pointerId: 1, button: 0, clientX: 248, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 251, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 251, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerDown(separator(), { pointerId: 2, button: 0, clientX: 248, clientY: 300, pointerType: 'touch' })
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 241, clientY: 300, pointerType: 'touch' })
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 241, clientY: 300, pointerType: 'touch' })
+    expect(moved).not.toHaveBeenCalled()
+    expect(kept).not.toHaveBeenCalled()
+    expect(valueOf()).toBe(248)
+
+    fireEvent.pointerDown(separator(), { pointerId: 3, button: 0, clientX: 248, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 3, clientX: 251, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerMove(window, { pointerId: 3, clientX: 253, clientY: 300, pointerType: 'mouse' })
+    fireEvent.pointerUp(window, { pointerId: 3, clientX: 253, clientY: 300, pointerType: 'mouse' })
+    expect(moved.mock.calls.map(([width]) => width)).toEqual([253])
+    expect(kept).toHaveBeenCalledWith(253)
+  })
+
+  it('lets something dragged over the page through to what is under it, until the drag ends', () => {
+    render(<Pane pane="start" minValue={180} maxValue={420} />)
+    expect(separator().hasAttribute('data-passing')).toBe(false)
+    fireEvent.dragEnter(document.body)
+    expect(separator().getAttribute('data-passing')).toBe('true')
+    fireEvent.drop(document.body)
+    expect(separator().hasAttribute('data-passing')).toBe(false)
+    // A drag that left the window ends with no event: the pointer's next move ends it
+    fireEvent.dragEnter(document.body)
+    expect(separator().getAttribute('data-passing')).toBe('true')
+    fireEvent.pointerMove(document.body)
+    expect(separator().hasAttribute('data-passing')).toBe(false)
+  })
+
   it('reports the width a drag has reached again when its limits change while it lasts', () => {
     const moved = vi.fn()
     const { rerender } = render(<Splitter aria-label="Resize Navigation" pane="start" value={248} minValue={180} maxValue={420} onResize={moved} onResizeEnd={() => {}} onReset={() => {}} />)
@@ -220,17 +260,26 @@ describe('Splitter', () => {
     expect(valueOf()).toBe(270)
   })
 
-  it('keeps the width a drag reached when it goes before the drag ends', () => {
+  it('ends a press it goes before the end of as React Aria would: a drag keeps its width, and text selection comes back', async () => {
+    // iOS (jsdom is already WebKit), where React Aria takes text selection from the whole page while a press lasts
+    vi.spyOn(navigator, 'platform', 'get').mockReturnValue('iPad')
+    const root = document.documentElement.style
     const kept = vi.fn()
     const { unmount } = render(<Pane pane="start" minValue={180} maxValue={420} onResizeEnd={kept} />)
     fireEvent.pointerDown(separator(), { pointerId: 1, button: 0, clientX: 248, clientY: 300, pointerType: 'mouse' })
+    expect(root.webkitUserSelect).toBe('none')
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 280, clientY: 300, pointerType: 'mouse' })
-    // As useMove's start does on iOS, which only its end, never reached here, undoes
-    document.documentElement.style.webkitUserSelect = 'none'
     unmount()
     expect(kept).toHaveBeenCalledWith(280)
     expect(document.documentElement.hasAttribute(RESIZING_ATTRIBUTE)).toBe(false)
-    expect(document.documentElement.style.webkitUserSelect).toBe('')
+    await waitFor(() => expect(root.webkitUserSelect).toBe(''))
+
+    // React Aria knows the press ended: the next one takes text selection away again, and gives it back
+    render(<Pane pane="start" minValue={180} maxValue={420} />)
+    fireEvent.pointerDown(separator(), { pointerId: 2, button: 0, clientX: 248, clientY: 300, pointerType: 'mouse' })
+    expect(root.webkitUserSelect).toBe('none')
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 248, clientY: 300, pointerType: 'mouse' })
+    await waitFor(() => expect(root.webkitUserSelect).toBe(''))
   })
 
   it('passes axe', async () => {

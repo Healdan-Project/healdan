@@ -1,8 +1,9 @@
 /* SPDX-FileCopyrightText: 2026 The Healdan Project
    SPDX-License-Identifier: LGPL-3.0-only */
 
+/* The gutter at each side is what the panes' dividers lie over, so nothing a view draws is under them */
 .view {
-  padding: var(--hd-space-5) var(--hd-space-6);
+  padding: var(--hd-space-5) var(--hd-gutter);
 }
 
 .title {

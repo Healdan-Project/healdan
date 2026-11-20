@@ -121,7 +121,8 @@ open or reload the web page.
 
 The left pane, and the details, Filters or preview at the right, can each be made wider or narrower. Point at the line
 between a pane and the list: the pointer becomes a resize arrow and the line darkens. Drag it to where you want it,
-with the mouse, a finger or a pen. The list takes whatever room the panes leave, and its columns follow.
+with the mouse, a finger or a pen. The list takes whatever room the panes leave, and its columns follow. A click or a
+tap on the line that barely moves leaves the pane as it was.
 
 From the keyboard, Tab to the divider, which a screen reader names **Resize Navigation**, **Resize Details**, **Resize
 Filters** or **Resize Preview** and reads its width in pixels. Then:
