@@ -5,12 +5,13 @@ import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import { expectNoViolations } from './axe'
 import { ADMIN_PASSWORD, ADMIN_USERNAME, expectListUnder, signIn } from './helpers'
 
-// An axe pass on Healdan Admin's Dashboard (admin spec 8.1 and 17.1), with its frame's find, Help and person menus, in the
-// light theme and in the dark one, which Playwright's `colorScheme` switches as the system's setting would, and in a
-// tablet-wide window with the left pane opened over the main area. A real browser draws the page, so this is where the
-// Dashboard's colour contrast is checked: the app's Vitest checks run in jsdom, which has no colours. It signs in as the
-// stack's admin and only reads, so it changes nothing on the stack and depends on nothing an earlier step left. The find
-// looks for the smoke fixture's client and matter, which every smoke stack has.
+// An axe pass on Healdan Admin's Dashboard (admin spec 8.1 and 17.1), with its frame's find, Help and person menus, and on
+// Phase 2's screens (8.2 to 8.5: Clients, Matters, a matter's Overview and Workspace, and Workspace Templates), in the light
+// theme and in the dark one, which Playwright's `colorScheme` switches as the system's setting would, and in a tablet-wide
+// window with the left pane opened over the main area. A real browser draws the page, so this is where the screens' colour
+// contrast is checked: the app's Vitest checks run in jsdom, which has no colours. It signs in as the stack's admin and
+// only reads, so it changes nothing on the stack and depends on nothing an earlier step left. The find and Phase 2's
+// screens look at the smoke fixture's client and matter, which every smoke stack has.
 
 for (const scheme of ['light', 'dark'] as const) {
   test.describe(`the Dashboard in the ${scheme} theme`, () => {
@@ -85,6 +86,40 @@ for (const scheme of ['light', 'dark'] as const) {
       await check('the person menu')
       await page.keyboard.press('Escape')
       await expect(page.getByRole('menu')).toBeHidden()
+    })
+
+    // Phase 2's screens (admin spec 8.2 to 8.5), opened from the left pane, with the smoke fixture's client 1 and matter 1.1,
+    // which they only read
+    test("Clients, Matters, a matter's Overview and Workspace, and Workspace Templates", async () => {
+      const pane = page.getByRole('navigation', { name: 'Navigation' })
+      const list = (name: string) => main().getByRole('grid', { name })
+
+      await pane.getByRole('link', { name: 'Clients' }).click()
+      await expect(list('Clients').getByRole('row', { name: /Smoke Client/ })).toBeVisible()
+      await check('the Clients list')
+
+      await pane.getByRole('link', { name: 'Matters' }).click()
+      const smoke = list('Matters').getByRole('row', { name: /^1\.1 Smoke Matter/ })
+      await expect(smoke).toBeVisible()
+      await check('the Matters list')
+
+      await smoke.click()
+      await expect(main().getByRole('heading', { level: 1, name: '1.1 Smoke Matter' })).toBeVisible()
+      await expect(main().getByRole('region', { name: 'Facts' })).toBeVisible()
+      await check("a matter's Overview")
+      await main().getByRole('tab', { name: 'Workspace' }).click()
+      // Its own folder chosen, with who can use it
+      await expect(main().getByRole('region', { name: 'Who Can Use This Folder' }).getByRole('table')).toBeVisible()
+      await expect(main().getByRole('treegrid').getByRole('row').first()).toBeVisible()
+      await check("a matter's Workspace")
+
+      await pane.getByRole('link', { name: 'Workspace Templates' }).click()
+      await expect(list('Workspace Templates').getByRole('row').nth(1)).toBeVisible()
+      await check('Workspace Templates')
+
+      // Back where the next test starts
+      await pane.getByRole('link', { name: 'Dashboard' }).click()
+      await expect(main().getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
     })
 
     test('a tablet-wide window, with the left pane opened over the main area', async () => {
