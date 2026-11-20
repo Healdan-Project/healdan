@@ -175,7 +175,7 @@ test('resizes a column by its edge and by keys, and keeps it after a reload', as
   const before = await widths(page)
   await press(page, box.x + box.width / 2, box.y + box.height / 2, 80)
   await expect(edge).toHaveAttribute('data-resizing', 'true')
-  expect(await pseudoBackground(edge, '::before')).toBe(colour)
+  await expect.poll(() => pseudoBackground(edge, '::before')).toBe(colour)
   await page.mouse.up()
   await expect.poll(async () => Math.round(await width(matter))).toBe(before.matter! + 80)
   // Nothing sorted: the list's own order, Last Used, still has the arrow
