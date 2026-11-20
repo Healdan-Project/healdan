@@ -287,6 +287,13 @@ cleanup() {
     compose logs --no-log-prefix --tail 100 db
     show_server_log
   fi
+  # A browser container that test-web.sh left on the stack's network (a run stopped in step 9) would keep Compose from
+  # removing the network
+  local network left
+  for network in $(docker network ls -q --filter "label=com.docker.compose.project=$PROJECT"); do
+    left=$(docker ps -aq --filter label=healdan.web-browsers --filter "network=$network")
+    [ -z "$left" ] || docker rm -f $left >/dev/null 2>&1
+  done
   compose down -v --remove-orphans >/dev/null 2>&1
   docker rm -f "$CLAIM" >/dev/null 2>&1
   rm -rf "$WORK"
