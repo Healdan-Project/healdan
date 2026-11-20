@@ -91,7 +91,7 @@ export const usageNotYet: A['Usage'] = {
   busiestMatters: [],
 }
 
-const saltmarsh: A['FoundClient'] = { id: 1, number: 1001, name: 'Saltmarsh Shipping Ltd' }
+export const saltmarsh: A['FoundClient'] = { id: 1, number: 1001, name: 'Saltmarsh Shipping Ltd' }
 
 /** What GET /v1/admin/find finds for "sal" */
 export const found: A['Found'] = {
@@ -104,6 +104,76 @@ export const found: A['Found'] = {
 }
 
 export const nothingFound: A['Found'] = { clients: [], matters: [], people: [] }
+
+// The firm's clients, Stores, people and templates, as the Matters list and its filters name them
+export const ashcombe: A['ClientBrief'] = { id: 9, number: 998, name: 'Ashcombe Reeve LLP' }
+export const brightwell: A['ClientBrief'] = { id: 2, number: 1002, name: 'Brightwell Bakeries Ltd' }
+export const kestrel: A['ClientBrief'] = { id: 3, number: 1003, name: 'Kestrel Software Ltd' }
+
+export const firmStore: A['Store'] = { id: 3, name: 'Firm' }
+export const clientWork: A['Store'] = { id: 4, name: 'Client Work' }
+/** GET /v1/admin/stores: by name */
+export const stores: A['Store'][] = [clientWork, firmStore]
+
+export const helen: A['PersonBrief'] = { id: 5, username: 'helen', name: 'Helen Ashcombe' }
+export const tom: A['PersonBrief'] = { id: 6, username: 'tom', name: 'Tom Reeve' }
+export const sam: A['PersonBrief'] = { id: 10, username: 'sam', name: 'Sam Okafor' }
+
+const firmTemplate: A['TemplateBrief'] = { id: 201, name: 'Firm' }
+const litigation: A['TemplateBrief'] = { id: 202, name: 'Litigation' }
+const transactional: A['TemplateBrief'] = { id: 203, name: 'Transactional' }
+
+/** A client as the Clients list and its search give it */
+export function clientOf(brief: A['ClientBrief'], over: Partial<A['Client']> = {}): A['Client'] {
+  return { ...brief, matters: 2, documents: 500, lastActivity: '2026-11-19T10:12:00Z', ...over }
+}
+
+/** GET /v1/admin/clients: a page of clients */
+export function clientList(items: A['Client'][], over: Partial<A['ClientList']> = {}): A['ClientList'] {
+  return { items, offset: 0, limit: 20, total: items.length, figuresAt: '2026-11-19T10:41:00Z', ...over }
+}
+
+/** A matter, as the Matters list shows it: 1001.1 unless `over` says otherwise */
+export function matterRow(over: Partial<A['MatterRow']> = {}): A['MatterRow'] {
+  return {
+    id: 11,
+    number: '1001.1',
+    name: 'Charter Dispute – MV Northern Star',
+    client: saltmarsh,
+    store: clientWork,
+    owner: tom,
+    template: litigation,
+    documents: 412,
+    bytes: Math.round(4.6 * GB),
+    lastActivity: '2026-11-19T10:12:00Z',
+    folderId: 110,
+    ...over,
+  }
+}
+
+/** The firm's matters, in the list's own order (by client number, then matter number). 1003.2's owner has gone, and it was made from no template. */
+export const matterRows: A['MatterRow'][] = [
+  matterRow({ id: 91, number: '998.1', name: 'Firm Policies', client: ashcombe, store: firmStore, owner: helen, template: firmTemplate, documents: 86, bytes: 900 * MB, lastActivity: '2026-11-12T09:00:00Z', folderId: 910 }),
+  matterRow({ id: 92, number: '998.2', name: 'IT and Systems', client: ashcombe, store: firmStore, owner: sam, template: firmTemplate, documents: 41, bytes: 600 * MB, lastActivity: '2026-11-03T15:30:00Z', folderId: 920 }),
+  matterRow(),
+  matterRow({ id: 12, number: '1001.2', name: 'Vessel Sale', template: transactional, documents: 96, bytes: Math.round(1.2 * GB), lastActivity: '2026-11-14T11:00:00Z', folderId: 120 }),
+  matterRow({ id: 21, number: '1002.1', name: 'Commercial Lease', client: brightwell, owner: helen, template: transactional, documents: 73, bytes: 700 * MB, lastActivity: '2026-11-11T08:45:00Z', folderId: 210 }),
+  matterRow({ id: 22, number: '1002.2', name: 'Employment Tribunal', client: brightwell, documents: 148, bytes: Math.round(1.7 * GB), lastActivity: '2026-11-18T16:20:00Z', folderId: 220 }),
+  matterRow({ id: 31, number: '1003.1', name: 'Series A Investment', client: kestrel, owner: helen, template: transactional, documents: 204, bytes: Math.round(2.3 * GB), lastActivity: '2026-11-19T09:05:00Z', folderId: 310 }),
+  matterRow({ id: 32, number: '1003.2', name: 'Licence Review', client: kestrel, owner: null, template: null, documents: 31, bytes: 300 * MB, lastActivity: '2026-11-06T13:10:00Z', folderId: 320 }),
+]
+
+/** GET /v1/admin/matters: a page of matters, their figures worked out at 10:41 on 19 November 2026 */
+export function matterList(items: A['MatterRow'][], over: Partial<A['MatterList']> = {}): A['MatterList'] {
+  return { items, offset: 0, limit: 100, total: items.length, figuresAt: '2026-11-19T10:41:00Z', ...over }
+}
+
+/** GET /v1/users, the people picker's: anyone whose name or username holds `q` */
+export function people(q: unknown): S['UserHitPage'] {
+  const words = String(q ?? '').toLowerCase()
+  const items = [helen, tom, sam].filter((one) => one.name.toLowerCase().includes(words) || one.username.includes(words))
+  return { items, offset: 0, limit: 20, total: items.length }
+}
 
 export function problem(status: number, code: string, detail = 'A server sentence that must not be shown raw.'): ApiError {
   return new ApiError(status, code, detail, { status, code, detail })
@@ -129,6 +199,10 @@ export function defaultRoutes(): Routes {
     'GET /v1/admin/dashboard': dashboard,
     'GET /v1/admin/dashboard/usage': usage,
     'GET /v1/admin/find': nothingFound,
+    'GET /v1/admin/matters': matterList(matterRows),
+    'GET /v1/admin/stores': stores,
+    'GET /v1/admin/clients': clientList([]),
+    'GET /v1/users': ({ query }: { query?: Record<string, unknown> }) => people(query?.q),
   }
 }
 

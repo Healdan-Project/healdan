@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { goTo, useMessageFor } from '@healdan/shell'
 import { ComboBox, Icon, type ComboBoxSection } from '@healdan/ui'
+import { useDebounced } from '../pickers/typing'
 import { useAdminQuery } from '../queries'
 import { t } from '../strings'
 import { CLASSIC } from './LeftPane'
@@ -37,15 +38,6 @@ export function destinationOf(found: Found): string {
 function findable(text: string): string | undefined {
   const q = text.trim().slice(0, FIND_MAX).trim()
   return q.length >= 2 || /^\d+$/.test(q) ? q : undefined
-}
-
-function useDebounced<V>(value: V, delay: number): V {
-  const [settled, setSettled] = useState(value)
-  useEffect(() => {
-    const timer = setTimeout(() => setSettled(value), delay)
-    return () => clearTimeout(timer)
-  }, [value, delay])
-  return settled
 }
 
 /** Each kind's options under its heading, by an id that says which it is: c1, m11, p7 */

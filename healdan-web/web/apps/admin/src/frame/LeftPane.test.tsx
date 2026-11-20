@@ -35,15 +35,17 @@ async function renderPane(nav: readonly NavGroup[], routes: Routes = {}) {
 }
 
 describe('The left pane', () => {
-  it('shows only the screens that have shipped: the Dashboard, and the Classic Interface at its foot', async () => {
+  it('shows only the screens that have shipped: the Dashboard, Matters under Firm, and the Classic Interface at its foot', async () => {
     const { view } = await renderApp('/')
     const links = within(pane()).getAllByRole('link')
     expect(links.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
       ['Dashboard', '/admin/'],
+      ['Matters', '/admin/matters'],
       ['Classic Interface', '/frontend.jsp'],
     ])
-    // No group has a shipped screen yet, so none is drawn
-    expect(within(pane()).queryAllByRole('heading')).toEqual([])
+    // Only Firm has a shipped screen yet, so only its group is drawn
+    expect(within(pane()).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Firm'])
+    expect(within(pane()).getByRole('region', { name: 'Firm' })).toBeTruthy()
     await expectNoAxeViolations(view.container)
   })
 

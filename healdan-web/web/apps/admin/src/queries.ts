@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { keepPreviousData, useQuery, type UseQueryResult } from '@tanstack/react-query'
-import type { adminComponents, adminPaths, Api } from '@healdan/api'
+import { apiPath, type adminComponents, type adminPaths, type Api } from '@healdan/api'
 import { ASK_ON_RETURN, useApi } from '@healdan/shell'
 
 type A = adminComponents['schemas']
@@ -47,6 +47,13 @@ export function adminKey(path: AdminGetPath, query?: object): readonly unknown[]
 
 export const adminKeys = {
   dashboard: adminKey('/v1/admin/dashboard'),
+  /** Every list and search of clients, a client's page among them */
+  clients: adminKey('/v1/admin/clients'),
+  /** A client by its id, as its page and the Matters list's Client filter read it */
+  client: (id: number) => [...adminKey('/v1/admin/clients'), id] as const,
+  /** Every page of the Matters list, whatever its filters and order */
+  matters: adminKey('/v1/admin/matters'),
+  stores: adminKey('/v1/admin/stores'),
 }
 
 /**
@@ -76,4 +83,19 @@ export function useDashboard(enabled = true) {
 /** The Dashboard's Usage, asked again as the rest of it is, its days cut in the browser's time zone, as the User app's are */
 export function useUsage() {
   return useAdminQuery('/v1/admin/dashboard/usage', { poll: true, query: { zone: Intl.DateTimeFormat().resolvedOptions().timeZone } })
+}
+
+/** Every Store, by name: a short list, for the Store menus (spec 7.2) */
+export function useStores() {
+  return useAdminQuery('/v1/admin/stores')
+}
+
+/** A client, for its page and to name the client a filter holds; nothing is asked without an id, or while `enabled` is false */
+export function useClient(id: number | undefined, enabled = true) {
+  const api = useApi()
+  return useQuery({
+    queryKey: adminKeys.client(id ?? -1),
+    queryFn: ({ signal }) => api.get<A['Client']>(apiPath`/v1/admin/clients/${id ?? -1}`, undefined, { signal }),
+    enabled: enabled && id !== undefined,
+  })
 }

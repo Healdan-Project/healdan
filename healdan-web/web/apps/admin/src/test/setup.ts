@@ -4,9 +4,12 @@
 import { cleanup } from '@testing-library/react'
 import { clearToasts, resetAnnouncer, setLabels } from '@healdan/ui'
 import { afterEach, vi } from 'vitest'
+import { installIntersectionObserver } from './intersection'
 import { showPage } from './visibility'
 import { resetViewport } from './viewport'
 
+// A list's next page loads as its end comes into view, which a test says with bringObservedIntoView()
+installIntersectionObserver()
 // The router scrolls to the top on each address, which jsdom doesn't do and says so on every test.
 window.scrollTo = () => {}
 

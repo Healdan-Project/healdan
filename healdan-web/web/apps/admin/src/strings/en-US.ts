@@ -24,6 +24,8 @@ export const adminEnUS = {
   'admin.nav.storage': 'Storage',
   'admin.nav.search': 'Search',
   'admin.nav.monitoring': 'Monitoring',
+  // The screens, each under its group
+  'admin.nav.matters': '{matters}',
 
   // The top bar's find: its name and placeholder, as the spec words it (7.1)
   'admin.find.label': 'Find a client, matter or person',
@@ -91,6 +93,32 @@ export const adminEnUS = {
   'admin.usage.storeOnEncrypted': '{size} on {backend}, encrypted',
   'admin.usage.busiest': 'Busiest {matters} This Week',
   'admin.usage.noneBusy': 'Nothing was filed in the last 7 days.',
+
+  // The pickers: a client is offered and shown by its number and name
+  'admin.client.field': 'Client',
+  'admin.client.label': '{number} – {name}',
+
+  // The Matters list (spec 8.3): its filters, its columns and what it says when it has no rows
+  'admin.matters.title': '{matters}',
+  'admin.matters.filters': 'Filter {matters}',
+  'admin.matters.text': 'Number or Name',
+  'admin.matters.store': 'Store',
+  'admin.matters.allStores': 'All Stores',
+  'admin.matters.owner': 'Owner',
+  'admin.matters.clear': 'Clear Filters',
+  'admin.matters.column.number': '{matter}',
+  'admin.matters.column.name': 'Name',
+  'admin.matters.column.client': 'Client',
+  'admin.matters.column.store': 'Store',
+  'admin.matters.column.owner': 'Owner',
+  'admin.matters.column.template': 'Template',
+  'admin.matters.column.documents': 'Documents',
+  'admin.matters.column.bytes': 'Size',
+  'admin.matters.column.lastActivity': 'Last Activity',
+  'admin.matters.figuresAt': 'Documents, Size and Last Activity as of {when}',
+  'admin.matters.figuresPending': "Documents, Size and Last Activity haven't been worked out since the server started. They show here within a few minutes.",
+  'admin.matters.none': 'No {matterLower} has been made yet.',
+  'admin.matters.noneMatch': 'No {matterLower} matches the filters.',
 } as const satisfies Record<`admin.${string}`, string>
 
 export const adminPlurals = {

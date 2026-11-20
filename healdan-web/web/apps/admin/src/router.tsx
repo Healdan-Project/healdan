@@ -7,6 +7,7 @@ import { ErrorPanel, parseSearch, stringifySearch } from '@healdan/shell'
 import { ADMIN_BASE, routes } from './addresses'
 import { Frame } from './frame/Frame'
 import { DashboardView } from './views/DashboardView'
+import { MattersView, mattersSearch } from './views/MattersView'
 import { NotFoundView } from './views/NotFoundView'
 
 // The frame holds every page, and an address no page has is said in the frame, in the app's own words. A page reads only
@@ -15,7 +16,18 @@ const rootRoute = createRootRoute({ component: Frame, notFoundComponent: NotFoun
 
 const dashboardRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.dashboard, component: DashboardView })
 
-const routeTree = rootRoute.addChildren([dashboardRoute])
+// /matters: every matter, its order and filters in the address (MattersView). A matter's page, /matters/$id, is
+// Phase 2's next screen; until it's routed the frame says there's no such page.
+const mattersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.matters,
+  validateSearch: mattersSearch,
+  component: function MattersRoute() {
+    return <MattersView search={mattersRoute.useSearch()} />
+  },
+})
+
+const routeTree = rootRoute.addChildren([dashboardRoute, mattersRoute])
 
 /**
  * A view that failed as it drew: the catalogue's short message and Try Again, which asks the server again for what the

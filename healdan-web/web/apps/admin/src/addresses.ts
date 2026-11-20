@@ -30,3 +30,11 @@ export const routes = {
   jobs: '/jobs',
   searchIndex: '/search-index',
 } as const
+
+/**
+ * A matter's page, with ADMIN_BASE, as a link or the router's `href` takes it: the matter's id, never its folder's, as
+ * one segment.
+ */
+export function matterHref(id: number): string {
+  return `${ADMIN_BASE}/matters/${encodeURIComponent(String(id))}`
+}
