@@ -207,6 +207,7 @@ Phase 1 built the first three endpoints in this table, for the Admin app's Dashb
 | `FolderService.create` in the Templates Store | `POST /admin/templates`, empty or a copy of another (`copyOf`) |
 | `FolderService.rename` of a template | `PATCH /admin/templates/{id}` |
 | `FolderService.delete` of a template | `DELETE /admin/templates/{id}`, answering its Trash item |
+| `FolderService.restore` of a template, or of a template's folder | stays the Classic Interface's, its Trash and its Deleted folders report, until Stage 2 (spec §11), as `POST /trash/{id}/restore` restores into Stores only |
 | (none: what New Matter would refuse in a template is new) | `GET /admin/templates/{id}/problems` |
 | `HealdanMatterService.listStores` | `GET /admin/stores`, beside M2's `GET /stores` |
 | `FolderService.create` of a workspace under the root | `POST /admin/stores`, with the groups that can see it |

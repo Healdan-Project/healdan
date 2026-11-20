@@ -201,7 +201,7 @@ The same component serves a matter's Workspace tab and a workspace template's pa
 | **Read/Write** | Read Only's, plus Write, Add, Rename, Move, Delete |
 | **Full Access** | all 25, which is what a matter's owner gets |
 
-- **Rules, from the server:** a folder narrows its parent and never widens it (P1); every group that can read a matter can read its Store (P2); the owner's row stays. The `guest` group and read-only people can't be given more than Read Only, which CE doesn't check when a folder's permissions are saved, so the admin route refuses it. **Apply to Subfolders** is offered where `checkApplyToTree` allows.
+- **Rules, from the server:** a folder narrows its parent and never widens it (P1); every group that can read a matter can read its Store (P2); the owner's row stays, with Full Access, whoever the owner is (a read-only owner's row then holds what a read-only person's can). The `guest` group and read-only people can't be given more than Read Only: the admin route refuses a save that gives them more, but for that owner's row. **Apply to Subfolders** is offered where `checkApplyToTree` allows.
 - **In a template,** nothing checks permissions as they're edited today. So the page lists what New Matter would refuse, as warnings, using `AclMath` and `PermissionRules`, and saving still works.
 
 ### 8.5 Workspace Templates
