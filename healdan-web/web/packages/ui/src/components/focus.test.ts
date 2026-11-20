@@ -13,6 +13,7 @@ describe('focus style', () => {
       './Button.module.css',
       './Choices.module.css',
       './ComboBox.module.css',
+      './ComboBoxLayer.module.css',
       './DatePicker.module.css',
       './Dialog.module.css',
       './Fields.module.css',
@@ -36,10 +37,10 @@ describe('focus style', () => {
   for (const [file, css] of Object.entries(sheets)) {
     it(`${file} uses the shared focus outline on focus-visible`, () => {
       const rules = [...css.matchAll(/([^{}]*\[data-focus-visible\][^{}]*)\{([^}]*)\}/g)]
-      const unfocused = ['Dialog', 'Overlay', 'Tray', 'VisuallyHidden', 'ProgressBar', 'StatusDot', 'GroupChip'].map((name) => `./${name}.module.css`)
+      const unfocused = ['Dialog', 'Overlay', 'Tray', 'ComboBoxLayer', 'VisuallyHidden', 'ProgressBar', 'StatusDot', 'GroupChip'].map((name) => `./${name}.module.css`)
       if (unfocused.includes(file)) {
-        // The dialog and the tray hold focusable parts, not focus of their own; hidden text, a progress bar, a status and a
-        // group's chip are never focused
+        // The dialog, the tray and a combo box's layer hold focusable parts, not focus of their own (the layer's options
+        // are ComboBox.module.css's); hidden text, a progress bar, a status and a group's chip are never focused
         expect(rules).toHaveLength(0)
         return
       }

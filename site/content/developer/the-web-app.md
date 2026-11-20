@@ -394,7 +394,13 @@ view.
   narrowing, dates, number checks). A user property, such as Author or Typist, is `details/UserField.tsx`: `@healdan/ui`'s
   `PickField` (React Aria's ComboBox with its label above it), which asks `GET /v1/users?q=` once the typing pauses
   (one character is enough; the server answers 20 at most), offers the field's own person first, and sends `{ id }`,
-  as the helper does. A folder or document property stays text.
+  as the helper does. A folder or document property stays text. `PickField` draws its list as `ComboBox` does (see
+  [The Search Box and Search Results](#the-search-box-and-search-results)): right after the field, so in the form or in
+  the filing form's dialog, in a layer fixed over the window. In a dialog the list is above the dialog's fields and can
+  hang past its edge, and React Aria is kept from hiding the dialog's other fields and buttons while it's open; the
+  dialog still hides the page behind it, and its Tab, Esc (the first closes the list, the next the dialog) and a click
+  outside it (which closes only the list while it's open) are as they were. `PickField.test.tsx` runs axe with the
+  list open on a page and in a `Dialog`, and fails if React Aria hides anything there again.
 - **The tray.** `FilingTray` over `@healdan/ui`'s `Tray`, marked `data-react-aria-top-layer` so a modal's hiding of the page
   leaves it for a screen reader. A refusal is said from the catalogue (`refusal.ts`), from the problem's `code`, its
   `fields` or its `hold`, and an `already-filed` names the copy. **Edit** asks the details panel to open its form
@@ -520,11 +526,11 @@ Test it with `views/TrashView.test.tsx`, whose routes answer each view's items a
 kinds, which are scopes too) joined to `@healdan/ui`'s `ComboBox`, React Aria's, with the options the caller gives in
 named sections and not filtered by it. Focus stays in the box and the arrow keys move through the options. The list
 comes right after the box in the page, in the top bar's search landmark, drawn in a layer fixed over the window
-(`.layer` in `ComboBox.module.css`, so an element round the box that clips or is positioned can't cut it off or move
-it), where React Aria would draw it at the end of `<body>`. React Aria's combo box hides everything outside the box and
-its list from screen readers while the list is open (`aria-hidden`), because a list at the end of `<body>` is far from
-the box in reading order; with the list beside the box there's nothing to hide, and `ComboBox`'s `PageStaysShown`
-keeps React Aria from hiding it, as React Aria has no switch for it yet
+(`ComboBoxLayer` in `ComboBoxLayer.tsx`, so an element round the box that clips or is positioned can't cut it off or
+move it), where React Aria would draw it at the end of `<body>`. React Aria's combo box hides everything outside the box
+and its list from screen readers while the list is open (`aria-hidden`), because a list at the end of `<body>` is far
+from the box in reading order; with the list beside the box there's nothing to hide, and `ComboBoxPopover`'s
+`PageStaysShown`, beside it, keeps React Aria from hiding it, as React Aria has no switch for it yet
 ([adobe/react-spectrum#4937](https://github.com/adobe/react-spectrum/issues/4937)). `ComboBox.test.tsx` runs axe on a
 whole page with the list open, and fails if React Aria hides anything again. Enter with
 none under the arrow keys is `onSubmit`, which React Aria itself never reports (it only commits a custom value), so the

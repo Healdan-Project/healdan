@@ -196,6 +196,14 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Edit Properties' }).click()
       await expect(page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Save' })).toBeVisible()
       await check('the properties form')
+      // Author's list of people open, with the whole page around it: the list comes right after the field, in the form, and
+      // the page stays shown to a screen reader (@healdan/ui's PickField), so nothing hidden holds a link (aria-hidden-focus)
+      const editing = page.getByRole('region', { name: 'Details' })
+      await editing.getByRole('combobox', { name: 'Author', exact: true }).fill('a')
+      await expect(editing.getByRole('listbox').getByRole('option').first()).toBeVisible()
+      await check("the properties form with Author's list open")
+      await page.keyboard.press('Escape')
+      await expect(editing.getByRole('listbox')).toBeHidden()
       await page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Cancel' }).click()
       // A held document's Check-Out Info, a shaded box above the tabs, whose text axe checks for contrast in each theme
       const details = page.getByRole('region', { name: 'Details' })
@@ -265,9 +273,19 @@ for (const scheme of ['light', 'dark'] as const) {
       await main().getByRole('button', { name: 'Upload' }).focus()
       const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.keyboard.press('Alt+Enter')])
       await chooser.setFiles({ name: `Form ${RUN}.txt`, mimeType: 'text/plain', buffer: Buffer.from('form') })
-      await expect(page.getByRole('dialog', { name: 'File Documents' })).toBeVisible()
+      const form = page.getByRole('dialog', { name: 'File Documents' })
+      await expect(form).toBeVisible()
       await check('the File Documents form')
+      // Author's list open in the dialog: it is drawn in the dialog, over its fields, and the dialog's other fields stay shown
+      // to a screen reader (@healdan/ui's PickField); Escape closes the list and leaves the dialog open
+      await form.getByRole('combobox', { name: 'Author', exact: true }).fill('a')
+      await expect(form.getByRole('listbox').getByRole('option').first()).toBeVisible()
+      await check("the File Documents form with Author's list open")
       await page.keyboard.press('Escape')
+      await expect(form.getByRole('listbox')).toBeHidden()
+      await expect(form).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(form).toBeHidden()
     })
 
     test('the rename field, the delete question and the Help menu', async () => {

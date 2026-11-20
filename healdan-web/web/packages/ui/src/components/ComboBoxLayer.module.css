@@ -1,0 +1,19 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* Where a combo box's list is drawn (ComboBoxLayer.tsx): right after the box in the page, but as big as the window and
+   fixed over it, so an element round the box that clips or scrolls (overflow) can't cut the list off, and one that is
+   positioned can't move it (React Aria 1.22 places a list inside a positioned element wrongly, shifting it by its 12-pixel
+   padding). Above the page's own layers (its panes' 20), below a dialog's (100); in a dialog it is inside the dialog's own
+   layer, so above the dialog's fields. It takes no clicks itself, only its list does. */
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  pointer-events: none;
+}
+
+/* The list in it */
+.inLayer {
+  pointer-events: auto;
+}

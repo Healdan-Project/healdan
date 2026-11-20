@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useState, type Key } from 'react'
-import { ComboBox as AriaComboBox, FieldError, Input, Label, ListBox, ListBoxItem, Popover } from 'react-aria-components'
+import { ComboBox as AriaComboBox, FieldError, Input, Label, ListBox, ListBoxItem } from 'react-aria-components'
 import { Icon, type IconName } from '../icons'
 import comboStyles from './ComboBox.module.css'
+import { ComboBoxLayer, ComboBoxPopover } from './ComboBoxLayer'
 import styles from './Fields.module.css'
 
 export interface PickFieldOption {
@@ -36,12 +37,16 @@ export interface PickFieldProps {
 /**
  * A field that picks one of many, found as the person types (a React Aria ComboBox with its label above it, as the
  * other fields have): an option is picked with the arrow keys and Enter, or a click. Text left half typed goes back to
- * what was picked; an emptied box picks nothing.
+ * what was picked; an emptied box picks nothing. The list comes right after the field, so it is in the caller's form or
+ * dialog, and what is round it, a dialog's other fields too, stays shown to a screen reader while it's open
+ * (`ComboBoxLayer`, as for `ComboBox`).
  */
 export function PickField({ label, required, error, value, onChange, options, onTextChange }: PickFieldProps) {
   const [text, setText] = useState(value?.label ?? '')
   // A value changed from outside (the form opening again) shows its label: set as it draws, not in an effect
   const [shown, setShown] = useState(value)
+  // Where the list is drawn (ComboBoxLayer)
+  const [layer, setLayer] = useState<HTMLDivElement | null>(null)
   if (shown?.id !== value?.id || shown?.label !== value?.label) {
     setShown(value)
     setText(value?.label ?? '')
@@ -83,47 +88,50 @@ export function PickField({ label, required, error, value, onChange, options, on
   }
 
   return (
-    <AriaComboBox
-      className={styles.field}
-      items={items}
-      inputValue={text}
-      onInputChange={type}
-      selectedKey={value?.id ?? null}
-      onSelectionChange={pick}
-      isRequired={required}
-      validationBehavior="aria"
-      isInvalid={error ? true : undefined}
-      menuTrigger="input"
-    >
-      <Label className={styles.label}>
-        {label}
-        {required && (
-          <span className={styles.mark} aria-hidden>
-            {' *'}
-          </span>
-        )}
-      </Label>
-      <Input className={styles.input} onBlur={leave} />
-      <FieldError className={styles.error}>{error}</FieldError>
-      <Popover className={comboStyles.popover} placement="bottom start" offset={4}>
-        <ListBox className={comboStyles.list}>
-          {(option: PickFieldOption) => (
-            <ListBoxItem id={option.id} textValue={option.label} className={comboStyles.option}>
-              {option.icon && <Icon name={option.icon} />}
-              {/* One text, so the name is the label, a space, then the secondary text, as a screen reader reads what is drawn */}
-              <span className={comboStyles.label}>
-                {option.label}
-                {option.meta && (
-                  <>
-                    {' '}
-                    <span className={comboStyles.meta}>{option.meta}</span>
-                  </>
-                )}
-              </span>
-            </ListBoxItem>
+    <>
+      <AriaComboBox
+        className={styles.field}
+        items={items}
+        inputValue={text}
+        onInputChange={type}
+        selectedKey={value?.id ?? null}
+        onSelectionChange={pick}
+        isRequired={required}
+        validationBehavior="aria"
+        isInvalid={error ? true : undefined}
+        menuTrigger="input"
+      >
+        <Label className={styles.label}>
+          {label}
+          {required && (
+            <span className={styles.mark} aria-hidden>
+              {' *'}
+            </span>
           )}
-        </ListBox>
-      </Popover>
-    </AriaComboBox>
+        </Label>
+        <Input className={styles.input} onBlur={leave} />
+        <FieldError className={styles.error}>{error}</FieldError>
+        <ComboBoxPopover layer={layer} className={comboStyles.popover} placement="bottom start" offset={4}>
+          <ListBox className={comboStyles.list}>
+            {(option: PickFieldOption) => (
+              <ListBoxItem id={option.id} textValue={option.label} className={comboStyles.option}>
+                {option.icon && <Icon name={option.icon} />}
+                {/* One text, so the name is the label, a space, then the secondary text, as a screen reader reads what is drawn */}
+                <span className={comboStyles.label}>
+                  {option.label}
+                  {option.meta && (
+                    <>
+                      {' '}
+                      <span className={comboStyles.meta}>{option.meta}</span>
+                    </>
+                  )}
+                </span>
+              </ListBoxItem>
+            )}
+          </ListBox>
+        </ComboBoxPopover>
+      </AriaComboBox>
+      <ComboBoxLayer onLayer={setLayer} />
+    </>
   )
 }
