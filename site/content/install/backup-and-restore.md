@@ -17,21 +17,27 @@ Run these from the folder with Healdan's `compose.yaml`. The app stops for the l
 
 ```bash
 docker compose stop app
-docker compose exec db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump -u"$MARIADB_USER" --single-transaction "$MARIADB_DATABASE"' > logicaldoc-db.sql
+docker compose exec -T db sh -c 'pg_dump -U postgres -Fc "$HEALDAN_DB_NAME"' > logicaldoc-db.dump
 docker run --rm -v logicaldoc_logicaldoc-conf:/conf -v logicaldoc_logicaldoc-repository:/repository \
   -v "$PWD":/backup busybox tar czf /backup/logicaldoc-files.tgz /conf /repository
 docker compose start app
 ```
 
-That leaves two files: `logicaldoc-db.sql`, the database, and `logicaldoc-files.tgz`, the configuration and the
+That leaves two files: `logicaldoc-db.dump`, the database, and `logicaldoc-files.tgz`, the configuration and the
 documents. Keep them together. The app's moves between [storage backends](../../admin/storage-backends/) stop with
 it, and carry on once it's started again.
+
+`pg_dump` is PostgreSQL's own backup tool. It runs inside the database's container, as PostgreSQL's administrator,
+`postgres`, which needs no password there, and `-Fc` writes PostgreSQL's compressed format, which `pg_restore` reads
+back. If `DB_HOST` points at a PostgreSQL of your own, back its database up there instead: the stack's `db` holds
+none of Healdan's data. A backup made before the install [moved from MariaDB](../moving-from-mariadb/), `logicaldoc-db.sql`, restores
+only onto a version that runs on MariaDB.
 
 ## What the Backup Holds
 
 | File | What it holds |
 |---|---|
-| `logicaldoc-db.sql` | the database: documents, matters, users and settings, each storage backend's settings with its sealed S3 secret, and the record of which backend holds each file |
+| `logicaldoc-db.dump` | the database: documents, matters, users and settings, each storage backend's settings with its sealed S3 secret, and the record of which backend holds each file |
 | `logicaldoc-files.tgz` | the configuration volume, the storage backends' key files and the key that seals secrets among it; and the repository volume: Original's files, staging (saves into a Store on S3 not uploaded yet), Original's `.held` folder of [held copies](../../admin/storage-backends/held-deletes/), the search index and the logs |
 
 Neither holds:
@@ -126,6 +132,12 @@ with Healdan's `compose.yaml`:
 docker compose stop app
 ```
 
+Restore onto a stack that has never started: Healdan cloned, and `.env` written, as for a
+[new install](../quick-start/). Run these from the folder with Healdan's `compose.yaml`. The database comes back
+before the app's first start. An app that starts on an empty database beside a repository that holds documents
+stops at once, saying `the database is empty, but the repository volume already holds an install's files`, rather
+than make a new, empty install beside them.
+
 {{% steps %}}
 
 ### Start the Database
@@ -134,13 +146,20 @@ docker compose stop app
 docker compose up -d db
 ```
 
-Wait until `docker compose ps` shows it healthy.
+Wait until `docker compose ps` shows it healthy. Its first start makes the app's role and an empty database, from
+`DB_USER`, `DB_PASSWORD` and `DB_NAME` in `.env`.
 
 ### Load the Database
 
 ```bash
-docker compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE"' < logicaldoc-db.sql
+docker compose exec -T db sh -c 'pg_restore -U "$HEALDAN_DB_USER" -d "$HEALDAN_DB_NAME" --no-owner --exit-on-error --single-transaction' < logicaldoc-db.dump
 ```
+
+It prints nothing when it works. It loads as the app's own role, so the app owns the tables, as it must to upgrade
+them later, whatever the backup's server called its role. It loads all or nothing: if it meets an error, it stops,
+loads nothing, and says why. `relation "…" already exists` means the database isn't empty, as when
+the app has already started on this stack: on a stack made for this restore, which holds nothing else, start again
+on empty volumes with `docker compose down -v`.
 
 ### Bring LogicalDOC's Tables Up to Date
 
@@ -239,7 +258,7 @@ docker run --rm --env-file restic.env restic/restic:0.18.1 init
 After each backup, from the same folder:
 
 ```bash
-docker run --rm --env-file restic.env -v "$PWD":/backup:ro restic/restic:0.18.1 backup --host healdan /backup/logicaldoc-db.sql /backup/logicaldoc-files.tgz
+docker run --rm --env-file restic.env -v "$PWD":/backup:ro restic/restic:0.18.1 backup --host healdan /backup/logicaldoc-db.dump /backup/logicaldoc-files.tgz
 docker run --rm --env-file restic.env restic/restic:0.18.1 forget --keep-daily 30 --prune
 ```
 
@@ -260,7 +279,7 @@ To restore, get the files back from the offsite copy, into the folder you run th
 docker run --rm --env-file restic.env -v "$PWD":/restore restic/restic:0.18.1 restore latest --target /restore
 ```
 
-They land in a `backup` folder beneath it, as `backup/logicaldoc-db.sql` and `backup/logicaldoc-files.tgz`. restic
+They land in a `backup` folder beneath it, as `backup/logicaldoc-db.dump` and `backup/logicaldoc-files.tgz`. restic
 runs as root in its container, so they come back with the owners they had when they were backed up, by user ID:
 `logicaldoc-files.tgz` belongs to root, as the backup made it, and the rest to the user who ran the backup. On another
 server that ID may be someone else's, or nobody's: make the files yours with `sudo chown -R "$USER" backup`. For an

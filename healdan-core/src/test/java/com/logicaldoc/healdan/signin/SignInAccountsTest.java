@@ -54,6 +54,7 @@ import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.healdan.token.ApiTokens;
+import com.logicaldoc.healdan.util.StorableText;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -585,12 +586,38 @@ public class SignInAccountsTest extends AbstractHealdanTestCase {
 		DbSnapshot before = snapshot();
 
 		String tooLong = "a".repeat(256);
-		String emoji = "jane" + new String(Character.toChars(0x1F600));
-		for (String username : Arrays.asList("bob", "BOB", "admin", "Admin", "_system", "a>b", "", "   ", null,
-				tooLong, emoji, " padded", "line\nbreak"))
-			refused("username-taken", accounts().decide(entra, claims("oid-" + username, username, null, "g-lit")));
+		// PostgreSQL stores no NUL, and a lone surrogate isn't a character (PostgreSQL spec section 7.5)
+		List<String> usernames = Arrays.asList("bob", "BOB", "admin", "Admin", "_system", "a>b", "", "   ", null,
+				tooLong, "ja\u0000ne", "jane\uD83D", " padded", "line\nbreak");
+		// Each its own identity, which a provider's signed token carries as it is
+		for (int i = 0; i < usernames.size(); i++)
+			refused("username-taken", accounts().decide(entra, claims("oid-" + i, usernames.get(i), null, "g-lit")));
 
 		before.assertUnchanged();
+
+		// An emoji is kept
+		String emoji = "jane" + new String(Character.toChars(0x1F600));
+		assertEquals(emoji, UserDAO.get()
+				.findById(allowed(accounts().decide(entra, claims("oid-emoji", emoji, null, "g-lit")), true, true)
+						.getId(), true)
+				.getUsername());
+	}
+
+	@Test
+	public void testClaimsKeepEmoji() {
+		String party = new String(Character.toChars(0x1F389));
+		assertEquals(new Names("Ann " + party, "Smith"), namesOf("Ann " + party, "Smith", null));
+		// Whatever CE's sanitiser makes of a NUL or a lone surrogate, the name is one PostgreSQL stores
+		Names messy = namesOf("A\u0000nn", "Sm\uD83Cith", null);
+		assertTrue(messy.first(), StorableText.holds(messy.first()));
+		assertTrue(messy.last(), StorableText.holds(messy.last()));
+		// Cut to the column, a name loses an emoji the cut would split whole
+		assertEquals(new Names("x".repeat(254), null),
+				namesOf("x".repeat(254) + party + "y", null, null));
+
+		assertEquals("ann" + party + "@firm.example",
+				SignInAccounts.email(claims("oid-1", "ann", "ann" + party + "@firm.example")));
+		assertNull(SignInAccounts.email(claims("oid-1", "ann", "ann\uD83C@firm.example")));
 	}
 
 	/** CE renames a deleted account, but its row keeps the new name under the unique index */

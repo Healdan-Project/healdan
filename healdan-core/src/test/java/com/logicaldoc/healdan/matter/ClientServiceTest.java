@@ -73,19 +73,23 @@ public class ClientServiceTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testNameMustFitTheDatabase() throws Exception {
-		// MariaDB's utf8 tables hold no character beyond the Basic Multilingual Plane, such as an emoji (R33)
-		String message = "The client name cannot contain emoji or other characters the database can't store.";
+		// PostgreSQL stores no NUL, and a lone surrogate isn't a character (PostgreSQL spec section 7.5)
+		String message = "The client name cannot contain characters Healdan can't keep.";
 		HealdanRuleException refused = assertThrows(HealdanRuleException.class,
-				() -> service.create(1, "Party \uD83C\uDF89", admin));
+				() -> service.create(1, "Party\u0000Time", admin));
 		assertEquals(message, refused.getMessage());
 		assertNull(ClientDAO.get().findByNumber(1));
-		// A lone surrogate too
-		assertThrows(HealdanRuleException.class, () -> service.create(1, "Half \uD83C", admin));
-
-		Client client = service.create(1, "Caf\u00e9 \u2013 \u4e2d\u6587", admin);
-		refused = assertThrows(HealdanRuleException.class,
-				() -> service.rename(client.getId(), "\uD83C\uDF89", admin));
+		refused = assertThrows(HealdanRuleException.class, () -> service.create(1, "Half \uD83C", admin));
 		assertEquals(message, refused.getMessage());
+		assertNull(ClientDAO.get().findByNumber(1));
+
+		// An emoji is kept
+		Client client = service.create(1, "Party \uD83C\uDF89", admin);
+		assertEquals("Party \uD83C\uDF89", ClientDAO.get().findByNumber(1).getName());
+		refused = assertThrows(HealdanRuleException.class,
+				() -> service.rename(client.getId(), "\u0000", admin));
+		assertEquals(message, refused.getMessage());
+		service.rename(client.getId(), "Caf\u00e9 \u2013 \u4e2d\u6587", admin);
 		assertEquals("Caf\u00e9 \u2013 \u4e2d\u6587", ClientDAO.get().findByNumber(1).getName());
 	}
 

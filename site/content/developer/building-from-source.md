@@ -149,6 +149,37 @@ When Grant File Access asks, go up one level from the folder it opens in and gra
 holds every test's folder, so the app doesn't ask again.
 The one that only compiles the AppleScript (`EveryScriptCompiles`) starts nothing and needs no variable.
 
+## Running the WAR Outside Docker
+
+The [Docker stack](../../install/quick-start/) is the only install Healdan supports, and the only one its manuals
+describe. The WAR also runs in a Tomcat of your own, against a PostgreSQL 18 database made as
+[A PostgreSQL of Your Own](../../install/what-runs/#a-postgresql-of-your-own) gives it, but it then gets none of the
+start-up tool's work (see [The Start-Up Tool](../how-healdan-extends-logicaldoc/#the-start-up-tool)):
+
+- the checks of the server and the database: PostgreSQL 18 or later, a UTF-8 database, a role that can create tables
+  in its schema, and the warning for a collation that doesn't sort by code point;
+- the guard that stops an install from starting empty beside its own files, or on a move from MariaDB that didn't
+  finish;
+- the settings it owns in `context.properties` on every start: `jdbc.driver`, `jdbc.dbms`, `hibernate.dialect`, and
+  `store`, without which Healdan's storage is off;
+- the 50-second `lock_timeout` it gives the app's role in its database, without which a lock cycle can wait for good;
+- `?logServerErrorDetail=false` on the JDBC URL, without which a failed statement's exception quotes the row's values
+  into Healdan's log.
+
+Set the last two by hand. The lock timeout, once, as the app's role or as a superuser, naming your role and
+database:
+
+```sql
+alter role logicaldoc in database logicaldoc set lock_timeout = '50s';
+```
+
+It takes effect on the role's next connection, so restart Tomcat after it. The URL parameter goes at the end of
+`jdbc.url` in `context.properties`:
+
+```properties
+jdbc.url=jdbc:postgresql://localhost:5432/logicaldoc?logServerErrorDetail=false
+```
+
 ## Good to Know
 
 - `logicaldoc-parent` is a module of the build, and the root POM inherits from it, so dependency and plugin

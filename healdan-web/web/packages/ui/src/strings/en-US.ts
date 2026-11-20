@@ -238,7 +238,7 @@ export const enUS = {
   'favorites.renameField': 'Name of Favorite {name}',
   'favorites.where': '{name} · {where}',
   'favorites.tooLong': "A favorite's name can't be longer than 255 characters.",
-  'favorites.invalid': "The name has a character Healdan can't keep, such as an emoji.",
+  'favorites.invalid': "The name has a character Healdan can't keep.",
   'folder.actions': 'Folder Actions',
   'folder.empty': 'This folder is empty.',
   'folder.more': 'More for {name}',

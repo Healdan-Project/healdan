@@ -254,8 +254,8 @@ public class Setup implements EntryPoint {
 			valueMap.put(entry.getKey(), entry.getValue()[0]);
 
 		dbEngine.setValueMap(valueMap);
-		// Healdan: MariaDB is the database it runs on
-		dbEngine.setValue(MARIADB);
+		// Healdan: PostgreSQL is the database it runs on
+		dbEngine.setValue(POSTGRESQL);
 		dbEngine.setShowIfCondition(
 				(item, value, form) -> !I18N.message(EMBEDDED).equals(databaseForm.getValue(DB_TYPE)));
 		RequiredIfValidator ifValidator = new RequiredIfValidator();

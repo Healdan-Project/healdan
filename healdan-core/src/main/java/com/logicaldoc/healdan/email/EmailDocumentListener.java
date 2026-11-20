@@ -25,9 +25,9 @@ import com.logicaldoc.util.spring.Context;
 /**
  * Sets the Date filed of every new document to now, whatever came with it, and
  * fills the email fields of a new {@code .eml} or {@code .msg} from the file,
- * its Message-ID among them (spec §6.8; M5 spec §6.1). The document is named
+ * its Message-ID among them (spec \u00a76.8; M5 spec \u00a76.1). The document is named
  * after the subject. Once it is stored, the Message-ID the listener read from
- * the file goes into {@link EmailIndex} (M5 spec §6.2), the index the
+ * the file goes into {@link EmailIndex} (M5 spec \u00a76.2), the index the
  * once-per-matter rule and the lookups use; a new email whose file gave none,
  * such as a copy's clone stored without its file, keeps the Message-ID
  * property it came with, and that goes in instead. Any other document is no
@@ -117,7 +117,7 @@ public class EmailDocumentListener implements DocumentListener {
 		if (extension == null)
 			return;
 
-		// An email that can't be read keeps its own name, which must still fit the database (R33)
+		// An email that can't be read keeps its own name, with only what Healdan can't keep replaced
 		File file = transaction != null ? transaction.getFile() : null;
 		Optional<EmailFields> extracted = file != null ? EmailFields.extract(file, extension) : Optional.empty();
 		String named = FileNames.keep(fileName);

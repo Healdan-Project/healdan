@@ -22,7 +22,7 @@ import com.logicaldoc.util.spring.Context;
  */
 public final class LegacyDocNumbers {
 
-	// trim() on both databases, so a number stored with spaces around it is found as on MariaDB before
+	// trim(), so a number stored with spaces around it is found, as it was when Healdan ran on MariaDB
 	private static final String QUERY = """
 			select d.ld_id
 			  from ld_document d

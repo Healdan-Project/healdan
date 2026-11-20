@@ -26,7 +26,7 @@ import org.slf4j.LoggerFactory;
 import com.logicaldoc.core.communication.EMail;
 import com.logicaldoc.core.communication.MailUtil;
 import com.logicaldoc.core.communication.Recipient;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.util.StorableText;
 
 import jakarta.mail.Address;
 import jakarta.mail.Message;
@@ -35,10 +35,11 @@ import jakarta.mail.internet.MailDateFormat;
 import jakarta.mail.internet.MimeMessage;
 
 /**
- * What the profile keeps of an email (spec §6.8). Every field is read on its own,
+ * What the profile keeps of an email (spec \u00a76.8). Every field is read on its own,
  * so a damaged header costs only that field; an unknown field is null, never
- * "now". A character beyond the Basic Multilingual Plane becomes U+FFFD
- * ({@link BasicPlane}). Nothing here throws.
+ * "now". A NUL becomes a space and a lone surrogate U+FFFD
+ * ({@link StorableText}); every other character, an emoji too, is kept.
+ * Nothing here throws.
  * 
  * @param from the sender, as {@code Name <addr>}
  * @param to the To recipients, joined with {@code ", "}
@@ -232,16 +233,11 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 		return new EmailFields(text(from), text(to), text(cc), text(subject), sent, received, messageId);
 	}
 
-	/*
-	 * A character beyond the Basic Multilingual Plane, such as an emoji, would
-	 * fail the insert on MariaDB (R33): it becomes U+FFFD, before the cut, which
-	 * then splits no surrogate pair
-	 */
+	/* What PostgreSQL can store, cut to the column without splitting a surrogate pair */
 	private static String text(String value) {
 		if (StringUtils.isBlank(value))
 			return null;
-		String clean = BasicPlane.replaceOthers(value).replace('\u0000', ' ').trim();
-		return clean.length() > MAX_TEXT ? clean.substring(0, MAX_TEXT) : clean;
+		return StorableText.cut(StorableText.clean(value).trim(), MAX_TEXT);
 	}
 
 	private interface Reader<T> {

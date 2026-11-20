@@ -36,8 +36,7 @@ trap cleanup EXIT
 api() { curl -fsS -u admin:admin "$@"; }
 app() { docker exec "$APP_CONTAINER" "$@"; }
 db_query() {
-  docker exec "$DB_CONTAINER" sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "$1"' \
-    sh "$1"
+  docker exec "$DB_CONTAINER" sh -c 'PGPASSWORD="$HEALDAN_DB_PASSWORD" psql -X -q -At -F "$(printf "\t")" -h 127.0.0.1 -U "$HEALDAN_DB_USER" -d "$HEALDAN_DB_NAME" -c "$1"' sh "$1"
 }
 is_png() { [ "$(od -An -tx1 -N4 "$1" | tr -d ' \n')" = 89504e47 ]; }
 
@@ -309,8 +308,10 @@ done
 failed_once() {
   local row attempts retry error
   while :; do
-    row=$(db_query "select hd_attempts, timestampdiff(second, now(), hd_nexttry), coalesce(hd_lasterror, '')
-      from hd_preview_job where hd_docid = $bad_id") || { echo "  can't read bad.docx's job"; return 1; }
+    # The error on the row's one line: psql prints a value's line breaks and tabs as they are
+    row=$(db_query "select hd_attempts, cast(extract(epoch from hd_nexttry - now()) as int),
+      translate(coalesce(hd_lasterror, ''), E'\n\r\t', '   ') from hd_preview_job where hd_docid = $bad_id") \
+      || { echo "  can't read bad.docx's job"; return 1; }
     if [ -z "$row" ]; then
       echo "  bad.docx has no job: it was converted, or never queued"
       return 1

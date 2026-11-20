@@ -10,10 +10,10 @@ is required. After changing `.env`, run `docker compose up -d`.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `DB_PASSWORD` | (required) | The MariaDB password for `DB_USER` |
-| `DB_NAME` | `logicaldoc` | The database's name |
-| `DB_USER` | `logicaldoc` | The database user |
-| `DB_HOST` / `DB_PORT` | `db` / `3306` | Change these only to use a MariaDB outside the stack |
+| `DB_PASSWORD` | (required) | The password of `DB_USER` |
+| `DB_NAME` | `logicaldoc` | The database's name. Not `postgres`, `template0` or `template1`, which PostgreSQL has already |
+| `DB_USER` | `logicaldoc` | PostgreSQL's role for the app, which owns the database. Not `postgres`, PostgreSQL's administrator, and not a name beginning `pg_` |
+| `DB_HOST` / `DB_PORT` | `db` / `5432` | Change these only to use a PostgreSQL outside the stack: see [A PostgreSQL of Your Own](../what-runs/#a-postgresql-of-your-own) |
 | `LOGICALDOC_PUBLIC_URL` | unset | The public HTTPS address when Healdan is behind a proxy, for example `https://docs.example.org`. Used in links and emails |
 | `LOGICALDOC_BIND` | `127.0.0.1` | The host address the app is published on. `127.0.0.1` means this machine only |
 | `LOGICALDOC_PORT` | `8080` | The host port the app is published on |
@@ -31,9 +31,10 @@ is required. After changing `.env`, run `docker compose up -d`.
 - the database connection: `jdbc.url`, `jdbc.username` and `jdbc.password`;
 - the public address (`server.url`), when `LOGICALDOC_PUBLIC_URL` is set.
 
-Change those in `.env`. Healdan also writes one setting of its own on every start, `store`, which makes its storage
-keep the documents' files, so changing `store` yourself does nothing. Everything else is set in the app's admin
-screens, and survives restarts, recreating the containers and rebuilding the image.
+Change those in `.env`. Healdan also writes four settings of its own on every start, so changing them yourself does
+nothing: `store`, which makes its storage keep the documents' files, and `jdbc.driver`, `jdbc.dbms` and
+`hibernate.dialect`, which name PostgreSQL. Everything else is set in the app's admin screens, and survives restarts,
+recreating the containers and rebuilding the image.
 
 ## Settings Without a Screen
 
@@ -69,30 +70,40 @@ docker compose start app
 
 ## Changing the Database Password
 
-MariaDB only reads `DB_PASSWORD` when it first creates its data volume. To change the password later:
+The stack's PostgreSQL reads `DB_PASSWORD` only when it first creates its data volume, to make the app's role. To
+change the password later:
 
 {{% steps %}}
 
 ### Open a Database Session
 
-Run this, and enter the current password when asked. Use your `DB_USER` if you changed it.
+From the folder with Healdan's `compose.yaml`:
 
 ```bash
-docker compose exec db mariadb -u logicaldoc -p
+docker compose exec db psql -U postgres
 ```
+
+This signs in as PostgreSQL's administrator, `postgres`, which needs no password inside the database's container,
+and can't sign in from anywhere else.
 
 ### Set the New Password
 
-At the `MariaDB` prompt:
+At the `postgres=#` prompt, run this, with your `DB_USER` if you changed it, and type the new password twice. Nothing
+shows as you type.
 
-```sql
-SET PASSWORD = PASSWORD('new-password');
+```text
+\password logicaldoc
 ```
 
-Inside the quotes, write a `'` as `''` and a `\` as `\\`. Nothing else needs escaping.
+psql changes it with `alter role`, and sends PostgreSQL the password already hashed, so it needs no escaping, and the
+password itself never reaches a log. Then type `\q` to leave.
 
 ### Update `.env`
 
-Put the new password in `.env`, then run `docker compose up -d`.
+Put the new password in `.env`, quoted as [Passwords and Special Characters](#passwords-and-special-characters)
+says, then run `docker compose up -d`.
 
 {{% /steps %}}
+
+On a PostgreSQL of your own, change the role's password there, in `psql` with `\password` as above, or with
+`alter role logicaldoc password '…';`, writing a `'` inside the quotes as `''`. Then update `.env` the same way.

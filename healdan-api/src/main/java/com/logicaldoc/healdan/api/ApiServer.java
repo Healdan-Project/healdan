@@ -80,15 +80,17 @@ public class ApiServer implements ApplicationContextAware {
 
 	/**
 	 * @return the providers every request goes through: JSON, problems, CORS
-	 *         (before matching, so a preflight needs no token), the token
-	 *         check, the admin API's checks after it, and the upload limit and
-	 *         clean-up
+	 *         (before matching, so a preflight needs no token), the refusal of
+	 *         a query parameter Healdan can't keep (before matching too), the
+	 *         token check, the admin API's checks after it, and the upload
+	 *         limit and clean-up
 	 */
 	static List<Object> providers() {
 		List<Object> providers = new ArrayList<>();
 		providers.add(ApiJson.provider());
 		providers.add(new ProblemMapper());
 		providers.add(new CorsFilter());
+		providers.add(new TextFilter());
 		providers.add(new TokenFilter());
 		providers.add(new AdminFilter());
 		providers.add(new UploadFilter());

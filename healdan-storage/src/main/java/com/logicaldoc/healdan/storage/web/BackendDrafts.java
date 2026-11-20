@@ -26,7 +26,7 @@ import com.logicaldoc.healdan.storage.backend.Endpoints;
 import com.logicaldoc.healdan.storage.backend.S3Backend;
 import com.logicaldoc.healdan.storage.backend.S3Settings;
 import com.logicaldoc.healdan.storage.crypto.BackendKeys;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.util.StorableText;
 
 /**
  * A storage backend's settings as the Storage tab sends them, read into a {@link Draft} and checked before anything is
@@ -147,22 +147,21 @@ final class BackendDrafts {
 	/**
 	 * @param typed a backend's name as typed
 	 * @return it stripped
-	 * @throws HealdanRuleException if it is empty, too long, or holds characters the database can't
+	 * @throws HealdanRuleException if it is empty, too long, or holds characters Healdan can't keep
 	 */
 	static String name(String typed) throws HealdanRuleException {
 		return text(typed, "name", MAX_NAME);
 	}
 
-	/** @return the text, stripped, which the database can hold */
+	/** @return the text, stripped, which Healdan can keep ({@link StorableText}) */
 	private static String text(String value, String what, int max) throws HealdanRuleException {
 		String text = StringUtils.strip(value);
 		if (StringUtils.isEmpty(text))
 			throw refuse("The %s can't be empty.".formatted(what));
 		if (text.length() > max)
 			throw refuse("The %s can't be longer than %d characters.".formatted(what, max));
-		// MariaDB's utf8 tables hold no character beyond the Basic Multilingual Plane (R33)
-		if (!BasicPlane.holds(text))
-			throw refuse("The %s can't contain emoji or other characters the database can't store.".formatted(what));
+		if (!StorableText.holds(text))
+			throw refuse("The %s can't contain %s.".formatted(what, StorableText.CANT_KEEP));
 		return text;
 	}
 
@@ -192,8 +191,8 @@ final class BackendDrafts {
 		if (prefix.length() > MAX_PLACE)
 			throw refuse("The prefix can't be longer than %d characters, with the / it is kept with at its end."
 					.formatted(MAX_PLACE));
-		if (!BasicPlane.holds(prefix))
-			throw refuse("The prefix can't contain emoji or other characters the database can't store.");
+		if (!StorableText.holds(prefix))
+			throw refuse("The prefix can't contain " + StorableText.CANT_KEEP + ".");
 		String accessKey = text(backend.getAccessKey(), "access key", MAX_ACCESS_KEY);
 		S3Settings settings;
 		try {

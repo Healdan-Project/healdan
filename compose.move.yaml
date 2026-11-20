@@ -1,0 +1,26 @@
+# Run with compose.yaml, once, to move an install from MariaDB: see the Install manual's Moving from MariaDB to PostgreSQL.
+services:
+  mariadb:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-logicaldoc}
+      MARIADB_USER: ${DB_USER:-logicaldoc}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      TZ: ${TZ:-UTC}
+    # As the old stack's db service ran it. LogicalDOC's MariaDB scripts declare utf8/utf8_bin per table; this is the
+    # default for anything else.
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    volumes:
+      - db-data:/var/lib/mysql
+  app:
+    depends_on:
+      mariadb:
+        condition: service_healthy
+volumes:
+  db-data:

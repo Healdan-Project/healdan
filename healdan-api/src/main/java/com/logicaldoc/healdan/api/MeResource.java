@@ -211,7 +211,7 @@ public class MeResource {
 	 * @return the favorite, renamed; {@code 404} if the caller has no such
 	 *         favorite, or can no longer read its item; {@code 422 validation}
 	 *         for a name over 255 characters, or with a control character or
-	 *         one the database can't store
+	 *         one Healdan can't keep
 	 */
 	@PATCH
 	@Path("favorites/{id: [0-9]+}")
@@ -249,9 +249,8 @@ public class MeResource {
 	 * @return the name stripped of the spaces around it; null when there's
 	 *         nothing else, for the item's own name
 	 * @throws ApiProblem {@code 422 validation} for the field {@code name}:
-	 *         {@code invalid} for a control character or one the database
-	 *         can't store, such as an emoji, and {@code too-long} over 255
-	 *         characters
+	 *         {@code invalid} for a control character or one Healdan can't
+	 *         keep, and {@code too-long} over 255 characters
 	 */
 	static String favoriteName(String requested) {
 		String name = StringUtils.strip(requested);

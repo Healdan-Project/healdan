@@ -64,7 +64,7 @@ import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.spring.Context;
 
 /**
- * Spec §5.4: a search folder lists the documents of its matter that changed
+ * Spec \u00a75.4: a search folder lists the documents of its matter that changed
  * within its window, newest change first, that the viewer can read.
  * <p>
  * A lean layout, as each document costs over a second: a Store "Main" that
@@ -97,7 +97,7 @@ public class SearchFolderServiceTest extends AbstractHealdanTestCase {
 
 	private static final String BAD_NAME = "A search folder name can't be empty or longer than 255 characters.";
 
-	private static final String OUTSIDE_PLANE_NAME = "A search folder name can't contain emoji or other characters the database can't store.";
+	private static final String CANT_KEEP_NAME = "A search folder name can't contain characters Healdan can't keep.";
 
 	private static final SearchFolderRule ANYONE_30 = rule(30, false, Kind.ALL, null, null);
 
@@ -256,6 +256,20 @@ public class SearchFolderServiceTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testClassStoredWithATrailingSpaceMatches() throws Exception {
+		long setId = AttributeSetDAO.get().findByName(HealdanConstants.PROFILE_TEMPLATE, Tenant.DEFAULT_ID, true)
+				.getId();
+		AttributeOptionDAO.get().store(new AttributeOption(setId, HealdanConstants.ATTR_DOCCLASS, "Letters"));
+		Document letter = createWith(documents, "letter.txt", alice, Map.of(HealdanConstants.ATTR_DOCCLASS, "Letters"));
+		// As a value can come from before Healdan, or through the Classic Interface: PostgreSQL compares the space
+		jdbc.update("update ld_document_ext set ld_stringvalue = ? where ld_docid = ? and ld_name = ?", "Letters ",
+				letter.getId(), HealdanConstants.ATTR_DOCCLASS);
+
+		// The stored value is compared without the spaces at its ends, as the rule's is stripped when it's saved
+		assertEquals(List.of(letter.getId()), evaluateWith(rule(30, false, Kind.ALL, "Letters", null)));
+	}
+
+	@Test
 	public void testExcludesOtherMattersAndDeleted() throws Exception {
 		Matter other = fx.matter(client, 2, "Other", store, "Documents");
 		Folder otherWorkspace = FolderDAO.get().findById(other.getFolderId());
@@ -404,7 +418,12 @@ public class SearchFolderServiceTest extends AbstractHealdanTestCase {
 		assertRefused(SUBCLASS_WITHOUT_CLASS, () -> service.create(documents.getId(), "Bad",
 				rule(30, false, Kind.ALL, null, "Sub1"), alice));
 		assertRefused(BAD_NAME, () -> service.create(documents.getId(), " ", ANYONE_30, alice));
-		assertRefused(OUTSIDE_PLANE_NAME, () -> service.create(documents.getId(), "Recent \ud83d\udd0d", ANYONE_30, alice));
+		// PostgreSQL stores no NUL, and a lone surrogate isn't a character (PostgreSQL spec section 7.5)
+		assertRefused(CANT_KEEP_NAME, () -> service.create(documents.getId(), "Rec\u0000ent", ANYONE_30, alice));
+		assertRefused(CANT_KEEP_NAME, () -> service.create(documents.getId(), "Recent \ud83d", ANYONE_30, alice));
+		// An emoji is kept
+		assertEquals("Recent \ud83d\udd0d",
+				reload(service.create(documents.getId(), "Recent \ud83d\udd0d", ANYONE_30, alice)).getName());
 
 		Folder search = create(documents, alice);
 		assertRefused(BAD_NAME, () -> service.update(search.getId(), null, ANYONE_30, alice));

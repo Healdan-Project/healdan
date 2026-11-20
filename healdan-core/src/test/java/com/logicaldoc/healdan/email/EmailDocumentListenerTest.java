@@ -230,29 +230,20 @@ public class EmailDocumentListenerTest extends AbstractHealdanTestCase {
 		assertNull(corrupt.getValue(HealdanConstants.ATTR_EMAILSUBJECT));
 		assertNull(corrupt.getValue(HealdanConstants.ATTR_EMAILSENT));
 
-		// An email that can't be read keeps its own name, without what MariaDB's utf8 tables can't hold (R33)
+		// An email that can't be read keeps its own name, emoji and all
 		Document party = file("corrupt.msg", "Party " + new String(Character.toChars(0x1F389)) + ".msg");
-		assertEquals("Party \ufffd.msg", party.getFileName());
+		assertEquals("Party \ud83c\udf89.msg", party.getFileName());
 	}
 
 	@Test
-	public void testEmojiInHeadersBecomesReplacementCharacter() throws Exception {
-		// MariaDB's utf8 tables hold no character beyond the Basic Multilingual Plane (R33); HSQLDB would
+	public void testEmojiInHeadersIsKept() throws Exception {
+		// PostgreSQL spec section 7.5: what's stored is what was sent
 		Document doc = file("healdan-emoji.eml", "emoji.eml");
-		assertEquals("Ann \ufffd <ann@example.com>", doc.getValue(HealdanConstants.ATTR_EMAILFROM));
-		assertEquals("Bob \ufffd <bob@example.com>", doc.getValue(HealdanConstants.ATTR_EMAILTO));
-		assertEquals("Ren\u00e9e \ufffd <renee@example.com>", doc.getValue(HealdanConstants.ATTR_EMAILCC));
-		assertEquals("Re: \ufffd Sale", doc.getValue(HealdanConstants.ATTR_EMAILSUBJECT));
-		assertEquals("Re_ \ufffd Sale.eml", doc.getFileName());
-		for (String attribute : List.of(HealdanConstants.ATTR_EMAILFROM, HealdanConstants.ATTR_EMAILTO,
-				HealdanConstants.ATTR_EMAILCC, HealdanConstants.ATTR_EMAILSUBJECT))
-			assertNoSurrogate(doc.getValue(attribute).toString());
-		assertNoSurrogate(doc.getFileName());
-	}
-
-	private static void assertNoSurrogate(String text) {
-		for (int i = 0; i < text.length(); i++)
-			assertFalse(text, Character.isSurrogate(text.charAt(i)));
+		assertEquals("Ann \ud83c\udf89 <ann@example.com>", doc.getValue(HealdanConstants.ATTR_EMAILFROM));
+		assertEquals("Bob \ud83d\ude00 <bob@example.com>", doc.getValue(HealdanConstants.ATTR_EMAILTO));
+		assertEquals("Ren\u00e9e \ud83c\udf39 <renee@example.com>", doc.getValue(HealdanConstants.ATTR_EMAILCC));
+		assertEquals("Re: \ud83c\udf89 Sale", doc.getValue(HealdanConstants.ATTR_EMAILSUBJECT));
+		assertEquals("Re_ \ud83c\udf89 Sale.eml", doc.getFileName());
 	}
 
 	@Test

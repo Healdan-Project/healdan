@@ -188,12 +188,22 @@ public class AuthResourceTest extends ApiTestCase {
 		assertEquals(1L, (long) jdbc().queryForObject("select ld_value from ld_sequence where ld_name = ?", Long.class,
 				LoginThrottle.LOGINFAIL_USERNAME + "clerk"));
 
-		// A name the database can't store is invalid
+		// A NUL, which PostgreSQL can't store, is refused as the body is read (PostgreSQL spec section 7.5)
+		ApiResponse nul = post(TOKENS)
+				.json(Map.of("username", "clerk", "password", HealdanFixtures.PASSWORD, "name", "Lap\u0000top"))
+				.send();
+		assertEquals(nul.toString(), 400, nul.status());
+		assertEquals("bad-request", nul.code());
+		assertEquals("The field name has a character Healdan can't keep.", nul.json().path("detail").textValue());
+		assertEquals(0, ApiTokens.get().list(clerk.getId()).size());
+
+		// An emoji is kept
 		ApiResponse emoji = post(TOKENS)
 				.json(Map.of("username", "clerk", "password", HealdanFixtures.PASSWORD, "name", "Laptop \uD83D\uDCBB"))
 				.send();
-		assertEquals(emoji.toString(), 422, emoji.status());
-		assertEquals("invalid", emoji.json().path("fields").path(0).path("code").textValue());
+		assertEquals(emoji.toString(), 201, emoji.status());
+		assertEquals("Laptop \uD83D\uDCBB", emoji.json().path("name").textValue());
+		assertEquals("Laptop \uD83D\uDCBB", row(emoji.json().path("token").textValue()).getName());
 	}
 
 	private int sessionRows(String username) {

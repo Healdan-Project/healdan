@@ -53,8 +53,11 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 
 	private static final String SECRET_TWO = "secret-two-c71d";
 
-	/* Beyond the Basic Multilingual Plane, which MariaDB's utf8 tables can't hold; written without the source's encoding */
+	/* Beyond the Basic Multilingual Plane, which Healdan keeps; written without the source's encoding */
 	private static final String EMOJI = new String(Character.toChars(0x1F600));
+
+	/* What every refusal of a character PostgreSQL can't store says, after the field's name (spec section 7.5) */
+	private static final String CANT_KEEP = " can't contain characters Healdan can't keep.";
 
 	@Rule
 	public TemporaryFolder folder = new TemporaryFolder();
@@ -349,7 +352,7 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testRefusals() {
+	public void testRefusals() throws Exception {
 		// the id
 		assertSaveRefused("provider's id", valid("Entra"), SECRET_ONE);
 		assertSaveRefused("provider's id", valid("two words"), SECRET_ONE);
@@ -389,8 +392,10 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		assertSaveRefused("label", build("entra", null, ENTRA_ISSUER, "c1", "oid", "u", "e", "g"), SECRET_ONE);
 		assertSaveRefused("label", build("entra", "x".repeat(61), ENTRA_ISSUER, "c1", "oid", "u", "e", "g"),
 				SECRET_ONE);
-		assertSaveRefused("label", build("entra", "Sign in " + EMOJI, ENTRA_ISSUER, "c1", "oid", "u", "e", "g"),
+		assertSaveRefused("label" + CANT_KEEP, build("entra", "Sign\u0000in", ENTRA_ISSUER, "c1", "oid", "u", "e", "g"),
 				SECRET_ONE);
+		assertSaveRefused("client id" + CANT_KEEP,
+				build("entra", "Label", ENTRA_ISSUER, "c\uD83D", "oid", "u", "e", "g"), SECRET_ONE);
 
 		// the claims
 		assertSaveRefused("identity claim", build("entra", "Label", ENTRA_ISSUER, "c1", "", "u", "e", "g"), SECRET_ONE);
@@ -422,6 +427,10 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 				"signin.adminAlert", "false", "signin.adminAlert.recipients", "admin", "signin.recheck.minutes", "480"),
 				signInSettings());
 		assertEquals(List.of(), providers().all());
+
+		// An emoji is kept
+		providers().save(build("entra", "Sign in " + EMOJI, ENTRA_ISSUER, "c1", "oid", "u", "e", "g"), SECRET_ONE);
+		assertEquals("Sign in " + EMOJI, providers().find("entra").orElseThrow().label());
 	}
 
 	@Test
@@ -929,12 +938,16 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		assertRefused("value", () -> providers().saveGroups("entra", List.of(new GroupMapping(null, staff.getId()))));
 		assertRefused("value", () -> providers().saveGroups("entra",
 				List.of(new GroupMapping("x".repeat(256), staff.getId()))));
-		assertRefused("value", () -> providers().saveGroups("entra",
-				List.of(new GroupMapping("Sign in " + EMOJI, staff.getId()))));
+		assertRefused("value" + CANT_KEEP, () -> providers().saveGroups("entra",
+				List.of(new GroupMapping("Sign\u0000in", staff.getId()))));
 		assertRefused("group", () -> providers().saveGroups("entra", null));
 
 		// and the map is as it was
 		assertEquals(kept, providers().groups("entra"));
+
+		// An emoji is kept
+		providers().saveGroups("entra", List.of(new GroupMapping("Partners " + EMOJI, staff.getId())));
+		assertEquals("Partners " + EMOJI, providers().groups("entra").get(0).value());
 	}
 
 	@Test
@@ -1054,7 +1067,7 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		assertRefused("label", () -> providers().saveOptions("  ", true, List.of("admin")));
 		assertRefused("label", () -> providers().saveOptions(null, true, List.of("admin")));
 		assertRefused("label", () -> providers().saveOptions("x".repeat(61), true, List.of("admin")));
-		assertRefused("label", () -> providers().saveOptions("Use " + EMOJI, true, List.of("admin")));
+		assertRefused("label" + CANT_KEEP, () -> providers().saveOptions("Use\u0000It", true, List.of("admin")));
 		assertRefused("nobody", () -> providers().saveOptions("Password", true, List.of("admin", "nobody")));
 		assertRefused("recipient", () -> providers().saveOptions("Password", true, List.of()));
 		assertRefused("recipient", () -> providers().saveOptions("Password", true, null));
@@ -1063,6 +1076,10 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		assertEquals("Use a Password", providers().passwordLabel());
 		assertTrue(providers().adminAlert());
 		assertEquals(List.of("admin", "author"), providers().adminAlertRecipients());
+
+		// An emoji is kept
+		providers().saveOptions("Use " + EMOJI, true, List.of("admin"));
+		assertEquals("Use " + EMOJI, providers().passwordLabel());
 	}
 
 	@Test

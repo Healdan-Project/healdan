@@ -4,9 +4,9 @@ weight: 10
 ---
 LogicalDOC Community Edition's settings and tools that Healdan uses as they are.
 
-Healdan's database is MariaDB, the stack's own or a server of your own: Healdan doesn't support MySQL, Oracle or
-SQL Server.
-See [Supported Databases](../../install/what-runs/#supported-databases) in the Install Guide.
+Healdan's database is PostgreSQL 18, the stack's own or a server of your own: Healdan doesn't support MariaDB,
+MySQL, Oracle or SQL Server. See [Supported Databases](../../install/what-runs/#supported-databases) in the Install
+Guide, and [Moving from MariaDB to PostgreSQL](../../install/moving-from-mariadb/) for an install made on MariaDB.
 
 ## Giving a Settings Screen to Others
 

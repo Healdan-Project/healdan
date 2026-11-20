@@ -15,7 +15,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import com.logicaldoc.healdan.util.Savepoints;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -62,15 +61,16 @@ public class PreviewJobs {
 
 	/**
 	 * Queues a file version, due at once. A job already queued stays as it is:
-	 * its insert fails inside a savepoint, so a transaction it joins goes on.
+	 * the insert does nothing on a duplicate key, so a transaction it joins goes on.
 	 *
 	 * @param docId the document
 	 * @param fileVersion the file version
 	 * @param now the current time
 	 */
 	public void add(long docId, String fileVersion, Instant now) {
-		Savepoints.insertIfAbsent(jdbc,
-				"insert into hd_preview_job (hd_docid, hd_fileversion, hd_attempts, hd_nexttry, hd_created) values (?, ?, 0, ?, ?)",
+		jdbc.update(
+				"insert into hd_preview_job (hd_docid, hd_fileversion, hd_attempts, hd_nexttry, hd_created) values (?, ?, 0, ?, ?) "
+						+ "on conflict (hd_docid, hd_fileversion) do nothing",
 				docId, fileVersion, Timestamp.from(now), Timestamp.from(now));
 	}
 

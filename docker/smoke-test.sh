@@ -86,6 +86,81 @@ compose() {
   docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f compose.yaml -f docker/tests/compose.smoke.yaml \
     -f docker/tests/compose.signin.yaml -f docker/tests/compose.storage.yaml "$@"
 }
+# db_query <SQL>: the app's database, as the app's role over TCP, as the app connects; rows tab-separated, no headers
+db_query() {
+  compose exec -T db sh -c 'PGPASSWORD="$HEALDAN_DB_PASSWORD" psql -X -q -At -F "$(printf "\t")" -h 127.0.0.1 -U "$HEALDAN_DB_USER" -d "$HEALDAN_DB_NAME" -c "$1"' sh "$1"
+}
+# PostgreSQL's own log (PostgreSQL spec section 10.1): a statement PostgreSQL refuses is an ERROR line there, whatever
+# the Java around it swallowed. docker/tests/db-log-expected.txt lists those a run is expected to have, one extended
+# regular expression a line, each with its reason above it. A line it doesn't expect is printed, and passes, until the
+# list has held for five consecutive runs of the draft pull request's CI on each architecture (each run's "PostgreSQL's
+# log" lines reporting 0 unexpected); then, before that pull request is marked ready, a commit of it makes check_db_log
+# fail on one: its return 0 becomes [ "$unexpected" = 0 ] (the plan's Task 23).
+# A log that can't be read, or isn't PostgreSQL's, fails now: a clean log has to be one that was read.
+DB_LOG_SERVICE=db
+DB_LOG_EXPECTED=docker/tests/db-log-expected.txt
+# db_log_errors <log file>: each line of the log that holds ERROR:, with the first line of the statement PostgreSQL
+# logged after it for the same process, if it did, appended as " STATEMENT:  <statement>". Its DETAIL, which can quote
+# a row's values, is left out.
+db_log_errors() {
+  awk '
+    function pid(line) { return match(line, /\[[0-9]+\]/) ? substr(line, RSTART, RLENGTH) : "" }
+    function flush() { if (entry != "") print entry; entry = "" }
+    index($0, "ERROR:") { flush(); entry = $0; owner = pid($0); next }
+    entry != "" && pid($0) == owner && index($0, " STATEMENT:  ") { print entry substr($0, index($0, " STATEMENT:  ")); entry = ""; next }
+    entry != "" && pid($0) == owner && $0 ~ / (DETAIL|HINT|CONTEXT|QUERY|LOCATION):  / { next }
+    # A line without a time, such as the second line of a statement, belongs to the entry before it
+    /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] / { flush() }
+    END { flush() }' "$1"
+}
+# check_db_log <the steps the db container's log covers>: reads the db service's whole log, and fails when it can't, when
+# it's empty or isn't PostgreSQL's (no "database system is ready to accept connections"), and when the list of
+# expected lines can't be read. Then it prints the lines read, the ERROR lines' count, expected and unexpected, how many
+# each pattern matched, and every unexpected line, which passes until the list has held.
+check_db_log() {
+  local log=$WORK/db-log lines=$WORK/db-log-errors patterns=$WORK/db-log-patterns status=0 read_lines total unexpected pattern
+  compose logs --no-log-prefix "$DB_LOG_SERVICE" > "$log" 2> "$log.err" || status=$?
+  if [ "$status" != 0 ]; then
+    echo "  couldn't read the $DB_LOG_SERVICE service's log (exit status $status): $(tail -n 3 "$log.err")"
+    return 1
+  fi
+  read_lines=$(wc -l < "$log" | tr -d ' ')
+  if [ "$read_lines" = 0 ]; then
+    echo "  the $DB_LOG_SERVICE service's log is empty"
+    return 1
+  fi
+  if ! grep -qF 'database system is ready to accept connections' "$log"; then
+    echo "  the $read_lines lines of the $DB_LOG_SERVICE service's log have no 'database system is ready to accept" \
+      "connections': they aren't PostgreSQL's log"
+    return 1
+  fi
+  if ! [ -f "$DB_LOG_EXPECTED" ] || ! [ -r "$DB_LOG_EXPECTED" ]; then
+    echo "  there's no readable list of the expected lines at '$DB_LOG_EXPECTED'"
+    return 1
+  fi
+  # grep's 1 is a list with no pattern; 2 is a list it couldn't read
+  status=0
+  grep -vE '^[[:space:]]*(#|$)' "$DB_LOG_EXPECTED" > "$patterns" || status=$?
+  if [ "$status" -gt 1 ]; then
+    echo "  couldn't read the list of the expected lines at '$DB_LOG_EXPECTED'"
+    return 1
+  fi
+  db_log_errors "$log" > "$lines"
+  total=$(wc -l < "$lines" | tr -d ' ')
+  # With no pattern, grep -f matches nothing, so every line is unexpected
+  unexpected=$(grep -cvEf "$patterns" "$lines" || true)
+  # A pattern grep can't read leaves no count: then every line counts as unexpected
+  unexpected=${unexpected:-$total}
+  echo "PostgreSQL's log, $1: $read_lines lines read, $total ERROR lines, $((total - unexpected)) expected and $unexpected unexpected"
+  while IFS= read -r pattern; do
+    echo "  $(grep -cE -- "$pattern" "$lines" || true)  $pattern" | cut -c 1-160
+  done < "$patterns"
+  if [ "$unexpected" != 0 ]; then
+    echo "  unexpected, which don't fail the run until the list has held:"
+    grep -vEf "$patterns" "$lines" | head -n 50 | cut -c 1-400 | sed 's/^/    /'
+  fi
+  return 0
+}
 # The app writes its warnings to dms.log in the repository volume, not to stdout, and step 8 replaces the container
 # but keeps the volume, so the log covers the whole run. docker cp reads it from a stopped container too.
 show_server_log() {
@@ -133,6 +208,8 @@ cleanup() {
     echo "== Garage's last 40 lines of output, and its setup's"
     compose logs --no-log-prefix --tail 40 garage
     compose logs --no-log-prefix --tail 20 garage-setup
+    echo "== PostgreSQL's last 100 lines"
+    compose logs --no-log-prefix --tail 100 db
     show_server_log
   fi
   compose down -v --remove-orphans >/dev/null 2>&1
@@ -325,12 +402,12 @@ check "Poppler renders the PDF inside the container" compose exec -T app sh -c \
   < "$WORK/smoke.pdf"
 check "PDF thumbnail generated (Poppler via allowed-commands.txt)" is_png "$WORK/smoke.pdf.thumb"
 
-echo "== 5. Healdan schema, seeds, doc #s and the filing rule"
-db_query() {
-  compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "$1"' sh "$1"
-}
+echo "== 5. Healdan schema, seeds, doc #s, the filing rule, the text Healdan keeps and a user's edit"
 check "hd_schema_history has version 1, successful" test \
-  "$(db_query "select count(*) from hd_schema_history where version = '1' and success = 1")" = 1
+  "$(db_query "select count(*) from hd_schema_history where version = '1' and success")" = 1
+# The start-up tool gives the app's role this lock_timeout in its database, which each of its connections takes
+# (PostgreSQL spec section 7.4): MariaDB's lock wait, so a lock cycle still ends by failing one of its statements
+check "the app's role waits 50s for a lock" test "$(db_query 'show lock_timeout')" = 50s
 check "seed.profile and seed.everyone recorded" test \
   "$(db_query "select count(*) from hd_setting where name in ('seed.profile', 'seed.everyone')")" = 2
 check "smoke-fixture seed recorded" test \
@@ -379,26 +456,161 @@ check "upload to the matter's top level is refused by the filing rule" refused_w
   "Documents can't be saved at the top level of a matter. Choose one of its folders."
 check "upload to the Default workspace is refused by the filing rule" refused_with "$ws_id" \
   "Documents must be filed in a folder inside a matter."
-# An email with an emoji in its Subject and From (RFC 2047). CE's MariaDB tables are utf8, 3 bytes a character, and
-# strict, so Healdan puts U+FFFD for every character beyond the Basic Multilingual Plane before the insert (R33).
-# Uploaded after the doc # checks above, which expect the first two uploads to be 1 and 2.
+# Text beyond the Basic Multilingual Plane, such as an emoji, is kept as typed: PostgreSQL's UTF-8 database stores it,
+# where MariaDB's utf8 tables couldn't (PostgreSQL spec section 7.5). What it can't store is NUL, which is refused.
+EMOJI=$'\xf0\x9f\x8e\x89' # U+1F389, four bytes in UTF-8
+# An email with the emoji in its Subject and From (RFC 2047). Uploaded after the doc # checks above, which expect the
+# first two uploads to be 1 and 2.
 printf '%s\r\n' 'From: =?UTF-8?B?QW5uIPCfjok=?= <ann@example.com>' 'To: bob@example.com' \
   'Subject: =?UTF-8?B?UmU6IPCfjokgU2FsZQ==?=' 'Date: Tue, 14 Oct 2025 09:29:00 +0200' 'MIME-Version: 1.0' \
   'Content-Type: text/plain; charset=UTF-8' '' 'Party.' > "$WORK/emoji.eml"
-no_4byte_char() { # <text>: no UTF-8 lead byte of a 4-byte character (0xF0-0xF4)
-  printf '%s' "$1" | python3 -c 'import sys; b = sys.stdin.buffer.read(); sys.exit(0 if b and not any(0xF0 <= x <= 0xF4 for x in b) else 1)'
-}
 email_id=$(api -H 'Accept: application/json' -F "folderId=$doc_folder" -F "filename=emoji.eml" \
   -F "filedata=@$WORK/emoji.eml" "$BASE/services/rest/document/upload" || true)
 check "email with an emoji in its headers uploaded" grep -Eq '^[0-9]+$' <<<"$email_id"
 email_json=$(api -H 'Accept: application/json' "$BASE/services/rest/document/getDocument?docId=$email_id" || true)
-check "email named after its subject, with U+FFFD for the emoji" \
-  test "$(jq -r '.fileName // empty' <<<"$email_json")" = $'Re_ \xef\xbf\xbd Sale.eml'
-check "email's subject field stored with U+FFFD for the emoji" \
+check "email named after its subject, with its emoji" \
+  test "$(jq -r '.fileName // empty' <<<"$email_json")" = "Re_ $EMOJI Sale.eml"
+check "email's subject field stored with its emoji" \
   test "$(jq -r '[.attributes[]? | select(.name == "emailsubject") | .stringValue][0] // empty' <<<"$email_json")" \
-  = $'Re: \xef\xbf\xbd Sale'
-check "email's stored file name has no 4-byte character" \
-  no_4byte_char "$(db_query "select ld_filename from ld_document where ld_id = ${email_id:-0}")"
+  = "Re: $EMOJI Sale"
+check "email's file name in the database has its emoji" \
+  test "$(db_query "select ld_filename from ld_document where ld_id = ${email_id:-0}")" = "Re_ $EMOJI Sale.eml"
+
+# A device token for admin, for the JSON API's reads and filing below, signed out at the end of this step
+api_token=$(jq -n '{username: "admin", password: "admin", name: "smoke step 5", device: {id: "smoke-step-5"}}' \
+  | curl -fsS -H 'Content-Type: application/json' -d @- "$BASE/api/v1/auth/tokens" | jq -r '.token // empty' || true)
+check "a device token for admin" grep -Eq '^hd_' <<<"$api_token"
+bearer() { curl -fsS -H "Authorization: Bearer $api_token" "$@"; }
+
+# gwt_long <number from 0>: a long as a GWT-RPC request writes it, in base 64 with GWT's digits, without leading zeros
+gwt_long() {
+  local n=$1 digits='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789$_' out=
+  while :; do
+    out=${digits:$((n % 64)):1}$out
+    n=$((n / 64))
+    [ "$n" -gt 0 ] || break
+  done
+  printf '%s' "$out"
+}
+# rpc_types <module> <class>...: the strong name of one of the GWT module's serialization policies that lets the server
+# read every class named, then each class's type signature in it (such as java.lang.Long/4227064769), a line each. A
+# policy's line for a class is "<class>, <whether the server reads it>, ..., <its type signature>, <its CRC>".
+rpc_types() {
+  local module=$1 class args=()
+  shift
+  for class in "$@"; do args+=(-e "$class, true,"); done
+  compose exec -T app sh -c 'cd "$CATALINA_HOME/webapps/ROOT/$1" && shift && grep -HF "$@" -- *.gwt.rpc' sh "$module" \
+    "${args[@]}" | LC_ALL=C sort | awk -v want="$*" '
+      BEGIN { n = split(want, classes, " ") }
+      { colon = index($0, ":"); file = substr($0, 1, colon - 1); split(substr($0, colon + 1), field, ", ")
+        if (field[2] != "true") next
+        if (!(file in seen)) { seen[file] = 1; files[++count] = file }
+        type[file, field[1]] = field[6] }
+      END {
+        for (f = 1; f <= count; f++) {
+          file = files[f]
+          all = 1
+          for (i = 1; i <= n; i++) if (!((file, classes[i]) in type)) all = 0
+          if (!all) continue
+          name = file; sub(/\.gwt\.rpc$/, "", name); print name
+          for (i = 1; i <= n; i++) print type[file, classes[i]]
+          exit 0
+        }
+        exit 1
+      }'
+}
+# rpc <servlet under frontend/> <policy> <the string table from the service on, | between> <the payload>: a GWT-RPC
+# call as the Classic Interface sends it, signed in as admin with step 3's session (the sid header). It prints the
+# answer, which starts //OK, or //EX for an exception. Strings 1 and 2 are the module's address and the policy.
+rpc() {
+  local strings="$BASE/frontend/|$2|$3" count
+  count=$(($(printf '%s' "$strings" | tr -cd '|' | wc -c) + 1))
+  curl -sS -X POST "$BASE/frontend/$1" -H 'Content-Type: text/x-gwt-rpc; charset=utf-8' -H 'X-GWT-Permutation: 0' \
+    -H "sid: $sid" --data-binary "7|0|$count|$strings|$4|"
+}
+
+# A matter named with the emoji, through the New Matter dialog's call, HealdanMatterService.create(GUIMatter): matter
+# 1.1's client's next number (1.1 is the smoke fixture's, 1.2 and 1.3 the storage overlay's, 1.4 Second Matter) in the
+# Store Smoke, with matter 1.1's template and owner. GWT sends the GUIMatter's fields by name: clientId, clientName,
+# clientNumber, description, display, folderId, id, name, number, ownerId, ownerName, storeId, then templateId, a Long.
+MATTER_NAME="Smoke $EMOJI Matter"
+read -r client_id client_number template_id owner_id <<<"$(db_query "select m.hd_clientid, c.hd_number, m.hd_templateid,
+  m.hd_ownerid from hd_matter m join hd_client c on c.ld_id = m.hd_clientid where m.hd_folderid = $matter_id")"
+MATTER_NUMBER=$(db_query "select coalesce(max(hd_number), 0) + 1 from hd_matter where hd_clientid = ${client_id:-0}")
+matter_types=$(rpc_types frontend com.logicaldoc.gui.frontend.client.healdan.beans.GUIMatter java.lang.Long || true)
+{ read -r policy; read -r matter_type; read -r long_type; } <<<"$matter_types" || true
+create_matter() {
+  local reply
+  reply=$(rpc healdanmatter "$policy" \
+    "com.logicaldoc.gui.frontend.client.healdan.services.HealdanMatterService|create|$matter_type|$MATTER_NAME|$long_type" \
+    "1|2|3|4|1|5|5|$(gwt_long "${client_id:-0}")|0|A|0|0|A|A|6|$(gwt_long "${MATTER_NUMBER:-0}")|$(gwt_long "${owner_id:-0}")|0|$(gwt_long "${store_id:-0}")|7|$(gwt_long "${template_id:-0}")")
+  case $reply in
+    //OK*) ;;
+    *) echo "  HealdanMatterService.create answered: ${reply:0:300}"; return 1 ;;
+  esac
+}
+check "matter $client_number.$MATTER_NUMBER, '$MATTER_NAME', created through the Classic Interface's service" create_matter
+new_matter=$(db_query "select ld_id from hd_matter where hd_clientid = ${client_id:-0} and hd_number = ${MATTER_NUMBER:-0}")
+new_matter_json=$(bearer "$BASE/api/v1/matters/${new_matter:-0}" || true)
+check "the API reads its name back with the emoji" test "$(jq -r '.name // empty' <<<"$new_matter_json")" = "$MATTER_NAME"
+check "and its workspace's name" test "$(api -H 'Accept: application/json' \
+  "$BASE/services/rest/folder/getFolder?folderId=$(jq -r '.folderId // 0' <<<"$new_matter_json")" | jq -r '.name // empty' \
+  || true)" = "$client_number.$MATTER_NUMBER "$'\xe2\x80\x93'" $MATTER_NAME"
+
+# A document filed through the JSON API under a name with the emoji
+printf 'Notes.\n' > "$WORK/notes.txt"
+jq -n --argjson folder "$doc_folder" --arg name "Notes $EMOJI.txt" '{folderId: $folder, name: $name, checkOut: false}' \
+  > "$WORK/notes.json"
+notes=$(bearer -F "document=<$WORK/notes.json;type=application/json" -F "file=@$WORK/notes.txt;filename=notes.txt" \
+  "$BASE/api/v1/documents" | jq -r '.docNumber // empty' || true)
+check "a document filed as 'Notes $EMOJI.txt'" grep -Eq '^[0-9]+$' <<<"$notes"
+check "keeps its name" test "$(bearer "$BASE/api/v1/documents/${notes:-0}" | jq -r '.name // empty' || true)" \
+  = "Notes $EMOJI.txt"
+
+# A NUL in a query parameter is 400 before any statement is run: PostgreSQL would fail the statement, a 500
+nul_refused() {
+  local code
+  code=$(curl -s -o "$WORK/nul.json" -w '%{http_code}' -H "Authorization: Bearer $api_token" \
+    "$BASE/api/v1/search?author=a%00b")
+  [ "$code" = 400 ] && [ "$(jq -r '.code // empty' "$WORK/nul.json" 2>/dev/null)" = bad-request ] && return 0
+  echo "  HTTP $code: $(head -c 300 "$WORK/nul.json")"
+  return 1
+}
+check "GET /api/v1/search?author=a%00b is 400 bad-request" nul_refused
+
+# An edit of an existing user is kept (PostgreSQL spec section 7.2): CE's user save reads ld_enabled, an int, as a Long,
+# which pgjdbc refuses, and without Healdan's typed reads the refusal rolled the save back with no error. Account >
+# Users' Disable and Enable, SecurityService.changeStatus(List<Long>, boolean), on apiuser, whose sign-ins step 5c
+# needs: enabled again before it.
+api_user=$(db_query "select ld_id from ld_user where ld_username = 'apiuser'")
+list_types=$(rpc_types frontend java.util.ArrayList java.lang.Long || true)
+{ read -r list_policy; read -r list_type; read -r list_long_type; } <<<"$list_types" || true
+change_status() { # <1 to enable, 0 to disable>
+  local reply
+  reply=$(rpc security "$list_policy" \
+    "com.logicaldoc.gui.common.client.services.SecurityService|changeStatus|java.util.List|Z|$list_type|$list_long_type" \
+    "1|2|3|4|2|5|6|7|1|8|$(gwt_long "${api_user:-0}")|$1")
+  case $reply in
+    //OK*) ;;
+    *) echo "  SecurityService.changeStatus answered: ${reply:0:300}"; return 1 ;;
+  esac
+}
+# active <username>: 0 when GET /v1/users, which finds the people who are active, lists the username, 1 when it doesn't,
+# and 2 when the API couldn't be asked
+active() {
+  local listed
+  listed=$(bearer "$BASE/api/v1/users?q=$1" | jq -r --arg u "$1" '[.items[].username] | index($u) != null') || return 2
+  [ "$listed" = true ]
+}
+inactive() { local status=0; active "$1" || status=$?; [ "$status" = 1 ]; }
+check "apiuser disabled through the Classic Interface's service" change_status 0
+check "the database keeps the edit" test "$(db_query "select ld_enabled from ld_user where ld_id = ${api_user:-0}")" = 0
+check "and the API no longer finds apiuser among the active" inactive apiuser
+check "apiuser enabled again" change_status 1
+check "the database keeps that edit too" test "$(db_query "select ld_enabled from ld_user where ld_id = ${api_user:-0}")" = 1
+check "and the API finds apiuser again" active apiuser
+check "admin's device token signed out" test "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE \
+  -H "Authorization: Bearer $api_token" "$BASE/api/v1/auth/tokens/current")" = 204
 
 echo "== 5a. full text in Office and email files (spec §9)"
 # Uploads a .docx and an .eml into the Smoke Matter and searches for a token in each; their output carries its own PASS/FAIL lines
@@ -473,11 +685,13 @@ check "storage backends against the stand-in" storage_test
 echo "step 5f took $((SECONDS - storage_started)) s"
 
 echo "== 6. webservice schema present"
-check "ld_webservicecall exists" compose exec -T db sh -c \
-  'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "select 1 from ld_webservicecall where 1=0"'
+check "ld_webservicecall exists" test "$(db_query "select to_regclass('ld_webservicecall') is not null")" = t
 
 echo "== 7. setup wizard blocked"
 check "GET /setup is 403" test "$(http_code "$BASE/setup")" = 403
+# Before step 8's down, which removes the db container and its log
+check "PostgreSQL's log, steps 1 to 7, read against $DB_LOG_EXPECTED (unexpected lines reported, not yet failing)" \
+  check_db_log "steps 1 to 7"
 
 echo "== 8. data survives down/up, and an earlier image's default is replaced"
 # As a conf volume written before 2026-10-30 holds it: cachecontrol without the loaders' rule (Docker spec §13).
@@ -526,5 +740,9 @@ check "the Indexer runs every 5 seconds for the browser's searches" fast_indexer
 web_started=$SECONDS
 check "the User app in the browser" env BASE="$BASE" HEALDAN_INDEXER_FAST=1 bash docker/tests/test-web.sh
 echo "step 9 took $((SECONDS - web_started)) s"
+# The db container step 8 made: its log holds steps 8 and 9
+check "PostgreSQL's log, steps 8 and 9, read against $DB_LOG_EXPECTED (unexpected lines reported, not yet failing)" \
+  check_db_log "steps 8 and 9"
 
+echo "The smoke test took $SECONDS s"
 finish

@@ -75,19 +75,6 @@ public class SavepointsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testInsertIfAbsent() {
-		transaction.executeWithoutResult(status -> {
-			assertTrue(Savepoints.insertIfAbsent(jdbc, INSERT, "savepoints.absent", "1"));
-			assertFalse(Savepoints.insertIfAbsent(jdbc, INSERT, "savepoints.absent", "2"));
-			jdbc.update("update hd_setting set value = ? where name = ?", "3", "savepoints.absent");
-			jdbc.update(INSERT, "savepoints.other", "4");
-		});
-
-		assertEquals("3", value("savepoints.absent"));
-		assertEquals("4", value("savepoints.other"));
-	}
-
-	@Test
 	public void testAnErrorRollsBackTheWork() {
 		transaction.executeWithoutResult(status -> {
 			jdbc.update(INSERT, "savepoints.kept", "1");

@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
 
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.healdan.api.model.FieldError;
-import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.healdan.util.StorableText;
 import com.logicaldoc.util.spring.Context;
 
 import jakarta.activation.DataHandler;
@@ -172,17 +172,16 @@ public final class Uploads {
 	 * @param max the longest the name may be
 	 * @param slashes true if a {@code /} or a backslash is fine, as in a label
 	 * @param errors where to add {@code invalid} for a control character, a
-	 *        slash when it isn't fine, or a character the database can't store,
-	 *        and {@code too-long} over {@code max} characters
+	 *        slash when it isn't fine, or a character Healdan can't keep
+	 *        ({@link StorableText}), and {@code too-long} over {@code max}
+	 *        characters
 	 */
 	public static void checkText(String name, String field, int max, boolean slashes, List<FieldError> errors) {
 		if (name.chars().anyMatch(c -> (!slashes && (c == '/' || c == '\\')) || Character.isISOControl(c)))
 			errors.add(new FieldError(field, "invalid", slashes ? "A name can't contain control characters."
 					: "A name can't contain /, \\ or control characters."));
-		// CE's tables hold only the Basic Multilingual Plane, and strict MariaDB refuses the rest at the write
-		else if (!BasicPlane.holds(name))
-			errors.add(new FieldError(field, "invalid",
-					"A name can't contain emoji or other characters the database can't store."));
+		else if (!StorableText.holds(name))
+			errors.add(new FieldError(field, "invalid", "A name can't contain " + StorableText.CANT_KEEP + "."));
 		if (name.length() > max)
 			errors.add(new FieldError(field, TOO_LONG, "A name can't be longer than %d characters.".formatted(max)));
 	}

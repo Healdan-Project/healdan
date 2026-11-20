@@ -1,4 +1,4 @@
-# Development overlay: UI on the LAN, Java debugger, MariaDB port. Use with
+# Development overlay: UI on the LAN, Java debugger, PostgreSQL port. Use with
 #   docker compose -f compose.yaml -f compose.dev.yaml up -d --build
 # or COMPOSE_FILE=compose.yaml:compose.dev.yaml in .env. See docker/README.md.
 services:
@@ -14,4 +14,4 @@ services:
 
   db:
     ports:
-      - "127.0.0.1:${DEV_DB_PORT:-3306}:3306"
+      - "127.0.0.1:${DEV_DB_PORT:-5432}:5432"
