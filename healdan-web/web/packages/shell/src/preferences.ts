@@ -14,6 +14,10 @@ export interface Preferences {
   keepNumber(name: string, value: number): void
   /** Forgets what is kept under the name, if storage allows */
   forget(name: string): void
+  /** The JSON value kept under the name, or undefined when there's none, storage is refused or the text isn't JSON */
+  readJson(name: string): unknown
+  /** Keeps a JSON value under the name, if storage allows */
+  keepJson(name: string, value: unknown): void
 }
 
 /** An app's preferences, each kept under the prefix and the name */
@@ -41,6 +45,22 @@ export function preferences(prefix: string): Preferences {
         window.localStorage.removeItem(prefix + name)
       } catch {
         // Refused: there was nothing kept to forget
+      }
+    },
+    readJson(name) {
+      try {
+        const text = window.localStorage.getItem(prefix + name)
+        if (text === null) return undefined
+        return JSON.parse(text) as unknown
+      } catch {
+        return undefined
+      }
+    },
+    keepJson(name, value) {
+      try {
+        window.localStorage.setItem(prefix + name, JSON.stringify(value))
+      } catch {
+        // Refused: the page keeps it until it's reloaded
       }
     },
   }
