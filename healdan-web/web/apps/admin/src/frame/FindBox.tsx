@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
-import { goTo, messageFor } from '@healdan/shell'
+import { goTo, useMessageFor } from '@healdan/shell'
 import { ComboBox, Icon, type ComboBoxSection } from '@healdan/ui'
 import { useAdminQuery } from '../queries'
 import { t } from '../strings'
@@ -100,6 +100,7 @@ const NOTHING: A['Found'] = { clients: [], matters: [], people: [] }
  * first. A screen reader hears when nothing was found, or the find failed.
  */
 export function FindBox() {
+  const messageFor = useMessageFor()
   const [text, setText] = useState('')
   const wanted = findable(text)
   const settled = useDebounced(wanted, FIND_DELAY_MS)

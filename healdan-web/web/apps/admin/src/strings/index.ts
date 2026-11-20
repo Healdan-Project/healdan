@@ -10,3 +10,13 @@ const catalogue = createCatalogue(adminEnUS, adminPlurals)
 export const t = catalogue.t
 /** The Admin app's plural for the key, or else the shared catalogue's, as @healdan/ui's plural() picks and fills it */
 export const plural = catalogue.plural
+
+/**
+ * The messages for the problems the app's own catalogue holds (only those, so the shared catalogue answers the rest), in
+ * the form @healdan/shell's messageFor and MessagesProvider take. `extra` is the app's own strings.
+ */
+export function lookupFor(extra: object, text: (key: never) => string): (key: string) => string | undefined {
+  return (key) => (key.startsWith('problems.') && Object.hasOwn(extra, key) ? text(key as never) : undefined)
+}
+
+export const problemLookup = lookupFor(adminEnUS, catalogue.t)

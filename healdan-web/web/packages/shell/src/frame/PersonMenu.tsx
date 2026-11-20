@@ -6,7 +6,7 @@ import { ApiError } from '@healdan/api'
 import { Menu, MenuItem, clearToasts, t, toast } from '@healdan/ui'
 import { useMe } from '../queries'
 import { useApi } from '../services'
-import { messageFor } from './errors'
+import { useMessageFor } from './messages'
 import { goTo } from './navigate'
 import styles from './PersonMenu.module.css'
 
@@ -18,6 +18,7 @@ function initials(name: string): string {
 /** The person's menu: their name, the app's own items (`children`), Classic Interface and Sign Out. */
 export function PersonMenu({ children }: { children?: ReactNode }) {
   const api = useApi()
+  const messageFor = useMessageFor()
   const name = useMe().data?.name ?? ''
 
   async function signOut() {
