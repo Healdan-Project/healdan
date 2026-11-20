@@ -403,6 +403,12 @@ The sections below say more about the parts a client needs to know before it sta
 }
 ```
 
+## Last Used in Recent's Lists
+
+Each item of `GET /documents/recent` and `GET /folders/recent` has `lastUsed`, a UTC time: when the caller last filed,
+changed, checked in or out, or downloaded the document, or, for a folder, last filed or changed a document in it. It's
+the time the lists are ordered by, and no other answer has it.
+
 ## Listing a Folder
 
 `GET /folders/{id}/children` lists the subfolders the caller can read, by name, then the documents the caller can

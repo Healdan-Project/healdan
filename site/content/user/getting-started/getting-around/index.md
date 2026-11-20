@@ -84,6 +84,35 @@ page's address, so the link you copy takes someone to the same place, and Back a
 Open a matter or a folder from the left pane, and the main area lists what's in it: see [Opening a
 Matter](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matter).
 
+## The List's Columns
+
+Every list, of documents or of folders, matters, clients or the Trash, has columns you can resize and sort by. The
+lists of documents also let you choose which columns show, and in what order.
+
+- **Resize a column** by dragging the right edge of its heading, and double-click the edge to put the column's width back.
+  From the keyboard, open the heading's menu and choose **Resize Column**, then press Left or Right, and Enter or Esc
+  when you're done. When the columns are wider than the list, the list scrolls sideways.
+- **Sort** by clicking a heading, and again for the other way. A date column, such as **Edit Date**, sorts newest
+  first at its first click. **Recent Documents**, **Recent Emails** and **Recent Folders** start sorted by **Last
+  Used**, newest first, and **Checked Out to Me** by **Checked Out**. In this release, a folder or a search doesn't yet
+  sort by **Matter**, **Client**, **Location**, **Date Filed**, **Size** or **File Type**; a later release adds them.
+- **The heading's menu** opens on a right-click, or on Shift+F10 or the menu key while a heading has the keyboard's
+  focus (the arrow keys reach the headings from the rows). It has **Sort Ascending** and **Sort Descending**, **Sort by
+  Relevance** on a sorted search, **Resize Column**, **Move Left** and **Move Right**, **Hide** and the column's name,
+  **Choose Columns…** and **Reset Columns**. Title can't move or hide.
+- **Choose the columns** with the **Columns** button at the end of the headings, or **Choose Columns…** in a heading's
+  menu. The panel's **Shown** section lists the columns in their order, with **Title** marked **Always Shown**, and **More
+  Columns** lists the rest, such as **Client**, **Location**, **Date Filed**, **Size** and **File Type**. Tick a column to show it at the
+  end, and untick one to hide it. **Move Up** and **Move Down** move the column with the focus, or drag it. **Reset to
+  Default** puts the list's usual columns back. Changes apply at once, and Esc closes the panel.
+- **Move a column** by dragging its heading along the headings, or with **Move Left** and **Move Right**.
+- **Reset Columns** in a heading's menu puts back the list's default columns, order and widths.
+
+Each kind of list keeps its own columns: a folder's, a search's, Recent Documents', Recent Emails' and Checked Out to Me's
+are chosen apart. The list beside the reading pane, which keeps **Title**, **Doc #** and **Edit Date** at first, has a
+layout of its own too, whichever list it's showing. They're kept in this browser, so another browser or computer starts from the defaults, and so does this one if you clear
+the browser's data.
+
 ## The Details Panel
 
 Select a document in a folder's list, in search results, in a Recent list or in **Checked Out to Me**, and its

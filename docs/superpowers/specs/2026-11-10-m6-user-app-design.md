@@ -179,7 +179,7 @@ The owner reviewed the layout in the browser, from mockups drawn with the demo f
 ### 6.4 Preview (owner: both)
 
 - **Space opens Quick Look:** a large preview over the app, as Finder's does, from every document list (R52). ‹ › and the arrow keys move through the list behind it, except while the focus is in the page, where they scroll it (changed in the build: R55, as a zoomed page must scroll by keyboard); Space or Esc closes it. Nothing behind it reflows.
-- **A button in Quick Look docks it** as a reading pane in the right region, which stays docked while you click or arrow down the list, until you close it. The list keeps Title, Doc # and Edit Date while it's narrow.
+- **A button in Quick Look docks it** as a reading pane in the right region, which stays docked while you click or arrow down the list, until you close it. The list keeps Title, Doc # and Edit Date while it's narrow (changed after M6: those three are the default of the `beside` column layout, which any document list takes while the reading pane is docked and which can be changed like any other; see the [list columns spec](2026-11-19-list-columns-design.md) §4.8).
 - **While it's docked, the reading pane takes the details' place:** clicking a row previews it. The funnel shows Filters there until you next click a row, as with the details (§6.2). Closing the reading pane brings the details back.
 - **What's shown:** M1.5's PDF, drawn in the page with PDF.js; a picture as itself; an email as a message (§6.6). A type with no preview says so, with Open and Download.
 

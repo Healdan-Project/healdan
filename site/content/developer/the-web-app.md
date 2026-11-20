@@ -220,6 +220,44 @@ The virtualiser places the rows itself, so the Table needs a height: it fills a 
 jsdom has no IntersectionObserver, which notices the end of a list, so the tests' setup installs one that sees
 nothing until a test calls `bringObservedIntoView()` from `test/intersection.ts`, as scrolling to the end would.
 
+### Columns and Sorting
+
+Each option below is one a list switches on; a bare `Table` behaves as before.
+
+- **`resizing`** (`{ widths, onResizeEnd, onReset }`) wraps the table in React Aria's `ResizableTableContainer` and draws
+  a `ColumnResizer` 24 pixels wide on each heading's edge. Widths are pixels by column id. Resizing fixes the column and
+  those to its left, as React Aria does, and a double-click on the edge calls `onReset` for that column. Each column's
+  `minWidth` is its least width. A layout wider than the list scrolls sideways.
+- **The heading menu** opens when any of `onSort`, `resizing`, `choice` or `onResetColumns` is given: a right-click, or
+  Shift+F10 or the menu key on a heading (`data-column-key`; Table's one `ContextMenu` takes a `{ row }` or `{ column }`
+  subject). **`choice`** (`{ onMove, onHide, panel }`) adds **Move Left**, **Move Right**, **Hide** and **Choose Columns…**,
+  and the **Columns** button, which open `panel` in a popover; **`onResetColumns`** adds **Reset Columns**, and
+  **`relevance`** (`{ onSelect }`) adds **Sort by Relevance** while a sort is set. **Resize Column** starts the column's
+  keyboard resize.
+- **Dragging a heading** moves its column (not Title) when `choice` is given, with a drag of its own type,
+  `COLUMN_TYPE` (`application/x-healdan-column`), never `ROWS_TYPE`, so it can't drop on a row, a folder or the tree,
+  and a row drag can't drop on the headings. It needs no React Aria drag and drop code, as the row drag doesn't.
+- **`TableColumn.newestFirst`** makes the first click sort descending, for a date column.
+- **`ColumnsPanel`** (`@healdan/ui`) is the panel's content: **Shown**, **More Columns**, **Always Shown** for Title,
+  **Move Up**, **Move Down** and **Reset to Default**, each change applied at once.
+
+The layouts are `views/columnLayouts.ts`, one per kind of list, kept in this browser's `localStorage` under
+`healdan.columns.<kind>` through `@healdan/shell`'s `readJson` and `keepJson`, each in `try`. The document kinds are
+`folder`, `documents`, `all`, `emails`, `recentDocuments`, `recentEmails`, `checkedOut` and `beside`, the layout every
+document list takes while the reading pane is docked; the others (`folders`, `matters`, `clients`, `recentFolders`,
+`recentClients`, `trashMine`, `trashEveryone`, `trashRemoved`) keep widths only. The value is
+`{"v":1,"shown"?:[…],"widths":{…}}`: `shown` (column ids in order) is written only once someone has chosen columns, so a
+layout of widths alone still gets the kind's defaults, a later release's included. A value that isn't that shape, or of
+another version, reads as no layout; ids the kind doesn't offer are dropped, and Title goes first. `useColumnLayout(kind,
+offered)` returns `shown`, `widths` and `resized`, `resetWidth`, `show`, `hide`, `move` and `reset`, and writes when a
+change ends, not during a drag. The sort isn't kept: it's in the address.
+
+A list the server sends whole (Recent, Checked Out to Me) sorts in the browser, by the server's rules, with `compareRows`
+and `sortRows` in `views/compareRows.ts` (titles by file name ignoring case, doc #s as numbers, versions by major then
+minor, rows with no value last either way, ties in the list's own order). A paged list (a folder, a search, the Trash)
+sorts on the server, and a column the server doesn't sort yet (`SERVER_SORTS` in `views/listColumns.tsx`) doesn't offer
+sorting there.
+
 ## Keeping the Page Up to Date
 
 The app has no push updates yet (M6's spec §16). Instead it asks again for what's on screen each time the person comes
@@ -604,7 +642,7 @@ keys, Space and Esc). A view renders `<QuickLook documents total loadMore />` wi
 and passes Space on a row to `usePreviewKey`; which document is shown is in `QuickLookState`, a context in the frame, so
 the details' and the toolbar's Preview buttons open it too. ‹ › move the selection with them, and at the end of the
 loaded rows › calls the list's `loadMore` and moves on when the page comes. `ReadingPane` is the same view docked in the
-right region, and `narrowed()` in `views/listColumns.tsx` gives the list its three columns while it's there.
+right region, and the list uses the `beside` column layout (by default **Title**, **Doc #** and **Edit Date**) while it's there.
 
 ### PDF.js Under the Page's Policy
 
