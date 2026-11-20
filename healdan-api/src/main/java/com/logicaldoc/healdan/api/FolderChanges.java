@@ -6,7 +6,9 @@ package com.logicaldoc.healdan.api;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Callable;
 import java.util.function.BiConsumer;
+import java.util.stream.LongStream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,7 +59,10 @@ import com.logicaldoc.util.spring.Context;
  * {@link #moveMatter} and {@link #deleteMatter}: the same paths, with the same
  * locks and checks, but for the refusal of a matter's own folder, and with
  * this class's own refusals answered as {@code 409 refused}, with the same
- * sentence and no {@code holds} (Admin app plan, P2-R13).
+ * sentence and no {@code holds} (Admin app plan, P2-R13); a workspace's
+ * folders and templates through {@link #deleteWorkspaceFolder}, likewise, and
+ * the Admin app's renames and moves of them hold this class's locks with
+ * {@link #withFolderLocks}.
  */
 public final class FolderChanges {
 
@@ -148,23 +153,82 @@ public final class FolderChanges {
 	 * @return the Trash item the delete made
 	 */
 	public TrashItem deleteMatter(long id, Caller caller) {
-		User user = caller.user();
 		try {
-			matterFolder(id, user);
-			try {
-				HealdanTreeChecks.deletedTrees(user, List.of(id));
-			} catch (PermissionException e) {
-				log.debug("Matter folder {} holds items the caller may not delete", id);
-				throw ApiProblem.conflict("refused", DELETE_ITEMS);
-			}
-			List<Long> tree = StoredRows.get().tree(id);
-			refused(() -> {
-				refuseCheckedOut(tree, user, "deleted");
-				return null;
-			});
-			return refused(() -> trashTree(id, tree, caller));
+			matterFolder(id, caller.user());
+			return deleteForAdmin(id, caller);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't delete matter folder #" + id, e);
+		}
+	}
+
+	/**
+	 * Moves a workspace's folder, or a workspace template's own folder, and
+	 * everything live in it, to the caller's Trash, as {@link #deleteMatter}
+	 * does a matter's own folder, for the Admin app's workspace and template
+	 * routes, which have checked which folder it is. Checks, in order:
+	 * something inside without Delete; a document inside checked out, by
+	 * anyone, the caller too; an immutable document inside. Each of those is
+	 * {@code 409 refused}, with the sentence {@link #delete} gives, as is a
+	 * veto of Healdan's rules.
+	 *
+	 * @param id the folder
+	 * @param caller the signed-in caller, an administrator
+	 * @return the Trash item the delete made
+	 */
+	public TrashItem deleteWorkspaceFolder(long id, Caller caller) {
+		try {
+			return deleteForAdmin(id, caller);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't delete folder #" + id, e);
+		}
+	}
+
+	/**
+	 * {@link #deleteMatter} and {@link #deleteWorkspaceFolder} once they know
+	 * the folder: their checks, then the delete
+	 */
+	private static TrashItem deleteForAdmin(long id, Caller caller) throws PersistenceException {
+		User user = caller.user();
+		try {
+			HealdanTreeChecks.deletedTrees(user, List.of(id));
+		} catch (PermissionException e) {
+			log.debug("Folder {} holds items the caller may not delete", id);
+			throw ApiProblem.conflict("refused", DELETE_ITEMS);
+		}
+		List<Long> tree = StoredRows.get().tree(id);
+		refused(() -> {
+			refuseCheckedOut(tree, user, "deleted");
+			return null;
+		});
+		return refused(() -> trashTree(id, tree, caller));
+	}
+
+	/**
+	 * Runs work while holding the locks of these folders, as renames and moves
+	 * hold their parents': the Admin app's workspace and template routes hold
+	 * the folder a name goes into while they check and write it, so two
+	 * changes can't give one name twice there. They're taken in id order, as a
+	 * move takes both parents'.
+	 *
+	 * @param <T> what the work returns
+	 * @param failure what failed, for the log
+	 * @param work what to do
+	 * @param folderIds the folders whose locks to hold
+	 * @return what the work returned
+	 */
+	public <T> T withFolderLocks(String failure, Callable<T> work, long... folderIds) {
+		return locked(LongStream.of(folderIds).distinct().sorted().toArray(), 0, failure, work);
+	}
+
+	private <T> T locked(long[] ids, int next, String failure, Callable<T> work) {
+		if (next < ids.length)
+			return parents.withLock(ids[next], failure, () -> locked(ids, next + 1, failure, work));
+		try {
+			return work.call();
+		} catch (RuntimeException e) {
+			throw e;
+		} catch (Exception e) {
+			throw new IllegalStateException(failure, e);
 		}
 	}
 

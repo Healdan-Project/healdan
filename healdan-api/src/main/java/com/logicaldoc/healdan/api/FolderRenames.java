@@ -40,7 +40,9 @@ import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
  * listeners is {@code 409 refused}, as the ProblemMapper answers one.
  * <p>
  * Its rule for a name, {@link #name}, is the admin API's too, for every
- * folder name it takes ({@code openapi-admin.yaml}'s {@code FolderName}).
+ * folder name it takes ({@code openapi-admin.yaml}'s {@code FolderName}): a
+ * Store's, a workspace's folder's, a search folder's and a template's, so
+ * every folder name follows one rule.
  */
 public final class FolderRenames {
 
