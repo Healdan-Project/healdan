@@ -255,7 +255,9 @@ Compose's own lines, about the containers it starts, come before it.
 
 The `Source` line's zone is MariaDB's, which takes it from `TZ` in `.env`, as the old stack's did, such as
 `time zone UTC (the server's, +00:00)`. It has to be the zone your install ran with: `TZ` in `.env`, or `UTC` when
-`.env` doesn't set it. If it isn't, don't start Healdan. Put `TZ` back as the install had it, then remove what the
+`.env` doesn't set it. MariaDB gives a zone by its short name and its hours from UTC on the day of the move, not as
+`.env` spells it: with `TZ=America/Chicago`, in winter, the line says `time zone CST (the server's, -06:00)`. If it
+isn't your zone, don't start Healdan. Put `TZ` back as the install had it, then remove what the
 move made and move again. With host folders, PostgreSQL's data is in its folder, not the volume these commands
 remove: use [Starting the Move Over](#starting-the-move-over)'s commands instead. On volumes:
 
