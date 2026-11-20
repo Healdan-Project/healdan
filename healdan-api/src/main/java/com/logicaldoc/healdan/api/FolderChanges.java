@@ -27,6 +27,8 @@ import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.authorization.PermissionException;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.HealdanRuleException;
+import com.logicaldoc.healdan.admin.workspace.WorkspaceAdmin;
 import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.api.model.HeldDocument;
 import com.logicaldoc.healdan.api.model.HoldView;
@@ -36,11 +38,13 @@ import com.logicaldoc.healdan.matter.MatterService;
 import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.trash.TrashItemRow;
 import com.logicaldoc.healdan.trash.TrashMember;
 import com.logicaldoc.healdan.trash.TrashRules;
 import com.logicaldoc.healdan.trash.TrashState;
 import com.logicaldoc.healdan.trash.TrashStore;
+import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -60,9 +64,10 @@ import com.logicaldoc.util.spring.Context;
  * locks and checks, but for the refusal of a matter's own folder, and with
  * this class's own refusals answered as {@code 409 refused}, with the same
  * sentence and no {@code holds} (Admin app plan, P2-R13); a workspace's
- * folders and templates through {@link #deleteWorkspaceFolder}, likewise, and
- * the Admin app's renames and moves of them hold this class's locks with
- * {@link #withFolderLocks}.
+ * folders and templates through {@link #deleteWorkspaceFolder} and
+ * {@link #deleteTemplate}, likewise, each refusing a folder its route doesn't
+ * delete, and the Admin app's renames and moves of them hold this class's
+ * locks with {@link #withFolderLocks}.
  */
 public final class FolderChanges {
 
@@ -162,12 +167,15 @@ public final class FolderChanges {
 	}
 
 	/**
-	 * Moves a workspace's folder, or a workspace template's own folder, and
+	 * Moves a workspace's folder or search folder, below its top folder, and
 	 * everything live in it, to the caller's Trash, as {@link #deleteMatter}
-	 * does a matter's own folder, for the Admin app's workspace and template
-	 * routes, which have checked which folder it is. Checks, in order:
-	 * something inside without Delete; a document inside checked out, by
-	 * anyone, the caller too; an immutable document inside. Each of those is
+	 * does a matter's own folder, for the Admin app's workspace routes.
+	 * Checks, in order: a folder that isn't a workspace's
+	 * ({@code WorkspaceAdmin.workspaceFolder}), such as a Store, the Templates
+	 * Store or the root ({@code 404}); the workspace's top folder, a matter's
+	 * own or a template's, which goes with its matter or template; something
+	 * inside without Delete; a document inside checked out, by anyone, the
+	 * caller too; an immutable document inside. Each but the first is
 	 * {@code 409 refused}, with the sentence {@link #delete} gives, as is a
 	 * veto of Healdan's rules.
 	 *
@@ -177,6 +185,15 @@ public final class FolderChanges {
 	 */
 	public TrashItem deleteWorkspaceFolder(long id, Caller caller) {
 		try {
+			WorkspaceAdmin workspaces = WorkspaceAdmin.get();
+			Folder folder = workspaces.workspaceFolder(id);
+			if (folder == null)
+				throw ApiProblem.notFound("There's no folder %d in a workspace.".formatted(id));
+			try {
+				workspaces.refuseTopDelete(folder);
+			} catch (HealdanRuleException e) {
+				throw ApiProblem.conflict("refused", e.getMessage());
+			}
 			return deleteForAdmin(id, caller);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't delete folder #" + id, e);
@@ -184,8 +201,33 @@ public final class FolderChanges {
 	}
 
 	/**
-	 * {@link #deleteMatter} and {@link #deleteWorkspaceFolder} once they know
-	 * the folder: their checks, then the delete
+	 * Moves a workspace template's own folder, with its folders and search
+	 * folders, to the caller's Trash, for the Admin app's template route.
+	 * Checks, in order: a folder that isn't a template's own, directly in the
+	 * Templates Store ({@code 404}); something inside without Delete; a
+	 * document inside checked out, by anyone, the caller too; an immutable
+	 * document inside. Each of those is {@code 409 refused}, with the sentence
+	 * {@link #delete} gives, as is a veto of Healdan's rules.
+	 *
+	 * @param id the template's own folder
+	 * @param caller the signed-in caller, an administrator
+	 * @return the Trash item the delete made
+	 */
+	public TrashItem deleteTemplate(long id, Caller caller) {
+		try {
+			Folder folder = WorkspaceAdmin.get().workspaceFolder(id);
+			if (folder == null || !Long.valueOf(folder.getParentId()).equals(HealdanSettings.get().templatesStoreId()))
+				throw ApiProblem.notFound("There's no template %d.".formatted(id));
+			return deleteForAdmin(id, caller);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't delete template #" + id, e);
+		}
+	}
+
+	/**
+	 * {@link #deleteMatter}, {@link #deleteWorkspaceFolder} and
+	 * {@link #deleteTemplate} once they know the folder: their checks, then
+	 * the delete
 	 */
 	private static TrashItem deleteForAdmin(long id, Caller caller) throws PersistenceException {
 		User user = caller.user();
@@ -403,6 +445,9 @@ public final class FolderChanges {
 					FolderHistory history = new FolderHistory();
 					history.setSession(caller.session());
 					history.setEvent(FolderEvent.MOVED);
+					// The cache isn't transactional: a rollback, such as a record that fails, mustn't leave the
+					// folder cached in the new Store
+					CacheEvictor.get().evictFoldersOnRollback(List.of(id));
 					try {
 						// A veto of Healdan's rules is answered 409 refused by the ProblemMapper, wrapped or not
 						folders.move(current, into, history);

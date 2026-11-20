@@ -138,11 +138,11 @@ public class AdminFolderAccessResource {
 	}
 
 	/**
-	 * @throws ApiProblem {@code 404 not-found} unless the folder is a workspace's
+	 * @throws ApiProblem {@code 404 not-found} unless the folder is a workspace's, as every folder route asks
+	 *         ({@link WorkspaceRequests#folder})
 	 */
-	private static void existing(long id) throws PersistenceException {
-		if (FolderAccessService.get().workspaceFolder(id) == null)
-			throw ApiProblem.notFound("There's no folder %d in a workspace.".formatted(id));
+	private static void existing(long id) {
+		WorkspaceRequests.folder(id);
 	}
 
 	/**

@@ -153,7 +153,7 @@ public class AdminTemplatesResource {
 	public DeletedFolder delete(@PathParam("id") long id) {
 		TemplateInfo template = existing(id);
 		Caller caller = Caller.current();
-		TrashItem item = WorkspaceRequests.changes().deleteWorkspaceFolder(id, caller);
+		TrashItem item = WorkspaceRequests.changes().deleteTemplate(id, caller);
 		AdminEvents.get().recordAfter(new AdminEvent(AdminArea.MATTERS, "template.deleted", TEMPLATE, id,
 				template.name(), null), caller.user());
 		return DeletedFolder.of(item);

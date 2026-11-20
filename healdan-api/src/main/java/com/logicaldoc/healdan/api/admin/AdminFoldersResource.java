@@ -236,9 +236,12 @@ public class AdminFoldersResource {
 	@Path("{id: [0-9]+}/properties")
 	@Consumes(MediaType.APPLICATION_JSON)
 	public FolderProperties setProperties(@PathParam("id") long id, ValuesBody body) {
-		if (body == null || body.values() == null)
+		if (body == null)
 			throw ApiProblem.badRequest("Send the folder's values as a JSON object in values.");
 		Folder folder = WorkspaceRequests.folder(id);
+		if (body.values() == null)
+			throw ApiProblem.validation(
+					List.of(new FieldError("values", "required", "Give the folder's values, the whole set.")));
 		Caller caller = Caller.current();
 		User user = caller.user();
 		try {
