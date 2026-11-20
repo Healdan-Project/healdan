@@ -54,10 +54,13 @@ export function ItemContextMenu({ attribute, menu, children }: { attribute: stri
 }
 
 /**
- * Where the browser's own menu stays: copy, paste and spelling work there. A slider has no text, and has its item's menu: a
- * resizable heading's focus is on its edge's slider (React Aria's), so the heading's menu opens from there.
+ * A slider has no text, and has its item's menu: a resizable heading's focus is on its edge's slider (React Aria's), so the
+ * heading's menu opens from there. The slider is hidden, so the menu opens below the item, not by the slider.
  */
-const EDITABLE = 'input:not([type="range"]), textarea, select, [contenteditable]:not([contenteditable="false"])'
+const SLIDER = 'input[type="range"]'
+
+/** Where the browser's own menu stays: copy, paste and spelling work there */
+const EDITABLE = `input:not(${SLIDER}), textarea, select, [contenteditable]:not([contenteditable="false"])`
 
 /** What marks a ContextMenu's own element (below) */
 const AREA = 'data-context-menu'
@@ -154,8 +157,9 @@ export function ContextMenu<T>({ target, subjectOf, label, items, onOpen, childr
     if (!found) return
     event.preventDefault()
     event.stopPropagation()
-    // At the focused element: its start, just below it
-    const box = (event.target as Element).getBoundingClientRect()
+    // At the focused element (a row, or a cell of it): its start, just below it. A slider's at its item.
+    const focused = event.target as Element
+    const box = (focused.matches(SLIDER) ? found.element : focused).getBoundingClientRect()
     open(found, { x: box.left, y: box.bottom }, true)
   }
 

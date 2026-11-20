@@ -763,8 +763,14 @@ describe('Table heading menu', () => {
     press(row(/Letter 1/), 'ArrowUp')
     const slider = within(header('Title')).getByRole('slider')
     expect(document.activeElement).toBe(slider)
+    // jsdom lays nothing out: the heading and its edge's slider, hidden at the heading's end, are given their boxes
+    header('Title').getBoundingClientRect = () => new DOMRect(40, 0, 220, 34)
+    slider.getBoundingClientRect = () => new DOMRect(247, 0, 1, 1)
     fireEvent.keyDown(slider, { key: 'F10', shiftKey: true })
     const resizable = await screen.findByRole('menu', { name: 'Title Column' })
+    // Below the heading, at its start, not by the slider over the next heading
+    const popover = resizable.closest<HTMLElement>('.popover')!
+    expect({ left: popover.style.left, top: popover.style.top }).toEqual({ left: '40px', top: '36px' })
     await waitFor(() => expect(document.activeElement).toBe(within(resizable).getByRole('menuitemradio', { name: 'Sort Ascending' })))
     await closeMenu()
     await waitFor(() => expect(document.activeElement).toBe(slider))
@@ -828,7 +834,14 @@ describe('Table heading menu', () => {
     rerender(<Harness onSort={vi.fn()} relevance={relevance} sort={{ column: 'title', direction: 'ascending' }} />)
     const menu = await openMenu('Doc #')
     expect(entries(menu)).toEqual(['Sort Ascending', 'Sort Descending', 'Sort by Relevance'])
-    await user.click(within(menu).getByRole('menuitemradio', { name: 'Sort by Relevance' }))
+    // A plain item, not one of the sorts' choices: it never shows while it's the list's order, so it would never be checked
+    const byRelevance = within(menu).getByRole('menuitem', { name: 'Sort by Relevance' })
+    expect(byRelevance.hasAttribute('aria-checked')).toBe(false)
+    await closeMenu()
+    // On a column that doesn't sort, it's the only item
+    expect(entries(await openMenu('Note'))).toEqual(['Sort by Relevance'])
+    expect(within(screen.getByRole('menu')).queryAllByRole('menuitemradio')).toEqual([])
+    await user.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Sort by Relevance' }))
     expect(relevance.onSelect).toHaveBeenCalledOnce()
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
   })

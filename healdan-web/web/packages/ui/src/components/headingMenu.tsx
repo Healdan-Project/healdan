@@ -47,25 +47,29 @@ export function headingMenu<T extends TableRow>(columns: TableColumn<T>[], id: s
   if (!column) return undefined
   const { sort, onSort, relevance, startResize, choice, onResetColumns } = options
 
+  // The column's sorts, one of them ticked while it's the list's; then Sort by Relevance, a plain item, as it shows only while
+  // another order is the list's and so would be a choice never checked
   const sorts: ReactNode[] = []
   if (column.allowsSorting && onSort) {
     sorts.push(
-      <SortItem key="ascending" id="ascending" label={t('columns.sortAscending')} onAction={() => onSort({ column: id, direction: 'ascending' })} />,
-      <SortItem key="descending" id="descending" label={t('columns.sortDescending')} onAction={() => onSort({ column: id, direction: 'descending' })} />,
+      <MenuSection key="sorts" selectionMode="single" selectedKeys={sort?.column === id ? [sort.direction] : []}>
+        <SortItem id="ascending" label={t('columns.sortAscending')} onAction={() => onSort({ column: id, direction: 'ascending' })} />
+        <SortItem id="descending" label={t('columns.sortDescending')} onAction={() => onSort({ column: id, direction: 'descending' })} />
+      </MenuSection>,
     )
   }
-  if (relevance && sort) sorts.push(<SortItem key="relevance" id="relevance" label={t('columns.sortByRelevance')} onAction={relevance.onSelect} />)
+  if (relevance && sort) {
+    sorts.push(
+      <MenuItem key="relevance" id="relevance" onAction={relevance.onSelect}>
+        {t('columns.sortByRelevance')}
+      </MenuItem>,
+    )
+  }
 
   const fixed = column.isRowHeader === true
   const left = columns[index - 1]
   const groups: ReactNode[][] = [
-    sorts.length === 0
-      ? []
-      : [
-          <MenuSection key="sorts" selectionMode="single" selectedKeys={sort?.column === id ? [sort.direction] : []}>
-            {sorts}
-          </MenuSection>,
-        ],
+    sorts,
     startResize
       ? [
           <MenuItem key="resize" id="resize" onAction={() => startResize(id)}>
