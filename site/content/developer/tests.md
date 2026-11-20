@@ -700,11 +700,12 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     the spec checked out on its token, and the warning before releasing it (closed with Esc, so nothing is released), a
     matter, a folder with details (its toolbar buttons all one height, and a document the spec checked out through the
     API, and releases at the end, whose row shows its marker and is 34 pixels high, as a free row is), the properties
-    form, alone and with Author's list of people open, that document's details with its **Check-Out Info** and the
+    form, alone and with Author's list of people open (Author emptied first, so the list opens when the people come;
+    then, with someone picked, Esc closes the list and leaves the form open), that document's details with its **Check-Out Info** and the
     **Versions** tab, Filters (with one in use, and
     while the counts are held open with `page.route`, since busy states keep AA contrast and the last answer's counts
     must stay, never zeros), the list while it is asked for again, the filing tray and the File Documents form, alone
-    and with Author's list open in it (Esc then closes the list and leaves the dialog open), the
+    and with Author's list open in it (Author emptied first; Esc then closes the list and leaves the dialog open), the
     rename field, the delete question, the Help menu, the delete question for a folder with its line of what it holds, the toast
     with **Undo**, the move picker for a folder with its greyed choices, the question before a folder leaves its matter, the Trash
     with an item and with it selected, its **Remove** and **Empty Trash** questions and the empty Trash, search results for a word with their Filters (Title keeps 200

@@ -397,7 +397,9 @@ view.
   as the helper does. A folder or document property stays text. React Aria opens a combo box's list only as the text
   changes, so people who come once the typing has stopped would wait for another key: `OpensWhenOptionsCome` (shared
   with `ComboBox`) opens the list when they come, while the box has the focus and holds typed text, never the picked
-  person's name. `PickField` draws its list as `ComboBox` does (see
+  person's name. The Esc that closes the list is the list's: with someone picked React Aria passes it on, so `PickField`
+  marks it as taken (`preventDefault`), and the properties form's own Esc, which cancels the form, leaves it alone.
+  `PickField` draws its list as `ComboBox` does (see
   [The Search Box and Search Results](#the-search-box-and-search-results)): right after the field, so in the form or in
   the filing form's dialog, in a layer fixed over the window. In a dialog the list is above the dialog's fields and can
   hang past its edge, and React Aria is kept from hiding the dialog's other fields and buttons while it's open; the
@@ -530,7 +532,7 @@ kinds, which are scopes too) joined to `@healdan/ui`'s `ComboBox`, React Aria's,
 named sections and not filtered by it. Focus stays in the box and the arrow keys move through the options. The list
 comes right after the box in the page, in the top bar's search landmark, drawn in a layer fixed over the window
 (`ComboBoxLayer` in `ComboBoxLayer.tsx`, so an element round the box that clips or is positioned can't cut it off or
-move it), where React Aria would draw it at the end of `<body>`. React Aria's combo box hides everything outside the box
+move it, and above the panes, the filing tray and the toasts), where React Aria would draw it at the end of `<body>`. React Aria's combo box hides everything outside the box
 and its list from screen readers while the list is open (`aria-hidden`), because a list at the end of `<body>` is far
 from the box in reading order; with the list beside the box there's nothing to hide, and `ComboBoxPopover`'s
 `PageStaysShown`, beside it, keeps React Aria from hiding it, as React Aria has no switch for it yet

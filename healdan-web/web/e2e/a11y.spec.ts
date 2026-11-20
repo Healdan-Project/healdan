@@ -197,14 +197,28 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Save' })).toBeVisible()
       await check('the properties form')
       // Author's list of people open, with the whole page around it: the list comes right after the field, in the form, and
-      // the page stays shown to a screen reader (@healdan/ui's PickField), so nothing hidden holds a link (aria-hidden-focus)
+      // the page stays shown to a screen reader (@healdan/ui's PickField), so nothing hidden holds a link (aria-hidden-focus).
+      // Author holds the filer, whom the list offers at once whatever is typed, so it's emptied first (Tab leaves it empty):
+      // the list then opens only once the people found for "a" come (OpensWhenOptionsCome), and axe looks at them as they are
       const editing = page.getByRole('region', { name: 'Details' })
-      await editing.getByRole('combobox', { name: 'Author', exact: true }).fill('a')
+      const author = editing.getByRole('combobox', { name: 'Author', exact: true })
+      await author.fill('')
+      await page.keyboard.press('Tab')
+      await expect(author).toHaveValue('')
+      await author.fill('a')
       await expect(editing.getByRole('listbox').getByRole('option').first()).toBeVisible()
       await check("the properties form with Author's list open")
+      // With someone picked, Esc closes the list and only the list: React Aria passes that Esc on, and PickField takes it, so
+      // the form's own Esc, which cancels the form, leaves it alone
+      await page.keyboard.press('ArrowDown')
+      await page.keyboard.press('Enter')
+      await expect(editing.getByRole('listbox')).toBeHidden()
+      await author.fill('a')
+      await expect(editing.getByRole('listbox')).toBeVisible()
       await page.keyboard.press('Escape')
       await expect(editing.getByRole('listbox')).toBeHidden()
-      await page.getByRole('region', { name: 'Details' }).getByRole('button', { name: 'Cancel' }).click()
+      await expect(editing.getByRole('button', { name: 'Save' })).toBeVisible()
+      await editing.getByRole('button', { name: 'Cancel' }).click()
       // A held document's Check-Out Info, a shaded box above the tabs, whose text axe checks for contrast in each theme
       const details = page.getByRole('region', { name: 'Details' })
       await heldRow.getByRole('rowheader').click()
@@ -277,8 +291,13 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(form).toBeVisible()
       await check('the File Documents form')
       // Author's list open in the dialog: it is drawn in the dialog, over its fields, and the dialog's other fields stay shown
-      // to a screen reader (@healdan/ui's PickField); Escape closes the list and leaves the dialog open
-      await form.getByRole('combobox', { name: 'Author', exact: true }).fill('a')
+      // to a screen reader (@healdan/ui's PickField). Author holds the filer, so it's emptied first, as in the properties form,
+      // and the list opens once the people come; Escape closes the list and leaves the dialog open
+      const formAuthor = form.getByRole('combobox', { name: 'Author', exact: true })
+      await formAuthor.fill('')
+      await page.keyboard.press('Tab')
+      await expect(formAuthor).toHaveValue('')
+      await formAuthor.fill('a')
       await expect(form.getByRole('listbox').getByRole('option').first()).toBeVisible()
       await check("the File Documents form with Author's list open")
       await page.keyboard.press('Escape')

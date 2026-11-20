@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import axe from 'axe-core'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { expectNoAxeViolations } from '../test/axe'
+import { expectNoAxeViolations, expectNoPageAxeViolations, hiddenOnes } from '../test/axe'
 import '../tokens.css'
 import { Icon } from '../icons'
 import { ComboBox, type ComboBoxSection } from './ComboBox'
@@ -115,6 +114,25 @@ describe('ComboBox', () => {
     expect(screen.queryByRole('listbox')).toBeNull()
   })
 
+  it('leaves its list closed when options come once the box was left', async () => {
+    const { rerender } = render(
+      <>
+        <Example shown={[]} />
+        <button type="button">After</button>
+      </>,
+    )
+    type('ch')
+    await userEvent.tab()
+    expect(screen.getByRole('combobox', { name: 'Search' })).not.toBe(document.activeElement)
+    rerender(
+      <>
+        <Example shown={sections} />
+        <button type="button">After</button>
+      </>,
+    )
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
   it('closes on Escape, keeping what was typed', async () => {
     render(<Example />)
     const box = type('ch')
@@ -135,9 +153,6 @@ describe('ComboBox', () => {
     await screen.findByRole('listbox')
     await expectNoAxeViolations(document.body)
   })
-
-  // What carries aria-hidden, to say so when anything does
-  const hiddenOnes = () => [...document.querySelectorAll('[aria-hidden="true"]')].map((element) => element.outerHTML.slice(0, 80))
 
   // A page as the apps' top bars have it: the box in a search landmark between links and buttons, and a main area
   function Page() {
@@ -174,16 +189,7 @@ describe('ComboBox', () => {
     // The whole page, every rule but colour contrast (jsdom has no colours): nothing hidden holds a link (aria-hidden-focus),
     // the page keeps its main landmark and heading, and the list is inside a landmark (region). jsdom's page has no title
     // or language of its own, which the apps' index.html give theirs.
-    const { title, lang } = { title: document.title, lang: document.documentElement.lang }
-    document.title = 'Recent Documents'
-    document.documentElement.lang = 'en-US'
-    try {
-      const result = await axe.run(document, { rules: { 'color-contrast': { enabled: false } } })
-      expect(result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`)).toEqual([])
-    } finally {
-      document.title = title
-      document.documentElement.lang = lang
-    }
+    await expectNoPageAxeViolations(document, 'Recent Documents')
     // React Aria's mark for a layer it keeps shown is gone once it has looked
     expect(document.querySelector('[data-react-aria-top-layer]')).toBeNull()
   })

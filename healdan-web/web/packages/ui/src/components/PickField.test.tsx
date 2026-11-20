@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import axe from 'axe-core'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { expectNoAxeViolations } from '../test/axe'
+import { expectNoAxeViolations, expectNoPageAxeViolations, hiddenOnes } from '../test/axe'
 import '../tokens.css'
 import { Button } from './Button'
 import { Dialog } from './Dialog'
@@ -93,13 +92,13 @@ describe('PickField', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  // Options the caller finds later, as UserField's come from the server once the typing pauses: none at first, then `found`
+  // Options the caller finds later, as UserField's come from the server once the typing pauses: none at first, then
+  // `found`, which it keeps whatever is typed or picked after, so only PickField decides whether they open the list
   function Later({ found }: { found: PickFieldOption[] }) {
     const [value, setValue] = useState<PickFieldOption | null>(null)
-    const [text, setText] = useState('')
     return (
       <>
-        <PickField label="Author" value={value} options={text === '' ? [] : found} onTextChange={setText} onChange={setValue} />
+        <PickField label="Author" value={value} options={found} onTextChange={() => undefined} onChange={setValue} />
         <button type="button">After</button>
       </>
     )
@@ -116,25 +115,56 @@ describe('PickField', () => {
     await userEvent.keyboard('{ArrowDown}{Enter}')
     expect(box().value).toBe('Pat Example')
     await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
-    // Another answer for the picked name doesn't open it again
+    // Answers that go and come again while the box holds the picked name, not typing, don't open it again
+    rerender(<Later found={[]} />)
     rerender(<Later found={[pat]} />)
-    await new Promise((resolve) => setTimeout(resolve, 20))
     expect(screen.queryByRole('listbox')).toBeNull()
+    expect(box()).toBe(document.activeElement)
   })
 
-  it('leaves its list closed when options come after it was left or closed with Escape', async () => {
+  it('leaves its list closed when options come after it was left, closed with Escape or emptied', async () => {
     const { rerender } = render(<Later found={[]} />)
     await userEvent.type(box(), 'pa')
     await userEvent.tab()
     rerender(<Later found={[pat]} />)
-    await new Promise((resolve) => setTimeout(resolve, 20))
     expect(screen.queryByRole('listbox')).toBeNull()
     rerender(<Later found={[]} />)
     await userEvent.type(box(), 'pa')
     await userEvent.keyboard('{Escape}')
     rerender(<Later found={[pat]} />)
-    await new Promise((resolve) => setTimeout(resolve, 20))
     expect(screen.queryByRole('listbox')).toBeNull()
+    // Typed away to nothing, with the box still focused: an emptied box offers nothing
+    rerender(<Later found={[]} />)
+    await userEvent.type(box(), 'pa{Backspace}{Backspace}')
+    rerender(<Later found={[pat]} />)
+    expect(screen.queryByRole('listbox')).toBeNull()
+    expect(box()).toBe(document.activeElement)
+  })
+
+  // A form round the field that closes on Esc, as PropertiesForm does, unless something inside took it (defaultPrevented)
+  function InForm({ onEscape }: { onEscape: () => void }) {
+    return (
+      <div
+        onKeyDown={(event) => {
+          if (event.key === 'Escape' && !event.defaultPrevented) onEscape()
+        }}
+      >
+        <Example />
+      </div>
+    )
+  }
+
+  it('takes the Esc that closes its list, with someone picked, so a form round it that closes on Esc stays open', async () => {
+    const onEscape = vi.fn()
+    render(<InForm onEscape={onEscape} />)
+    await openList()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull())
+    expect(box().value).toBe('Jamie Clarke')
+    expect(onEscape).not.toHaveBeenCalled()
+    // With the list closed, Esc goes on to the form
+    await userEvent.keyboard('{Escape}')
+    expect(onEscape).toHaveBeenCalledTimes(1)
   })
 
   it('shows an option\'s icon and its secondary text beside its label, in the option\'s name, and only the label once picked', async () => {
@@ -176,24 +206,6 @@ describe('PickField', () => {
     await expectNoAxeViolations(container)
   })
 
-  // What carries aria-hidden, to say so when anything does
-  const hiddenOnes = (inside: ParentNode = document) => [...inside.querySelectorAll('[aria-hidden="true"]')].map((element) => element.outerHTML.slice(0, 80))
-
-  // Every rule but colour contrast (jsdom has no colours), over the whole page or one part of it. jsdom's page has no title
-  // or language of its own, which the apps' index.html give theirs.
-  async function axeViolations(context: Document | Element) {
-    const { title, lang } = { title: document.title, lang: document.documentElement.lang }
-    document.title = 'Properties'
-    document.documentElement.lang = 'en-US'
-    try {
-      const result = await axe.run(context, { rules: { 'color-contrast': { enabled: false } } })
-      return result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.html).join(' | ')}`)
-    } finally {
-      document.title = title
-      document.documentElement.lang = lang
-    }
-  }
-
   async function openList() {
     await userEvent.clear(box())
     await userEvent.type(box(), 'pa')
@@ -229,8 +241,9 @@ describe('PickField', () => {
     // In the form, after the box in reading order
     expect(screen.getByRole('form', { name: 'Properties' }).contains(list)).toBe(true)
     expect(box().compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // The whole page: nothing hidden holds a link (aria-hidden-focus), and the list is inside a landmark (region)
-    expect(await axeViolations(document)).toEqual([])
+    // The whole page, every rule but colour contrast (jsdom has no colours): nothing hidden holds a link (aria-hidden-focus),
+    // and the list is inside a landmark (region)
+    await expectNoPageAxeViolations(document, 'Properties')
     // React Aria's mark for a layer it keeps shown is gone once it has looked
     expect(document.querySelector('[data-react-aria-top-layer]')).toBeNull()
     await userEvent.keyboard('{Escape}')
@@ -272,7 +285,7 @@ describe('PickField', () => {
     const overlay = dialog.closest('body > *')!
     expect(hiddenOnes(overlay)).toEqual([])
     expect(dialog.contains(list)).toBe(true)
-    expect(await axeViolations(overlay)).toEqual([])
+    await expectNoPageAxeViolations(overlay, 'File Documents')
     expect(document.querySelector('[data-react-aria-top-layer]')).toBeNull()
   })
 

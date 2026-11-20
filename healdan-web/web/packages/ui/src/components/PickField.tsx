@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useState, type Key } from 'react'
-import { ComboBox as AriaComboBox, FieldError, Input, Label, ListBox, ListBoxItem } from 'react-aria-components'
+import { useContext, useState, type Key } from 'react'
+import { ComboBox as AriaComboBox, ComboBoxStateContext, FieldError, Input, Label, ListBox, ListBoxItem, type InputProps } from 'react-aria-components'
 import { Icon, type IconName } from '../icons'
 import comboStyles from './ComboBox.module.css'
 import { ComboBoxLayer, ComboBoxPopover } from './ComboBoxLayer'
@@ -33,6 +33,21 @@ export interface PickFieldProps {
   options: PickFieldOption[]
   /** What is typed, as it changes, for the caller to find options for; the value's label while nothing is typed */
   onTextChange: (text: string) => void
+}
+
+// The Esc that closes the list is the list's. With something picked, React Aria lets it go on to what is round the field
+// (a dialog, or a form that closes on Esc, as PropertiesForm does), so it's marked as taken (defaultPrevented), and only
+// the list closes. Esc with the list closed goes on as before. Not while an input method is composing, which takes Esc.
+function PickInput(props: InputProps) {
+  const state = useContext(ComboBoxStateContext)
+  return (
+    <Input
+      {...props}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !event.nativeEvent.isComposing && state?.isOpen) event.preventDefault()
+      }}
+    />
+  )
 }
 
 /**
@@ -113,7 +128,7 @@ export function PickField({ label, required, error, value, onChange, options, on
             </span>
           )}
         </Label>
-        <Input className={styles.input} onBlur={leave} />
+        <PickInput className={styles.input} onBlur={leave} />
         <OpensWhenOptionsCome text={text} hasOptions={found} />
         <FieldError className={styles.error}>{error}</FieldError>
         <ComboBoxPopover layer={layer} className={comboStyles.popover} placement="bottom start" offset={4}>
