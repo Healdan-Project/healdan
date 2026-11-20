@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { formatDateTime, formatSize, setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
-import { clientOf, matterList, matterRows, problem, saltmarsh, type FakeApi } from '../test/fakeApi'
+import { brightwell, clientOf, matterList, matterRows, problem, saltmarsh, type FakeApi } from '../test/fakeApi'
 import { renderApp } from '../test/renderApp'
 
 const main = () => screen.getByRole('main')
@@ -159,6 +159,19 @@ describe("A client's page", () => {
     fireEvent.keyDown(row, { key: 'Enter' })
     fireEvent.keyUp(row, { key: 'Enter' })
     await waitFor(() => expect(router.state.location.pathname).toBe('/matters/11'))
+  })
+
+  it("starts afresh on another client's page, by Back too, with no dialog carried from the one before", async () => {
+    const { router } = await renderApp('/clients/1', { ...PAGE, 'GET /v1/admin/clients/2': clientOf(brightwell) })
+    await screen.findByRole('heading', { level: 1, name: '1001 – Saltmarsh Shipping Ltd' })
+    await act(() => router.navigate({ href: '/clients/2' }))
+    await screen.findByRole('heading', { level: 1, name: '1002 – Brightwell Bakeries Ltd' })
+    await userEvent.click(within(main()).getByRole('button', { name: 'Rename' }))
+    expect(await screen.findByRole('dialog', { name: 'Rename Client' })).toBeTruthy()
+    await act(async () => router.history.back())
+    await waitFor(() => expect(router.state.location.pathname).toBe('/clients/1'))
+    expect(screen.queryAllByRole('dialog').map((one) => one.getAttribute('aria-label') ?? one.textContent?.slice(0, 20))).toEqual([])
+    expect(await screen.findByRole('heading', { level: 1, name: '1001 – Saltmarsh Shipping Ltd' })).toBeTruthy()
   })
 
   it("says there's no such client when the server has none, and when the address names none, with the way to Clients", async () => {

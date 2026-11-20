@@ -41,7 +41,7 @@ export function useMatter(id: number) {
   return useRead<A['Matter']>(workspaceKeys.matter(id), apiPath`/v1/admin/matters/${id}`)
 }
 
-/** Every workspace template, by name: a short list, as Stores are (spec 7.2) */
+/** Every workspace template, by name: a short list, as Stores are (spec 7.2), for its screens and New Matter's menu */
 export function useTemplates() {
   return useRead<A['TemplateInfo'][]>(workspaceKeys.templates, '/v1/admin/templates')
 }
@@ -55,9 +55,9 @@ export function useTemplateProblems(id: number, enabled = true) {
   return useRead<A['TemplateProblem'][]>(workspaceKeys.problems(id), apiPath`/v1/admin/templates/${id}/problems`, enabled)
 }
 
-/** A workspace's folders, from its top folder: a matter's own, or a template's */
-export function useWorkspaceTree(folderId: number) {
-  return useRead<A['WorkspaceNode']>(workspaceKeys.tree(folderId), apiPath`/v1/admin/workspaces/${folderId}/tree`)
+/** A workspace's folders, from its top folder: a matter's own, or a template's; nothing is asked without one */
+export function useWorkspaceTree(folderId: number | undefined) {
+  return useRead<A['WorkspaceNode']>(workspaceKeys.tree(folderId ?? -1), apiPath`/v1/admin/workspaces/${folderId ?? -1}/tree`, folderId !== undefined)
 }
 
 export function useFolderAccess(id: number) {

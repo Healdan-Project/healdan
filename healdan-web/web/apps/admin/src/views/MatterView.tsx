@@ -60,7 +60,8 @@ function MatterPage({ id, tab }: { id: number; tab: MatterTab }) {
       </div>
     )
   }
-  return <Matter matter={asked.data} tab={tab} />
+  // By its id, so another matter's page, by Back or Forward too, starts afresh: no dialog, tab or folder carried over
+  return <Matter key={asked.data.id} matter={asked.data} tab={tab} />
 }
 
 /** "Saltmarsh Shipping Ltd · Client Work · owner Tom Reeve · from template Litigation · 412 documents, 4.6 GB" */

@@ -57,6 +57,7 @@ async function openNewMatter(routes: Routes = {}) {
 async function pick(dialog: HTMLElement, name: string, typed: string, option: string) {
   await userEvent.type(box(dialog, name), typed)
   await pause()
+  // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
   await userEvent.keyboard('{ArrowDown}')
   await userEvent.click(await screen.findByRole('option', { name: option }))
 }
@@ -176,6 +177,17 @@ describe('New Matter', () => {
     await userEvent.type(field(dialog, 'Number'), '2')
     await waitFor(() => expect(outline(dialog)[0]).toBe('1004.2 – Community Hall Lease'))
     await waitFor(() => expect(outline(dialog).slice(1)).toEqual(['  Correspondence', '  Drafts', '  Due Diligence', '  Emails', '  Executed', '  Emails in This Matter, Search Folder', '  My Recent Docs Here, Search Folder']))
+  })
+
+  it("asks again for the templates and the chosen template's folders when the person comes back to the window, as the templates' screens do", async () => {
+    const { api, dialog } = await openNewMatter()
+    await userEvent.selectOptions(select(dialog, 'Template'), 'Litigation')
+    await waitFor(() => expect(outline(dialog)).toHaveLength(7))
+    expect(api.callsTo('GET /v1/admin/templates')).toHaveLength(1)
+    expect(api.callsTo('GET /v1/admin/workspaces/202/tree')).toHaveLength(1)
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/templates')).toHaveLength(2))
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/workspaces/202/tree')).toHaveLength(2))
   })
 
   it('checks the form with the server as it changes, once the typing pauses, never for each key', async () => {

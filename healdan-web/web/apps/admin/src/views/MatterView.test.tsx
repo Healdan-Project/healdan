@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { ApiError, type adminComponents } from '@healdan/api'
@@ -116,6 +116,19 @@ describe("A matter's page", () => {
     expect(within(main()).getByRole('tab', { name: 'Overview' }).getAttribute('aria-selected')).toBe('true')
   })
 
+  it("starts afresh on another matter's page, by Back too, with no dialog carried from the one before", async () => {
+    const { router } = await openMatter('/matters/11', { 'GET /v1/admin/matters/12': matterPage(matterRow({ id: 12, number: '1001.2', name: 'Crew Wages', folderId: 120 })) })
+    await act(() => router.navigate({ href: '/matters/12' }))
+    await screen.findByRole('heading', { level: 1, name: '1001.2 Crew Wages' })
+    await userEvent.click(within(main()).getByRole('button', { name: 'Edit' }))
+    expect(await screen.findByRole('dialog', { name: 'Edit 1001.2' })).toBeTruthy()
+    // Back to the matter before, whose answer is at hand
+    await act(async () => router.history.back())
+    await waitFor(() => expect(router.state.location.pathname).toBe('/matters/11'))
+    expect(screen.queryAllByRole('dialog').map((one) => one.getAttribute('aria-label') ?? one.textContent?.slice(0, 20))).toEqual([])
+    expect(await screen.findByRole('heading', { level: 1, name: TITLE })).toBeTruthy()
+  })
+
   it("says there's no such matter, for an id that isn't one and one the server doesn't have", async () => {
     const first = await renderApp('/matters/99', workspaceRoutes())
     expect(await screen.findByRole('heading', { level: 1, name: 'Matter Not Found' })).toBeTruthy()
@@ -162,6 +175,7 @@ describe('Edit', () => {
     await userEvent.clear(owner)
     await userEvent.type(owner, 'hel')
     await waitFor(() => expect(api.callsTo('GET /v1/users').at(-1)?.query).toEqual({ q: 'hel' }))
+    // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
     await userEvent.keyboard('{ArrowDown}')
     await userEvent.click(await screen.findByRole('option', { name: 'Helen Ashcombe helen' }))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }))

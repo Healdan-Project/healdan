@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { adminComponents } from '@healdan/api'
@@ -219,6 +219,18 @@ describe("A template's page", () => {
     const dialog = await screen.findByRole('alertdialog', { name: 'Move the Template Litigation to the Trash?' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }))
     expect((await within(dialog).findByRole('alert')).textContent).toBe('A document in it is checked out.')
+  })
+
+  it("starts afresh on another template's page, by Back too, with no dialog carried from the one before", async () => {
+    const { router } = await openTemplate()
+    await act(() => router.navigate({ href: '/templates/203' }))
+    await screen.findByRole('heading', { level: 1, name: 'Transactional' })
+    await userEvent.click(within(main()).getByRole('button', { name: 'Rename' }))
+    expect(await screen.findByRole('dialog', { name: 'Rename Template' })).toBeTruthy()
+    await act(async () => router.history.back())
+    await waitFor(() => expect(router.state.location.pathname).toBe('/templates/202'))
+    expect(screen.queryAllByRole('dialog').map((one) => one.getAttribute('aria-label') ?? one.textContent?.slice(0, 20))).toEqual([])
+    expect(await screen.findByRole('heading', { level: 1, name: 'Litigation' })).toBeTruthy()
   })
 
   it("says there's no such template", async () => {

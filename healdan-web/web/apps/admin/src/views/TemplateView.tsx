@@ -46,7 +46,8 @@ function TemplatePage({ id }: { id: number }) {
       </div>
     )
   }
-  return <Template template={asked.data} />
+  // By its id, so another template's page, by Back or Forward too, starts afresh: no dialog or folder carried over
+  return <Template key={asked.data.id} template={asked.data} />
 }
 
 const counts = new Intl.NumberFormat('en-US')

@@ -68,7 +68,8 @@ function ClientPage({ id, search }: { id: number; search: ClientSearch }) {
       </div>
     )
   }
-  return <Client client={asked.data} search={search} />
+  // By its id, so another client's page, by Back or Forward too, starts afresh: no dialog carried over
+  return <Client key={asked.data.id} client={asked.data} search={search} />
 }
 
 const counts = new Intl.NumberFormat('en-US')

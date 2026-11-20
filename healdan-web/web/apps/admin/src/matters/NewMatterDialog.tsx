@@ -11,10 +11,11 @@ import { matterHref } from '../addresses'
 import { ClientDialog } from '../clients/ClientDialog'
 import { ClientPicker } from '../pickers/ClientPicker'
 import { PersonPicker } from '../pickers/PersonPicker'
-import { adminKeys, useNextMatterNumber, useStores, useTemplates, useWorkspaceTree } from '../queries'
+import { adminKeys, useNextMatterNumber, useStores } from '../queries'
 import { NewStoreDialog } from '../stores/NewStoreDialog'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
+import { useTemplates, useWorkspaceTree, workspaceKeys } from '../workspace/queries'
 import formStyles from '../forms/Form.module.css'
 import styles from './NewMatter.module.css'
 import { useMatterCheck } from './useMatterCheck'
@@ -154,7 +155,7 @@ export function NewMatterDialog({ client: preset, onClose }: NewMatterDialogProp
       // The lists that count matters: the Matters list, the clients' (a client's matters) and the templates' (made from it)
       void queryClient.invalidateQueries({ queryKey: adminKeys.matters })
       void queryClient.invalidateQueries({ queryKey: adminKeys.clients })
-      void queryClient.invalidateQueries({ queryKey: adminKeys.templates })
+      void queryClient.invalidateQueries({ queryKey: workspaceKeys.templates })
       toast(t('admin.newMatter.created', { number: made.number, name: made.name }))
       // Not through the dialog's own close, which is held while busy
       onClose()

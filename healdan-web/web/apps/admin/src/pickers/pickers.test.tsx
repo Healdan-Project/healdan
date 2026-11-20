@@ -90,6 +90,7 @@ describe('ClientPicker', () => {
     await userEvent.type(box('Client'), 'bake')
     await pause()
     // The arrow key goes to what was found (PickField opens its list by itself only as the text changes)
+    // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
     await userEvent.keyboard('{ArrowDown}')
     const list = await screen.findByRole('listbox')
     expect(within(list).getAllByRole('option').map((one) => one.textContent)).toEqual(['1002 – Brightwell Bakeries Ltd'])
@@ -131,6 +132,7 @@ const findRoutes: Routes = { 'GET /v1/admin/find': ({ query }: { query?: Record<
 /** The options the list offers once the typing has paused and the arrow key has gone to them */
 async function offered() {
   await pause()
+  // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
   await userEvent.keyboard('{ArrowDown}')
   const list = await screen.findByRole('listbox')
   return { list, names: within(list).getAllByRole('option').map((one) => one.textContent) }
@@ -156,6 +158,7 @@ describe('PersonPicker', () => {
     await userEvent.type(box('Owner'), 'old')
     await pause()
     expect(api.callsTo('GET /v1/users').at(-1)?.query).toEqual({ q: 'old' })
+    // TODO(#285): PickField opens its list when the answer comes once #285 is merged in; this ArrowDown goes then
     await userEvent.keyboard('{ArrowDown}')
     expect(screen.queryByRole('listbox')).toBeNull()
   })

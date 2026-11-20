@@ -62,9 +62,7 @@ export const adminKeys = {
   /** Every Store menu, and who can see each Store */
   stores: adminKey('/v1/admin/stores'),
   storeAccess: (id: number) => [...adminKey('/v1/admin/stores'), id, 'access'] as const,
-  templates: adminKey('/v1/admin/templates'),
-  /** A workspace's tree, a template's or a matter's, by its top folder */
-  workspaceTree: (folderId: number) => ['admin', 'workspaces', folderId, 'tree'] as const,
+  // The templates' and the workspaces' keys, and their reads, are workspace/queries.ts's
   groups: adminKey('/v1/admin/groups'),
 }
 
@@ -128,21 +126,6 @@ export function useNextClientNumber(enabled = true) {
     enabled,
     staleTime: 0,
     gcTime: 0,
-  })
-}
-
-/** Every workspace template, by name: a short list, for New Matter's Template menu (spec 7.2) */
-export function useTemplates() {
-  return useAdminQuery('/v1/admin/templates')
-}
-
-/** A workspace's folders, a template's or a matter's, by its top folder; nothing is asked without one */
-export function useWorkspaceTree(folderId: number | undefined) {
-  const api = useApi()
-  return useQuery({
-    queryKey: adminKeys.workspaceTree(folderId ?? -1),
-    queryFn: ({ signal }) => api.get<A['WorkspaceNode']>(apiPath`/v1/admin/workspaces/${folderId ?? -1}/tree`, undefined, { signal }),
-    enabled: folderId !== undefined,
   })
 }
 
