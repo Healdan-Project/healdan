@@ -19,10 +19,68 @@ info:
       describes them. `$ref` doesn't reach across the two files, so this one
       repeats `Page`, `FieldError` and the `Problem` response unchanged, and
       `Problem` with only the members the admin API answers with.
+    - A change is checked in this order, and a refusal changes nothing:
+      1. `400 bad-request` for a body that isn't the JSON expected, holds a
+         member the route doesn't take (but for those a route names as
+         `not-editable`), or holds a character Healdan can't keep (NUL, or a
+         lone surrogate).
+      2. `404 not-found` for what the path names, when it doesn't exist or
+         isn't what the route acts on.
+      3. `422 validation` for members that are missing, blank once the
+         whitespace at either end is taken off, can't be changed, or are
+         wrong in another way the route names, each in `fields` with its
+         code, such as `required` or `not-editable`.
+      4. `409 refused` for what Healdan's rules refuse, with a sentence in
+         `detail` that says why, which the app can show as it is. Something
+         the request names by its id that no longer exists, such as a client
+         or a group, is refused this way too.
+    - Every change is recorded in the administration record: when, who and
+      from where, its area, its action (such as `matter.moved`), what it
+      acted on, and the fields it changed with their old and new values. A
+      change that's one transaction is recorded inside it, so the two stand
+      or fall together; one that isn't, such as a delete, is recorded
+      straight after it succeeds. A change that changes nothing isn't
+      recorded.
 servers:
   - url: /api
 security:
   - cookieAuth: []
+tags:
+  - name: Dashboard
+    description: |
+      The Dashboard area (`AdminArea.DASHBOARD`): the Dashboard and the top
+      bar's find (Admin app spec sections 7.1 and 8.1).
+  - name: Matters
+    description: |
+      The Matters area (`AdminArea.MATTERS`): clients, matters, their
+      workspaces and the workspace templates (Admin app spec sections 8.2 to
+      8.5). Only members of `admin`, on the web session, reach these routes:
+      no session is `401 unauthenticated`, a device token
+      `403 web-session-only`, and anyone else `403 admins-only`.
+
+      A workspace is a matter's own folder and everything in it, or a
+      workspace template's: a folder directly in the Templates Store, and
+      everything in it. The routes under `/v1/admin/workspaces`,
+      `/v1/admin/folders` and `/v1/admin/search-folders` act only on a
+      workspace's folders and search folders, its top folder included: any
+      other id, such as a Store's, the Templates Store's, the root's or
+      LogicalDOC's Default workspace's, an alias, a folder in the Trash or one
+      that doesn't exist, is `404 not-found`.
+  - name: Stores
+    description: |
+      The Stores area (`AdminArea.STORES`): the Stores, and who can see each
+      (Admin app spec section 8.6). A Store is a workspace directly under the
+      root that holds matters; LogicalDOC's Default workspace and the
+      Templates Store aren't Stores. Only members of `admin`, on the web
+      session, reach these routes: no session is `401 unauthenticated`, a
+      device token `403 web-session-only`, and anyone else `403 admins-only`.
+  - name: People
+    description: |
+      The People area (`AdminArea.PEOPLE`): the groups, for the forms that
+      name them (Admin app spec section 8.7). Only members of `admin`, on the
+      web session, reach these routes: no session is `401 unauthenticated`,
+      a device token `403 web-session-only`, and anyone else
+      `403 admins-only`.
 paths:
   /v1/admin/dashboard:
     get:
@@ -170,6 +228,1635 @@ paths:
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/admin/clients:
+    get:
+      operationId: adminListClients
+      summary: The clients
+      description: |
+        The Clients list (Admin app spec section 8.2): every client, with its
+        live matters and its documents' figures. A page of `limit` from
+        `offset`, with the total once `q` has filtered them.
+
+        - `q`, read with the whitespace at either end taken off, in any case,
+          its `%` and `_` taken as they are, keeps the clients whose number
+          starts with it or whose name contains it. Without it, or blank,
+          every client.
+        - `matters` counts its live matters, not deleted or in the Trash, as
+          they are at the request.
+        - `documents` and `lastActivity` are its matters' figures, from the
+          summary the server keeps in memory for the Dashboard's Usage,
+          worked out at most every 15 minutes and never by a request:
+          `figuresAt` says when. Until the first summary since the server
+          started, they and `figuresAt` are null; a matter made since the
+          last summary counts nothing until the next.
+        - `sort` is `number` (the default), `name` (ignoring case),
+          `matters`, `documents` or `lastActivity`, and `order` `asc` (the
+          default) or `desc`. Ties go by number, and a client with nothing
+          to sort by, such as a null `lastActivity`, comes last whichever
+          the order.
+
+        A `sort` or `order` that isn't one of these, a negative `offset` or
+        a `limit` outside 1 to 200 is `400 bad-request`.
+      tags: [Matters]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: A client's number, or part of its name
+          schema:
+            type: string
+        - name: sort
+          in: query
+          required: false
+          description: The column to sort by; `number` by default
+          schema:
+            type: string
+            enum: [number, name, matters, documents, lastActivity]
+        - $ref: '#/components/parameters/SortOrder'
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: A page of clients
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: adminCreateClient
+      summary: Create a client
+      description: |
+        Creates a client with the number and name given, through
+        `ClientService.create`, and answers `201` with it, its address as
+        `Location` (Admin app spec section 8.2). The name has the whitespace
+        at either end taken off. The number never changes afterwards, and
+        nothing deletes a client. `GET /v1/admin/clients/next-number` gives
+        the number to suggest.
+
+        - `422 validation` for `number` or `name` missing, or a name that's
+          blank (`required`).
+        - `409 refused` for a number below 1 or already used, and a name
+          over 255 characters.
+
+        Recorded as `client.created`, with its number and name.
+      tags: [Matters]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewClient'
+      responses:
+        '201':
+          description: The new client
+          headers:
+            Location:
+              description: The client's address, such as `/api/v1/admin/clients/12`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/clients/next-number:
+    get:
+      operationId: adminNextClientNumber
+      summary: The number to suggest for a new client
+      description: |
+        The highest client number in use plus 1, or 1 with no client yet
+        (`ClientService.suggestNumber`), for New Client to fill in. It
+        reserves nothing: of two administrators given the same number, the
+        second to create is refused.
+      tags: [Matters]
+      responses:
+        '200':
+          description: The number
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NextNumber'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/clients/{id}:
+    get:
+      operationId: adminGetClient
+      summary: A client
+      description: |
+        The client, as the list gives it, for its page (Admin app spec
+        section 8.2), which lists its matters with
+        `GET /v1/admin/matters?clientId=`. A client that doesn't exist is
+        `404 not-found`.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/ClientPath'
+      responses:
+        '200':
+          description: The client
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: adminRenameClient
+      summary: Rename a client
+      description: |
+        Changes the client's name, through `ClientService.rename`, and
+        answers the client. Only the name can change (Admin app spec section
+        8.2), and no matter's folder is renamed with it: a matter's folder
+        is named by its number and its own name.
+
+        - `404 not-found` for a client that doesn't exist.
+        - `422 validation` for a body with `number` (`not-editable`), and for
+          a name missing or blank (`required`).
+        - `409 refused` for a name over 255 characters.
+
+        Recorded as `client.renamed`, with the name before and after. A
+        rename to the name it has changes nothing and isn't recorded.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/ClientPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NameChange'
+      responses:
+        '200':
+          description: The client, renamed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/matters:
+    get:
+      operationId: adminListMatters
+      summary: The matters
+      description: |
+        The Matters list (Admin app spec section 8.3), the one place that
+        lists every matter: the live ones, not deleted or in the Trash. A
+        page of `limit` from `offset`, with the total once the filters have
+        applied, which all apply together.
+
+        - `q`, read with the whitespace at either end taken off, in any case,
+          its `%` and `_` taken as they are, keeps the matters whose number
+          with their client's, such as `1001.1`, starts with it, or whose
+          name or client's name contains it. Without it, or blank, every
+          matter.
+        - `clientId`, `storeId` and `ownerId` keep the matters of that
+          client, in that Store, or owned by that person. An id that names
+          nothing keeps none.
+        - `documents`, `bytes` and `lastActivity` come from the summary the
+          server keeps in memory for the Dashboard's Usage, worked out at
+          most every 15 minutes and never by a request: `figuresAt` says
+          when. Until the first summary since the server started, they and
+          `figuresAt` are null; a matter made since the last summary shows
+          none until the next.
+        - `sort` is `number` (the default: by client number, then matter
+          number), `name`, `client` (its name, then its number), `store`,
+          `owner`, `template` (each by name), `documents`, `bytes` or
+          `lastActivity`, names ignoring case, and `order` `asc` (the
+          default) or `desc`. Ties go by number, and a matter with nothing
+          to sort by, such as no template or a null `lastActivity`, comes
+          last whichever the order.
+
+        A `sort` or `order` that isn't one of these, a negative `offset` or
+        a `limit` outside 1 to 200 is `400 bad-request`.
+      tags: [Matters]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: A matter's number, such as `1001.1`, or part of its name or its client's name
+          schema:
+            type: string
+        - name: clientId
+          in: query
+          required: false
+          description: Only this client's matters
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: storeId
+          in: query
+          required: false
+          description: Only the matters in this Store
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: ownerId
+          in: query
+          required: false
+          description: Only the matters this person owns, by the user's id
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: sort
+          in: query
+          required: false
+          description: The column to sort by; `number` by default
+          schema:
+            type: string
+            enum: [number, name, client, store, owner, template, documents, bytes, lastActivity]
+        - $ref: '#/components/parameters/SortOrder'
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: A page of matters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: adminCreateMatter
+      summary: Create a matter
+      description: |
+        Creates a matter and its workspace from a workspace template, all or
+        nothing, through `MatterService.create` (Admin app spec section
+        8.3), and answers `201` with it, its address as `Location`. The
+        template's folders, with their permissions, their properties and
+        its search folders, are copied into the Store as the matter's own
+        folder, named as `1001.2 – Name`; every folder gets the matter's
+        client and matter; and the owner's own group gets Full Access to
+        the matter's folder. `POST /v1/admin/matters/check` says beforehand
+        what this would refuse.
+
+        - `422 validation` for `clientId`, `number`, `name`, `storeId`,
+          `ownerId` or `templateId` missing, or a name that's blank
+          (`required`).
+        - `409 refused` for what `MatterService` refuses: a client, Store,
+          template or owner that no longer exists; an owner whose account is
+          disabled; a number below 1 or already used, by a deleted matter
+          too, as a matter's number is never used again (by any client's
+          matter when numbers are system-wide); a name with `/`, `\` or
+          markup, or too long for the folder's name; a description over
+          4,000 characters; and the permission rules: a folder of the
+          template that grants more than its parent (P1), or a group that
+          could read the matter but can't read its Store (P2; the owner's
+          own group passes when the owner can read the Store).
+
+        Recorded as `matter.created`, with every field it set: the client,
+        number, name, description, Store, template and owner, by name.
+      tags: [Matters]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewMatter'
+      responses:
+        '201':
+          description: The new matter
+          headers:
+            Location:
+              description: The matter's address, such as `/api/v1/admin/matters/34`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Matter'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/matters/check:
+    post:
+      operationId: adminCheckMatter
+      summary: What creating a matter would refuse
+      description: |
+        New Matter's check, run as the form changes (Admin app spec section
+        8.3): the problems `createMatter` would refuse in the draft, found
+        with the same rules, so they're said before **Create Matter**. It
+        creates and writes nothing, and records nothing.
+
+        The draft is the form as it stands: any member may be left out or
+        null, and a problem is looked for only once every member it needs
+        is given, as `MatterProblemCode` says. A blank name is no problem
+        here: the form asks for one itself. `problems` is empty when nothing
+        is found, and is in the order `MatterProblemCode` lists the codes.
+
+        A draft never answers `422`: a member that's missing is left
+        unchecked.
+      tags: [Matters]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterDraft'
+      responses:
+        '200':
+          description: The problems found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterCheck'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/matters/next-number:
+    get:
+      operationId: adminNextMatterNumber
+      summary: The number to suggest for a client's next matter
+      description: |
+        The highest matter number in use plus 1, the client's or, when
+        numbers are system-wide (Healdan Settings), the whole install's,
+        deleted matters included, as a number is never used again
+        (`MatterNumbering.suggest`); 1 with none. New Matter fills it in as
+        the next free number. It reserves nothing: of two administrators
+        given the same number, the second to create is refused.
+
+        A missing `clientId` is `422 validation` (`required`), and a client
+        that doesn't exist `404 not-found`.
+      tags: [Matters]
+      parameters:
+        - name: clientId
+          in: query
+          required: true
+          description: The client the matter is for
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        '200':
+          description: The number
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NextNumber'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/matters/{id}:
+    get:
+      operationId: adminGetMatter
+      summary: A matter
+      description: |
+        The matter, for its page (Admin app spec section 8.3): its facts,
+        its figures from the summary as the list gives them, its own
+        folder's id for the Workspace tab and **Open in Healdan**, and, for
+        the Overview tab, how many of its documents couldn't be indexed and
+        how many previews were given up on, both counted at the request
+        from the documents stamped with its client and matter.
+
+        A matter that doesn't exist, or whose folder is in the Trash, is
+        `404 not-found`.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/MatterPath'
+      responses:
+        '200':
+          description: The matter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Matter'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: adminEditMatter
+      summary: Edit a matter
+      description: |
+        Changes the matter's name, description and owner, the only things
+        **Edit** changes, through `MatterService.update` (Admin app spec
+        section 8.3), and answers the matter. A member left out stays as it
+        is; a `description` of null, or blank, takes it away. A new name
+        renames the matter's folder (`1001.2 – New Name`). A new owner's own
+        group gets Full Access to the matter's folder and the old owner's
+        row is taken off it, and off the folders below that narrow with it.
+
+        - `404 not-found` for a matter that doesn't exist or whose folder is
+          in the Trash.
+        - `422 validation` for `clientId`, `number`, `storeId` or
+          `templateId` (`not-editable`): a matter's client, number and
+          template never change, and **Move to Another Store** changes its
+          Store. Also for a name that's null or blank, or an owner that's
+          null (`required`).
+        - `409 refused` for what `MatterService` refuses: a name with `/`,
+          `\` or markup, or too long for the folder's name; a description
+          over 4,000 characters; an owner that doesn't exist or whose
+          account is disabled; and a new owner who can't read the matter's
+          Store (P2).
+
+        Recorded as `matter.updated`, with the fields whose values changed,
+        an owner by name. An edit that changes nothing isn't recorded.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/MatterPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterChange'
+      responses:
+        '200':
+          description: The matter, changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Matter'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: adminDeleteMatter
+      summary: Move a matter to the Trash
+      description: |
+        Moves the matter's folder, and everything live in it, to the
+        caller's Trash, through LogicalDOC's folder delete, as the User
+        app's delete of a folder does, and answers the Trash item it made
+        (Admin app spec section 8.3). The matter's row stays, so its number
+        stays taken; the matter is then `404` here and gone from the lists.
+        An administrator restores it from the User app's Trash
+        (`POST /v1/trash/{id}/restore` with `trashItemId`), which brings it
+        back as it was.
+
+        - `404 not-found` for a matter that doesn't exist or whose folder is
+          already in the Trash.
+        - `409 refused` while a document in it is checked out, by anyone,
+          the caller too; while it holds an immutable document; and for what
+          Healdan's rules refuse.
+
+        Recorded as `matter.deleted`, after the delete.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/MatterPath'
+      responses:
+        '200':
+          description: The Trash item the delete made
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedMatter'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/matters/{id}/move:
+    post:
+      operationId: adminMoveMatter
+      summary: Move a matter to another Store
+      description: |
+        Moves the matter's folder, with everything in it, into another
+        Store, through LogicalDOC's folder move, and answers the matter in
+        its new Store (Admin app spec section 8.3). The matter keeps its
+        client, number and name, and its documents their properties; a
+        folder in it that followed the old Store's permissions is fitted to
+        the new Store's, as on every route. The documents' files follow to
+        the new Store's storage backend in the background, so until they
+        have, a file may still be read from the old one. A move into the
+        Store it's in changes nothing.
+
+        - `404 not-found` for a matter that doesn't exist or whose folder is
+          in the Trash.
+        - `422 validation` for a missing `storeId` (`required`).
+        - `409 refused` when `storeId` isn't a live Store (Default, Templates
+          and the root aren't Stores); while a document in it is checked out,
+          by anyone; when a folder in the Store already has the matter's
+          folder's name, compared without regard to case, as the matter's
+          folder is never renamed to fit; and for what Healdan's rules
+          refuse, such as a group that can read the matter but can't read
+          the new Store (P2).
+
+        Recorded as `matter.moved`, with the Store before and after.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/MatterPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MatterMove'
+      responses:
+        '200':
+          description: The matter, in its new Store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Matter'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/workspaces/{folderId}/tree:
+    get:
+      operationId: adminWorkspaceTree
+      summary: A workspace's folders
+      description: |
+        The Workspace Editor's folder tree (Admin app spec section 8.4), of a
+        matter's workspace or a workspace template's: `folderId` is the
+        matter's own folder (`folderId` in its `Matter`) or the template's
+        (its `id`). Every live folder and search folder in it, at every
+        level, hidden ones too, with `ownPermissions` on each folder that
+        has permissions of its own, which the editor shows with a lock. Each
+        folder's `children` are its folders, then its search folders, each
+        by name, ignoring case; a search folder has none.
+
+        Any other id is `404 not-found`: a folder inside a workspace (ask
+        for its workspace's tree), a Store, and the others the Matters tag
+        names.
+      tags: [Matters]
+      parameters:
+        - name: folderId
+          in: path
+          required: true
+          description: The matter's own folder, or the template's
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        '200':
+          description: The workspace's top folder, with everything in it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceNode'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/folders/{id}:
+    patch:
+      operationId: adminRenameFolder
+      summary: Rename a workspace's folder
+      description: |
+        Renames a folder or search folder of a workspace (Admin app spec
+        section 8.4), at any level below its top folder, a matter's top
+        level included. The name has the whitespace at either end taken
+        off; the folder's own name changes nothing, after the checks up to
+        `404`. Answers `204`.
+
+        - `404 not-found` for a folder outside a workspace.
+        - `422 validation` for the name, as `FolderName` says.
+        - `409 refused` for the workspace's top folder (a matter's takes its
+          name from the matter, through `PATCH /v1/admin/matters/{id}`, and
+          a template's through `PATCH /v1/admin/templates/{id}`); for a name
+          another folder or search folder in the same folder has, compared
+          without regard to case (changing only the case of its own name
+          works); and for what Healdan's rules refuse.
+
+        Recorded as `folder.renamed`, with the name before and after.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/FolderPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FolderRename'
+      responses:
+        '204':
+          description: Renamed
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: adminDeleteFolder
+      summary: Move a workspace's folder to the Trash
+      description: |
+        Moves a folder or search folder of a workspace, below its top
+        folder, and everything live in it, to the caller's Trash, through
+        LogicalDOC's folder delete, as the User app's delete does (Admin app
+        spec section 8.4). Answers `204`. A matter made from a template
+        keeps its own copy of a folder deleted from the template.
+
+        - `404 not-found` for a folder outside a workspace.
+        - `409 refused` for the workspace's top folder (a matter's is
+          deleted with `DELETE /v1/admin/matters/{id}`, a template's with
+          `DELETE /v1/admin/templates/{id}`); while a document in it is
+          checked out, by anyone, the caller too; while it holds an
+          immutable document; and for what Healdan's rules refuse.
+
+        Recorded as `folder.deleted`, after the delete.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/FolderPath'
+      responses:
+        '204':
+          description: In the Trash
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/folders/{id}/children:
+    post:
+      operationId: adminCreateFolder
+      summary: Create a folder in a workspace
+      description: |
+        Creates a folder in the folder `id` names, in a workspace, at any
+        level, its top folder included, so a matter's top level too (Admin
+        app spec section 8.4). The name has the whitespace at either end
+        taken off. The new folder follows its parent's permissions, takes
+        the properties its parent passes down and, in a matter, the matter's
+        client and matter, as a folder made in the User app does. Answers
+        `201` with it, as a node of the tree with no children.
+
+        - `404 not-found` for a folder outside a workspace.
+        - `422 validation` for the name, as `FolderName` says.
+        - `409 refused` for a search folder, which holds no folders; for a
+          name another folder or search folder there has, compared without
+          regard to case; and for what Healdan's rules refuse.
+
+        Recorded as `folder.created`, with its name and the folder it's in.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/FolderPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewWorkspaceFolder'
+      responses:
+        '201':
+          description: The new folder
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceNode'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/folders/{id}/move:
+    post:
+      operationId: adminMoveFolder
+      summary: Move a folder within its workspace
+      description: |
+        Moves a folder or search folder of a workspace, below its top
+        folder, with everything in it, into another folder of the same
+        workspace, its top folder included, through LogicalDOC's folder
+        move (Admin app spec section 8.4). A folder that would then grant
+        more than its new parent is narrowed to fit, as on every route
+        (P1). A move into the folder it's in changes nothing. Answers `204`.
+
+        - `404 not-found` for a folder outside a workspace, or a `folderId`
+          that isn't a folder of one.
+        - `422 validation` for a missing `folderId` (`required`).
+        - `409 refused` for the workspace's top folder; into another
+          workspace (a folder moves to another matter in the User app); into
+          a search folder, the folder itself or a folder inside it; while a
+          document in it is checked out, by anyone; for a name another folder
+          or search folder there has, compared without regard to case; and
+          for what Healdan's rules refuse.
+
+        Recorded as `folder.moved`, with the folder it was in before and
+        after.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/FolderPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FolderMove'
+      responses:
+        '204':
+          description: Moved
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/folders/{id}/access:
+    get:
+      operationId: adminGetFolderAccess
+      summary: Who can use a folder
+      description: |
+        The Workspace Editor's **Who Can Use This Folder** (Admin app spec
+        section 8.4), for a folder or search folder of a workspace, its top
+        folder included: what it grants each group and person, its own
+        permissions or, when it follows, those of the folder it follows
+        (`followsFolderId`), each row with its access level. Whether
+        **Apply to Subfolders** is offered is `canApplyToSubfolders`.
+
+        A folder outside a workspace is `404 not-found`.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/FolderPath'
+      responses:
+        '200':
+          description: The folder's access
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderAccess'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: adminSetFolderAccess
+      summary: Set who can use a folder
+      description: |
+        Sets a workspace's folder's permissions, through
+        `FolderAccessService`, and answers its access after (Admin app spec
+        section 8.4). Either `rows`, the folder's own permissions from then
+        on (**Set Own Permissions**, and **Save**): each group or person
+        gets exactly the permissions its row gives, and one left out gets
+        none here; or `followParent: true`, which gives them up for its
+        parent's (**Follow Parent**). Inside a matter, the folders below it
+        that would grant more than it then narrow with it, as on every
+        route.
+
+        - `404 not-found` for a folder outside a workspace.
+        - `422 validation`: `rows` (`required`) when neither `rows` nor
+          `followParent: true` is sent, and (`invalid`) when both are; a row
+          (`rows[2]`) with neither `groupId` nor `userId` (`required`), with
+          both (`invalid`), or naming a group or person an earlier row named
+          (`duplicate`); and a row's empty `permissions`
+          (`rows[2].permissions`, `required`).
+        - `409 refused` for a group or person that no longer exists; for
+          `guest`, or a read-only person's own group, given anything beyond
+          Read Only, which LogicalDOC doesn't check when a folder's
+          permissions are saved; for leaving out the owner's row on a
+          matter's own folder, or making that folder follow its Store; and,
+          inside a matter, for a folder that would grant more than its
+          parent (P1) or, on its own folder, a group that could read the
+          matter but can't read its Store (P2). In a template P1 and P2
+          aren't checked as it's edited: the save works, and
+          `GET /v1/admin/templates/{id}/problems` lists what New Matter would
+          refuse.
+
+        Recorded as `folder.access-changed`, with the rows before and after.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/FolderPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FolderAccessChange'
+      responses:
+        '200':
+          description: The folder's access, saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderAccess'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/folders/{id}/apply-access:
+    post:
+      operationId: adminApplyFolderAccess
+      summary: Give the folders below a folder its permissions
+      description: |
+        **Apply to Subfolders** (Admin app spec section 8.4): every folder
+        and search folder below this one, at every level, deleted ones too,
+        gives up permissions of its own and follows this folder, through
+        LogicalDOC's `applySecurityToTree`, as the Classic Interface's Apply
+        to Subfolders does. A folder below that was restricted is opened up
+        to this folder's permissions. Answers `204`.
+
+        - `404 not-found` for a folder outside a workspace.
+        - `409 refused` where `canApplyToSubfolders` is false: a folder with
+          no folder below it, and where Healdan's rules don't allow it
+          (`checkApplyToTree`).
+
+        Recorded as `folder.access-applied`, after it's done.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/FolderPath'
+      responses:
+        '204':
+          description: Applied
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/folders/{id}/properties:
+    get:
+      operationId: adminGetFolderProperties
+      summary: The values a folder sets
+      description: |
+        The property values a workspace's folder sets for what's filed below
+        it (Admin app spec section 8.4), its top folder included: each
+        property of the Healdan profile that passes down from folders, in
+        the profile's order. That's Class and Subclass, and any property an
+        administrator has added to the profile, but not Client and Matter,
+        which come from the matter, nor those a document alone has (Author,
+        Typist, Comments, Legacy doc # and the email fields). Each value is
+        `local`, set on this folder, which passes it down; `inherited`, from
+        the folder `inheritedFrom` names; or `default`, the install's
+        default Class.
+
+        - `404 not-found` for a folder outside a workspace.
+        - `409 refused` for a search folder, which holds nothing and sets no
+          values.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/FolderPath'
+      responses:
+        '200':
+          description: The folder's values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderProperties'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: adminSetFolderProperties
+      summary: Set the values a folder sets
+      description: |
+        Sets the folder's values, stored with LogicalDOC's folder change
+        event, so Healdan's profile rules mark them and pass them down, and
+        answers its values after (Admin app spec section 8.4). `values`
+        holds the whole set: a value that differs from what the folder would
+        inherit becomes the folder's own, and passes down to the folders and
+        documents below that don't set their own; one equal to it, `null`,
+        empty text, or a property left out goes back to inheriting. In a
+        matter the folders and documents below take the change at once; in
+        a template, the matters made from it afterwards do.
+
+        - `404 not-found` for a folder outside a workspace.
+        - `422 validation`, every value that's wrong before anything is
+          saved, by the property's name, with the codes
+          `setProperties` in `openapi.yaml` uses: `unknown` for a
+          property the list doesn't have, or a user, folder or document that
+          doesn't exist; `read-only` for Client and Matter; `type` for a
+          value of the wrong JSON type or format; `too-long` for text over
+          4,000 characters once cleaned of markup; `not-an-option` for a
+          value that isn't one of its `options`; and `class-mismatch` for a
+          Subclass that doesn't belong to the folder's Class.
+        - `409 refused` for a search folder, and for what Healdan's rules
+          refuse.
+
+        Recorded as `folder.properties-changed`, with each value before and
+        after.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/FolderPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FolderPropertiesChange'
+      responses:
+        '200':
+          description: The folder's values, saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderProperties'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/folders/{id}/search-folders:
+    post:
+      operationId: adminCreateSearchFolder
+      summary: Create a search folder in a workspace
+      description: |
+        Creates a search folder in the folder `id` names, in a workspace, at
+        any level, its top folder included, through
+        `SearchFolderService.create` (Admin app spec section 8.4), and
+        answers `201` with it, its address as `Location`. The name has the
+        whitespace at either end taken off. It follows its parent's
+        permissions, and its rule runs each time someone opens it in the
+        User app: in a matter, the documents of that matter changed in the
+        rule's window that the person can read, newest first; in a template,
+        it's copied with its rule into each matter made from it.
+
+        - `404 not-found` for a folder outside a workspace, the Templates
+          Store among them.
+        - `422 validation` for `name` or `rule` missing, a member of the
+          rule missing, or a name that's blank (`required`).
+        - `409 refused` for a search folder, which holds no folders; for a
+          name over 255 characters; for `rule.days` below 1; for a
+          `docSubclass` without a `docClass`; and for what Healdan's rules
+          refuse.
+
+        Recorded as `search-folder.created`, with its name, the folder it's
+        in and its rule.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/FolderPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewSearchFolder'
+      responses:
+        '201':
+          description: The new search folder
+          headers:
+            Location:
+              description: The search folder's address, such as `/api/v1/admin/search-folders/56`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchFolder'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/search-folders/{id}:
+    get:
+      operationId: adminGetSearchFolder
+      summary: A search folder and its rule
+      description: |
+        A search folder of a workspace, with its rule, for the Workspace
+        Editor to edit (Admin app spec section 8.4). Any other folder, a
+        plain folder of a workspace among them, is `404 not-found`.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/SearchFolderPath'
+      responses:
+        '200':
+          description: The search folder
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchFolder'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: adminEditSearchFolder
+      summary: Change a search folder's name or rule
+      description: |
+        Changes a search folder's name, its rule, or both, through
+        `SearchFolderService.update`, and answers it (Admin app spec section
+        8.4). A member left out stays as it is; a `rule` sent replaces the
+        whole rule, as `GET` gives it. A template's search folder changes
+        only the matters made from it afterwards.
+
+        - `404 not-found` for anything but a search folder of a workspace.
+        - `422 validation` for a name that's null or blank, a `rule` that's
+          null, or a member of the rule missing (`required`).
+        - `409 refused` for a name over 255 characters; for `rule.days`
+          below 1; for a `docSubclass` without a `docClass`; and for what
+          Healdan's rules refuse.
+
+        Recorded as `search-folder.changed`, with the name and the rule's
+        values before and after. A change that changes nothing isn't
+        recorded.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/SearchFolderPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchFolderChange'
+      responses:
+        '200':
+          description: The search folder, changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchFolder'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/templates:
+    get:
+      operationId: adminListTemplates
+      summary: The workspace templates
+      description: |
+        Every workspace template (Admin app spec section 8.5): the live
+        folders directly in the Templates Store that a matter can be made
+        from (`MatterService.templates`: not search folders or aliases), by
+        name, ignoring case, each with how many folders it holds and how
+        many live matters were made from it. A short list, so not a page.
+        Empty on a fresh install, where a template is needed before the
+        first matter.
+      tags: [Matters]
+      responses:
+        '200':
+          description: The templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TemplateInfo'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: adminCreateTemplate
+      summary: Create a workspace template
+      description: |
+        Creates a template, a folder directly in the Templates Store (Admin
+        app spec section 8.5), and answers `201` with it, its address as
+        `Location`: empty, or, with `copyOf`, a copy of that template, with
+        its folders, their permissions and values, and its search folders
+        with their rules. The name has the whitespace at either end taken
+        off.
+
+        - `422 validation` for the name, as `FolderName` says.
+        - `409 refused` for a name another template has, compared without
+          regard to case; for a `copyOf` that isn't a template; and for what
+          Healdan's rules refuse.
+
+        Recorded as `template.created`, with its name and the template it
+        copies, if any.
+      tags: [Matters]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewTemplate'
+      responses:
+        '201':
+          description: The new template
+          headers:
+            Location:
+              description: The template's address, such as `/api/v1/admin/templates/78`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateInfo'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/templates/{id}:
+    get:
+      operationId: adminGetTemplate
+      summary: A workspace template
+      description: |
+        The template, as the list gives it, for its page (Admin app spec
+        section 8.5), whose folders are
+        `GET /v1/admin/workspaces/{folderId}/tree` with its `id`. Anything
+        but a template is `404 not-found`.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/TemplatePath'
+      responses:
+        '200':
+          description: The template
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateInfo'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: adminRenameTemplate
+      summary: Rename a workspace template
+      description: |
+        Renames the template's folder, and answers the template. Matters
+        already made from it are unchanged, as by any change to a template
+        (Admin app spec section 8.5). The name has the whitespace at either
+        end taken off; its own name changes nothing.
+
+        - `404 not-found` for anything but a template.
+        - `422 validation` for the name, as `FolderName` says.
+        - `409 refused` for a name another template has, compared without
+          regard to case (changing only the case of its own works), and for
+          what Healdan's rules refuse.
+
+        Recorded as `template.renamed`, with the name before and after.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/TemplatePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FolderRename'
+      responses:
+        '200':
+          description: The template, renamed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateInfo'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: adminDeleteTemplate
+      summary: Move a workspace template to the Trash
+      description: |
+        Moves the template's folder, with its folders and search folders, to
+        the caller's Trash, through LogicalDOC's folder delete, and answers
+        `204` (Admin app spec section 8.5). Matters already made from it are
+        unchanged; their `template` is null from then on. New Matter no
+        longer offers it.
+
+        - `404 not-found` for anything but a template.
+        - `409 refused` for what Healdan's rules refuse.
+
+        Recorded as `template.deleted`, after the delete.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/TemplatePath'
+      responses:
+        '204':
+          description: In the Trash
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/templates/{id}/problems:
+    get:
+      operationId: adminTemplateProblems
+      summary: What New Matter would refuse in a template
+      description: |
+        Nothing checks a template's permissions as they're edited, so the
+        template's page lists, as warnings, what New Matter would refuse in
+        a matter made from it, with the same rules (`AclMath` and
+        `PermissionRules`); saving the template still works (Admin app spec
+        section 8.4). Empty for a clean template.
+
+        - `wider-than-parent`, once for each folder that grants a group
+          something its parent doesn't (P1), in the tree's order.
+        - `store-unreadable`, for each Store, once for each group that could
+          read a matter made from the template but can't read that Store
+          (P2), by Store name and then group name. The matter's owner, not
+          known yet, is left aside: New Matter's check names the owner when
+          one is chosen.
+
+        Anything but a template is `404 not-found`.
+      tags: [Matters]
+      parameters:
+        - $ref: '#/components/parameters/TemplatePath'
+      responses:
+        '200':
+          description: The problems found
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TemplateProblem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/stores:
+    get:
+      operationId: adminListStores
+      summary: The Stores
+      description: |
+        Every live Store, by name, ignoring case (`MatterService.stores`):
+        not LogicalDOC's Default workspace or the Templates Store. A short
+        list, so not a page: for the Store menus of New Matter, Move to
+        Another Store and the Matters list.
+      tags: [Stores]
+      responses:
+        '200':
+          description: The Stores
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Store'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: adminCreateStore
+      summary: Create a Store
+      description: |
+        Creates a Store, a workspace under the root, and gives each group in
+        `groupIds` Read, the Store's one level, **Can See**, all in one
+        transaction (`StoreService.create`), so a matter can be made in it
+        at once (Admin app spec section 8.6). Answers `201` with it. The
+        name has the whitespace at either end taken off. A new Store keeps
+        its files on Original, the server's own folder, until its storage
+        backend is changed.
+
+        - `422 validation` for the name, as `FolderName` says, and for a
+          missing `groupIds` (`required`).
+        - `409 refused` for a name another workspace under the root has,
+          compared without regard to case, LogicalDOC's Default workspace and
+          the Templates Store among them; for a group that no longer exists;
+          and for what Healdan's rules refuse.
+
+        Recorded as `store.created`, with its name and who can see it.
+      tags: [Stores]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewStore'
+      responses:
+        '201':
+          description: The new Store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Store'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/stores/{id}/access:
+    get:
+      operationId: adminGetStoreAccess
+      summary: Who can see a Store
+      description: |
+        Each group and person with permissions on the Store (Admin app spec
+        section 8.6). A Store has one level, **Can See** (Read, the only
+        permission that matters on a Store), so a row's `level` is `can-see`
+        when it grants Read alone, and `custom` when it grants anything
+        else, with or without Read.
+
+        LogicalDOC's Default workspace, the Templates Store, the root and any
+        other folder that isn't a live Store are `404 not-found`.
+      tags: [Stores]
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+      responses:
+        '200':
+          description: Who can see it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreAccess'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: adminSetStoreAccess
+      summary: Set who can see a Store
+      description: |
+        Sets who can see the Store, in one transaction
+        (`StoreService.setAccess`), and answers who can see it after (Admin
+        app spec section 8.6): each group in `groupIds`, a person's own group
+        among them, gets Read, keeping any other permission its row has, and
+        every other group's row goes. New Matter's **Let {group} Read the
+        Store** sends the Store's groups with the problem's group added.
+        Healdan's permission rules then narrow, as on every route, what in
+        the Store's matters follows the Store's permissions.
+
+        - `404 not-found` as `adminGetStoreAccess` answers.
+        - `422 validation` for a missing `groupIds` (`required`).
+        - `409 refused` for a group that no longer exists, and for what
+          Healdan's rules refuse.
+
+        Recorded as `store.access-changed`, with who could see it before and
+        after. A change that changes nothing isn't recorded.
+      tags: [Stores]
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreAccessChange'
+      responses:
+        '200':
+          description: Who can see it, saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreAccess'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/groups:
+    get:
+      operationId: adminListGroups
+      summary: The groups
+      description: |
+        The groups, for the forms that name one, such as New Store's **who
+        can see it** (Admin app spec section 8.6): live groups only, not a
+        person's own group (`_user_…`), by name, ignoring case. A page of
+        `limit` from `offset`, with the total once `q` has filtered them.
+
+        `q`, read with the whitespace at either end taken off, in any case,
+        its `%` and `_` taken as they are, keeps the groups whose name
+        contains it. Without it, or blank, every group.
+
+        A negative `offset` or a `limit` outside 1 to 200 is
+        `400 bad-request`.
+      tags: [People]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Part of a group's name
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageOffset'
+        - $ref: '#/components/parameters/PageLimit'
+      responses:
+        '200':
+          description: A page of groups
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupList'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   securitySchemes:
     cookieAuth:
@@ -181,6 +1868,86 @@ components:
         origin, on the rules `openapi.yaml`'s `cookieAuth` describes. A device
         token, sent as a Bearer `Authorization` header, is
         `403 web-session-only` here.
+  parameters:
+    PageOffset:
+      name: offset
+      in: query
+      required: false
+      description: How many items to skip. Default 0.
+      schema:
+        type: integer
+        minimum: 0
+    PageLimit:
+      name: limit
+      in: query
+      required: false
+      description: The most items to return, 1 to 200. Default 50.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+    SortOrder:
+      name: order
+      in: query
+      required: false
+      description: '`asc` (the default) or `desc`.'
+      schema:
+        type: string
+        enum: [asc, desc]
+    ClientPath:
+      name: id
+      in: path
+      required: true
+      description: The client's id
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    MatterPath:
+      name: id
+      in: path
+      required: true
+      description: The matter's id, not its folder's
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    FolderPath:
+      name: id
+      in: path
+      required: true
+      description: The id of a folder or search folder of a workspace
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    SearchFolderPath:
+      name: id
+      in: path
+      required: true
+      description: The search folder's id
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    TemplatePath:
+      name: id
+      in: path
+      required: true
+      description: The template's id, which is its folder's
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    StorePath:
+      name: id
+      in: path
+      required: true
+      description: The Store's id, which is its folder's
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
   responses:
     Problem:
       description: A refusal or an error
@@ -639,3 +2406,999 @@ components:
         enabled:
           type: boolean
           description: False for a disabled account, which can't sign in
+    Client:
+      type: object
+      description: A client, with its matters' figures
+      additionalProperties: false
+      required: [id, number, name, matters, documents, lastActivity]
+      properties:
+        id:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+          description: Its number, which never changes
+        name:
+          type: string
+        matters:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many live matters it has, not deleted or in the Trash
+        documents:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: |
+            Its matters' live documents, not shortcuts and not in the Trash,
+            counted through the client and matter stamped on them, as the
+            summary last counted them; null until the summary has been worked
+            out since the server started
+        lastActivity:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When one of its matters' documents was last filed or saved, as
+            the summary last found it; null with none, or until the summary
+            has been worked out
+    ClientList:
+      description: A page of clients, and when their figures were worked out
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - required: [figuresAt]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Client'
+            figuresAt:
+              type: [string, 'null']
+              format: date-time
+              description: |
+                When the summary that gives `documents` and `lastActivity`
+                was worked out; null until it has been since the server
+                started
+      unevaluatedProperties: false
+    NewClient:
+      type: object
+      description: A new client
+      additionalProperties: false
+      required: [number, name]
+      properties:
+        number:
+          type: integer
+          format: int64
+          description: Its number, 1 or more, which never changes; `GET /v1/admin/clients/next-number` suggests one
+        name:
+          type: string
+          description: Its name, at most 255 characters
+    NameChange:
+      type: object
+      description: A client's new name
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: At most 255 characters
+    NextNumber:
+      type: object
+      description: The number to suggest
+      additionalProperties: false
+      required: [number]
+      properties:
+        number:
+          type: integer
+          format: int64
+          minimum: 1
+    ClientBrief:
+      type: object
+      description: A client named in another object
+      additionalProperties: false
+      required: [id, number, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+        name:
+          type: string
+    StoreBrief:
+      type: object
+      description: A Store named in another object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+    TemplateBrief:
+      type: object
+      description: A workspace template named in another object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Its id, which is its folder's
+        name:
+          type: string
+    FolderBrief:
+      type: object
+      description: A folder named in another object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+    PersonBrief:
+      type: object
+      description: A person named in another object
+      additionalProperties: false
+      required: [id, username, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The user's id
+        username:
+          type: string
+        name:
+          type: string
+          description: The first and last name; the username when both are blank
+    MatterRow:
+      type: object
+      description: A matter, as the Matters list shows it
+      additionalProperties: false
+      required: [id, number, name, client, store, owner, template, documents, bytes, lastActivity, folderId]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The matter's id, not its folder's
+        number:
+          type: string
+          description: Its number with its client's
+          examples: ['1001.1']
+        name:
+          type: string
+          description: Its own name, without its number
+        client:
+          $ref: '#/components/schemas/ClientBrief'
+        store:
+          $ref: '#/components/schemas/StoreBrief'
+        owner:
+          description: Who owns it; null when that person's account has been deleted
+          oneOf:
+            - $ref: '#/components/schemas/PersonBrief'
+            - type: 'null'
+        template:
+          description: |
+            The workspace template it was made from; null when it was made
+            from none, or that template has been deleted since
+          oneOf:
+            - $ref: '#/components/schemas/TemplateBrief'
+            - type: 'null'
+        documents:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: |
+            Its live documents, not shortcuts and not in the Trash, counted
+            through the client and matter stamped on them, as the summary
+            last counted them; null until the summary has been worked out
+            since the server started
+        bytes:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: The size of those documents' files, the current version of each; null as `documents` is
+        lastActivity:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When one of its documents was last filed or saved, as the
+            summary last found it; null with none, or until the summary has
+            been worked out
+        folderId:
+          type: integer
+          format: int64
+          description: |
+            Its own folder, the top of its workspace:
+            `GET /v1/admin/workspaces/{folderId}/tree` takes it, and so does
+            the User app
+    MatterList:
+      description: A page of matters, and when their figures were worked out
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - required: [figuresAt]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/MatterRow'
+            figuresAt:
+              type: [string, 'null']
+              format: date-time
+              description: |
+                When the summary that gives `documents`, `bytes` and
+                `lastActivity` was worked out; null until it has been since
+                the server started
+      unevaluatedProperties: false
+    Matter:
+      type: object
+      description: A matter, for its page
+      additionalProperties: false
+      required: [id, number, name, description, client, store, owner, template, documents, bytes, lastActivity,
+        folderId, indexFailed, previewsGivenUp]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The matter's id, not its folder's
+        number:
+          type: string
+          description: Its number with its client's
+          examples: ['1001.1']
+        name:
+          type: string
+          description: Its own name, without its number
+        description:
+          type: [string, 'null']
+        client:
+          $ref: '#/components/schemas/ClientBrief'
+        store:
+          $ref: '#/components/schemas/StoreBrief'
+        owner:
+          description: Who owns it; null when that person's account has been deleted
+          oneOf:
+            - $ref: '#/components/schemas/PersonBrief'
+            - type: 'null'
+        template:
+          description: |
+            The workspace template it was made from; null when it was made
+            from none, or that template has been deleted since
+          oneOf:
+            - $ref: '#/components/schemas/TemplateBrief'
+            - type: 'null'
+        documents:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: As in `MatterRow`, from the summary
+        bytes:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: As in `MatterRow`, from the summary
+        lastActivity:
+          type: [string, 'null']
+          format: date-time
+          description: As in `MatterRow`, from the summary
+        folderId:
+          type: integer
+          format: int64
+          description: Its own folder, the top of its workspace
+        indexFailed:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many of its live documents couldn't be indexed, as the
+            Dashboard's `index-failed` counts them, counted at the request
+        previewsGivenUp:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many of its live documents' previews were given up on after
+            their last try, as the Dashboard's `previews-given-up` counts
+            them, counted at the request
+    NewMatter:
+      type: object
+      description: What New Matter creates
+      additionalProperties: false
+      required: [clientId, number, name, storeId, ownerId, templateId]
+      properties:
+        clientId:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+          description: |
+            The matter's number within its client, such as 2 for `1004.2`;
+            `GET /v1/admin/matters/next-number` suggests one
+        name:
+          type: string
+          description: Its own name, without its number
+        description:
+          type: [string, 'null']
+          description: At most 4,000 characters; null, blank or left out for none
+        storeId:
+          type: integer
+          format: int64
+          description: The Store its folder goes in
+        ownerId:
+          type: integer
+          format: int64
+          description: The user who owns it, whose own group gets Full Access
+        templateId:
+          type: integer
+          format: int64
+          description: The workspace template its folders are copied from
+    MatterDraft:
+      type: object
+      description: |
+        New Matter's form as it stands, for its check: `NewMatter`'s members,
+        any of them left out or null
+      additionalProperties: false
+      properties:
+        clientId:
+          type: [integer, 'null']
+          format: int64
+        number:
+          type: [integer, 'null']
+          format: int64
+        name:
+          type: [string, 'null']
+        description:
+          type: [string, 'null']
+        storeId:
+          type: [integer, 'null']
+          format: int64
+        ownerId:
+          type: [integer, 'null']
+          format: int64
+        templateId:
+          type: [integer, 'null']
+          format: int64
+    MatterCheck:
+      type: object
+      description: What creating the draft would refuse
+      additionalProperties: false
+      required: [problems]
+      properties:
+        problems:
+          type: array
+          description: Empty when nothing is found; in the order `MatterProblemCode` lists the codes
+          items:
+            $ref: '#/components/schemas/MatterProblem'
+    MatterProblemCode:
+      type: string
+      description: |
+        What New Matter's check finds, each looked for once the draft gives
+        the members in brackets:
+
+        - `client-missing` (`clientId`): the client no longer exists.
+        - `number-invalid` (`number`): a number below 1.
+        - `number-taken` (`clientId` and `number`, or `number` alone when
+          numbers are system-wide): a matter already has the number, a
+          deleted one too.
+        - `name-invalid` (a `name` that isn't blank): a `/`, a `\` or markup,
+          or, once `clientId` and `number` are given too, too long for the
+          folder's name with the matter's number before it.
+        - `description-invalid` (`description`): over 4,000 characters.
+        - `store-missing` (`storeId`): not a live Store.
+        - `template-missing` (`templateId`): not a live template.
+        - `owner-missing` (`ownerId`): there's no such person.
+        - `owner-disabled` (`ownerId`): the person's account is disabled.
+        - `wider-than-parent` (`templateId`): a folder of the template grants
+          a group something its parent doesn't (P1), once for each such
+          folder, with the group the first excess is about.
+        - `store-unreadable` (`templateId` and `storeId`, and `ownerId` for
+          the owner): a group the template would let into the matter, or the
+          owner, can't read the Store (P2), once for each, with `storeId`,
+          `groupId` and `groupName`, and `fixAction` `grant-store-read`.
+      enum: [client-missing, number-invalid, number-taken, name-invalid, description-invalid, store-missing,
+        template-missing, owner-missing, owner-disabled, wider-than-parent, store-unreadable]
+      examples: [number-taken, store-unreadable]
+    MatterProblem:
+      type: object
+      description: One thing creating the draft would refuse
+      additionalProperties: false
+      required: [code, message, fixAction, storeId, groupId, groupName]
+      properties:
+        code:
+          $ref: '#/components/schemas/MatterProblemCode'
+        message:
+          type: string
+          description: An English sentence that says what's wrong, which the app can show as it is
+          examples: [Everyone can't read the Store Regional Office.]
+        fixAction:
+          type: [string, 'null']
+          description: |
+            How New Matter can put it right there: `grant-store-read`, **Let
+            {group} Read the Store**, which is
+            `PUT /v1/admin/stores/{storeId}/access` with `groupId` added to
+            who can see the Store, then the check again. Null for a problem
+            the form puts right itself.
+          enum: [grant-store-read, null]
+        storeId:
+          type: [integer, 'null']
+          format: int64
+          description: The Store it's about, for `store-unreadable`; null otherwise
+        groupId:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            The group it's about, a person's own group for a person: for
+            `store-unreadable`, and `wider-than-parent` when it names one;
+            null otherwise
+        groupName:
+          type: [string, 'null']
+          description: |
+            That group's name, or that person's first and last name, for
+            **Let {group} Read the Store**; null with no `groupId`
+    MatterChange:
+      type: object
+      description: |
+        What **Edit** changes, each member left out staying as it is. A
+        matter's client, number and template never change, and its Store
+        changes by a move: those members are `422 validation`
+        (`not-editable`).
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: Its own name, without its number
+        description:
+          type: [string, 'null']
+          description: At most 4,000 characters; null or blank for none
+        ownerId:
+          type: integer
+          format: int64
+          description: The user who owns it
+    MatterMove:
+      type: object
+      description: Where a matter moves
+      additionalProperties: false
+      required: [storeId]
+      properties:
+        storeId:
+          type: integer
+          format: int64
+          description: The Store its folder moves into
+    DeletedMatter:
+      type: object
+      description: The Trash item a matter's delete made
+      additionalProperties: false
+      required: [trashItemId, folders, documents]
+      properties:
+        trashItemId:
+          type: integer
+          format: int64
+          description: |
+            The item in the caller's Trash that holds the matter's folder,
+            which `POST /v1/trash/{id}/restore` restores and the User app's
+            Trash lists
+        folders:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The folders in the matter's folder that went with it, at every level, its own left out
+        documents:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The documents that went with it
+    WorkspaceNode:
+      type: object
+      description: A folder or search folder of a workspace, with what's in it
+      additionalProperties: false
+      required: [id, name, kind, ownPermissions, children]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        kind:
+          type: string
+          description: '`folder`, or a `search-folder`, which lists documents by its rule and holds no folders'
+          enum: [folder, search-folder]
+        ownPermissions:
+          type: boolean
+          description: True when it has permissions of its own, false when it follows another folder's
+        children:
+          type: array
+          description: Its folders, then its search folders, each by name, ignoring case; none for a search folder
+          items:
+            $ref: '#/components/schemas/WorkspaceNode'
+    FolderName:
+      type: string
+      description: |
+        A folder's name: a workspace folder's, a template's or a Store's,
+        with the whitespace at either end taken off. `422 validation` for
+        the field `name` as `renameFolder` in `openapi.yaml` answers it:
+        `required`, also for a name of characters that show nothing, such as
+        U+200B; `too-long`, over 255 characters; and `invalid`, for a `/`, a
+        `\`, a control character, one that changes the text's direction, any
+        HTML tag, or a character reference such as `&amp;`.
+    FolderRename:
+      type: object
+      description: A folder's or a template's new name
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          $ref: '#/components/schemas/FolderName'
+    NewWorkspaceFolder:
+      type: object
+      description: A new folder of a workspace
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          $ref: '#/components/schemas/FolderName'
+    FolderMove:
+      type: object
+      description: Where a workspace's folder moves
+      additionalProperties: false
+      required: [folderId]
+      properties:
+        folderId:
+          type: integer
+          format: int64
+          description: The folder it moves into, of the same workspace
+    Permission:
+      type: string
+      description: |
+        One of LogicalDOC's 25 permissions, in its order, which **Show Every
+        Permission** lists
+      enum: [read, download, write, add, security, immutable, delete, rename, import, export, sign, archive, workflow,
+        calendar, subscription, print, password, move, email, automation, store, readingreq, preview, customid,
+        revision]
+    AccessLevel:
+      type: string
+      description: |
+        A row's permissions as a level, an exact match (Admin app spec
+        section 8.4):
+
+        - `read-only`: read, preview, download, print and email;
+        - `read-write`: Read Only's, plus write, add, rename, move and
+          delete;
+        - `full-access`: all 25, what a matter's owner gets;
+        - `can-see`: read alone, a Store's one level; the Workspace Editor
+          shows it as Custom on a folder;
+        - `custom`: anything else.
+      enum: [read-only, read-write, full-access, can-see, custom]
+    AccessRow:
+      type: object
+      description: What a folder or Store grants a group or a person
+      additionalProperties: false
+      required: [groupId, name, person, userId, level, permissions, owner]
+      properties:
+        groupId:
+          type: integer
+          format: int64
+          description: The group, or the person's own group
+        name:
+          type: string
+          description: The group's name, or the person's first and last name (the username when both are blank)
+        person:
+          type: boolean
+          description: True for a person's own group
+        userId:
+          type: [integer, 'null']
+          format: int64
+          description: The person, for a person's own group; null for a group
+        level:
+          $ref: '#/components/schemas/AccessLevel'
+        permissions:
+          type: array
+          description: What it grants, in the order `Permission` lists them
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Permission'
+        owner:
+          type: boolean
+          description: |
+            True for the matter's owner's own group, on any folder of the
+            matter; false elsewhere, and on a Store
+    FolderAccess:
+      type: object
+      description: Who can use a workspace's folder
+      additionalProperties: false
+      required: [folderId, ownPermissions, followsFolderId, rows, canApplyToSubfolders]
+      properties:
+        folderId:
+          type: integer
+          format: int64
+        ownPermissions:
+          type: boolean
+          description: True when it has permissions of its own; false when it follows another folder's
+        followsFolderId:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            When it follows, the folder whose permissions it takes, which may
+            be above its parent, or its Store; null with its own
+        rows:
+          type: array
+          description: What it grants, groups first, then people, each by name, ignoring case
+          items:
+            $ref: '#/components/schemas/AccessRow'
+        canApplyToSubfolders:
+          type: boolean
+          description: |
+            Whether **Apply to Subfolders** is offered: it has a folder below
+            it, and Healdan's rules allow it (`checkApplyToTree`)
+    FolderAccessChange:
+      type: object
+      description: |
+        A folder's new permissions: `rows`, its own; or `followParent: true`,
+        its parent's. One of the two, never both.
+      additionalProperties: false
+      properties:
+        followParent:
+          type: boolean
+          description: True to give up its own permissions and follow its parent's
+        rows:
+          type: array
+          description: Its own permissions, each group or person once; one left out gets none here
+          items:
+            $ref: '#/components/schemas/AccessGrant'
+    AccessGrant:
+      type: object
+      description: |
+        What a folder grants a group, by `groupId`, or a person, by `userId`,
+        whose own group gets it: one of the two
+      additionalProperties: false
+      required: [permissions]
+      properties:
+        groupId:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        permissions:
+          type: array
+          description: Exactly what it grants, at least one; `AccessLevel` lists each level's
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/Permission'
+    FolderProperties:
+      type: object
+      description: The values a workspace's folder sets for what's filed below it
+      additionalProperties: false
+      required: [folderId, properties]
+      properties:
+        folderId:
+          type: integer
+          format: int64
+        properties:
+          type: array
+          description: Each property that passes down from folders, in the profile's order
+          items:
+            $ref: '#/components/schemas/FolderProperty'
+    FolderProperty:
+      type: object
+      description: One value a folder sets, or inherits
+      additionalProperties: false
+      required: [name, label, type, value, source, inheritedFrom, options]
+      properties:
+        name:
+          type: string
+          description: The property's name, as `values` names it
+          examples: [docclass]
+        label:
+          type: string
+          examples: [Class]
+        type:
+          type: string
+          description: The type of the value
+          enum: [string, integer, decimal, date, boolean, user, folder, document]
+        value:
+          description: |
+            The folder's value: its own, or what it inherits; null when it
+            has none. Text for a `string`, a number for an `integer` or a
+            `decimal`, true or false for a `boolean`, an ISO 8601 timestamp
+            for a `date`, a `PropertyUser` for a `user`, the folder's id for a
+            `folder` and the doc # for a `document`, as `openapi.yaml`'s
+            `ProfileField` gives them.
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - $ref: '#/components/schemas/PropertyUser'
+            - type: 'null'
+        source:
+          type: [string, 'null']
+          description: |
+            `local`: set on this folder, which passes it down. `inherited`:
+            from the folder `inheritedFrom` names. `default`: the install's
+            default Class. Null when there's no value.
+          enum: [local, inherited, default, null]
+        inheritedFrom:
+          description: The folder an inherited value comes from, or null
+          oneOf:
+            - $ref: '#/components/schemas/FolderBrief'
+            - type: 'null'
+        options:
+          type: [array, 'null']
+          description: The values to pick from, in order; null when the property isn't picked from a list
+          items:
+            $ref: '#/components/schemas/PropertyOption'
+    PropertyUser:
+      type: object
+      description: A person a `user` property names
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: [string, 'null']
+    PropertyOption:
+      type: object
+      description: One value of a property picked from a list
+      additionalProperties: false
+      required: [value, label, class]
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+        class:
+          type: [string, 'null']
+          description: For a Subclass, the Class it belongs to, so the list can narrow to the chosen Class; null otherwise
+    FolderPropertiesChange:
+      type: object
+      description: A folder's values, the whole set
+      additionalProperties: false
+      required: [values]
+      properties:
+        values:
+          type: object
+          description: |
+            Each value the folder sets, by the property's name, as
+            `FolderProperty.value` gives it (a `user` by its id, or the
+            `{id, name}` given). A property that's null, empty text or left
+            out inherits.
+          additionalProperties:
+            $ref: '#/components/schemas/FolderPropertyValue'
+          examples:
+            - docclass: Correspondence
+              docsubclass: null
+    FolderPropertyValue:
+      description: |
+        A value as a request sends it, in the form `FolderProperty.value`
+        has. Text is at most 4,000 characters once cleaned of markup.
+      oneOf:
+        - type: string
+          maxLength: 4000
+        - type: number
+        - type: boolean
+        - type: object
+          description: A user, by its `id`, as `PropertyUser` or alone
+          additionalProperties: false
+          required: [id]
+          properties:
+            id:
+              type: integer
+              format: int64
+            name:
+              type: [string, 'null']
+        - type: 'null'
+    SearchFolderRule:
+      type: object
+      description: |
+        Which documents a search folder lists: those of its matter changed
+        within the window, that match the rest, which whoever opens it can
+        read, newest change first. Sent back as `GET` gives it, every member
+        given.
+      additionalProperties: false
+      required: [days, onlyMine, kind, docClass, docSubclass]
+      properties:
+        days:
+          type: integer
+          minimum: 1
+          description: The window, documents changed in the last so many days, counted back from when it's opened
+        onlyMine:
+          type: boolean
+          description: True when only the changes of whoever opens it count
+        kind:
+          type: string
+          description: '`all` documents, `documents` only (not emails), or `emails` only (`.eml` and `.msg` files)'
+          enum: [all, documents, emails]
+        docClass:
+          type: [string, 'null']
+          description: The Class the documents must have; null for any
+        docSubclass:
+          type: [string, 'null']
+          description: The Subclass the documents must have, only with a `docClass`; null for any
+    SearchFolder:
+      type: object
+      description: A search folder of a workspace, with its rule
+      additionalProperties: false
+      required: [id, name, rule]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        rule:
+          $ref: '#/components/schemas/SearchFolderRule'
+    NewSearchFolder:
+      type: object
+      description: A new search folder
+      additionalProperties: false
+      required: [name, rule]
+      properties:
+        name:
+          type: string
+          description: At most 255 characters
+        rule:
+          $ref: '#/components/schemas/SearchFolderRule'
+    SearchFolderChange:
+      type: object
+      description: A search folder's new name or rule, each left out staying as it is
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: At most 255 characters
+        rule:
+          $ref: '#/components/schemas/SearchFolderRule'
+    TemplateInfo:
+      type: object
+      description: A workspace template
+      additionalProperties: false
+      required: [id, name, folders, matters]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: |
+            Its id, which is its folder's: New Matter's `templateId`, and the
+            `folderId` of `GET /v1/admin/workspaces/{folderId}/tree`
+        name:
+          type: string
+        folders:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The live folders and search folders in it, at every level, its own left out
+        matters:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The live matters made from it, not deleted or in the Trash
+    NewTemplate:
+      type: object
+      description: A new workspace template
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          $ref: '#/components/schemas/FolderName'
+        copyOf:
+          type: [integer, 'null']
+          format: int64
+          description: The template to copy; null or left out for an empty one
+    TemplateProblem:
+      type: object
+      description: Something New Matter would refuse in a matter made from the template
+      additionalProperties: false
+      required: [code, message, folderId, storeId, groupId]
+      properties:
+        code:
+          type: string
+          description: |
+            `wider-than-parent`: a folder grants a group something its parent
+            doesn't (P1). `store-unreadable`: a group that could read a matter
+            made from it can't read a Store (P2).
+          enum: [wider-than-parent, store-unreadable]
+        message:
+          type: string
+          description: An English sentence that says what's wrong, which the app can show as it is
+          examples: ['Privileged grants more than its parent (group Partners: WRITE).']
+        folderId:
+          type: [integer, 'null']
+          format: int64
+          description: The folder that grants more than its parent, for `wider-than-parent`; null otherwise
+        storeId:
+          type: [integer, 'null']
+          format: int64
+          description: The Store, for `store-unreadable`; null otherwise
+        groupId:
+          type: [integer, 'null']
+          format: int64
+          description: The group it's about, a person's own group for a person; null when it names none
+    Store:
+      type: object
+      description: A Store
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Its id, which is its folder's
+        name:
+          type: string
+    NewStore:
+      type: object
+      description: A new Store, and who can see it
+      additionalProperties: false
+      required: [name, groupIds]
+      properties:
+        name:
+          $ref: '#/components/schemas/FolderName'
+        groupIds:
+          type: array
+          description: The groups that can see it, each given Read; empty for administrators alone
+          uniqueItems: true
+          items:
+            type: integer
+            format: int64
+    StoreAccess:
+      type: object
+      description: Who can see a Store
+      additionalProperties: false
+      required: [storeId, rows]
+      properties:
+        storeId:
+          type: integer
+          format: int64
+        rows:
+          type: array
+          description: |
+            Each group and person with permissions on it, groups first, then
+            people, each by name, ignoring case; a row's `level` is
+            `can-see` or `custom`, and its `owner` false
+          items:
+            $ref: '#/components/schemas/AccessRow'
+    StoreAccessChange:
+      type: object
+      description: Who can see a Store from then on
+      additionalProperties: false
+      required: [groupIds]
+      properties:
+        groupIds:
+          type: array
+          description: |
+            The groups, or people's own groups, that can see it, each given
+            Read; every other group's row goes. Empty for administrators
+            alone.
+          uniqueItems: true
+          items:
+            type: integer
+            format: int64
+    Group:
+      type: object
+      description: A group, not a person's own
+      additionalProperties: false
+      required: [id, name, description]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: [string, 'null']
+    GroupList:
+      description: A page of groups
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/Group'
+      unevaluatedProperties: false

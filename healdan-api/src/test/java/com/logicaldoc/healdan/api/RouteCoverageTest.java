@@ -40,11 +40,32 @@ import jakarta.ws.rs.Path;
 public class RouteCoverageTest extends AbstractHealdanTestCase {
 
 	/**
-	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them; none
-	 * now. Each must be described and not implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and
-	 * leaves the list once it's implemented.
+	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them: Phase
+	 * 2's, under the plan's task that implements each. Each must be described and not implemented
+	 * ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and leaves the list once it's implemented.
 	 */
-	static final Set<String> DESCRIBED_AHEAD = Set.of();
+	static final Set<String> DESCRIBED_AHEAD = Set.of(
+			// Task 13: clients
+			"GET /v1/admin/clients", "POST /v1/admin/clients", "GET /v1/admin/clients/next-number",
+			"GET /v1/admin/clients/{id}", "PATCH /v1/admin/clients/{id}",
+			// Task 14: matters
+			"GET /v1/admin/matters", "POST /v1/admin/matters", "POST /v1/admin/matters/check",
+			"GET /v1/admin/matters/next-number", "GET /v1/admin/matters/{id}", "PATCH /v1/admin/matters/{id}",
+			"DELETE /v1/admin/matters/{id}", "POST /v1/admin/matters/{id}/move",
+			// Task 15: Stores, and the groups a form needs
+			"GET /v1/admin/stores", "POST /v1/admin/stores", "GET /v1/admin/stores/{id}/access",
+			"PUT /v1/admin/stores/{id}/access", "GET /v1/admin/groups",
+			// Task 16: folder access
+			"GET /v1/admin/folders/{id}/access", "PUT /v1/admin/folders/{id}/access",
+			"POST /v1/admin/folders/{id}/apply-access",
+			// Task 17: workspace folders, search folders and templates
+			"GET /v1/admin/workspaces/{folderId}/tree", "POST /v1/admin/folders/{id}/children",
+			"PATCH /v1/admin/folders/{id}", "DELETE /v1/admin/folders/{id}", "POST /v1/admin/folders/{id}/move",
+			"GET /v1/admin/folders/{id}/properties", "PUT /v1/admin/folders/{id}/properties",
+			"POST /v1/admin/folders/{id}/search-folders", "GET /v1/admin/search-folders/{id}",
+			"PATCH /v1/admin/search-folders/{id}", "GET /v1/admin/templates", "POST /v1/admin/templates",
+			"GET /v1/admin/templates/{id}", "PATCH /v1/admin/templates/{id}", "DELETE /v1/admin/templates/{id}",
+			"GET /v1/admin/templates/{id}/problems");
 
 	@Test
 	public void testEveryRouteIsDescribed() {
