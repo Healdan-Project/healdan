@@ -66,9 +66,9 @@ Templates**.
   **Rename** saves the new one. Changing only the case of its own name works. Matters already made from it are
   unchanged, and the Matters list shows the template's new name.
 - **Delete** asks first, as in "Move the Template Litigation to the Trash?" It says the template's folders go with it,
-  that matters already made from it are unchanged and New Matter won't offer it any more, and "The Trash will list
-  it, but can't put it back in the Templates Store." **Move to Trash** moves it, with its folders and search folders,
-  to your Trash, and the list opens. The matters made from it then show no template in the Matters list.
+  that matters already made from it are unchanged and New Matter won't offer it any more, and "Healdan's Trash will
+  list it but can't put it back in the Templates Store; the Classic Interface's Trash can." **Move to Trash** moves it,
+  with its folders and search folders, to your Trash, and the list opens. The matters made from it then show no template in the Matters list.
 
 Healdan records each rename, with the name before and after, and each delete.
 
