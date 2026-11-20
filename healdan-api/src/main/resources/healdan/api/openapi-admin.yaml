@@ -904,9 +904,10 @@ paths:
       description: |
         Renames a folder or search folder of a workspace (Admin app spec
         section 8.4), at any level below its top folder, a matter's top
-        level included. The name has the whitespace at either end taken
-        off; the folder's own name changes nothing, after the checks up to
-        `404`. Answers `204`.
+        level included. It's the only route that renames a search folder, so
+        a folder's name and a search folder's follow one rule. The name has
+        the whitespace at either end taken off; the folder's own name
+        changes nothing, after the checks up to `404`. Answers `204`.
 
         - `404 not-found` for a folder outside a workspace.
         - `422 validation` for the name, as `FolderName` says.
@@ -1313,21 +1314,24 @@ paths:
         Creates a search folder in the folder `id` names, in a workspace, at
         any level, its top folder included, through
         `SearchFolderService.create` (Admin app spec section 8.4), and
-        answers `201` with it, its address as `Location`. The name has the
-        whitespace at either end taken off. It follows its parent's
-        permissions, and its rule runs each time someone opens it in the
-        User app: in a matter, the documents of that matter changed in the
-        rule's window that the person can read, newest first; in a template,
-        it's copied with its rule into each matter made from it.
+        answers `201` with it, its address as `Location`. Its name is
+        checked as a folder's is, by the same rules as
+        `POST /v1/admin/folders/{id}/children`, before the service runs, so
+        it's stored as sent, with the whitespace at either end taken off. It
+        follows its parent's permissions, and its rule runs each time
+        someone opens it in the User app: in a matter, the documents of that
+        matter changed in the rule's window that the person can read, newest
+        first; in a template, it's copied with its rule into each matter made
+        from it.
 
         - `404 not-found` for a folder outside a workspace, the Templates
           Store among them.
-        - `422 validation` for `name` or `rule` missing, a member of the
-          rule missing, or a name that's blank (`required`).
+        - `422 validation` for the name, as `FolderName` says, and for
+          `rule`, or a member of it, missing (`required`).
         - `409 refused` for a search folder, which holds no folders; for a
-          name over 255 characters; for `rule.days` below 1; for a
-          `docSubclass` without a `docClass`; and for what Healdan's rules
-          refuse.
+          name another folder or search folder there has, compared without
+          regard to case; for `rule.days` below 1; for a `docSubclass`
+          without a `docClass`; and for what Healdan's rules refuse.
 
         Recorded as `search-folder.created`, with its name, the folder it's
         in and its rule.
@@ -1395,24 +1399,25 @@ paths:
           $ref: '#/components/responses/Problem'
     patch:
       operationId: adminEditSearchFolder
-      summary: Change a search folder's name or rule
+      summary: Change a search folder's rule
       description: |
-        Changes a search folder's name, its rule, or both, through
-        `SearchFolderService.update`, and answers it (Admin app spec section
-        8.4). A member left out stays as it is; a `rule` sent replaces the
-        whole rule, as `GET` gives it. A template's search folder changes
-        only the matters made from it afterwards.
+        Changes a search folder's rule, through `SearchFolderService.update`
+        with the name it has, and answers it (Admin app spec section 8.4).
+        The `rule` sent replaces the whole rule, as `GET` gives it. A search
+        folder is renamed only as a folder is, through
+        `PATCH /v1/admin/folders/{id}`, so a body with `name` is
+        `400 bad-request`, as any member the route doesn't take is. A
+        template's search folder changes only the matters made from it
+        afterwards.
 
         - `404 not-found` for anything but a search folder of a workspace.
-        - `422 validation` for a name that's null or blank, a `rule` that's
-          null, or a member of the rule missing (`required`).
-        - `409 refused` for a name over 255 characters; for `rule.days`
-          below 1; for a `docSubclass` without a `docClass`; and for what
-          Healdan's rules refuse.
+        - `422 validation` for a `rule` that's missing or null, or a member
+          of it missing (`required`).
+        - `409 refused` for `rule.days` below 1; for a `docSubclass` without
+          a `docClass`; and for what Healdan's rules refuse.
 
-        Recorded as `search-folder.changed`, with the name and the rule's
-        values before and after. A change that changes nothing isn't
-        recorded.
+        Recorded as `search-folder.changed`, with the rule's values before
+        and after. A change that changes nothing isn't recorded.
       tags: [Matters]
       parameters:
         - $ref: '#/components/parameters/SearchFolderPath'
@@ -2917,8 +2922,8 @@ components:
     FolderName:
       type: string
       description: |
-        A folder's name: a workspace folder's, a template's or a Store's,
-        with the whitespace at either end taken off. `422 validation` for
+        A folder's name: a workspace folder's or search folder's, a
+        template's or a Store's, with the whitespace at either end taken off. `422 validation` for
         the field `name` as `renameFolder` in `openapi.yaml` answers it:
         `required`, also for a name of characters that show nothing, such as
         U+200B; `too-long`, over 255 characters; and `invalid`, for a `/`, a
@@ -3240,18 +3245,17 @@ components:
       required: [name, rule]
       properties:
         name:
-          type: string
-          description: At most 255 characters
+          $ref: '#/components/schemas/FolderName'
         rule:
           $ref: '#/components/schemas/SearchFolderRule'
     SearchFolderChange:
       type: object
-      description: A search folder's new name or rule, each left out staying as it is
+      description: |
+        A search folder's new rule. Its name changes only through
+        `PATCH /v1/admin/folders/{id}`, as a folder's does.
       additionalProperties: false
+      required: [rule]
       properties:
-        name:
-          type: string
-          description: At most 255 characters
         rule:
           $ref: '#/components/schemas/SearchFolderRule'
     TemplateInfo:
