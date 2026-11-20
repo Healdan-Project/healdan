@@ -92,9 +92,9 @@ below). The lists of documents also let you choose which columns show, and in wh
 - **Resize a column** by dragging the right edge of its heading, and double-click the edge to put the column's width
   back. From the keyboard, open the heading's menu and choose **Resize Column**, then press Left or Right, and Enter or
   Esc when you're done. When the columns are wider than the list, the list scrolls sideways.
-- **Sort** by clicking a heading, and again for the other way. A date column, such as **Edit Date**, sorts newest
-  first at its first click. **Recent Documents**, **Recent Emails** and **Recent Folders** start sorted by **Last
-  Used**, newest first, and **Checked Out to Me** by **Checked Out**.
+- **Sort** by clicking a heading, or pressing Enter or Space on it, and again for the other way. A date column, such
+  as **Edit Date**, sorts newest first at its first click. **Recent Documents**, **Recent Emails** and **Recent
+  Folders** start sorted by **Last Used**, newest first, and **Checked Out to Me** by **Checked Out**.
 - **In this release,** a folder or a search doesn't yet sort by **Matter**, **Client**, **Location**, **Date Filed**,
   **Size** or **File Type**, the Trash sorts only by **Name**, **Deleted** and **Removed**, and a search's **Folders**,
   **Matters** and **Clients** scopes don't sort. A later release adds them. The page a doc # opens lists one document,

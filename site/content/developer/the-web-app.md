@@ -227,7 +227,9 @@ Each option below is one a list switches on; a bare `Table` behaves as before.
 - **`resizing`** (`{ widths, onResizeEnd, onReset }`) wraps the table in React Aria's `ResizableTableContainer` and draws
   a `ColumnResizer` 24 pixels wide on each heading's edge. Widths are pixels by column id. Resizing fixes the column and
   those to its left, as React Aria does, and a double-click on the edge calls `onReset` for that column. Each column's
-  `minWidth` is its least width. A layout wider than the list scrolls sideways.
+  `minWidth` is its least width. A layout wider than the list scrolls sideways. A heading's keyboard focus is then its
+  name, a `tabIndex={-1}` span before the edge (React Aria's way for a heading with a resizer), where Enter and Space
+  sort; the edge's slider is disabled and hidden from a screen reader except while a resize lasts.
 - **The heading menu** opens when any of `onSort`, `resizing`, `choice` or `onResetColumns` is given: a right-click, or
   Shift+F10 or the menu key on a heading (`data-column-key`; Table's one `ContextMenu` takes a `{ row }` or `{ column }`
   subject). **`choice`** (`{ onMove, onHide, panel }`) adds **Move Left**, **Move Right**, **Hide** and **Choose Columns…**,
