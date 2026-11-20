@@ -795,7 +795,9 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     API, and releases at the end, whose row shows its marker and is 34 pixels high, as a free row is), the properties
     form, alone and with Author's list of people open (Author emptied first, so the list opens when the people come;
     then, with someone picked, Esc closes the list and leaves the form open), that document's details with its **Check-Out Info** and the
-    **Versions** tab, Filters (with one in use, and
+    **Versions** tab, a heading's menu and the **Columns** panel, with a column of **More Columns** shown (and the
+    **Columns** button drawn as the toolbar's **More** is, its background, border, corners and colour, in each theme),
+    Filters (with one in use, and
     while the counts are held open with `page.route`, since busy states keep AA contrast and the last answer's counts
     must stay, never zeros), the list while it is asked for again, the filing tray and the File Documents form, alone
     and with Author's list open in it (Author emptied first; Esc then closes the list and leaves the dialog open), the
@@ -809,9 +811,7 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     Signed-in Devices (whole in its dialog, with no sideways scroll, every Revoke inside it and a name of at most two
     lines at 1280, and again at 768) with the Revoke question and its refusal (and a real revoke, whose focus must stay
     in the dialog), at 768 × 1024 the folded top bar with the left pane, the empty region and the details opened over
-    the list, a heading's menu and the **Columns** panel, with a column of **More Columns** shown (and the **Columns**
-    button drawn as the toolbar's **More** is, its background, border, corners and colour, in each theme), and last the
-    signed-out screen (the session is ended with `DELETE /api/v1/session` from the page). Colour
+    the list, and last the signed-out screen (the session is ended with `DELETE /api/v1/session` from the page). Colour
     contrast is checked here, as jsdom can't. axe-core is the workspace's own development dependency: `e2e/axe.ts` reads
     its file from `node_modules` and runs it with `page.evaluate`, which the browser's debugging protocol does and the
     page's Content-Security-Policy doesn't govern, so the policy stays as the app ships it. No spec turns it off:

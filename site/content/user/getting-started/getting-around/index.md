@@ -12,7 +12,7 @@ orange-red, PDFs red, emails blue and pictures purple. Some kinds share a blue, 
 LibreOffice's text documents, spreadsheets and presentations take the colours of their Microsoft Office counterparts,
 and any other kind of file, such as a drawing, has the plain document icon in the colour of the text beside it.
 
-![Healdan's web page in the Due Diligence folder of matter 1002.1 – Commercial Lease: the top bar with the Healdan name, the Documents search box, the ? button and the PN menu; the left pane with Checked Out to Me and its count, 4, at the top, then Recent, Recent Matters, My Matters opened to the matter's folders, and the My Favorites heading at the bottom; the folder's two documents, Service Charge Budget 2026–27.xlsx and Site Plan – Unit 4 Weir Lane.odg, with the second selected; and its details at the right, with the thumbnail of the plan, its name with the Favorites star beside it, Open, Download, Copy Link and Check Out, then the Properties and Versions (1) tabs, with Properties showing Edit Properties and the plan's properties](whole-window.png)
+![Healdan's web page in the Due Diligence folder of matter 1002.1 – Commercial Lease: the top bar with the Healdan name, the Documents search box, the ? button and the PN menu; the left pane with Checked Out to Me and its count, 4, at the top, then Recent, Recent Matters, My Matters opened to the matter's folders, and the My Favorites heading at the bottom; the folder's two documents, Service Charge Budget 2026–27.xlsx and Site Plan – Unit 4 Weir Lane.odg, with the second selected and the Columns button at the end of the headings; and its details at the right, with the thumbnail of the plan, its name with the Favorites star beside it, Open, Download, Copy Link and Check Out, then the Properties and Versions (1) tabs, with Properties showing Edit Properties and the plan's properties](whole-window.png)
 
 ## The Top Bar
 
@@ -86,20 +86,19 @@ Matter](../../working-with-matters/stores-and-matter-workspaces/#opening-a-matte
 
 ## The List's Columns
 
-Every list has columns you can resize, and most lists sort by their columns: this release leaves a few out (see
-below). The lists of documents also let you choose which columns show, and in what order.
+Every list has columns you can resize, and most lists sort by their columns (a few don't: see below). The lists of
+documents also let you choose which columns show, and in what order.
 
 - **Resize a column** by dragging the right edge of its heading, and double-click the edge to put the column's width
-  back. From the keyboard, open the heading's menu and choose **Resize Column**, then press Left or Right, and Enter or
-  Esc when you're done. When the columns are wider than the list, the list scrolls sideways.
+  back. From the keyboard, open the heading's menu and choose **Resize Column**, then press Left or Right, and Enter,
+  Esc or Tab when you're done. When the columns are wider than the list, the list scrolls sideways.
 - **Sort** by clicking a heading, or pressing Enter or Space on it, and again for the other way. A date column, such
   as **Edit Date**, sorts newest first at its first click. **Recent Documents**, **Recent Emails** and **Recent
   Folders** start sorted by **Last Used**, newest first, and **Checked Out to Me** by **Checked Out**.
-- **In this release,** a folder or a search doesn't yet sort by **Matter**, **Client**, **Location**, **Date Filed**,
+- **What doesn't sort:** a folder or a search doesn't sort by **Matter**, **Client**, **Location**, **Date Filed**,
   **Size** or **File Type**, the Trash sorts only by **Name**, **Deleted** and **Removed**, and a search's **Folders**,
-  **Matters** and **Clients** scopes don't sort. A later release adds them. The page a doc # opens lists one document,
-  so it has nothing to sort.
-- **The heading's menu** opens on a right-click, or on Shift+F10 or the menu key while a heading has the keyboard's
+  **Matters** and **Clients** scopes don't sort. The page a doc # opens lists one document, so it has nothing to sort.
+- **The heading's menu** opens on a right-click, or on Shift-F10 or the menu key while a heading has the keyboard's
   focus (the arrow keys reach the headings from the rows). It has **Sort Ascending** and **Sort Descending**, **Sort by
   Relevance** on a sorted search, **Resize Column**, **Move Left** and **Move Right**, **Hide** with the column's name
   (such as **Hide Matter**), **Choose Columns…** and **Reset Columns**. **Title** can't move or hide.
@@ -236,13 +235,14 @@ once the list has the focus.
 | Key | What it does |
 |---|---|
 | `/` | Jumps to the search box |
-| Up and down arrows | Move through the list |
+| Up and down arrows | Move through the list; Up from the first row reaches the column headings |
 | Enter | Opens the document in its app (the Healdan Helper), or a folder |
 | Space | On a document's row, opens Quick Look, which Esc closes; on a folder's row, selects it |
 | F2 | Renames the selected document in place, the folder with the focus in a list or in the **My Matters** tree, or in **My Favorites** the favourite with the focus |
 | Delete | Moves the selected documents and folders, or the folder with the focus in the **My Matters** tree, to the Trash, after asking. In the Trash, it's **Remove…** |
 | F6 | Moves to the message that follows a delete, where Tab reaches **Undo** |
-| Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row, tree item or left-pane link with the focus; Esc closes it |
+| Shift-F10, or the menu key | Opens the [right-click menu](#right-click-menus) of the row, tree item or left-pane link with the focus, or on a column heading [the heading's menu](#the-lists-columns); Esc closes it |
+| Enter or Space on a column heading | Sorts the list by that column, and again for the other way |
 | Option-Enter on **Upload** | Files with the form first |
 
 ## A Narrower Window
@@ -253,7 +253,7 @@ Filters) button, open them over the list, and Esc or choosing a link closes them
 widths and can't be resized there; the widths you chose come back when the window is wider again. A phone's screen is
 too small for the app.
 
-![The web page in a window 768 pixels wide: the left pane open over the folder's list, with Checked Out to Me and its count, 4, at the top, then Recent, Recent Matters, My Matters opened to 1002.1 – Commercial Lease's folders, and My Favorites, below a top bar that has the ☰ (Navigation) and panel-icon (Details and Filters) buttons](narrow-window.png)
+![The web page in a window 768 pixels wide: the left pane open over the folder's list, with Checked Out to Me and its count, 4, at the top, then Recent, Recent Matters, My Matters opened to 1002.1 – Commercial Lease's folders, My Favorites, and Trash at its foot, below a top bar that has the ☰ (Navigation) and panel-icon (Details and Filters) buttons](narrow-window.png)
 
 ## When Something Goes Wrong
 
