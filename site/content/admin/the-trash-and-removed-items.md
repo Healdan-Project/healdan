@@ -103,8 +103,9 @@ and Healdan's own.
 
 ### What It Never Destroys
 
-- **A matter's own folder, and a Store.** Only an administrator deletes them, in the Classic Interface. They stay
-  removed, and their contents are destroyed. The matter's number stays reserved.
+- **A matter's own folder, and a Store.** Only an administrator deletes them: a matter with **Delete** on
+  [its page](../clients-and-matters/#delete) in the Admin app, and a Store in the Classic Interface. They stay removed,
+  and their contents are destroyed. The matter's number stays reserved.
 - **A folder something still needs.** The job keeps a removed folder for another night, and tries again, while any of
   these holds:
   - a document or folder that isn't destroyed yet still has it as its folder or its parent, such as a document a

@@ -4,9 +4,11 @@ weight: -1
 ---
 
 The Admin app is where administrators run Healdan, at `/admin/` on your Healdan address. So far it has the
-Dashboard: what needs your attention, the server's health and how Healdan is used, on one page; and the Clients and
-Matters lists, where clients and matters are made (see [Clients and Matters](../clients-and-matters/)). Everything
-else is still done in the Classic Interface, which the rest of this guide describes, and the Admin app links there.
+Dashboard: what needs your attention, the server's health and how Healdan is used, on one page; the Clients and
+Matters lists, where clients and matters are made, with a page for each client and matter (see
+[Clients and Matters](../clients-and-matters/)); each matter's workspace, its folders and who can use them; and the
+workspace templates (see [Workspace Templates](../workspace-templates/)). Everything else is still done in the
+Classic Interface, which the rest of this guide describes, and the Admin app links there.
 
 {{< callout type="warning" >}}
 An administrator can read every document: an account in the `admin` group skips every permission check. Give each
@@ -57,10 +59,11 @@ Interface. See [Reverse Proxy](../../install/reverse-proxy/).
 
 ### The Left Pane
 
-The left pane has what the Admin app has so far: **Dashboard**; under **Firm**, **Clients** and **Matters**, which
-takes your install's word for matters, such as **Projects**; and at its foot **Classic Interface**, which opens the
-Classic Interface, in the same window, for everything else. The entry for the screen you're on is marked, a client's
-page under **Clients** too.
+The left pane has what the Admin app has so far: **Dashboard**; under **Firm**, **Clients**, **Matters**, which
+takes your install's word for matters, such as **Projects**, and **Workspace Templates**; and at its foot **Classic
+Interface**, which opens the Classic Interface, in the same window, for everything else. The entry for the screen
+you're on is marked, and so is a list's entry while one of its pages is open, such as **Matters** for a matter's
+page.
 
 On a window narrower than 1,024 pixels, the left pane folds away behind the **☰** (Navigation) button in the top bar,
 which opens it over the page. Esc or choosing a link closes it again. The Admin app is designed for a window 1,280
@@ -152,11 +155,13 @@ from. Why is in the server's log.
 
 ## What's Still in the Classic Interface
 
-Everything else, which the rest of this guide describes there: Stores, editing, moving and deleting matters,
-workspace templates and top-level folders, users and groups, permissions, Healdan Settings with its Sign-In and Storage
-tabs, storage backends, and the screens [System](../system/) covers, such as scheduled tasks, search and indexing,
-outgoing email, reports and the server's log. **Classic Interface**, in your menu or at the foot of the left pane,
-opens it, on the same sign-in. Its own ways of making clients and matters still work there too.
+Everything else, which the rest of this guide describes there: Stores, but for making one with
+[New Store](../stores/#creating-a-store) and letting a group read one from New Matter, so the Stores list, renaming and
+deleting a Store, who can see it and its storage backend; users and groups; the permissions of Stores and documents;
+Healdan Settings with its Sign-In and Storage tabs, where storage backends are set up; and the screens
+[System](../system/) covers, such as scheduled tasks, search and indexing, outgoing email, reports and the server's
+log. **Classic Interface**, in your menu or at the foot of the left pane, opens it, on the same sign-in. Its own ways
+of making and changing clients, matters and templates still work there too.
 
 ## When Something Goes Wrong
 

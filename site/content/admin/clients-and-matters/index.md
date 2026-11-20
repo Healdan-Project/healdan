@@ -8,8 +8,8 @@ Store, copied from a template. Your install can call matters something else, suc
 in [Healdan Settings](../healdan-settings/). The Admin app's screens use that word too, as in **Projects** and **New
 Project**.
 
-Clients and matters are made in [the Admin app](../the-admin-app/): **Clients** and **Matters** are under **Firm** in
-its left pane.
+Clients and matters are made and managed in [the Admin app](../the-admin-app/): **Clients** and **Matters** are under
+**Firm** in its left pane.
 
 ## Clients
 
@@ -55,7 +55,8 @@ filter."
   until the figures have been worked out since the server started, and Last Activity says "None" for a client with
   nothing filed.
 - **Its matters,** as the [Matters list](#the-matters-list) shows them, without the Client column, and sorted the same
-  way. With none, it says "No matter has been made for this client yet."
+  way. Select one to open [its page](#a-matters-page). With none, it says "No matter has been made for this client
+  yet."
 
 An address that names no client says "Client Not Found", with **Go to Clients**.
 
@@ -132,6 +133,8 @@ line above the list says when they were worked out, as in "Documents, Size and L
 matter made since the last time shows 0 for Documents and Size, and no Last Activity, until the next. With no matter
 yet it says "No matter has been made yet.", and with none that matches, "No matter matches the filters."
 
+Select a matter, with a click or Enter, to open [its page](#a-matters-page).
+
 ### Creating a Matter
 
 **New Matter**, at the end of the Matters list's title or on a client's page, opens New Matter. Its fields are on the
@@ -181,12 +184,12 @@ When you press **Create Matter**, Healdan does all of this, or none of it:
 3. gives the owner Full Access to the matter's folder.
 
 While it's being made, **Cancel** is greyed out and Esc does nothing. Once it's made, Healdan says "Created" with the
-matter's number and name, and the dialog closes. Anything Healdan still refuses, such as a number another
-administrator took a moment before, shows above the buttons in Healdan's own words. Healdan records the new matter,
-with every field it set and who made it.
+matter's number and name, the dialog closes and [the matter's page](#a-matters-page) opens. Anything Healdan still
+refuses, such as a number another administrator took a moment before, shows above the buttons in Healdan's own words.
+Healdan records the new matter, with every field it set and who made it.
 
-To change the workspace's permissions, if the template's aren't right for this matter, use its **Security** tab in
-the Classic Interface.
+If the template's folders or permissions aren't right for this matter, change them on its page's
+[Workspace tab](#the-workspace-tab).
 
 #### New Matter in the Classic Interface
 
@@ -194,6 +197,112 @@ Right-click a Store in the Classic Interface's folder tree and choose **New Matt
 the same fields, the Store you right-clicked chosen, and Healdan applies the same rules when you click **Create**.
 
 ![The Classic Interface's New Matter dialog, filled in: client 1004 – Marsh Lane Community Trust, number 2, name Community Hall Lease, a description, Store Client Work, owner hashcombe and template Transactional](new-matter.png)
+
+### A Matter's Page
+
+A matter's page, at `/admin/matters/` and the matter's id, opens when you select the matter in the Matters list or on
+its client's page, once New Matter has made it, and from **Manage in Admin** on the matter's menu in the User app (see
+[Getting Around](../../user/getting-started/getting-around/#right-click-menus)).
+
+- **Matters**, above the title, goes back to the list.
+- **The title** is the matter's number and name, such as "1001.1 Charter Dispute – MV Northern Star", with **Edit**,
+  **Move to Another Store**, **Open in Healdan** and **Delete** beside it.
+- **The line under it** names the client, the Store, the owner, the template, and the documents with their size, as in
+  "Saltmarsh Shipping Ltd · Client Work · owner Tom Reeve · from template Litigation · 412 documents, 4.6 GB". It
+  says "no owner" once the owner's account has been deleted, and leaves out the template when there's none, and the
+  figures until they've been worked out.
+- **Two tabs,** **Overview** and **Workspace**. The page's address keeps the tab, so a reload or a copied link opens
+  the same one.
+
+An address that names no matter, or a matter in the Trash, says "Matter Not Found", with **Go to Matters**. The page
+asks Healdan again each time you come back to its window, as the lists do.
+
+#### The Overview Tab
+
+- **Description:** the matter's description, or "No description."
+- **Facts:** **Client**, which opens the client's page, **Store**, **Owner**, **Template**, **Documents**, **Size**
+  and **Last Activity**. The last three come from the same figures as the Matters list's, and say "Not worked out yet"
+  until they've been worked out since the server started. **Owner** says "None: the owner's account has been deleted"
+  once it has, **Template** says "None" for a matter made from no template or whose template has gone, and **Last
+  Activity** says "None" for a matter with nothing filed.
+- **Stuck or Failing:** how many of the matter's documents couldn't be indexed, so search won't find their text, and
+  how many of their previews were given up on, counted when the page asks. With neither, it says "Nothing in this
+  matter is stuck or failing." See [Search and Indexing](../system/search-and-indexing/) and
+  [Office Previews](../office-previews/).
+
+#### The Workspace Tab
+
+The **Workspace** tab is the matter's workspace in the [Workspace Editor](../top-level-folders/#the-workspace-editor):
+its folders and search folders, who can use each folder, the values each sets, and each search folder's rule. Healdan's
+permission rules check each change you save to a matter's workspace: see
+[Who Can Use This Folder](../permissions/#who-can-use-this-folder). What you were changing there is kept while you
+look at the Overview.
+
+#### Edit
+
+**Edit** changes the matter's name, description and owner, and nothing else: the dialog says its client, number and
+template never change, and that **Move to Another Store** changes its Store. **Save** stays greyed out until something
+has changed, and the dialog says first what Healdan would refuse:
+
+| It says | When |
+|---|---|
+| "A name can't have / or \ in it." | the name has a slash or a backslash |
+| "That is too long." | the name, with the matter's number and a dash before it, is too long for a folder's name |
+| "A description can be 4,000 characters at most." | the description is longer |
+| "Its owner's account has been deleted. Choose a new owner." | the owner's account has gone |
+
+**Owner** offers only people who can sign in, and can't be left empty. A new name renames the matter's folder, as in
+`1001.1 – New Name`. A new owner gets Full Access to the matter's folder, and the old owner's row is taken off it, and
+off the folders below that narrow with it. Anything else Healdan refuses, such as markup in the name or a new owner who
+can't read the Store, shows in the dialog in Healdan's own words. While the change is on its way, **Cancel** is greyed
+out and Esc does nothing; once it's saved, Healdan says "Saved" with the matter's number and name. Healdan records the
+fields that changed.
+
+#### Move to Another Store
+
+**Move to Another Store** offers the Stores in a menu, the one the matter is in marked "(Where It Is Now)", which says
+"It's in that Store already." if you choose it. **Move** stays greyed out until you choose another. The matter keeps
+its client, number and name, and its documents their properties. As the dialog says, its files follow to the new
+Store's [storage backend](../storage-backends/) in the background, so until they have, a file may still be read from
+the old one (see
+[Choosing a Store's Backend](../storage-backends/choosing-a-stores-backend/#matters-moving-between-stores)).
+
+Healdan refuses the move, and the dialog says why:
+
+- when a folder in that Store already has the matter's folder's name, in any case, as the matter's folder is never
+  renamed to fit;
+- while a document in the matter is checked out, by anyone;
+- when a group that can read the matter can't read the new Store (see
+  [A Matter and Its Store](../permissions/#a-matter-and-its-store)).
+
+Once it's moved, Healdan says "Moved" with the matter and its new Store, and records the Store before and after.
+
+#### Delete
+
+**Delete** asks first: "Move 1001.1 to the Trash?" It names what the matter holds, counted afresh, as in "1001.1 –
+Charter Dispute goes to the Trash with everything in it: 8 folders and 412 documents.", and says that its number stays
+taken and that an administrator can restore it from the Trash in Healdan. **Move to Trash** moves the matter's folder,
+with everything in it, to your Trash in the User app, and the Matters list opens. Healdan says "Moved" with the
+matter's number and name, linking to that Trash, and records the delete.
+
+Healdan refuses while a document in the matter is checked out, by anyone, you included, or while the matter holds an
+immutable document, and the dialog says so.
+
+The matter is then gone from the Admin app's lists and pages, and its number is never used again. To bring it back,
+restore it from your Trash in the User app (see [The Trash](../../user/documents/the-trash/)), and it comes back to its
+Store as it was. [The Trash and Removed Items](../the-trash-and-removed-items/) says how administrators restore what
+anyone deleted.
+
+#### Open in Healdan
+
+**Open in Healdan** opens the matter's folder in the User app, in the same window.
+
+#### Matters in the Classic Interface
+
+**Edit Matter…**, on the workspace's right-click menu in the Classic Interface's folder tree, still changes a matter's
+name, description and owner, with the same rules, and Healdan records each edit as it does one made in the Admin app.
+A matter's folder can still be deleted there too, as any folder: it goes to the Trash, and restoring it brings the
+matter back.
 
 ## Matter Numbers
 
@@ -209,13 +318,3 @@ before clients start sharing matter numbers:
 Switching from system-wide to per client is always allowed. Switching from per client to system-wide is allowed only
 if no two clients share a matter number; otherwise Healdan lists the clashes. Matter numbers can't be changed, so once
 two clients share one, numbering stays per client.
-
-## Editing and Deleting a Matter
-
-These are done in the Classic Interface:
-
-- **Edit Matter…** on the workspace's right-click menu changes its name, description and owner. The workspace's name
-  follows the matter's. Changing the owner gives the new owner every permission on the workspace and removes the old
-  owner's; Healdan warns you first.
-- **Deleting a matter:** delete its workspace folder as any folder. It goes to the trash, and restoring it brings the
-  matter back. A matter's number is never reused, even after the trash is emptied.

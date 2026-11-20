@@ -15,10 +15,10 @@ document, locking, permissions and your messages.
 ## For Administrators
 
 Administrators now start their work in the Admin app, at `/admin/`, which **Admin** in the app's menu opens. Its
-Dashboard shows what needs their attention, the server's health and how Healdan is used, and they make clients and
-matters there. Administration's other screens are still in the Classic Interface, and the Admin app's **Classic
-Interface**, at the foot of its left pane, opens them. See the Admin Guide's
-[The Admin App](../../admin/the-admin-app/).
+Dashboard shows what needs their attention, the server's health and how Healdan is used, and they make and manage
+clients, matters, their workspaces and workspace templates there. Administration's other screens are still in the
+Classic Interface, and the Admin app's **Classic Interface**, at the foot of its left pane, opens them. See the Admin
+Guide's [The Admin App](../../admin/the-admin-app/).
 
 ## Getting There and Back
 
