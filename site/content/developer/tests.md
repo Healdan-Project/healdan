@@ -705,7 +705,8 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     rename field, the delete question, the Help menu, the delete question for a folder with its line of what it holds, the toast
     with **Undo**, the move picker for a folder with its greyed choices, the question before a folder leaves its matter, the Trash
     with an item and with it selected, its **Remove** and **Empty Trash** questions and the empty Trash, search results for a word with their Filters (Title keeps 200
-    pixels, and text that doesn't fit ends in an ellipsis), a document's page, Quick Look on a PDF and on an email, the
+    pixels, and text that doesn't fit ends in an ellipsis), the search box's suggestions for the smoke fixture's matter
+    with the whole page around them, a document's page, Quick Look on a PDF and on an email, the
     reading pane, New Folder, More and Move To… (a matter's client starts clear of it, drawn smaller), the person menu,
     Signed-in Devices (whole in its dialog, with no sideways scroll, every Revoke inside it and a name of at most two
     lines at 1280, and again at 768) with the Revoke question and its refusal (and a real revoke, whose focus must stay
@@ -730,11 +731,10 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     so a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
     person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes
     it, and the focus goes back to **☰**), and last the signed-out screen. This is where the Dashboard's colour
-    contrast is checked. The find's list is checked on its own (`expectNoViolations`' `within`), without axe's
-    `region` (its `skip`): while the list is open, React Aria's combo box hides the rest of the page from screen
-    readers with `aria-hidden` over parts that hold links, which axe's `aria-hidden-focus` and its page-level rules
-    refuse, and its popover sits outside every landmark. The User app's search box is the same component, and
-    `a11y.spec.ts` doesn't open it.
+    contrast is checked. The find's list is checked with the whole page around it, as the User app's search box's
+    is: `@healdan/ui`'s `ComboBox` draws the list right after the box, inside the find's search landmark, and keeps
+    the page around it shown to a screen reader while it's open (The Web App page's The Search Box and Search
+    Results), so nothing hidden holds a link (axe's `aria-hidden-focus`).
   - `resizing.spec.ts` files a document into a folder of its own inside `E2E`, and through the page drags the left
     pane's divider with the mouse and checks the pane's width, its value and that the list's Title column narrowed (the
     virtualiser measured the narrower list); reloads and finds the width kept; moves it by keys; checks that a window

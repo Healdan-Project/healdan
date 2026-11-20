@@ -63,12 +63,11 @@ for (const scheme of ['light', 'dark'] as const) {
       // Client 1 and matter 1.1, each under its kind's heading
       await expect(found).toContainText('Smoke Client')
       await expect(found).toContainText('Smoke Matter')
-      // The list on its own: while it's open, React Aria's combo box hides the rest of the page from screen readers
-      // (aria-hidden on the top bar's other parts, the left pane and the main area, which hold links), so a check of the
-      // whole page fails axe's aria-hidden-focus and its rules for the page's main landmark and heading, as the User app's
-      // search box, the same component, would. The list sits in a popover outside every landmark, as React Aria draws
-      // it, so axe's `region` isn't run on it. Its options, their headings and their colours are checked.
-      await expectNoViolations(page, `the find's list (${scheme})`, '[role="listbox"]', ['region'])
+      // The whole page with the list open: the list comes right after the box, inside the find's search landmark, and the
+      // page around it stays shown to a screen reader (@healdan/ui's ComboBox), so nothing hidden holds a link
+      // (aria-hidden-focus) and the page keeps its main landmark and heading. Its options, their headings and their colours
+      // are checked with it.
+      await check("the find's list")
       await page.keyboard.press('Escape')
       await find.fill('')
       await expect(found).toBeHidden()

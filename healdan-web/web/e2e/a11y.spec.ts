@@ -402,6 +402,23 @@ for (const scheme of ['light', 'dark'] as const) {
       await check('search results')
     })
 
+    test("the search box's suggestions", async () => {
+      await page.goto('/app/')
+      await expect(page.getByRole('heading', { name: 'Recent Documents' })).toBeVisible()
+      const box = page.getByRole('combobox', { name: 'Search' })
+      await box.fill('Smoke')
+      // The smoke fixture's matter 1.1, under its heading, and the search itself
+      const list = page.getByRole('listbox')
+      await expect(list.getByRole('option', { name: /Smoke Matter/ }).first()).toBeVisible()
+      await expect(list.getByRole('option', { name: 'Search Documents for "Smoke"' })).toBeVisible()
+      // The whole page with the list open: the list comes right after the box, in the search landmark, and the page around
+      // it stays shown to a screen reader (@healdan/ui's ComboBox), so nothing hidden holds a link (aria-hidden-focus)
+      await check("the search box's suggestions")
+      await page.keyboard.press('Escape')
+      await expect(list).toBeHidden()
+      await box.fill('')
+    })
+
     test("a document's own page", async () => {
       await page.goto(`/app/doc/${pdfNumber}`)
       await expect(main().getByRole('row', { name: new RegExp(PDF.replace('.', '\\.')) })).toBeVisible()
