@@ -478,19 +478,21 @@ public class FolderAccessService {
 	}
 
 	/**
+	 * @param groupId a row's group, or a person's own group
 	 * @return how the record names a row: {@code group IT} or {@code user jdoe}, with the group's id after a deleted
 	 *         one's, which has no name of its own
 	 */
-	private static String rowName(long groupId) {
+	public static String rowName(long groupId) {
 		String described = AclMath.describe(groupId);
 		return described.startsWith("a deleted ") ? described + " " + groupId : described;
 	}
 
 	/**
+	 * @param flags what a row grants, null for no row
 	 * @return the flags in {@link Permission}'s order, as the contract names them, such as {@code read, write}; null
-	 *         for none
+	 *         for none, as the record gives a row's
 	 */
-	static String flags(Set<Permission> flags) {
+	public static String flags(Set<Permission> flags) {
 		if (flags == null)
 			return null;
 		return List.of(Permission.values()).stream().filter(flags::contains)

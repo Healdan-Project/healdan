@@ -1730,18 +1730,23 @@ paths:
         `groupIds` Read, the Store's one level, **Can See**, all in one
         transaction (`StoreService.create`), so a matter can be made in it
         at once (Admin app spec section 8.6). Answers `201` with it. The
-        name has the whitespace at either end taken off. A new Store keeps
-        its files on Original, the server's own folder, until its storage
-        backend is changed.
+        name has the whitespace at either end taken off. A group in
+        `groupIds` may be a person's own. A new Store keeps its files on
+        Original, the server's own folder, until its storage backend is
+        changed.
 
+        - `400 bad-request` for a `groupIds` that names a group twice or
+          holds a null.
         - `422 validation` for the name, as `FolderName` says, and for a
           missing `groupIds` (`required`).
-        - `409 refused` for a name another workspace under the root has,
-          compared without regard to case, LogicalDOC's Default workspace and
-          the Templates Store among them; for a group that no longer exists;
-          and for what Healdan's rules refuse.
+        - `409 refused` for a name another live folder directly under the
+          root has, compared without regard to case: another Store,
+          LogicalDOC's Default workspace or the Templates Store; for a group
+          that no longer exists; and for what Healdan's rules refuse.
 
-        Recorded as `store.created`, with its name and who can see it.
+        Recorded as `store.created`, with its name and one change for each
+        group that can see it, named as `group Partners` or `user jdoe`,
+        with `read`.
       tags: [Stores]
       requestBody:
         required: true
@@ -1777,7 +1782,8 @@ paths:
         section 8.6). A Store has one level, **Can See** (Read, the only
         permission that matters on a Store), so a row's `level` is `can-see`
         when it grants Read alone, and `custom` when it grants anything
-        else, with or without Read.
+        else, with or without Read. A group or person the Store grants
+        nothing isn't listed, though LogicalDOC can keep a row for one.
 
         LogicalDOC's Default workspace, the Templates Store, the root and any
         other folder that isn't a live Store are `404 not-found`.
@@ -1807,18 +1813,31 @@ paths:
         (`StoreService.setAccess`), and answers who can see it after (Admin
         app spec section 8.6): each group in `groupIds`, a person's own group
         among them, gets Read, keeping any other permission its row has, and
-        every other group's row goes. New Matter's **Let {group} Read the
-        Store** sends the Store's groups with the problem's group added.
-        Healdan's permission rules then narrow, as on every route, what in
-        the Store's matters follows the Store's permissions.
+        every other group's row goes. An empty list leaves the Store to
+        administrators alone. A Store that followed another folder's
+        permissions gets its own.
 
+        New Matter's **Let {group} Read the Store** sends the groups whose
+        rows have `read`, with the problem's group added. A `custom` row that
+        lacks Read isn't among them, so its group's row goes: harmless on a
+        Store, where only Read matters. Healdan's permission rules then
+        narrow, as on every route, what in the Store's matters follows the
+        Store's permissions.
+
+        - `400 bad-request` for a `groupIds` that names a group twice or
+          holds a null.
         - `404 not-found` as `adminGetStoreAccess` answers.
         - `422 validation` for a missing `groupIds` (`required`).
-        - `409 refused` for a group that no longer exists, and for what
-          Healdan's rules refuse.
+        - `409 refused` for a group that no longer exists (a deleted group
+          the Store grants something now may stay, as LogicalDOC still lets
+          its members in), and for what Healdan's rules refuse.
 
-        Recorded as `store.access-changed`, with who could see it before and
-        after. A change that changes nothing isn't recorded.
+        Recorded as `store.access-changed`, with `follows` (the folder it
+        followed, null after) when it followed another folder's permissions,
+        and one change for each row that changed, named as `group Partners`
+        or `user jdoe`, valued with its permissions in `Permission`'s order
+        (`read, download`), null for no row. A change that changes nothing
+        is neither written nor recorded.
       tags: [Stores]
       parameters:
         - $ref: '#/components/parameters/StorePath'
@@ -3382,7 +3401,7 @@ components:
           $ref: '#/components/schemas/FolderName'
         groupIds:
           type: array
-          description: The groups that can see it, each given Read; empty for administrators alone
+          description: The groups, or people's own groups, that can see it, each given Read; empty for administrators alone
           uniqueItems: true
           items:
             type: integer
@@ -3433,6 +3452,7 @@ components:
           type: string
         description:
           type: [string, 'null']
+          description: Its description; null for none, an empty one included
     GroupList:
       description: A page of groups
       allOf:
