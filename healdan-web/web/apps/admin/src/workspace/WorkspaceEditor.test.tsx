@@ -222,6 +222,17 @@ describe('Who Can Use This Folder', () => {
     expect(within(access()).getByRole('combobox', { name: 'Access for Tom Reeve' })).toBeTruthy()
   })
 
+  it("sends the owner's row on the matter's own folder with every permission, whatever was stored for a read-only account", async () => {
+    const stored = { ...charterAccess[110]!, rows: charterAccess[110]!.rows.map((one) => (one.owner ? { ...one, permissions: permissionsOf('read-only') } : one)) }
+    const { api } = await openWorkspace({ 'GET /v1/admin/folders/110/access': stored, 'PUT /v1/admin/folders/110/access': charterAccess[110] })
+    expect(accessRows()[2]).toEqual(['Tom Reeve Owner', 'Full Access'])
+    await userEvent.click(within(access()).getByRole('button', { name: 'Remove Everyone' }))
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(putsTo(api, 110)).toHaveLength(1))
+    const owner = (putsTo(api, 110)[0] as A['FolderAccessChange']).rows!.find((one) => one.userId === tom.id || one.groupId === 106)
+    expect(owner?.permissions).toEqual([...PERMISSIONS])
+  })
+
   it("moves the focus to the next row's Remove once a row is removed, and to Add Person or Group when none follows", async () => {
     await openWorkspace()
     // On the matter's own folder the owner's row, last, has no Remove
