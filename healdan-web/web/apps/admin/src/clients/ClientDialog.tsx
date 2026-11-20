@@ -29,7 +29,10 @@ export interface ClientDialogProps {
   initialName?: string
   /** The client as the server answered, made or renamed, just before the dialog closes; where to go next is the caller's */
   onSaved?: (client: A['Client']) => void
-  /** The dialog closes: Cancel, Esc, a click outside, or once saved. The caller stops drawing it. */
+  /**
+   * The dialog closes: Cancel, Esc, a click outside, or once saved. The caller stops drawing it. While a change is on its
+   * way it can't be closed, as the server may make it anyway.
+   */
   onClose: () => void
 }
 
@@ -62,7 +65,8 @@ function useNumberTakenBy(number: number | undefined): A['Client'] | undefined {
  * form can see are said before its button; the server's refusal of a used number, or anything else, is said in the
  * dialog (useRefusalFor), and a field the server says is wrong beside it. Once saved, every list and search of clients
  * is asked again, and the client's own page has the answer at once; a rename asks again for the matters' rows, which
- * name their client.
+ * name their client. While the change is on its way, Cancel is greyed out and Esc and a click outside do nothing, so
+ * nobody backs out of a client the server then makes: the dialog closes once it's made, or stays to say why it wasn't.
  */
 export function ClientDialog({ client, initialName = '', onSaved, onClose }: ClientDialogProps) {
   const isNew = client === undefined
@@ -100,7 +104,7 @@ export function ClientDialog({ client, initialName = '', onSaved, onClose }: Cli
     return number === undefined ? undefined : api.send<A['Client']>('POST', '/v1/admin/clients', { number, name: trimmed } satisfies A['NewClient'])
   }
 
-  async function save(close: () => void) {
+  async function save() {
     const sending = request()
     if (sending === undefined) return
     setBusy(true)
@@ -114,7 +118,8 @@ export function ClientDialog({ client, initialName = '', onSaved, onClose }: Cli
       if (!isNew) void queryClient.invalidateQueries({ queryKey: adminKeys.matters })
       if (isNew) toast(t('admin.clientDialog.created', { client: clientLabel(saved) }))
       onSaved?.(saved)
-      close()
+      // Not through the dialog's own close, which is held while busy
+      onClose()
     } catch (error) {
       setFailure(error)
     } finally {
@@ -123,13 +128,13 @@ export function ClientDialog({ client, initialName = '', onSaved, onClose }: Cli
   }
 
   return (
-    <Dialog title={t(isNew ? 'admin.clientDialog.newTitle' : 'admin.clientDialog.renameTitle')} isOpen onOpenChange={(open) => !open && onClose()}>
+    <Dialog title={t(isNew ? 'admin.clientDialog.newTitle' : 'admin.clientDialog.renameTitle')} isOpen onOpenChange={(open) => !open && !busy && onClose()}>
       {(close) => (
         <form
           className={styles.form}
           onSubmit={(event) => {
             event.preventDefault()
-            if (ready && !busy) void save(close)
+            if (ready && !busy) void save()
           }}
         >
           {isNew ? (
@@ -168,7 +173,9 @@ export function ClientDialog({ client, initialName = '', onSaved, onClose }: Cli
             </p>
           )}
           <div className={styles.buttons}>
-            <Button onPress={close}>{t('common.cancel')}</Button>
+            <Button onPress={close} isDisabled={busy}>
+              {t('common.cancel')}
+            </Button>
             <Button type="submit" variant="default" isDisabled={!ready} isPending={busy}>
               {t(isNew ? 'admin.clientDialog.create' : 'admin.clientDialog.rename')}
             </Button>

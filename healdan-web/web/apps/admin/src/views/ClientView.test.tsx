@@ -74,6 +74,25 @@ describe("A client's page", () => {
     await expectNoAxeViolations(view.container)
   })
 
+  it('asks again for the client and its matters when the person comes back to the window, however fresh they are', async () => {
+    let client = saltmarshClient
+    const { api } = await renderApp('/clients/1', { ...PAGE, 'GET /v1/admin/clients/1': () => client })
+    await screen.findByRole('heading', { level: 1, name: '1001 – Saltmarsh Shipping Ltd' })
+    await rows()
+    expect(api.callsTo('GET /v1/admin/clients/1')).toHaveLength(1)
+    expect(api.callsTo('GET /v1/admin/matters')).toHaveLength(1)
+    // Meanwhile another administrator renamed it, and a matter of it was filed into
+    client = { ...saltmarshClient, name: 'Saltmarsh Shipping Group', documents: 509, lastActivity: '2026-11-19T11:30:00Z' }
+    await act(async () => void window.dispatchEvent(new Event('focus')))
+    expect(await screen.findByRole('heading', { level: 1, name: '1001 – Saltmarsh Shipping Group' })).toBeTruthy()
+    expect(facts().slice(2)).toEqual([
+      ['Documents', '509'],
+      ['Last Activity', formatDateTime('2026-11-19T11:30:00Z')],
+    ])
+    expect(api.callsTo('GET /v1/admin/clients/1')).toHaveLength(2)
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/matters')).toHaveLength(2))
+  })
+
   it('goes back to the Clients list from its crumb', async () => {
     const { router } = await renderApp('/clients/1', PAGE)
     await screen.findByRole('heading', { level: 1, name: '1001 – Saltmarsh Shipping Ltd' })
