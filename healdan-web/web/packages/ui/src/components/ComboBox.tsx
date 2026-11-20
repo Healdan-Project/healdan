@@ -14,6 +14,7 @@ import {
   Popover,
 } from 'react-aria-components'
 import styles from './ComboBox.module.css'
+import { OpensWhenOptionsCome } from './OpensWhenOptionsCome'
 
 export interface ComboBoxOption {
   id: string
@@ -53,7 +54,7 @@ export interface ComboBoxProps {
 
 // Enter with no option under the arrow keys is the person's own words, which React Aria would only commit as a custom
 // value and never report; the state says whether an option has the focus.
-function SubmitInput({ onSubmit, value, hasOptions, closerRef, ...props }: { onSubmit: (text: string) => void; value: string; hasOptions: boolean; closerRef: MutableRefObject<(() => void) | null> } & Record<string, unknown>) {
+function SubmitInput({ onSubmit, closerRef, ...props }: { onSubmit: (text: string) => void; closerRef: MutableRefObject<(() => void) | null> } & Record<string, unknown>) {
   const state = useContext(ComboBoxStateContext)
   // The caller's pick closes the list from outside the state
   useEffect(() => {
@@ -62,13 +63,6 @@ function SubmitInput({ onSubmit, value, hasOptions, closerRef, ...props }: { onS
       closerRef.current = null
     }
   }, [closerRef, state])
-  // React Aria opens the list when typing changes the box and options exist at that moment; options that come in the
-  // same render as the first character (the caller works them out from it) miss that moment, so it's asked again here.
-  // It never opens on its own account: only after the text changed, with the box focused.
-  useEffect(() => {
-    if (state && state.isFocused && hasOptions && !state.isOpen) state.open(null, 'input')
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a change of the text or of having options asks
-  }, [value, hasOptions])
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     // Not while an input method is composing, when Enter picks a character
     if (event.key !== 'Enter' || event.nativeEvent.isComposing) return
@@ -174,7 +168,9 @@ export function ComboBox({ value, onValueChange, sections, onSelect, onSubmit, i
         allowsCustomValue
         menuTrigger="input"
       >
-        <SubmitInput ref={inputRef} className={inputClassName} placeholder={placeholder} onSubmit={onSubmit} value={value} hasOptions={sections.length > 0} closerRef={closerRef} />
+        <SubmitInput ref={inputRef} className={inputClassName} placeholder={placeholder} onSubmit={onSubmit} closerRef={closerRef} />
+        {/* Options worked out from the first character come in the same render as it, too late for React Aria */}
+        <OpensWhenOptionsCome text={value} hasOptions={sections.length > 0} />
         <ListPopover layer={layer} triggerRef={anchorRef}>
           <ListBox className={styles.list}>
             {(section: ComboBoxSection) => (

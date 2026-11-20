@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useState, type Key } from 'react'
-import { ComboBox as AriaComboBox, FieldError, Input, Label, ListBox, ListBoxItem } from 'react-aria-components'
+import { useContext, useState, type Key } from 'react'
+import { ComboBox as AriaComboBox, ComboBoxStateContext, FieldError, Input, Label, ListBox, ListBoxItem, type InputProps } from 'react-aria-components'
 import { Icon, type IconName } from '../icons'
 import { ListPopover, useListLayer } from './ComboBox'
 import comboStyles from './ComboBox.module.css'
+import { OpensWhenOptionsCome } from './OpensWhenOptionsCome'
 import styles from './Fields.module.css'
 
 export interface PickFieldOption {
@@ -34,6 +35,21 @@ export interface PickFieldProps {
   onTextChange: (text: string) => void
 }
 
+// The Esc that closes the list is the list's. With something picked, React Aria lets it go on to what is round the field
+// (a dialog, or a form that closes on Esc, as PropertiesForm does), so it's marked as taken (defaultPrevented), and only
+// the list closes. Esc with the list closed goes on as before. Not while an input method is composing, which takes Esc.
+function PickInput(props: InputProps) {
+  const state = useContext(ComboBoxStateContext)
+  return (
+    <Input
+      {...props}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !event.nativeEvent.isComposing && state?.isOpen) event.preventDefault()
+      }}
+    />
+  )
+}
+
 /**
  * A field that picks one of many, found as the person types (a React Aria ComboBox with its label above it, as the
  * other fields have): an option is picked with the arrow keys and Enter, or a click. Text left half typed goes back to
@@ -53,6 +69,9 @@ export function PickField({ label, required, error, value, onChange, options, on
   // value again from a list as it reports leaving the box, so an emptied box with the value in its list couldn't tell
   // the two apart
   const items = value && text.trim() !== '' ? [value, ...options.filter((option) => option.id !== value.id)] : options
+  // Options found for what was typed, which may come once the typing has stopped (UserField's, from the server), and open
+  // the list then; never for the picked one's own name, which the box shows once it is picked
+  const found = options.length > 0 && text.trim() !== '' && text !== value?.label
 
   function type(next: string) {
     setText(next)
@@ -107,7 +126,8 @@ export function PickField({ label, required, error, value, onChange, options, on
             </span>
           )}
         </Label>
-        <Input className={styles.input} onBlur={leave} />
+        <PickInput className={styles.input} onBlur={leave} />
+        <OpensWhenOptionsCome text={text} hasOptions={found} />
         <FieldError className={styles.error}>{error}</FieldError>
         <ListPopover layer={layer}>
           <ListBox className={comboStyles.list}>

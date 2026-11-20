@@ -7,12 +7,15 @@
    padding). That holds while nothing round the box holds what is fixed inside it: a transform, a filter or backdrop-filter,
    a perspective, will-change of one of them, or containment (contain: layout or paint, container-type) would shrink the
    layer to that element and let its overflow cut the list off, so a combo box never goes inside one (the a11y specs check
-   that the layer covers the window). Above the page's own layers (its panes' 20), below a dialog's (100); it takes no
-   clicks itself, only its list does, and while it's empty (the list closed) it isn't drawn at all. */
+   that the layer covers the window). Above everything the page draws, as at the end of <body>, where React Aria's list
+   was above all of it: the panes (20), the filing tray (190) and the toasts (200). A list is open only while its box has
+   the focus, which a dialog opening takes, so no dialog is drawn over an open list; in a dialog the layer is inside the
+   dialog's own layer, so above the dialog's fields. It takes no clicks itself, only its list does, and while it's empty
+   (the list closed) it isn't drawn at all. */
 .layer {
   position: fixed;
   inset: 0;
-  z-index: 90;
+  z-index: 210;
   pointer-events: none;
 }
 
