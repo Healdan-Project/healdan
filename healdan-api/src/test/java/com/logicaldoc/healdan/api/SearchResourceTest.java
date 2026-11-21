@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.api;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -41,6 +42,7 @@ import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.searchengine.Hit;
 import com.logicaldoc.core.searchengine.Search;
 import com.logicaldoc.core.searchengine.SearchEngine;
+import com.logicaldoc.core.searchengine.SearchException;
 import com.logicaldoc.core.searchengine.SearchOptions;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
@@ -49,7 +51,12 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.api.model.MatterView;
+import com.logicaldoc.healdan.api.model.SearchPage;
+import com.logicaldoc.healdan.listing.ListingQuery.Sort;
 import com.logicaldoc.healdan.matter.Matter;
+import com.logicaldoc.healdan.matter.MatterDAO;
+import com.logicaldoc.healdan.search.ClientSearch;
 import com.logicaldoc.healdan.search.ExtensionFilteredSearch;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.BulkHits;
@@ -287,6 +294,130 @@ public class SearchResourceTest extends ApiTestCase {
 
 		assertEquals(0, items("scope=matters&q=998.1", outsider).size());
 		assertEquals(0, items("scope=clients&q=healdan", outsider).size());
+	}
+
+	/**
+	 * Each key sorts by its column's rule (spec section 4.7), in each scope
+	 * that takes it: Title by the folder's name ignoring case, then as Matter;
+	 * Matter by the client's number, then the matter's, as numbers; Client by
+	 * the client's name ignoring case. A folder in no matter (a Store) comes
+	 * last either way, and ties go by id in the sort's direction.
+	 */
+	@Test
+	public void testFoldersMattersAndClientsSort() throws Exception {
+		// Made in an order that is none of the sorts': ids, numbers as text and names with their case all sort otherwise
+		Matter beacon = fx.matter(fx.client(1000, "beacon Partners"), 1, "Lease Beacon", store);
+		var zenith = fx.client(5, "Zenith Partners");
+		Matter ten = fx.matter(zenith, 10, "Lease Ten", store);
+		Matter nine = fx.matter(zenith, 9, "Lease Nine", store);
+		Matter acme = fx.matter(fx.client(12, "Acme Partners"), 1, "Lease Acme", store);
+
+		Folder courtBeacon = fx.folder(FolderDAO.get().findById(beacon.getFolderId()), "Court Brief");
+		Folder courtTen = fx.folder(FolderDAO.get().findById(ten.getFolderId()), "court brief");
+		Folder courtNine = fx.folder(FolderDAO.get().findById(nine.getFolderId()), "Court Brief");
+		Folder zeta = fx.folder(FolderDAO.get().findById(acme.getFolderId()), "Zeta brief");
+		Folder alpha = fx.folder(FolderDAO.get().findById(nine.getFolderId()), "alpha Brief");
+		Folder briefs = fx.store("Briefs");
+		fx.grant(briefs, clerk.getUserGroup(), Permission.READ);
+		String token = signIn(clerk);
+
+		// The three Court Briefs tie, ignoring case, and go by their matters
+		List<Long> byTitle = List.of(alpha.getId(), briefs.getId(), courtNine.getId(), courtTen.getId(),
+				courtBeacon.getId(), zeta.getId());
+		assertEquals(byTitle, sortedIds("scope=folders&q=brief&sort=title", token, 6));
+		assertEquals(reversed(byTitle), sortedIds("scope=folders&q=brief&sort=title&order=desc", token, 6));
+
+		// The two in matter 5.9 tie, and go by id; the Store has no matter
+		assertEquals(List.of(courtNine.getId(), alpha.getId(), courtTen.getId(), zeta.getId(), courtBeacon.getId(),
+				briefs.getId()), sortedIds("scope=folders&q=brief&sort=matter", token, 6));
+		assertEquals(List.of(courtBeacon.getId(), zeta.getId(), courtTen.getId(), alpha.getId(), courtNine.getId(),
+				briefs.getId()), sortedIds("scope=folders&q=brief&sort=matter&order=desc", token, 6));
+
+		List<Long> byMatter = List.of(nine.getId(), ten.getId(), acme.getId(), beacon.getId());
+		assertEquals(byMatter, sortedIds("scope=matters&q=lease&sort=matter", token, 4));
+		assertEquals(reversed(byMatter), sortedIds("scope=matters&q=lease&sort=matter&order=desc", token, 4));
+
+		// Zenith's two matters tie, and go by id
+		List<Long> byClient = List.of(acme.getId(), beacon.getId(), ten.getId(), nine.getId());
+		for (String scope : new String[] { "scope=matters&q=lease", "scope=clients&q=partners" }) {
+			assertEquals(scope, byClient, sortedIds(scope + "&sort=client", token, 4));
+			assertEquals(scope, reversed(byClient), sortedIds(scope + "&sort=client&order=desc", token, 4));
+		}
+
+		// Without a sort, the search's own order, and no total
+		JsonNode unsorted = page("scope=clients&q=partners", token);
+		assertEquals(byMatter, ids(unsorted.path("items")));
+		assertTrue(unsorted.path("total").isNull());
+		assertTrue(unsorted.path("totalAtLeast").isMissingNode());
+	}
+
+	/**
+	 * @return the ids of every page of the query, two at a time, to the first
+	 *         short page; each page has the total and no floor
+	 */
+	private List<Long> sortedIds(String query, String token, long total) {
+		List<Long> found = new ArrayList<>();
+		for (int offset = 0;; offset += 2) {
+			JsonNode page = page(query + "&limit=2&offset=" + offset, token);
+			assertEquals(query, total, page.path("total").asLong());
+			assertTrue(query, page.path("totalAtLeast").isMissingNode());
+			found.addAll(ids(page.path("items")));
+			if (page.path("items").size() < 2)
+				return found;
+		}
+	}
+
+	private static List<Long> reversed(List<Long> ids) {
+		List<Long> reversed = new ArrayList<>(ids);
+		Collections.reverse(reversed);
+		return reversed;
+	}
+
+	/**
+	 * A search that fills every window it's given, as one of more than 10,000
+	 * hits does: sorted, its page says how many it found the caller can see,
+	 * as a floor, and no total
+	 */
+	@Test
+	public void testAScopesSortOverTenThousandSaysAtLeast() throws Exception {
+		SearchOptions options = Search.newOptions(HealdanConstants.SEARCH_CLIENTS);
+		options.setExpression("healdan");
+		options.setUserId(clerk.getId());
+		options.setTenantId(Tenant.DEFAULT_ID);
+		ClientSearch never = new ClientSearch() {
+			@Override
+			protected void internalSearch() throws SearchException {
+				// Healdan's two matters, then hits that are no matter, to the window's end
+				super.internalSearch();
+				for (long id = -1; hits.size() < options.getMaxHits(); id--) {
+					Hit hit = new Hit();
+					hit.setId(id);
+					hit.setType("folder");
+					hits.add(hit);
+				}
+			}
+		};
+		never.setOptions(options);
+		long demo = MatterDAO.get().findByFolderId(workspace.getId()).getId();
+		long other = MatterDAO.get().findByFolderId(otherWorkspace.getId()).getId();
+
+		SearchPage first = SearchResource.others(never, options, clerk, new Paging(0, 1), null, Sort.CLIENT, false);
+		assertNull(first.total());
+		assertEquals(Long.valueOf(2), first.totalAtLeast());
+		assertEquals(List.of(demo), matterIds(first));
+		SearchPage last = SearchResource.others(never, options, clerk, new Paging(0, 1), null, Sort.CLIENT, true);
+		assertEquals(List.of(other), matterIds(last));
+		assertEquals(Long.valueOf(2), last.totalAtLeast());
+
+		// Without a sort, as before: no total and no floor
+		SearchPage unsorted = SearchResource.others(never, options, clerk, new Paging(0, 1), null, null, false);
+		assertNull(unsorted.total());
+		assertNull(unsorted.totalAtLeast());
+		assertEquals(List.of(demo), matterIds(unsorted));
+	}
+
+	private static List<Long> matterIds(SearchPage page) {
+		return page.items().stream().map(item -> ((MatterView) item).id()).toList();
 	}
 
 	@Test
@@ -1145,7 +1276,9 @@ public class SearchResourceTest extends ApiTestCase {
 				"scope=clients&q=healdan&type=pdf", "q=x&type=folder", "q=x&type=spreadsheet", "q=x&matter=998",
 				"q=x&client=ABC", "q=x&facets=size", "q=x&edited=week", "q=x&edited=7d&from=2026-01-01",
 				"q=x&from=2026-02-01&to=2026-01-01", "q=x&author=", "q=x&order=desc", "q=x&sort=colour",
-				"q=x&sort=title&order=up", "scope=folders&q=docu&sort=title", "scope=matters&q=998&sort=docNumber",
+				"q=x&sort=title&order=up", "scope=folders&q=docu&sort=client", "scope=folders&q=docu&sort=colour",
+				"scope=folders&q=docu&sort=title&order=up", "scope=matters&q=998&sort=docNumber",
+				"scope=matters&q=998&sort=title", "scope=clients&q=healdan&sort=matter",
 				"scope=clients&q=healdan&order=asc", "q=x&zone=Mars/Olympus", "q=x&from=2026-01-01&zone=%2B99:00",
 				"scope=folders&q=docu&zone=Nowhere" }) {
 			ApiResponse response = get("/api/v1/search?" + query).token(token).send();

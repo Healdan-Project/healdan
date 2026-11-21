@@ -5,8 +5,10 @@ package com.logicaldoc.healdan.api;
 
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -32,6 +34,10 @@ import com.logicaldoc.core.security.user.UserHistory;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.api.model.SearchPage;
 import com.logicaldoc.healdan.docnumber.DocNumberQuery;
+import com.logicaldoc.healdan.listing.ListingQuery.Sort;
+import com.logicaldoc.healdan.matter.Client;
+import com.logicaldoc.healdan.matter.ClientDAO;
+import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.matter.MatterLocator;
@@ -54,7 +60,9 @@ import jakarta.ws.rs.core.MediaType;
  * The documents, emails and all scopes ({@link DocumentSearch}) page through
  * every hit up to {@link #MAX_WINDOW}, take the filters and a sort, and count
  * (M6 spec sections 9.2 and 9.5). The other scopes page as the old UI's
- * search box does, and count nothing.
+ * search box does, and count nothing; sorted by one of their columns
+ * ({@link #SCOPE_SORTS}), they read every hit up to {@code MAX_WINDOW}, sort
+ * what the caller may see, and count it (list columns spec section 5.2).
  */
 @Component
 @Path("/v1/search")
@@ -73,6 +81,13 @@ public class SearchResource {
 	static final int FACET_WINDOW = 2500;
 
 	/**
+	 * The sorts of the scopes that aren't of documents, by scope: the columns
+	 * their lists show (list columns spec section 5.2)
+	 */
+	private static final Map<String, List<String>> SCOPE_SORTS = Map.of("folders", List.of("title", "matter"),
+			"matters", List.of("matter", "client"), "clients", List.of("client"));
+
+	/**
 	 * @param scope {@code documents} (the default), {@code emails}, {@code all},
 	 *        {@code folders}, {@code matters} or {@code clients}
 	 * @param q what to look for
@@ -80,8 +95,10 @@ public class SearchResource {
 	 * @param limit the most hits to return
 	 * @param within a folder to search inside, at any depth; only for the
 	 *        {@code folders} and {@code documents} scopes
-	 * @param sort what to sort the documents by, as a folder's are; none for
-	 *        the best hits first
+	 * @param sort what to sort the documents by, as a folder's are; in the
+	 *        folders, matters and clients scopes, one of their columns
+	 *        ({@link #SCOPE_SORTS}); none for the best hits first, or the
+	 *        search's own order
 	 * @param order {@code asc} or {@code desc}, with a sort
 	 * @param type the file kinds to keep ({@link Filters})
 	 * @param author the Authors to keep, by username
@@ -117,14 +134,16 @@ public class SearchResource {
 			throw ApiProblem.badRequest("Only the documents and folders scopes can search within a folder.");
 		if (StringUtils.isNotEmpty(order) && StringUtils.isEmpty(sort))
 			throw ApiProblem.badRequest("Give a sort with the order. Without one, the best hits come first.");
+		boolean documents = List.of("documents", "emails", "all").contains(chosen);
+		if (!documents && StringUtils.isNotEmpty(sort) && !SCOPE_SORTS.get(chosen).contains(sort))
+			throw ApiProblem.badRequest("The %s scope's sort can be %s, not %s."
+					.formatted(chosen, String.join(" or ", SCOPE_SORTS.get(chosen)), sort));
 		Filters filters = Filters.of(type, sort, order, author, docClass, client, matter, edited, from, to, facets,
 				zone, Clock.systemDefaultZone());
 		if (filters.foldersOnly())
 			throw ApiProblem.badRequest("A search's type is a file kind. Search the folders scope for folders.");
-		boolean documents = List.of("documents", "emails", "all").contains(chosen);
-		if (!documents && (filters.query().filtered() || filters.query().sort() != null
-				|| !filters.facets().isEmpty()))
-			throw ApiProblem.badRequest("Only the documents, emails and all scopes take filters, a sort and facets.");
+		if (!documents && (filters.query().filtered() || !filters.facets().isEmpty()))
+			throw ApiProblem.badRequest("Only the documents, emails and all scopes take filters and facets.");
 
 		Caller caller = Caller.current();
 		User user = caller.user();
@@ -151,7 +170,8 @@ public class SearchResource {
 
 			if (documents)
 				return DocumentSearch.run(search, options, user, filters, paging, within);
-			return others(search, options, user, paging, within);
+			return others(search, options, user, paging, within, filters.query().sort(),
+					filters.query().descending());
 		} catch (SearchException e) {
 			// The mapper logs it, and answers 500 server-error
 			throw new IllegalStateException("Search failed", e);
@@ -161,31 +181,127 @@ public class SearchResource {
 	}
 
 	/**
-	 * The folders, matters and clients scopes: the window grows until the page
-	 * is full or the search has no more; the total isn't counted
+	 * The folders, matters and clients scopes. Without a sort, the window grows
+	 * until the page is full or the search has no more, and the total isn't
+	 * counted. With one, the search reads one window of {@link #MAX_WINDOW},
+	 * and every hit the caller may see is sorted ({@link #sorted}) and paged;
+	 * the answer has the total when the search had no more, and otherwise how
+	 * many it found, as a document search's sort does.
+	 *
+	 * @param sort {@code TITLE} or {@code MATTER} in the folders scope,
+	 *        {@code MATTER} or {@code CLIENT} in the matters scope,
+	 *        {@code CLIENT} in the clients scope; null for the search's own
+	 *        order
+	 * @param descending whether the sort is reversed
 	 */
-	private static SearchPage others(Search search, SearchOptions options, User user, Paging paging, Long within)
-			throws SearchException, PersistenceException {
-		long wanted = Math.min((long) paging.offset() + paging.limit(), MAX_WINDOW);
+	static SearchPage others(Search search, SearchOptions options, User user, Paging paging, Long within, Sort sort,
+			boolean descending) throws SearchException, PersistenceException {
+		// A sort looks at every hit
+		long wanted = sort != null ? MAX_WINDOW : Math.min((long) paging.offset() + paging.limit(), MAX_WINDOW);
 		long window = wanted;
-		List<Object> shown;
+		List<Found> shown;
+		boolean complete;
 		// Each hit is checked once, however often the window grows
-		Map<Long, Optional<Object>> checked = new HashMap<>();
+		Map<Long, Optional<Found>> checked = new HashMap<>();
 		while (true) {
 			options.setMaxHits((int) window);
 			List<Hit> hits = search.search();
 			shown = shown(hits, options.getType(), user, wanted, checked, within);
-			if (shown.size() >= wanted || hits.size() < window || window >= MAX_WINDOW)
+			// Fewer hits than asked for: the search has no more
+			complete = hits.size() < window;
+			if (shown.size() >= wanted || complete || window >= MAX_WINDOW)
 				break;
 			window = Math.min(window * 2, MAX_WINDOW);
 		}
+		if (sort != null)
+			shown = sorted(shown, sort, descending);
 
 		int from = (int) Math.min(paging.offset(), shown.size());
 		int to = (int) Math.min((long) paging.offset() + paging.limit(), shown.size());
 		List<Object> items = new ArrayList<>();
-		for (Object found : shown.subList(from, to))
+		for (Found found : shown.subList(from, to))
 			view(found, user).ifPresent(items::add);
-		return new SearchPage(List.copyOf(items), paging.offset(), paging.limit(), null, null, null);
+		Long total = sort != null && complete ? (long) shown.size() : null;
+		Long totalAtLeast = sort != null && !complete ? (long) shown.size() : null;
+		return new SearchPage(List.copyOf(items), paging.offset(), paging.limit(), total, totalAtLeast, null);
+	}
+
+	/**
+	 * A hit the caller may see
+	 *
+	 * @param folder the folder, in the folders scope; null in the matters and
+	 *        clients scopes
+	 * @param matter in those scopes, the matter; in the folders scope, the
+	 *        matter the folder is or is inside, or null for none, as for a
+	 *        Store
+	 */
+	private record Found(Folder folder, Matter matter) {
+
+		/** @return the id of the folder or matter, as its view's {@code id} */
+		long id() {
+			return folder != null ? folder.getId() : matter.getId();
+		}
+	}
+
+	/**
+	 * What a sort compares for a hit
+	 *
+	 * @param found the hit
+	 * @param text the folder's or client's name in lower case, or null
+	 * @param clientNumber the number of the matter's client, or null for no
+	 *        matter
+	 * @param matterNumber the matter's number, or null for no matter
+	 */
+	private record Keyed(Found found, String text, Long clientNumber, Long matterNumber) {
+	}
+
+	/**
+	 * @return the hits in the sort's order, by each key's column (list columns
+	 *         spec section 4.7): {@code TITLE} by the folder's name, then as
+	 *         {@code MATTER}; {@code MATTER} by the client's number, then the
+	 *         matter's; {@code CLIENT} by the client's name. Names are compared
+	 *         ignoring case as the server's SQL and the browser compare them:
+	 *         in lower case ({@link Locale#ROOT}), by UTF-16 code unit. A hit
+	 *         with no value, a folder in no matter, comes last either way;
+	 *         ties go by id, in the sort's direction.
+	 */
+	private static List<Found> sorted(List<Found> shown, Sort sort, boolean descending)
+			throws PersistenceException {
+		// Read once per client, however many of its matters there are
+		Map<Long, Client> clients = new HashMap<>();
+		List<Keyed> keyed = new ArrayList<>(shown.size());
+		for (Found found : shown) {
+			Matter matter = found.matter();
+			Client client = null;
+			if (matter != null) {
+				client = clients.get(matter.getClientId());
+				if (client == null) {
+					client = ClientDAO.get().findById(matter.getClientId());
+					clients.put(matter.getClientId(), client);
+				}
+			}
+			String text = switch (sort) {
+			case TITLE -> found.folder().getName();
+			case CLIENT -> client != null ? client.getName() : null;
+			default -> null;
+			};
+			keyed.add(new Keyed(found, text != null ? text.toLowerCase(Locale.ROOT) : null,
+					client != null ? client.getNumber() : null, matter != null ? matter.getNumber() : null));
+		}
+
+		Comparator<String> texts = descending ? Comparator.reverseOrder() : Comparator.naturalOrder();
+		Comparator<Long> numbers = descending ? Comparator.reverseOrder() : Comparator.naturalOrder();
+		Comparator<Keyed> byText = Comparator.comparing(Keyed::text, Comparator.nullsLast(texts));
+		Comparator<Keyed> byMatter = Comparator.comparing(Keyed::clientNumber, Comparator.nullsLast(numbers))
+				.thenComparing(Keyed::matterNumber, Comparator.nullsLast(numbers));
+		Comparator<Keyed> order = switch (sort) {
+		case TITLE -> byText.thenComparing(byMatter);
+		case MATTER -> byMatter;
+		case CLIENT -> byText;
+		default -> throw new IllegalArgumentException("Only a document search sorts by " + sort);
+		};
+		keyed.sort(order.thenComparing(k -> k.found().id(), numbers));
+		return keyed.stream().map(Keyed::found).toList();
 	}
 
 	/**
@@ -242,17 +358,16 @@ public class SearchResource {
 	 * @param checked what earlier windows found for each hit, by id; this
 	 *        window's answers are added
 	 * @param within the folder the hits must be inside, or null
-	 * @return what of the hits the caller may see, as the matters or folders
-	 *         themselves, in the hits' order, at most {@code wanted}; the views
-	 *         come later, for the page alone
+	 * @return what of the hits the caller may see, in the hits' order, at
+	 *         most {@code wanted}; the views come later, for the page alone
 	 */
-	private static List<Object> shown(List<Hit> hits, int type, User user, long wanted,
-			Map<Long, Optional<Object>> checked, Long within) throws PersistenceException {
-		List<Object> shown = new ArrayList<>();
+	private static List<Found> shown(List<Hit> hits, int type, User user, long wanted,
+			Map<Long, Optional<Found>> checked, Long within) throws PersistenceException {
+		List<Found> shown = new ArrayList<>();
 		for (Hit hit : hits) {
 			if (shown.size() >= wanted)
 				break;
-			Optional<Object> found = checked.get(hit.getId());
+			Optional<Found> found = checked.get(hit.getId());
 			if (found == null) {
 				found = check(hit, type, user, within);
 				checked.put(hit.getId(), found);
@@ -263,28 +378,31 @@ public class SearchResource {
 	}
 
 	/**
-	 * @return the matter or folder the hit is, if the caller may see it and,
-	 *         with {@code within}, it is inside that folder at any depth
+	 * @return the matter or folder the hit is, with the folder's matter, if
+	 *         the caller may see it and, with {@code within}, it is inside that
+	 *         folder at any depth
 	 */
-	private static Optional<Object> check(Hit hit, int type, User user, Long within) throws PersistenceException {
+	private static Optional<Found> check(Hit hit, int type, User user, Long within) throws PersistenceException {
 		if (type == HealdanConstants.SEARCH_MATTERS || type == HealdanConstants.SEARCH_CLIENTS) {
 			Matter matter = MatterDAO.get().findByFolderId(hit.getId());
-			return matter != null && AccessChecks.readableFolder(hit.getId(), user).isPresent() ? Optional.of(matter)
+			return matter != null && AccessChecks.readableFolder(hit.getId(), user).isPresent()
+					? Optional.of(new Found(null, matter))
 					: Optional.empty();
 		}
 		Optional<Folder> folder = AccessChecks.readableFolder(hit.getId(), user);
 		// The API shows folders inside Stores only, and no aliases
-		return folder.isPresent() && folder.get().getDeleted() == 0 && folder.get().getType() != Folder.TYPE_ALIAS
-				&& MatterLocator.get().locate(folder.get()).isUnderAStore()
-				&& (within == null || folder.get().getId() != within
-						&& FolderDAO.get().isInPath(within, folder.get().getId()))
-						? Optional.of(folder.get())
+		if (folder.isEmpty() || folder.get().getDeleted() != 0 || folder.get().getType() == Folder.TYPE_ALIAS)
+			return Optional.empty();
+		FolderPosition position = MatterLocator.get().locate(folder.get());
+		return position.isUnderAStore() && (within == null || folder.get().getId() != within
+				&& FolderDAO.get().isInPath(within, folder.get().getId()))
+						? Optional.of(new Found(folder.get(), position.matter()))
 						: Optional.empty();
 	}
 
-	private static Optional<Object> view(Object found, User user) throws PersistenceException {
-		if (found instanceof Matter matter)
-			return Optional.of(ApiViews.matter(matter, null));
-		return ApiViews.folder((Folder) found, user).map(Object.class::cast);
+	private static Optional<Object> view(Found found, User user) throws PersistenceException {
+		if (found.folder() == null)
+			return Optional.of(ApiViews.matter(found.matter(), null));
+		return ApiViews.folder(found.folder(), user).map(Object.class::cast);
 	}
 }
