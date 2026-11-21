@@ -139,15 +139,15 @@ public class DashboardService {
 	/**
 	 * The screens the Dashboard links to (spec section 8.1): the Admin app's address once a screen has shipped, and
 	 * the Classic Interface until then. Each phase that ships a screen changes its row; Phase 2 shipped Clients, Matters
-	 * and Workspace Templates.
+	 * and Workspace Templates, and Phase 3 Stores and Backends.
 	 */
 	enum Screen {
 		DASHBOARD("/admin/"),
 		CLIENTS("/admin/clients"),
 		MATTERS("/admin/matters"),
 		TEMPLATES("/admin/templates"),
-		STORES(Landing.CLASSIC),
-		BACKENDS(Landing.CLASSIC),
+		STORES("/admin/stores"),
+		BACKENDS("/admin/backends"),
 		USERS(Landing.CLASSIC),
 		SIGN_IN_PROVIDERS(Landing.CLASSIC),
 		SETTINGS(Landing.CLASSIC),
@@ -371,9 +371,13 @@ public class DashboardService {
 		Outcome<Mail> mailNow = await(mailAsked, deadline);
 		Instant now = clock.instant();
 
+		// A full disk leads to the Backends, where giving a Store another backend frees it; where storage backends are
+		// off there's none to give and that screen says nothing applies, so it leads to the Classic Interface
+		Screen disk = storageNow.ok() && !storageNow.value().on() ? Screen.SETTINGS : Screen.BACKENDS;
+
 		List<AttentionItem> attention = new ArrayList<>();
 		List<String> unchecked = new ArrayList<>();
-		attend(AttentionItem.FILES_STUCK, Screen.BACKENDS, storageNow, DashboardService::filesStuck, attention,
+		attend(AttentionItem.FILES_STUCK, Screen.STORES, storageNow, DashboardService::filesStuck, attention,
 				unchecked);
 		attend(AttentionItem.BACKEND_UNREACHABLE, Screen.BACKENDS, storageNow, DashboardService::backendsDown, attention,
 				unchecked);
@@ -390,13 +394,13 @@ public class DashboardService {
 				unchecked);
 		attend(AttentionItem.JOB_OVERDUE, Screen.BACKGROUND_JOBS, jobsNow, all -> named(overdue(all, now)),
 				attention, unchecked);
-		attend(AttentionItem.DISK_LOW, Screen.BACKENDS, volumesNow, DashboardService::disksLow, attention, unchecked);
+		attend(AttentionItem.DISK_LOW, disk, volumesNow, DashboardService::disksLow, attention, unchecked);
 
 		List<HealthTile> health = new ArrayList<>();
 		health.add(tile(HealthTile.SERVER, Screen.SERVER_LOG, null, DashboardService::serverTile));
 		health.add(tile(HealthTile.DATABASE, Screen.SERVER_LOG, databaseNow,
 				() -> databaseTile(databaseNow.value())));
-		health.add(tile(HealthTile.DISK, Screen.BACKENDS, volumesNow, () -> diskTile(volumesNow.value())));
+		health.add(tile(HealthTile.DISK, disk, volumesNow, () -> diskTile(volumesNow.value())));
 		health.add(tile(HealthTile.MEMORY, Screen.SERVER_LOG, null, DashboardService::memoryTile));
 		health.add(tile(HealthTile.SIGN_IN, Screen.SIGN_IN_PROVIDERS, signInNow,
 				() -> signInTile(signInNow.value())));
@@ -458,8 +462,16 @@ public class DashboardService {
 		}
 	}
 
-	/** How many, and the line that says more, of something that needs attention */
-	private record Found(long count, String detail) {
+	/**
+	 * How many, and the line that says more, of something that needs attention
+	 *
+	 * @param screen where its item links to; null for its code's own screen
+	 */
+	record Found(long count, String detail, Screen screen) {
+
+		Found(long count, String detail) {
+			this(count, detail, null);
+		}
 	}
 
 	/** @return what was found, null if there's nothing */
@@ -481,7 +493,7 @@ public class DashboardService {
 			Found found = check.apply(source.value());
 			if (found != null)
 				attention.add(new AttentionItem(code, (int) Math.min(Integer.MAX_VALUE, found.count()),
-						found.detail(), screen.link));
+						found.detail(), (found.screen() != null ? found.screen() : screen).link));
 		} catch (RuntimeException e) {
 			log.warn("The Dashboard couldn't check {}: {}", code, e.getClass().getName());
 			log.debug("The Dashboard couldn't check {}", code, e);
@@ -666,7 +678,11 @@ public class DashboardService {
 
 	// Needs Attention
 
-	private static Found filesStuck(Storage s) {
+	/**
+	 * @return the stuck files, which a Store's page retries; only those with no Store, the Backends page's Other Files,
+	 *         link there
+	 */
+	static Found filesStuck(Storage s) {
 		if (!s.on())
 			return null;
 		StorageOverview overview = s.overview();
@@ -683,7 +699,7 @@ public class DashboardService {
 					store.storeName() + (store.backendName() != null ? ", moving to " + store.backendName() : ""));
 		}
 		if (stuck.isEmpty())
-			return new Found(count, "Files with no Store");
+			return new Found(count, "Files with no Store", Screen.BACKENDS);
 		List<String> places = new ArrayList<>();
 		for (StoreBackendInfo store : stuck)
 			places.add(store.storeName() + " (" + Words.number(store.stuck()) + ")");

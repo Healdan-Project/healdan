@@ -6,7 +6,7 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { useId, useState } from 'react'
 import { ApiError, apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom, useApi } from '@healdan/shell'
-import { Button, Icon, toast } from '@healdan/ui'
+import { Button, formatCount, Icon, toast } from '@healdan/ui'
 import { routes } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
 import { TemplateDialog } from '../templates/TemplateDialog'
@@ -49,8 +49,6 @@ function TemplatePage({ id }: { id: number }) {
   // By its id, so another template's page, by Back or Forward too, starts afresh: no dialog or folder carried over
   return <Template key={asked.data.id} template={asked.data} />
 }
-
-const counts = new Intl.NumberFormat('en-US')
 
 function Template({ template }: { template: A['TemplateInfo'] }) {
   const api = useApi()
@@ -102,11 +100,11 @@ function Template({ template }: { template: A['TemplateInfo'] }) {
       <dl className={styles.facts}>
         <div className={styles.fact}>
           <dt>{t('admin.template.folders')}</dt>
-          <dd>{counts.format(template.folders)}</dd>
+          <dd>{formatCount(template.folders)}</dd>
         </div>
         <div className={styles.fact}>
           <dt>{t('admin.template.matters')}</dt>
-          <dd>{counts.format(template.matters)}</dd>
+          <dd>{formatCount(template.matters)}</dd>
         </div>
       </dl>
       <p className={page.summary}>{t('admin.template.unchanged')}</p>

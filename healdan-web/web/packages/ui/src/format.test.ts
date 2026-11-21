@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { describe, expect, it } from 'vitest'
-import { formatDate, formatDateTime, formatDay, formatSize, formatVersion } from './format'
+import { formatCount, formatDate, formatDateTime, formatDay, formatSize, formatVersion } from './format'
 
 describe('formatDate', () => {
   it("shows today's time", () => {
@@ -53,6 +53,15 @@ describe('formatDay', () => {
   it('shows nothing for what is not a day', () => {
     expect(formatDay('soon')).toBe('')
     expect(formatDay('')).toBe('')
+  })
+})
+
+describe('formatCount', () => {
+  it('groups a count as US English does', () => {
+    expect(formatCount(0)).toBe('0')
+    expect(formatCount(812)).toBe('812')
+    expect(formatCount(3902)).toBe('3,902')
+    expect(formatCount(1_234_567)).toBe('1,234,567')
   })
 })
 

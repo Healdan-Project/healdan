@@ -158,6 +158,8 @@ Healdan's migrations and setup steps on it.
   its copies of `Page`, `FieldError` and the `Problem` response are the first file's, but for their words, and its
   `Problem` the first file's with fewer members. It also checks that every value of a string enum, in both files, is
   a string: YAML reads a bare `off`, `on`, `yes` or `no` as a boolean, as the Dashboard's tile status `off` would be.
+  And `testNoValueIsCutShortByAHash` fails on a comment after a value on its line, in either file, as YAML ends a
+  plain value at ` #` and reads the rest as a comment: a description that names a doc # is quoted.
   `DocsResourceTest` checks that the served `openapi.yaml` holds no admin route and that `openapi-admin.yaml` isn't
   served.
 - **`AdminFilterTest`** checks the admin API's refusals through test-only resources under `/api/v1/admin/test/`,
@@ -265,8 +267,9 @@ the packages under it), `healdan-api` and `healdan-storage`. No test makes a rea
   several backends and Stores, the ten tiles in order and those that need attention, a part that fails leaving the
   rest whole, a source that can't be read unchecked, a slow one still being worked out, storage backends off, the
   database's tile on PostgreSQL, Sign-In and Outgoing Email, and a second read coming from what's kept.
-  `DashboardScreensTest` pins where the links go: each shipped screen's Admin address, the Dashboard, Clients, Matters
-  and Workspace Templates, and the Classic Interface for every other. `CachedTest`
+  `DashboardScreensTest` pins where the links go: each shipped screen's Admin address, the Dashboard, Clients,
+  Matters, Workspace Templates, Stores and Backends, the Classic Interface for every other, and stuck files linking
+  to Stores, or to Backends when only files with no Store are stuck, as `DashboardServiceTest` does too. `CachedTest`
   checks what's kept: one ask per period however many read, the last answer while it's asked again, none older than
   two periods, a failure kept like an answer, `forget()` and a clock set back. `WordsTest` checks the tiles' words,
   and `ProviderClientTest` that `answers` fetches a provider's discovery document afresh and remembers a failure for
@@ -313,10 +316,31 @@ the packages under it), `healdan-api` and `healdan-storage`. No test makes a rea
   permissions kept, each row as Can See or Custom, a change of nothing neither written nor recorded, a Store that
   followed another folder's permissions getting its own, what's a Store, and the refusals, P2's among them: a group a
   matter lets in refused while it can still read the matter, the owner passing while they can read the Store, a matter
-  that already let in more blocking no other change, and only live matters with their own permissions checked.
-  `AdminStoresResourceTest`, in `healdan-api`, checks the Stores' routes, their check order and refusals, P2's among
-  them, and `AdminGroupsResourceTest` the groups' list: by name, without people's own or deleted groups, `q` and
-  paging. Each also checks the refusals of a non-administrator and of a device token.
+  that already let in more blocking no other change, and only live matters with their own permissions checked; and a
+  Store's rename (a change of case, its own name, a name taken under the root) and restore, deleted and removed, back
+  under the root with its matters, and their refusals. `AdminStoresResourceTest`, in `healdan-api`, checks the Stores'
+  routes, their check order and refusals, P2's among them: the list's rows before and after the summary, with and
+  without the storage port, and with its overview failing, when the list and a Store's page still answer, their storage
+  parts null, and the warning names no Store; a create on another backend, and one whose switch fails after it, left on
+  Original; Default, the Templates Store and the root refused a rename and a delete; a delete's one Trash item, a
+  document checked out inside refusing it, and its restore from Deleted Stores; and the root's lock, with two creates of
+  one name at once, in different cases, one made and the other refused (`testTwoCreatesOfOneName`), and a create, a
+  rename and a restore each made to wait for the lock while the test gives their name to another Store, then refused as
+  a name taken (`testTheRootsLock`). `AdminGroupsResourceTest` checks the groups' list: by name, without people's own or
+  deleted groups, `q` and paging. Each also checks the refusals of a non-administrator and of a device token.
+- **`AdminBackendsResourceTest`**, in `healdan-api`, checks the Storage routes through `FakeStoragePort`, a storage port
+  in the tests that keeps its backends, Stores and settings in memory, refuses as the Storage tab does with sentences
+  of its own, and keeps what each write was given, never a secret or a recovery key. The tests set `StoragePort`'s
+  seam to it and put the real one back after. It checks every route `503 storage-unavailable` without the port, after
+  a body that isn't the JSON expected, while the Stores' own routes answer; storage backends off; each route's answer,
+  `422`s and refusals, in the check order; `409 secret-key-missing` with `sealed`, then `newKey`; Test before saving,
+  which never answers `422`; a Store's backend, its count before a switch, and its stuck files; the settings' limits
+  and `out-of-range`; a backend's `storesInTrash` in the list and on its own; that each request reads the backends
+  once at most, the settings' `GET` and `PUT` not at all (`testEachRequestReadsTheBackendsOnceAtMost`); and that a
+  recovery key is in the add's and Show's answers only, and an S3 secret in none, no record, log line or refusal of a
+  request that typed one holding either (`testNoAnswerRecordOrLogHoldsASecret`, which reads every logger's lines
+  through `LogCapture.root()`, in `healdan-core`'s test-jar, which collects what the root logger writes, and so every
+  logger that passes its lines up to it).
 - **`WorkspaceAdminTest`**, in `healdan-core`, checks a workspace's folders: what's in scope, a search folder directly
   in the Templates Store among what isn't; a matter's tree and a template's, in order, hidden folders kept and aliases
   and deleted ones left out, search folders last; New Folder at a matter's top level, deeper and in a template, taking
@@ -334,7 +358,9 @@ the packages under it), `healdan-api` and `healdan-storage`. No test makes a rea
   `healdan-api`, check each route's answer, its check order and refusals, the records, the deletes' Trash items and
   their restore (a matter's folder comes back; a template's, and a template's folder, are `409 place-gone`), a matter
   made from a deleted template unchanged but for its template, and the refusals of a non-administrator and of a
-  device token.
+  device token. `testTheAdminChangesRefuseANonAdministrator` calls `FolderChanges`' five entry points for the Admin
+  app, a matter's move and delete, a workspace folder's, a template's and a Store's delete, as someone who isn't an
+  administrator, and finds each `403 admins-only`, with nothing changed.
 
 ### The Storage Tests
 
@@ -374,9 +400,28 @@ copy left under `.held/`: the purge's retry of a put back that failed, a due old
 rather than purge it, and a hold whose row can't be written. `TinkClasspathTest` checks that encryption runs without the
 `gson` and `protobuf` classes Tink brings, which the plugin zip leaves out.
 
-`StorageAdministrationImplTest` checks the storage port the Admin app reads (see
+`StorageAdministrationImplTest` checks the storage port the Admin app reads and changes storage through (see
 [How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/#healdans-code)): that `healdan-core` finds one by
-type, and that it answers what the Storage tab's overview does, field for field, with no secret in it.
+type, and that it answers what the Storage tab's overview does, field for field, with no secret in it. Through the
+port, it adds, tests, saves and removes a local backend, renames Original and is refused its removal, shows,
+confirms and enters an encrypted one's recovery key, switches a Store with its count first, retries stuck files, a
+Store's and those with no Store, and saves the settings within their limits, checking each record exactly, and that
+a read, a refusal and a change that changes nothing record nothing. On `FakeS3`, an encrypted S3 backend's secret,
+its sealed value, its access key and its recovery key reach no record, no answer's `toString()` and no log line, a
+secret typed again the same isn't recorded as changed, and with the secret key file gone a save or an add with a
+secret is `SecretKeyMissingProblem`, writing nothing, until `newKey`. A record that fails leaves its change standing,
+as `recordAfter` does. `testStoresInTheTrashKeepTheirBackend` deletes two Stores on a second backend, one removed
+from the Trash too, and checks that the backend's page, the list and a save's answer name them, ignoring case; that
+a remove and a change of path are refused with the port's sentences, for one Store and for two, while a rename still
+saves; that a Store in the Trash with no backend of its own is Original's, whose remove keeps its own sentence; that
+the Templates Store is never named; and that only the rename is recorded. `testOnlyAnAdministratorAndOnlyWhileOn`
+checks that every change, and Show Recovery Key, refuses someone who isn't an administrator and changes nothing,
+that with storage backends off the administrator's check still comes first and every change is refused with the
+port's own sentence, that `on()` and `settings()` answer, and that nothing is recorded.
+
+`OverviewPort`, in `healdan-core`'s test-jar, is a storage port for the tests that read only its overview, such as
+`DashboardServiceTest`'s and `UsageSummaryTest`'s: a lambda gives the overview, and every other method fails the test
+that calls it.
 
 #### The Fake S3 Server
 
@@ -894,13 +939,28 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     Workspace Editor. Then it signs in as `webuser` and checks in the User app that the matter's restricted folder
     isn't visible and the other folder is. Like every admin spec, it changes nothing global: it makes its own clients,
     matters, Stores and templates, and changes neither `webuser`, Everyone nor `Smoke Garage`.
+  - `admin-storage.spec.ts` walks Phase 3's Storage screens (Admin app spec §8.6). As `admin`, with names of its own
+    run, it finds `Smoke Garage` reachable on the Backends list, with its page and the storage settings and their
+    limits, which it only reads: none of its requests there writes, and a value outside a setting's limits is said
+    beside the field and never saved. Then it adds a local-folder backend of its own, encrypted, confirms its recovery
+    key from the window the add opens, tests it and removes it. A new backend's folder has to be there already, and a
+    spec can't make one in the app's container, so it uses `/var/tmp` in Chromium and `/tmp` in WebKit, which every
+    container of the image has, outside its volumes and apart from Original, staging, the read cache, the key files and
+    the conf folder; it first removes a backend an earlier run of it left there. Last, it makes a Store of its own on
+    Original with **New Store**, Everyone able to see it, opens its page and its tabs, renames it, deletes it, finds it
+    under **Deleted Stores** and restores it. It changes neither `Smoke Garage`, Smoke Cloud nor matters 1.2 and 1.3,
+    which steps 5f and 8 check. As its backends share one folder per browser, and each run first removes what an
+    earlier one left there, run one `test-web.sh` at a time against a stack: two at once could remove each other's
+    backend.
   - `admin-a11y.spec.ts` runs axe on the Admin app as `admin`, in the light theme and again in the dark one, as
     `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart, so
     a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
     person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes it,
     and the focus goes back to **☰**), Phase 2's screens (the Clients list, the Matters list, a matter's page on its
     Overview and Workspace tabs, and Workspace Templates, with the smoke fixture's client 1 and matter 1.1, which it
-    only reads, so it changes nothing and needs the smoke overlay), and last the signed-out screen. This is where the
+    only reads, so it changes nothing and needs the smoke overlay), Phase 3's (the Stores list, the smoke fixture's
+    Store `Smoke` on its three tabs, the Backends list with the storage settings, and `Smoke Garage`'s page, which it
+    only reads too, and the Stores and Backends lists at 768 × 1024), and last the signed-out screen. This is where the
     Dashboard's colour contrast is checked. The find's list is checked with the whole page around it, as the User app's
     search box's is: `@healdan/ui`'s `ComboBox` draws the list right after the box, inside the find's search landmark,
     and keeps the page around it shown to a screen reader while it's open (The Web App page's The Search Box and Search

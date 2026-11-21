@@ -4,7 +4,7 @@
 - **Written:** 2026-10-23, for the [M2 design](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) (§12), from the code at `808d5395b`.
 - **Kept current:** each milestone that adds endpoints updates its entries' tags and endpoints in the same pull request.
 - **After M6**, the User app's later phases add their endpoints to §0.3, each marked "built after M6", and their old calls move from `Later` to `M6`: a favourite's name and renaming folders (2026-11-14), and moving and deleting folders and the Trash (2026-11-17, the [folders and Trash spec](../superpowers/specs/2026-11-16-folders-and-trash-design.md) §6).
-- **The Admin app's Phase 1 built** its endpoints on 2026-11-19 (§0.5), in pull request `Admin app: the foundation and the Dashboard` ([Admin app spec](../superpowers/specs/2026-11-18-admin-app-design.md) §10). Its later phases add theirs to §0.5: Phase 2 built its clients', matters', workspaces', templates', Stores' and groups' on 2026-11-20, in pull request `Admin app: clients, matters and workspaces` (Healdan-Project/healdan#287). The corrections the spec's §10 names, Healdan's storage service and the sign-in methods M4 added to `HealdanSettingsService`, which this file doesn't list yet, wait for the phases that replace them: Phase 3 and Stage 2.
+- **The Admin app's Phase 1 built** its endpoints on 2026-11-19 (§0.5), in pull request `Admin app: the foundation and the Dashboard` ([Admin app spec](../superpowers/specs/2026-11-18-admin-app-design.md) §10). Its later phases add theirs to §0.5: Phase 2 built its clients', matters', workspaces', templates', Stores' and groups' on 2026-11-20, in pull request `Admin app: clients, matters and workspaces` (Healdan-Project/healdan#287), and Phase 3 its Stores' and storage's on 2026-11-21, in pull request `Admin app: Stores and Backends` (Healdan-Project/healdan#294). Of the corrections the spec's §10 names, Healdan's storage service (`HealdanStorageService`, the Classic Interface's Storage tab, `/frontend/healdanstorage`), which §1 doesn't list and §0's totals don't count, has each of its calls mapped in §0.5, as Phase 3 replaces it whole; the sign-in methods M4 added to `HealdanSettingsService`, which this file doesn't list yet, wait for Stage 2, which replaces them.
 - **M6 built** its endpoints on 2026-11-10 to 2026-11-12 (§0.3), and its design left the rest of the old calls it weighed to later phases of the User app (`Later`) or to none (M6 spec §4, §16).
 - **M3 built** its endpoints on 2026-10-24 (§0.2): the bookmarks, `FolderService.create` and `/thumbnail` moved from M6 to M3, and the rest of M3's additions have no old call behind them.
 - **M2 built** every `M2` endpoint named here on 2026-10-23 and 2026-10-24 (§0.1). Its `openapi.yaml` (`healdan-api/src/main/resources/healdan/api/openapi.yaml`) is the reference for what they do; this file only maps the old calls to them.
@@ -171,9 +171,9 @@ M6 built every endpoint in this table, for the User app ([M6 spec](../superpower
 | SetupService | 2 |  |  |  |  |  |  |  | 2 |
 | DropboxService | 6 |  |  |  |  |  |  |  | 6 |
 
-### 0.5 What the Admin app adds (Phases 1 and 2 built)
+### 0.5 What the Admin app adds (Phases 1 to 3 built)
 
-Phase 1 built the first three endpoints in this table, for the Admin app's Dashboard and its find (Admin app spec §8.1, §10), and Phase 2 the rest so far, for its clients, its matters, their workspaces, the workspace templates, and the Stores and groups a first matter needs (§8.2 to §8.6, §14). They're under `/api/v1/admin`, described in `openapi-admin.yaml`, not `openapi.yaml`, and answer administrators' web sessions only. The rows marked "(none: …)" have no old call behind them.
+Phase 1 built the first three endpoints in this table, for the Admin app's Dashboard and its find (Admin app spec §8.1, §10), Phase 2 those from `listClients` to `/data/groups.xml`, for its clients, its matters, their workspaces, the workspace templates, and the Stores and groups a first matter needs (§8.2 to §8.6, §14), and Phase 3 the rest so far, for the Stores and the storage backends (§8.6, §9.7), which do everything the Classic Interface's Storage tab does, through `HealdanStorageService`'s calls. They're under `/api/v1/admin`, described in `openapi-admin.yaml`, not `openapi.yaml`, and answer administrators' web sessions only. The rows marked "(none: …)" have no old call behind them.
 
 | Old call | Admin endpoint |
 |---|---|
@@ -213,6 +213,23 @@ Phase 1 built the first three endpoints in this table, for the Admin app's Dashb
 | `FolderService.create` of a workspace under the root | `POST /admin/stores`, with the groups that can see it |
 | `FolderService.getFolder`'s permissions, `saveACL`, for a Store | `GET`, `PUT /admin/stores/{id}/access` |
 | `/data/groups.xml` | `GET /admin/groups?q=`, people's own groups left out |
+| `HealdanMatterService.listStores`, with each Store's backend from `HealdanStorageService.load` | `GET /admin/stores`, each row with its matters, figures, who can read it, its backend and its files waiting and stuck (changed from Phase 2's `{ id, name }`), and `GET /admin/stores/{id}` |
+| `FolderService.rename` of a Store | `PATCH /admin/stores/{id}` (Default, the Templates Store and the root refused) |
+| `FolderService.delete` of a Store | `DELETE /admin/stores/{id}`, the Store and its matters as one Trash item, answering it |
+| `/data/deletedfolders.xml`, for the Stores | `GET /admin/stores/deleted`, deleted or removed |
+| `FolderService.restore` of a Store | `POST /admin/stores/{id}/restore`, back under the root, as `POST /trash/{id}/restore` refuses a Store's item |
+| `HealdanStorageService.load` | `GET /admin/backends` (the backends, each with its live Stores and its Stores in the Trash, and the files with no Store), `GET /admin/backends/{id}`, `GET /admin/stores/{id}/backend` (a Store's) and `GET /admin/storage/settings`, with the settings' limits |
+| `HealdanStorageService.testNew` | `POST /admin/backends/test`, with `id` for a backend being edited |
+| `HealdanStorageService.addBackend` | `POST /admin/backends`, answering an encrypted backend's recovery key once |
+| `HealdanStorageService.saveBackend` | `PATCH /admin/backends/{id}`, a new bucket, prefix or path refused by name while a Store in the Trash keeps its files there |
+| `HealdanStorageService.testBackend` | `POST /admin/backends/{id}/test` |
+| `HealdanStorageService.removeBackend` | `DELETE /admin/backends/{id}`, refused by name while a Store in the Trash keeps its files there, as while a live one does |
+| `HealdanStorageService.showRecoveryKey`, `confirmRecoveryKey`, `enterRecoveryKey` | `POST /admin/backends/{id}/recovery-key/show`, `/confirm`, `/enter` |
+| `HealdanStorageService.keyEvents` | `GET /admin/backends/{id}/key-events` |
+| `HealdanStorageService.previewStoreSwitch` | `GET /admin/stores/{id}/backend?backendId=`'s `switchPreview` |
+| `HealdanStorageService.setStoreBackend` | `PUT /admin/stores/{id}/backend`, and `backendId` on `POST /admin/stores` |
+| `HealdanStorageService.stuckFiles`, `retry` | `GET /admin/stores/{id}/stuck-files` and `POST …/retry` for a Store's; `GET /admin/storage/stuck-files` and `POST …/retry` for the files with no Store |
+| `HealdanStorageService.saveSettings` | `PUT /admin/storage/settings`, `422 out-of-range` against the limits |
 
 ## 1. GWT-RPC services
 

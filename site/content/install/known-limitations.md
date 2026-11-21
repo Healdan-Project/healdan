@@ -150,7 +150,6 @@ weight: 13
   and removes what was deleted, and adds documents and folders to My Favorites and takes them off. Other things are done in the Classic
   Interface, one choice away in the app's menu on the same sign-in: [The Classic
   Interface](../../user/the-classic-interface/) lists them. They are:
-  - a Store's Trash item, which is restored in the Classic Interface;
   - permissions on documents and folders;
   - a document's history;
   - notes, and links between documents;
@@ -158,13 +157,15 @@ weight: 13
   - your profile and password, and your messages;
   - making and editing search folders;
   - choosing and reordering the list's columns, and setting properties on many documents at once;
-  - moving and deleting a Store, which an administrator does there (a matter's own folder is moved and deleted on the
-    matter's page in the Admin app), and copying documents and folders, and locking documents;
+  - copying documents and folders, and locking documents;
   - tags, and a bookmark's own name and description (the Bookmarks section; the app's My Favorites adds and removes
     them).
 
-  Administration is there as well, apart from what [the Admin app](#the-admin-app) has: its Dashboard, its clients
-  and matters with their workspaces, and the workspace templates.
+  Administration is there as well, apart from what [the Admin app](#the-admin-app) has: its Dashboard, its clients and
+  matters with their workspaces, the workspace templates, the Stores and the storage backends. Only an administrator
+  moves or deletes a matter's own folder, on the matter's page in the Admin app, or deletes a Store, on the Store's page
+  there, and the User app's Trash doesn't restore a Store's item: a Store is restored from **Deleted Stores** on the
+  Admin app's Stores page, or in the Classic Interface.
 - **The Classic Interface's Trash lists a deleted folder's contents as rows of their own.** Healdan records a folder
   and what it held as one item, but LogicalDOC's Trash screen lists every deleted row, so a deleted folder's documents
   and subfolders show beside it. It also restores into the folder open in its tree, not where the item was deleted
@@ -191,11 +192,12 @@ weight: 13
 
 ## The Admin App
 
-- **The Dashboard, clients, matters and templates so far.** The Admin app at `/admin/` has its Dashboard, the clients
-  and matters with a page for each, each matter's workspace and the workspace templates, and makes a Store with New
-  Store. The rest of the Stores' screens, users and groups, the permissions of Stores and documents, Healdan Settings,
-  storage backends, scheduled tasks, search and indexing and the server's log are all in the Classic Interface, which
-  the Admin app's left pane and its links open. Its find opens a client's or a matter's page in the Admin app, but
+- **The Dashboard, clients, matters, templates, Stores and storage backends so far.** The Admin app at `/admin/` has
+  its Dashboard, the clients and matters with a page for each, each matter's workspace, the workspace templates, the
+  Stores with a page for each, and the storage backends. Users and groups, the permissions of documents, Healdan
+  Settings, scheduled tasks, search and indexing and the server's log are all in the Classic Interface, which the
+  Admin app's left pane and its links open. A Store's **Who Can See It** adds groups, not people: to let one person
+  see a Store, add a group they're in. The Admin app's find opens a client's or a matter's page in the Admin app, but
   the Classic Interface for a person, not the person it found. See [The Admin App](../../admin/the-admin-app/).
 - **For the `admin` group only.** A group given Administration screens through the Classic Interface's menus doesn't
   get the Admin app, and keeps using those screens there.

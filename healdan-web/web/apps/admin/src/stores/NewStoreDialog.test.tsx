@@ -12,7 +12,7 @@ import { TYPING_DELAY_MS } from '../pickers/typing'
 import { adminKeys } from '../queries'
 import { problemLookup } from '../strings'
 import { expectNoAxeViolations } from '../test/axe'
-import { clientWork, fakeApi, firmStore, partners, problem, regionalOffice, type Routes } from '../test/fakeApi'
+import { clientWork, fakeApi, firmStore, partners, problem, regionalOffice, storageOff, wasabiBackend, type Routes } from '../test/fakeApi'
 import { NewStoreDialog } from './NewStoreDialog'
 
 type A = adminComponents['schemas']
@@ -51,6 +51,8 @@ const seeing = () => {
   return list ? within(list).getAllByRole('listitem').map((item) => item.firstChild?.textContent) : []
 }
 const offered = () => within(within(dialog()).getByRole('listbox')).getAllByRole('option').map((option) => option.textContent)
+const backend = () => within(dialog()).getByRole('combobox', { name: 'Backend' }) as HTMLSelectElement
+const backendChoices = () => Array.from(backend().options, (option) => option.textContent)
 
 describe('New Store', () => {
   it('asks for the name and who can see it, from the groups, and makes the Store', async () => {
@@ -65,7 +67,9 @@ describe('New Store', () => {
     // Nobody yet, but the administrators
     expect(within(dialog()).getByText('Only administrators can see it until a group is added.')).toBeTruthy()
     expect(seeing()).toEqual([])
-    expect(within(dialog()).getByText("Its files are kept on Original, the server's own storage, until its storage backend is changed.")).toBeTruthy()
+    // The backends a Store can be given, Original first and chosen
+    await waitFor(() => expect(backendChoices()).toEqual(['Original', 'Wasabi EU (Encrypted)', 'Archive']))
+    expect(backend().selectedOptions[0]?.textContent).toBe('Original')
     // The groups to add, each by name, with its description
     await waitFor(() => expect(offered()).toEqual(['Everyone Everyone in the firm', 'Partners', 'Trainees Trainee solicitors']))
     // Under the dialog's own title
@@ -101,11 +105,13 @@ describe('New Store', () => {
     await userEvent.type(name(), '  Regional Office ')
     await userEvent.click(create())
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    // On Original, which needs no backend named
     expect(sent).toEqual({ name: 'Regional Office', groupIds: [partners.id] } satisfies A['NewStore'])
     expect(onSaved).toHaveBeenCalledWith(regionalOffice)
     expect(onSaved.mock.invocationCallOrder[0]).toBeLessThan(onClose.mock.invocationCallOrder[0]!)
-    // Every Store menu has it at once, by name
-    expect(queryClient.getQueryData(adminKeys.stores)).toEqual([clientWork, firmStore, regionalOffice])
+    // The Stores are asked for again, as the list's rows carry more than the create's answer says: none is made up here
+    expect(queryClient.getQueryState(adminKeys.stores)?.isInvalidated).toBe(true)
+    expect(queryClient.getQueryData(adminKeys.stores)).toEqual([clientWork, firmStore])
     expect(await screen.findByText('Created Regional Office')).toBeTruthy()
   })
 
@@ -121,6 +127,75 @@ describe('New Store', () => {
     await userEvent.keyboard('{Enter}')
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
     expect(sent).toEqual({ name: 'Regional Office', groupIds: [] })
+  })
+
+  it('keeps the new Store on the backend chosen, of those a Store can be given', async () => {
+    let sent: unknown
+    const { view } = renderDialog({
+      'POST /v1/admin/stores': ({ body }: Sent) => {
+        sent = body
+        return { ...regionalOffice, backendId: wasabiBackend.id } satisfies A['Store']
+      },
+    })
+    await waitFor(() => expect(backendChoices()).toEqual(['Original', 'Wasabi EU (Encrypted)', 'Archive']))
+    // Office NAS isn't offered: its recovery key isn't confirmed
+    expect(within(dialog()).getByText("A backend is offered once it can be used: an encrypted one once its recovery key is confirmed. It can be changed later, on the Store's page.")).toBeTruthy()
+    await userEvent.selectOptions(backend(), 'Wasabi EU (Encrypted)')
+    await userEvent.type(name(), 'Regional Office')
+    await expectNoAxeViolations(view.baseElement)
+    await userEvent.click(create())
+    await waitFor(() => expect(sent).toEqual({ name: 'Regional Office', groupIds: [], backendId: wasabiBackend.id } satisfies A['NewStore']))
+    expect(await screen.findByText('Created Regional Office')).toBeTruthy()
+  })
+
+  it("says the Store was made on Original when it couldn't be given the backend chosen", async () => {
+    // The answer names the backend it ended on: Original, as the one chosen was removed as the Store was made
+    const { onSaved } = renderDialog({ 'POST /v1/admin/stores': () => regionalOffice })
+    await waitFor(() => expect(backendChoices()).toEqual(['Original', 'Wasabi EU (Encrypted)', 'Archive']))
+    await userEvent.selectOptions(backend(), 'Wasabi EU (Encrypted)')
+    await userEvent.type(name(), 'Regional Office')
+    await userEvent.click(create())
+    expect(await screen.findByText("Created Regional Office on Original, as it couldn't be given Wasabi EU. Its backend can be changed on the Store's page.")).toBeTruthy()
+    expect(onSaved).toHaveBeenCalledWith(regionalOffice)
+  })
+
+  it("asks for no backend on a server that doesn't use storage backends, or doesn't have Healdan's storage module", async () => {
+    for (const answer of [storageOff, problem(503, 'storage-unavailable')]) {
+      let sent: unknown
+      const { api, view } = renderDialog({
+        'GET /v1/admin/backends': () => answer,
+        'POST /v1/admin/stores': ({ body }: Sent) => {
+          sent = body
+          return regionalOffice
+        },
+      })
+      await waitFor(() => expect(api.callsTo('GET /v1/admin/backends')).toHaveLength(1))
+      await userEvent.type(name(), 'Regional Office')
+      expect(within(dialog()).queryByRole('combobox', { name: 'Backend' })).toBeNull()
+      expect(within(dialog()).queryByText(/A backend is offered/)).toBeNull()
+      expect(within(dialog()).queryByText(/The backends couldn't be read/)).toBeNull()
+      await userEvent.click(create())
+      await waitFor(() => expect(sent).toEqual({ name: 'Regional Office', groupIds: [] }))
+      view.unmount()
+    }
+  })
+
+  it("says the Store will be made on Original when the backends couldn't be read, and can be moved after", async () => {
+    let sent: unknown
+    const { api, view } = renderDialog({
+      'GET /v1/admin/backends': () => problem(500, 'server-error'),
+      'POST /v1/admin/stores': ({ body }: Sent) => {
+        sent = body
+        return regionalOffice
+      },
+    })
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/backends')).toHaveLength(1))
+    expect(await within(dialog()).findByText("The backends couldn't be read, so the Store will be made on Original. Its backend can be changed later, on the Store's page.")).toBeTruthy()
+    expect(within(dialog()).queryByRole('combobox', { name: 'Backend' })).toBeNull()
+    await expectNoAxeViolations(view.baseElement)
+    await userEvent.type(name(), 'Regional Office')
+    await userEvent.click(create())
+    await waitFor(() => expect(sent).toEqual({ name: 'Regional Office', groupIds: [] }))
   })
 
   it('finds a group by its name, once the typing pauses', async () => {

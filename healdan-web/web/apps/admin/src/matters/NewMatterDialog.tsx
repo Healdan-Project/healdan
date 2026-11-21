@@ -13,6 +13,7 @@ import { ClientPicker } from '../pickers/ClientPicker'
 import { PersonPicker } from '../pickers/PersonPicker'
 import { adminKeys, useNextMatterNumber, useStores } from '../queries'
 import { NewStoreDialog } from '../stores/NewStoreDialog'
+import { storesChanged } from '../stores/queries'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 import { useTemplates, useWorkspaceTree, workspaceKeys } from '../workspace/queries'
@@ -58,6 +59,8 @@ function numberOf(text: string): number | undefined {
 export interface NewMatterDialogProps {
   /** The client it's for, as a client's page sets it; another can still be picked */
   client?: A['ClientBrief']
+  /** The Store it goes in, by its id, as a Store's page sets it; another can still be chosen */
+  storeId?: number
   /** The dialog closes: Cancel, Esc, a click outside, or once the matter is made. The caller stops drawing it. */
   onClose: () => void
 }
@@ -70,7 +73,7 @@ export interface NewMatterDialogProps {
  * form, where a group the template lets in that can't read the Store has Let {group} Read the Store to put it right
  * there. Create waits until the check of the form as it is finds nothing. Once made, the matter's page opens.
  */
-export function NewMatterDialog({ client: preset, onClose }: NewMatterDialogProps) {
+export function NewMatterDialog({ client: preset, storeId: presetStore, onClose }: NewMatterDialogProps) {
   const api = useApi()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -82,7 +85,7 @@ export function NewMatterDialog({ client: preset, onClose }: NewMatterDialogProp
   const leavingClient = useRef(false)
   // What the person typed in Number; until they do, and again for each client picked, it holds the suggestion
   const [typedNumber, setTypedNumber] = useState<string>()
-  const [storeId, setStoreId] = useState<number>()
+  const [storeId, setStoreId] = useState<number | undefined>(presetStore)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [owner, setOwner] = useState<A['PersonBrief'] | null>(null)
@@ -92,7 +95,10 @@ export function NewMatterDialog({ client: preset, onClose }: NewMatterDialogProp
   const [busy, setBusy] = useState(false)
 
   const suggested = useNextMatterNumber(client?.id)
-  const stores = useStores().data ?? []
+  // A Store just made with New Store, until the Stores list, asked again, has it: the menu names it at once
+  const [madeStore, setMadeStore] = useState<Pick<A['Store'], 'id' | 'name'>>()
+  const listed = useStores().data ?? []
+  const stores: Pick<A['Store'], 'id' | 'name'>[] = madeStore !== undefined && !listed.some((store) => store.id === madeStore.id) ? [...listed, madeStore] : listed
   const templates = useTemplates()
 
   const numberText = typedNumber ?? (suggested.data ? String(suggested.data.number) : '')
@@ -152,10 +158,12 @@ export function NewMatterDialog({ client: preset, onClose }: NewMatterDialogProp
         ownerId: owner.id,
         templateId,
       } satisfies A['NewMatter'])
-      // The lists that count matters: the Matters list, the clients' (a client's matters) and the templates' (made from it)
+      // The lists that count matters: the Matters list, the clients' (a client's matters), the templates' (made from it)
+      // and the Stores' (in it)
       void queryClient.invalidateQueries({ queryKey: adminKeys.matters })
       void queryClient.invalidateQueries({ queryKey: adminKeys.clients })
       void queryClient.invalidateQueries({ queryKey: workspaceKeys.templates })
+      storesChanged(queryClient, storeId)
       toast(t('admin.newMatter.created', { number: made.number, name: made.name }))
       // Not through the dialog's own close, which is held while busy
       onClose()
@@ -317,6 +325,7 @@ export function NewMatterDialog({ client: preset, onClose }: NewMatterDialogProp
           {making === 'store' && (
             <NewStoreDialog
               onSaved={(made) => {
+                setMadeStore({ id: made.id, name: made.name })
                 setStoreId(made.id)
                 changed()
               }}
@@ -422,6 +431,8 @@ function Problems({
       const groupIds = [...new Set([...readers, groupId])]
       const saved = await api.send<A['StoreAccess']>('PUT', apiPath`/v1/admin/stores/${storeId}/access`, { groupIds } satisfies A['StoreAccessChange'])
       queryClient.setQueryData(adminKeys.storeAccess(storeId), saved)
+      // Who can read it, as the Stores list and its page say
+      storesChanged(queryClient, storeId)
       toast(t('admin.newMatter.granted', { group: groupName, store: storeName(storeId) ?? t('admin.newMatter.theStore') }))
       // The button stays busy until the check has been asked again, so it isn't offered again meanwhile
       await onFixed()
