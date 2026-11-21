@@ -21,7 +21,7 @@ git pull
 ```
 
 If [Changes to LogicalDOC's Tables](#changes-to-logicaldocs-tables) lists one your database doesn't have yet, make
-it now. Then fetch Tomcat's newest image, which brings Java's security fixes, and build and start the new version:
+it now. Then fetch the Tomcat image the new version is built on, which brings its Java, and build and start it:
 
 ```bash
 docker pull tomcat:11.0.29-jre25-temurin
@@ -75,15 +75,21 @@ what to change.
 
 ## Getting a Newer Java
 
-Healdan's image is built on Tomcat's, which brings Java. `docker compose up -d --build` on its own reuses the copy of
-that image your server already has, so it doesn't bring a newer Java. That's why an upgrade pulls Tomcat's image
-first. To get the newest Java without changing your version of Healdan, run the same two commands without `git pull`.
-The build reuses what it already made for Healdan itself:
+Healdan's image is built on Tomcat's, which brings Java. Each version of Healdan names the image of one Tomcat
+version, the one in the commands on this page. While that's Tomcat's newest version, Docker Hub rebuilds its image
+on each new release of Java, but `docker compose up -d --build` on its own reuses the copy of the image your server
+already has, so it doesn't bring a newer Java. That's why an upgrade pulls Tomcat's image first. To get a newer Java
+without changing your version of Healdan, run the same two commands without `git pull`. The build reuses what it
+already made for Healdan itself:
 
 ```bash
 docker pull tomcat:11.0.29-jre25-temurin
 docker compose up -d --build
 ```
+
+Once a newer version of Tomcat is out, the older one's image isn't rebuilt, so pulling it again brings no newer Java.
+A later fix to Java then comes with a version of Healdan that names a newer Tomcat image, so upgrade to it as at the
+top of this page.
 
 If `.env` sets `LOGICALDOC_IMAGE` to a published image, your server doesn't build Healdan. Run `docker compose pull`
 and `docker compose up -d` instead, as `--build` would store a build of your checkout under the published name.
@@ -93,6 +99,13 @@ To see which Java the app runs:
 ```bash
 docker compose exec app java -version
 ```
+
+### The Base64 Option in `.env` {#cve-2026-114938-java4shell}
+
+In November 2026 this page suggested adding `-XX:-UseBASE64Intrinsics` to `CATALINA_OPTS` in `.env`, to turn off
+the part of Java that CVE-2026-114938 ("Java4Shell") affects until Tomcat's image had the fix. Builds of Healdan
+from 21 November 2026 have it. If you added the option, take it out of `.env` once `java -version` shows 25.0.5.1 or
+later, and run `docker compose up -d`. It does no harm left in, but Java decodes Base64 more slowly with it.
 
 ## Moving to a New PostgreSQL Major Version
 
