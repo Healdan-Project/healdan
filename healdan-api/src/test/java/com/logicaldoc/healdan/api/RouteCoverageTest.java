@@ -40,11 +40,39 @@ import jakarta.ws.rs.Path;
 public class RouteCoverageTest extends AbstractHealdanTestCase {
 
 	/**
-	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them; none
-	 * now. Each must be described and not implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and
-	 * leaves the list once it's implemented.
+	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them: Phase
+	 * 3's Stores and Storage routes (Admin app ruling P3-R2). Each must be described and not implemented
+	 * ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and leaves the list once it's implemented.
 	 */
-	static final Set<String> DESCRIBED_AHEAD = Set.of();
+	static final Set<String> DESCRIBED_AHEAD = Set.of(
+			// A Store's own (Stores)
+			"GET /v1/admin/stores/deleted",
+			"GET /v1/admin/stores/{id}",
+			"PATCH /v1/admin/stores/{id}",
+			"DELETE /v1/admin/stores/{id}",
+			"POST /v1/admin/stores/{id}/restore",
+			// Storage under a Store (Storage)
+			"GET /v1/admin/stores/{id}/backend",
+			"PUT /v1/admin/stores/{id}/backend",
+			"GET /v1/admin/stores/{id}/stuck-files",
+			"POST /v1/admin/stores/{id}/stuck-files/retry",
+			// The backends (Storage)
+			"GET /v1/admin/backends",
+			"POST /v1/admin/backends",
+			"POST /v1/admin/backends/test",
+			"GET /v1/admin/backends/{id}",
+			"PATCH /v1/admin/backends/{id}",
+			"DELETE /v1/admin/backends/{id}",
+			"POST /v1/admin/backends/{id}/test",
+			"POST /v1/admin/backends/{id}/recovery-key/show",
+			"POST /v1/admin/backends/{id}/recovery-key/confirm",
+			"POST /v1/admin/backends/{id}/recovery-key/enter",
+			"GET /v1/admin/backends/{id}/key-events",
+			// The settings and the files with no Store (Storage)
+			"GET /v1/admin/storage/settings",
+			"PUT /v1/admin/storage/settings",
+			"GET /v1/admin/storage/stuck-files",
+			"POST /v1/admin/storage/stuck-files/retry");
 
 	@Test
 	public void testEveryRouteIsDescribed() {
