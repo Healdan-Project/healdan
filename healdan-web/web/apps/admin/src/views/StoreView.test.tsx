@@ -308,6 +308,83 @@ describe('Who can see a Store', () => {
   })
 })
 
+describe("Leaving a Store's page over a change to who can see it", () => {
+  const readers = [accessRow(2, 'Everyone', ['read']), accessRow(partners.id, partners.name, ['read'])]
+  const ACCESS: Routes = { 'GET /v1/admin/stores/4/access': { storeId: 4, rows: readers } satisfies A['StoreAccess'] }
+  const panel = () => within(main()).getByRole('tabpanel', { name: 'Who Can See It' })
+  const listed = () => within(within(panel()).getByRole('list', { name: 'Who Can See Client Work' })).getAllByRole('listitem').map((item) => item.textContent)
+  const unload = () => {
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    return event.defaultPrevented
+  }
+
+  it('asks before a link in the left pane leaves the page while a change is unsaved, and Cancel keeps it; Discard Changes leaves', async () => {
+    const { router, view } = await openStore('/stores/4?tab=access', ACCESS)
+    await waitFor(() => expect(listed()).toEqual(['Everyone', 'Partners']))
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Remove Everyone' }))
+    await userEvent.click(within(pane()).getByRole('link', { name: 'Clients' }))
+    let dialog = await screen.findByRole('alertdialog', { name: 'Leave the Changes to Client Work?' })
+    expect(within(dialog).getByText("The changes to Client Work aren't saved. Leaving this page discards them.")).toBeTruthy()
+    await expectNoAxeViolations(view.container)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog', { name: /^Leave the Changes/ })).toBeNull())
+    expect(router.state.location.pathname).toBe('/stores/4')
+    expect(listed()).toEqual(['Partners'])
+
+    // The crumb asks too, and Discard Changes leaves
+    await userEvent.click(within(within(main()).getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Stores' }))
+    dialog = await screen.findByRole('alertdialog', { name: 'Leave the Changes to Client Work?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard Changes' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/stores'))
+  })
+
+  it('asks while a save is on its way, saying so, and leaves without asking once it is saved', async () => {
+    const answer = held<A['StoreAccess']>()
+    const { router } = await openStore('/stores/4?tab=access', { ...ACCESS, 'PUT /v1/admin/stores/4/access': () => answer.promise })
+    await waitFor(() => expect(listed()).toHaveLength(2))
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Remove Everyone' }))
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Save' }))
+    await userEvent.click(within(pane()).getByRole('link', { name: 'Clients' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Leave the Changes to Client Work?' })
+    expect(within(dialog).getByText("The changes to Client Work are still being saved. If you leave this page now, you won't hear whether they were.")).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Leave Page' })).toBeTruthy()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await act(async () => answer.answer({ storeId: 4, rows: readers.slice(1) }))
+    expect(await screen.findByText('Saved who can see Client Work')).toBeTruthy()
+    // Saved: nothing to ask about
+    await userEvent.click(within(pane()).getByRole('link', { name: 'Clients' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/clients'))
+    expect(screen.queryByRole('alertdialog', { name: /^Leave the Changes/ })).toBeNull()
+  })
+
+  it('changes tab without asking, keeping the change, and asks the browser before the window is closed or reloaded over one', async () => {
+    const { router } = await openStore('/stores/4?tab=access', ACCESS)
+    await waitFor(() => expect(listed()).toHaveLength(2))
+    expect(unload()).toBe(false)
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Remove Everyone' }))
+    expect(unload()).toBe(true)
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Matters' }))
+    await waitFor(() => expect(router.state.location.search).toEqual({}))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    await userEvent.click(within(main()).getByRole('tab', { name: 'Who Can See It' }))
+    expect(listed()).toEqual(['Partners'])
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Discard Changes' }))
+    expect(unload()).toBe(false)
+  })
+
+  it('goes to the Stores list without asking once the Store itself is deleted', async () => {
+    const { router } = await openStore('/stores/4?tab=access', { ...ACCESS, 'DELETE /v1/admin/stores/4': { trashItemId: 960, folders: 48, documents: 1004 } satisfies A['DeletedFolder'] })
+    await waitFor(() => expect(listed()).toHaveLength(2))
+    await userEvent.click(within(panel()).getByRole('button', { name: 'Remove Everyone' }))
+    await userEvent.click(within(main()).getByRole('button', { name: 'Delete' }))
+    const dialog = await screen.findByRole('alertdialog', { name: 'Move Client Work to the Trash?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Move to Trash' }))
+    await waitFor(() => expect(router.state.location.pathname).toBe('/stores'))
+    expect(screen.queryByRole('alertdialog', { name: /^Leave the Changes/ })).toBeNull()
+  })
+})
+
 describe("A Store's storage", () => {
   const panel = () => within(main()).getByRole('tabpanel', { name: 'Storage' })
 
