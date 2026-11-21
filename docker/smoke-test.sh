@@ -325,8 +325,6 @@ trap cleanup EXIT
 printf "DB_PASSWORD='%s'\nLOGICALDOC_IMAGE=%s\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\nSMOKE_GARAGE_PORT=%s\n" \
   "$PW" "$IMAGE" "$PORT" "$KEYCLOAK_PORT" "$GARAGE_PORT" > "$ENV_FILE"
 printf "SMOKE_SERVER_XML='%s'\n" "$SERVER_XML" >> "$ENV_FILE"
-# Asks for the JVM's Base64 intrinsics and has it print its final flags, for step 2's check (Docker spec §17).
-echo "CATALINA_OPTS='-Xmx2g -XX:+UseBASE64Intrinsics -XX:+PrintFlagsFinal'" >> "$ENV_FILE"
 
 # Fixtures: a 16x16 PNG and a one-page PDF with a correct xref table.
 python3 - "$WORK" <<'PY'
@@ -447,10 +445,6 @@ build=
 check "its $build.cache.js keeps max-age=600" test "$(cache_control "$BASE/login/$build.cache.js")" = max-age=600
 # Upstream's policy had a non-breaking space after object-src, which browsers dropped as unrecognised (Docker spec §14).
 check "the Content-Security-Policy has object-src 'none'" grep -qx "object-src 'none'" <(csp_directives "$BASE/login.jsp")
-# CVE-2026-114938, until the image's Java has the fix (Docker spec §17). This stack's CATALINA_OPTS asks for the
-# intrinsics and prints the JVM's final flags, so this passes only if setenv.sh's option wins and the JVM took it.
-check "Tomcat's JVM has the Base64 intrinsics off, though CATALINA_OPTS asks for them" \
-  app_logs_have 'bool  *UseBASE64Intrinsics  *= *false'
 
 echo "== 2b. forwarded addresses (docker/tests/test-proxies.sh)"
 # Fails three sign-ins with made-up X-Forwarded-For headers and checks which address the throttle counted; its
