@@ -232,7 +232,7 @@ address is the one Tomcat works out from `X-Forwarded-For`, so:
   `LOGICALDOC_TRUSTED_PROXIES`. A proxy passes on a header the client made up, but adds the address the request
   really came from at the end, and that's the one Healdan takes. So a machine on your LAN can't claim another
   address, whether it goes through the proxy or straight to the app's port.
-- **Whatever is trusted can claim any address,** `127.0.0.1` included, and LogicalDOC never blocks the `admin`
+- **Whatever is trusted can claim any address,** `127.0.0.1` included, and the throttle never blocks the `admin`
   account signing in from there. Left unset, `LOGICALDOC_TRUSTED_PROXIES` trusts the Docker networks the app is on:
   the Docker host, and with the proxy overlay every container on the proxy's network. To trust only NPM there, give
   NPM's container a fixed address on that network (Compose's `ipv4_address`) and put it in

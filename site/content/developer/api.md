@@ -1004,7 +1004,34 @@ against it, as they check the others against `openapi.yaml`.
 - **Only members of the `admin` group get in.** Anyone else is `403 admins-only`, asked again at every request, so
   someone taken out of `admin` is refused at their next one.
 
-The server answers three routes there:
+### How a Change Is Answered
+
+A change is checked in one order, and a refusal changes nothing:
+
+1. `400 bad-request` for a body that isn't the JSON the route takes, holds a member it doesn't take (but for those it
+   answers `not-editable`), or holds NUL or a lone surrogate.
+2. `404 not-found` for what the path names, when it doesn't exist or isn't what the route acts on. One query
+   parameter is read the same way: `clientId` of `GET /v1/admin/matters/next-number`. A list's filter that names
+   nothing keeps nothing.
+3. `422 validation` for a member that's missing or blank (`required`), one that can't change (`not-editable`), and
+   what a route names, such as an access row's, each in `fields`.
+4. `409 refused` for what Healdan's rules refuse, with the rule's sentence in `detail`, which the Admin app shows as
+   it is. An id in a body that names nothing, such as a client or an owner deleted meanwhile, is refused this way
+   too, and so are a matter's or a workspace folder's move or delete while a document inside is checked out, and its
+   delete while one is immutable, with the sentence the public routes' `checked-out` and `immutable` give, but no
+   `holds`.
+
+Beside `401` and the two `403`s above, these are the only problems the admin routes answer. A create that loses a
+race for its number, of two creates of one client number, or of one number in one client's matters, at the same
+moment, is answered as a number already used, `409 refused` with the same sentence: the database's unique index
+refuses the second, and the server asks the number's check again once the first has committed.
+
+Each change is recorded in the administration record, with who made it, from where and the fields it changed, before
+and after (see [How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/#healdans-code)). A change that's
+one transaction is recorded inside it, and one that isn't, such as a delete, straight after it succeeds. A change
+that changes nothing isn't recorded.
+
+### The Dashboard and the Find
 
 - **`GET /v1/admin/dashboard`** is the Dashboard's Needs Attention and Server Health: `attention`, what an
   administrator should act on, each with its `code`, a `count`, a `detail` line and a `link`; `unchecked`, the codes
@@ -1034,6 +1061,225 @@ The server answers three routes there:
   (by name, by a number such as `1001.1`, or all of a client's for a bare client number) and people (by username or
   name, disabled ones too, never a system account). `%` and `_` in `q` are taken as they are, and a blank `q` is
   `422 validation`.
+
+### Clients and Matters
+
+The two lists are pages (`offset` and `limit`, as in [Lists and Paging](#lists-and-paging)) with `figuresAt` beside
+`items`. Their `documents`, `bytes` and `lastActivity` come from the Dashboard's usage summary, and `figuresAt` says
+when it was worked out: until the first summary after a start, they and `figuresAt` are null, and a matter made since
+the last summary has `documents` and `bytes` 0 and `lastActivity` null until the next. `q` is read trimmed, in any
+case, with `%` and `_` taken as they are. `sort` takes the names below exactly, and `order` is `asc` (the default) or
+`desc`; anything else is `400 bad-request`. Ties go by number, ascending whichever the order, and a row with nothing to
+sort by comes last either way. A matter's `number` is text with its client's, such as `"1001.1"`; in a request, and in
+`next-number`'s answer, it's the matter's own integer.
+
+- **`GET /v1/admin/clients`**: each client with `matters`, its live matters, and its matters' figures. `q` keeps the
+  clients whose number starts with it or whose name contains it. `sort` is `number` (the default), `name`, `matters`,
+  `documents` or `lastActivity`.
+- **`GET /v1/admin/clients/next-number`**: the highest client number plus 1, or 1. It reserves nothing.
+- **`GET /v1/admin/clients/{id}`**: one client, as the list gives it.
+- **`POST /v1/admin/clients`** with `{ "number", "name" }` answers `201`, with the client and its `Location`. A
+  number below 1 or used already, and a name over 255 characters, are `409 refused`.
+- **`PATCH /v1/admin/clients/{id}`** with `{ "name" }` renames it, and no matter's folder with it. A `number`, even
+  the one it has, is `422` `not-editable`. Nothing deletes a client: `DELETE` is `405`.
+- **`GET /v1/admin/matters`**: the live matters, not deleted or in the Trash, each with its client, Store, `owner`
+  (null once that account is deleted), `template` (null when it was made from none, or that template isn't live
+  now), figures and `folderId`, the matter's own folder. `q` keeps the matters whose number, as `1001.1`, starts with
+  it, or whose name or client's name contains it; `clientId`, `storeId` and `ownerId` keep a client's, a Store's or
+  an owner's; all of them apply together. `sort` is `number` (the default, by client number, then matter number),
+  `name`, `client`, `store`, `owner`, `template`, `documents`, `bytes` or `lastActivity`.
+- **`GET /v1/admin/matters/next-number?clientId=`**: the client's highest matter number plus 1, or the install's when
+  numbers are system-wide, deleted matters included, as a number is never used again; 1 with none. It reserves
+  nothing.
+- **`POST /v1/admin/matters/check`** with the form as it stands, a `MatterDraft` whose members may each be null or
+  left out, answers `problems`: what creating it would refuse, found with the create's own rules and sentences, each
+  looked for once the members it needs are given (`MatterProblemCode` says which), in the order the codes are
+  listed. Each has a `code`, a `message` to show, and, for `store-unreadable`, a group (or the owner) that can't read
+  the Store, with `storeId`, `groupId`, `groupName` and `fixAction` `grant-store-read`: the Store's access with that
+  group added. It never answers `422`, and writes and records nothing.
+- **`GET /v1/admin/matters/{id}`**: the matter, with its description, its figures and their `figuresAt`, and
+  `indexFailed` and `previewsGivenUp`, its documents that couldn't be indexed and whose previews were given up on,
+  counted at the request. A matter in the Trash is `404`.
+- **`POST /v1/admin/matters`** with `clientId`, `number`, `name`, `description` (optional), `storeId`, `ownerId` and
+  `templateId` makes the matter and its workspace from the template, all or nothing, and answers `201` with it and
+  its `Location`. `409 refused` covers what the check reports, and the permission rules: a folder of the template
+  that grants more than its parent, and a group that could read the matter but can't read its Store.
+- **`PATCH /v1/admin/matters/{id}`** changes `name`, `description` and `ownerId`: a member left out stays as it is,
+  and a `description` of null or blank takes it away. A new name renames the matter's folder. A new owner's own group
+  gets Full Access to the matter's folder, and the old owner's row goes from it and from the folders below that
+  narrow with it. `clientId`, `number`, `storeId` and `templateId` are `422` `not-editable`, even as null.
+- **`POST /v1/admin/matters/{id}/move`** with `{ "storeId" }` moves the matter's folder into another live Store and
+  answers the matter there; its files follow to the Store's storage backend in the background. A move into the Store
+  it's in changes nothing. A folder in the Store with the matter's folder's name, compared without regard to case, is
+  `409 refused`, as the folder is never renamed to fit, and so is a group that could read the matter but can't read
+  the new Store.
+- **`DELETE /v1/admin/matters/{id}`** moves the matter's folder to the caller's Trash, as the public folder delete
+  does, and answers `{ "trashItemId", "folders", "documents" }`, the Trash item and what went with it. The matter's
+  row stays, so its number stays taken. `POST /v1/trash/{id}/restore` brings it back as it was.
+
+### A Workspace's Folders
+
+A workspace is a matter's own folder and everything in it, or a workspace template's top folder, directly in the
+Templates Store, and everything in it. These routes take only those folders and search folders: any other id, such as
+a Store's, the Templates Store's, an alias, a folder in the Trash or one that doesn't exist, is `404 not-found`. A
+workspace's top folder is renamed, moved and deleted with its matter or template, through their routes, so the
+folder routes refuse to rename, move or delete it (`409 refused`). A name has the whitespace at either end taken off,
+and is checked as `renameFolder` in `openapi.yaml` checks it (`FolderName`: `422` `required`, `too-long` or
+`invalid`), and a name another folder or search folder in the same folder has, compared without regard to case, is
+`409 refused`; changing only the case of a folder's own name works. Each change is recorded, naming the folder by its
+path from the workspace's top folder, as `1001.1 – Charter Dispute/Documents`.
+
+- **`GET /v1/admin/workspaces/{folderId}/tree`**, with a matter's own folder (its `folderId`) or a template's id: the
+  workspace's top folder as a `WorkspaceNode`, `{ "id", "name", "kind", "ownPermissions", "children" }`, with every
+  live folder and search folder in it, at every level, hidden ones too, each folder's folders first and then its
+  search folders, each by name, ignoring case. `kind` is `folder` or `search-folder`, which has no children, and
+  `ownPermissions` is true for a folder with permissions of its own. A folder alias is left out, as New Matter's copy
+  leaves it out. A folder inside a workspace, rather than its top, is `404`.
+- **`POST /v1/admin/folders/{id}/children`** with `{ "name" }` makes a folder in that one, at any level, its top
+  included, and answers `201` with it as a node with no children, and no `Location`. It follows its parent's
+  permissions and takes what its parent passes down and, in a matter, the matter's client and matter. A search folder
+  holds no folders: `409 refused`. Recorded as `folder.created`.
+- **`PATCH /v1/admin/folders/{id}`** with `{ "name" }` renames a folder or a search folder, the only route that renames
+  a search folder, and answers `204`. Recorded as `folder.renamed`.
+- **`POST /v1/admin/folders/{id}/move`** with `{ "folderId" }` moves a folder or search folder, with everything in it,
+  into another folder of the same workspace, its top included, and answers `204`; inside a matter, a folder that would
+  then grant more than its new parent is narrowed to fit, as on every route. A move into the folder it's in changes
+  nothing. A missing `folderId` is `422` `required`; one that isn't a live folder of a workspace is `409 refused`, as
+  any id in a body that names nothing is, and so are a move into another workspace (a matter's folder moves to another
+  matter through the public `POST /v1/folders/{id}/move`, and a template's stays in its template), into a search
+  folder, the folder itself or a folder inside it, and one while a document in it is checked out, by anyone. Recorded
+  as `folder.moved`.
+- **`DELETE /v1/admin/folders/{id}`** moves a folder or search folder, and everything live in it, to the caller's
+  Trash, as the public folder delete does, and answers the Trash item, `DeletedFolder`,
+  `{ "trashItemId", "folders", "documents" }`, as a matter's delete does. `POST /v1/trash/{id}/restore` brings a
+  matter's folder back where it was, and answers a template's, or a folder of one, `409 place-gone`, as it restores
+  into a Store only; an administrator restores those in the Classic Interface (see
+  [The Trash and Removed Items](../../admin/the-trash-and-removed-items/#in-the-classic-interface)). A document in it
+  checked out, by anyone, or an immutable one, is `409 refused`, with the sentence the public routes' `checked-out`
+  and `immutable` give. Recorded as `folder.deleted`, straight after.
+- **`GET /v1/admin/folders/{id}/access`** is who can use the folder: `ownPermissions`, true when it has its own, or
+  `followsFolderId`, the folder whose permissions it follows, which may be above its parent, or its Store; `rows`,
+  groups first and then people, each by name; and `canApplyToSubfolders`. A row has its `groupId` (a person's own group
+  for a person, with `person` true and their `userId`), its `name` (a person's first and last name, or their username
+  when both are blank; `Group` and its id for a group whose record is gone), its `permissions` and `level`, and `owner`,
+  true for the matter owner's row. A group or person the folder grants nothing isn't listed, so every row can go back to
+  `PUT` as it is. A `level` is `read-only` (Read, Preview, Download, Print and Email), `read-write` (those, and Write,
+  Add, Rename, Move and Delete), `full-access` (all 25), `can-see` (Read alone) or `custom` for any other set: the match
+  is exact. Permissions are LogicalDOC's names in lower case, such as `read`, `readingreq` and `customid`.
+- **`PUT /v1/admin/folders/{id}/access`** takes either `rows`, each `{ "groupId" }` or `{ "userId" }` with its
+  `permissions`, which become the folder's own and replace every row it had (an empty list leaves it to administrators),
+  or `{ "followParent": true }`, which gives them up for its parent's, as LogicalDOC's `updateSecurityRef` does: the
+  folders that followed it then follow what it follows. A permission that isn't one of the names, or is named twice in a
+  row, is `400`. A row with neither id or both, or naming someone an earlier row named, a person by `userId` and by
+  their own group's `groupId` included, is `422`, and so are missing or empty `permissions`. `409 refused` covers a
+  group or person that no longer exists (but a deleted group the folder already grants something may stay, so a save
+  needn't take away what's there); `guest`, or a read-only person's own group, given anything beyond Read Only's five
+  permissions that the folder doesn't grant it already (so a row sent back as it is, such as a read-only owner's that
+  a folder took over from the one it followed, passes), but for the owner's row on a matter's own folder; on a
+  matter's own folder, its owner's row left out or
+  given less than Full Access, or the folder following its Store; and, inside a matter, a folder granting more than its
+  parent, or, on the matter's own folder, a group that could read the matter but can't read its Store. In a template
+  those two rules aren't checked as it's edited. The owner's row on a matter's own folder is sent with Full Access
+  whoever owns the matter, and a read-only owner's is then kept as what a read-only person's row can hold: `read`,
+  `download`, `preview`, `print`, `email`, `subscription` and `store`, which `GET` answers as `custom`, with `owner`
+  true. Below that folder the owner's row may go, and is capped as anyone's. Inside a matter, the folders below that
+  would grant more then narrow with it, as on every route.
+- **`POST /v1/admin/folders/{id}/apply-access`** is LogicalDOC's `applySecurityToTree`, and answers `204`. Every folder
+  and search folder below this one, at every level, those in the Trash too, loses its own rows and follows what this
+  folder follows: nothing is skipped, moved or deleted, so a restricted folder below stays where it is but is opened
+  up, granting exactly what this folder grants. The folder itself doesn't change. A folder with no live folder below
+  it is `409 refused`.
+- **`GET /v1/admin/folders/{id}/properties`** is the values a folder sets for what's filed below it: `folderId` and
+  `properties`, each property of the Healdan profile that passes down from folders, in the profile's order, but Client
+  and Matter, which come from the matter. Each has its `name`, `label`, `type`, `value`, `source` (`local`, set here
+  and passed down; `inherited`, from `inheritedFrom`; `default`, the install's default Class; or null for none) and
+  `options`, a Subclass option with its `class`. A search folder sets none: `409 refused`.
+- **`PUT /v1/admin/folders/{id}/properties`** with `{ "values" }`, the whole set by name: a value that differs from what
+  the folder would inherit becomes its own and passes down to what below sets none; one equal to it, null, empty text
+  or left out goes back to inheriting. In a matter what's below takes it at once; in a template, matters made
+  afterwards do. It answers the folder's values. A missing or null `values` is `422` `required`, after the `404` for
+  the folder, and every wrong value is `422`, by its name, before anything is saved, with the codes `setProperties` in
+  `openapi.yaml` uses (`read-only` for Client and Matter). Recorded as `folder.properties-changed`, with each value of
+  its own that changed, null for one it inherits.
+- **`POST /v1/admin/folders/{id}/search-folders`** with `{ "name", "rule" }` makes a search folder there, through
+  `SearchFolderService.create`, and answers `201` with it and its `Location`; its name is checked as a folder's,
+  before the service runs, so it's stored as sent. A `rule` is `{ "days", "onlyMine", "kind", "docClass",
+  "docSubclass" }`: the window from 1 day, only the changes of whoever opens it or anyone's, `all`, `documents` or
+  `emails`, and a Class and a Subclass, each null for any, whose choices are the `docclass` and `docsubclass` options
+  of any folder's properties in the workspace. A missing `rule` or member is `422` `required`; `days` below 1 and a
+  `docSubclass` without a `docClass` are `409 refused`. A search folder made directly in the Templates Store is
+  `404`, as it's no workspace's. Recorded as `search-folder.created`, with its name, the folder it's in and its rule.
+- **`GET /v1/admin/search-folders/{id}`** is a search folder, `{ "id", "name", "rule" }`, and
+  **`PATCH /v1/admin/search-folders/{id}`** with `{ "rule" }` replaces its rule, through `SearchFolderService.update`
+  with the name it has, and answers it. A `name` in the body is `400`, as any member the route doesn't take is: it's
+  renamed only as a folder is. Recorded as `search-folder.rule-changed`, with the rule's values that changed. A
+  template's search folder changes only the matters made from it afterwards.
+
+### Workspace Templates
+
+A template is a live folder directly in the Templates Store that a matter can be made from, not a search folder or an
+alias. Its `id` is its folder's: New Matter's `templateId`, and the `folderId` of its tree. Its folders are changed
+through the routes above, and its name is checked as a folder's is (`FolderName`, `422`).
+
+- **`GET /v1/admin/templates`**: every template, `{ "id", "name", "folders", "matters" }`, by name, ignoring case, as a
+  plain array, a short list: `folders` counts its live folders and search folders at every level, its own and any
+  folder alias left out, and `matters` the live matters made from it. Empty on a fresh install.
+- **`GET /v1/admin/templates/{id}`**: one template, as the list gives it. Anything else is `404`.
+- **`POST /v1/admin/templates`** with `{ "name", "copyOf" }` makes a template and answers `201` with it and its
+  `Location`. Without `copyOf` it's empty, following the Templates Store's permissions as a folder made there does;
+  with it, it's a copy of that template made as New Matter copies one, in one transaction: its folders and search
+  folders, but folder aliases, each folder's permissions and values, and each search folder's rule, its top folder
+  following what the other's follows or with its own as the other's has. A name another template has, compared
+  without regard to case, and a `copyOf` that isn't a template are `409 refused`. Recorded as `template.created`, with
+  its name and the template it copies.
+- **`PATCH /v1/admin/templates/{id}`** with `{ "name" }` renames it, and answers it. A name another template has is
+  `409 refused`; changing only the case of its own works. Recorded as `template.renamed`.
+- **`DELETE /v1/admin/templates/{id}`** moves the template, with its folders and search folders, to the caller's Trash
+  and answers `DeletedFolder`, as a folder's delete does. The User app's Trash lists it, but answers its restore
+  `409 place-gone`, and an administrator restores it in the Classic Interface. Matters made from it are unchanged,
+  with `template` null from then on, and New Matter no longer offers it. Recorded as `template.deleted`, straight
+  after.
+- **`GET /v1/admin/templates/{id}/problems`** is what New Matter would refuse in a matter made from the template, as
+  warnings, as nothing checks a template's permissions as it's edited: each a `code`, a `message` to show,
+  `folderId`, `storeId`, `groupId` and `groupName`, as `MatterProblem` has them. `wider-than-parent` comes once for each
+  folder or search folder that grants a group more than the folder it's in, in the tree's order: one with permissions
+  of its own, or one that still follows a folder above the folder it's in, as a folder made while the folder it's in
+  followed that folder goes on doing (LogicalDOC's way). `store-unreadable` comes for each Store, once for each group
+  that could read a matter made from the template but can't read that Store, by Store name and then group name; the
+  owner, not known yet, is left aside. Empty for a clean template.
+
+### Stores and Groups
+
+A Store is a workspace directly under the root that holds matters: LogicalDOC's Default workspace and the Templates
+Store aren't Stores.
+
+- **`GET /v1/admin/stores`**: every live Store, `{ "id", "name" }`, by name, ignoring case, as a plain array: it's a
+  short list, for the Store menus of New Matter, Move to Another Store and the Matters list.
+- **`POST /v1/admin/stores`** with `{ "name", "groupIds" }` makes the Store, and gives each group in `groupIds`, a
+  person's own group among them, Read, the Store's one level, **Can See**, all in one transaction, so a matter can be
+  made in it at once. It answers `201` with the Store and no `Location`. An empty `groupIds` leaves the Store to
+  administrators. A new Store keeps its files on Original. A `groupIds` that names a group twice or holds a null is
+  `400`; the name is checked as a folder's is (`422`), and a missing `groupIds` is `422` `required`; a name another
+  live folder directly under the root has, compared without regard to case, and a group that no longer exists, are
+  `409 refused`.
+- **`GET /v1/admin/stores/{id}/access`**: who can see the Store, `storeId` and its `rows`, as a folder's rows are
+  given, but with `level` `can-see` for a row of Read alone and `custom` for any other, and `owner` always false. A
+  group or person the Store grants nothing isn't listed. Default, Templates, the root and anything else that isn't a
+  live Store are `404`.
+- **`PUT /v1/admin/stores/{id}/access`** with `{ "groupIds" }`: each group listed gets Read, keeping any other
+  permission its row has, and every other row goes; a Store that followed another folder's permissions gets its own,
+  and an empty list leaves it to administrators. It's `409 refused` for a group that no longer exists (but a deleted
+  group the Store grants something to now may stay), and for a change that would shut a group out of the Store while
+  that group can read one of the Store's matters: whoever can read a matter must be able to read its Store (P2).
+  That's checked before anything is written, the matter's owner's own group passing while the owner could read the
+  Store, and the sentence names the first group shut out and its matter, or how many of the Store's matters it can
+  read and the first by name, as in "Group Partners can read the matter 1001.1 – Charter Dispute but would no longer
+  read its Store." A matter that already let in a group the Store didn't refuses no other change, so the change that
+  puts it right goes through. New Matter's **Let Everyone Read the Store** sends the groups whose rows have `read`, with
+  the problem's group added, so the `PUT` takes away a `custom` row without `read`, which lets nobody see a Store.
+- **`GET /v1/admin/groups?q=`**: a page of live groups, by name, ignoring case, without people's own groups, each with
+  its `id`, `name` and `description` (null for none). `q`, read trimmed, in any case, with `%` and `_` taken as they
+  are, keeps the groups whose name contains it; without it, every group.
 
 ## Healdan's Own Client
 

@@ -1,7 +1,7 @@
 # The Admin App: design
 
 - **Date:** 2026-11-18
-- **Status:** designed with the owner on 2026-11-18, question by question and through mockups in the browser ([`2026-11-18-admin-app-mockups/`](2026-11-18-admin-app-mockups/README.md)). The owner approved this written spec the same day. Implementation plan: [`docs/superpowers/plans/2026-11-18-admin-app.md`](../plans/2026-11-18-admin-app.md), approved the same day, for subagent-driven building. Phase 1 built on 2026-11-19 (see the plan's decision log); Phases 2 to 6 not built.
+- **Status:** designed with the owner on 2026-11-18, question by question and through mockups in the browser ([`2026-11-18-admin-app-mockups/`](2026-11-18-admin-app-mockups/README.md)). The owner approved this written spec the same day. Implementation plan: [`docs/superpowers/plans/2026-11-18-admin-app.md`](../plans/2026-11-18-admin-app.md), approved the same day, for subagent-driven building. Phase 1 built on 2026-11-19, and Phase 2 on 2026-11-20 (see the plan's decision log); Phases 3 to 6 not built.
 - **Roadmap:** the backlog row "Admin app, then retiring the old GWT UI" in [`docs/ROADMAP.md`](../../ROADMAP.md).
 - **Inputs:**
   - the roadmap's glossary and its M6 decisions "Three separate units" and "Hosting";
@@ -201,7 +201,7 @@ The same component serves a matter's Workspace tab and a workspace template's pa
 | **Read/Write** | Read Only's, plus Write, Add, Rename, Move, Delete |
 | **Full Access** | all 25, which is what a matter's owner gets |
 
-- **Rules, from the server:** a folder narrows its parent and never widens it (P1); every group that can read a matter can read its Store (P2); the owner's row stays. The `guest` group and read-only people can't be given more than Read Only, which CE doesn't check when a folder's permissions are saved, so the admin route refuses it. **Apply to Subfolders** is offered where `checkApplyToTree` allows.
+- **Rules, from the server:** a folder narrows its parent and never widens it (P1); every group that can read a matter can read its Store (P2); the owner's row stays, with Full Access, whoever the owner is (a read-only owner's row then holds what a read-only person's can). The `guest` group and read-only people can't be given more than Read Only: the admin route refuses a save that gives them more, but for that owner's row. **Apply to Subfolders** is offered where `checkApplyToTree` allows.
 - **In a template,** nothing checks permissions as they're edited today. So the page lists what New Matter would refuse, as warnings, using `AclMath` and `PermissionRules`, and saving still works.
 
 ### 8.5 Workspace Templates
@@ -483,7 +483,7 @@ The Admin Guide's pages move to the app as their screens do, keeping their addre
   - views: a preview, an email and an inline attachment recorded once per half hour; a `202`, a thumbnail and properties not recorded;
   - reindexing: each scope, Skip left alone, a job with failures reaching its end, failed told from waiting, Cancel, a restart resuming from its place, and old hits still found.
 - **App:** Vitest and Testing Library for each screen, over a fake API typed from the contract, with an axe check.
-- **End to end,** in Playwright in Chromium and WebKit, in the smoke test's last step: `admin-access.spec.ts` (signing in and returning as `admin`; `webuser`'s no-access page and refused asset; a signed-out asset), one spec per screen, and `admin-a11y.spec.ts` in both themes. These specs run before most others and share the stack, so they change nothing global: their own clients, matters, Stores and people, no index emptying, and no change to `webuser`, Everyone or `Smoke Garage`. `helpers.ts`' `signIn` takes who signs in.
+- **End to end,** in Playwright in Chromium and WebKit, in the smoke test's last step: `admin-access.spec.ts` (signing in and returning as `admin`; `webuser`'s no-access page and refused asset; a signed-out asset), one spec per screen, and `admin-a11y.spec.ts` in both themes. (Changed in the build: Phase 2's screens share one spec, `admin-matters.spec.ts`, which takes a matter from a new Store and template through to the User app, as the plan's Task 21 has it, and `admin-a11y.spec.ts` checks each of them.) These specs run before most others and share the stack, so they change nothing global: their own clients, matters, Stores and people, no index emptying, and no change to `webuser`, Everyone or `Smoke Garage`. `helpers.ts`' `signIn` takes who signs in.
 - **`docker/tests/test-web.sh`** gains `curl` checks that `webuser` gets `403` at `/admin/` and that a signed-out asset isn't `200`.
 
 ### 17.2 Acceptance (owner)

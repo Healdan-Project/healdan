@@ -23,6 +23,7 @@ import com.logicaldoc.core.searchengine.SearchException;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.listing.ListingSql;
 import com.logicaldoc.healdan.matter.ClientMatterRef;
 import com.logicaldoc.healdan.matter.MatterDisplay;
 import com.logicaldoc.util.spring.Context;
@@ -133,7 +134,8 @@ public class MatterSearch extends Search {
 		Optional<ClientMatterRef> ref = ClientMatterRef.parse(input);
 		if (ref.isEmpty()) {
 			params.addValue("text", containing(input));
-			return "lower(m.hd_name) like :text escape '!' or lower(m.hd_description) like :text escape '!'";
+			return "lower(m.hd_name) like :text %1$s or lower(m.hd_description) like :text %1$s"
+					.formatted(ListingSql.LIKE_ESCAPE);
 		}
 		if (ref.get().isNumberOnly()) {
 			params.addValue("matter", ref.get().client());
@@ -145,13 +147,12 @@ public class MatterSearch extends Search {
 
 	/**
 	 * @param text what the user typed
-	 * @return a {@code like} pattern, with {@code !} as the escape, matching
-	 *         lower-case text that contains it as it is: its {@code %} and
-	 *         {@code _} are not wildcards
+	 * @return a {@code like} pattern, for {@link ListingSql#LIKE_ESCAPE},
+	 *         matching lower-case text that contains it as it is: its
+	 *         {@code %} and {@code _} are not wildcards
 	 */
 	protected static String containing(String text) {
-		String escaped = text.toLowerCase(Locale.ROOT).replace("!", "!!").replace("%", "!%").replace("_", "!_");
-		return "%" + escaped + "%";
+		return ListingSql.containing(text.toLowerCase(Locale.ROOT));
 	}
 
 	private static Hit toHit(ResultSet rs, int row) throws SQLException {

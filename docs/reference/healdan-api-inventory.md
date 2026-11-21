@@ -4,7 +4,7 @@
 - **Written:** 2026-10-23, for the [M2 design](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) (§12), from the code at `808d5395b`.
 - **Kept current:** each milestone that adds endpoints updates its entries' tags and endpoints in the same pull request.
 - **After M6**, the User app's later phases add their endpoints to §0.3, each marked "built after M6", and their old calls move from `Later` to `M6`: a favourite's name and renaming folders (2026-11-14), and moving and deleting folders and the Trash (2026-11-17, the [folders and Trash spec](../superpowers/specs/2026-11-16-folders-and-trash-design.md) §6).
-- **The Admin app's Phase 1 built** its endpoints on 2026-11-19 (§0.5), in pull request `Admin app: the foundation and the Dashboard` ([Admin app spec](../superpowers/specs/2026-11-18-admin-app-design.md) §10). Its later phases add theirs to §0.5. The corrections the spec's §10 names, Healdan's storage service and the sign-in methods M4 added to `HealdanSettingsService`, which this file doesn't list yet, wait for the phases that replace them: Phase 3 and Stage 2.
+- **The Admin app's Phase 1 built** its endpoints on 2026-11-19 (§0.5), in pull request `Admin app: the foundation and the Dashboard` ([Admin app spec](../superpowers/specs/2026-11-18-admin-app-design.md) §10). Its later phases add theirs to §0.5: Phase 2 built its clients', matters', workspaces', templates', Stores' and groups' on 2026-11-20, in pull request `Admin app: clients, matters and workspaces` (Healdan-Project/healdan#287). The corrections the spec's §10 names, Healdan's storage service and the sign-in methods M4 added to `HealdanSettingsService`, which this file doesn't list yet, wait for the phases that replace them: Phase 3 and Stage 2.
 - **M6 built** its endpoints on 2026-11-10 to 2026-11-12 (§0.3), and its design left the rest of the old calls it weighed to later phases of the User app (`Later`) or to none (M6 spec §4, §16).
 - **M3 built** its endpoints on 2026-10-24 (§0.2): the bookmarks, `FolderService.create` and `/thumbnail` moved from M6 to M3, and the rest of M3's additions have no old call behind them.
 - **M2 built** every `M2` endpoint named here on 2026-10-23 and 2026-10-24 (§0.1). Its `openapi.yaml` (`healdan-api/src/main/resources/healdan/api/openapi.yaml`) is the reference for what they do; this file only maps the old calls to them.
@@ -171,15 +171,48 @@ M6 built every endpoint in this table, for the User app ([M6 spec](../superpower
 | SetupService | 2 |  |  |  |  |  |  |  | 2 |
 | DropboxService | 6 |  |  |  |  |  |  |  | 6 |
 
-### 0.5 What the Admin app adds (Phase 1 built)
+### 0.5 What the Admin app adds (Phases 1 and 2 built)
 
-Phase 1 built every endpoint in this table, for the Admin app's Dashboard and its find (Admin app spec §8.1, §10). They're under `/api/v1/admin`, described in `openapi-admin.yaml`, not `openapi.yaml`, and answer administrators' web sessions only. The rows marked "(none: …)" have no old call behind them.
+Phase 1 built the first three endpoints in this table, for the Admin app's Dashboard and its find (Admin app spec §8.1, §10), and Phase 2 the rest so far, for its clients, its matters, their workspaces, the workspace templates, and the Stores and groups a first matter needs (§8.2 to §8.6, §14). They're under `/api/v1/admin`, described in `openapi-admin.yaml`, not `openapi.yaml`, and answer administrators' web sessions only. The rows marked "(none: …)" have no old call behind them.
 
 | Old call | Admin endpoint |
 |---|---|
 | `SystemService.getStatistics` | `GET /admin/dashboard/usage`, whose signed-in count is what Phase 1 replaces of the Sessions screen; its list, `/data/sessions.xml`, is Stage 2's (spec §11) |
 | (none: Needs Attention and Server Health are new) | `GET /admin/dashboard` |
 | (none: one find of clients, matters and people is new) | `GET /admin/find?q=` |
+| `HealdanSettingsService.listClients` | `GET /admin/clients`, with each client's matters and figures, and `GET /admin/clients/{id}` |
+| `HealdanSettingsService.saveClient` | `POST /admin/clients` to create, `PATCH /admin/clients/{id}` to rename |
+| `HealdanSettingsService.suggestClientNumber` | `GET /admin/clients/next-number` |
+| (none: no old call lists every matter) | `GET /admin/matters` |
+| `HealdanMatterService.suggestMatterNumber` | `GET /admin/matters/next-number?clientId=` |
+| (none: New Matter's check as the form changes is new) | `POST /admin/matters/check` |
+| `HealdanMatterService.create` | `POST /admin/matters` |
+| `HealdanMatterService.getByFolder` | `GET /admin/matters/{id}`, by the matter's id |
+| `HealdanMatterService.update` | `PATCH /admin/matters/{id}` |
+| `FolderService.move` of a matter's own folder into another Store | `POST /admin/matters/{id}/move` |
+| `FolderService.delete` of a matter's own folder | `DELETE /admin/matters/{id}`, answering its Trash item |
+| `FolderService.getFolder`'s permissions, for a workspace's folder | `GET /admin/folders/{id}/access` |
+| `FolderService.saveACL`, `inheritACL`, for a workspace's folder | `PUT /admin/folders/{id}/access`, with `rows` or `followParent: true` |
+| `FolderService.saveACL` with its subfolders, for a workspace's folder | `POST /admin/folders/{id}/apply-access` |
+| `/data/folders.xml`, for a workspace's folders | `GET /admin/workspaces/{folderId}/tree`, the whole tree at once, with search folders and which folders have permissions of their own |
+| `FolderService.create`, for a workspace's folder | `POST /admin/folders/{id}/children` |
+| `FolderService.rename`, for a workspace's folder or search folder | `PATCH /admin/folders/{id}` |
+| `FolderService.move`, within a workspace | `POST /admin/folders/{id}/move` |
+| `FolderService.delete`, for a workspace's folder | `DELETE /admin/folders/{id}`, answering its Trash item |
+| `FolderService.getFolder`'s attributes and `FolderService.save`, for a workspace's folder | `GET`, `PUT /admin/folders/{id}/properties` |
+| `HealdanSearchFolderService.create`, in a workspace | `POST /admin/folders/{id}/search-folders` |
+| `HealdanSearchFolderService.get`, `update`, in a workspace | `GET`, `PATCH /admin/search-folders/{id}` (the rule; a rename is `PATCH /admin/folders/{id}`) |
+| `HealdanSearchFolderService.classes`, `subclasses` | the `docclass` and `docsubclass` options of `GET /admin/folders/{id}/properties` |
+| `HealdanMatterService.listTemplates` | `GET /admin/templates`, with each template's folders and matters, and `GET /admin/templates/{id}` |
+| `FolderService.create` in the Templates Store | `POST /admin/templates`, empty or a copy of another (`copyOf`) |
+| `FolderService.rename` of a template | `PATCH /admin/templates/{id}` |
+| `FolderService.delete` of a template | `DELETE /admin/templates/{id}`, answering its Trash item |
+| `FolderService.restore` of a template, or of a template's folder | stays the Classic Interface's, its Trash and its Deleted folders report, until Stage 2 (spec §11), as `POST /trash/{id}/restore` restores into Stores only |
+| (none: what New Matter would refuse in a template is new) | `GET /admin/templates/{id}/problems` |
+| `HealdanMatterService.listStores` | `GET /admin/stores`, beside M2's `GET /stores` |
+| `FolderService.create` of a workspace under the root | `POST /admin/stores`, with the groups that can see it |
+| `FolderService.getFolder`'s permissions, `saveACL`, for a Store | `GET`, `PUT /admin/stores/{id}/access` |
+| `/data/groups.xml` | `GET /admin/groups?q=`, people's own groups left out |
 
 ## 1. GWT-RPC services
 
@@ -249,20 +282,20 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 | `resolve` | Matter-number lookup: `998.1` or a bare number -> matters (max 100). | M2 |
 | `addToMyMatters`, `removeFromMyMatters` | Edit My Matters (folder bookmarks). Built as `PUT` and `DELETE /me/matters/{folderId}`. | M6 |
 | `listStores` | The Stores to choose from. Admin-only, and the API keeps it admin-only (`GET /stores`). | M2 |
-| `create`, `update`, `getByFolder`, `suggestMatterNumber`, `listTemplates` | Matter admin: create from template (all-or-nothing), edit, read by workspace, suggest number, templates to choose from. All admin-only. | Admin |
+| `create`, `update`, `getByFolder`, `suggestMatterNumber`, `listTemplates` | Matter admin: create from template (all-or-nothing), edit, read by workspace, suggest number, templates to choose from. All admin-only. | Admin (`/admin/matters`, and `listTemplates` `/admin/templates`, §0.5) |
 
 ### HealdanSearchFolderService
 
 - Interface: `gui/frontend/client/healdan/services/HealdanSearchFolderService.java`; RPC URL `/frontend/healdansearchfolder` (`@RemoteServiceRelativePath("healdansearchfolder")`)
 - Server impl: **HealdanSearchFolderServiceImpl**
 - Methods: 6 (M2 2, Later 4)
-- Lands in: `/folders/{id}`, `/folders/{id}/children` (M2); `/search-folders/{id}` (Later)
+- Lands in: `/folders/{id}`, `/folders/{id}/children` (M2); `/search-folders/{id}` (Later); `/admin/folders/{id}/search-folders`, `/admin/search-folders/{id}` (a workspace's, built in the Admin app's Phase 2, §0.5)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
 | `get`, `evaluate` | Search folders (saved rule shown as a folder): read one; evaluate it to up to 1000 doc ids. | M2 |
-| `create`, `update` | Create or edit a search folder's rule. | Later |
-| `classes`, `subclasses` | Class and Subclass option lists for the rule editor. | Later |
+| `create`, `update` | Create or edit a search folder's rule. | Later (in a workspace: `/admin/folders/{id}/search-folders` and `/admin/search-folders/{id}`, §0.5) |
+| `classes`, `subclasses` | Class and Subclass option lists for the rule editor. | Later (in a workspace: `/admin/folders/{id}/properties`' options, §0.5) |
 
 ### HealdanSettingsService
 
@@ -275,7 +308,7 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 |---|---|---|
 | `labels` | Matter label singular/plural (any user). | M2 |
 | `load`, `save` | Healdan settings (admin). | Admin |
-| `listClients`, `saveClient`, `suggestClientNumber` | Client list/create/rename, next client number. | Admin |
+| `listClients`, `saveClient`, `suggestClientNumber` | Client list/create/rename, next client number. | Admin (`/admin/clients`, §0.5) |
 
 ### AttributeSetService
 
@@ -464,13 +497,13 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 | `getFolder` | Folder bean (path, permissions, template/attributes, counts) with optional path/doc count/subfolder count. The browse call. | M2 |
 | `getAllowedPermissions` | Effective permissions over a set of folders (can I add/write here). | M2 |
 | `create` | Create a folder. (Healdan restricts Client/Matter structure.) Built as `POST /folders`, New Folder in the helper's Save window. | M3 |
-| `createAlias`, `save` | Alias, update properties. | Later |
+| `createAlias`, `save` | Alias, update properties. | Later (a workspace's folder's values: `/admin/folders/{id}/properties`, §0.5) |
 | `rename` | Rename a folder. Built as `PATCH /folders/{id}` with `{ name }` (after M6: the folder rename spec, 2026-11-14). | M6 |
 | `delete`, `restore`, `deleteFromTrash` | Delete to trash, restore, purge. Built as `DELETE /folders/{id}`, `POST /trash/{id}/restore` and `DELETE /trash/{id}` (after M6: the folders and Trash spec, 2026-11-17). | M6 |
 | `paste` | Paste documents (copy/cut, links, notes, security options). A cut's move is built as `POST /documents/{docNumber}/move`; copying waits for its phase. | M6 |
 | `move` | Move a folder. Built as `POST /folders/{id}/move` (after M6: the folders and Trash spec, 2026-11-17). | M6 |
 | `merge`, `copyFolders`, `pasteAsAlias` | Merge/copy folders; paste documents as aliases. | Later |
-| `saveACL`, `inheritACL` | Edit folder ACL (optionally to subfolders); inherit from another folder. | Later |
+| `saveACL`, `inheritACL` | Edit folder ACL (optionally to subfolders); inherit from another folder. | Later (a workspace's folder: `/admin/folders/{id}/access` and `/apply-access`, §0.5) |
 | `applyTemplate` | Apply a folder template (structure) to a folder. | Later |
 | `setFolderPagination` | Per-folder list paging preference. The User app loads every list 100 rows at a time (M6 spec §10.2). | none |
 | `applyGridLayout` | Per-folder grid layout preference: choosing columns waits for its phase. | Later |
@@ -835,7 +868,7 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/data/deletedfolders.xml` | DeletedFoldersDataServlet | parentId, userId | Folders in the trash. | M6 | `GET /trash?view=everyone` and `removed`, a folder one row with what it took (built after M6: the same) |
 | `/data/garbage.xml` | GarbageDataServlet | (none) | Mixed latest 100 deleted docs/folders for the user (trash dashlet). | M6 | `GET /trash` (`view=mine`, paged; built after M6: the same) |
 | `/data/users.xml` | UsersDataServlet | groupId, required, skipdisabled, impersonifiers | Users (optionally of a group), for pickers and admin grid. Needed by permission UIs (Later) and Walls (M7) too. | M6 | `GET /users?q=` (built in M2; the User app's Author and Typist pickers use it) |
-| `/data/groups.xml` | GroupsDataServlet | (none) | Groups (name, description, source). | Later | `/groups` |
+| `/data/groups.xml` | GroupsDataServlet | (none) | Groups (name, description, source). | Later | `/groups` (the Admin app's search: `/admin/groups`, §0.5) |
 | `/data/dashlets.xml` | DashletsDataServlet | (none) | Defined dashlets. | none | – (the User app has no dashlets, M6 spec §4) |
 | `/data/languages.xml` | LanguagesDataServlet | gui (only GUI-enabled languages) | Active languages. | Later | `/server` |
 | `/data/timezones.xml` | TimeZonesDataServlet | (none) | Time zones for the profile form. | Later | `/server` |

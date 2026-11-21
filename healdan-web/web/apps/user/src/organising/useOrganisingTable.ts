@@ -69,7 +69,7 @@ export function useOrganisingTable(rows: readonly Hit[], selection: ReadonlySet<
         else organising.startRename(key)
       },
       onDelete: (keys: Set<string>) => {
-        // A matter's own folder is deleted in the Classic Interface, as Delete on a matter in the tree says
+        // A matter's own folder is deleted by an administrator in the Admin app, as Delete on a matter in the tree says
         if ([...keys].some((key) => matters.has(key))) return toast(t('delete.matterFolder'))
         const items = itemsOf(keys)
         // With nothing that can be deleted, the first folder says why, as F2 does, and nothing is asked; with several,

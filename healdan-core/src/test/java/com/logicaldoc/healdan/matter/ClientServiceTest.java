@@ -9,10 +9,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 
-import java.sql.SQLException;
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import javax.sql.DataSource;
 
@@ -26,6 +23,7 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.admin.AdminContext;
+import com.logicaldoc.healdan.support.AdminRecord;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.spring.Context;
 
@@ -146,7 +144,7 @@ public class ClientServiceTest extends AbstractHealdanTestCase {
 						.formatted(admin.getId(), client.getId()),
 				"%d admin 192.0.2.20 MATTERS client.renamed client %d 998 \u2013 Healdan Ltd {\"name\":{\"before\":\"Healdan\",\"after\":\"Healdan Ltd\"}}"
 						.formatted(admin.getId(), client.getId())),
-				events());
+				AdminRecord.events());
 	}
 
 	@Test
@@ -168,7 +166,7 @@ public class ClientServiceTest extends AbstractHealdanTestCase {
 				jdbc.queryForObject("select hd_name from hd_client where ld_id = ?", String.class, client.getId()));
 		assertEquals("Five", ClientDAO.get().findById(client.getId()).getName());
 		assertNull(ClientDAO.get().findByNumber(6));
-		assertEquals(1, events().size());
+		assertEquals(1, AdminRecord.events().size());
 	}
 
 	@Test
@@ -179,22 +177,5 @@ public class ClientServiceTest extends AbstractHealdanTestCase {
 
 		assertEquals(999, service.suggestNumber());
 		assertEquals(List.of(7L, 998L), ClientDAO.get().findAllByNumber().stream().map(Client::getNumber).toList());
-	}
-
-	/**
-	 * @return each row of the administration record, oldest first, as its
-	 *         user, username, address, area, action, target and detail
-	 */
-	static List<String> events() {
-		return new JdbcTemplate(Context.get(DataSource.class)).query(
-				"select hd_userid, hd_username, hd_address, hd_area, hd_action, hd_targetkind, hd_targetid,"
-						+ " hd_targetname, hd_detail from hd_admin_event order by hd_id",
-				(rs, n) -> IntStream.rangeClosed(1, 9).mapToObj(i -> {
-					try {
-						return String.valueOf(rs.getObject(i));
-					} catch (SQLException e) {
-						throw new IllegalStateException(e);
-					}
-				}).collect(Collectors.joining(" ")));
 	}
 }

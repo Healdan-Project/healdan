@@ -4,6 +4,7 @@
 import { useId } from 'react'
 import { FieldError, Input, Label, TextArea, TextField as AriaTextField } from 'react-aria-components'
 import styles from './Fields.module.css'
+import hiddenStyles from './VisuallyHidden.module.css'
 
 interface FieldProps {
   label: string
@@ -69,17 +70,19 @@ export interface SelectFieldProps extends FieldProps {
   options: { value: string; label: string }[]
   /** The text of a choice that leaves it with no value; without it the list offers only its options */
   empty?: string
+  /** The label names the list for a screen reader but isn't drawn, as in a table's row, whose column heading says what it is */
+  labelHidden?: boolean
 }
 
 /** A pick from a list: it offers only its options, and `empty` if the field may have none. */
-export function SelectField({ label, value, onChange, options, empty, required, error }: SelectFieldProps) {
+export function SelectField({ label, value, onChange, options, empty, required, error, labelHidden = false }: SelectFieldProps) {
   const id = useId()
   const errorId = `${id}-error`
   // A value the list no longer has stays shown, so it isn't silently replaced by the first option
   const known = value === '' || options.some((option) => option.value === value)
   return (
     <div className={styles.field}>
-      <label className={styles.label} htmlFor={id}>
+      <label className={labelHidden ? hiddenStyles.hidden : styles.label} htmlFor={id}>
         {label}
         <Mark required={required} />
       </label>

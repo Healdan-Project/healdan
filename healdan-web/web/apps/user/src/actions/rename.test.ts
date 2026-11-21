@@ -47,7 +47,7 @@ describe('whyNotRename', () => {
   })
   it("says a matter's own folder takes the matter's name", () => {
     expect(whyNotRename(folder({ kind: 'matter', canRename: false, path: [store, workspace] }), true)).toBe(
-      "A matter's own folder takes the matter's name: an administrator changes it with Edit Matter… in the Classic Interface.",
+      "A matter's own folder takes the matter's name: an administrator changes it with Edit on the matter's page in the Admin app.",
     )
   })
   it("says a matter's top-level folders are for administrators, to someone who isn't one", () => {
@@ -66,7 +66,7 @@ describe('folderRenameRefusal', () => {
   it('words each refusal from the catalogue, never the server', () => {
     expect(folderRenameRefusal(refused(409, 'name-taken'), 'Letters')).toBe("There's already a folder called Letters here.")
     expect(folderRenameRefusal(refused(403, 'admins-only'), 'X')).toBe("Only administrators can rename a matter's top-level folders.")
-    expect(folderRenameRefusal(refused(409, 'not-renamable'), 'X')).toContain('Edit Matter…')
+    expect(folderRenameRefusal(refused(409, 'not-renamable'), 'X')).toContain("with Edit on the matter's page in the Admin app")
     expect(folderRenameRefusal(refused(403, 'forbidden'), 'X')).toBe("You don't have permission to rename this folder.")
     const fields = [{ field: 'name', code: 'invalid', detail: 'A server sentence.' }]
     expect(folderRenameRefusal(refused(422, 'validation', { fields }), 'X')).toBe("That name isn't allowed.")

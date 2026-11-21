@@ -6,6 +6,7 @@ import { useId } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { StatusDot } from '@healdan/ui'
 import type { DashboardAnswer } from '../queries'
+import { ServerLink } from '../frame/ServerLink'
 import { t } from '../strings'
 import { adminEnUS, type AdminStringKey } from '../strings/en-US'
 import { PartState } from './PartState'
@@ -39,9 +40,9 @@ function Tile({ tile }: { tile: HealthTile }) {
       <div className={styles.tileTop}>
         <h3 className={styles.tileName}>
           {/* The name is the tile's link, which covers the tile, so the whole of it opens the screen behind it */}
-          <a className={styles.tileLink} href={tile.link}>
+          <ServerLink className={styles.tileLink} href={tile.link}>
             {nameOf(tile)}
-          </a>
+          </ServerLink>
         </h3>
         <span data-status>
           <StatusDot status={tile.status}>{unreadable ? t('admin.status.unavailable') : statusOf(tile)}</StatusDot>

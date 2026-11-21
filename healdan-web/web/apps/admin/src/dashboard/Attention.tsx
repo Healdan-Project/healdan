@@ -5,7 +5,9 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { useId } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { Icon, formatList } from '@healdan/ui'
+import { pathOf } from '../addresses'
 import { CLASSIC, screenAt } from '../frame/LeftPane'
+import { ServerLink } from '../frame/ServerLink'
 import type { AttentionCode, DashboardAnswer } from '../queries'
 import { plural, t } from '../strings'
 import { adminEnUS, adminPlurals, type AdminPluralKey, type AdminStringKey } from '../strings/en-US'
@@ -20,10 +22,15 @@ function messageOf(item: Item): string | undefined {
   return Object.hasOwn(adminPlurals, key) ? plural(key as AdminPluralKey, item.count) : undefined
 }
 
-/** What a row's link says: the screen it opens, the Classic Interface until that screen ships, or Open elsewhere */
+/**
+ * What a row's link says: the screen it opens, the Classic Interface until that screen ships, or Open elsewhere. Its path
+ * decides, so a query or a hash on it changes nothing.
+ */
 export function linkLabel(link: string): string {
-  if (link === CLASSIC) return t('person.classic')
-  return screenAt(link) ?? t('admin.attention.open')
+  const path = pathOf(link)
+  if (path === undefined) return t('admin.attention.open')
+  if (path === CLASSIC) return t('person.classic')
+  return screenAt(path) ?? t('admin.attention.open')
 }
 
 function labelOf(code: AttentionCode): string {
@@ -47,10 +54,10 @@ function Row({ item }: { item: Item }) {
           {item.detail}
         </span>
       </span>
-      <a className={styles.go} href={item.link} aria-describedby={message ? id : undefined}>
+      <ServerLink className={styles.go} href={item.link} aria-describedby={message ? id : undefined}>
         {linkLabel(item.link)}
         <Icon name="chevronRight" size={14} />
-      </a>
+      </ServerLink>
     </li>
   )
 }

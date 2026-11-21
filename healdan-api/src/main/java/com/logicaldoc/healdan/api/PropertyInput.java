@@ -27,9 +27,10 @@ import com.logicaldoc.healdan.profile.ProfileView.Source;
  * edit of a document's properties and for a new document alike: each is
  * checked before anything is written, then set on the value object CE takes,
  * so that Healdan's rules decide what becomes local and what inherits (M1 spec
- * section 6.7).
+ * section 6.7). The Admin app checks the values a workspace's folder sets
+ * with {@link #check} too.
  */
-final class PropertyInput {
+public final class PropertyInput {
 
 	private static final String CLASS = HealdanConstants.ATTR_DOCCLASS;
 
@@ -56,7 +57,7 @@ final class PropertyInput {
 	 *        wouldn't belong to its Class
 	 * @return the values to set, by name in the order sent; null clears one
 	 */
-	static Map<String, Object> check(List<ProfileField> fields, Map<String, JsonNode> sent,
+	public static Map<String, Object> check(List<ProfileField> fields, Map<String, JsonNode> sent,
 			Map<String, Object> inherited, User caller, List<FieldError> errors) {
 		Map<String, ProfileField> byName = byName(fields);
 		Template template = ProfileSchema.get().template();

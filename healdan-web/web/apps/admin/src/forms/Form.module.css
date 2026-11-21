@@ -1,0 +1,57 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The Admin app's dialogs that make something (New Matter, New Store): their fields, what they say of them, and their
+   buttons, as the client dialog draws its own (Clients.module.css). */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-4);
+}
+
+/* A line under a field, or under the form, that says more of it */
+.note {
+  margin: 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+/* What the server refused, above the buttons */
+.refusal {
+  margin: 0;
+  color: var(--hd-required);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--hd-space-3);
+  margin-top: var(--hd-space-2);
+}
+
+/* A field with the button that makes a new one of what it picks beside it, level with its box: New Client…, New Store… */
+.withAction {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--hd-space-3);
+}
+
+/* The field takes the room, and the button keeps its own */
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.withAction > :last-child {
+  flex: none;
+}
+
+/* A field and the note under it */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+  min-width: 0;
+}

@@ -45,3 +45,6 @@ can create one directly inside a matter's workspace, as with any folder there. T
 
 To change a rule, right-click the search folder in the Classic Interface and choose **Edit search folder…**, which
 needs the Write permission. Renaming it needs Rename.
+
+Administrators also make and change a matter's search folders, and a workspace template's, in the Admin app: see the
+Admin Guide's [A Search Folder's Rule](../../../admin/top-level-folders/#a-search-folders-rule).

@@ -1,0 +1,118 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* A matter's page and a template's, as 02-matters.html's B draws a matter's: the crumb, the title with its actions at the
+   end of its line, the line under it, then the tabs or the workspace. Unlike a list, the page scrolls as a whole. */
+
+.page {
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: var(--hd-space-5) var(--hd-space-6) var(--hd-space-6);
+}
+
+/* What a page's actions hold besides buttons: Open in Healdan, a link that looks like one */
+.linkButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  box-sizing: border-box;
+  min-height: 26px;
+  padding: 0 var(--hd-space-4);
+  border: 1px solid var(--hd-button-secondary-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-button-secondary);
+  color: var(--hd-text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.linkButton:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  box-shadow: 0 0 0 5px var(--hd-focus-ring);
+}
+
+/* A button's icon beside its words */
+.withIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+}
+
+.summary {
+  margin: 0 0 var(--hd-space-4);
+  color: var(--hd-text-secondary);
+}
+
+/* The Overview: its description, facts and what's stuck, one under another */
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-5);
+  padding-top: var(--hd-space-4);
+  max-width: 880px;
+}
+
+.overview h2 {
+  margin: 0 0 var(--hd-space-2);
+  font-size: var(--hd-font-size-title);
+  font-weight: var(--hd-weight-bold);
+}
+
+.overview p,
+.overview ul {
+  margin: 0;
+}
+
+.overview ul {
+  padding-inline-start: var(--hd-space-5);
+}
+
+.line {
+  margin: 0;
+}
+
+.link {
+  color: var(--hd-accent-text);
+}
+
+.link:focus-visible {
+  outline: var(--hd-focus-outline);
+  outline-offset: var(--hd-focus-offset);
+  border-radius: var(--hd-radius-small);
+}
+
+.muted {
+  margin: 0;
+  color: var(--hd-text-secondary);
+}
+
+/* A template's problems, as warnings above its workspace */
+.problems {
+  margin: 0 0 var(--hd-space-5);
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-inline-start: 3px solid var(--hd-caution-text);
+  border-radius: var(--hd-radius);
+  background: var(--hd-window);
+}
+
+.problems h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  margin: 0 0 var(--hd-space-2);
+  font-size: var(--hd-font-size-title);
+  font-weight: var(--hd-weight-bold);
+}
+
+.problems ul {
+  margin: 0 0 var(--hd-space-2);
+  padding-inline-start: var(--hd-space-5);
+}
+
+.problems p {
+  margin: 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}

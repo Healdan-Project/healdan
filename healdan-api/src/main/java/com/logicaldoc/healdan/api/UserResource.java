@@ -15,6 +15,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.UserHit;
+import com.logicaldoc.healdan.listing.ListingSql;
 
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -34,7 +35,7 @@ public class UserResource {
 	/** The most users a search returns */
 	static final int MAX_HITS = 20;
 
-	private static final String MATCHES = "like :q escape '!'";
+	private static final String MATCHES = "like :q " + ListingSql.LIKE_ESCAPE;
 
 	/**
 	 * @param q what to look for in the username, the first or last name, or
@@ -52,7 +53,7 @@ public class UserResource {
 				and (lower(_entity.username) %1$s or lower(_entity.firstName) %1$s or lower(_entity.name) %1$s
 				or lower(concat(_entity.firstName, ' ', _entity.name)) %1$s)""".formatted(MATCHES);
 		Map<String, Object> parameters = Map.of("tenantId", Caller.current().user().getTenantId(), "enabled",
-				Boolean.TRUE, "type", User.Type.DEFAULT, "q", "%" + escape(q.strip().toLowerCase(Locale.ROOT)) + "%");
+				Boolean.TRUE, "type", User.Type.DEFAULT, "q", ListingSql.containing(q.strip().toLowerCase(Locale.ROOT)));
 		try {
 			// A missing name first, where PostgreSQL would put it last in an ascending sort
 			List<User> users = UserDAO.get().findByWhere(where, parameters,
@@ -61,13 +62,5 @@ public class UserResource {
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't search the users", e);
 		}
-	}
-
-	/**
-	 * @return the text with LIKE's wildcards, and the escape character, taken
-	 *         literally
-	 */
-	private static String escape(String text) {
-		return text.replace("!", "!!").replace("%", "!%").replace("_", "!_");
 	}
 }

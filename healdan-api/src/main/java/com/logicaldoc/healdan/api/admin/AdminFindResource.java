@@ -48,7 +48,7 @@ public class AdminFindResource {
 	/** The most of each kind */
 	static final int MAX_EACH = 5;
 
-	private static final String MATCHES = "like :q escape '!'";
+	private static final String MATCHES = "like :q " + ListingSql.LIKE_ESCAPE;
 
 	/**
 	 * The live matters (not deleted, their folders not in the Trash) that match, each with its client, by client
@@ -73,7 +73,7 @@ public class AdminFindResource {
 		if (text.isEmpty())
 			throw ApiProblem.validation(List.of(new FieldError("q", "required", "Say what to look for.")));
 
-		String like = "%" + escape(text.toLowerCase(Locale.ROOT)) + "%";
+		String like = ListingSql.containing(text.toLowerCase(Locale.ROOT));
 		Optional<ClientMatterRef> ref = ClientMatterRef.parse(text);
 		try {
 			return new FoundView(clients(like, ref), matters(like, ref), people(like));
@@ -142,12 +142,5 @@ public class AdminFindResource {
 
 	private static FoundClient client(Client client) {
 		return new FoundClient(client.getId(), client.getNumber(), client.getName());
-	}
-
-	/**
-	 * @return the text with LIKE's wildcards, and the escape character, taken literally
-	 */
-	private static String escape(String text) {
-		return text.replace("!", "!!").replace("%", "!%").replace("_", "!_");
 	}
 }

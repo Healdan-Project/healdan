@@ -1,0 +1,107 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* New Matter, as the last drawing of 02-matters.html has it: the fields in two columns, what the matter will contain beside
+   them, and what the check found under both. In a narrow window everything goes in one column. */
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  gap: var(--hd-space-5);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: var(--hd-space-4);
+}
+
+/* A field across both columns: Client, Name and Description */
+.span {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 640px) {
+  .columns,
+  .fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* It Will Contain: the matter's own folder, and the template's under it, as a tree's rows are drawn */
+.contains {
+  min-width: 0;
+  padding: var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+}
+
+.containsTitle {
+  margin: 0 0 var(--hd-space-3);
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+  font-weight: var(--hd-weight-bold);
+}
+
+.tree {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each level below the matter's own folder, one step in */
+.tree .tree {
+  padding-inline-start: var(--hd-space-5);
+}
+
+.node {
+  display: flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  min-height: 24px;
+}
+
+/* A long name gives way with an ellipsis, as a tree's rows do */
+.nodeName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What the check found about no one field: each in its own box, with its sign */
+.problems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.problem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--hd-space-3);
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-caution);
+  border-radius: var(--hd-radius);
+}
+
+.problemSign {
+  flex: none;
+  margin-top: 2px;
+  color: var(--hd-caution-text);
+}
+
+.problemText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+  min-width: 0;
+}
+
+.problemLine {
+  margin: 0;
+}

@@ -338,7 +338,7 @@ public class FilingRules {
 			throw refuse(RESTORE_NOT_IN_TRASH, ids);
 
 		FolderPosition parent = locator.locate(into);
-		// CE doesn't check that the folder is deleted: an admin's restore of a live one moves it
+		// Restoring a live folder, an admin's alone, moves it: it's checked as a move
 		if (row.deleted() == 0)
 			checkMoveAt(currentPosition(folderId, row), parent, row.alias(), admin, ids);
 		if (locator.locate(row.parentId()).kind() == Kind.STORE) {
@@ -357,12 +357,12 @@ public class FilingRules {
 
 	/**
 	 * A deleted document is restored: the user needs DELETE on it, as on a
-	 * folder they restore (R22). CE's own check sees nothing on a deleted
-	 * document. CE doesn't check that the document is in the trash: restoring a
-	 * live one would move it with no MOVE asked, and a purged one would undo
-	 * the purge, so only an admin may. Restored anywhere but the folder it was
-	 * deleted from, it is filed there anew, which needs WRITE on that folder, as
-	 * for adding a document and as CE's SOAP restore asks.
+	 * folder they restore (R22), checked here, as the document is deleted.
+	 * Only an admin restores one that isn't in the trash: restoring a live one
+	 * would move it with no MOVE asked, and a purged one would undo the purge.
+	 * Restored anywhere but the folder it was deleted from, it is filed there
+	 * anew, which needs WRITE on that folder, as for adding a document and as
+	 * CE's SOAP restore asks.
 	 *
 	 * @param documentId the document
 	 * @param folderId the folder it is restored into

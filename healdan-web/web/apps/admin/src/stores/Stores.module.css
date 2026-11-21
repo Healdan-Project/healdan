@@ -1,0 +1,53 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* New Store's Who Can See It: the groups added, each with Remove, above the list to add more from */
+
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+}
+
+/* As a field's label (Fields.module.css) */
+.label {
+  margin: 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.chosen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hd-space-3);
+  min-height: 28px;
+  padding-inline-start: var(--hd-space-3);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+}
+
+.groupName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A group to add: its name, then what it's for, smaller */
+.option {
+  min-width: 0;
+}
+
+.description {
+  font-size: var(--hd-font-size-small);
+}

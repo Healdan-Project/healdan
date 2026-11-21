@@ -156,8 +156,9 @@ open a document in an app from the page, as each update runs the search again, o
 ## Right-Click Menus
 
 Right-click a document, a folder or a matter, in a list or in the left pane, for a menu of what you can do with it. On
-a Mac, Control-click does the same. Every choice in these menus is also on the toolbar or beside the item, so the menu
-is a shortcut, never the only way.
+a Mac, Control-click does the same. Every choice in these menus, but those only administrators see, such as **Manage
+in Admin**, is also on the toolbar or beside the item, so the menu is a shortcut, never the only way. An administrator
+finds every matter in the Admin app's **Matters** list too.
 
 - **A document,** in a folder, search results, **Recent Documents**, **Recent Emails**, **Checked Out to Me** or a
   doc # result: **Open**, **Preview** and **Open in New Tab**; **Download** and **Check Out**, or **Check In** and
@@ -169,8 +170,11 @@ is a shortcut, never the only way.
   out where you can't do it to the folder, and **Rename** on a matter's own folder, which has no **Move To…** or
   **Delete** either), and **Add to Favorites** or **Remove from Favorites**.
 - **A matter,** in **My Matters**, **Recent Matters** or a search for matters: **Open**, **Open in New Tab**,
-  **Rename**, which is always greyed out (a matter takes its name from **Edit Matter…** in the Classic Interface), and
-  **Add to My Matters** or **Remove from My Matters**.
+  **Rename**, which is always greyed out (a matter's folder takes the matter's name, which only an administrator
+  changes), and **Add to My Matters** or **Remove from My Matters**. An administrator's menu also has **Manage in
+  Admin**, last, after a line: it opens the matter's page in the Admin app, in a new tab, where administrators edit,
+  move and delete the matter and change its workspace (see the Admin Guide's
+  [A Matter's Page](../../../admin/clients-and-matters/#a-matters-page)). Nobody else's menu has it.
 - **An item in My Favorites:** **Open** and **Open in New Tab**; **Rename Favorite**, and **Use Original Name** when it has a
   name of its own (see [A Favourite's Own Name](#a-favourites-own-name)); and **Remove from Favorites**.
 

@@ -175,6 +175,42 @@ public class ProfileView {
 	}
 
 	/**
+	 * The values a folder sets for what's filed below it, as the Admin app's
+	 * Workspace Editor shows them (Admin app spec section 8.4): each property
+	 * that passes down from folders, in the profile's order, client and
+	 * matter included (never editable). A value is local when the folder set
+	 * it; otherwise it's inherited from the nearest folder above, up to the
+	 * workspace's top folder, that set it, or it's the install's default
+	 * Class. None is required: a folder needn't set anything.
+	 *
+	 * @param folder a folder of a workspace, with its attributes
+	 * @param topFolderId the workspace's top folder, a matter's own or a
+	 *        template's, which ends the walk up
+	 * @return its properties
+	 * @throws PersistenceException error at data layer
+	 */
+	public List<ProfileField> forFolder(Folder folder, long topFolderId) throws PersistenceException {
+		Set<String> local = localValues.locals(LocalValueDAO.FOLDER, folder.getId());
+		Set<String> inheritable = schema.inheritable();
+		List<Step> steps = folder.getId() != topFolderId ? walk(folder.getParentId(), topFolderId) : List.of();
+
+		List<ProfileField> fields = new ArrayList<>();
+		for (Map.Entry<String, Attribute> definition : definitions()) {
+			String name = definition.getKey();
+			if (!inheritable.contains(name))
+				continue;
+			Object value = valueOf(folder.getAttribute(name), definition.getValue().getType());
+			ProfileField field = value != null && local.contains(name) && !schema.fixed().contains(name)
+					? field(name, definition.getValue(), value, Source.LOCAL, null)
+					: inheritedField(name, definition.getValue(), value, steps);
+			fields.add(new ProfileField(field.name(), field.label(), field.type(), false, field.editable(),
+					field.value(), field.source(), field.inheritedFromId(), field.inheritedFromName(), null, null,
+					field.options()));
+		}
+		return fields;
+	}
+
+	/**
 	 * @return the profile's attributes that are fields, in position order:
 	 *         not sections, not hidden
 	 */
@@ -246,13 +282,21 @@ public class ProfileView {
 		FolderPosition position = locator.locate(folderId);
 		if (!position.isInsideMatter() || position.workspaceId() == null)
 			return List.of();
+		return walk(folderId, position.workspaceId());
+	}
 
+	/**
+	 * @return the folders from this one up to the top folder given, nearest
+	 *         first, with their local attributes; up to the root if the top
+	 *         isn't above it
+	 */
+	private List<Step> walk(long folderId, long topFolderId) throws PersistenceException {
 		FolderDAO folders = FolderDAO.get();
 		List<Folder> chain = new ArrayList<>();
 		Folder folder = folders.findById(folderId);
 		while (folder != null) {
 			chain.add(folder);
-			if (folder.getId() == position.workspaceId() || folder.getParentId() == folder.getId())
+			if (folder.getId() == topFolderId || folder.getParentId() == folder.getId())
 				break;
 			folder = folders.findById(folder.getParentId());
 		}
