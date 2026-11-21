@@ -8,7 +8,7 @@
 
 ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-25
 # The Install manual's Upgrading page pulls this tag by name: change both together.
-ARG TOMCAT_IMAGE=tomcat:11.0-jre25-temurin
+ARG TOMCAT_IMAGE=tomcat:11.0.29-jre25-temurin
 
 # ---- build: the same Maven build CI runs, producing the exploded WAR in /build/ROOT ----
 FROM ${MAVEN_IMAGE} AS build
