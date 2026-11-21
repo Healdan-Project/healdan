@@ -431,7 +431,7 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testDocumentRename() throws Exception {
-		// CE schedules the renamed version's save before the store
+		// Vetoed first, before CE reads the document (CE now saves the renamed version only once the store is done)
 		assertVetoLeavesNothing(VetoSwitch.BEFORE_DOCUMENT_RENAME,
 				() -> DocumentManager.get().rename(doc.getId(), "renamed.txt", documentTransaction()));
 	}

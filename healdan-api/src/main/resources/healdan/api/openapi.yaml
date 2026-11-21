@@ -1020,7 +1020,9 @@ paths:
         becomes `Lease v1.2.docx`), one that differs only in the extension's
         case is spelt as the document's, and one that ends in another
         extension is `422 validation` with `extension`, as a save's name is.
-        The same name changes nothing and makes no version.
+        A name another document in the folder has is made unique as the old
+        UI's Rename makes it (`Lease(1).docx`), which the answer's `name`
+        says. The same name changes nothing and makes no version.
 
         The checks run in this order:
 

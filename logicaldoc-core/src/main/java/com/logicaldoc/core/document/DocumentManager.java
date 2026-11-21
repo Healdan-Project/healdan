@@ -1424,7 +1424,8 @@ public class DocumentManager {
             document.setFileName(newName.trim());
             String extension = FileUtil.getExtension(newName.trim());
             if (StringUtils.isNotEmpty(extension)) {
-                document.setType(FileUtil.getExtension(newName));
+                // Healdan: the type from the name as stored, without the spaces trimmed from it
+                document.setType(extension);
             } else {
                 document.setType(UNKNOWN);
             }
@@ -1437,7 +1438,10 @@ public class DocumentManager {
             transaction.setEvent(DocumentEvent.RENAMED);
             documentDAO.store(document, transaction);
 
-            // Healdan: the version only once the rename is stored, as a check-in's or a move's
+            // Healdan: the version only once the rename is stored, as a check-in's or a move's, with the name and the
+            // type the document was stored with, which the store makes unique in the folder
+            version.setFileName(document.getFileName());
+            version.setType(document.getType());
             DocumentFuture elaboration = new DocumentFuture(document, saveVersionAsync(version, document));
 
             markAliasesToIndex(docId);

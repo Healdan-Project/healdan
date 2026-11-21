@@ -496,14 +496,41 @@ public class DocumentManagerTest extends AbstractCoreTestCase {
         }
 
         // Any version save the rename started is done
+        awaitVersionSaves();
+        assertEquals("pippo.pdf", docDao.findById(1L).getFileName());
+        assertEquals(before, docDao.queryForList(versions, String.class));
+    }
+
+    /**
+     * Healdan: a rename's version record has the name and the type the
+     * document was stored with: the name the store made unique in the
+     * folder, and the type without the spaces the name was trimmed of.
+     */
+    @Test
+    public void testRenameRecordsTheNameStored() throws Exception {
+        DocumentHistory transaction = new DocumentHistory();
+        transaction.setUser(userDao.findByUsername("admin"));
+        // Document 3, in the same folder, is pluto.pdf
+        testSubject.rename(1L, "pluto.pdf ", transaction);
+        awaitVersionSaves();
+
+        Document doc = docDao.findById(1L);
+        assertEquals("pluto(1).pdf", doc.getFileName());
+        assertEquals("pdf", doc.getType());
+        assertEquals(List.of("pluto(1).pdf|pdf"), docDao.queryForList("select ld_filename || '|' || ld_type"
+                + " from ld_version where ld_documentid = 1 and ld_version = '1.1' and ld_deleted = 0", String.class));
+    }
+
+    /**
+     * Waits for the version records CE saves in the background
+     */
+    private static void awaitVersionSaves() throws Exception {
         ThreadPoolExecutor pool = ThreadPools.get().getPool("VersionSave");
         long deadline = System.currentTimeMillis() + 20000L;
         while (!pool.getQueue().isEmpty() || pool.getActiveCount() > 0) {
             assertTrue("Background version saves didn't finish", System.currentTimeMillis() < deadline);
             Thread.sleep(50L);
         }
-        assertEquals("pippo.pdf", docDao.findById(1L).getFileName());
-        assertEquals(before, docDao.queryForList(versions, String.class));
     }
 
     @Test

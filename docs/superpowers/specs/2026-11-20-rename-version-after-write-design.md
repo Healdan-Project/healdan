@@ -35,9 +35,11 @@ moment before. A write that lands between LogicalDOC's read and its store makes 
 (`StaleObjectStateException`). The API asks LogicalDOC again (`DocumentChanges.write`, `PropertiesResource.change`,
 `VersionResource.checkIn`), and drops the record of a write that was lost in its flush before it does.
 
-**`rename` started its record before its write.** It's the one path that calls `saveVersionAsync` before
-`documentDAO.store`; the check-in, the move and the create call it after, and the property change (`update`) saves its
-record on the caller's thread after the store. So a rename whose store failed had already queued its record:
+**`rename` started its record before its write.** It's the one path that queues a new record before
+`documentDAO.store`; the check-in, the move and the create call `saveVersionAsync` after, and the property change
+(`update`) saves its record on the caller's thread after the store. (`replaceFile` also queues its saves first, but
+they update the file size of records that exist, so they take no number; see §6.) So a rename whose store failed had
+already queued its record:
 
 1. The rename reads the document at version N and gives it N+1, queues the record N+1, and its store fails.
 2. `DocumentChanges.write` asks again at once. The second rename reads N, gives it N+1, is stored, and queues its own
@@ -62,9 +64,28 @@ record on the caller's thread after the store. So a rename whose store failed ha
 
 **`rename` queues its version record once its store has succeeded.** (call) One statement moves below
 `documentDAO.store(document, transaction)`, as in `checkin` and `moveToFolder`. The record is still made from the
-document before the store, as it was: only when it's saved changes. A rename whose store fails keeps no record; one
-lost in its flush still keeps one, which `DocumentChanges.write` waits for through the returned future and drops
-before it asks again, as before.
+document before the store, which gives the document its number, but it takes the name and the type the document was
+stored with: the store makes the name unique in the folder (`Lease(1).docx`), and the record had the name asked for.
+The type comes from the name as trimmed, as the name does, where it took the spaces it was trimmed of (`docx `).
+
+A rename whose store throws keeps no record. Two cases are left:
+
+- **A write lost in its flush still keeps one.** The store returns as if it had written, so the record is queued.
+  `DocumentChanges.write` waits for it through the returned future and drops it before it asks again, as before, and
+  now waits up to 60 seconds, not 10, and asks again only once it's dropped, as a late record would take the number
+  the rename asked again gives the document. On the routes that don't ask again (the Classic Interface, WebDAV, the
+  REST web service) the record stays, a rename that never happened: still open (§6).
+- **A store that throws after its write was committed keeps none**, where LogicalDOC kept one. The document DAO
+  commits on a plain `PersistenceException` (it rolls back only on `HealdanVetoException`), so a failure after the
+  write that isn't from SQL, such as an `afterStore` listener's, leaves the document at its new number with no record:
+  a gap in the timeline, not a clash, as the document's next write takes the number after. No listener does this on a
+  rename today. (call) Accepted: a record for a write that may not have happened is the fault this change removes.
+
+**The API takes the name LogicalDOC stores.** `DocumentChanges.write` asked again whenever the document wasn't as
+asked, so a rename onto a name another document in the folder has, which the store makes unique, was made three
+times, with three records, and answered `500`. A document at the number LogicalDOC's write gives it has the write as
+LogicalDOC stored it, so `write` now stops there, and the rename answers `200` with `Lease(1).docx`, as the old UI's
+Rename does.
 
 Nothing in Healdan's own code can stop a save LogicalDOC has queued, and every route reaches `rename`, so the edit
 is in LogicalDOC's file. Healdan's API could instead wait for the stray record after a failed rename and drop it,
@@ -79,6 +100,7 @@ the ordinary way.
 | File | Edit | Why |
 |---|---|---|
 | `logicaldoc-core/src/main/java/com/logicaldoc/core/document/DocumentManager.java` | In `rename`, the `DocumentFuture` that calls `saveVersionAsync` is made after `documentDAO.store`, with a `Healdan:` note | A rename whose write fails keeps no version record, so a rename asked again, or the document's next write, can take its number (§2) |
+| The same | In `rename`, just before that, the record takes the document's stored name and type; and the type is the trimmed name's extension, already worked out, each with a `Healdan:` note | The record has the name the document has, made unique in the folder, and the type has no trailing space (§3) |
 
 ## 5. Tests
 
@@ -86,6 +108,11 @@ the ordinary way.
   `UPSTREAM_TESTS`): a document listener refuses the rename's store; once LogicalDOC's version saves are done, the
   document keeps its name and its version records are as they were. Before the change a `1.1` record appeared (and
   LogicalDOC's version quota moved two older records aside to make room for it).
+- **`DocumentManagerTest#testRenameRecordsTheNameStored`** (in `logicaldoc-core`, added to `UPSTREAM_TESTS`): a
+  rename to `pluto.pdf ` in a folder that holds `pluto.pdf` stores `pluto(1).pdf` with the type `pdf`, and its `1.1`
+  record has both.
+- **`DocumentChangesTest#testRenameToANameTakenInTheFolder`**: the API's rename onto a name taken in the folder is one
+  rename, `200` with `Lease(1).docx`, and one record with that name.
 - **`DocumentChangesTest#testRenamePastABackgroundWrite`** (in `healdan-api`, on PostgreSQL): `BackgroundWrite`
   stores the document from another thread, with a change of its colour, after the rename read it, so the rename's
   store fails and the API asks again. The rename is `200`, and the one `1.1` record is the rename as stored, with the
@@ -104,3 +131,9 @@ the ordinary way.
 - **`HibernatePersistentObjectDAO.flush` swallows every failure.** It's why the refused insert went on to a second
   statement, and why a write lost in its flush rolls back unseen, which the API works around in three places. Not
   changed here: callers count on it, and changing it is a larger upstream edit.
+- **A write lost in its flush keeps its record on the routes that don't ask again** (§3): the Classic Interface's
+  rename, check-in and move, WebDAV and the REST web service. `saveVersionAsync` could store a record only once
+  `ld_document` has the record's number, but a move inside a folder merge's transaction isn't committed when the save
+  looks, and the API's check-in takes a missing record as a failure, not a lost write, so both would need changing too.
+- **`replaceFile` queues its records' saves before its store** (§2). They take no number, but a store that fails
+  leaves the records' file size changed and the document's not.

@@ -60,7 +60,7 @@ public class DocumentChangesTest extends ApiTestCase {
 	/** A change another write makes, which tells a version record made before it from one made after */
 	private static final Consumer<Document> RED = d -> d.setColor("red");
 
-	private static final String EMAIL ="From: Cara Diaz <cara@example.com>\r\nSubject: Twin\r\n"
+	private static final String EMAIL = "From: Cara Diaz <cara@example.com>\r\nSubject: Twin\r\n"
 			+ "Message-ID: <twin-1@example.com>\r\nContent-Type: text/plain\r\n\r\nTwin.\r\n";
 
 	private User clerk;
@@ -269,6 +269,21 @@ public class DocumentChangesTest extends ApiTestCase {
 		assertEquals("Lease.docx", DocumentDAO.get().findById(d.getId()).getFileName());
 		// The rename's one record is the rename as stored, after the other write
 		assertEquals(List.of("1.0 event.stored a.docx -", "1.1 event.renamed Lease.docx red"), versions(d));
+	}
+
+	@Test
+	public void testRenameToANameTakenInTheFolder() throws Exception {
+		// CE makes the name unique, as the old UI's Rename does, and the API takes that as the rename stored
+		file("Lease.docx");
+		Document d = file("a.docx");
+		ApiResponse response = rename(d, "Lease", token);
+		awaitAsyncWork();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("Lease(1).docx", response.json().path("name").textValue());
+		assertEquals("Lease(1).docx", DocumentDAO.get().findById(d.getId()).getFileName());
+		// One rename, whose record has the name stored
+		assertEquals(List.of("1.0 event.stored a.docx -", "1.1 event.renamed Lease(1).docx -"), versions(d));
 	}
 
 	@Test
