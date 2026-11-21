@@ -605,9 +605,9 @@ public class FolderListing {
 		case CLASS -> List.of(text(select.join(CLASS, HealdanConstants.ATTR_DOCCLASS)));
 		case SUBCLASS -> List.of(text(select.join(SUBCLASS, HealdanConstants.ATTR_DOCSUBCLASS)));
 		case TYPIST -> List.of(personName(select, TYPIST, HealdanConstants.ATTR_TYPIST, TYPIST_USER));
-		case FROM -> List.of(text(select.join(FROM, HealdanConstants.ATTR_EMAILFROM)));
-		case TO -> List.of(text(select.join(TO, HealdanConstants.ATTR_EMAILTO)));
-		case SENT -> List.of(select.join(SENT, HealdanConstants.ATTR_EMAILSENT) + ".ld_datevalue");
+		case FROM -> List.of(emailOnly(select, text(select.join(FROM, HealdanConstants.ATTR_EMAILFROM))));
+		case TO -> List.of(emailOnly(select, text(select.join(TO, HealdanConstants.ATTR_EMAILTO))));
+		case SENT -> List.of(emailOnly(select, select.join(SENT, HealdanConstants.ATTR_EMAILSENT) + ".ld_datevalue"));
 		};
 		List<String> order = new ArrayList<>();
 		for (String key : keys) {
@@ -644,6 +644,17 @@ public class FolderListing {
 	 */
 	private static String text(String alias) {
 		return "lower(%s)".formatted(unlessBlank(alias + ".ld_stringvalue"));
+	}
+
+	/**
+	 * @return an email's value, and null for a document that isn't an email,
+	 *         by its type, as the File Type filter decides: CE's screens can
+	 *         give any document the email properties, and a list leaves its
+	 *         email cells blank
+	 */
+	private static String emailOnly(Select select, String value) {
+		select.params.addValue("emailtypes", new TreeSet<>(FileKinds.extensions(FileKinds.EMAIL)));
+		return "case when lower(d.ld_type) in (:emailtypes) then %s end".formatted(value);
 	}
 
 	/**

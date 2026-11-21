@@ -2678,7 +2678,9 @@ components:
         `typist` (by name, as `author`), `from`, `to` (an email's, ignoring
         case) or `sent` (when an email was sent). `matter`, `client` and
         `location` take the client and matter numbers stamped on the
-        document. Ties go by the document's age, so pages never overlap,
+        document. A document that isn't an email, by its type as the File
+        Type filter decides, has no From, To or Sent, whatever properties it
+        holds. Ties go by the document's age, so pages never overlap,
         and documents with no value to sort by, or a blank one, come last
         either way. Anything else is `400`. A search's `folders`, `matters`
         and `clients` scopes take only the sorts its description names.

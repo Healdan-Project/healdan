@@ -62,11 +62,11 @@ public record ListingQuery(Sort sort, boolean descending, Set<String> kinds, Set
 		SUBCLASS,
 		/** The Typist's name, as {@link #AUTHOR} sorts */
 		TYPIST,
-		/** An email's From, ignoring case */
+		/** An email's From, ignoring case; a document that isn't an email, by its type, has none */
 		FROM,
-		/** An email's To, ignoring case */
+		/** An email's To, ignoring case; a document that isn't an email has none */
 		TO,
-		/** When an email was sent */
+		/** When an email was sent; a document that isn't an email has none */
 		SENT
 	}
 

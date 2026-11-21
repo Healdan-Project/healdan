@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -1093,19 +1094,24 @@ public class SearchResourceTest extends ApiTestCase {
 				m -> parts(columns.get(m.docNumber()).folder().toLowerCase(), 998L, matterNumber(m)));
 		keys.put("filed", m -> parts(columns.get(m.docNumber()).filed()));
 		keys.put("size", m -> parts(columns.get(m.docNumber()).size()));
-		// The File Type filter's names, A to Z, then the extension
+		// The File Type filter's names, A to Z, then the type, ignoring case: here the file name's extension, which
+		// BulkHits.copies gives each copy as its type, lower-cased
 		List<String> typeNames = List.of("email", "excel", "opendocument", "other", "pdf", "picture", "powerpoint",
 				"word");
-		keys.put("type", m -> parts(typeNames.indexOf(m.kind()), m.name().substring(m.name().lastIndexOf('.') + 1)));
+		keys.put("type", m -> parts(typeNames.indexOf(m.kind()),
+				m.name().substring(m.name().lastIndexOf('.') + 1).toLowerCase(Locale.ROOT)));
 		keys.put("class", m -> parts(lowerOrNone(m.docClass())));
 		keys.put("subclass", m -> parts(lowerOrNone(columns.get(m.docNumber()).subclass())));
 		keys.put("typist", m -> {
 			String typist = columns.get(m.docNumber()).typist();
 			return parts(typist == null ? null : (typist + " " + typist).toLowerCase());
 		});
-		keys.put("from", m -> parts(lowerOrNone(columns.get(m.docNumber()).from())));
-		keys.put("to", m -> parts(lowerOrNone(columns.get(m.docNumber()).to())));
-		keys.put("sent", m -> parts(columns.get(m.docNumber()).sent()));
+		// An email's alone: the layout has none, so the From, To and Sent each document holds sort as none, and
+		// every document ties, as its row's email is null
+		keys.put("from", m -> parts(emailOnly(m, lowerOrNone(columns.get(m.docNumber()).from()))));
+		keys.put("to", m -> parts(emailOnly(m, lowerOrNone(columns.get(m.docNumber()).to()))));
+		keys.put("sent", m -> parts(emailOnly(m, columns.get(m.docNumber()).sent())));
+		assertTrue(made.stream().noneMatch(m -> m.kind().equals("email")));
 		// Every sort the API takes
 		assertEquals(Filters.SORTS.keySet(), keys.keySet());
 
@@ -1141,6 +1147,11 @@ public class SearchResourceTest extends ApiTestCase {
 	/** The text in lower case; null for none, and for a blank one, which a list shows as none */
 	private static String lowerOrNone(String text) {
 		return StringUtils.isBlank(text) ? null : text.toLowerCase();
+	}
+
+	/** An email's value; none for a document that isn't an email */
+	private static Object emailOnly(Made made, Object value) {
+		return made.kind().equals("email") ? value : null;
 	}
 
 	private static long matterNumber(Made made) {

@@ -248,18 +248,20 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 	 * (none: no value, a property with no row, or a blank one):
 	 *
 	 * <pre>
-	 *     file          type  matter  filed       size  class      subclass  typist       from              to                 sent
-	 * k1  minutes.docx  docx  998.10  03-01 10h   300   Letters    b         Zoe Abe      Zara &lt;zara@...&gt; team@example.com  05-02 9h
-	 * k2  letter.doc    doc   998.9   01-01       20    contracts  (null)    Aaron Zed    adam@example.com  (no row)           05-01
-	 * k3  mail.eml      eml   998.1   03-01 10h   300   Advice     A         mlee (kept)  Adam@example.com  Board@example.com  (null)
-	 * k4  notes.txt     txt   998.1   02-01       null  (no row)   a         (null)       (null)            alice@example.com  05-02 9h
-	 * k5  scan.PDF      PDF   998.-   04-01       4000  letters    (no row)  Aaron Zed    (blank)           board@example.com  04-30
-	 * k6  README        null  -.-     2025-12-31  1     (blank)    c         (blank)      bob@example.com   (null)             (no row)
+	 *     file          type  matter  filed       size  class      subclass  typist       from               to                 sent
+	 * k1  minutes.docx  docx  998.10  03-01 10h   300   Letters    b         Zoe Abe      [Zara &lt;zara@...&gt;] [team@example.com]  [05-02 9h]
+	 * k2  letter.msg    msg   998.9   01-01       20    contracts  (null)    Aaron Zed    adam@example.com   (blank)            05-01
+	 * k3  mail.eml      eml   998.1   03-01 10h   300   Advice     A         mlee (kept)  Adam@example.com   Board@example.com  (null)
+	 * k4  notes.EML     EML   998.1   02-01       null  (no row)   a         (null)       Zed &lt;zed@...&gt;    alice@example.com  05-02 9h
+	 * k5  scan.PDF      PDF   998.-   04-01       4000  letters    (no row)  Aaron Zed    (null)             [board@example.com] [04-30]
+	 * k6  README        null  -.-     2025-12-31  1     (blank)    c         (blank)      [bob@example.com]  (no row)           (no row)
 	 * </pre>
 	 *
 	 * Abby is Zoe Abe and Zara is Aaron Zed, so their names sort the other way
-	 * from their usernames; mlee is a username kept with no user. All are in
-	 * Columns, in matter 998.1's Documents, whatever their stamps say.
+	 * from their usernames; mlee is a username kept with no user. Only k2, k3
+	 * and k4 are emails, by their type, so the email fields in brackets, on
+	 * the others, count as none. All are in Columns, in matter 998.1's
+	 * Documents, whatever their stamps say.
 	 */
 	private void columnsLayout() throws Exception {
 		User abby = fx.user("abby");
@@ -270,7 +272,7 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 		columns = fx.folder(documents, "Columns");
 		k1 = fx.upload(columns, "minutes.docx", "1", admin).getId();
 		awaitAsyncWork();
-		List<Long> copies = bulk(k1, columns, List.of("letter.doc", "mail.eml", "notes.txt", "scan.PDF", "README"));
+		List<Long> copies = bulk(k1, columns, List.of("letter.msg", "mail.eml", "notes.EML", "scan.PDF", "README"));
 		k2 = copies.get(0);
 		k3 = copies.get(1);
 		k4 = copies.get(2);
@@ -278,9 +280,9 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 		k6 = copies.get(4);
 
 		file(k1, "docx", 300L, LocalDateTime.of(2026, 3, 1, 10, 0));
-		file(k2, "doc", 20L, LocalDateTime.of(2026, 1, 1, 0, 0));
+		file(k2, "msg", 20L, LocalDateTime.of(2026, 1, 1, 0, 0));
 		file(k3, "eml", 300L, LocalDateTime.of(2026, 3, 1, 10, 0));
-		file(k4, "txt", null, LocalDateTime.of(2026, 2, 1, 0, 0));
+		file(k4, "EML", null, LocalDateTime.of(2026, 2, 1, 0, 0));
 		file(k5, "PDF", 4000L, LocalDateTime.of(2026, 4, 1, 0, 0));
 		file(k6, null, 1L, LocalDateTime.of(2025, 12, 31, 0, 0));
 
@@ -315,16 +317,16 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 		text(k1, HealdanConstants.ATTR_EMAILFROM, "Zara <zara@example.com>");
 		text(k2, HealdanConstants.ATTR_EMAILFROM, "adam@example.com");
 		text(k3, HealdanConstants.ATTR_EMAILFROM, "Adam@example.com");
-		text(k4, HealdanConstants.ATTR_EMAILFROM, null);
-		text(k5, HealdanConstants.ATTR_EMAILFROM, "  ");
+		text(k4, HealdanConstants.ATTR_EMAILFROM, "Zed <zed@example.com>");
+		text(k5, HealdanConstants.ATTR_EMAILFROM, null);
 		text(k6, HealdanConstants.ATTR_EMAILFROM, "bob@example.com");
 
 		text(k1, HealdanConstants.ATTR_EMAILTO, "team@example.com");
-		noAttribute(k2, HealdanConstants.ATTR_EMAILTO);
+		text(k2, HealdanConstants.ATTR_EMAILTO, "  ");
 		text(k3, HealdanConstants.ATTR_EMAILTO, "Board@example.com");
 		text(k4, HealdanConstants.ATTR_EMAILTO, "alice@example.com");
 		text(k5, HealdanConstants.ATTR_EMAILTO, "board@example.com");
-		text(k6, HealdanConstants.ATTR_EMAILTO, null);
+		noAttribute(k6, HealdanConstants.ATTR_EMAILTO);
 
 		sent(k1, LocalDateTime.of(2026, 5, 2, 9, 0));
 		sent(k2, LocalDateTime.of(2026, 5, 1, 0, 0));
@@ -665,16 +667,17 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 		orders.put(Sort.LOCATION, List.of(list(k3, k4, k2, k1, k5, k6), list(k1, k2, k4, k3, k5, k6)));
 		orders.put(Sort.FILED, List.of(list(k6, k2, k4, k1, k3, k5), list(k5, k3, k1, k4, k2, k6)));
 		orders.put(Sort.SIZE, List.of(list(k6, k2, k1, k3, k5, k4), list(k5, k3, k1, k2, k6, k4)));
-		// Email, Other, PDF, Word: the File Type names A to Z; then the extension, ignoring case, k6's none last
-		orders.put(Sort.TYPE, List.of(list(k3, k4, k6, k5, k2, k1), list(k1, k2, k5, k4, k6, k3)));
+		// Email, Other, PDF, Word: the File Type names A to Z; then the extension, ignoring case (eml, EML, msg)
+		orders.put(Sort.TYPE, List.of(list(k3, k4, k2, k6, k5, k1), list(k1, k5, k6, k2, k4, k3)));
 		// Ignoring case, so Letters and letters tie; no row and a blank last
 		orders.put(Sort.CLASS, List.of(list(k3, k2, k1, k5, k4, k6), list(k5, k1, k2, k3, k6, k4)));
 		orders.put(Sort.SUBCLASS, List.of(list(k3, k4, k1, k6, k2, k5), list(k6, k1, k4, k3, k5, k2)));
 		// Aaron Zed, mlee, Zoe Abe: by name, not username, as Author sorts; a blank kept username is no one
 		orders.put(Sort.TYPIST, List.of(list(k2, k5, k3, k1, k4, k6), list(k1, k3, k5, k2, k6, k4)));
-		orders.put(Sort.FROM, List.of(list(k2, k3, k6, k1, k4, k5), list(k1, k6, k3, k2, k5, k4)));
-		orders.put(Sort.TO, List.of(list(k4, k3, k5, k1, k2, k6), list(k1, k5, k3, k4, k6, k2)));
-		orders.put(Sort.SENT, List.of(list(k5, k2, k1, k4, k3, k6), list(k4, k1, k2, k5, k6, k3)));
+		// The emails alone, k2 to k4: what k1, k5 and k6 hold, which their rows leave blank, sorts as none
+		orders.put(Sort.FROM, List.of(list(k2, k3, k4, k1, k5, k6), list(k4, k3, k2, k6, k5, k1)));
+		orders.put(Sort.TO, List.of(list(k4, k3, k1, k2, k5, k6), list(k3, k4, k6, k5, k2, k1)));
+		orders.put(Sort.SENT, List.of(list(k2, k4, k1, k3, k5, k6), list(k4, k2, k6, k5, k3, k1)));
 		// Every sort the columns added
 		assertEquals(EnumSet.complementOf(EnumSet.of(Sort.TITLE, Sort.DOC_NUMBER, Sort.VERSION, Sort.AUTHOR,
 				Sort.EDITED)), EnumSet.copyOf(orders.keySet()));
