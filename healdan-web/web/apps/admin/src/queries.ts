@@ -59,7 +59,10 @@ export const adminKeys = {
   nextMatterNumber: (clientId: number) => adminKey('/v1/admin/matters/next-number', { clientId }),
   /** New Matter's checks of its form, each by the form it checked, under `matters` too */
   matterCheck: [...adminKey('/v1/admin/matters'), 'check'] as const,
-  /** Every Store menu, and who can see each Store */
+  /**
+   * The Stores, for every Store menu and the Stores list, and, under it, each Store's page, who can see it, its backend and
+   * the Stores in the Trash (stores/queries.ts reads them)
+   */
   stores: adminKey('/v1/admin/stores'),
   storeAccess: (id: number) => [...adminKey('/v1/admin/stores'), id, 'access'] as const,
   // The templates' and the workspaces' keys, and their reads, are workspace/queries.ts's
@@ -111,9 +114,17 @@ export function useUsage() {
   return useAdminQuery('/v1/admin/dashboard/usage', { poll: true, query: { zone: Intl.DateTimeFormat().resolvedOptions().timeZone } })
 }
 
-/** Every Store, by name: a short list, for the Store menus (spec 7.2) */
+/**
+ * Every Store, by name: a short list (spec 7.2), for the Store menus, which read each one's id and name, and for the Stores
+ * list, which shows the rest. Each return to the window asks again however fresh it is, as the list's files change.
+ */
 export function useStores() {
-  return useAdminQuery('/v1/admin/stores')
+  const api = useApi()
+  return useQuery({
+    queryKey: adminKeys.stores,
+    queryFn: ({ signal }) => api.get<AdminAnswer<'/v1/admin/stores'>>('/v1/admin/stores', undefined, { signal }),
+    meta: ASK_ON_RETURN,
+  })
 }
 
 /**

@@ -113,8 +113,69 @@ export const kestrel: A['ClientBrief'] = { id: 3, number: 1003, name: 'Kestrel S
 
 export const firmStore: A['Store'] = { id: 3, name: 'Firm' }
 export const clientWork: A['Store'] = { id: 4, name: 'Client Work' }
-/** GET /v1/admin/stores: by name */
-export const stores: A['Store'][] = [clientWork, firmStore]
+
+/** The backends the Stores keep their files on, as a Store names one */
+export const originalOnStore: A['StoreBackend'] = { id: 1, name: 'Original', kind: 'local', encrypted: false }
+export const wasabiOnStore: A['StoreBackend'] = { id: 2, name: 'Wasabi EU', kind: 's3', encrypted: true }
+
+/** Nothing waiting to reach a Store's backend, and nothing stuck */
+export const nothingPending: A['PendingFiles'] = { waiting: 0, waitingBytes: 0, stuck: 0 }
+
+/** A Store as the Stores list and its page give it: on Original, with nothing in it, unless `over` says otherwise */
+export function storeInfoOf(store: A['Store'], over: Partial<A['StoreInfo']> = {}): A['StoreInfo'] {
+  return { ...store, matters: 0, documents: 0, bytes: 0, figuresAt: '2026-11-19T10:41:00Z', readers: [], backend: originalOnStore, pending: nothingPending, ...over }
+}
+
+/** Client Work: six matters on Wasabi EU, encrypted, that Everyone can see, with three files stuck */
+export const clientWorkInfo = storeInfoOf(clientWork, {
+  matters: 6,
+  documents: 1004,
+  bytes: Math.round(11.8 * GB),
+  readers: [{ groupId: 2, name: 'Everyone', person: false }],
+  backend: wasabiOnStore,
+  pending: { waiting: 0, waitingBytes: 0, stuck: 3 },
+})
+
+/** Firm: two matters on Original, that Everyone and Helen can see, everything in place */
+export const firmInfo = storeInfoOf(firmStore, {
+  matters: 2,
+  documents: 280,
+  bytes: Math.round(2.4 * GB),
+  readers: [
+    { groupId: 2, name: 'Everyone', person: false },
+    { groupId: 105, name: 'Helen Ashcombe', person: true },
+  ],
+})
+
+/** GET /v1/admin/stores: by name, each with what the Stores list shows; the menus read only the id and the name */
+export const stores: A['StoreInfo'][] = [clientWorkInfo, firmInfo]
+
+/** A Store in the Trash: Old Branch, deleted by Sam with its two matters, unless `over` says otherwise */
+export function deletedStoreOf(over: Partial<A['DeletedStore']> = {}): A['DeletedStore'] {
+  return {
+    id: 6,
+    name: 'Old Branch',
+    trashItemId: 950,
+    state: 'deleted',
+    matters: 2,
+    deletedAt: '2026-11-18T15:00:00Z',
+    deletedBy: { id: 10, username: 'sam', name: 'Sam Okafor' },
+    removedAt: null,
+    destroyAfter: null,
+    ...over,
+  }
+}
+
+/** A Store's backend and files, as GET /v1/admin/stores/{id}/backend answers without a backend to count a move to */
+export function storeStorageOf(info: A['StoreInfo'], over: Partial<A['StoreStorage']> = {}): A['StoreStorage'] {
+  return { storeId: info.id, on: info.backend !== null, backend: info.backend, files: 0, bytes: 0, pending: info.pending ?? nothingPending, switchPreview: null, ...over }
+}
+
+/** Client Work's 3,902 files on Wasabi EU, and Firm's 812 on Original */
+export const storeStorage: Record<number, A['StoreStorage']> = {
+  [clientWork.id]: storeStorageOf(clientWorkInfo, { files: 3902, bytes: Math.round(11.8 * GB) }),
+  [firmStore.id]: storeStorageOf(firmInfo, { files: 812, bytes: Math.round(2.4 * GB) }),
+}
 
 export const helen: A['PersonBrief'] = { id: 5, username: 'helen', name: 'Helen Ashcombe' }
 export const tom: A['PersonBrief'] = { id: 6, username: 'tom', name: 'Tom Reeve' }
@@ -612,6 +673,36 @@ export function storageRoutes(): Routes {
 }
 
 /**
+ * What the Stores list and a Store's page read, as the defaults answer them: Client Work and Firm, none in the Trash, each
+ * Store's backend and files (with what a switch to another backend would move: every file not on it, as the server
+ * counts them), no stuck files listed, and who can see each Store, its readers, each at Can See.
+ */
+export function storeRoutes(): Routes {
+  const byId = (params: string[]) => stores.find((one) => one.id === Number(params[0]))
+  return {
+    // Before /deleted, which it matches too: of two routes that match, the later wins
+    'GET /v1/admin/stores/*': ({ params }: { params: string[] }) => byId(params) ?? notFound(),
+    'GET /v1/admin/stores/deleted': [],
+    'GET /v1/admin/stores/*/backend': ({ params, query }: { params: string[]; query?: Record<string, unknown> }) => {
+      const storage = storeStorage[Number(params[0])]
+      if (storage === undefined) return notFound()
+      if (query?.backendId === undefined) return storage
+      const backendId = Number(query.backendId)
+      const moving = storage.backend?.id === backendId ? { files: 0, bytes: 0 } : { files: storage.files, bytes: storage.bytes }
+      return { ...storage, switchPreview: { backendId, ...moving } } satisfies A['StoreStorage']
+    },
+    'GET /v1/admin/stores/*/stuck-files': [],
+    'GET /v1/admin/stores/*/access': ({ params }: { params: string[] }) => {
+      const store = byId(params)
+      // A Store the fixtures don't hold is new, and lets nobody in but the administrators
+      if (store === undefined) return { storeId: Number(params[0]), rows: [] } satisfies A['StoreAccess']
+      const rows = store.readers.map((reader) => accessRow(reader.groupId, reader.name, ['read'], reader.person ? reader.groupId - 100 : null))
+      return { storeId: store.id, rows } satisfies A['StoreAccess']
+    },
+  }
+}
+
+/**
  * What a matter's page and a template's read, to spread over the defaults: matter 11 (1001.1), the templates, the
  * workspaces' trees, their folders' access and values, their search folders, the groups, and what a folder holds.
  */
@@ -668,7 +759,7 @@ export function defaultRoutes(): Routes {
     'GET /v1/admin/templates': templates,
     'GET /v1/admin/workspaces/*/tree': ({ params }: { params: string[] }) => templateTrees[Number(params[0])] ?? problem(404, 'not-found'),
     'GET /v1/admin/groups': ({ query }: { query?: Record<string, unknown> }) => groups(query),
-    'GET /v1/admin/stores/*/access': ({ params }: { params: string[] }) => ({ storeId: Number(params[0]), rows: [] }) satisfies A['StoreAccess'],
+    ...storeRoutes(),
     ...storageRoutes(),
   }
 }

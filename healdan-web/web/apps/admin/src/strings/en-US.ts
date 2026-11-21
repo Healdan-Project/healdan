@@ -203,7 +203,7 @@ export const adminEnUS = {
   // Once a matter is made: its number and name
   'admin.newMatter.created': 'Created {number} – {name}',
 
-  // New Store (spec 8.6): its name and who can see it; a new Store keeps its files on Original (the plan's Spec Correction 1)
+  // New Store (spec 8.6): its name, who can see it, and the backend it keeps its files on
   'admin.newStore.title': 'New Store',
   'admin.newStore.name': 'Name',
   'admin.newStore.who': 'Who Can See It',
@@ -213,7 +213,8 @@ export const adminEnUS = {
   'admin.newStore.find': 'Find a group',
   'admin.newStore.hint': 'Find a group by its name. Each group added can see the Store.',
   'admin.newStore.groups': 'Groups',
-  'admin.newStore.backend': "Its files are kept on Original, the server's own storage, until its storage backend is changed.",
+  'admin.newStore.backend': 'Backend',
+  'admin.newStore.backendNote': "A backend is offered once it can be used: an encrypted one once its recovery key is confirmed. It can be changed later, on the Store's page.",
   'admin.newStore.create': 'Create Store',
   'admin.newStore.created': 'Created {name}',
 
@@ -652,6 +653,124 @@ export const adminEnUS = {
   'admin.stuck.retried': 'The stuck files of {name} wait to move again',
   'admin.stuck.otherRetried': 'The stuck files with no Store wait to move again',
 
+  // The Stores list (spec 8.6): each Store with its backend, figures, who can read it and its files, and the deleted ones
+  'admin.nav.stores': 'Stores',
+  'admin.stores.title': 'Stores',
+  'admin.stores.new': 'New Store',
+  'admin.stores.refresh': 'Refresh',
+  'admin.stores.column.name': 'Store',
+  'admin.stores.column.backend': 'Backend',
+  'admin.stores.column.matters': '{matters}',
+  'admin.stores.column.documents': 'Documents',
+  'admin.stores.column.size': 'Size',
+  'admin.stores.column.readers': 'Who Can Read',
+  'admin.stores.column.files': 'Files',
+  // A backend, as a Store names it
+  'admin.stores.encrypted': '{name} (Encrypted)',
+  // Who can read a Store that lets nobody in but the administrators
+  'admin.stores.adminsOnly': 'Administrators Only',
+  // A Store's files: each on its backend, or some still to move there, or some the mover gave up on
+  'admin.stores.files.upToDate': 'Up to Date',
+  'admin.stores.files.stuck': '{files} stuck',
+  'admin.stores.files.waiting': '{files} waiting',
+  'admin.stores.files.waitingSize': '{files} waiting ({size})',
+  'admin.stores.files.both': '{stuck}, {waiting}',
+  'admin.stores.figuresAt': 'Documents and Size as of {when}',
+  'admin.stores.figuresPending': "Documents and Size haven't been worked out since the server started. They show here within a few minutes.",
+  'admin.stores.storageOff': "Storage backends aren't in use on this server, so every Store keeps its files in LogicalDOC's own store.",
+  'admin.stores.none': 'No Store has been made yet.',
+
+  // The Stores in the Trash, under the list, each with Restore
+  'admin.deletedStores.title': 'Deleted Stores',
+  'admin.deletedStores.about': 'Each went to the Trash with everything in it, and Restore brings it back with everything its delete took.',
+  'admin.deletedStores.none': 'No Store is in the Trash.',
+  'admin.deletedStores.column.name': 'Store',
+  'admin.deletedStores.column.deletedAt': 'Deleted',
+  'admin.deletedStores.column.deletedBy': 'Deleted By',
+  'admin.deletedStores.column.matters': '{matters}',
+  'admin.deletedStores.column.state': 'Where It Is',
+  'admin.deletedStores.column.restore': 'Restore',
+  // Who deleted it, when the server's data doesn't say, or their account has been deleted
+  'admin.deletedStores.byUnknown': 'Not Known',
+  'admin.deletedStores.deleted': 'In the Trash',
+  'admin.deletedStores.removed': 'Removed from the Trash; destroyed for good after {when}',
+  'admin.deletedStores.removedUndated': 'Removed from the Trash',
+  'admin.deletedStores.restore': 'Restore',
+  'admin.deletedStores.restoreName': 'Restore {name}',
+  'admin.restoreStore.title': 'Restore {name}?',
+  'admin.restoreStore.with': '{name} comes back under the root, with its {count} and everything else its delete took.',
+  'admin.restoreStore.withAll': '{name} comes back under the root, with everything its delete took.',
+  'admin.restoreStore.alone': 'Anything deleted on its own before the Store was stays in the Trash.',
+  'admin.restoreStore.confirm': 'Restore',
+  'admin.restoreStore.done': 'Restored {name}',
+
+  // A Store's page (spec 8.6): its facts, its actions, and its tabs
+  'admin.store.rename': 'Rename',
+  'admin.store.changeBackend': 'Change Backend',
+  'admin.store.delete': 'Delete',
+  'admin.store.backend': 'Backend',
+  'admin.store.files': 'Files',
+  'admin.store.matters': '{matters}',
+  'admin.store.documents': 'Documents',
+  'admin.store.size': 'Size',
+  'admin.store.readers': 'Who Can Read',
+  // A figure the summary hasn't given since the server started
+  'admin.store.pending': 'Not worked out yet',
+  'admin.store.tabs': 'Sections',
+  'admin.store.tab.matters': '{matters}',
+  'admin.store.tab.access': 'Who Can See It',
+  'admin.store.tab.storage': 'Storage',
+  'admin.store.mattersOf': '{matters} in {name}',
+  'admin.store.noMatters': 'No {matterLower} is in this Store yet.',
+  'admin.store.notFound.title': 'Store Not Found',
+  'admin.store.notFound.message': "There's no such Store, or it's in the Trash.",
+  'admin.store.notFound.stores': 'Go to Stores',
+
+  // Rename, which takes the Store's name alone: its matters keep theirs
+  'admin.renameStore.title': 'Rename {name}',
+  'admin.renameStore.name': 'Name',
+  'admin.renameStore.taken': "There's already a Store called {name}.",
+  'admin.renameStore.rename': 'Rename',
+  'admin.renameStore.done': 'Renamed {before} to {after}',
+
+  // Delete, which asks first, naming the matters it takes (spec 8.6)
+  'admin.deleteStore.title': 'Move {name} to the Trash?',
+  'admin.deleteStore.holds': '{name} goes to the Trash with everything in it: its {count}, and everything in them. Their numbers stay taken.',
+  'admin.deleteStore.empty': '{name} goes to the Trash. It holds no {matterLower}.',
+  'admin.deleteStore.restore': 'It can be restored, with everything it took, from Deleted Stores on the Stores page.',
+  'admin.deleteStore.confirm': 'Move to Trash',
+  'admin.deleteStore.done': 'Moved {name} to the Trash',
+
+  // Who Can See It: a Store's one level, Can See (Read), for each group and person
+  'admin.storeAccess.title': 'Who Can See This Store',
+  'admin.storeAccess.list': 'Who Can See {name}',
+  'admin.storeAccess.about': 'Each group and person listed can see the Store, the one level a Store has. Whoever can read a {matterLower} in it has to be able to see it too.',
+  'admin.storeAccess.custom': 'Custom',
+  'admin.storeAccess.customNote': 'Custom: it has permissions besides Read on the Store, which Save keeps.',
+  'admin.storeAccess.save': 'Save',
+  'admin.storeAccess.discard': 'Discard Changes',
+  'admin.storeAccess.saved': 'Saved who can see {name}',
+
+  // A Store's storage: its backend and its files, and the stuck ones with Retry
+  'admin.storeStorage.about': "Its files move to its backend in the background, and each is read from where it is until it has moved.",
+  'admin.storeStorage.backend': 'Backend',
+  'admin.storeStorage.holds': 'Holds',
+  'admin.storeStorage.waiting': 'Waiting to Move',
+  'admin.storeStorage.stuck': 'Stuck',
+  'admin.storeStorage.stuckTitle': 'Stuck Files',
+  'admin.storeStorage.retry': 'Retry',
+  'admin.storeStorage.off': "Storage backends are off on this server: it keeps every file in LogicalDOC's own store.",
+
+  // Change Backend: the backends a Store can be given, and what would move, said before the change
+  'admin.switchBackend.title': 'Change the Backend of {name}',
+  'admin.switchBackend.backend': 'Backend',
+  'admin.switchBackend.current': 'Where its files are kept now.',
+  'admin.switchBackend.counting': 'Counting the files that would move…',
+  'admin.switchBackend.moves': "{files} ({size}) will move to {backend} in the background. Until each has moved, it's read from where it is now.",
+  'admin.switchBackend.atOnce': 'No file has to move, so the change takes effect at once.',
+  'admin.switchBackend.confirm': 'Change Backend',
+  'admin.switchBackend.done': '{store} now keeps its files on {backend}',
+
   // The problems only the admin API answers, which the shared catalogue doesn't hold
   'problems.storage-unavailable': "This server doesn't have Healdan's storage module.",
   'problems.secret-key-missing': "Healdan's secret key file is missing.",
@@ -678,6 +797,8 @@ export const adminPlurals = {
   'admin.usage.filed': { one: '{n} filed', other: '{n} filed' },
   // Beside the Clients list's title
   'admin.clients.count': { one: '{n} Client', other: '{n} Clients' },
+  // Beside the Stores list's title
+  'admin.stores.count': { one: '{n} Store', other: '{n} Stores' },
   // A matter's Overview: what's stuck or failing in it
   'admin.matter.indexFailed': {
     one: "{n} document couldn't be indexed, so search won't find its text",

@@ -35,7 +35,7 @@ async function renderPane(nav: readonly NavGroup[], routes: Routes = {}) {
 }
 
 describe('The left pane', () => {
-  it('shows only the screens that have shipped: the Dashboard, Clients, Matters and Workspace Templates under Firm, Backends under Storage, and the Classic Interface at its foot', async () => {
+  it('shows only the screens that have shipped: the Dashboard, Clients, Matters and Workspace Templates under Firm, Stores and Backends under Storage, and the Classic Interface at its foot', async () => {
     const { view } = await renderApp('/')
     const links = within(pane()).getAllByRole('link')
     expect(links.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
@@ -43,6 +43,7 @@ describe('The left pane', () => {
       ['Clients', '/admin/clients'],
       ['Matters', '/admin/matters'],
       ['Workspace Templates', '/admin/templates'],
+      ['Stores', '/admin/stores'],
       ['Backends', '/admin/backends'],
       ['Classic Interface', '/frontend.jsp'],
     ])
