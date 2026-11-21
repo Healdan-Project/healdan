@@ -47,7 +47,7 @@ import com.logicaldoc.healdan.admin.dashboard.DashboardService.Space;
 import com.logicaldoc.healdan.admin.errors.CapturedError;
 import com.logicaldoc.healdan.admin.errors.ErrorStore;
 import com.logicaldoc.healdan.admin.jobs.JobStatus;
-import com.logicaldoc.healdan.admin.storage.StorageAdministration;
+import com.logicaldoc.healdan.admin.storage.OverviewPort;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageSettingsInfo;
@@ -72,6 +72,13 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 
 	private static final String CLASSIC = "/frontend.jsp";
 
+	private static final String BACKENDS = "/admin/backends";
+
+	/** The links to the Admin app's screens, by attention code and tile name; every other is the Classic Interface */
+	private static final Map<String, String> LINKS = Map.of(AttentionItem.FILES_STUCK, "/admin/stores",
+			AttentionItem.BACKEND_UNREACHABLE, BACKENDS, AttentionItem.DISK_LOW, BACKENDS, HealthTile.STORAGE_BACKENDS,
+			BACKENDS, HealthTile.DISK, BACKENDS);
+
 	private final HealdanFixtures fx = new HealdanFixtures();
 
 	private DashboardService service;
@@ -94,7 +101,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		service = DashboardService.get();
 		jdbc = new JdbcTemplate(Context.get(DataSource.class));
 		overview = overview(List.of(backend(1, "Original", BackendInfo.OK)), List.of(), 0);
-		service.ports = () -> List.of(() -> overview);
+		service.ports = () -> List.of(OverviewPort.of(() -> overview));
 		service.disks = folder -> {
 			ContextProperties config = Context.get().getConfig();
 			for (Map.Entry<String, Space> space : spaces.entrySet())
@@ -180,7 +187,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 
 		// files-stuck and backend-unreachable, from the storage port
 		overview = overview(List.of(backend(1, "Original", BackendInfo.OK), backend(2, "Wasabi EU", BackendInfo.UNREACHABLE)),
-				List.of(new StoreBackendInfo(10, "Client Work", 2, "Wasabi EU", 3, 3, 40, 4000)), 0);
+				List.of(new StoreBackendInfo(10, "Client Work", 2, "Wasabi EU", 3, 300, 3, 40, 4000)), 0);
 		// index-failed: a document whose latest try failed
 		Document document = unindexable();
 		// errors: one unresolved in the last 24 hours; one resolved, and one older, don't count
@@ -229,9 +236,10 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		assertEquals(1, disk.count());
 		assertEquals("Repository 86% full", disk.detail());
 
-		// Every screen they're fixed on is still the Classic Interface's, and every line says something
+		// Stuck files are fixed on the Stores screen and the storage's on the Backends screen, both the Admin app's;
+		// the rest on the Classic Interface's still. Every line says something
 		for (AttentionItem item : dashboard.attention()) {
-			assertEquals(item.code(), CLASSIC, item.link());
+			assertEquals(item.code(), LINKS.getOrDefault(item.code(), CLASSIC), item.link());
 			assertFalse(item.code(), item.detail().isBlank());
 		}
 	}
@@ -242,9 +250,9 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		overview = overview(
 				List.of(backend(1, "Original", BackendInfo.OK), backend(2, "Wasabi EU", BackendInfo.UNREACHABLE),
 						backend(3, "Backup", BackendInfo.FAILING), backend(4, "New", BackendInfo.UNCHECKED)),
-				List.of(new StoreBackendInfo(10, "Client Work", 2, "Wasabi EU", 3, 3, 40, 4000),
-						new StoreBackendInfo(11, "Firm", 3, "Backup", 1, 1, 5, 500),
-						new StoreBackendInfo(12, "Quiet", 1, "Original", 0, 0, 5, 500)),
+				List.of(new StoreBackendInfo(10, "Client Work", 2, "Wasabi EU", 3, 300, 3, 40, 4000),
+						new StoreBackendInfo(11, "Firm", 3, "Backup", 1, 100, 1, 5, 500),
+						new StoreBackendInfo(12, "Quiet", 1, "Original", 0, 0, 0, 5, 500)),
 				2);
 
 		Dashboard dashboard = read();
@@ -269,7 +277,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 			assertNull(tile.name() + ": " + tile.problem(), tile.problem());
 			assertNotNull(tile.name(), tile.detail());
 			assertTrue(tile.name(), Set.of(HealthTile.OK, HealthTile.ATTENTION, HealthTile.OFF).contains(tile.status()));
-			assertEquals(tile.name(), CLASSIC, tile.link());
+			assertEquals(tile.name(), LINKS.getOrDefault(tile.name(), CLASSIC), tile.link());
 		}
 
 		HealthTile server = tile(dashboard, HealthTile.SERVER);
@@ -346,7 +354,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testAFailingPartDoesNotFailTheRest() throws Exception {
-		StorageAdministration failing = () -> {
+		OverviewPort failing = () -> {
 			throw new PersistenceException("hd_storage_file is gone");
 		};
 		service.ports = () -> List.of(failing);
@@ -360,7 +368,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		assertNull(storage.detail());
 		assertNull(storage.used());
 		assertNull(storage.total());
-		assertEquals(CLASSIC, storage.link());
+		assertEquals(BACKENDS, storage.link());
 
 		List<HealthTile> others = new ArrayList<>(dashboard.health());
 		others.remove(storage);
@@ -410,7 +418,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
-			return List.of(() -> overview);
+			return List.of(OverviewPort.of(() -> overview));
 		};
 		try {
 			long started = System.nanoTime();
@@ -457,7 +465,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		// The port says they're off, as on an FSStore server
 		StorageOverview offOverview = new StorageOverview(false, List.of(), List.of(), new StorageSettingsInfo(30, 10, 4),
 				0, 0, 0);
-		service.ports = () -> List.of(() -> offOverview);
+		service.ports = () -> List.of(OverviewPort.of(() -> offOverview));
 		Dashboard portOff = read();
 		assertEquals(List.of(), portOff.unchecked());
 		assertEquals(HealthTile.OFF, tile(portOff, HealthTile.STORAGE_BACKENDS).status());
@@ -539,7 +547,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		AtomicInteger asked = new AtomicInteger();
 		service.ports = () -> {
 			asked.incrementAndGet();
-			return List.of(() -> overview);
+			return List.of(OverviewPort.of(() -> overview));
 		};
 		assertEquals(List.of(), read().attention());
 		assertEquals(1, asked.get());
@@ -547,7 +555,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		// News for two sources: a document that couldn't be indexed, and files stuck on the storage port
 		unindexable();
 		overview = overview(List.of(backend(1, "Original", BackendInfo.OK), backend(2, "Wasabi EU", BackendInfo.OK)),
-				List.of(new StoreBackendInfo(10, "Client Work", 2, "Wasabi EU", 3, 3, 40, 4000)), 0);
+				List.of(new StoreBackendInfo(10, "Client Work", 2, "Wasabi EU", 3, 300, 3, 40, 4000)), 0);
 		Dashboard kept = service.read();
 		assertEquals(List.of(), kept.attention());
 		assertEquals("None waiting, none failed", tile(kept, HealthTile.SEARCH_INDEX).detail());

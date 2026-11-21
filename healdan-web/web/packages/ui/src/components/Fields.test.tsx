@@ -18,6 +18,32 @@ describe('Fields', () => {
     await expectNoAxeViolations(container)
   })
 
+  it('ties a description to its field, under its label, as a screen reader reads it after the name', async () => {
+    const { container } = render(<TextField label="Read Cache (GB)" value="20" onChange={() => {}} description="From 1 to 10,000." />)
+    const input = screen.getByRole('textbox', { name: 'Read Cache (GB)' })
+    const described = (input.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent)
+    expect(described).toContain('From 1 to 10,000.')
+    await expectNoAxeViolations(container)
+  })
+
+  it('hides what is typed in a secret, which the browser neither fills nor keeps', async () => {
+    const onChange = vi.fn()
+    const { container } = render(<TextField label="Secret" type="password" autoComplete="new-password" value="" onChange={onChange} />)
+    const input = screen.getByLabelText('Secret')
+    expect(input.getAttribute('type')).toBe('password')
+    expect(input.getAttribute('autocomplete')).toBe('new-password')
+    await userEvent.type(input, 'x')
+    expect(onChange).toHaveBeenCalledWith('x')
+    await expectNoAxeViolations(container)
+  })
+
+  it('takes the browser off filling a field that holds a code, such as a key', () => {
+    render(<TextField label="Recovery Key" autoComplete="off" value="" onChange={() => {}} />)
+    const input = screen.getByRole('textbox', { name: 'Recovery Key' })
+    expect(input.getAttribute('autocomplete')).toBe('off')
+    expect(input.getAttribute('spellcheck')).toBe('false')
+  })
+
   it('reports what is typed', async () => {
     const onChange = vi.fn()
     render(<TextField label="Comments" value="" onChange={onChange} />)

@@ -40,9 +40,9 @@ import jakarta.ws.rs.Path;
 public class RouteCoverageTest extends AbstractHealdanTestCase {
 
 	/**
-	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them; none
-	 * now. Each must be described and not implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and
-	 * leaves the list once it's implemented.
+	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them, as
+	 * Phase 3's Stores and Storage routes were (Admin app ruling P3-R2): none now. Each must be described and not
+	 * implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and leaves the list once it's implemented.
 	 */
 	static final Set<String> DESCRIBED_AHEAD = Set.of();
 

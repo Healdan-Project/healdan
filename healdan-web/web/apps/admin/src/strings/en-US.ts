@@ -203,7 +203,7 @@ export const adminEnUS = {
   // Once a matter is made: its number and name
   'admin.newMatter.created': 'Created {number} – {name}',
 
-  // New Store (spec 8.6): its name and who can see it; a new Store keeps its files on Original (the plan's Spec Correction 1)
+  // New Store (spec 8.6): its name, who can see it, and the backend it keeps its files on
   'admin.newStore.title': 'New Store',
   'admin.newStore.name': 'Name',
   'admin.newStore.who': 'Who Can See It',
@@ -213,7 +213,8 @@ export const adminEnUS = {
   'admin.newStore.find': 'Find a group',
   'admin.newStore.hint': 'Find a group by its name. Each group added can see the Store.',
   'admin.newStore.groups': 'Groups',
-  'admin.newStore.backend': "Its files are kept on Original, the server's own storage, until its storage backend is changed.",
+  'admin.newStore.backend': 'Backend',
+  'admin.newStore.backendNote': "A backend is offered once it can be used: an encrypted one once its recovery key is confirmed. It can be changed later, on the Store's page.",
   'admin.newStore.create': 'Create Store',
   'admin.newStore.created': 'Created {name}',
 
@@ -468,7 +469,312 @@ export const adminEnUS = {
   'admin.deleteTemplate.trash': "Healdan's Trash will list it but can't put it back in the Templates Store; the Classic Interface's Trash can.",
   'admin.deleteTemplate.confirm': 'Move to Trash',
   'admin.deleteTemplate.done': 'Moved the template {name} to the Trash',
-} as const satisfies Record<`admin.${string}`, string>
+
+  // The Backends list (spec 8.6): each storage backend, as the Storage tab shows it, the files with no Store, and the settings
+  'admin.nav.backends': 'Backends',
+  'admin.backends.title': 'Backends',
+  'admin.backends.add': 'Add Backend',
+  'admin.backends.refresh': 'Refresh',
+  'admin.backends.about': 'Each backend is a place files are kept: a folder on this server, or a bucket at an S3 service. Each Store keeps its files on one backend.',
+  'admin.backends.off': "Storage backends are off on this server: it keeps every file in LogicalDOC's own store, so nothing here applies.",
+  'admin.backends.unavailable': "The Backends screen can't be shown on this server, as it doesn't have Healdan's storage module.",
+  'admin.backends.none': 'No backends.',
+  'admin.backends.column.name': 'Name',
+  'admin.backends.column.kind': 'Kind',
+  'admin.backends.column.where': 'Where',
+  'admin.backends.column.encrypted': 'Encrypted',
+  'admin.backends.column.files': 'Files',
+  'admin.backends.column.size': 'Size',
+  'admin.backends.column.status': 'Status',
+  'admin.backends.column.keyShown': 'Key Last Shown',
+  'admin.backends.kind.local': 'Local Folder',
+  'admin.backends.kind.s3': 'S3',
+  'admin.backends.yes': 'Yes',
+  'admin.backends.no': 'No',
+  // A backend's status, from its last use, Test or check
+  'admin.backends.status.ok': 'OK',
+  'admin.backends.status.unreachable': "Can't Be Reached",
+  'admin.backends.status.failing': 'Failing',
+  'admin.backends.status.unchecked': 'Not Checked Yet',
+  'admin.backends.status.since': '{status} since {when}',
+  'admin.backends.status.why': '{status}: {error}',
+  'admin.backends.notOffered': "Its recovery key isn't confirmed, so no Store can use it yet.",
+  // An S3 backend's place: its bucket and prefix at its endpoint
+  'admin.backends.where.s3': '{bucket}/{prefix} at {endpoint}',
+  // When its endpoint can't be read
+  'admin.backends.where.s3Bucket': '{bucket}/{prefix}',
+  'admin.backends.keyShown': '{when} to {username}',
+  'admin.backends.keyNever': 'Never',
+  // The files whose document isn't in a Store, the Storage tab's Other Files
+  'admin.backends.other.title': 'Files with No Store',
+  'admin.backends.other.about': "Files whose document isn't in a Store, such as one saved before it had a folder. They have no backend to choose.",
+  'admin.backends.other.waiting': 'Waiting to Move',
+  'admin.backends.other.stuck': 'Stuck',
+  'admin.backends.other.none': 'None',
+  'admin.backends.other.size': '{files} ({size})',
+  'admin.backends.other.stuckFiles': 'Stuck Files',
+  'admin.backends.other.retry': 'Retry',
+
+  // The storage settings, under the Backends list
+  'admin.storageSettings.title': 'Settings',
+  'admin.storageSettings.holdDays': 'Holding Period (Days)',
+  'admin.storageSettings.holdDaysNote': "How many days a file's old copy is held after a move or a delete before it's purged, from {min} to {max}.",
+  'admin.storageSettings.cacheGb': 'Read Cache (GB)',
+  'admin.storageSettings.cacheGbNote': "How much of S3 backends' files this server keeps for reading, from {min} to {max} GB.",
+  'admin.storageSettings.transfers': 'Parallel Transfers',
+  'admin.storageSettings.transfersNote': 'How many files move between backends at once, from {min} to {max}.',
+  'admin.storageSettings.range': 'Enter a whole number from {min} to {max}.',
+  'admin.storageSettings.save': 'Save',
+  'admin.storageSettings.saved': 'Saved the storage settings',
+
+  // A backend's page (spec 8.6): its status, facts and actions
+  'admin.backend.test': 'Test',
+  'admin.backend.edit': 'Edit',
+  'admin.backend.remove': 'Remove',
+  'admin.backend.showKey': 'Show Recovery Key',
+  'admin.backend.confirmKey': 'Confirm Recovery Key',
+  'admin.backend.enterKey': 'Enter Recovery Key',
+  'admin.backend.keyHistory': 'Key History',
+  'admin.backend.kind': 'Kind',
+  'admin.backend.where': 'Where',
+  'admin.backend.holds': 'Holds',
+  'admin.backend.holdsWhat': '{files} · {size}',
+  'admin.backend.encrypted': 'Encrypted',
+  'admin.backend.key': 'Recovery Key',
+  'admin.backend.keyConfirmed': 'Confirmed',
+  'admin.backend.keyNotConfirmed': 'Not Confirmed',
+  'admin.backend.keyShown': 'Key Last Shown',
+  'admin.backend.stores': 'Stores',
+  'admin.backend.noStores': 'None',
+  'admin.backend.original': "Original is the folder the server has always kept files in. Its folder comes from the server's configuration, so only its name changes here, and it can't be removed: it keeps the files of every Store that has no other backend.",
+  'admin.backend.passed': 'Test passed.',
+  'admin.backend.notFound.title': 'Backend Not Found',
+  'admin.backend.notFound.message': "There's no such backend.",
+  'admin.backend.notFound.backends': 'Go to Backends',
+
+  // Remove, which asks first
+  'admin.removeBackend.title': 'Remove {name}?',
+  'admin.removeBackend.only': "Only a backend no Store uses, with no file recorded on it and no copy held there, can be removed. It can't be undone.",
+  'admin.removeBackend.place': 'Its settings leave Healdan, and its marker is deleted from its place, so another backend can have it. The folder or bucket itself stays, with anything else in it.',
+  'admin.removeBackend.key': 'Its key file is deleted too. The record of its recovery key\'s showings stays.',
+  'admin.removeBackend.confirm': 'Remove',
+  'admin.removeBackend.done': 'Removed {name}',
+
+  // Add Backend and Edit: a folder's path, or an S3 bucket's settings, tested before they're saved
+  'admin.backendDialog.addTitle': 'Add a Storage Backend',
+  'admin.backendDialog.editTitle': 'Edit {name}',
+  'admin.backendDialog.kind': 'Kind',
+  'admin.backendDialog.name': 'Name',
+  'admin.backendDialog.originalName': 'Original can be renamed, but nothing else about it changes.',
+  'admin.backendDialog.path': 'Path',
+  'admin.backendDialog.pathNote': "The folder's whole path in the server's container, from /, such as /mnt/archive.",
+  'admin.backendDialog.endpoint': 'Endpoint',
+  'admin.backendDialog.endpointNote': "The service's address for the bucket's region, such as https://s3.eu-central-1.wasabisys.com.",
+  'admin.backendDialog.region': 'Region',
+  'admin.backendDialog.bucket': 'Bucket',
+  'admin.backendDialog.prefix': 'Prefix',
+  'admin.backendDialog.prefixNote': 'Optional: a folder in the bucket, so one bucket can serve several backends.',
+  'admin.backendDialog.accessKey': 'Access Key',
+  'admin.backendDialog.secret': 'Secret',
+  'admin.backendDialog.secretNote': "It's never shown again.",
+  'admin.backendDialog.secretSet': 'Set: leave empty to keep it.',
+  'admin.backendDialog.secretNotSet': 'Not Set: enter it again.',
+  'admin.backendDialog.pathStyle': 'Path-Style Addressing',
+  'admin.backendDialog.pathStyleNote': "The bucket in the address's path, not its host name, as some services need.",
+  'admin.backendDialog.encrypt': 'Encrypt',
+  'admin.backendDialog.encryptNote': "It can't change once the backend is added. An encrypted backend's recovery key is shown as soon as it's added.",
+  'admin.backendDialog.encrypted': 'Encrypted, chosen when the backend was added.',
+  'admin.backendDialog.notEncrypted': 'Not encrypted, chosen when the backend was added.',
+  // Why a setting shows as text, which can't change here
+  'admin.backendDialog.fixedFiles': "Can't change once files are there.",
+  'admin.backendDialog.fixedStores': "Can't change while a Store keeps its files here.",
+  'admin.backendDialog.fixedConfig': "From the server's configuration.",
+  // A bucket's prefix when it has none
+  'admin.backendDialog.noPrefix': 'None',
+  'admin.backendDialog.test': 'Test',
+  'admin.backendDialog.add': 'Add',
+  'admin.backendDialog.save': 'Save',
+  'admin.backendDialog.saveAnyway': 'Save Anyway',
+  'admin.backendDialog.passed': 'Test passed.',
+  'admin.backendDialog.notAdded': "Test failed, so the backend wasn't added.",
+  'admin.backendDialog.anyway': 'Save these settings anyway? The backend fails until they work.',
+  'admin.backendDialog.added': 'Added {name}',
+  'admin.backendDialog.saved': 'Saved {name}',
+  // When Healdan's secret key file is missing as an S3 secret is typed: what a new key costs, and the way not to
+  'admin.backendDialog.newKeyRestore': 'If it went missing by mistake, restore it from a backup and try again: nothing needs restarting, and nothing is lost.',
+  'admin.backendDialog.newKey': 'Make a New Key',
+
+  // An encrypted backend's recovery key: shown at its add, or asked for again; confirmed by its last group; entered; its history
+  'admin.recoveryKey.title': 'Recovery Key of {name}',
+  'admin.recoveryKey.saveNow': '{name} is encrypted. This is its recovery key: save it now, away from this server, in a password manager or on paper kept locked away.',
+  'admin.recoveryKey.why': "The files of {name} can be read only with its key file, in this server's configuration folder, or with this recovery key, which puts the key file back. Lose both, and its files are lost for good: nobody can read them, Healdan included.",
+  'admin.recoveryKey.notAgain': "It isn't shown again unless an administrator asks, and each showing is recorded.",
+  'admin.recoveryKey.key': 'Recovery Key',
+  'admin.recoveryKey.copy': 'Copy',
+  'admin.recoveryKey.copied': 'Copied the recovery key',
+  'admin.recoveryKey.askLast': "To show it's saved, type its last group of four characters. No Store can use {name} until you do.",
+  'admin.recoveryKey.lastGroup': 'Last Group',
+  'admin.recoveryKey.confirm': 'Confirm',
+  'admin.recoveryKey.later': 'Later',
+  'admin.recoveryKey.close': 'Close',
+  'admin.recoveryKey.confirmed': 'The recovery key of {name} is confirmed: Stores can use it',
+  'admin.recoveryKey.confirmTitle': 'Confirm the Recovery Key of {name}',
+  'admin.recoveryKey.confirmLine': 'Type the last group of four characters of its recovery key, from where it was saved. No Store can use {name} until you do.',
+  'admin.recoveryKey.showTitle': 'Show the Recovery Key of {name}?',
+  'admin.recoveryKey.showLine': "Each showing is recorded, with who and when, in its Key History, and the server's log says it was shown.",
+  'admin.recoveryKey.show': 'Show Recovery Key',
+  'admin.recoveryKey.enterTitle': 'Enter the Recovery Key of {name}',
+  'admin.recoveryKey.enterLine': "If the key file of {name} was lost or damaged, its recovery key puts it back. Healdan checks the key against the backend first, and writes nothing if it isn't the backend's.",
+  'admin.recoveryKey.enterField': 'Recovery Key',
+  'admin.recoveryKey.enterNote': '52 characters, in any case; spaces and hyphens are ignored.',
+  'admin.recoveryKey.enter': 'Enter',
+  'admin.recoveryKey.entered': 'The recovery key is right, and the key file of {name} is back',
+  'admin.recoveryKey.historyTitle': 'Key History of {name}',
+  'admin.recoveryKey.history.when': 'When',
+  'admin.recoveryKey.history.what': 'What',
+  'admin.recoveryKey.history.by': 'By',
+  'admin.recoveryKey.history.shown': 'Recovery Key Shown',
+  'admin.recoveryKey.history.entered': 'Recovery Key Entered',
+  'admin.recoveryKey.history.none': 'No showing or entering of its recovery key is recorded.',
+
+  // The files the mover gave up on, a Store's or those with no Store, with Retry
+  'admin.stuck.title': 'Stuck Files of {name}',
+  'admin.stuck.otherTitle': 'Stuck Files with No Store',
+  'admin.stuck.about': "The mover gave up on these files after ten failures in a row, and leaves each where it is, where it still opens, until it's retried. Put the cause right first, such as the S3 user's permissions or a full disk: Retry puts them all back to waiting, and they move with the others.",
+  'admin.stuck.listed': 'Listed: the files of the newest documents, {shown} of {stuck}.',
+  'admin.stuck.column.document': 'Document ID',
+  'admin.stuck.column.fileName': 'File Name',
+  'admin.stuck.column.resource': 'Resource',
+  'admin.stuck.column.attempts': 'Tries',
+  'admin.stuck.column.lastError': 'Last Error',
+  'admin.stuck.deleted': 'Document deleted',
+  'admin.stuck.none': 'No stuck files.',
+  'admin.stuck.retry': 'Retry',
+  'admin.stuck.retried': 'The stuck files of {name} wait to move again',
+  'admin.stuck.otherRetried': 'The stuck files with no Store wait to move again',
+
+  // The Stores list (spec 8.6): each Store with its backend, figures, who can read it and its files, and the deleted ones
+  'admin.nav.stores': 'Stores',
+  'admin.stores.title': 'Stores',
+  'admin.stores.new': 'New Store',
+  'admin.stores.refresh': 'Refresh',
+  'admin.stores.column.name': 'Store',
+  'admin.stores.column.backend': 'Backend',
+  'admin.stores.column.matters': '{matters}',
+  'admin.stores.column.documents': 'Documents',
+  'admin.stores.column.size': 'Size',
+  'admin.stores.column.readers': 'Who Can Read',
+  'admin.stores.column.files': 'Files',
+  // A backend, as a Store names it
+  'admin.stores.encrypted': '{name} (Encrypted)',
+  // Who can read a Store that lets nobody in but the administrators
+  'admin.stores.adminsOnly': 'Administrators Only',
+  // A Store's files: each on its backend, or some still to move there, or some the mover gave up on
+  'admin.stores.files.upToDate': 'Up to Date',
+  'admin.stores.files.stuck': '{files} stuck',
+  'admin.stores.files.waiting': '{files} waiting',
+  'admin.stores.files.waitingSize': '{files} waiting ({size})',
+  'admin.stores.files.both': '{stuck}, {waiting}',
+  'admin.stores.figuresAt': 'Documents and Size as of {when}',
+  'admin.stores.figuresPending': "Documents and Size haven't been worked out since the server started. They show here within a few minutes.",
+  'admin.stores.storageOff': "Storage backends aren't in use on this server, so every Store keeps its files in LogicalDOC's own store.",
+  'admin.stores.none': 'No Store has been made yet.',
+
+  // The Stores in the Trash, under the list, each with Restore
+  'admin.deletedStores.title': 'Deleted Stores',
+  'admin.deletedStores.about': 'Each went to the Trash with everything in it, and Restore brings it back with everything its delete took.',
+  'admin.deletedStores.none': 'No Store is in the Trash.',
+  'admin.deletedStores.column.name': 'Store',
+  'admin.deletedStores.column.deletedAt': 'Deleted',
+  'admin.deletedStores.column.deletedBy': 'Deleted By',
+  'admin.deletedStores.column.matters': '{matters}',
+  'admin.deletedStores.column.state': 'Where It Is',
+  'admin.deletedStores.column.restore': 'Restore',
+  // Who deleted it, when the server's data doesn't say, or their account has been deleted
+  'admin.deletedStores.byUnknown': 'Not Known',
+  'admin.deletedStores.deleted': 'In the Trash',
+  'admin.deletedStores.removed': 'Removed from the Trash; destroyed for good after {when}',
+  'admin.deletedStores.removedUndated': 'Removed from the Trash',
+  'admin.deletedStores.restore': 'Restore',
+  'admin.deletedStores.restoreName': 'Restore {name}',
+  'admin.restoreStore.title': 'Restore {name}?',
+  'admin.restoreStore.with': '{name} comes back under the root, with its {count} and everything else its delete took.',
+  'admin.restoreStore.withAll': '{name} comes back under the root, with everything its delete took.',
+  'admin.restoreStore.alone': 'Anything deleted on its own before the Store was stays in the Trash.',
+  'admin.restoreStore.confirm': 'Restore',
+  'admin.restoreStore.done': 'Restored {name}',
+
+  // A Store's page (spec 8.6): its facts, its actions, and its tabs
+  'admin.store.rename': 'Rename',
+  'admin.store.changeBackend': 'Change Backend',
+  'admin.store.delete': 'Delete',
+  'admin.store.backend': 'Backend',
+  'admin.store.files': 'Files',
+  'admin.store.matters': '{matters}',
+  'admin.store.documents': 'Documents',
+  'admin.store.size': 'Size',
+  'admin.store.readers': 'Who Can Read',
+  // A figure the summary hasn't given since the server started
+  'admin.store.pending': 'Not worked out yet',
+  'admin.store.tabs': 'Sections',
+  'admin.store.tab.matters': '{matters}',
+  'admin.store.tab.access': 'Who Can See It',
+  'admin.store.tab.storage': 'Storage',
+  'admin.store.mattersOf': '{matters} in {name}',
+  'admin.store.noMatters': 'No {matterLower} is in this Store yet.',
+  'admin.store.notFound.title': 'Store Not Found',
+  'admin.store.notFound.message': "There's no such Store, or it's in the Trash.",
+  'admin.store.notFound.stores': 'Go to Stores',
+
+  // Rename, which takes the Store's name alone: its matters keep theirs
+  'admin.renameStore.title': 'Rename {name}',
+  'admin.renameStore.name': 'Name',
+  'admin.renameStore.taken': "There's already a Store called {name}.",
+  'admin.renameStore.rename': 'Rename',
+  'admin.renameStore.done': 'Renamed {before} to {after}',
+
+  // Delete, which asks first, naming the matters it takes (spec 8.6)
+  'admin.deleteStore.title': 'Move {name} to the Trash?',
+  'admin.deleteStore.holds': '{name} goes to the Trash with everything in it: its {count}, and everything in them. Their numbers stay taken.',
+  'admin.deleteStore.empty': '{name} goes to the Trash. It holds no {matterLower}.',
+  'admin.deleteStore.restore': 'It can be restored, with everything it took, from Deleted Stores on the Stores page.',
+  'admin.deleteStore.confirm': 'Move to Trash',
+  'admin.deleteStore.done': 'Moved {name} to the Trash',
+
+  // Who Can See It: a Store's one level, Can See (Read), for each group and person
+  'admin.storeAccess.title': 'Who Can See This Store',
+  'admin.storeAccess.list': 'Who Can See {name}',
+  'admin.storeAccess.about': 'Each group and person listed can see the Store, the one level a Store has. Whoever can read a {matterLower} in it has to be able to see it too.',
+  'admin.storeAccess.custom': 'Custom',
+  'admin.storeAccess.customNote': 'Custom: it has permissions besides Read on the Store, which Save keeps.',
+  'admin.storeAccess.save': 'Save',
+  'admin.storeAccess.discard': 'Discard Changes',
+  'admin.storeAccess.saved': 'Saved who can see {name}',
+
+  // A Store's storage: its backend and its files, and the stuck ones with Retry
+  'admin.storeStorage.about': "Its files move to its backend in the background, and each is read from where it is until it has moved.",
+  'admin.storeStorage.backend': 'Backend',
+  'admin.storeStorage.holds': 'Holds',
+  'admin.storeStorage.waiting': 'Waiting to Move',
+  'admin.storeStorage.stuck': 'Stuck',
+  'admin.storeStorage.stuckTitle': 'Stuck Files',
+  'admin.storeStorage.retry': 'Retry',
+  'admin.storeStorage.off': "Storage backends are off on this server: it keeps every file in LogicalDOC's own store.",
+
+  // Change Backend: the backends a Store can be given, and what would move, said before the change
+  'admin.switchBackend.title': 'Change the Backend of {name}',
+  'admin.switchBackend.backend': 'Backend',
+  'admin.switchBackend.current': 'Where its files are kept now.',
+  'admin.switchBackend.counting': 'Counting the files that would move…',
+  'admin.switchBackend.moves': "{files} ({size}) will move to {backend} in the background. Until each has moved, it's read from where it is now.",
+  'admin.switchBackend.atOnce': 'No file has to move, so the change takes effect at once.',
+  'admin.switchBackend.confirm': 'Change Backend',
+  'admin.switchBackend.done': '{store} now keeps its files on {backend}',
+
+  // The problems only the admin API answers, which the shared catalogue doesn't hold
+  'problems.storage-unavailable': "This server doesn't have Healdan's storage module.",
+  'problems.secret-key-missing': "Healdan's secret key file is missing.",
+} as const satisfies Record<`admin.${string}` | `problems.${string}`, string>
 
 export const adminPlurals = {
   // Needs Attention's rows, by the item's code and count; the server's detail follows
@@ -491,6 +797,8 @@ export const adminPlurals = {
   'admin.usage.filed': { one: '{n} filed', other: '{n} filed' },
   // Beside the Clients list's title
   'admin.clients.count': { one: '{n} Client', other: '{n} Clients' },
+  // Beside the Stores list's title
+  'admin.stores.count': { one: '{n} Store', other: '{n} Stores' },
   // A matter's Overview: what's stuck or failing in it
   'admin.matter.indexFailed': {
     one: "{n} document couldn't be indexed, so search won't find its text",
@@ -499,6 +807,15 @@ export const adminPlurals = {
   'admin.matter.previewsGivenUp': { one: '{n} preview was given up on', other: '{n} previews were given up on' },
   // Follow Parent's question: what below the folder follows it, and so takes its parent's permissions too
   'admin.access.followBelow': { one: '{names} follows it, so it takes them too.', other: '{names} follow it, so they take them too.' },
+  // A backend's files, its stuck files and the files with no Store: "1 file", "3,902 files"
+  'admin.storage.files': { one: '{n} file', other: '{n} files' },
+  // What Test found, above the problems, each in a list
+  'admin.storage.testFound': { one: 'Test found one problem:', other: 'Test found {n} problems:' },
+  // What a new secret key costs: the values sealed with the missing one can't be opened, and are entered again
+  'admin.backendDialog.newKeyLoses': {
+    one: "A new key keeps the S3 secret you typed, and the {n} value sealed with the missing one can't be opened again: each sign-in provider's client secret and each other storage backend's S3 secret are entered again (those backends fail until then), and Healdan Helpers that signed in through a provider sign in again.",
+    other: "A new key keeps the S3 secret you typed, and the {n} values sealed with the missing one can't be opened again: each sign-in provider's client secret and each other storage backend's S3 secret are entered again (those backends fail until then), and Healdan Helpers that signed in through a provider sign in again.",
+  },
 } as const satisfies Record<`admin.${string}`, PluralForms>
 
 export type AdminStringKey = keyof typeof adminEnUS

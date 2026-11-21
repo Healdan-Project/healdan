@@ -53,7 +53,12 @@ public class AdminDashboardResourceTest extends ApiTestCase {
 		for (JsonNode tile : dashboard.path("health")) {
 			assertTrue(tile.toString(), tile.path("problem").isNull());
 			assertTrue(tile.toString(), tile.path("detail").isTextual());
-			assertEquals(tile.toString(), "/frontend.jsp", tile.path("link").textValue());
+			// The storage's and the disks' are fixed on the Admin app's Backends screen, the rest on the Classic
+			// Interface's still
+			boolean backends = List.of(HealthTile.STORAGE_BACKENDS, HealthTile.DISK)
+					.contains(tile.path("name").textValue());
+			assertEquals(tile.toString(), backends ? "/admin/backends" : "/frontend.jsp",
+					tile.path("link").textValue());
 		}
 		JsonNode storage = dashboard.path("health").path(HealthTile.NAMES.indexOf(HealthTile.STORAGE_BACKENDS));
 		assertEquals("off", storage.path("status").textValue());

@@ -29,27 +29,39 @@ Healdan included. The key file is in the configuration volume's backups; keep th
 
 ## Saving the Recovery Key
 
-When you add an encrypted backend, its recovery key shows at once. That showing is recorded, as every later one is
-(see [Showing It Again](#showing-it-again)).
+When you add an encrypted backend, its recovery key shows at once, in a window named after the backend, such as
+**Recovery Key of Cloud Storage**. It says to save the key now, away from the server, and that losing both the key
+file and the recovery key loses the backend's files for good. That showing is recorded, as every later one is (see
+[Showing It Again](#showing-it-again)).
 
-![The Recovery Key of Cloud Storage window: it says Cloud Storage is encrypted and to save its recovery key now, away from the server, that losing both the key file and the recovery key loses its files for good, then shows the key in two lines of four-character groups with a copy icon, and asks for its last group, with Confirm and Later](recovery-key.png)
+1. Save it now, away from the server: in the firm's password manager, or on paper kept locked away. **Copy**, beside
+   it, puts it on the clipboard, ready to paste into the password manager.
+2. Type its last group of four characters in **Last Group**, and press **Confirm**. Healdan says "The recovery key of
+   Cloud Storage is confirmed: Stores can use it". A group that isn't the key's last is refused: "That isn't the last
+   group of this backend's recovery key: type its last four characters, as it was shown."
 
-1. Save it now, away from the server: in the firm's password manager, or on paper kept locked away. The icon beside
-   it copies it.
-2. Type its last group of four characters in **Last Group**, and press **Confirm**.
+Until you confirm it, no Store can use the backend: a Store's choice of backend doesn't offer it, the backend's status
+ends "Its recovery key isn't confirmed, so no Store can use it yet.", and its page's **Recovery Key** says **Not
+Confirmed**. **Later** closes the window without confirming, and the backend's page opens. To confirm it from there:
 
-Until you confirm it, no Store can use the backend: the Stores' drop-down doesn't offer it, and its status ends
-"Its recovery key isn't confirmed, so no Store can use it yet". **Later** closes the window without confirming;
-**Show Recovery Key** then asks for the last group again, until you've confirmed it.
+- **Confirm Recovery Key**, on its page while the key isn't confirmed, asks for the last group from where you saved
+  the key, without showing it again.
+- **Show Recovery Key** shows the key again, and asks for its last group too, until it's confirmed.
 
 ## Showing It Again
 
-Select the backend and press **Show Recovery Key**. Every showing is recorded, with who and when, the one when the
-backend was added included:
+On the backend's page, **Show Recovery Key** asks first, "Show the Recovery Key of Cloud Storage?", saying that each
+showing is recorded, with who and when, in its Key History, and that the server's log says it was shown. **Show
+Recovery Key**, in that question, shows the key, in the same window as at the add, with **Copy**; **Cancel** shows
+nothing and records nothing. A backend whose key file is missing has no key to show: "The key file of this backend is
+missing or can't be read, so there is no key to show: enter its recovery key to put the file back."
 
-- **Key Last Shown,** on the tab, shows the latest.
-- **Key History,** from the backend's right-click menu, lists every showing and every entering of its recovery key,
-  newest first. The record stays when the backend is removed.
+Every showing is recorded, the one when the backend was added included:
+
+- **Key Last Shown,** on the Backends list and the backend's page, shows the latest, and to whom.
+- **Key History,** on the backend's page, lists every showing and every entering of its recovery key, newest first:
+  **When**, **What** (**Recovery Key Shown** or **Recovery Key Entered**) and **By**. The record stays when the
+  backend is removed.
 
 The server's log records each showing too, but never the key.
 
@@ -58,12 +70,14 @@ The server's log records each showing too, but never the key.
 A backend whose key file is missing or isn't its own fails. Test says "The key file of this backend is missing", or
 that the key file "isn't the key it was made with", as after a restore from the wrong backup. To put it back:
 
-1. Select the backend, and press **Enter Recovery Key**.
-2. Type or paste the key in **Recovery Key**, and press **Enter**.
+1. On the backend's page, press **Enter Recovery Key**.
+2. Type or paste the key in **Recovery Key**, and press **Enter**. It's read in any case, with spaces and hyphens
+   ignored.
 
-Healdan checks the key against the backend before it writes anything, and refuses one that isn't the backend's.
-When it's right, it writes the key file again: "The recovery key is right, and the key file of … is back." The
-backend is OK again, and each entering is recorded in its Key History.
+Healdan checks the key against the backend before it writes anything, and refuses one that isn't the backend's: "That
+recovery key isn't this backend's: its check object doesn't decrypt with it, so nothing was written. Check the key,
+and type it again." When it's right, it writes the key file again: "The recovery key is right, and the key file of
+Cloud Storage is back". The backend is OK again, and each entering is recorded in its Key History.
 
 A key file deleted while the server runs isn't noticed until **Test** or the next start, as the server keeps using
 the key it read, so nothing is lost meanwhile.

@@ -6,11 +6,15 @@ import { createRootRoute, createRoute, createRouter, type ErrorComponentProps, t
 import { ErrorPanel, parseSearch, stringifySearch } from '@healdan/shell'
 import { ADMIN_BASE, routes } from './addresses'
 import { Frame } from './frame/Frame'
+import { BackendsView } from './views/BackendsView'
+import { BackendView } from './views/BackendView'
 import { ClientView, clientSearch } from './views/ClientView'
 import { ClientsView, clientsSearch } from './views/ClientsView'
 import { DashboardView } from './views/DashboardView'
 import { MattersView, mattersSearch } from './views/MattersView'
 import { MatterView, matterSearch } from './views/MatterView'
+import { StoresView } from './views/StoresView'
+import { StoreView, storeSearch } from './views/StoreView'
 import { TemplatesView } from './views/TemplatesView'
 import { TemplateView } from './views/TemplateView'
 import { NotFoundView } from './views/NotFoundView'
@@ -72,7 +76,32 @@ const templateRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([dashboardRoute, clientsRoute, clientRoute, mattersRoute, matterRoute, templatesRoute, templateRoute])
+// /stores: every Store, and the Stores in the Trash (StoresView); /stores/$id, a Store's page, its tab and the order of its
+// matters in the address (StoreView), which says itself when the id names no live Store
+const storesRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.stores, component: StoresView })
+
+const storeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.store,
+  validateSearch: storeSearch,
+  component: function StoreRoute() {
+    return <StoreView id={storeRoute.useParams().id} search={storeRoute.useSearch()} />
+  },
+})
+
+// /backends: every storage backend, the files with no Store and the storage settings (BackendsView); /backends/$id, a
+// backend's page (BackendView), which says itself when the id names no backend
+const backendsRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.backends, component: BackendsView })
+
+const backendRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.backend,
+  component: function BackendRoute() {
+    return <BackendView id={backendRoute.useParams().id} />
+  },
+})
+
+const routeTree = rootRoute.addChildren([dashboardRoute, clientsRoute, clientRoute, mattersRoute, matterRoute, templatesRoute, templateRoute, storesRoute, storeRoute, backendsRoute, backendRoute])
 
 /**
  * A view that failed as it drew: the catalogue's short message and Try Again, which asks the server again for what the

@@ -64,4 +64,32 @@ describe('RadioChoices', () => {
     expect(onChange).toHaveBeenCalledWith('today')
     await expectNoAxeViolations(container)
   })
+
+  it("greys out a choice that can't be made, and says after a choice's name what more there is to say of it", async () => {
+    const onChange = vi.fn()
+    const { container } = render(
+      <RadioChoices
+        label="Backend"
+        choices={[
+          { value: '1', label: 'Original', description: 'Where its files are kept now.' },
+          { value: '4', label: 'Office NAS', disabled: true, description: "Its recovery key isn't confirmed." },
+          { value: '3', label: 'Archive' },
+        ]}
+        value="1"
+        onChange={onChange}
+      />,
+    )
+    const nas = screen.getByRole('radio', { name: 'Office NAS' }) as HTMLInputElement
+    expect(nas.disabled).toBe(true)
+    await userEvent.click(nas)
+    expect(onChange).not.toHaveBeenCalled()
+    // Its name is its label alone; the description is read after it
+    const said = (radio: HTMLElement) => document.getElementById(radio.getAttribute('aria-describedby') ?? '')?.textContent
+    expect(said(nas)).toBe("Its recovery key isn't confirmed.")
+    expect(said(screen.getByRole('radio', { name: 'Original' }))).toBe('Where its files are kept now.')
+    expect(screen.getByRole('radio', { name: 'Archive' }).getAttribute('aria-describedby')).toBeNull()
+    await userEvent.click(screen.getByRole('radio', { name: 'Archive' }))
+    expect(onChange).toHaveBeenCalledWith('3')
+    await expectNoAxeViolations(container)
+  })
 })

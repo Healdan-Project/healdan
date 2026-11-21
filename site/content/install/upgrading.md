@@ -242,8 +242,8 @@ own storage, as above. Its first start does a few things once:
 - **It writes a marker, `.healdan-backend`,** in Original's folder, `/opt/logicaldoc/repository/docs`. If that folder
   has neither a marker nor any file while the database has documents, as when a [host folder](../host-folders/)
   didn't mount, the app stops instead of marking an empty folder: see [Troubleshooting](../troubleshooting/).
-- **It hides LogicalDOC's own Stores screen** under **Administration → Settings**, as the **Storage** tab of Healdan
-  Settings takes its place.
+- **It hides LogicalDOC's own Stores screen** under **Administration → Settings**, as Healdan's own storage screens
+  take its place: the Admin app's **Backends** and **Stores**, and the **Storage** tab of Healdan Settings.
 - **Nothing moves.** Every Store stays on Original, the repository's own folder, until you give it another backend.
 
 ## Presentations and Spreadsheets Whose Text Wasn't Read

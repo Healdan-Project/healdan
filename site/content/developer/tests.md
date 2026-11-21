@@ -374,9 +374,21 @@ copy left under `.held/`: the purge's retry of a put back that failed, a due old
 rather than purge it, and a hold whose row can't be written. `TinkClasspathTest` checks that encryption runs without the
 `gson` and `protobuf` classes Tink brings, which the plugin zip leaves out.
 
-`StorageAdministrationImplTest` checks the storage port the Admin app reads (see
+`StorageAdministrationImplTest` checks the storage port the Admin app reads and changes storage through (see
 [How Healdan Extends LogicalDOC](../how-healdan-extends-logicaldoc/#healdans-code)): that `healdan-core` finds one by
-type, and that it answers what the Storage tab's overview does, field for field, with no secret in it.
+type, and that it answers what the Storage tab's overview does, field for field, with no secret in it. Through the
+port, it adds, tests, saves and removes a local backend, renames Original and is refused its removal, shows,
+confirms and enters an encrypted one's recovery key, switches a Store with its count first, retries stuck files, a
+Store's and those with no Store, and saves the settings within their limits, checking each record exactly, and that
+a read, a refusal and a change that changes nothing record nothing. On `FakeS3`, an encrypted S3 backend's secret, its sealed value, its
+access key and its recovery key reach no record, no answer's `toString()` and no log line, a secret typed again the
+same isn't recorded as changed, and with the secret key file gone a save or an add with a secret is
+`SecretKeyMissingProblem`, writing nothing, until `newKey`. A record that fails leaves its change standing, as
+`recordAfter` does.
+
+`OverviewPort`, in `healdan-core`'s test-jar, is a storage port for the tests that read only its overview, such as
+`DashboardServiceTest`'s and `UsageSummaryTest`'s: a lambda gives the overview, and every other method fails the test
+that calls it.
 
 #### The Fake S3 Server
 

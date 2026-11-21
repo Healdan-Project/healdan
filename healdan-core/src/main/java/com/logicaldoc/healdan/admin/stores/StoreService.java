@@ -3,6 +3,8 @@
 
 package com.logicaldoc.healdan.admin.stores;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -11,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -23,10 +26,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderEvent;
+import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.Permission;
+import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanRuleException;
@@ -34,6 +40,7 @@ import com.logicaldoc.healdan.admin.AdminArea;
 import com.logicaldoc.healdan.admin.AdminEvent;
 import com.logicaldoc.healdan.admin.AdminEvent.Change;
 import com.logicaldoc.healdan.admin.AdminEvents;
+import com.logicaldoc.healdan.admin.PersonNames;
 import com.logicaldoc.healdan.admin.access.AccessLevel;
 import com.logicaldoc.healdan.admin.access.AccessRow;
 import com.logicaldoc.healdan.admin.access.FolderAccessService;
@@ -41,8 +48,15 @@ import com.logicaldoc.healdan.matter.FolderPosition.Kind;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.matter.MatterService;
 import com.logicaldoc.healdan.rules.FilingRules;
+import com.logicaldoc.healdan.rules.StoredRows;
+import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
 import com.logicaldoc.healdan.security.AclMath;
 import com.logicaldoc.healdan.security.PermissionRules;
+import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.trash.TrashMember;
+import com.logicaldoc.healdan.trash.TrashRestore;
+import com.logicaldoc.healdan.trash.TrashState;
+import com.logicaldoc.healdan.trash.TrashStore;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.healdan.util.StorableText;
 import com.logicaldoc.util.html.HTMLSanitizer;
@@ -61,14 +75,28 @@ import com.logicaldoc.util.spring.Context;
  * Store's matters follows its permissions, as on every route. Both go through {@link FolderDAO}, so Healdan's
  * listeners check them.
  * <p>
+ * A Store is renamed with the name rules it's made with, and restored from the Trash, deleted or removed, back
+ * directly under the root with what its delete took ({@link TrashRestore}), once no other live folder there has its
+ * name. LogicalDOC's Default workspace, the Templates Store and the root aren't renamed, deleted or restored as Stores
+ * are ({@link #fixedFolder}).
+ * <p>
  * Each change is recorded in the administration record inside its transaction, a row's change by whom it names
  * ({@link FolderAccessService#rowName}) with its permissions before and after; a change that changes nothing isn't
- * written or recorded. Administrators only.
+ * written or recorded. A restore is recorded by its caller, straight after it. Administrators only.
  */
 @Service
 public class StoreService {
 
-	static final String ONLY_ADMINS = "Only an administrator can create a Store or change who can see it.";
+	static final String ONLY_ADMINS = "Only an administrator can create, rename or restore a Store, or change who can "
+			+ "see it.";
+
+	static final String NOT_IN_TRASH = "That Store isn't in the Trash.";
+
+	static final String FIXED_DEFAULT = "LogicalDOC's Default workspace isn't a Store, so it isn't %s here.";
+
+	static final String FIXED_TEMPLATES = "The Templates Store holds the workspace templates, so it isn't %s here.";
+
+	static final String FIXED_ROOT = "The root holds the Stores, so it isn't %s here.";
 
 	static final String NOT_A_STORE = "That folder isn't a Store.";
 
@@ -151,6 +179,109 @@ public class StoreService {
 	}
 
 	/**
+	 * @param folderId a folder
+	 * @param change what would be done to it, such as {@code renamed} or {@code deleted}
+	 * @return the sentence that refuses the change to LogicalDOC's Default workspace, the Templates Store or the root,
+	 *         which aren't Stores and aren't changed as Stores are; null for any other folder
+	 */
+	public String fixedFolder(long folderId, String change) {
+		if (folderId == Folder.DEFAULTWORKSPACEID)
+			return FIXED_DEFAULT.formatted(change);
+		if (Long.valueOf(folderId).equals(HealdanSettings.get().templatesStoreId()))
+			return FIXED_TEMPLATES.formatted(change);
+		if (folderId == Folder.ROOTID)
+			return FIXED_ROOT.formatted(change);
+		return null;
+	}
+
+	/**
+	 * @param folderId a folder
+	 * @return whether it's a Store, live or in the Trash
+	 * @throws PersistenceException error at data layer
+	 */
+	public boolean isStore(long folderId) throws PersistenceException {
+		return store(folderId) != null || trashItem(folderId).isPresent();
+	}
+
+	/**
+	 * @param folderId a folder
+	 * @return the Trash item that holds it, if it's a Store in the Trash: a workspace directly under the root, but
+	 *         LogicalDOC's Default workspace and the Templates Store, its row at code 1, deleted, or 2, removed from
+	 *         the Trash and not destroyed yet, and its item's top member in that state; empty for anything else
+	 */
+	public Optional<Long> trashItem(long folderId) {
+		FolderRow row = StoredRows.get().folder(folderId);
+		if (row == null || row.type() != Folder.TYPE_WORKSPACE || row.parentId() != Folder.ROOTID
+				|| fixedFolder(folderId, "") != null)
+			return Optional.empty();
+		TrashState state = switch (row.deleted()) {
+		case PersistentObject.DELETED_CODE_DEFAULT -> TrashState.DELETED;
+		case PersistentObject.DELETED_CODE_STRONG -> TrashState.REMOVED;
+		default -> null;
+		};
+		return state == null ? Optional.empty() : TrashStore.get().itemHolding(new TrashMember('F', folderId), state);
+	}
+
+	/**
+	 * A Store in the Trash, as the Stores screen lists it.
+	 *
+	 * @param id the Store, its folder's id
+	 * @param name its name, as it was deleted
+	 * @param trashItemId the Trash item its delete made
+	 * @param state {@link TrashState#DELETED}, in the Trash, or {@link TrashState#REMOVED}, removed from it
+	 * @param matters how many matters' own folders went with it and are in its item still, in that state
+	 * @param deletedAt when it was deleted
+	 * @param deletedBy who deleted it; null when that isn't recorded, or their account is deleted
+	 * @param removedAt when it was removed from the Trash; null unless removed
+	 */
+	public record DeletedStore(long id, String name, long trashItemId, TrashState state, long matters,
+			Instant deletedAt, Person deletedBy, Instant removedAt) {
+	}
+
+	/**
+	 * A person named in another record.
+	 *
+	 * @param id their user id
+	 * @param username their username
+	 * @param name their first and last name, as {@link PersonNames} gives it
+	 */
+	public record Person(long id, String username, String name) {
+	}
+
+	/**
+	 * @param tenantId the tenant
+	 * @return the Stores in the Trash, deleted or removed and not destroyed yet, as {@link #trashItem} reads them,
+	 *         whoever deleted them, the most recently deleted first
+	 */
+	public List<DeletedStore> deleted(long tenantId) {
+		Long templates = HealdanSettings.get().templatesStoreId();
+		return jdbc.query("""
+				select t.hd_id, t.hd_objectid, t.hd_name, m.hd_state, t.hd_deletedat, m.hd_removedat,
+				       u.ld_id, u.ld_username, u.ld_firstname, u.ld_name,
+				       (select count(*) from hd_trash_member mm join hd_matter mt on mt.hd_folderid = mm.hd_objectid
+				         where mm.hd_trashid = t.hd_id and mm.hd_objecttype = 'F' and mm.hd_state = m.hd_state)
+				  from hd_trash t
+				  join hd_trash_member m on m.hd_trashid = t.hd_id and m.hd_objecttype = 'F'
+				   and m.hd_objectid = t.hd_objectid
+				  join ld_folder f on f.ld_id = t.hd_objectid
+				  left join ld_user u on u.ld_id = t.hd_deletedby and u.ld_deleted = 0
+				 where t.hd_tenantid = ? and t.hd_kind = 'folder' and f.ld_type = ? and f.ld_parentid = ?
+				   and not f.ld_id = ? and not f.ld_id = ? and not f.ld_id = ?
+				   and ((m.hd_state = ? and f.ld_deleted = ?) or (m.hd_state = ? and f.ld_deleted = ?))
+				 order by t.hd_deletedat desc, t.hd_id desc""", (rs, n) -> {
+			long userId = rs.getLong(7);
+			Person by = rs.wasNull() ? null
+					: new Person(userId, rs.getString(8),
+							PersonNames.of(rs.getString(9), rs.getString(10), rs.getString(8)));
+			Timestamp removed = rs.getTimestamp(6);
+			return new DeletedStore(rs.getLong(2), rs.getString(3), rs.getLong(1), TrashState.of(rs.getString(4)),
+					rs.getLong(11), rs.getTimestamp(5).toInstant(), by, removed != null ? removed.toInstant() : null);
+		}, tenantId, Folder.TYPE_WORKSPACE, Folder.ROOTID, Folder.ROOTID, Folder.DEFAULTWORKSPACEID,
+				templates != null ? templates : -1L, TrashState.DELETED.code(), PersistentObject.DELETED_CODE_DEFAULT,
+				TrashState.REMOVED.code(), PersistentObject.DELETED_CODE_STRONG);
+	}
+
+	/**
 	 * @param storeId a Store
 	 * @return who can see it: what it grants, a row of Read alone {@link AccessLevel#CAN_SEE} and any other
 	 *         {@link AccessLevel#CUSTOM}; groups and people granted nothing left out
@@ -185,7 +316,7 @@ public class StoreService {
 		requireAdmin(actor);
 		String clean = cleanName(name);
 		Folder root = FolderDAO.get().findRoot(actor.getTenantId());
-		checkNameFree(root, clean);
+		checkNameFree(root, clean, 0);
 		Set<Long> groups = groups(canSeeGroupIds, Map.of());
 
 		Folder vo = new Folder(clean);
@@ -214,6 +345,76 @@ public class StoreService {
 				.put(FolderAccessService.rowName(group), new Change(null, FolderAccessService.flags(flags))));
 		events.record(new AdminEvent(AdminArea.STORES, "store.created", STORE, store.getId(), clean, changes), actor);
 		return FolderDAO.get().findById(store.getId());
+	}
+
+	/**
+	 * Renames a Store, with the name rules of {@link #create}; its matters keep their folders and their names. Its own
+	 * name changes nothing; a change of its case alone is a rename.
+	 *
+	 * @param storeId a Store
+	 * @param name its new name; the whitespace at either end is taken off
+	 * @param actor who renames it
+	 * @return false if it has that name already, which changes nothing
+	 * @throws PersistenceException a refusal, a {@link HealdanRuleException} with its sentence: the actor isn't an
+	 *         administrator; the folder isn't a live Store; the name is blank, too long, holds a character Healdan
+	 *         can't keep or one LogicalDOC would store otherwise, or is another live folder's under the root, compared
+	 *         without regard to case. Or an error at data layer
+	 */
+	@Transactional(rollbackFor = Exception.class)
+	public boolean rename(long storeId, String name, User actor) throws PersistenceException {
+		requireAdmin(actor);
+		Folder store = existing(storeId);
+		String clean = cleanName(name);
+		if (clean.equals(store.getName()))
+			return false;
+		FolderDAO folders = FolderDAO.get();
+		checkNameFree(folders.findRoot(store.getTenantId()), clean, storeId);
+
+		Folder current = folders.findById(storeId, true);
+		String old = current.getName();
+		FolderHistory history = FolderAccessService.history(actor, FolderEvent.RENAMED);
+		history.setFilenameOld(old);
+		history.setPathOld(folders.computePathExtended(storeId));
+		current.setName(clean);
+		// The cache isn't transactional: a rollback, such as a record that fails, mustn't leave the new name cached
+		evictor.evictFoldersOnRollback(List.of(storeId));
+		folders.store(current, history);
+		// LogicalDOC makes a name unique with a number when another change has taken it meanwhile
+		if (!clean.equals(current.getName()))
+			throw new HealdanRuleException(TAKEN_BY_STORE.formatted(clean));
+
+		events.record(new AdminEvent(AdminArea.STORES, "store.renamed", STORE, storeId, clean,
+				Map.of("name", new Change(old, clean))), actor);
+		return true;
+	}
+
+	/**
+	 * Restores a Store from the Trash, deleted or removed, back directly under the root, with what its delete took and
+	 * nothing else, through the Trash's restore ({@link TrashRestore#restore}), so Healdan's rules and hooks decide
+	 * as on every route. Its name is checked first, as {@link #create} checks a new one: the restore keeps a folder's
+	 * name as it is. It isn't recorded here: its caller records it straight after.
+	 *
+	 * @param storeId a Store in the Trash
+	 * @param actor who restores it
+	 * @param session the caller's session, for the history; null for none
+	 * @return the Store, live again
+	 * @throws PersistenceException a refusal, a {@link HealdanRuleException} with its sentence: the actor isn't an
+	 *         administrator; the folder isn't a Store in the Trash ({@link #NOT_IN_TRASH}), as when another restore
+	 *         or the nightly destroy took it out meanwhile; another live folder under the root has its name, compared
+	 *         without regard to case; or what Healdan's rules refuse. Or an error at data layer
+	 */
+	@Transactional(rollbackFor = Exception.class)
+	public Folder restore(long storeId, User actor, Session session) throws PersistenceException {
+		requireAdmin(actor);
+		long item = trashItem(storeId).orElseThrow(() -> new HealdanRuleException(NOT_IN_TRASH));
+		Folder root = FolderDAO.get().findRoot(actor.getTenantId());
+		checkNameFree(root, StoredRows.get().folder(storeId).name(), storeId);
+		// A workspace goes back directly under the root
+		TrashRestore.get().restore(item, root.getId(), actor, session);
+		Folder restored = store(storeId);
+		if (restored == null)
+			throw new IllegalStateException("Store %d wasn't restored under the root".formatted(storeId));
+		return restored;
 	}
 
 	/**
@@ -337,10 +538,11 @@ public class StoreService {
 	}
 
 	/**
+	 * @param exceptId a folder to leave out, the Store being renamed or restored; 0 for none
 	 * @throws HealdanRuleException if a live folder directly under the root has the name, compared without regard to
 	 *         case, with a sentence for what it is
 	 */
-	private void checkNameFree(Folder root, String name) throws PersistenceException {
+	private void checkNameFree(Folder root, String name, long exceptId) throws PersistenceException {
 		record Child(long id, String name) {
 		}
 		// Compared in Java, as a rename's are (FolderRenames.taken), not with the database's lower()
@@ -348,7 +550,8 @@ public class StoreService {
 				select ld_id, ld_name from ld_folder
 				 where ld_parentid = ? and not ld_id = ld_parentid and ld_deleted = 0 order by ld_id""",
 				(rs, n) -> new Child(rs.getLong(1), rs.getString(2)), root.getId()).stream()
-				.filter(found -> name.equalsIgnoreCase(found.name())).findFirst().orElse(null);
+				.filter(found -> found.id() != exceptId && name.equalsIgnoreCase(found.name())).findFirst()
+				.orElse(null);
 		if (child == null)
 			return;
 		Folder clash = FolderDAO.get().findById(child.id());

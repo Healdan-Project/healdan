@@ -139,15 +139,15 @@ public class DashboardService {
 	/**
 	 * The screens the Dashboard links to (spec section 8.1): the Admin app's address once a screen has shipped, and
 	 * the Classic Interface until then. Each phase that ships a screen changes its row; Phase 2 shipped Clients, Matters
-	 * and Workspace Templates.
+	 * and Workspace Templates, and Phase 3 Stores and Backends.
 	 */
 	enum Screen {
 		DASHBOARD("/admin/"),
 		CLIENTS("/admin/clients"),
 		MATTERS("/admin/matters"),
 		TEMPLATES("/admin/templates"),
-		STORES(Landing.CLASSIC),
-		BACKENDS(Landing.CLASSIC),
+		STORES("/admin/stores"),
+		BACKENDS("/admin/backends"),
 		USERS(Landing.CLASSIC),
 		SIGN_IN_PROVIDERS(Landing.CLASSIC),
 		SETTINGS(Landing.CLASSIC),
@@ -373,7 +373,7 @@ public class DashboardService {
 
 		List<AttentionItem> attention = new ArrayList<>();
 		List<String> unchecked = new ArrayList<>();
-		attend(AttentionItem.FILES_STUCK, Screen.BACKENDS, storageNow, DashboardService::filesStuck, attention,
+		attend(AttentionItem.FILES_STUCK, Screen.STORES, storageNow, DashboardService::filesStuck, attention,
 				unchecked);
 		attend(AttentionItem.BACKEND_UNREACHABLE, Screen.BACKENDS, storageNow, DashboardService::backendsDown, attention,
 				unchecked);

@@ -25,10 +25,11 @@ info:
          `not-editable`), or holds a character Healdan can't keep (NUL, or a
          lone surrogate).
       2. `404 not-found` for what the path names, when it doesn't exist or
-         isn't what the route acts on. One query parameter is read the same
-         way: `clientId` of `GET /v1/admin/matters/next-number`, which reads
-         that client. A list's filters keep nothing for an id that names
-         nothing.
+         isn't what the route acts on. Two query parameters are read the
+         same way: `clientId` of `GET /v1/admin/matters/next-number`, which
+         reads that client, and `backendId` of
+         `GET /v1/admin/stores/{id}/backend`, which reads that backend. A
+         list's filters keep nothing for an id that names nothing.
       3. `422 validation` for members that are missing, blank once the
          whitespace at either end is taken off, can't be changed, or are
          wrong in another way the route names, each in `fields` with its
@@ -37,6 +38,11 @@ info:
          `detail` that says why, which the app can show as it is. Something
          the request names by its id that no longer exists, such as a client
          or a group, is refused this way too.
+
+      The Storage routes have two codes of their own, which the Storage tag
+      describes: `503 storage-unavailable`, on a server without Healdan's
+      storage module, and `409 secret-key-missing`, with `sealed`, when
+      Healdan's secret key file is missing as an S3 secret is typed.
     - Every change is recorded in the administration record: when, who and
       from where, its area, its action (such as `matter.moved`), what it
       acted on, and the fields it changed with their old and new values. A
@@ -71,12 +77,55 @@ tags:
       that doesn't exist, is `404 not-found`.
   - name: Stores
     description: |
-      The Stores area (`AdminArea.STORES`): the Stores, and who can see each
-      (Admin app spec section 8.6). A Store is a workspace directly under the
-      root that holds matters; LogicalDOC's Default workspace and the
-      Templates Store aren't Stores. Only members of `admin`, on the web
-      session, reach these routes: no session is `401 unauthenticated`, a
-      device token `403 web-session-only`, and anyone else `403 admins-only`.
+      The Stores area (`AdminArea.STORES`): the Stores, who can see each,
+      and a Store's page, rename, delete and restore (Admin app spec section
+      8.6). A Store is a workspace directly under the root that holds
+      matters; LogicalDOC's Default workspace and the Templates Store aren't
+      Stores. Only members of `admin`, on the web session, reach these
+      routes: no session is `401 unauthenticated`, a device token
+      `403 web-session-only`, and anyone else `403 admins-only`.
+
+      Which storage backend a Store keeps its files on, and its files that
+      haven't moved, are the Storage tag's routes under the same address.
+  - name: Storage
+    description: |
+      The Storage area (`AdminArea.STORAGE`): the storage backends, the
+      backend each Store keeps its files on, the files the mover gave up on,
+      and the storage settings, everything the Classic Interface's Storage
+      tab does (Admin app spec sections 8.6 and 9.7). Only members of
+      `admin`, on the web session, reach these routes: no session is
+      `401 unauthenticated`, a device token `403 web-session-only`, and
+      anyone else `403 admins-only`.
+
+      - A server without Healdan's storage module answers every route here
+        `503 storage-unavailable`, after a body that isn't the JSON expected
+        (`400`) and before anything else.
+      - Storage backends are off on a server that keeps its files in
+        LogicalDOC's own store, not through Healdan's storage. Then
+        `GET /v1/admin/backends`, `GET /v1/admin/storage/settings` and
+        `GET /v1/admin/stores/{id}/backend` answer `on: false`, with no
+        backends; a backend named in the path is `404 not-found`, as none is
+        listed; the two lists of stuck files answer what's recorded; and
+        every other route, Test before saving included, is `409 refused`,
+        with a sentence that says storage backends are off, in the check
+        order's step 4.
+      - The refusals are the Storage tab's own, each `409 refused` with its
+        sentence in `detail`, which the app shows as it is.
+      - When Healdan's secret key file is missing while values are sealed
+        with it, a change that types an S3 secret is `409 secret-key-missing`,
+        with the sentence in `detail` and `sealed`, how many stored values
+        are sealed with the missing key, and nothing is written. Sent again
+        with `newKey: true`, it makes a new key, which leaves those values to
+        be entered again: the app asks first, as the tab does.
+      - Nothing here answers an S3 secret, only whether one is stored. An
+        encrypted backend's recovery key is answered only by the add of that
+        backend and by `POST /v1/admin/backends/{id}/recovery-key/show`, each
+        recorded as a showing. A problem never holds what a request typed as
+        a secret, a recovery key or its last group.
+      - Each change is recorded in the Storage area, straight after it
+        succeeds, as a storage change isn't one transaction with its record.
+        A secret's and an access key's changes are recorded as changed, with
+        no value. A change that changes nothing isn't recorded.
   - name: People
     description: |
       The People area (`AdminArea.PEOPLE`): the groups, for the forms that
@@ -1741,9 +1790,25 @@ paths:
       summary: The Stores
       description: |
         Every live Store, by name, ignoring case (`MatterService.stores`):
-        not LogicalDOC's Default workspace or the Templates Store. A short
-        list, so not a page: for the Store menus of New Matter, Move to
-        Another Store and the Matters list.
+        not LogicalDOC's Default workspace, the Templates Store or a Store in
+        the Trash. A short list, so not a page: for the Store menus of New
+        Matter, Move to Another Store and the Matters list, and for the Stores
+        list (Admin app spec section 8.6), each with what that list shows.
+
+        - `matters` counts its live matters, not deleted or in the Trash, as
+          they are at the request.
+        - `documents` and `bytes` are its matters', from the summary the
+          server keeps in memory for the Dashboard's Usage, worked out at
+          most every 15 minutes and never by a request: `figuresAt` says
+          when. Until the first summary since the server started, they and
+          `figuresAt` are null; a Store made or restored since the last
+          summary has `documents` and `bytes` 0 until the next.
+        - `readers` are the groups and people that can see it, as
+          `GET /v1/admin/stores/{id}/access` lists them.
+        - `backend` and `pending` are its storage backend and its files that
+          haven't reached it, as `GET /v1/admin/stores/{id}/backend` gives
+          them: null when storage backends are off, or on a server without
+          Healdan's storage module, which this route answers all the same.
       tags: [Stores]
       responses:
         '200':
@@ -1753,7 +1818,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Store'
+                  $ref: '#/components/schemas/StoreInfo'
         '401':
           $ref: '#/components/responses/Problem'
         '403':
@@ -1769,9 +1834,16 @@ paths:
         transaction (`StoreService.create`), so a matter can be made in it
         at once (Admin app spec section 8.6). Answers `201` with it. The
         name has the whitespace at either end taken off. A group in
-        `groupIds` may be a person's own. A new Store keeps its files on
-        Original, the server's own folder, until its storage backend is
-        changed.
+        `groupIds` may be a person's own. It answers the Store's id and name
+        alone: `GET /v1/admin/stores/{id}` gives the rest.
+
+        The new Store keeps its files on the backend `backendId` names,
+        Original, the server's own folder, when it's null or left out. The
+        backend is checked first; the Store is made, in one transaction, then
+        given its backend, as `PUT /v1/admin/stores/{id}/backend` does. Should
+        that backend stop being offered to Stores in between, as when another
+        administrator removes it, the Store stays on Original and the answer
+        is still `201`; the server logs it.
 
         - `400 bad-request` for a `groupIds` that names a group twice or
           holds a null.
@@ -1780,11 +1852,18 @@ paths:
         - `409 refused` for a name another live folder directly under the
           root has, compared without regard to case: another Store,
           LogicalDOC's Default workspace or the Templates Store; for a group
-          that no longer exists; and for what Healdan's rules refuse.
+          that no longer exists; for a `backendId` that names no backend, or
+          one not offered to Stores (an encrypted backend whose recovery key
+          isn't confirmed); for any backend but Original while storage
+          backends are off, or on a server without Healdan's storage module;
+          and for what Healdan's rules refuse. Of two creates, renames or
+          restores giving one name at the same moment, the second is refused
+          as a name taken, with the same sentence.
 
         Recorded as `store.created`, with its name and one change for each
         group that can see it, named as `group Partners` or `user jdoe`,
-        with `read`.
+        with `read`; and, for a backend other than Original, as
+        `store.backend-changed` too, in the Storage area.
       tags: [Stores]
       requestBody:
         required: true
@@ -1808,6 +1887,209 @@ paths:
         '409':
           $ref: '#/components/responses/Problem'
         '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/stores/deleted:
+    get:
+      operationId: adminListDeletedStores
+      summary: The Stores in the Trash
+      description: |
+        The Stores in the Trash, which the Stores list shows apart, each with
+        **Restore** (`POST /v1/admin/stores/{id}/restore`; Admin app spec
+        section 8.6): every Store whose delete is in a Trash, whoever deleted
+        it, `deleted`, or removed from it and not destroyed yet, `removed`.
+        Most recently deleted first. A short list, so not a page.
+
+        The User app's Trash doesn't restore a Store's item
+        (`409 refused`): this route's restore does.
+      tags: [Stores]
+      responses:
+        '200':
+          description: The Stores in the Trash
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeletedStore'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/stores/{id}:
+    get:
+      operationId: adminGetStore
+      summary: A Store
+      description: |
+        The Store, as the list gives it, for its page (Admin app spec section
+        8.6), which lists its matters with `GET /v1/admin/matters?storeId=`,
+        who can see it with `GET /v1/admin/stores/{id}/access`, and its
+        storage backend with `GET /v1/admin/stores/{id}/backend`.
+
+        Anything but a live Store is `404 not-found`: LogicalDOC's Default
+        workspace, the Templates Store, the root, a Store in the Trash and
+        any other folder.
+      tags: [Stores]
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+      responses:
+        '200':
+          description: The Store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreInfo'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: adminRenameStore
+      summary: Rename a Store
+      description: |
+        Renames the Store's folder, through `StoreService.rename`, and
+        answers the Store (Admin app spec section 8.6). Its matters keep
+        their folders and their names. The name has the whitespace at either
+        end taken off; its own name changes nothing, after the checks up to
+        `422` and the refusal of the three folders below, which comes first:
+        they're refused whatever the name, their own included.
+
+        - `404 not-found` for anything but a live Store, but for the three
+          folders `409 refused` names.
+        - `422 validation` for the name, as `FolderName` says.
+        - `409 refused` for LogicalDOC's Default workspace, the Templates
+          Store and the root, which aren't renamed here, each with a sentence
+          that says so, even when the name sent is the one it has; for a name
+          another live folder directly under the root has, compared without
+          regard to case, with the sentences of `POST /v1/admin/stores`
+          (changing only the case of its own name works); and for what
+          Healdan's rules refuse. Of two creates,
+          renames or restores giving one name at the same moment, the second
+          is refused as a name taken.
+
+        Recorded as `store.renamed`, with the name before and after.
+      tags: [Stores]
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FolderRename'
+      responses:
+        '200':
+          description: The Store, renamed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreInfo'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: adminDeleteStore
+      summary: Move a Store to the Trash
+      description: |
+        Moves the Store's folder, every matter in it and everything live in
+        them, to the caller's Trash as one item, through LogicalDOC's folder
+        delete, as a matter's delete does, and answers the Trash item it made
+        (Admin app spec section 8.6). The matters' rows stay, so their
+        numbers stay taken. The Store and its matters are then `404` here
+        and gone from the lists, and `GET /v1/admin/stores/deleted` lists the
+        Store, which `POST /v1/admin/stores/{id}/restore` brings back with
+        its matters.
+
+        - `404 not-found` for anything but a live Store, but for the three
+          folders `409 refused` names.
+        - `409 refused` for LogicalDOC's Default workspace, the Templates
+          Store and the root, which aren't deleted here, each with a sentence
+          that says so; while a document in it is checked out, by anyone, the
+          caller too; while it holds an immutable document; and for what
+          Healdan's rules refuse.
+
+        Recorded as `store.deleted`, after the delete.
+      tags: [Stores]
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+      responses:
+        '200':
+          description: The Trash item the delete made
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletedFolder'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/stores/{id}/restore:
+    post:
+      operationId: adminRestoreStore
+      summary: Restore a Store from the Trash
+      description: |
+        Restores the Store from the Trash, back directly under the root, with
+        the matters and everything else its delete took, through the Trash's
+        restore, whether its item is `deleted` or `removed`, and answers the
+        Store (Admin app spec section 8.6). `id` is the Store's folder, as
+        `GET /v1/admin/stores/deleted` gives it. What was deleted on its own
+        before the Store was is a Trash item of its own, and stays there.
+        Takes no body.
+
+        - `404 not-found` when `id` names no Store, live or in the Trash.
+        - `409 refused` for a live Store, with a sentence that says it isn't
+          in the Trash, as after another restore; when another live folder
+          directly under the root now has its name, compared without regard
+          to case, with the sentences of `POST /v1/admin/stores`, so that
+          folder is renamed first; when the nightly destroy, or another
+          restore, takes it out of the Trash as this one runs; and for what
+          Healdan's rules refuse, such as a group that could read one of its
+          matters but can't read the Store (P2).
+          Of two creates, renames or restores giving one name at the same
+          moment, the second is refused as a name taken.
+
+        Recorded as `store.restored`, after the restore.
+      tags: [Stores]
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+      responses:
+        '200':
+          description: The Store, back
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreInfo'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
@@ -1912,6 +2194,887 @@ paths:
         '409':
           $ref: '#/components/responses/Problem'
         '422':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/stores/{id}/backend:
+    get:
+      operationId: adminGetStoreBackend
+      summary: A Store's storage backend
+      description: |
+        The storage backend the Store keeps its files on, Original when it
+        has no other, and its files: how many it has and their size, those
+        that haven't reached that backend yet, and those the mover gave up on
+        (Admin app spec section 8.6).
+
+        With `backendId`, `switchPreview` also says how many of its files,
+        and their bytes, would move were it given that backend, the files not
+        on it now, as the Storage tab says before a switch. It changes
+        nothing.
+
+        While storage backends are off, `on` is false, `backend` null and the
+        counts 0.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for anything but a live Store, as
+          `GET /v1/admin/stores/{id}` answers it, and for a `backendId` that
+          names no backend, any while storage backends are off.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+        - name: backendId
+          in: query
+          required: false
+          description: A backend to count the move to; without it, nothing is counted
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        '200':
+          description: Its backend and its files
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreStorage'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: adminSetStoreBackend
+      summary: Give a Store another storage backend
+      description: |
+        Gives the Store the backend `backendId` names, from then on, as the
+        Storage tab's change of a Store's backend does, and answers its
+        backend and its files after (Admin app spec section 8.6). Its files
+        move there in the background, `pending` falling as they do, and until
+        each has moved it's read from where it is. Original brings them back
+        to the server's own folder. The Store's own backend changes nothing.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for anything but a live Store.
+        - `422 validation` for a missing `backendId` (`required`).
+        - `409 refused`, with the Storage tab's sentence: while storage
+          backends are off; for a `backendId` that names no backend; for one
+          not offered to Stores, an encrypted backend whose recovery key
+          isn't confirmed; for one still being added; and for what Healdan's
+          rules refuse.
+
+        Recorded as `store.backend-changed`, with the backend before and
+        after, by name.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreBackendChange'
+      responses:
+        '200':
+          description: Its backend and its files, after
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreStorage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/stores/{id}/stuck-files:
+    get:
+      operationId: adminListStoreStuckFiles
+      summary: A Store's stuck files
+      description: |
+        The Store's files the mover gave up on, after ten failed tries in a
+        row, which stay where they are, where they still open, until they're
+        retried (Admin app spec section 8.6). The newest documents first, at
+        most 1,000: `pending.stuck` of `GET /v1/admin/stores/{id}/backend`
+        counts them all. A short list, so not a page.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for anything but a live Store.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+      responses:
+        '200':
+          description: Its stuck files
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1000
+                items:
+                  $ref: '#/components/schemas/StuckFile'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/stores/{id}/stuck-files/retry:
+    post:
+      operationId: adminRetryStoreStuckFiles
+      summary: Retry a Store's stuck files
+      description: |
+        **Retry** (Admin app spec section 8.6): every stuck file of the Store
+        goes back to waiting, its tries counted from nought again, and the
+        mover is woken, which moves them with the others. The cause, such as
+        the S3 user's permissions or a full disk, is put right first. Takes
+        no body; answers `204`. With none stuck, it changes nothing.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for anything but a live Store.
+        - `409 refused` while storage backends are off.
+
+        Recorded as `storage.stuck-retried`, naming the Store; with none
+        stuck, it changes nothing and isn't recorded.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/StorePath'
+      responses:
+        '204':
+          description: Waiting again
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/backends:
+    get:
+      operationId: adminListBackends
+      summary: The storage backends
+      description: |
+        Whether this server keeps its files through storage backends (`on`),
+        every backend as its page shows it, and the files with no Store that
+        haven't reached a backend or that the mover gave up on, such as a
+        document's saved before it had a folder, the Storage tab's Other
+        Files (Admin app spec section 8.6). Original first, then the others
+        in the order they were added. A short list, so not a page.
+
+        While storage backends are off, `on` is false, with no backends and
+        `otherFiles` all 0.
+
+        `503 storage-unavailable` on a server without Healdan's storage
+        module.
+      tags: [Storage]
+      responses:
+        '200':
+          description: The backends
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendOverview'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: adminAddBackend
+      summary: Add a storage backend
+      description: |
+        Adds a backend, a local folder or an S3 bucket, as the Storage tab's
+        Add does, and answers `201` with it as its page shows it, its address
+        as `Location` (Admin app spec section 8.6). In order: Test on the
+        settings as sent, which must pass; the settings saved; its marker
+        written in its place, which refuses a place whose marker names
+        another backend or another install; for an encrypted backend, its key
+        file and check object; and Test once more, in full, its key included.
+        A step that fails undoes the ones before it, so its name and place
+        are free to try again. It holds nothing until a Store is given it.
+
+        An encrypted backend's answer carries its recovery key in
+        `recoveryKey`, often the only time it's shown, so the app shows it at
+        once, to be saved away from the server; that showing is recorded.
+        Only `POST /v1/admin/backends/{id}/recovery-key/show` answers it
+        again. No Store can be given the backend until the key's last group
+        is typed back (`POST /v1/admin/backends/{id}/recovery-key/confirm`).
+        Whether a backend is encrypted is chosen here, and never changes.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `422 validation` for what the kind needs, missing or blank
+          (`required`): `kind` and `name`; a folder's `path`; an S3 bucket's
+          `endpoint`, `region`, `bucket`, `accessKey` and `secret`. For a
+          `kind` other than `local` and `s3` (`invalid`). And for a member of
+          the other kind, sent with a value (`invalid`): S3's for a folder,
+          or `path` for S3; null counts as left out.
+        - `409 secret-key-missing`, with `sealed`, for an S3 bucket while
+          Healdan's secret key file is missing and values are sealed with it,
+          unless `newKey` is true; nothing is written.
+        - `409 refused`, with the Storage tab's sentence: while storage
+          backends are off; for a name another backend has, in any case, or
+          over 100 characters; for a setting too long, or that isn't what it
+          must be (a path that isn't a folder's whole path from `/`; an
+          endpoint that isn't an address, or `http://` but for an S3 server
+          whose every address is on a private network, with path style); for
+          a place another backend has (the same bucket, at the same S3
+          service, with the same prefix or one that holds or sits inside it;
+          a folder that is, holds or sits inside another backend's, Original's,
+          staging's, the read cache's, the configuration folder or the storage
+          key files' folder, links followed); for Test failing, with what it
+          found; and for a later step failing, such as another backend's or
+          another install's marker in its place.
+
+        Recorded as `backend.added`, with its settings: its name, kind,
+        place and `encrypted`, its access key and its secret as changed with
+        no value; and, for an encrypted backend, as
+        `backend.recovery-key-shown` too, as its answer shows the key.
+      tags: [Storage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewBackend'
+      responses:
+        '201':
+          description: The new backend
+          headers:
+            Location:
+              description: The backend's address, such as `/api/v1/admin/backends/3`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddedBackend'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/backends/test:
+    post:
+      operationId: adminTestNewBackend
+      summary: Test a backend's settings before saving
+      description: |
+        **Test**, in the windows that add and edit a backend (Admin app spec
+        section 8.6): tries the settings as typed, saving nothing, and answers
+        the problems it found, none when it passed. A test that fails isn't a
+        refusal: it's `200`, each problem a sentence in `problems`, a setting
+        Healdan refuses among them, as the add or the save would say it.
+
+        - For S3, it writes a test object in the bucket, reads it back whole
+          and in part, lists it and deletes it. For a folder, it checks that
+          the folder exists, that Healdan can write in it, and that it holds
+          no other backend's marker.
+        - With `id`, the backend being edited: a missing or blank `secret`
+          uses the stored one, and a place that's still its own is tested
+          with its marker. Original's `id` tests Original in full, as
+          `POST /v1/admin/backends/{id}/test` does, whatever else is sent.
+        - The settings of the other kind, S3's for a folder or `path` for S3,
+          are left aside.
+
+        A draft never answers `422`: what's missing or wrong, an unknown
+        `kind` included, is among the problems. It records nothing.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `409 refused` while storage backends are off, and for an `id` that
+          names no backend.
+      tags: [Storage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackendTrial'
+      responses:
+        '200':
+          description: What the test found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendTestResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/backends/{id}:
+    get:
+      operationId: adminGetBackend
+      summary: A storage backend
+      description: |
+        The backend, as the list gives it, for its page and its Edit window
+        (Admin app spec section 8.6). Its S3 secret is never answered, only
+        whether one is stored (`hasSecret`), nor its recovery key.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for a backend that doesn't exist or was removed,
+          and for any while storage backends are off.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/BackendPath'
+      responses:
+        '200':
+          description: The backend
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: adminEditBackend
+      summary: Change a storage backend
+      description: |
+        Saves the backend's settings, as the Storage tab's Edit does, and
+        answers it as saved (Admin app spec section 8.6). A member left out
+        stays as it is, and `secret` only replaces the stored one: null,
+        blank or left out keeps it. The app tests the settings first
+        (`POST /v1/admin/backends/test` with `id`), as the tab does, and saves
+        all the same if the administrator chooses, so a backend can be
+        renamed during an outage: one whose settings don't work fails until
+        they do.
+
+        - The name changes, and for S3 the endpoint, region, access key,
+          secret and path style. The bucket, prefix or path change only while
+          no file is recorded or copy held on the backend (`inUse` false) and
+          no Store keeps its files there, and the new place is given its
+          marker, and an encrypted backend's check object, before the backend
+          points there. Original's folder comes from the server's
+          configuration, so only its name changes.
+        - Its kind never changes, nor whether it's encrypted, which its add
+          chose, as its recovery key was shown then.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for a backend that doesn't exist or was removed,
+          and for any while storage backends are off.
+        - `422 validation` for `kind` and `encrypted` (`not-editable`); for
+          Original, every member but `name` (`not-editable`); for a member of
+          the other kind, S3's on a folder or `path` on S3 (`not-editable`),
+          each only when sent with a value, as the add refuses them: null
+          counts as left out. And for the name, or a setting the backend's
+          kind needs, sent as null or blank (`required`).
+        - `409 secret-key-missing`, with `sealed`, for a new `secret` while
+          Healdan's secret key file is missing and values are sealed with it,
+          unless `newKey` is true; nothing is saved.
+        - `409 refused`, with the Storage tab's sentence: for a name another
+          backend has, in any case, or a setting refused as the add refuses
+          it; for a new bucket, prefix or path once a file is recorded or a
+          copy held on the backend, or while a Store keeps its files there;
+          for a new place that another backend has, or whose marker can't be
+          written; for a new place while the stored secret can't be read, as
+          after a new secret key, so the secret is typed again; for another
+          save that changed the backend meanwhile, so it's opened again; for
+          a backend still being added; and for what Healdan's rules refuse.
+
+        Recorded as `backend.changed`, with each changed setting before and
+        after, a new access key and a new secret as changed with no value. A
+        save that changes nothing isn't recorded.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/BackendPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BackendChange'
+      responses:
+        '200':
+          description: The backend, saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: adminRemoveBackend
+      summary: Remove a storage backend
+      description: |
+        Removes an empty backend, as the Storage tab's Remove does (Admin app
+        spec section 8.6): one no Store keeps its files on, with no file
+        recorded on it and no copy held there. Its settings leave the
+        database, its sealed S3 secret among them; an encrypted backend's key
+        file is deleted; and its marker and check object are deleted from its
+        place, so another backend can have it. It can't be undone. Answers
+        `204`.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for a backend that doesn't exist or was removed,
+          and for any while storage backends are off.
+        - `409 refused`, with the Storage tab's sentence: for Original, which
+          keeps the files of every Store with no other backend; while a Store
+          keeps its files on it, until it's given another; while files are
+          recorded on it, until they've moved off; while copies are held on
+          it, until the holding period ends and the purge deletes them; and
+          for a backend still being added.
+
+        Recorded as `backend.removed`.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/BackendPath'
+      responses:
+        '204':
+          description: Removed
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/backends/{id}/test:
+    post:
+      operationId: adminTestBackend
+      summary: Test a saved backend
+      description: |
+        **Test** on a backend's page (Admin app spec section 8.6): tests the
+        saved backend in full, with its settings and key file as they are
+        now, and answers the problems, none when it passed: its marker, a
+        test object as `POST /v1/admin/backends/test` writes, and for an
+        encrypted backend its key, which must decrypt its check object. Its
+        `status` then says what Test found. A test that fails isn't a
+        refusal. Takes no body, and records nothing.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for a backend that doesn't exist or was removed,
+          and for any while storage backends are off.
+        - `409 refused` for a backend still being added.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/BackendPath'
+      responses:
+        '200':
+          description: What the test found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendTestResult'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/backends/{id}/recovery-key/show:
+    post:
+      operationId: adminShowRecoveryKey
+      summary: Show an encrypted backend's recovery key
+      description: |
+        **Show Recovery Key** (Admin app spec section 8.6): answers an
+        encrypted backend's recovery key, from its key file as it is now, the
+        only answer but the backend's add that holds it. Each showing is
+        recorded, with who and when, before the key is answered, and the
+        server's log says it was shown, never the key; the backend's
+        `keyLastShown` and `keyLastShownBy`, and its key history, then name
+        it. Takes no body.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for a backend that doesn't exist or was removed,
+          and for any while storage backends are off.
+        - `409 refused`, with the Storage tab's sentence: for a backend that
+          isn't encrypted, which has no recovery key; for one whose key file
+          is missing or can't be read, whose recovery key is entered to put
+          it back; and for one still being added.
+
+        Recorded as `backend.recovery-key-shown`.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/BackendPath'
+      responses:
+        '200':
+          description: The recovery key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryKey'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/backends/{id}/recovery-key/confirm:
+    post:
+      operationId: adminConfirmRecoveryKey
+      summary: Confirm an encrypted backend's recovery key
+      description: |
+        Confirms that the backend's recovery key was saved, by the last group
+        of four characters typed back, and answers the backend, which Stores
+        can then be given (Admin app spec section 8.6). The group is read in
+        any case, spaces and hyphens ignored. Confirming a key already
+        confirmed changes nothing.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for a backend that doesn't exist or was removed,
+          and for any while storage backends are off.
+        - `422 validation` for a missing or blank `lastGroup` (`required`).
+        - `409 refused`, with the Storage tab's sentence: for a backend that
+          isn't encrypted; for one whose key file is missing, whose recovery
+          key is entered to put it back; for a group that isn't its recovery
+          key's last; and for a backend still being added.
+
+        Recorded as `backend.recovery-key-confirmed`, but for a key already
+        confirmed.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/BackendPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryKeyConfirmation'
+      responses:
+        '200':
+          description: The backend, its recovery key confirmed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/backends/{id}/recovery-key/enter:
+    post:
+      operationId: adminEnterRecoveryKey
+      summary: Put an encrypted backend's key file back
+      description: |
+        **Enter Recovery Key** (Admin app spec section 8.6): writes an
+        encrypted backend's key file again from its recovery key, as typed or
+        pasted, and answers the backend, which is then checked again. The key
+        is read in any case, spaces and hyphens ignored, and must decrypt the
+        backend's check object, which is read before anything is written, so
+        a mistyped key, or another backend's, can't replace the file.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for a backend that doesn't exist or was removed,
+          and for any while storage backends are off.
+        - `422 validation` for a missing or blank `recoveryKey`
+          (`required`).
+        - `409 refused`, with the Storage tab's sentence: for a backend that
+          isn't encrypted; for what isn't a recovery key, by its length or its
+          last character; for a key that isn't the backend's, so nothing was
+          written; for a backend that can't be used, or whose check object is
+          missing or can't be read, so the key can't be checked; for a key
+          file that couldn't be written; and for a backend still being added.
+
+        Recorded as `backend.recovery-key-entered`.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/BackendPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecoveryKeyEntry'
+      responses:
+        '200':
+          description: The backend, its key file back
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/backends/{id}/key-events:
+    get:
+      operationId: adminListKeyEvents
+      summary: A backend's key history
+      description: |
+        **Key History** (Admin app spec section 8.6): every showing and every
+        entering of the backend's recovery key, newest first, with who and
+        when, the showing at its add included. Empty for a backend that isn't
+        encrypted. A short list, so not a page.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `404 not-found` for a backend that doesn't exist or was removed,
+          and for any while storage backends are off.
+      tags: [Storage]
+      parameters:
+        - $ref: '#/components/parameters/BackendPath'
+      responses:
+        '200':
+          description: Its key history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KeyEvent'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/storage/settings:
+    get:
+      operationId: adminGetStorageSettings
+      summary: The storage settings
+      description: |
+        The storage settings, with each one's limits, for their form (Admin
+        app spec section 8.6): the holding period, how many days a file's old
+        copy is held after a move or a delete before the purge deletes it;
+        the read cache's size, for copies of S3 backends' files on the
+        server; and parallel transfers, how many files move between backends
+        at once. While storage backends are off, `on` is false, and the
+        values are as saved.
+
+        `503 storage-unavailable` on a server without Healdan's storage
+        module.
+      tags: [Storage]
+      responses:
+        '200':
+          description: The settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageSettings'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: adminSetStorageSettings
+      summary: Save the storage settings
+      description: |
+        Saves all three settings in one transaction, each checked before any
+        is written, and answers them as saved (Admin app spec section 8.6). A
+        new number of parallel transfers applies at once, and a holding
+        period to the copies held from then on.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `422 validation` for a setting that's missing (`required`), or
+          outside its limits, from 1 to the maximum `GET` gives
+          (`out-of-range`), each by its field; nothing is saved.
+        - `409 refused` while storage backends are off.
+
+        Recorded as `storage.settings-changed`, with each changed setting
+        before and after. Saving them as they are changes nothing.
+      tags: [Storage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StorageSettingsChange'
+      responses:
+        '200':
+          description: The settings, saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageSettings'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/storage/stuck-files:
+    get:
+      operationId: adminListOtherStuckFiles
+      summary: The stuck files with no Store
+      description: |
+        The files with no Store the mover gave up on, such as a document's
+        saved before it had a folder, listed as a Store's are
+        (`GET /v1/admin/stores/{id}/stuck-files`): the newest documents
+        first, at most 1,000; `otherFiles.stuck` of `GET /v1/admin/backends`
+        counts them all.
+
+        `503 storage-unavailable` on a server without Healdan's storage
+        module.
+      tags: [Storage]
+      responses:
+        '200':
+          description: The stuck files with no Store
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 1000
+                items:
+                  $ref: '#/components/schemas/StuckFile'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '503':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/admin/storage/stuck-files/retry:
+    post:
+      operationId: adminRetryOtherStuckFiles
+      summary: Retry the stuck files with no Store
+      description: |
+        **Retry** for the files with no Store, as a Store's
+        (`POST /v1/admin/stores/{id}/stuck-files/retry`): each goes back to
+        waiting, its tries counted from nought again, and the mover is woken.
+        Takes no body; answers `204`. With none stuck, it changes nothing.
+
+        - `503 storage-unavailable` on a server without Healdan's storage
+          module.
+        - `409 refused` while storage backends are off.
+
+        Recorded as `storage.stuck-retried`, naming no Store; with none
+        stuck, it changes nothing and isn't recorded.
+      tags: [Storage]
+      responses:
+        '204':
+          description: Waiting again
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '503':
           $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
@@ -2047,6 +3210,15 @@ components:
         type: integer
         format: int64
         minimum: 0
+    BackendPath:
+      name: id
+      in: path
+      required: true
+      description: The storage backend's id; Original's is 1
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
   responses:
     Problem:
       description: A refusal or an error
@@ -2059,7 +3231,8 @@ components:
       type: object
       description: |
         An RFC 9457 problem, as in `openapi.yaml`, with the codes the admin
-        API answers. `validation` adds `fields`.
+        API answers. `validation` adds `fields`, and `secret-key-missing`
+        adds `sealed`.
       required: [type, title, status, detail, code]
       properties:
         type:
@@ -2077,11 +3250,22 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [web-session-only, admins-only, not-found, refused, validation]
+          examples: [web-session-only, admins-only, not-found, refused, validation, secret-key-missing,
+            storage-unavailable]
         fields:
           type: array
           items:
             $ref: '#/components/schemas/FieldError'
+        sealed:
+          type: integer
+          format: int64
+          minimum: 1
+          description: |
+            For `secret-key-missing`: how many stored values are sealed with
+            Healdan's missing secret key file, sign-in providers' client
+            secrets and storage backends' S3 secrets among them. A new key
+            would leave each to be entered again, and helpers signed in
+            through a provider to sign in again
     FieldError:
       type: object
       additionalProperties: false
@@ -3001,7 +4185,7 @@ components:
           description: The documents that went with it
     DeletedFolder:
       type: object
-      description: The Trash item a workspace folder's or a template's delete made
+      description: The Trash item a workspace folder's, a template's or a Store's delete made
       additionalProperties: false
       required: [trashItemId, folders, documents]
       properties:
@@ -3013,12 +4197,15 @@ components:
             User app's Trash lists. `POST /v1/trash/{id}/restore` restores a
             matter's folder back where it was; a template's, or a folder of
             one, it answers `409 place-gone`, as it restores into a Store
-            only
+            only; and a Store's `409 refused`, as
+            `POST /v1/admin/stores/{id}/restore` restores a Store
         folders:
           type: integer
           format: int64
           minimum: 0
-          description: The folders and search folders in it that went with it, at every level, its own left out
+          description: |
+            The folders and search folders in it that went with it, at every
+            level, its own left out: a Store's matters' own folders among them
         documents:
           type: integer
           format: int64
@@ -3059,7 +4246,7 @@ components:
         HTML tag, or a character reference such as `&amp;`.
     FolderRename:
       type: object
-      description: A folder's or a template's new name
+      description: A folder's, a template's or a Store's new name
       additionalProperties: false
       required: [name]
       properties:
@@ -3475,7 +4662,7 @@ components:
             with no `groupId`
     Store:
       type: object
-      description: A Store
+      description: A Store, as its create answers it; `StoreInfo` has the rest
       additionalProperties: false
       required: [id, name]
       properties:
@@ -3487,7 +4674,7 @@ components:
           type: string
     NewStore:
       type: object
-      description: A new Store, and who can see it
+      description: A new Store, who can see it, and the storage backend it keeps its files on
       additionalProperties: false
       required: [name, groupIds]
       properties:
@@ -3500,6 +4687,13 @@ components:
           items:
             type: integer
             format: int64
+        backendId:
+          type: [integer, 'null']
+          format: int64
+          description: |
+            The storage backend it keeps its files on, one offered to Stores;
+            null or left out for Original, the server's own folder, whose id
+            is 1
     StoreAccess:
       type: object
       description: Who can see a Store
@@ -3533,6 +4727,689 @@ components:
           items:
             type: integer
             format: int64
+    StoreInfo:
+      type: object
+      description: A Store, as the Stores list and its page show it
+      additionalProperties: false
+      required: [id, name, matters, documents, bytes, figuresAt, readers, backend, pending]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Its id, which is its folder's
+        name:
+          type: string
+        matters:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many live matters it holds, not deleted or in the Trash, counted at the request
+        documents:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: |
+            Its matters' live documents, not shortcuts and not in the Trash,
+            counted through the client and matter stamped on them, as the
+            summary last counted them; null until the summary has been worked
+            out since the server started
+        bytes:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+          description: The size of those documents' files, the current version of each; null as `documents` is
+        figuresAt:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When the summary that gives `documents` and `bytes` was worked
+            out; null until it has been since the server started
+        readers:
+          type: array
+          description: |
+            Who can see it: each group and person whose row on it grants
+            Read, groups first, then people, each by name, ignoring case, as
+            `GET /v1/admin/stores/{id}/access` lists them. Empty when only
+            administrators can
+          items:
+            $ref: '#/components/schemas/StoreReader'
+        backend:
+          description: |
+            The storage backend it keeps its files on, Original when it has no
+            other; null while storage backends are off, and on a server
+            without Healdan's storage module
+          oneOf:
+            - $ref: '#/components/schemas/StoreBackend'
+            - type: 'null'
+        pending:
+          description: Its files that haven't reached its backend, and those the mover gave up on; null as `backend` is
+          oneOf:
+            - $ref: '#/components/schemas/PendingFiles'
+            - type: 'null'
+    StoreReader:
+      type: object
+      description: A group, or a person, that can see a Store
+      additionalProperties: false
+      required: [groupId, name, person]
+      properties:
+        groupId:
+          type: integer
+          format: int64
+          description: The group, or the person's own group, as `AccessRow` gives it
+        name:
+          type: string
+          description: The group's name, or the person's first and last name (the username when both are blank)
+        person:
+          type: boolean
+          description: True for a person's own group
+    DeletedStore:
+      type: object
+      description: A Store in the Trash
+      additionalProperties: false
+      required: [id, name, trashItemId, state, matters, deletedAt, deletedBy, removedAt, destroyAfter]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The Store's id, which is its folder's, as `POST /v1/admin/stores/{id}/restore` takes it
+        name:
+          type: string
+          description: Its name, as it was deleted
+        trashItemId:
+          type: integer
+          format: int64
+          description: The Trash item that holds it, which its delete made
+        state:
+          type: string
+          description: |
+            `deleted`, in its Trash; `removed`, taken out of the Trash and
+            destroyed for good after `destroyAfter`, until when an
+            administrator can still restore it
+          enum: [deleted, removed]
+        matters:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many matters went to the Trash with it, and are in its item still
+        deletedAt:
+          type: string
+          format: date-time
+        deletedBy:
+          description: |
+            Who deleted it; null when the server's data doesn't say, or that
+            person's account has been deleted
+          oneOf:
+            - $ref: '#/components/schemas/PersonBrief'
+            - type: 'null'
+        removedAt:
+          type: [string, 'null']
+          format: date-time
+          description: When it was removed from the Trash; null unless `removed`
+        destroyAfter:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            The night the server destroys it for good, once it has been
+            removed for the days the administrators set; null unless
+            `removed`
+    StoreBackendChange:
+      type: object
+      description: The storage backend a Store keeps its files on from then on
+      additionalProperties: false
+      required: [backendId]
+      properties:
+        backendId:
+          type: integer
+          format: int64
+          description: The backend, one offered to Stores; Original's id is 1
+    StoreStorage:
+      type: object
+      description: The storage backend a Store keeps its files on, and its files
+      additionalProperties: false
+      required: [storeId, 'on', backend, files, bytes, pending, switchPreview]
+      properties:
+        storeId:
+          type: integer
+          format: int64
+        'on':
+          type: boolean
+          description: Whether this server keeps its files through storage backends; false while they're off
+        backend:
+          description: Its backend, Original when it has no other; null while storage backends are off
+          oneOf:
+            - $ref: '#/components/schemas/StoreBackend'
+            - type: 'null'
+        files:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many of its files are recorded, on whichever backend each is
+            now; 0 while storage backends are off
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Their size
+        pending:
+          $ref: '#/components/schemas/PendingFiles'
+        switchPreview:
+          description: |
+            With `backendId`, what would move were the Store given that
+            backend; null without it
+          oneOf:
+            - $ref: '#/components/schemas/SwitchPreview'
+            - type: 'null'
+    SwitchPreview:
+      type: object
+      description: How much would move, were a Store given another backend
+      additionalProperties: false
+      required: [backendId, files, bytes]
+      properties:
+        backendId:
+          type: integer
+          format: int64
+          description: The backend asked about
+        files:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many of the Store's files would move to it, those not on it
+            now; none when nothing would, and the switch then takes effect at
+            once
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Their size
+    PendingFiles:
+      type: object
+      description: Files that haven't reached their Store's backend yet, and those the mover gave up on
+      additionalProperties: false
+      required: [waiting, waitingBytes, stuck]
+      properties:
+        waiting:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many files wait to move to their Store's backend: after the
+            Store was given another, a matter moved in from another Store, or
+            saves still to be uploaded
+        waitingBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Their size
+        stuck:
+          type: integer
+          format: int64
+          minimum: 0
+          description: |
+            How many files the mover gave up on, after ten failed tries in a
+            row: they stay where they are, and still open, until they're
+            retried
+    StuckFile:
+      type: object
+      description: A file the mover gave up on
+      additionalProperties: false
+      required: [docId, fileName, resource, attempts, lastError]
+      properties:
+        docId:
+          type: integer
+          format: int64
+          description: LogicalDOC's internal id of the document, not its doc #
+        fileName:
+          type: [string, 'null']
+          description: The document's file name; null when the document can't be found
+        resource:
+          type: string
+          description: |
+            Which of the document's files it is: a version's own file by its
+            version, such as `1.2`, and a file made from it after that, such
+            as `1.2-thumb.png` for its thumbnail or `1.2-conversion.pdf` for
+            its preview
+          examples: ['1.2', 1.2-thumb.png]
+        attempts:
+          type: integer
+          minimum: 0
+          description: How many times the mover has tried it
+        lastError:
+          type: [string, 'null']
+          description: Why its last try failed, in English
+    BackendOverview:
+      type: object
+      description: The storage backends, and the files with no Store
+      additionalProperties: false
+      required: ['on', backends, otherFiles]
+      properties:
+        'on':
+          type: boolean
+          description: |
+            Whether this server keeps its files through storage backends;
+            false when it keeps them in LogicalDOC's own store, and then
+            nothing here can change
+        backends:
+          type: array
+          description: Original first, then the others in the order they were added; none while storage backends are off
+          items:
+            $ref: '#/components/schemas/Backend'
+        otherFiles:
+          $ref: '#/components/schemas/PendingFiles'
+          description: |
+            The files with no Store, such as a document's saved before it had
+            a folder, the Storage tab's Other Files, which have no backend to
+            choose; all 0 while storage backends are off
+    Backend:
+      type: object
+      description: |
+        A storage backend, as its page and its Edit window show it. Its S3
+        secret is never answered, only whether one is stored, nor its
+        recovery key.
+      additionalProperties: false
+      required: [id, name, kind, original, path, endpoint, region, bucket, prefix, pathStyle, accessKey, hasSecret,
+        encrypted, keyConfirmed, offered, inUse, files, bytes, status, error, since, keyLastShown, keyLastShownBy,
+        stores]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Its id; Original's is 1
+        name:
+          type: string
+          description: Its own name, at most 100 characters, which no other backend has in any case
+        kind:
+          type: string
+          description: '`local`, a folder, or `s3`, a bucket at an S3 service'
+          enum: [local, s3]
+        original:
+          type: boolean
+          description: |
+            True for Original, the folder the server has always kept files in,
+            which every Store keeps its files on until it's given another
+        path:
+          type: [string, 'null']
+          description: |
+            A folder's whole path in the server's container, such as
+            `/mnt/archive`; Original's comes from the server's configuration
+            and can't change here. Null for S3
+          examples: [/mnt/archive]
+        endpoint:
+          type: [string, 'null']
+          description: |
+            S3's endpoint, its scheme, host and port only; null for a folder,
+            and for an S3 endpoint stored that can't be read as an address
+            with a host
+          examples: ['https://s3.eu-west-1.wasabisys.com']
+        region:
+          type: [string, 'null']
+          description: S3's region; null for a folder
+          examples: [eu-west-1]
+        bucket:
+          type: [string, 'null']
+          description: S3's bucket; null for a folder
+        prefix:
+          type: [string, 'null']
+          description: S3's folder in the bucket, as kept, ending in `/`, or empty for none; null for a folder
+          examples: [healdan/]
+        pathStyle:
+          type: boolean
+          description: |
+            S3's path-style addressing, the bucket in the address's path
+            rather than its host name; false for a folder
+        accessKey:
+          type: [string, 'null']
+          description: S3's access key ID, as the Storage tab shows it; null for a folder. The secret is never answered
+        hasSecret:
+          type: boolean
+          description: |
+            True when an S3 secret is stored that the server can read; false
+            for a folder, and when the stored one can't be read, as after a
+            new secret key, so it's typed again
+        encrypted:
+          type: boolean
+          description: Whether its files are encrypted, as its add chose; it never changes, and Original never is
+        keyConfirmed:
+          type: boolean
+          description: |
+            For an encrypted backend, whether its recovery key's last group
+            was typed back, which shows it was saved; false otherwise
+        offered:
+          type: boolean
+          description: |
+            Whether a Store can be given it: true but for an encrypted backend
+            whose recovery key isn't confirmed
+        inUse:
+          type: boolean
+          description: |
+            True while a file is recorded or a copy held on it: its bucket,
+            prefix or path can't change then
+        files:
+          type: integer
+          format: int64
+          minimum: 0
+          description: How many files are recorded on it
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Their size
+        status:
+          $ref: '#/components/schemas/BackendStatus'
+        error:
+          type: [string, 'null']
+          description: |
+            Why it's failing, in English, naming it as "this backend"; null
+            unless `status` is `unreachable` or `failing`
+        since:
+          type: [string, 'null']
+          format: date-time
+          description: When it entered its status, such as since when it has been failing; null while `unchecked`
+        keyLastShown:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When its recovery key was last shown, at its add or since; null if
+            never, and for one not encrypted
+        keyLastShownBy:
+          type: [string, 'null']
+          description: The username of whom it was last shown to; null as `keyLastShown` is
+        stores:
+          type: array
+          description: |
+            The names of the Stores that keep their files on it, by name,
+            ignoring case: for Original, every Store with no other backend.
+            The Templates Store isn't among them
+          items:
+            type: string
+    BackendStatus:
+      type: string
+      description: |
+        A backend's status, from its last use, Test or check:
+
+        - `unchecked`: not checked since the server started, which checks
+          every backend as it starts;
+        - `ok`: its last check passed;
+        - `unreachable`: failing because it can't be reached, an outage,
+          whose moves pause until it's back;
+        - `failing`: failing for another reason, such as its marker missing
+          or its credentials refused.
+      enum: [unchecked, ok, unreachable, failing]
+    NewBackend:
+      type: object
+      description: |
+        A new backend: a folder's `path`, or an S3 bucket's settings. Members
+        of the other kind are left out or null.
+      additionalProperties: false
+      required: [kind, name]
+      properties:
+        kind:
+          type: string
+          description: |
+            `local`, a folder, or `s3`, a bucket at an S3 service; any other
+            value is `422 validation` (`invalid`), not `400`
+          enum: [local, s3]
+        name:
+          type: string
+          description: Its own name, at most 100 characters
+        path:
+          type: [string, 'null']
+          description: A folder's whole path in the server's container, from `/`
+          examples: [/mnt/archive]
+        endpoint:
+          type: [string, 'null']
+          description: |
+            S3: the service's address for the bucket's region, `https://`, or
+            `http://` only for an S3 server whose every address is on a
+            private network, with path style
+          examples: ['https://s3.eu-west-1.wasabisys.com']
+        region:
+          type: [string, 'null']
+        bucket:
+          type: [string, 'null']
+        prefix:
+          type: [string, 'null']
+          description: |
+            S3, optional, a folder in the bucket, to which Healdan adds a `/`;
+            null, blank or left out for none
+        pathStyle:
+          type: [boolean, 'null']
+          description: S3, the bucket in the address's path rather than its host name; false when null or left out
+        accessKey:
+          type: [string, 'null']
+        secret:
+          type: [string, 'null']
+          description: S3's secret, never answered or shown again
+        encrypted:
+          type: [boolean, 'null']
+          description: |
+            Whether its files are encrypted, chosen now and never changed;
+            null or left out for the kind's own choice, true for S3 and false
+            for a folder
+        newKey:
+          type: boolean
+          description: |
+            True to make Healdan's secret key file anew, after
+            `secret-key-missing`, which leaves the values sealed with the
+            missing one to be entered again; false or left out otherwise
+    BackendTrial:
+      type: object
+      description: |
+        Settings to test, as the add or the edit window holds them, any member
+        left out or null. With `id`, they're that backend's, being edited.
+      additionalProperties: false
+      properties:
+        id:
+          type: [integer, 'null']
+          format: int64
+          description: The backend being edited; null or left out for one being added
+        kind:
+          type: [string, 'null']
+          description: As `NewBackend.kind`; another value, or none, is one of the test's problems
+          enum: [local, s3, null]
+        name:
+          type: [string, 'null']
+        path:
+          type: [string, 'null']
+        endpoint:
+          type: [string, 'null']
+        region:
+          type: [string, 'null']
+        bucket:
+          type: [string, 'null']
+        prefix:
+          type: [string, 'null']
+        pathStyle:
+          type: [boolean, 'null']
+        accessKey:
+          type: [string, 'null']
+        secret:
+          type: [string, 'null']
+          description: As typed; with `id`, null or blank for the stored one
+        encrypted:
+          type: [boolean, 'null']
+    BackendChange:
+      type: object
+      description: |
+        A backend's new settings, each member left out staying as it is. Its
+        kind and whether it's encrypted never change: those members are
+        `422 validation` (`not-editable`), as is every member but `name` for
+        Original.
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          description: At most 100 characters
+        path:
+          type: string
+          description: A folder's new path, only while it's not `inUse` and no Store keeps its files there
+        endpoint:
+          type: string
+        region:
+          type: string
+        bucket:
+          type: string
+          description: A new bucket, only while it's not `inUse` and no Store keeps its files there
+        prefix:
+          type: [string, 'null']
+          description: |
+            A new prefix, only while it's not `inUse` and no Store keeps its
+            files there; null or blank for none
+        pathStyle:
+          type: boolean
+        accessKey:
+          type: string
+        secret:
+          type: [string, 'null']
+          description: A new S3 secret; null, blank or left out keeps the stored one
+        newKey:
+          type: boolean
+          description: As `NewBackend.newKey`, with a new `secret`; nothing without one
+    AddedBackend:
+      type: object
+      description: A backend just added, and an encrypted one's recovery key
+      additionalProperties: false
+      required: [backend, recoveryKey]
+      properties:
+        backend:
+          $ref: '#/components/schemas/Backend'
+        recoveryKey:
+          description: |
+            An encrypted backend's recovery key, shown now and recorded as
+            shown; null for one not encrypted
+          oneOf:
+            - $ref: '#/components/schemas/RecoveryKeyText'
+            - type: 'null'
+    RecoveryKeyText:
+      type: string
+      description: |
+        An encrypted backend's key written out: 52 characters in 13 groups of
+        four, with a space between, using no I, L, O or U. Lose both it and
+        the backend's key file, and the backend's files can't be read
+      pattern: '^[0-9A-HJKMNP-TV-Z]{4}( [0-9A-HJKMNP-TV-Z]{4}){12}$'
+    RecoveryKey:
+      type: object
+      description: An encrypted backend's recovery key, as Show Recovery Key answers it
+      additionalProperties: false
+      required: [recoveryKey]
+      properties:
+        recoveryKey:
+          $ref: '#/components/schemas/RecoveryKeyText'
+    RecoveryKeyConfirmation:
+      type: object
+      description: A recovery key's last group, typed back
+      additionalProperties: false
+      required: [lastGroup]
+      properties:
+        lastGroup:
+          type: string
+          description: Its last four characters, as typed; any case, spaces and hyphens ignored
+    RecoveryKeyEntry:
+      type: object
+      description: A recovery key, as typed, to put a backend's key file back
+      additionalProperties: false
+      required: [recoveryKey]
+      properties:
+        recoveryKey:
+          type: string
+          description: As typed or pasted; any case, spaces and hyphens ignored
+    BackendTestResult:
+      type: object
+      description: What a test found
+      additionalProperties: false
+      required: [problems]
+      properties:
+        problems:
+          type: array
+          description: Each problem it found, a sentence in English the app shows as it is; empty when it passed
+          items:
+            type: string
+    KeyEvent:
+      type: object
+      description: A showing or an entering of a backend's recovery key
+      additionalProperties: false
+      required: [event, at, userId, username]
+      properties:
+        event:
+          type: string
+          description: '`shown`, shown to an administrator; `entered`, typed in to put its key file back'
+          enum: [shown, entered]
+        at:
+          type: string
+          format: date-time
+        userId:
+          type: integer
+          format: int64
+          description: The administrator's user id
+        username:
+          type: string
+          description: The administrator's username then
+    StorageSettings:
+      type: object
+      description: The storage settings, and each one's limits
+      additionalProperties: false
+      required: ['on', holdDays, cacheGb, transfers, limits]
+      properties:
+        'on':
+          type: boolean
+          description: Whether this server keeps its files through storage backends; false while they're off
+        holdDays:
+          type: integer
+          minimum: 1
+          description: |
+            The holding period, how many days an old copy is held after a move
+            or a delete before the purge deletes it
+        cacheGb:
+          type: integer
+          minimum: 1
+          description: The read cache's size, in GB, for copies of S3 backends' files on the server
+        transfers:
+          type: integer
+          minimum: 1
+          description: Parallel transfers, how many files move between backends at once
+        limits:
+          $ref: '#/components/schemas/StorageLimits'
+    StorageLimits:
+      type: object
+      description: Each storage setting's limits, as the server holds them
+      additionalProperties: false
+      required: [holdDays, cacheGb, transfers]
+      properties:
+        holdDays:
+          $ref: '#/components/schemas/SettingRange'
+        cacheGb:
+          $ref: '#/components/schemas/SettingRange'
+        transfers:
+          $ref: '#/components/schemas/SettingRange'
+    SettingRange:
+      type: object
+      description: The lowest and highest values a setting takes, both included
+      additionalProperties: false
+      required: [min, max]
+      properties:
+        min:
+          type: integer
+          minimum: 1
+          description: Always 1
+        max:
+          type: integer
+          minimum: 1
+    StorageSettingsChange:
+      type: object
+      description: All three storage settings
+      additionalProperties: false
+      required: [holdDays, cacheGb, transfers]
+      properties:
+        holdDays:
+          type: integer
+          description: Days, from 1 to `limits.holdDays.max`
+        cacheGb:
+          type: integer
+          description: GB, from 1 to `limits.cacheGb.max`
+        transfers:
+          type: integer
+          description: From 1 to `limits.transfers.max`
     Group:
       type: object
       description: A group, not a person's own

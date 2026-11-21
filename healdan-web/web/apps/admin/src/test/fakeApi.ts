@@ -113,8 +113,69 @@ export const kestrel: A['ClientBrief'] = { id: 3, number: 1003, name: 'Kestrel S
 
 export const firmStore: A['Store'] = { id: 3, name: 'Firm' }
 export const clientWork: A['Store'] = { id: 4, name: 'Client Work' }
-/** GET /v1/admin/stores: by name */
-export const stores: A['Store'][] = [clientWork, firmStore]
+
+/** The backends the Stores keep their files on, as a Store names one */
+export const originalOnStore: A['StoreBackend'] = { id: 1, name: 'Original', kind: 'local', encrypted: false }
+export const wasabiOnStore: A['StoreBackend'] = { id: 2, name: 'Wasabi EU', kind: 's3', encrypted: true }
+
+/** Nothing waiting to reach a Store's backend, and nothing stuck */
+export const nothingPending: A['PendingFiles'] = { waiting: 0, waitingBytes: 0, stuck: 0 }
+
+/** A Store as the Stores list and its page give it: on Original, with nothing in it, unless `over` says otherwise */
+export function storeInfoOf(store: A['Store'], over: Partial<A['StoreInfo']> = {}): A['StoreInfo'] {
+  return { ...store, matters: 0, documents: 0, bytes: 0, figuresAt: '2026-11-19T10:41:00Z', readers: [], backend: originalOnStore, pending: nothingPending, ...over }
+}
+
+/** Client Work: six matters on Wasabi EU, encrypted, that Everyone can see, with three files stuck */
+export const clientWorkInfo = storeInfoOf(clientWork, {
+  matters: 6,
+  documents: 1004,
+  bytes: Math.round(11.8 * GB),
+  readers: [{ groupId: 2, name: 'Everyone', person: false }],
+  backend: wasabiOnStore,
+  pending: { waiting: 0, waitingBytes: 0, stuck: 3 },
+})
+
+/** Firm: two matters on Original, that Everyone and Helen can see, everything in place */
+export const firmInfo = storeInfoOf(firmStore, {
+  matters: 2,
+  documents: 280,
+  bytes: Math.round(2.4 * GB),
+  readers: [
+    { groupId: 2, name: 'Everyone', person: false },
+    { groupId: 105, name: 'Helen Ashcombe', person: true },
+  ],
+})
+
+/** GET /v1/admin/stores: by name, each with what the Stores list shows; the menus read only the id and the name */
+export const stores: A['StoreInfo'][] = [clientWorkInfo, firmInfo]
+
+/** A Store in the Trash: Old Branch, deleted by Sam with its two matters, unless `over` says otherwise */
+export function deletedStoreOf(over: Partial<A['DeletedStore']> = {}): A['DeletedStore'] {
+  return {
+    id: 6,
+    name: 'Old Branch',
+    trashItemId: 950,
+    state: 'deleted',
+    matters: 2,
+    deletedAt: '2026-11-18T15:00:00Z',
+    deletedBy: { id: 10, username: 'sam', name: 'Sam Okafor' },
+    removedAt: null,
+    destroyAfter: null,
+    ...over,
+  }
+}
+
+/** A Store's backend and files, as GET /v1/admin/stores/{id}/backend answers without a backend to count a move to */
+export function storeStorageOf(info: A['StoreInfo'], over: Partial<A['StoreStorage']> = {}): A['StoreStorage'] {
+  return { storeId: info.id, on: info.backend !== null, backend: info.backend, files: 0, bytes: 0, pending: info.pending ?? nothingPending, switchPreview: null, ...over }
+}
+
+/** Client Work's 3,902 files on Wasabi EU, and Firm's 812 on Original */
+export const storeStorage: Record<number, A['StoreStorage']> = {
+  [clientWork.id]: storeStorageOf(clientWorkInfo, { files: 3902, bytes: Math.round(11.8 * GB) }),
+  [firmStore.id]: storeStorageOf(firmInfo, { files: 812, bytes: Math.round(2.4 * GB) }),
+}
 
 export const helen: A['PersonBrief'] = { id: 5, username: 'helen', name: 'Helen Ashcombe' }
 export const tom: A['PersonBrief'] = { id: 6, username: 'tom', name: 'Tom Reeve' }
@@ -489,6 +550,158 @@ export function restoredFolder(trashItemId: number, name: string): S['RestoredIt
 
 const notFound = () => problem(404, 'not-found')
 
+// Storage (Phase 3): the firm's backends, as the Storage tab shows them, the files with no Store, and the settings.
+
+/** A backend, as GET /v1/admin/backends/{id} answers it: Archive, an empty local folder no Store uses, unless `over` says otherwise */
+export function backendOf(over: Partial<A['Backend']> = {}): A['Backend'] {
+  return {
+    id: 3,
+    name: 'Archive',
+    kind: 'local',
+    original: false,
+    path: '/mnt/archive',
+    endpoint: null,
+    region: null,
+    bucket: null,
+    prefix: null,
+    pathStyle: false,
+    accessKey: null,
+    hasSecret: false,
+    encrypted: false,
+    keyConfirmed: false,
+    offered: true,
+    inUse: false,
+    files: 0,
+    bytes: 0,
+    status: 'ok',
+    error: null,
+    since: '2026-11-19T08:00:00Z',
+    keyLastShown: null,
+    keyLastShownBy: null,
+    stores: [],
+    ...over,
+  }
+}
+
+/** Original, which keeps Firm's files, every Store with no other backend */
+export const originalBackend = backendOf({ id: 1, name: 'Original', original: true, path: '/opt/logicaldoc/repository/docs', inUse: true, files: 812, bytes: Math.round(2.4 * GB), stores: ['Firm'] })
+
+/** Wasabi EU, the encrypted S3 bucket Client Work keeps its files in, its recovery key confirmed and last shown to Sam */
+export const wasabiBackend = backendOf({
+  id: 2,
+  name: 'Wasabi EU',
+  kind: 's3',
+  path: null,
+  endpoint: 'https://s3.eu-central-1.wasabisys.com',
+  region: 'eu-central-1',
+  bucket: 'ashcombe-reeve',
+  prefix: 'healdan/',
+  pathStyle: true,
+  accessKey: 'WASABIACCESSKEY01',
+  hasSecret: true,
+  encrypted: true,
+  keyConfirmed: true,
+  inUse: true,
+  files: 3902,
+  bytes: Math.round(11.8 * GB),
+  keyLastShown: '2026-10-02T09:15:00Z',
+  keyLastShownBy: 'sam',
+  stores: ['Client Work'],
+})
+
+/** Archive, an empty folder not checked since the server started */
+export const archiveBackend = backendOf({ status: 'unchecked', since: null })
+
+/** The office's NAS, encrypted, whose recovery key nobody has confirmed, failing as its share didn't mount */
+export const nasBackend = backendOf({
+  id: 4,
+  name: 'Office NAS',
+  path: '/mnt/nas',
+  encrypted: true,
+  keyConfirmed: false,
+  offered: false,
+  status: 'failing',
+  error: 'The marker of this backend is missing.',
+  since: '2026-11-19T09:30:00Z',
+})
+
+/** GET /v1/admin/backends: Original first, then the others by id, and nothing waiting or stuck with no Store */
+export function backendOverview(over: Partial<A['BackendOverview']> = {}): A['BackendOverview'] {
+  return { on: true, backends: [originalBackend, wasabiBackend, archiveBackend, nasBackend], otherFiles: { waiting: 0, waitingBytes: 0, stuck: 0 }, ...over }
+}
+
+/** GET /v1/admin/backends on a server that keeps its files in LogicalDOC's own store */
+export const storageOff: A['BackendOverview'] = { on: false, backends: [], otherFiles: { waiting: 0, waitingBytes: 0, stuck: 0 } }
+
+/** GET /v1/admin/storage/settings: a 30-day holding period, a 20 GB read cache and 4 parallel transfers, with the server's limits */
+export function storageSettings(over: Partial<A['StorageSettings']> = {}): A['StorageSettings'] {
+  return {
+    on: true,
+    holdDays: 30,
+    cacheGb: 20,
+    transfers: 4,
+    limits: { holdDays: { min: 1, max: 365 }, cacheGb: { min: 1, max: 10000 }, transfers: { min: 1, max: 16 } },
+    ...over,
+  }
+}
+
+/** A recovery key as the server writes one out: 13 groups of four, from 0-9 and A-Z without I, L, O or U */
+export const RECOVERY_KEY = '7K3M 9QXR 2HTW 4PZB 8VJC 6NDF 1GSY 5EAR 3WKQ 0TMH 9BXZ 2CVN 4JP8'
+
+/** GET /v1/admin/backends/2/key-events: newest first, the showing at its add last */
+export const wasabiKeyEvents: A['KeyEvent'][] = [
+  { event: 'shown', at: '2026-10-02T09:15:00Z', userId: sam.id, username: 'sam' },
+  { event: 'entered', at: '2026-09-30T16:40:00Z', userId: me.id, username: 'admin' },
+  { event: 'shown', at: '2026-09-01T11:00:00Z', userId: me.id, username: 'admin' },
+]
+
+/** A file the mover gave up on: version 1.2 of document 10388, unless `over` says otherwise */
+export function stuckFile(over: Partial<A['StuckFile']> = {}): A['StuckFile'] {
+  return { docId: 10388, fileName: 'Heads of Terms.pdf', resource: '1.2', attempts: 10, lastError: 'Access denied by the S3 service.', ...over }
+}
+
+/** What the Backends page and a backend's page read, as the defaults answer them */
+export function storageRoutes(): Routes {
+  const all = backendOverview().backends
+  return {
+    'GET /v1/admin/backends': backendOverview(),
+    'GET /v1/admin/backends/*': ({ params }: { params: string[] }) => all.find((one) => one.id === Number(params[0])) ?? notFound(),
+    'GET /v1/admin/backends/*/key-events': ({ params }: { params: string[] }) => (Number(params[0]) === wasabiBackend.id ? wasabiKeyEvents : []),
+    'GET /v1/admin/storage/settings': storageSettings(),
+    'GET /v1/admin/storage/stuck-files': [],
+  }
+}
+
+/**
+ * What the Stores list and a Store's page read, as the defaults answer them: Client Work and Firm, none in the Trash, each
+ * Store's backend and files (with what a switch to another backend would move: every file not on it, as the server
+ * counts them), no stuck files listed, and who can see each Store, its readers, each at Can See.
+ */
+export function storeRoutes(): Routes {
+  const byId = (params: string[]) => stores.find((one) => one.id === Number(params[0]))
+  return {
+    // Before /deleted, which it matches too: of two routes that match, the later wins
+    'GET /v1/admin/stores/*': ({ params }: { params: string[] }) => byId(params) ?? notFound(),
+    'GET /v1/admin/stores/deleted': [],
+    'GET /v1/admin/stores/*/backend': ({ params, query }: { params: string[]; query?: Record<string, unknown> }) => {
+      const storage = storeStorage[Number(params[0])]
+      if (storage === undefined) return notFound()
+      if (query?.backendId === undefined) return storage
+      const backendId = Number(query.backendId)
+      const moving = storage.backend?.id === backendId ? { files: 0, bytes: 0 } : { files: storage.files, bytes: storage.bytes }
+      return { ...storage, switchPreview: { backendId, ...moving } } satisfies A['StoreStorage']
+    },
+    'GET /v1/admin/stores/*/stuck-files': [],
+    'GET /v1/admin/stores/*/access': ({ params }: { params: string[] }) => {
+      const store = byId(params)
+      // A Store the fixtures don't hold is new, and lets nobody in but the administrators
+      if (store === undefined) return { storeId: Number(params[0]), rows: [] } satisfies A['StoreAccess']
+      const rows = store.readers.map((reader) => accessRow(reader.groupId, reader.name, ['read'], reader.person ? reader.groupId - 100 : null))
+      return { storeId: store.id, rows } satisfies A['StoreAccess']
+    },
+  }
+}
+
 /**
  * What a matter's page and a template's read, to spread over the defaults: matter 11 (1001.1), the templates, the
  * workspaces' trees, their folders' access and values, their search folders, the groups, and what a folder holds.
@@ -546,7 +759,8 @@ export function defaultRoutes(): Routes {
     'GET /v1/admin/templates': templates,
     'GET /v1/admin/workspaces/*/tree': ({ params }: { params: string[] }) => templateTrees[Number(params[0])] ?? problem(404, 'not-found'),
     'GET /v1/admin/groups': ({ query }: { query?: Record<string, unknown> }) => groups(query),
-    'GET /v1/admin/stores/*/access': ({ params }: { params: string[] }) => ({ storeId: Number(params[0]), rows: [] }) satisfies A['StoreAccess'],
+    ...storeRoutes(),
+    ...storageRoutes(),
   }
 }
 
