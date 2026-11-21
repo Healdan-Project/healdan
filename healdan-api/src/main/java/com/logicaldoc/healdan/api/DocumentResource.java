@@ -50,7 +50,6 @@ import com.logicaldoc.healdan.api.model.RenameRequest;
 import com.logicaldoc.healdan.api.model.TrashItem;
 import com.logicaldoc.healdan.docnumber.LegacyDocNumbers;
 import com.logicaldoc.healdan.email.MediaTypes;
-import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.listing.FileKinds;
 import com.logicaldoc.healdan.navigation.RecentDocuments;
 import com.logicaldoc.healdan.navigation.RecentDocuments.RecentDocument;
@@ -250,11 +249,11 @@ public class DocumentResource {
 					lastUsed.put(document.getId(), recent.lastAccess());
 				}
 			}
-			// The Authors in one query, not one a row
-			Map<Long, Author> authors = ApiViews.authors(documents);
+			// What the rows show in one go, not a query a row
+			ApiViews.RowReads rows = ApiViews.rows(documents);
 			List<DocumentView> views = new ArrayList<>();
 			for (Document document : documents)
-				views.add(ApiViews.document(document, caller, authors).withLastUsed(lastUsed.get(document.getId())));
+				views.add(ApiViews.document(document, caller, rows).withLastUsed(lastUsed.get(document.getId())));
 			return Page.whole(views);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list recent documents", e);

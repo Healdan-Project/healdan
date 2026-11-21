@@ -40,7 +40,6 @@ import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.RenameRequest;
 import com.logicaldoc.healdan.api.model.TrashContents;
 import com.logicaldoc.healdan.api.model.TrashItem;
-import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.listing.Facets;
 import com.logicaldoc.healdan.listing.FolderListing;
 import com.logicaldoc.healdan.listing.ListedPage;
@@ -316,9 +315,9 @@ public class FolderResource {
 			ListedPage listed = FolderListing.get().page(folder, caller,
 					query.page(documentOffset, paging.limit() - items.size()));
 			List<Document> page = documents(listed.docIds());
-			Map<Long, Author> authors = ApiViews.authors(page);
+			ApiViews.RowReads rows = ApiViews.rows(page);
 			for (Document d : page)
-				items.add(ApiViews.document(d, caller, view.kind(), view.matter(), authors));
+				items.add(ApiViews.document(d, caller, view.kind(), view.matter(), rows));
 
 			FacetsView counts = filters.facets().isEmpty() ? null
 					: facetsView(FolderListing.get().facets(folder, caller, query, filters.facets()), caller);
@@ -344,10 +343,10 @@ public class FolderResource {
 
 		// A search folder's documents are anywhere, so each finds its own matter
 		List<Document> page = listed.docIds().stream().map(byId::get).toList();
-		Map<Long, Author> authors = ApiViews.authors(page);
+		ApiViews.RowReads rows = ApiViews.rows(page);
 		List<Object> items = new ArrayList<>();
 		for (Document d : page)
-			items.add(ApiViews.document(d, caller, authors));
+			items.add(ApiViews.document(d, caller, rows));
 		FacetsView counts = filters.facets().isEmpty() ? null
 				: facetsView(FolderListing.get().facets(ids, filters.query(), filters.facets()), caller);
 		return new FolderChildPage(items, paging.offset(), paging.limit(), listed.total(), listed.total(), counts);

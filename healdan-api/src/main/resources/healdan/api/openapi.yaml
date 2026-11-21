@@ -3181,7 +3181,7 @@ components:
           $ref: '#/components/schemas/ClientRef'
     AuthorRef:
       type: object
-      description: A document's Author
+      description: A document's Author or Typist
       additionalProperties: false
       required: [username, displayName]
       properties:
@@ -3191,6 +3191,26 @@ components:
         displayName:
           type: string
           description: The Author's name, to show; the username when the Author is no longer a user
+    EmailView:
+      type: object
+      description: |
+        An email's sender, recipients and sent date, as its document's
+        From, To and Sent properties hold them
+      additionalProperties: false
+      required: [from, to, sent]
+      properties:
+        from:
+          type: [string, 'null']
+          description: The From property, as stored; null when it has none
+          examples: ['Ann Smith <ann@example.com>']
+        to:
+          type: [string, 'null']
+          description: The To property, as stored; null when it has none
+          examples: ['Bob Jones <bob@example.com>, carol@example.com']
+        sent:
+          type: [string, 'null']
+          format: date-time
+          description: The Sent property; null when it has none
     HoldView:
       type: object
       description: Who has a document checked out or locked
@@ -3292,7 +3312,7 @@ components:
     DocumentView:
       type: object
       additionalProperties: false
-      required: [type, docNumber, name, kind, size, version, fileVersion, reference, folder, matter, author, dateFiled, lastModified, hold, canEdit, canOpen]
+      required: [type, docNumber, name, kind, size, version, fileVersion, reference, folder, matter, author, dateFiled, lastModified, hold, canEdit, canOpen, docClass, docSubclass, typist, email]
       properties:
         type:
           type: string
@@ -3345,6 +3365,24 @@ components:
             - $ref: '#/components/schemas/AuthorRef'
             - type: 'null'
           description: The document's Author property; null when it has none
+        docClass:
+          type: [string, 'null']
+          description: The document's Class property, as stored; null when it has none
+        docSubclass:
+          type: [string, 'null']
+          description: The document's Subclass property, as stored; null when it has none
+        typist:
+          oneOf:
+            - $ref: '#/components/schemas/AuthorRef'
+            - type: 'null'
+          description: The document's Typist property, named as `author` is; null when it has none
+        email:
+          oneOf:
+            - $ref: '#/components/schemas/EmailView'
+            - type: 'null'
+          description: |
+            An email's From, To and Sent properties; null when `kind` isn't
+            `email`, whatever the document's properties hold
         dateFiled:
           type: string
           format: date-time

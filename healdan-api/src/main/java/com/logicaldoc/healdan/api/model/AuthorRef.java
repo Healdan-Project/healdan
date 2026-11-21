@@ -4,11 +4,11 @@
 package com.logicaldoc.healdan.api.model;
 
 /**
- * A document's Author, as a list shows it.
+ * A document's Author or Typist, as a list shows it.
  *
  * @param username the username, which the {@code author} filter takes
- * @param displayName the Author's name, to show; the username when the
- *        Author is no longer a user
+ * @param displayName the person's name, to show; the username when the
+ *        person is no longer a user
  */
 public record AuthorRef(String username, String displayName) {
 }

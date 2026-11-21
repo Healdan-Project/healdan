@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -31,6 +32,10 @@ import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.metadata.AttributeOption;
+import com.logicaldoc.core.metadata.AttributeOptionDAO;
+import com.logicaldoc.core.metadata.AttributeSet;
+import com.logicaldoc.core.metadata.AttributeSetDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
@@ -529,6 +534,71 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertEquals(response.toString(), 200, response.status());
 		assertEquals(1, response.json().path("items").size());
 		assertEquals(number(padded), response.json().path("items").get(0).path("docNumber").asLong());
+	}
+
+	@Test
+	public void testDocumentCarriesClassSubclassTypistAndEmail() throws Exception {
+		String eml = """
+				From: "Ann Smith" <ann@example.com>
+				To: bob@example.com, carol@example.com
+				Subject: Re: Demo plan
+				Date: Tue, 14 Oct 2025 09:29:00 +0200
+				MIME-Version: 1.0
+				Content-Type: text/plain; charset=UTF-8
+
+				Hello Bob.
+				""".replace("\n", "\r\n");
+		Document mail = file("note.eml", eml);
+		Document letter = file("a.docx", "Lease draft");
+		AttributeSet set = AttributeSetDAO.get().findByName(HealdanConstants.PROFILE_TEMPLATE, Tenant.DEFAULT_ID,
+				true);
+		AttributeOptionDAO.get()
+				.store(new AttributeOption(set.getId(), HealdanConstants.ATTR_DOCCLASS, "Correspondence"));
+		AttributeOptionDAO.get()
+				.store(new AttributeOption(set.getId(), HealdanConstants.ATTR_DOCSUBCLASS, "Letter", "Correspondence"));
+		String token = signIn(clerk);
+		ApiResponse patched = patch("/api/v1/documents/" + number(letter) + "/properties").token(token)
+				.json(Map.of("values", Map.of(HealdanConstants.ATTR_DOCCLASS, "Correspondence",
+						HealdanConstants.ATTR_DOCSUBCLASS, "Letter", HealdanConstants.ATTR_TYPIST, reader.getId())))
+				.send();
+		assertEquals(patched.toString(), 200, patched.status());
+		awaitAsyncWork();
+		// An email's property on a document that is no email, as CE's screens can give it one, shows nowhere
+		assertEquals(1, jdbc().update("update ld_document_ext set ld_stringvalue = ? where ld_docid = ? and ld_name = ?",
+				"Ann Smith <ann@example.com>", letter.getId(), HealdanConstants.ATTR_EMAILFROM));
+
+		JsonNode doc = get("/api/v1/documents/" + number(letter)).token(token).send().json();
+		assertEquals("Correspondence", doc.path("docClass").textValue());
+		assertEquals("Letter", doc.path("docSubclass").textValue());
+		assertEquals("reader", doc.path("typist").path("username").textValue());
+		assertEquals("reader reader", doc.path("typist").path("displayName").textValue());
+		assertTrue(doc.toString(), doc.has("email") && doc.path("email").isNull());
+
+		JsonNode message = get("/api/v1/documents/" + number(mail)).token(token).send().json();
+		assertEquals("Ann Smith <ann@example.com>", message.path("email").path("from").textValue());
+		assertEquals("bob@example.com, carol@example.com", message.path("email").path("to").textValue());
+		assertEquals("2025-10-14T07:29:00Z", message.path("email").path("sent").textValue());
+		// The Class a new document takes, no Subclass, and the Typist is who filed it, as the Author is
+		assertEquals("Docs", message.path("docClass").textValue());
+		assertTrue(message.toString(), message.has("docSubclass") && message.path("docSubclass").isNull());
+		assertEquals("boss", message.path("typist").path("username").textValue());
+		assertEquals("boss boss", message.path("typist").path("displayName").textValue());
+
+		// A list shows the same, read for its page
+		JsonNode items = get("/api/v1/folders/" + documents.getId() + "/children").token(token).send().json()
+				.path("items");
+		assertEquals(2, items.size());
+		for (JsonNode item : items) {
+			JsonNode alone = item.path("docNumber").asLong() == number(mail) ? message : doc;
+			for (String field : new String[] { "docClass", "docSubclass", "typist", "email" })
+				assertEquals(field, alone.path(field), item.path(field));
+		}
+
+		// An email with nothing stored still says it's one, with each field null
+		Document blank = file("blank.eml", "not a message");
+		JsonNode email = get("/api/v1/documents/" + number(blank)).token(token).send().json().path("email");
+		assertTrue(email.toString(), email.isObject() && email.path("from").isNull() && email.path("to").isNull()
+				&& email.path("sent").isNull());
 	}
 
 	@Test
