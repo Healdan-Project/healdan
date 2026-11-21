@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useId, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { fieldErrors, useApi } from '@healdan/shell'
-import { Button, TextField, toast } from '@healdan/ui'
+import { Button, formatCount, TextField, toast } from '@healdan/ui'
 import { t } from '../strings'
 import type { AdminStringKey } from '../strings/en-US'
 import { useRefusalFor } from '../strings/refusals'
@@ -22,8 +22,6 @@ const SETTINGS: { setting: Setting; label: AdminStringKey; note: AdminStringKey 
   { setting: 'cacheGb', label: 'admin.storageSettings.cacheGb', note: 'admin.storageSettings.cacheGbNote' },
   { setting: 'transfers', label: 'admin.storageSettings.transfers', note: 'admin.storageSettings.transfersNote' },
 ]
-
-const counts = new Intl.NumberFormat('en-US')
 
 /** The whole number typed, if it is one within the setting's limits */
 function valueOf(text: string, range: A['SettingRange']): number | undefined {
@@ -49,7 +47,7 @@ export function StorageSettingsForm({ settings }: { settings: A['StorageSettings
   const [failure, setFailure] = useState<unknown>()
 
   const textOf = (setting: Setting) => typed[setting] ?? String(settings[setting])
-  const rangeError = (setting: Setting) => t('admin.storageSettings.range', { min: counts.format(settings.limits[setting].min), max: counts.format(settings.limits[setting].max) })
+  const rangeError = (setting: Setting) => t('admin.storageSettings.range', { min: formatCount(settings.limits[setting].min), max: formatCount(settings.limits[setting].max) })
   const values = Object.fromEntries(SETTINGS.map(({ setting }) => [setting, valueOf(textOf(setting), settings.limits[setting])])) as Record<Setting, number | undefined>
   const named = fieldErrors(failure)
   const changed = SETTINGS.some(({ setting }) => values[setting] !== settings[setting])
@@ -97,7 +95,7 @@ export function StorageSettingsForm({ settings }: { settings: A['StorageSettings
                 required
                 value={text}
                 error={wrong ? rangeError(setting) : undefined}
-                description={t(note, { min: counts.format(settings.limits[setting].min), max: counts.format(settings.limits[setting].max) })}
+                description={t(note, { min: formatCount(settings.limits[setting].min), max: formatCount(settings.limits[setting].max) })}
                 onChange={(value) => {
                   setTyped((before) => ({ ...before, [setting]: value }))
                   // A change takes the last refusal away

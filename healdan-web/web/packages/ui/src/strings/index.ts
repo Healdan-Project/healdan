@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+import { formatCount } from '../format'
 import { enUS, enUSPlurals, type PluralKey, type StringKey } from './en-US'
 
 export const strings = enUS
@@ -31,11 +32,10 @@ export function t(key: StringKey, vars: Vars = {}): string {
 }
 
 const rules = new Intl.PluralRules('en-US')
-const counts = new Intl.NumberFormat('en-US')
 
 function pick(forms: PluralForms, count: number, vars: Vars): string {
   const form = rules.select(count) === 'one' ? forms.one : forms.other
-  const grouped = Object.fromEntries(Object.entries({ ...vars, n: count }).map(([name, value]) => [name, typeof value === 'number' ? counts.format(value) : value]))
+  const grouped = Object.fromEntries(Object.entries({ ...vars, n: count }).map(([name, value]) => [name, typeof value === 'number' ? formatCount(value) : value]))
   return fill(form, grouped)
 }
 

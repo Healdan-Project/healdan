@@ -127,6 +127,13 @@
   color: var(--hd-text);
 }
 
+/* The Stores named under a sentence, as what keeps a backend from being removed */
+.names {
+  margin: var(--hd-space-2) 0 0;
+  padding-inline-start: var(--hd-space-5);
+  overflow-wrap: anywhere;
+}
+
 /* The settings: each field a narrow column, with what it says under it */
 .settings {
   display: flex;

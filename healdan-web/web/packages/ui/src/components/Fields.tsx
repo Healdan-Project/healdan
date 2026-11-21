@@ -133,21 +133,30 @@ export function SelectField({ label, value, onChange, options, empty, required, 
 export interface CheckFieldProps extends FieldProps {
   checked: boolean
   onChange: (checked: boolean) => void
+  /** A line under the box that says more of it, which a screen reader reads after its name, as a text field's does */
+  description?: string
 }
 
 /** A yes or no. `required` marks it as one to answer: either answer is an answer, so it doesn't have to be ticked. */
-export function CheckField({ label, checked, onChange, required, error }: CheckFieldProps) {
+export function CheckField({ label, checked, onChange, description, required, error }: CheckFieldProps) {
   const id = useId()
+  const descriptionId = `${id}-description`
   const errorId = `${id}-error`
+  const describedBy = [description !== undefined ? descriptionId : undefined, error ? errorId : undefined].filter((one) => one !== undefined).join(' ')
   return (
     <div className={styles.field}>
       <label className={styles.check} htmlFor={id}>
-        <input id={id} type="checkbox" checked={checked} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} onChange={(event) => onChange(event.target.checked)} />
+        <input id={id} type="checkbox" checked={checked} aria-invalid={error ? true : undefined} aria-describedby={describedBy || undefined} onChange={(event) => onChange(event.target.checked)} />
         <span>
           {label}
           <Mark required={required} />
         </span>
       </label>
+      {description !== undefined && (
+        <span id={descriptionId} className={styles.description}>
+          {description}
+        </span>
+      )}
       {error && (
         <span id={errorId} className={styles.error}>
           {error}

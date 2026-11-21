@@ -579,6 +579,7 @@ export function backendOf(over: Partial<A['Backend']> = {}): A['Backend'] {
     keyLastShown: null,
     keyLastShownBy: null,
     stores: [],
+    storesInTrash: [],
     ...over,
   }
 }

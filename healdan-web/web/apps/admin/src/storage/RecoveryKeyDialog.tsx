@@ -85,25 +85,47 @@ function Refusal({ failure }: { failure: unknown }) {
   )
 }
 
-/** The key in two lines of its groups, as the Storage tab draws it, with Copy */
+/**
+ * The key in two lines of its groups, as the Storage tab draws it, with Copy. A copy the browser refuses (no permission,
+ * or the page not in front) says so beside the key, which never goes into what it says.
+ */
 function KeyText({ recoveryKey }: { recoveryKey: string }) {
   const groups = recoveryKey.split(' ')
   const half = Math.ceil(groups.length / 2)
   const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard
+  const [refused, setRefused] = useState(false)
+
+  async function copy(to: Clipboard) {
+    setRefused(false)
+    try {
+      await to.writeText(recoveryKey)
+      toast(t('admin.recoveryKey.copied'))
+    } catch {
+      setRefused(true)
+    }
+  }
+
   return (
-    <div className={styles.row}>
-      <div role="group" aria-label={t('admin.recoveryKey.key')} className={styles.key}>
-        <span className={styles.keyLine}>{groups.slice(0, half).join(' ')}</span> <span className={styles.keyLine}>{groups.slice(half).join(' ')}</span>
+    <>
+      <div className={styles.row}>
+        <div role="group" aria-label={t('admin.recoveryKey.key')} className={styles.key}>
+          <span className={styles.keyLine}>{groups.slice(0, half).join(' ')}</span> <span className={styles.keyLine}>{groups.slice(half).join(' ')}</span>
+        </div>
+        {clipboard !== undefined && (
+          <Button onPress={() => void copy(clipboard)}>
+            <span className={styles.row}>
+              <Icon name="copy" size={14} />
+              {t('admin.recoveryKey.copy')}
+            </span>
+          </Button>
+        )}
       </div>
-      {clipboard !== undefined && (
-        <Button onPress={() => void clipboard.writeText(recoveryKey).then(() => toast(t('admin.recoveryKey.copied')))}>
-          <span className={styles.row}>
-            <Icon name="copy" size={14} />
-            {t('admin.recoveryKey.copy')}
-          </span>
-        </Button>
+      {refused && (
+        <p className={styles.refusal} role="alert">
+          {t('admin.recoveryKey.copyFailed')}
+        </p>
       )}
-    </div>
+    </>
   )
 }
 

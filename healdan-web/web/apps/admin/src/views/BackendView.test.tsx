@@ -3,7 +3,7 @@
 
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { adminComponents } from '@healdan/api'
 import { formatDateTime, formatSize } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
@@ -83,6 +83,13 @@ describe("A backend's page", () => {
     expect(within(main()).getByText(/it can't be removed: it keeps the files of every Store that has no other backend/)).toBeTruthy()
   })
 
+  it('lists the Stores in the Trash that keep their files on it, beside the live ones', async () => {
+    const { view } = await page(3, { 'GET /v1/admin/backends/3': { ...archiveBackend, inUse: true, files: 40, storesInTrash: ['Old Branch'] } })
+    expect(facts()).toContainEqual(['Stores', 'None'])
+    expect(facts()).toContainEqual(['Stores in the Trash', 'Old Branch'])
+    await expectNoAxeViolations(view.container)
+  })
+
   it('tests the saved backend in full, says what it found, and asks again for its status', async () => {
     let problems: string[] = ['The key file of this backend is missing.']
     const { api } = await page(2, { 'POST /v1/admin/backends/2/test': () => ({ problems }) satisfies A['BackendTestResult'] })
@@ -160,6 +167,27 @@ describe('Show Recovery Key', () => {
     const ask = await screen.findByRole('alertdialog')
     await userEvent.click(within(ask).getByRole('button', { name: 'Show Recovery Key' }))
     expect((await within(ask).findByRole('alert')).textContent).toBe('The key file of Wasabi EU is missing: enter its recovery key to put it back.')
+  })
+
+  it("says the key couldn't be copied when the browser refuses its clipboard, and copies it when it doesn't", async () => {
+    // jsdom has no clipboard: this one refuses the first copy, as a browser does without the permission
+    const writeText = vi.fn<(text: string) => Promise<void>>().mockRejectedValueOnce(new DOMException('Write permission denied.', 'NotAllowedError')).mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    try {
+      await page(2, { 'POST /v1/admin/backends/2/recovery-key/show': { recoveryKey: RECOVERY_KEY } satisfies A['RecoveryKey'] })
+      await userEvent.click(within(main()).getByRole('button', { name: 'Show Recovery Key' }))
+      await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Show Recovery Key' }))
+      const shown = await screen.findByRole('dialog', { name: 'Recovery Key of Wasabi EU' })
+      await userEvent.click(within(shown).getByRole('button', { name: 'Copy' }))
+      const alert = await within(shown).findByRole('alert')
+      expect(alert.textContent).toBe("Couldn't copy the recovery key. Select it and copy it, or write it down.")
+      expect(writeText).toHaveBeenCalledWith(RECOVERY_KEY)
+      await userEvent.click(within(shown).getByRole('button', { name: 'Copy' }))
+      expect(await screen.findByText('Copied the recovery key')).toBeTruthy()
+      expect(within(shown).queryByRole('alert')).toBeNull()
+    } finally {
+      Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+    }
   })
 })
 
@@ -255,16 +283,51 @@ describe('Key History', () => {
 })
 
 describe('Remove', () => {
-  it('asks first, naming the backend, and says why it was refused while files remain', async () => {
-    const { api, view } = await page(3, { 'DELETE /v1/admin/backends/3': () => problem(409, 'refused', '3 files are recorded on this backend.') })
+  it("asks first, naming the backend, and says the server's refusal in the rule's words, as for one still being added", async () => {
+    const { api, view } = await page(3, { 'DELETE /v1/admin/backends/3': () => problem(409, 'refused', 'Archive is still being added.') })
     await userEvent.click(within(main()).getByRole('button', { name: 'Remove' }))
     const ask = await screen.findByRole('alertdialog', { name: 'Remove Archive?' })
     expect(within(ask).getByText(/Only a backend no Store uses, with no file recorded on it and no copy held there, can be removed/)).toBeTruthy()
     expect(api.callsTo('DELETE /v1/admin/backends/3')).toEqual([])
     await expectNoAxeViolations(view.container)
     await userEvent.click(within(ask).getByRole('button', { name: 'Remove' }))
-    expect((await within(ask).findByRole('alert')).textContent).toBe('3 files are recorded on this backend.')
+    expect((await within(ask).findByRole('alert')).textContent).toBe('Archive is still being added.')
     expect(api.callsTo('DELETE /v1/admin/backends/3')).toHaveLength(1)
+  })
+
+  it('says before any Remove what keeps a backend a Store uses, naming the Store, and offers none', async () => {
+    const { api, view } = await page(2)
+    await userEvent.click(within(main()).getByRole('button', { name: 'Remove' }))
+    const kept = await screen.findByRole('dialog', { name: "Wasabi EU Can't Be Removed Yet" })
+    expect(within(kept).getByText('A Store keeps its files on it. Give it another backend first, with Change Backend on its page:')).toBeTruthy()
+    expect(within(kept).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Client Work'])
+    expect(within(kept).getByText('Files are recorded on it, or old copies held there. It can be removed once every file has moved off it and the holding period has ended.')).toBeTruthy()
+    expect(within(kept).queryByRole('button', { name: 'Remove' })).toBeNull()
+    await expectNoAxeViolations(view.baseElement)
+    await userEvent.click(within(kept).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: "Wasabi EU Can't Be Removed Yet" })).toBeNull())
+    expect(api.callsTo('DELETE /v1/admin/backends/2')).toEqual([])
+  })
+
+  it('names the Stores in the Trash that keep their files on it, with the way to free it', async () => {
+    const { api } = await page(3, { 'GET /v1/admin/backends/3': { ...archiveBackend, inUse: true, files: 40, storesInTrash: ['Archive 2019', 'Old Branch'] } })
+    await userEvent.click(within(main()).getByRole('button', { name: 'Remove' }))
+    const kept = await screen.findByRole('dialog', { name: "Archive Can't Be Removed Yet" })
+    expect(
+      within(kept).getByText('2 Stores in the Trash keep their files on it, as their restore needs them. Restore each from Deleted Stores on the Stores page, give it another backend, then delete it again:'),
+    ).toBeTruthy()
+    expect(within(kept).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Archive 2019', 'Old Branch'])
+    expect(within(kept).queryByText(/Give it another backend first/)).toBeNull()
+    expect(within(kept).queryByRole('button', { name: 'Remove' })).toBeNull()
+    expect(api.callsTo('DELETE /v1/admin/backends/3')).toEqual([])
+  })
+
+  it('says copies still held there keep it once no file is recorded on it', async () => {
+    await page(3, { 'GET /v1/admin/backends/3': { ...archiveBackend, inUse: true } })
+    await userEvent.click(within(main()).getByRole('button', { name: 'Remove' }))
+    const kept = await screen.findByRole('dialog', { name: "Archive Can't Be Removed Yet" })
+    expect(within(kept).getByText(/^Files are recorded on it, or old copies held there\./)).toBeTruthy()
+    expect(within(kept).queryByRole('list')).toBeNull()
   })
 
   it('removes an empty backend and goes back to Backends', async () => {

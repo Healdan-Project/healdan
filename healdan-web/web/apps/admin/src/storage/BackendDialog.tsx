@@ -113,13 +113,14 @@ export interface BackendDialogProps {
 /**
  * Add a Storage Backend, and a backend's Edit (spec 8.6), with the Storage tab's rules. The add chooses the kind, a
  * local folder or an S3 bucket, and whether its files are encrypted, on for S3 to begin with; neither changes after.
- * Original takes only its name, and a bucket, prefix or path shows as text once files are there or a Store keeps its
- * files on the backend. The S3 secret is never shown: its field starts empty, and only a secret typed in it replaces
+ * Original takes only its name, and a bucket, prefix or path shows as text once files are there or a Store, live or in
+ * the Trash, keeps its files on the backend. The S3 secret is never shown: its field starts empty, and only a secret typed in it replaces
  * the one stored.
  *
  * **Test** tries the settings as typed and says what it found, saving nothing. **Add** tests them first and adds
  * nothing while Test fails, saying why; **Save** tests them first and, if Test finds problems, asks whether to save
- * anyway, as a backend can be renamed during an outage. When Healdan's secret key file is missing as an S3 secret is
+ * anyway, as a backend can be renamed during an outage. The settings are held while Test is on its way, so its answer
+ * is always about the settings shown. When Healdan's secret key file is missing as an S3 secret is
  * typed, it says the server's sentence and what a new key costs, and **Make a New Key** sends the change again with
  * `newKey`. While the change is on its way, Cancel is greyed out and Esc and a click outside do nothing. The secret lives
  * only in this window's state, and goes only into the requests' bodies.
@@ -136,7 +137,8 @@ export function BackendDialog({ backend, onAdded, onClose }: BackendDialogProps)
   const [busy, setBusy] = useState(false)
 
   const s3 = draft.kind === 's3'
-  // Why the bucket, prefix and path can't change here, as the Storage tab says it; none when they can
+  // Why the bucket, prefix and path can't change here, as the Storage tab says it, and while a Store in the Trash keeps its
+  // files here, as the server refuses the change then too (P3-R38); none when they can
   const placeFixed =
     backend === undefined || original
       ? undefined
@@ -144,7 +146,9 @@ export function BackendDialog({ backend, onAdded, onClose }: BackendDialogProps)
         ? t('admin.backendDialog.fixedFiles')
         : backend.stores.length > 0
           ? t('admin.backendDialog.fixedStores')
-          : undefined
+          : backend.storesInTrash.length > 0
+            ? t('admin.backendDialog.fixedTrash')
+            : undefined
 
   function set<K extends keyof Draft>(field: K, value: Draft[K]) {
     setDraft((before) => {
@@ -329,7 +333,8 @@ export function BackendDialog({ backend, onAdded, onClose }: BackendDialogProps)
             if (ready && !busy && !testing && outcome?.kind !== 'anyway' && outcome?.kind !== 'new-key') void send()
           }}
         >
-          <fieldset className={styles.form} disabled={busy}>
+          {/* Held while Test is on its way too, so what it answers is about the settings shown */}
+          <fieldset className={styles.form} disabled={busy || testing}>
             {isNew ? (
               <RadioChoices
                 label={t('admin.backendDialog.kind')}
@@ -378,23 +383,17 @@ export function BackendDialog({ backend, onAdded, onClose }: BackendDialogProps)
                   error={fieldError('secret')}
                   description={isNew ? t('admin.backendDialog.secretNote') : backend.hasSecret ? t('admin.backendDialog.secretSet') : t('admin.backendDialog.secretNotSet')}
                 />
-                <div className={styles.fixed}>
-                  <CheckField label={t('admin.backendDialog.pathStyle')} checked={draft.pathStyle} onChange={(checked) => set('pathStyle', checked)} />
-                  <p className={styles.note}>{t('admin.backendDialog.pathStyleNote')}</p>
-                </div>
+                <CheckField label={t('admin.backendDialog.pathStyle')} description={t('admin.backendDialog.pathStyleNote')} checked={draft.pathStyle} onChange={(checked) => set('pathStyle', checked)} />
               </>
             )}
             {isNew ? (
-              <div className={styles.fixed}>
-                <CheckField label={t('admin.backendDialog.encrypt')} checked={draft.encrypted} onChange={(checked) => set('encrypted', checked)} />
-                <p className={styles.note}>{t('admin.backendDialog.encryptNote')}</p>
-              </div>
+              <CheckField label={t('admin.backendDialog.encrypt')} description={t('admin.backendDialog.encryptNote')} checked={draft.encrypted} onChange={(checked) => set('encrypted', checked)} />
             ) : (
               !original && <p className={styles.muted}>{t(backend.encrypted ? 'admin.backendDialog.encrypted' : 'admin.backendDialog.notEncrypted')}</p>
             )}
           </fieldset>
           <div className={styles.result} role="status">
-            {outcome?.kind === 'tested' && (outcome.problems.length === 0 ? <p>{t('admin.backendDialog.passed')}</p> : <Problems problems={outcome.problems} />)}
+            {outcome?.kind === 'tested' && (outcome.problems.length === 0 ? <p>{t('admin.storage.passed')}</p> : <Problems problems={outcome.problems} />)}
           </div>
           {said}
           <div className={styles.buttons}>

@@ -251,7 +251,8 @@ describe('The Matters list', () => {
     expect(router.state.location.search).toEqual({})
   })
 
-  it('loads 100 rows at a time as the end of the list comes into view, to the end of what the server counted', async () => {
+  // 201 rows drawn three times over in jsdom: 2 s alone, but past Vitest's 5 s on a busy runner, so it has a limit of its own
+  it('loads 100 rows at a time as the end of the list comes into view, to the end of what the server counted', { timeout: 15_000 }, async () => {
     const many = Array.from({ length: 201 }, (_, i) => matterRow({ id: 1000 + i, number: `2000.${i + 1}`, name: `Matter ${String(i + 1).padStart(3, '0')}` }))
     const { api } = await renderApp('/matters', {
       'GET /v1/admin/matters': ({ query }: { query?: Record<string, unknown> }) => {
@@ -266,8 +267,10 @@ describe('The Matters list', () => {
     expect(await within(table).findByRole('row', { name: '2000.150 Matter 150' })).toBeTruthy()
     act(() => bringObservedIntoView())
     expect(await within(table).findByRole('row', { name: '2000.201 Matter 201' })).toBeTruthy()
+    // The last page has come and nothing is loading. Every row the server counted is here, so the list draws no row that
+    // asks for more; one it asked for anyway would be counted as the end comes into view, inside act
+    await waitFor(() => expect(within(table).queryByText('Loading…')).toBeNull())
     act(() => bringObservedIntoView())
-    await new Promise((resolve) => setTimeout(resolve, 100))
     expect(api.callsTo('GET /v1/admin/matters').map((call) => [call.query?.offset, call.query?.limit])).toEqual([
       [0, 100],
       [100, 100],

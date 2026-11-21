@@ -69,6 +69,10 @@ export function useStuckFiles(list: string) {
  * After a backend changed (added, saved, tested, removed, its key shown, confirmed or entered): the list, every backend's
  * page and the key histories are asked again, with the Dashboard, whose Needs Attention and the left pane's count follow
  * a backend's status. A backend the server answered is drawn at once on its page.
+ *
+ * The server keeps the Dashboard's storage figures for a minute (DashboardService's MAX_AGE), so after a Test the backend's
+ * page shows its new status at once, but the pane's count, asked again here, can still say the old one for up to a minute:
+ * it follows the next time the server works the figures out, and the next time the Dashboard is asked for after that.
  */
 export function backendsChanged(queryClient: QueryClient, saved?: A['Backend']) {
   if (saved !== undefined) queryClient.setQueryData(storageKeys.backend(saved.id), saved)

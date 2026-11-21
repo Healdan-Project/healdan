@@ -12,11 +12,15 @@ export function kindOf(backend: Pick<A['Backend'], 'kind'>): string {
   return t(backend.kind === 's3' ? 'admin.backends.kind.s3' : 'admin.backends.kind.local')
 }
 
-/** A folder's path, or an S3 bucket and its prefix at its endpoint, as the Storage tab says it; the bucket alone when the endpoint can't be read */
+/**
+ * A folder's path, or an S3 bucket and its prefix at its endpoint, as the Storage tab says it: "ashcombe-reeve/healdan/ at
+ * https://…", the bucket with no slash after it when it has no prefix, and the place alone when the endpoint can't be read
+ */
 export function whereOf(backend: A['Backend']): string {
   if (backend.kind !== 's3') return backend.path ?? ''
-  const place = { bucket: backend.bucket ?? '', prefix: backend.prefix ?? '' }
-  return backend.endpoint === null ? t('admin.backends.where.s3Bucket', place) : t('admin.backends.where.s3', { ...place, endpoint: backend.endpoint })
+  const bucket = backend.bucket ?? ''
+  const place = backend.prefix ? `${bucket}/${backend.prefix}` : bucket
+  return backend.endpoint === null ? place : t('admin.backends.where.s3', { place, endpoint: backend.endpoint })
 }
 
 /** The dot a status draws beside its words: OK, something to look at, or not checked yet */

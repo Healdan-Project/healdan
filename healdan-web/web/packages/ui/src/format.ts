@@ -44,6 +44,13 @@ export function formatList(values: string[]): string {
   return lists.format(values)
 }
 
+const counts = new Intl.NumberFormat('en-US')
+
+/** A count as US English groups it, as every count the apps show is: "1,234". A doc # is never one. */
+export function formatCount(count: number): string {
+  return counts.format(count)
+}
+
 const sizeUnits = ['B', 'KB', 'MB', 'GB', 'TB']
 
 /** A file's size in the units people read: "512 B", "209 KB", "1.4 MB" (1,024-based: KB, MB and GB, in en-US like the app's counts). */

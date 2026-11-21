@@ -3,12 +3,13 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { ApiError, apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom, useApi } from '@healdan/shell'
-import { Button, formatDateTime, formatSize, Icon, StatusDot, Table, Tabs, toast, type TableSort } from '@healdan/ui'
+import { Button, formatCount, formatDateTime, formatSize, Icon, StatusDot, Table, Tabs, toast, type TableSort } from '@healdan/ui'
 import { matterHref, routes } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
+import { Fact } from '../facts/Fact'
 import type { SortOrder } from '../lists/usePagedList'
 import { matterColumns, matterRowOf } from '../matters/columns'
 import { NewMatterDialog } from '../matters/NewMatterDialog'
@@ -18,9 +19,8 @@ import { storeKeys, storesChanged, useStore } from '../stores/queries'
 import { RenameStoreDialog } from '../stores/RenameStoreDialog'
 import { StoreAccessPanel } from '../stores/StoreAccessPanel'
 import { StoreStoragePanel } from '../stores/StoreStoragePanel'
-import { backendLabel, filesState, mattersInSentence, readersOf } from '../stores/text'
+import { backendLabel, filesState, mattersInSentence, ORIGINAL_BACKEND_ID, readersOf } from '../stores/text'
 import { plural, t } from '../strings'
-import type { AdminStringKey } from '../strings/en-US'
 import { EditsContext, type EditState } from '../workspace/edits'
 import { LeavePageQuestion } from '../workspace/LeavePageQuestion'
 import clientStyles from '../clients/Clients.module.css'
@@ -88,17 +88,6 @@ function StorePage({ id, search }: { id: number; search: StoreSearch }) {
   }
   // By its id, so another Store's page, by Back or Forward too, starts afresh: no dialog, tab or change carried over
   return <Store key={asked.data.id} store={asked.data} search={search} />
-}
-
-const counts = new Intl.NumberFormat('en-US')
-
-function Fact({ term, children }: { term: AdminStringKey; children: ReactNode }) {
-  return (
-    <div className={clientStyles.fact}>
-      <dt>{t(term)}</dt>
-      <dd>{children}</dd>
-    </div>
-  )
 }
 
 type Dialog = 'rename' | 'backend' | 'delete' | 'matter'
@@ -199,8 +188,8 @@ function Store({ store, search }: { store: A['StoreInfo']; search: StoreSearch }
             <StatusDot status={filesState(store.pending).status}>{filesState(store.pending).words}</StatusDot>
           </Fact>
         )}
-        <Fact term="admin.store.matters">{counts.format(store.matters)}</Fact>
-        <Fact term="admin.store.documents">{pending ? t('admin.store.pending') : counts.format(store.documents ?? 0)}</Fact>
+        <Fact term="admin.store.matters">{formatCount(store.matters)}</Fact>
+        <Fact term="admin.store.documents">{pending ? t('admin.store.pending') : formatCount(store.documents ?? 0)}</Fact>
         <Fact term="admin.store.size">{pending || store.bytes === null ? t('admin.store.pending') : formatSize(store.bytes)}</Fact>
         <Fact term="admin.store.readers">{readersOf(store)}</Fact>
       </dl>
@@ -217,6 +206,8 @@ function Store({ store, search }: { store: A['StoreInfo']; search: StoreSearch }
             {store.matters > 0 ? t('admin.deleteStore.holds', { name: store.name, count: mattersInSentence(store.matters) }) : t('admin.deleteStore.empty', { name: store.name })}
           </p>
           <p className={page.line}>{t('admin.deleteStore.restore')}</p>
+          {/* Its files stay where they are for its restore, so that backend is kept until it's restored and moved (P3-R38) */}
+          {store.backend !== null && store.backend.id !== ORIGINAL_BACKEND_ID && <p className={page.line}>{t('admin.deleteStore.backend', { backend: store.backend.name })}</p>}
         </Confirm>
       )}
       {dialog === 'matter' && <NewMatterDialog storeId={store.id} onClose={close} />}

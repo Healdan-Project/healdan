@@ -4,8 +4,9 @@
 import type { PluralForms } from '@healdan/ui'
 
 // The Admin app's own strings, over @healdan/ui's shared catalogue, so the User app never downloads them. US English;
-// labels in Title Case. Every key starts admin., and {matter}, {matters} and {matterLower} are the firm's words, as in
-// the shared catalogue.
+// labels in Title Case. Every key starts admin., but for the messages of the problems only the admin API answers, which
+// start problems. as the shared catalogue's do (at the end); {matter}, {matters} and {matterLower} are the firm's words,
+// as in the shared catalogue.
 export const adminEnUS = {
   'admin.app.name': 'Healdan Admin',
   // The tag beside Healdan in the top bar
@@ -215,6 +216,8 @@ export const adminEnUS = {
   'admin.newStore.groups': 'Groups',
   'admin.newStore.backend': 'Backend',
   'admin.newStore.backendNote': "A backend is offered once it can be used: an encrypted one once its recovery key is confirmed. It can be changed later, on the Store's page.",
+  // When the backends couldn't be read, but for a server without Healdan's storage module
+  'admin.newStore.backendsUnread': "The backends couldn't be read, so the Store will be made on Original. Its backend can be changed later, on the Store's page.",
   'admin.newStore.create': 'Create Store',
   'admin.newStore.created': 'Created {name}',
 
@@ -499,10 +502,9 @@ export const adminEnUS = {
   'admin.backends.status.since': '{status} since {when}',
   'admin.backends.status.why': '{status}: {error}',
   'admin.backends.notOffered': "Its recovery key isn't confirmed, so no Store can use it yet.",
-  // An S3 backend's place: its bucket and prefix at its endpoint
-  'admin.backends.where.s3': '{bucket}/{prefix} at {endpoint}',
-  // When its endpoint can't be read
-  'admin.backends.where.s3Bucket': '{bucket}/{prefix}',
+  // An S3 backend's place, its bucket and any prefix ("ashcombe-reeve/healdan/"), at its endpoint; the place alone when the
+  // endpoint can't be read
+  'admin.backends.where.s3': '{place} at {endpoint}',
   'admin.backends.keyShown': '{when} to {username}',
   'admin.backends.keyNever': 'Never',
   // The files whose document isn't in a Store, the Storage tab's Other Files
@@ -546,8 +548,9 @@ export const adminEnUS = {
   'admin.backend.keyShown': 'Key Last Shown',
   'admin.backend.stores': 'Stores',
   'admin.backend.noStores': 'None',
+  // The Stores in the Trash that keep their files on it, shown only when there are any
+  'admin.backend.storesInTrash': 'Stores in the Trash',
   'admin.backend.original': "Original is the folder the server has always kept files in. Its folder comes from the server's configuration, so only its name changes here, and it can't be removed: it keeps the files of every Store that has no other backend.",
-  'admin.backend.passed': 'Test passed.',
   'admin.backend.notFound.title': 'Backend Not Found',
   'admin.backend.notFound.message': "There's no such backend.",
   'admin.backend.notFound.backends': 'Go to Backends',
@@ -559,6 +562,10 @@ export const adminEnUS = {
   'admin.removeBackend.key': 'Its key file is deleted too. The record of its recovery key\'s showings stays.',
   'admin.removeBackend.confirm': 'Remove',
   'admin.removeBackend.done': 'Removed {name}',
+  // Remove, while something keeps the backend: what, and the way to free it, with no Remove
+  'admin.removeBackend.keptTitle': "{name} Can't Be Removed Yet",
+  'admin.removeBackend.inUse': 'Files are recorded on it, or old copies held there. It can be removed once every file has moved off it and the holding period has ended.',
+  'admin.removeBackend.close': 'Close',
 
   // Add Backend and Edit: a folder's path, or an S3 bucket's settings, tested before they're saved
   'admin.backendDialog.addTitle': 'Add a Storage Backend',
@@ -588,6 +595,7 @@ export const adminEnUS = {
   // Why a setting shows as text, which can't change here
   'admin.backendDialog.fixedFiles': "Can't change once files are there.",
   'admin.backendDialog.fixedStores': "Can't change while a Store keeps its files here.",
+  'admin.backendDialog.fixedTrash': "Can't change while a Store in the Trash keeps its files here.",
   'admin.backendDialog.fixedConfig': "From the server's configuration.",
   // A bucket's prefix when it has none
   'admin.backendDialog.noPrefix': 'None',
@@ -595,7 +603,6 @@ export const adminEnUS = {
   'admin.backendDialog.add': 'Add',
   'admin.backendDialog.save': 'Save',
   'admin.backendDialog.saveAnyway': 'Save Anyway',
-  'admin.backendDialog.passed': 'Test passed.',
   'admin.backendDialog.notAdded': "Test failed, so the backend wasn't added.",
   'admin.backendDialog.anyway': 'Save these settings anyway? The backend fails until they work.',
   'admin.backendDialog.added': 'Added {name}',
@@ -612,6 +619,7 @@ export const adminEnUS = {
   'admin.recoveryKey.key': 'Recovery Key',
   'admin.recoveryKey.copy': 'Copy',
   'admin.recoveryKey.copied': 'Copied the recovery key',
+  'admin.recoveryKey.copyFailed': "Couldn't copy the recovery key. Select it and copy it, or write it down.",
   'admin.recoveryKey.askLast': "To show it's saved, type its last group of four characters. No Store can use {name} until you do.",
   'admin.recoveryKey.lastGroup': 'Last Group',
   'admin.recoveryKey.confirm': 'Confirm',
@@ -636,6 +644,9 @@ export const adminEnUS = {
   'admin.recoveryKey.history.shown': 'Recovery Key Shown',
   'admin.recoveryKey.history.entered': 'Recovery Key Entered',
   'admin.recoveryKey.history.none': 'No showing or entering of its recovery key is recorded.',
+
+  // A Test that found nothing wrong, on a backend's page and in its window
+  'admin.storage.passed': 'Test passed.',
 
   // The files the mover gave up on, a Store's or those with no Store, with Retry
   'admin.stuck.title': 'Stuck Files of {name}',
@@ -739,6 +750,8 @@ export const adminEnUS = {
   'admin.deleteStore.holds': '{name} goes to the Trash with everything in it: its {count}, and everything in them. Their numbers stay taken.',
   'admin.deleteStore.empty': '{name} goes to the Trash. It holds no {matterLower}.',
   'admin.deleteStore.restore': 'It can be restored, with everything it took, from Deleted Stores on the Stores page.',
+  // For a Store on a backend other than Original
+  'admin.deleteStore.backend': "Its files stay on {backend} while it's in the Trash, so {backend} can't be removed until the Store is restored and given another backend.",
   'admin.deleteStore.confirm': 'Move to Trash',
   'admin.deleteStore.done': 'Moved {name} to the Trash',
 
@@ -812,6 +825,20 @@ export const adminPlurals = {
   'admin.storage.files': { one: '{n} file', other: '{n} files' },
   // What Test found, above the problems, each in a list
   'admin.storage.testFound': { one: 'Test found one problem:', other: 'Test found {n} problems:' },
+  // Remove, while Stores keep their files on the backend: above their names, each in a list
+  'admin.removeBackend.stores': {
+    one: 'A Store keeps its files on it. Give it another backend first, with Change Backend on its page:',
+    other: '{n} Stores keep their files on it. Give each another backend first, with Change Backend on its page:',
+  },
+  'admin.removeBackend.storesInTrash': {
+    one: 'A Store in the Trash keeps its files on it, as its restore needs them. Restore it from Deleted Stores on the Stores page, give it another backend, then delete it again:',
+    other: '{n} Stores in the Trash keep their files on it, as their restore needs them. Restore each from Deleted Stores on the Stores page, give it another backend, then delete it again:',
+  },
+  // Who Can See It: the rows that grant something on the Store but not Read, which the list doesn't show
+  'admin.storeAccess.unlisted': {
+    one: "{names} isn't listed, as it can't see the Store, but it has other permissions on it, which Save removes.",
+    other: "{names} aren't listed, as they can't see the Store, but they have other permissions on it, which Save removes.",
+  },
   // What a new secret key costs: the values sealed with the missing one can't be opened, and are entered again
   'admin.backendDialog.newKeyLoses': {
     one: "A new key keeps the S3 secret you typed, and the {n} value sealed with the missing one can't be opened again: each sign-in provider's client secret and each other storage backend's S3 secret are entered again (those backends fail until then), and Healdan Helpers that signed in through a provider sign in again.",
