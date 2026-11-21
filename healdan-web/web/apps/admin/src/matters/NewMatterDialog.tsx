@@ -9,6 +9,8 @@ import { fieldErrors, idFrom, useApi, useMessageFor } from '@healdan/shell'
 import { Button, Dialog, Icon, SelectField, TextField, toast, VisuallyHidden } from '@healdan/ui'
 import { matterHref } from '../addresses'
 import { ClientDialog } from '../clients/ClientDialog'
+import { Problems } from '../forms/Problems'
+import { Refusal } from '../forms/Refusal'
 import { ClientPicker } from '../pickers/ClientPicker'
 import { PersonPicker } from '../pickers/PersonPicker'
 import { adminKeys, useNextMatterNumber, useStores } from '../queries'
@@ -303,12 +305,8 @@ export function NewMatterDialog({ client: preset, storeId: presetStore, onClose 
               </div>
               <WillContain templateId={templateId} folderName={folderName} />
             </div>
-            <Problems problems={elsewhere} current={check.current} storeName={(id) => stores.find((store) => store.id === id)?.name} onFixed={check.recheck} />
-            {refusal !== undefined && (
-              <p className={formStyles.refusal} role="alert">
-                {refusal}
-              </p>
-            )}
+            <CheckProblems problems={elsewhere} current={check.current} storeName={(id) => stores.find((store) => store.id === id)?.name} onFixed={check.recheck} />
+            <Refusal>{refusal}</Refusal>
             <div className={formStyles.buttons}>
               <Button onPress={close} isDisabled={busy}>
                 {t('common.cancel')}
@@ -404,7 +402,7 @@ interface Fix {
  * a Store the form no longer names, and one at a time, so a second never reads who can see the Store before the first
  * has saved, which it would then take away.
  */
-function Problems({
+function CheckProblems({
   problems,
   current,
   storeName,
@@ -445,37 +443,32 @@ function Problems({
   return (
     // There before it has problems, so a screen reader says each as it comes
     <div aria-live="polite">
-      {problems.length > 0 && (
-        <ul className={styles.problems}>
-          {problems.map((problem, index) => {
-            const key = `${problem.code}:${problem.storeId ?? ''}:${problem.groupId ?? ''}:${index}`
-            const { storeId, groupId, groupName } = problem
-            const canGrant = problem.fixAction === 'grant-store-read' && storeId !== null && groupId !== null && groupName !== null
-            const mine = fix?.key === key ? fix : undefined
-            return (
-              <li key={key} className={styles.problem}>
-                <Icon name="alertTriangle" className={styles.problemSign} />
-                <div className={styles.problemText}>
-                  <p className={styles.problemLine}>{refusalFor(problem)}</p>
-                  {canGrant && (
-                    <p className={styles.problemLine}>
-                      <Button isPending={mine?.pending} isDisabled={waiting && mine?.pending !== true} onPress={() => void grant(storeId, groupId, groupName, key)}>
-                        {t('admin.newMatter.grant', { group: groupName })}
-                      </Button>{' '}
-                      <span>{t('admin.newMatter.orAnotherStore')}</span>
-                    </p>
-                  )}
-                  {mine?.failure !== undefined && (
-                    <p className={formStyles.refusal} role="alert">
-                      {refusalFor(mine.failure)}
-                    </p>
-                  )}
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      )}
+      <Problems
+        framed
+        problems={problems.map((problem, index) => {
+          const key = `${problem.code}:${problem.storeId ?? ''}:${problem.groupId ?? ''}:${index}`
+          const { storeId, groupId, groupName } = problem
+          const canGrant = problem.fixAction === 'grant-store-read' && storeId !== null && groupId !== null && groupName !== null
+          const mine = fix?.key === key ? fix : undefined
+          return {
+            key,
+            sentence: refusalFor(problem),
+            action: (
+              <>
+                {canGrant && (
+                  <p className={styles.problemLine}>
+                    <Button isPending={mine?.pending} isDisabled={waiting && mine?.pending !== true} onPress={() => void grant(storeId, groupId, groupName, key)}>
+                      {t('admin.newMatter.grant', { group: groupName })}
+                    </Button>{' '}
+                    <span>{t('admin.newMatter.orAnotherStore')}</span>
+                  </p>
+                )}
+                <Refusal failure={mine?.failure} />
+              </>
+            ),
+          }
+        })}
+      />
     </div>
   )
 }

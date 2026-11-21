@@ -12,6 +12,7 @@ import { CLIENT_SEARCH_LIMIT } from '../pickers/useClientSearch'
 import { adminKeys, useAdminQuery, useNextClientNumber } from '../queries'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
+import { Refusal } from '../forms/Refusal'
 import styles from './Clients.module.css'
 
 type A = adminComponents['schemas']
@@ -167,11 +168,7 @@ export function ClientDialog({ client, initialName = '', onSaved, onClose }: Cli
               setFailure(undefined)
             }}
           />
-          {refusal !== undefined && (
-            <p className={styles.refusal} role="alert">
-              {refusal}
-            </p>
-          )}
+          <Refusal>{refusal}</Refusal>
           <div className={styles.buttons}>
             <Button onPress={close} isDisabled={busy}>
               {t('common.cancel')}

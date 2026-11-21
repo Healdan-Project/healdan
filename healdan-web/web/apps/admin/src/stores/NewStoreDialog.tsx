@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { fieldErrors, useApi } from '@healdan/shell'
-import { Button, Dialog, Highlight, Icon, SearchPicker, SelectField, TextField, toast } from '@healdan/ui'
+import { Button, Dialog, SelectField, TextField, toast } from '@healdan/ui'
+import { Refusal } from '../forms/Refusal'
+import { GroupsField } from '../pickers/GroupsField'
 import { isStorageUnavailable, useBackends } from '../storage/queries'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
@@ -14,8 +16,6 @@ import { nameProblem } from '../workspace/text'
 import formStyles from '../forms/Form.module.css'
 import { storesChanged } from './queries'
 import { backendLabel } from './text'
-import { useGroupPicker } from './useGroupPicker'
-import styles from './Stores.module.css'
 
 type A = adminComponents['schemas']
 
@@ -41,15 +41,10 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
   const api = useApi()
   const queryClient = useQueryClient()
   const refusalFor = useRefusalFor()
-  const whoId = useId()
   const [name, setName] = useState('')
   const [chosen, setChosen] = useState<A['Group'][]>([])
   const [failure, setFailure] = useState<unknown>()
   const [busy, setBusy] = useState(false)
-  // Where the focus goes once a group is removed and its button with it: the next group's Remove, or Add a Group
-  const removeButtons = useRef(new Map<number, HTMLButtonElement>())
-  const addField = useRef<HTMLInputElement>(null)
-  const refocus = useRef<number | 'add' | undefined>(undefined)
 
   // The backends a Store can be given, Original first; none to choose from while storage backends are off, or the server
   // has no storage module (its 503 is said nowhere here: the Store is made on Original), or the backends couldn't be read
@@ -60,15 +55,6 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
   const original = offered.find((backend) => backend.original) ?? offered[0]
   const [backendId, setBackendId] = useState<number>()
   const backend = offered.find((one) => one.id === backendId) ?? original
-
-  const groups = useGroupPicker()
-
-  // Once the list is drawn without the group removed
-  useEffect(() => {
-    if (refocus.current === undefined) return
-    ;(refocus.current === 'add' ? addField.current : removeButtons.current.get(refocus.current))?.focus()
-    refocus.current = undefined
-  })
 
   const trimmed = name.trim()
   const fields = fieldErrors(failure)
@@ -89,11 +75,8 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
     change()
   }
 
-  function remove(group: A['Group']) {
-    const index = chosen.findIndex((one) => one.id === group.id)
-    const rest = chosen.filter((one) => one.id !== group.id)
-    setChosen(rest)
-    refocus.current = rest[index]?.id ?? 'add'
+  function remove(id: number) {
+    setChosen(chosen.filter((one) => one.id !== id))
     change()
   }
 
@@ -143,57 +126,13 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
               change()
             }}
           />
-          <div className={styles.who}>
-            <p id={whoId} className={styles.label}>
-              {t('admin.newStore.who')}
-            </p>
-            {chosen.length === 0 ? (
-              <p className={formStyles.note}>{t('admin.newStore.nobody')}</p>
-            ) : (
-              <ul aria-labelledby={whoId} className={styles.chosen}>
-                {chosen.map((group) => (
-                  <li key={group.id} className={styles.group}>
-                    <span className={styles.groupName}>{group.name}</span>
-                    <Button
-                      variant="quiet"
-                      aria-label={t('admin.newStore.remove', { name: group.name })}
-                      ref={(button) => {
-                        if (button) removeButtons.current.set(group.id, button)
-                        else removeButtons.current.delete(group.id)
-                      }}
-                      onPress={() => remove(group)}
-                    >
-                      <Icon name="close" size={14} />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <SearchPicker<A['Group']>
-            label={t('admin.newStore.add')}
-            placeholder={t('admin.newStore.find')}
+          <GroupsField
+            label={t('admin.newStore.who')}
+            items={chosen}
+            empty={t('admin.newStore.nobody')}
             hint={t('admin.newStore.hint')}
-            initialHeading={t('admin.newStore.groups')}
-            initial={groups.initial}
-            search={groups.search}
-            id={(group) => String(group.id)}
-            render={(group, query) => (
-              <span className={styles.option}>
-                <Highlight text={group.name} query={query} />
-                {group.description && (
-                  <>
-                    {' '}
-                    <span className={styles.description}>
-                      <Highlight text={group.description} query={query} />
-                    </span>
-                  </>
-                )}
-              </span>
-            )}
-            onPick={add}
-            leaveOut={(group) => chosenIds.has(group.id)}
-            inputRef={addField}
+            onAdd={add}
+            onRemove={(item) => remove(item.id)}
           />
           {backend !== undefined && (
             <div className={formStyles.field}>
@@ -211,11 +150,7 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
             </div>
           )}
           {unread && <p className={formStyles.note}>{t('admin.newStore.backendsUnread')}</p>}
-          {refusal !== undefined && (
-            <p className={formStyles.refusal} role="alert">
-              {refusal}
-            </p>
-          )}
+          <Refusal>{refusal}</Refusal>
           <div className={formStyles.buttons}>
             <Button onPress={close} isDisabled={busy}>
               {t('common.cancel')}

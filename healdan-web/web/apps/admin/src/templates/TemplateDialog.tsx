@@ -10,6 +10,7 @@ import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 import { useTemplates, workspaceKeys } from '../workspace/queries'
 import { nameProblem } from '../workspace/text'
+import { Refusal } from '../forms/Refusal'
 import styles from '../clients/Clients.module.css'
 
 type A = adminComponents['schemas']
@@ -107,11 +108,7 @@ export function TemplateDialog({ template, onSaved, onClose }: TemplateDialogPro
               {copyOf !== '' && <p className={styles.note}>{t('admin.templateDialog.copyNote')}</p>}
             </>
           )}
-          {refusal !== undefined && (
-            <p className={styles.refusal} role="alert">
-              {refusal}
-            </p>
-          )}
+          <Refusal>{refusal}</Refusal>
           <div className={styles.buttons}>
             <Button onPress={close} isDisabled={busy}>
               {t('common.cancel')}

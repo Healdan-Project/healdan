@@ -11,6 +11,7 @@ import { matterColumns, matterRowOf } from '../matters/columns'
 import { MatterFilters } from '../matters/MatterFilters'
 import { NewMatterDialog } from '../matters/NewMatterDialog'
 import { isMatterSort, useMatterList, type MatterListQuery, type MatterSort, type SortOrder } from '../matters/useMatterList'
+import { useChosen } from '../lists/useChosen'
 import { useWords } from '../lists/useWords'
 import { typed } from '../pickers/typing'
 import { useClient } from '../queries'
@@ -165,19 +166,4 @@ export function MattersView({ search }: { search: MattersSearch }) {
       {adding && <NewMatterDialog onClose={() => setAdding(false)} />}
     </div>
   )
-}
-
-/**
- * What the person picked for a filter here (null for none), shown at once: the address, which names it by id, follows a
- * moment later, and a picker that waited for it would leave its list open. It's forgotten when the address names anything
- * else, as the pane's Matters does, and undefined until something is picked.
- */
-function useChosen<T extends { id: number }>(id: number | undefined) {
-  const [chosen, setChosen] = useState<T | null | undefined>(undefined)
-  const [seen, setSeen] = useState(id)
-  if (id !== seen) {
-    setSeen(id)
-    if (chosen !== undefined && chosen?.id !== id) setChosen(undefined)
-  }
-  return [chosen, setChosen] as const
 }

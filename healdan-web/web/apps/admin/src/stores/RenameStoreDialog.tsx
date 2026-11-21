@@ -10,6 +10,7 @@ import { useStores } from '../queries'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 import { nameProblem } from '../workspace/text'
+import { Refusal } from '../forms/Refusal'
 import formStyles from '../forms/Form.module.css'
 import { storeKeys, storesChanged } from './queries'
 
@@ -82,11 +83,7 @@ export function RenameStoreDialog({ store, onClose }: RenameStoreDialogProps) {
               setFailure(undefined)
             }}
           />
-          {refusal !== undefined && (
-            <p className={formStyles.refusal} role="alert">
-              {refusal}
-            </p>
-          )}
+          <Refusal>{refusal}</Refusal>
           <div className={formStyles.buttons}>
             <Button onPress={close} isDisabled={busy}>
               {t('common.cancel')}

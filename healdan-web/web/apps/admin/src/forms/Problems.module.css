@@ -1,0 +1,54 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* Problems found before a button is pressed, or by a test: the line that says what found them, then each problem after
+   the warning sign, with what can put it right under it. Framed, each stands in a box of its own, as New Matter's do. */
+
+.found {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+  min-width: 0;
+}
+
+.problems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spaced {
+  gap: var(--hd-space-3);
+}
+
+.problem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--hd-space-3);
+}
+
+.framed {
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-caution);
+  border-radius: var(--hd-radius);
+}
+
+.sign {
+  flex: none;
+  margin-top: 2px;
+  color: var(--hd-caution-text);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+  min-width: 0;
+}
+
+.line {
+  margin: 0;
+}

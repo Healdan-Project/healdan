@@ -12,6 +12,7 @@ import { useFolderContents } from './queries'
 import { NEW_RULE, RuleFields, ruleOf, useClassOptions, type RuleDraft } from './SearchFolderPanel'
 import { holdsWhat, nameProblem } from './text'
 import { below, placed, type WorkspaceNode } from './tree'
+import { Refusal } from '../forms/Refusal'
 import page from '../matters/MatterPage.module.css'
 import styles from '../clients/Clients.module.css'
 
@@ -100,11 +101,7 @@ export function FolderNameDialog({ title, submit, initial = '', taken, rule, sen
               }}
             />
           )}
-          {refusal !== undefined && (
-            <p className={styles.refusal} role="alert">
-              {refusal}
-            </p>
-          )}
+          <Refusal>{refusal}</Refusal>
           <div className={styles.buttons}>
             <Button onPress={close} isDisabled={busy}>
               {t('common.cancel')}
@@ -134,7 +131,6 @@ export interface MoveFolderDialogProps {
  * that the folder it's in moves nothing, and that a folder there has the name.
  */
 export function MoveFolderDialog({ node, parent, root, send, onClose }: MoveFolderDialogProps) {
-  const refusalFor = useRefusalFor()
   const [into, setInto] = useState('')
   const [failure, setFailure] = useState<unknown>()
   const [busy, setBusy] = useState(false)
@@ -182,11 +178,7 @@ export function MoveFolderDialog({ node, parent, root, send, onClose }: MoveFold
               setFailure(undefined)
             }}
           />
-          {failure !== undefined && (
-            <p className={styles.refusal} role="alert">
-              {refusalFor(failure)}
-            </p>
-          )}
+          <Refusal failure={failure} />
           <div className={styles.buttons}>
             <Button onPress={close} isDisabled={busy}>
               {t('common.cancel')}

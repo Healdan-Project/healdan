@@ -38,6 +38,13 @@ export const adminEnUS = {
   'admin.find.disabled': 'Disabled',
   'admin.find.none': 'Nothing found.',
 
+  // A list of groups that more are added to from a search: New Store's and a Store's who can see it, a person's groups
+  'admin.groupsField.remove': 'Remove {name}',
+  'admin.groupsField.add': 'Add a Group',
+  'admin.groupsField.find': 'Find a group',
+  // Above the groups offered while nothing is typed
+  'admin.groupsField.groups': 'Groups',
+
   'admin.notFound.title': 'Page Not Found',
   'admin.notFound.message': "There's no such page in Healdan Admin.",
   'admin.notFound.dashboard': 'Go to the Dashboard',
@@ -209,11 +216,7 @@ export const adminEnUS = {
   'admin.newStore.name': 'Name',
   'admin.newStore.who': 'Who Can See It',
   'admin.newStore.nobody': 'Only administrators can see it until a group is added.',
-  'admin.newStore.remove': 'Remove {name}',
-  'admin.newStore.add': 'Add a Group',
-  'admin.newStore.find': 'Find a group',
   'admin.newStore.hint': 'Find a group by its name. Each group added can see the Store.',
-  'admin.newStore.groups': 'Groups',
   'admin.newStore.backend': 'Backend',
   'admin.newStore.backendNote': "A backend is offered once it can be used: an encrypted one once its recovery key is confirmed. It can be changed later, on the Store's page.",
   // When the backends couldn't be read, but for a server without Healdan's storage module
