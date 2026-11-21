@@ -251,13 +251,16 @@ What the screens from Phase 2 on share (the spec's section 7.2):
 - **A page starts afresh.** A client's, a matter's, a template's, a Store's and a backend's page are keyed by its id,
   so Back or Forward between two pages of one route carries no dialog, tab or chosen folder over.
 - **Stores** are `stores/`: `NewStoreDialog` (its **Backend** menu, the `offered` backends from `useBackends`, Original
-  first), `RenameStoreDialog`, `StoreAccessPanel` (groups only, from `useGroupPicker`, which New Store shares; a
-  person's row already there is kept and can be removed) and `StoreStoragePanel`, beside `queries.ts` (`storeKeys`,
-  under `['admin', 'stores']`, and `useStore`, `useStoreAccess`, `useStoreStorage`, `useDeletedStores` and
-  `useSwitchPreview`) and `text.ts`. After a change, `storesChanged` asks for the Stores again (the list, the deleted
-  ones, the Store's page and the Dashboard, and with `matters` the matters, clients and find too), never splicing an
-  answer in, as a create answers only `{ id, name }`; `storeFilesChanged` does the same after a Store's files change
-  place. The list's and a page's reads ask again at each return to the window, with no timer (`ASK_ON_RETURN`).
+  first, and a note that the Store will be made on Original when that read fails with anything but
+  `503 storage-unavailable`), `RenameStoreDialog`, `StoreAccessPanel` (groups only, from `useGroupPicker`, which New
+  Store shares; a person's row already there is kept and can be removed; the rows that grant something but not Read,
+  which it doesn't list, named under the list, as Save removes them) and `StoreStoragePanel`, beside `queries.ts`
+  (`storeKeys`, under `['admin', 'stores']`, and `useStore`, `useStoreAccess`, `useStoreStorage`, `useDeletedStores`
+  and `useSwitchPreview`) and `text.ts`. After a change, `storesChanged` asks for the Stores again (the list, the
+  deleted ones, the Store's page and the Dashboard, and with `matters` the matters, clients and find too), never
+  splicing an answer in, as a create answers only `{ id, name }`; `storeFilesChanged` does the same after a Store's
+  files change place. The list's and a page's reads ask again at each return to the window, with no timer
+  (`ASK_ON_RETURN`).
 - **Storage** is `storage/`: `BackendDialog` (add and edit, Test first, the `secret-key-missing` question and **Make a
   New Key**), `RecoveryKeyDialog` (show, after its question, confirm, enter and history), `SwitchBackendDialog` (every
   backend, one not `offered` greyed out with why, the count from `switchPreview` before **Change Backend** is
@@ -270,8 +273,23 @@ What the screens from Phase 2 on share (the spec's section 7.2):
   cache, the address or the browser's storage. The admin catalogue holds the two problem codes only the admin API
   answers (`problems.storage-unavailable`, `problems.secret-key-missing`), and `strings.test.ts` allows a `problems.`
   key there only when the shared catalogue lacks it. `@healdan/ui`'s `TextField` takes `type: 'password'`,
-  `autoComplete` (`off` or `new-password`, which turn spell checking off too) and `description`, and `RadioChoices`
-  a choice `disabled`, with a `description` tied to it by `aria-describedby`.
+  `autoComplete` (`off` or `new-password`, which turn spell checking off too) and `description`, `CheckField` a
+  `description` too, drawn under the box (the Path-Style Addressing and Encrypt notes), and `RadioChoices` a choice
+  `disabled`, each `description` tied to its control by `aria-describedby`, with the error's id after it when both
+  show. `BackendDialog` holds its fields in a disabled `<fieldset>` while Test is on its way, as while it saves, so
+  what Test says is about the settings shown. A backend's page knows what keeps the backend (`stores`,
+  `storesInTrash`, `inUse`), so its **Remove** opens, while anything does, a dialog that says what and how to free it,
+  with only **Close**, and the question with **Remove** only when nothing does; the server's refusal still shows in
+  that question, for a change made meanwhile. A Store's delete question names its backend when it isn't Original.
+- **One way to draw a fact and a count.** `facts/Fact.tsx`'s `Fact` draws a page's facts (a term and its value, in the
+  page's `<dl>`), and `@healdan/ui`'s `formatCount` (in `format.ts`, which its `plural` uses too) writes every count,
+  as "3,902", rather than an `Intl.NumberFormat` of the screen's own.
+- **The focus when what had it goes.** `focus.ts`' `useFocusWhenGone(gone, target)` moves the focus to `target`, such
+  as a section's heading with `tabIndex={-1}`, once `gone` turns true, and only when the focus was lost to the page's
+  body (`focusLost()`, which a screen can ask itself), so focus the person has moved stays. After a Retry that leaves
+  nothing stuck, it goes to the Files with No Store heading, or to a Store's Stuck Files heading, whose section then
+  stays, saying none are stuck; after a Restore in Deleted Stores, to the next row's **Restore**, or the section's
+  heading after the last. **Discard Changes** in Who Can See It puts the focus on **Add a Group**.
 - **A link the server gives,** such as the Dashboard's, goes through `frame/ServerLink.tsx` (see
   [Adding a Screen](#adding-a-screen)).
 

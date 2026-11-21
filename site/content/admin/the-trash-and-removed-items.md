@@ -59,9 +59,11 @@ with it. Every document that comes back is queued for indexing, so search finds 
   and a matter that already holds a copy of an email refuses a second one.
 - **A deleted Store is restored from Deleted Stores,** on the Admin app's Stores list, back under the root, with what
   its delete took, whether it's in the Trash or removed: see [Deleted Stores](../stores/#deleted-stores). The User
-  app's Trash lists its item for whoever deleted it, but can't restore it, and the API answers its restore
-  `409 refused`: "A Store is restored from Deleted Stores on the Admin app's Stores page, or in the Classic
-  Interface." The Classic Interface's Trash can restore it too.
+  app's Trash lists its item for whoever deleted it, and for administrators under **Everyone's**, but can't restore
+  it, and the API answers its restore `409 refused`: "A Store is restored from Deleted Stores on the Admin app's
+  Stores page, or in the Classic Interface." The Classic Interface's Trash can restore it too. Its files stay on its
+  storage backend meanwhile, so that backend can't be removed: see
+  [Removing a Backend](../storage-backends/removing-a-backend/).
 - **A workspace template, or a folder deleted from one,** is listed like any other item, but the API restores only
   into Stores, so its restore is `409 place-gone`, and the folders the User app then offers are matters and their
   folders, never the Templates Store or a template. An administrator restores them in the Classic Interface, below:

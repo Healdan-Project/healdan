@@ -1273,8 +1273,9 @@ as a name taken, `409 refused` with the same sentence.
   since the last), `figuresAt`, `readers` (each group and person whose row has Read, with `groupId`, `name` and
   `person`), `backend` (the `StoreBackend` it keeps its files on: `id`, `name`, `kind` and `encrypted`) and `pending`
   (`waiting`, `waitingBytes` and `stuck`, its files not on that backend yet and those the mover gave up on). `backend`
-  and `pending` are null while storage backends are off, and on a server without the storage module, which this route
-  answers all the same.
+  and `pending` are null while storage backends are off, on a server without the storage module, and when the storage
+  backends can't be read, which the server logs as a warning: the route answers all the same, so New Matter's Store
+  menu still works.
 - **`POST /v1/admin/stores`** with `{ "name", "groupIds", "backendId" }` makes the Store, and gives each group in
   `groupIds`, a person's own group among them, Read, the Store's one level, **Can See**, all in one transaction, so a
   matter can be made in it at once. It answers `201` with `{ "id", "name" }` and no `Location`. An empty `groupIds`
@@ -1299,7 +1300,10 @@ as a name taken, `409 refused` with the same sentence.
   `{ "trashItemId", "folders", "documents" }`, `folders` counting its matters' folders too. The matters' rows stay,
   so their numbers stay taken. Default, the Templates Store and the root are `409 refused`, each with its sentence,
   and so is a Store with a document inside checked out, by anyone, or immutable, with the sentence the public routes'
-  `checked-out` and `immutable` give. Recorded as `store.deleted`, straight after.
+  `checked-out` and `immutable` give. Recorded as `store.deleted`, straight after. The Store's files stay on its
+  backend while it's in the Trash, as its restore needs them, so the backend lists it in `storesInTrash` and can't be
+  removed, nor its place changed, until the Store is restored, given another backend and deleted again (see
+  [Storage](#storage)).
 - **`GET /v1/admin/stores/deleted`**: the Stores in the Trash, most recently deleted first, a plain array of
   `DeletedStore`: the Store's folder `id`, `name`, `trashItemId`, `state` (`deleted`, or `removed` from the Trash and
   not destroyed yet), `matters` (its matters' folders still in its item in that state), `deletedAt`, `deletedBy` (a
@@ -1345,16 +1349,22 @@ through `healdan-core`'s storage port, which `healdan-storage` implements (see
 - **While storage backends are off,** on a server that keeps its files in LogicalDOC's own store,
   `GET /v1/admin/backends`, `GET /v1/admin/storage/settings` and `GET /v1/admin/stores/{id}/backend` answer `on: false`,
   with no backends; a backend named in the path is `404`, as none is listed; the two lists of stuck files answer what's
-  recorded; and every other route, Test before saving included, is `409 refused`, with a sentence that says so.
-- **The refusals** are the Storage tab's own, each `409 refused` with its sentence in `detail`.
+  recorded; and every other route, Test before saving included, is `409 refused`, with a sentence of the Admin app's
+  own, as it has no Storage tab: "Storage backends are off: this server keeps its files in LogicalDOC's own store, so
+  its storage backends, its Stores' backends and its storage settings can't be changed."
+- **The refusals** are the Storage tab's, each `409 refused` with its sentence in `detail`, and two of the Admin
+  app's own: storage backends off (above), and a Store in the Trash that keeps its files on a backend being removed,
+  or whose bucket, prefix or path would change, which names each such Store, says it's in the Trash and how to free
+  the backend, as "Store Archive is in the Trash, and its files stay on this backend while it's there, so the backend
+  can't be removed: restore the Store, give it another backend, then delete it again."
 - **`409 secret-key-missing`** answers an add or an edit that types an S3 secret while Healdan's secret key file is
   missing and values are sealed with it: `detail` says so, and `sealed` counts the stored values sealed with the missing
   key. Nothing is written. Sent again with `newKey: true`, the change makes a new key, which leaves those values to be
   entered again, so the Admin app asks first, as the tab does.
 - **Nothing secret is answered.** No answer holds an S3 secret, only `hasSecret`, whether one is stored. A `Backend`
   holds the access key ID, which Edit shows. An encrypted backend's recovery key is in two answers only: its add's, as
-  `recoveryKey`, and `POST /v1/admin/backends/{id}/recovery-key/show`'s, each recorded as a showing. A problem never
-  holds what a request typed as a secret, a recovery key or its last group.
+  `recoveryKey`, and `POST /v1/admin/backends/{id}/recovery-key/show`'s, each recorded as a showing. Neither a
+  problem nor a Test's `problems` holds what a request typed as a secret, a recovery key or its last group.
 - **Each change is recorded** in the Storage area, straight after it succeeds, by the port, as a storage change isn't
   one transaction with its record: `backend.added`, `backend.changed`, `backend.removed`,
   `backend.recovery-key-shown`, `-confirmed` and `-entered`, `store.backend-changed`, `storage.stuck-retried` and
@@ -1369,8 +1379,10 @@ The routes:
   `s3`), `original`, its settings (`path`; `endpoint`, the scheme, host and port alone, null for a folder or an
   endpoint that can't be read; `region`, `bucket`, `prefix`, `pathStyle` and `accessKey`), `hasSecret`, `encrypted`,
   `keyConfirmed`, `offered` (whether a Store can be given it), `inUse`, `files`, `bytes`, `status` (`ok`,
-  `unreachable`, `failing` or `unchecked`), `error` and `since`, `keyLastShown` and `keyLastShownBy`, and `stores`, the
-  names of the live Stores on it: for Original, every Store with no other backend, the Templates Store left out.
+  `unreachable`, `failing` or `unchecked`), `error` and `since`, `keyLastShown` and `keyLastShownBy`, `stores`, the
+  names of the live Stores on it, and `storesInTrash`, the names of the Stores in the Trash on it, deleted or removed,
+  whose files stay there for their restore: for Original, every such Store with no other backend, the Templates Store
+  left out of both.
 - **`POST /v1/admin/backends`** adds a local folder or an S3 bucket, as the tab's Add does, and answers `201` with an
   `AddedBackend`, `{ "backend", "recoveryKey" }`, and its `Location`. Test runs on the settings first, and must pass;
   `recoveryKey` is null for a backend that isn't encrypted. `422` for what the kind needs, missing or blank
@@ -1379,15 +1391,20 @@ The routes:
   edited, whose stored secret a missing one uses. It answers `{ "problems" }`, empty when it passed: a test that fails
   isn't a refusal, and it never answers `422`.
 - **`GET`, `PATCH` and `DELETE /v1/admin/backends/{id}`** read, edit and remove a backend. `PATCH` is partial, a member
-  left out staying, and a `secret` null, blank or left out keeping the stored one. `kind` and `encrypted`, any member
-  but `name` for Original, and a member of the other kind are `422` `not-editable`, each only when sent with a value. A
-  new bucket, prefix or path is refused once files are recorded or copies held on the backend, or while a Store keeps
-  its files there. `DELETE` answers `204`, and removes only an empty backend, never Original.
+  left out staying, and a `secret` null, blank or left out keeping the stored one. A null member counts as left out
+  where the kind doesn't take it, and is `422` `required` where it does (`name` always), but for `pathStyle`, which
+  null keeps, and `prefix`, which null empties; `newKey` null is false. `kind` and `encrypted`, any member but `name`
+  for Original, and a member of the other kind are `422` `not-editable`, each only when sent with a value. A new
+  bucket, prefix or path is refused once files are recorded or copies held on the backend, or while a Store keeps its
+  files there, live or in the Trash, a Store in the Trash refused first, by name. `DELETE` answers `204`, and removes
+  only an empty backend, never Original: one no Store keeps its files on, live or in the Trash, a Store in the Trash
+  again refused first, by name, before the Storage tab's refusals but Original's.
 - **`POST /v1/admin/backends/{id}/test`** tests the saved backend in full, and answers its `problems`.
 - **`POST /v1/admin/backends/{id}/recovery-key/show`**, **`/confirm`** with `{ "lastGroup" }`, and **`/enter`** with
   `{ "recoveryKey" }` show, confirm and enter an encrypted backend's recovery key; `confirm` and `enter` answer the
-  backend. **`GET /v1/admin/backends/{id}/key-events`** is every showing and entering, newest first, each `event`
-  `shown` or `entered`, with `at`, `userId` and `username`.
+  backend. `enter` refuses what isn't a recovery key, by its length, its last character or a character a recovery key
+  can't hold, and a key that isn't the backend's, writing nothing. **`GET /v1/admin/backends/{id}/key-events`** is
+  every showing and entering, newest first, each `event` `shown` or `entered`, with `at`, `userId` and `username`.
 - **`GET /v1/admin/stores/{id}/backend`** is a Store's `StoreStorage`: `storeId`, `on`, its `backend` (null while
   storage backends are off), its `files` and `bytes` on any backend, and its `pending`. With `backendId`,
   `switchPreview` says how many files, and their bytes, a switch to that backend would move, and changes nothing.

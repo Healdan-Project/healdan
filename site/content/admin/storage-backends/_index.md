@@ -46,7 +46,7 @@ its page.
 |---|---|
 | Name | the backend's name |
 | Kind | **Local Folder** or **S3** |
-| Where | a folder's path, or an S3 bucket and its prefix at its endpoint, as `healdan-smoke/healdan/ at https://s3.eu-west-1.wasabisys.com`. The endpoint shows as its scheme, host and port alone |
+| Where | a folder's path, or an S3 bucket and its prefix at its endpoint, as `firm-documents/healdan/ at https://s3.eu-west-1.wasabisys.com`, or `firm-documents at https://s3.eu-west-1.wasabisys.com` for a bucket with no prefix. The endpoint shows as its scheme, host and port alone |
 | Encrypted | **Yes** or **No**: see [Encryption and Recovery Keys](encryption-and-recovery-keys/) |
 | Files, Size | the files recorded on it, and their size |
 | Status | whether Healdan can use it now (below) |
@@ -97,13 +97,15 @@ A backend's page, at `/admin/backends/` and its number, shows its status under i
 | Recovery Key | for an encrypted backend, **Confirmed** or **Not Confirmed** |
 | Key Last Shown | for an encrypted backend, as in the list |
 | Stores | the Stores that keep their files on it, or **None**. Original's are every Store that has no other backend, but the Templates Store |
+| Stores in the Trash | shown only when there are any: the deleted Stores that keep their files on it, as a restore needs them. Original's are every one that has no other backend. See [Deleting a Store](../stores/#deleting-a-store) |
 
 Its actions are at the top:
 
 - **Test** tests it in full, and says what it found under its status: see
   [Testing a Saved Backend](adding-a-backend/#testing-a-saved-backend).
 - **Edit** changes its settings: see [Changing a Backend](adding-a-backend/#changing-a-backend).
-- **Remove**, which Original's page doesn't have: see [Removing a Backend](removing-a-backend/).
+- **Remove**, which Original's page doesn't have. While a Store, a Store in the Trash, a file or a held copy keeps the
+  backend, it says so and doesn't offer to remove it: see [Removing a Backend](removing-a-backend/).
 - For an encrypted backend, **Show Recovery Key**, **Confirm Recovery Key** while its key isn't confirmed,
   **Enter Recovery Key** and **Key History**: see [Encryption and Recovery Keys](encryption-and-recovery-keys/).
 

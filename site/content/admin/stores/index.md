@@ -52,7 +52,9 @@ chooses it. Both ask for:
 - **Backend:** the storage backend the Store keeps its files on, **Original**, the server's own storage, to begin with.
   The menu offers the backends a Store can be given: those that aren't encrypted, and the encrypted ones whose
   recovery key is confirmed. It can be changed later, on the Store's page. On a server that doesn't use storage
-  backends, New Store doesn't ask, and the Store keeps its files in LogicalDOC's own store.
+  backends, New Store doesn't ask, and the Store keeps its files in LogicalDOC's own store. If the backends can't be
+  read, New Store says "The backends couldn't be read, so the Store will be made on Original. Its backend can be
+  changed later, on the Store's page."
 
 Anything Healdan refuses when you press **Create Store** shows in the dialog, in Healdan's own words, such as a
 backend someone removed meanwhile. While the Store is being made, **Cancel** is greyed out and Esc does nothing; once
@@ -83,7 +85,8 @@ Below them are three tabs:
 - **Storage**, on a server that uses storage backends: the Store's **Backend**, what it **Holds** there, as
   "3,902 files · 11.8 GB", what's **Waiting to Move** and what's **Stuck**, each "None" when there's nothing. While
   any file is stuck, **Stuck Files** lists them, with **Retry**: see
-  [Stuck Files and Retry](../storage-backends/waiting-and-stuck-files/#stuck-files-and-retry).
+  [Stuck Files and Retry](../storage-backends/waiting-and-stuck-files/#stuck-files-and-retry). Once a retry leaves
+  none stuck, **Stuck Files** says "No stuck files." until you leave the tab, and the focus moves to its heading.
 
 An address that names no Store, or a Store in the Trash, says "Store Not Found", with **Go to Stores**.
 
@@ -94,11 +97,15 @@ A Store's permissions decide who can see it, and they limit who can see the matt
 each group and person who can see the Store. One whose row gives more than Read on the Store is marked **Custom**, and
 saving keeps its other permissions. With nobody listed, only administrators can see it.
 
+A group or person whose row gives other permissions on the Store but not Read can't see it, so isn't listed. A line
+under the list names them, as "Partners isn't listed, as it can't see the Store, but it has other permissions on it,
+which Save removes." Adding a group back with **Add a Group** gives it Read and keeps its other permissions.
+
 - **Add a Group** finds a group, as New Store does, and the Remove button (an ×) beside a group or a person takes them
   off. Groups are added here, not people: to let one person see a Store, add a group they're in.
 - **Save** saves who can see the Store from then on, and stays greyed out until something has changed. **Discard
-  Changes** puts back what's saved. While the save is on its way, the list is held; once it's saved, Healdan says
-  "Saved who can see Client Work".
+  Changes** puts back what's saved, and the focus moves to **Add a Group**. While the save is on its way, the list is
+  held; once it's saved, Healdan says "Saved who can see Client Work".
 - **Leaving the page** with a change not saved, or while it's being saved, asks first, as the Workspace Editor does:
   "Leave the Changes to Client Work?", with **Discard Changes**, or, while it's saving, **Leave Page**. Choosing
   another tab keeps the change.
@@ -148,7 +155,9 @@ before the change, and the files then move in the background, each read from whe
 
 **Delete**, on the Store's page, moves the Store to the Trash with everything in it, its matters and everything in
 them, as one item. It asks first, "Move Client Work to the Trash?", saying how many matters go with it, that their
-numbers stay taken, and that it can be restored from **Deleted Stores** on the Stores list. **Move to Trash**, in that
+numbers stay taken, and that it can be restored from **Deleted Stores** on the Stores list. For a Store on a backend
+other than Original, it also says where its files stay, as "Its files stay on Wasabi EU while it's in the Trash, so
+Wasabi EU can't be removed until the Store is restored and given another backend." **Move to Trash**, in that
 question, deletes it, says "Moved Client Work to the Trash" and goes back to the list.
 
 - **It's refused while a document inside is checked out,** by anyone, **or is immutable,** as a matter's delete is,
@@ -156,6 +165,10 @@ question, deletes it, says "Moved Client Work to the Trash" and goes back to the
   again.
 - **Its matters leave the Matters list,** as matters in the Trash do. Their numbers stay taken, so a new matter never
   gets one of them.
+- **Its files stay on its backend** while it's in the Trash or removed from it, as a restore needs them. The
+  backend's page lists it under **Stores in the Trash**, and the backend can't be removed, nor its bucket, prefix or
+  path changed, until the Store is restored, given another backend and deleted again: see
+  [Removing a Backend](../storage-backends/removing-a-backend/).
 - **The nightly job never destroys a Store, or a matter's own folder.** Once the Store is removed from the Trash, the
   job destroys what's inside its matters after the days set in Healdan Settings, and keeps the Store and its matters'
   own folders: see [The Trash and Removed Items](../the-trash-and-removed-items/#what-it-never-destroys).
@@ -175,17 +188,19 @@ removed from the Trash among them:
 
 **Restore** brings a Store back directly under the root, with everything its delete took, whether it's in the Trash
 or removed from it. Restored after that date, a removed Store comes back with its matters, empty: their documents and
-folders have been destroyed. It asks first, "Restore Client Work?", saying it comes back with its matters and everything else
-its delete took, and that anything deleted on its own before the Store was stays in the Trash. Once it's back, Healdan
-says "Restored Client Work", and its matters are in the Matters list again.
+folders have been destroyed. **Restore** asks first, "Restore Client Work?", saying it comes back with its matters and
+everything else its delete took, and that anything deleted on its own before the Store was stays in the Trash. Once
+it's back, Healdan says "Restored Client Work", its matters are in the Matters list again, and the focus moves to the
+next Store's **Restore**, or to the **Deleted Stores** heading when it was the last.
 
 - **A name another folder under the root has now,** in any case, refuses the restore, as in "Another Store is already
   called Client Work.": rename that Store first, then restore.
 - **If someone restored it first,** Healdan says "That Store isn't in the Trash." in the question.
 - **Healdan's rules hold,** as on every restore: see [The Trash and Removed Items](../the-trash-and-removed-items/).
 
-The User app's Trash lists a deleted Store's item for whoever deleted it, but can't restore it: Restore says it can't
-be restored from there. Restore it here, or in the Classic Interface's Trash.
+The User app's Trash lists a deleted Store's item for whoever deleted it, and for administrators under
+**Everyone's**, but can't restore it: Restore says it can't be restored from there. Restore it here, or in the Classic
+Interface's Trash.
 
 ## Stores Healdan Treats Differently
 

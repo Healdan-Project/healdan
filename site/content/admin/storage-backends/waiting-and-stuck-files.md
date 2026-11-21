@@ -45,8 +45,10 @@ Put the cause right, such as the S3 user's permissions or a full disk, then pres
 or, for the files with no Store, in their window or beside **Stuck Files**. Every stuck file goes back to waiting,
 with its tries counted from nought again, and moves with the others. Healdan says so, as "The stuck files of Client
 Work wait to move again" or "The stuck files with no Store wait to move again", and the window closes. While the retry
-is on its way, the window's **Close** is greyed out. Healdan records each retry that puts stuck files back to waiting,
-with who and when.
+is on its way, the window's **Close** is greyed out. Once a retry leaves none stuck, the focus moves to the heading
+of the part it was in: **Files with No Store** on the Backends list, or **Stuck Files** on the Store's **Storage**
+tab, which then says "No stuck files." until you leave the tab. Healdan records each retry that puts stuck files
+back to waiting, with who and when.
 
 ## Files with No Store
 

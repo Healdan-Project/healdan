@@ -94,9 +94,9 @@ work.
 
 Needs Attention comes first: what an administrator should act on, each with how many, a line that says more, such as
 which Store or since when, and a link to where it's fixed. Stuck files link to **Stores**, where each Store's stuck
-files are, and a storage backend that can't be reached, or a disk more than 85% full, to **Backends**. The others link
-to **Classic Interface** until their place is in the Admin app. With nothing to report, it says "Nothing needs your
-attention."
+files are, or to **Backends** when only files with no Store are stuck, as those are listed there; a storage backend
+that can't be reached, or a disk more than 85% full, links to **Backends** too. The others link to **Classic
+Interface** until their place is in the Admin app. With nothing to report, it says "Nothing needs your attention."
 
 | It says, for example | What it means |
 |---|---|

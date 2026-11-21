@@ -54,7 +54,8 @@ them again. See [When a Backend Fails](../when-a-backend-fails/).
 **Test**, in the window, tries the settings as you typed them. For S3, it writes a test object in the bucket, reads
 it back whole and in part, lists it and deletes it. For a folder, it checks that the folder exists, that Healdan can
 write in it, and that it holds no other backend's marker. It says "Test passed." or, as in "Test found 2 problems:",
-each problem it found, a setting still to type among them, and saves nothing.
+each problem it found, a setting still to type among them, and saves nothing. While it tests, the settings are held,
+so what it says is always about the settings shown.
 
 **Add** stays greyed out until the name and the kind's settings are typed: for S3 everything but the prefix, and for
 a folder its path. It runs the same test first, and adds the backend only if it passes; otherwise the window says
@@ -87,8 +88,9 @@ something uses it.
   stored one. "Not Set: enter it again." means the stored secret can't be read, as after Healdan's secret key was
   made again: type it, and save.
 - **The bucket, prefix and path** show as text, and can't change, once files are there ("Can't change once files are
-  there.") or while a Store keeps its files on the backend ("Can't change while a Store keeps its files here."). To
-  move a backend's files to another place, add a backend there and give its Stores the new one.
+  there."), while a Store keeps its files on the backend ("Can't change while a Store keeps its files here.") or while
+  a Store in the Trash does ("Can't change while a Store in the Trash keeps its files here.", as its files stay there
+  for its restore). To move a backend's files to another place, add a backend there and give its Stores the new one.
 - **The kind and encryption** show as text, as "Encrypted, chosen when the backend was added.", and never change, as
   the recovery key is shown when the backend is added. To change encryption, remove the backend while it's empty and
   add it again.

@@ -35,7 +35,8 @@ file and the recovery key loses the backend's files for good. That showing is re
 [Showing It Again](#showing-it-again)).
 
 1. Save it now, away from the server: in the firm's password manager, or on paper kept locked away. **Copy**, beside
-   it, puts it on the clipboard, ready to paste into the password manager.
+   it, puts it on the clipboard, ready to paste into the password manager. If the browser doesn't let it use the
+   clipboard, the window says "Couldn't copy the recovery key. Select it and copy it, or write it down."
 2. Type its last group of four characters in **Last Group**, and press **Confirm**. Healdan says "The recovery key of
    Cloud Storage is confirmed: Stores can use it". A group that isn't the key's last is refused: "That isn't the last
    group of this backend's recovery key: type its last four characters, as it was shown."
@@ -60,8 +61,9 @@ Every showing is recorded, the one when the backend was added included:
 
 - **Key Last Shown,** on the Backends list and the backend's page, shows the latest, and to whom.
 - **Key History,** on the backend's page, lists every showing and every entering of its recovery key, newest first:
-  **When**, **What** (**Recovery Key Shown** or **Recovery Key Entered**) and **By**. The record stays when the
-  backend is removed.
+  **When**, **What** (**Recovery Key Shown** or **Recovery Key Entered**) and **By**. Once the backend is removed,
+  no screen shows its history, as its page has gone, but Healdan keeps it in its records and in the administration
+  record.
 
 The server's log records each showing too, but never the key.
 

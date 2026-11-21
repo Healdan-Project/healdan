@@ -218,12 +218,12 @@ Phase 1 built the first three endpoints in this table, for the Admin app's Dashb
 | `FolderService.delete` of a Store | `DELETE /admin/stores/{id}`, the Store and its matters as one Trash item, answering it |
 | `/data/deletedfolders.xml`, for the Stores | `GET /admin/stores/deleted`, deleted or removed |
 | `FolderService.restore` of a Store | `POST /admin/stores/{id}/restore`, back under the root, as `POST /trash/{id}/restore` refuses a Store's item |
-| `HealdanStorageService.load` | `GET /admin/backends` (the backends, and the files with no Store), `GET /admin/backends/{id}`, `GET /admin/stores/{id}/backend` (a Store's) and `GET /admin/storage/settings`, with the settings' limits |
+| `HealdanStorageService.load` | `GET /admin/backends` (the backends, each with its live Stores and its Stores in the Trash, and the files with no Store), `GET /admin/backends/{id}`, `GET /admin/stores/{id}/backend` (a Store's) and `GET /admin/storage/settings`, with the settings' limits |
 | `HealdanStorageService.testNew` | `POST /admin/backends/test`, with `id` for a backend being edited |
 | `HealdanStorageService.addBackend` | `POST /admin/backends`, answering an encrypted backend's recovery key once |
-| `HealdanStorageService.saveBackend` | `PATCH /admin/backends/{id}` |
+| `HealdanStorageService.saveBackend` | `PATCH /admin/backends/{id}`, a new bucket, prefix or path refused by name while a Store in the Trash keeps its files there |
 | `HealdanStorageService.testBackend` | `POST /admin/backends/{id}/test` |
-| `HealdanStorageService.removeBackend` | `DELETE /admin/backends/{id}` |
+| `HealdanStorageService.removeBackend` | `DELETE /admin/backends/{id}`, refused by name while a Store in the Trash keeps its files there, as while a live one does |
 | `HealdanStorageService.showRecoveryKey`, `confirmRecoveryKey`, `enterRecoveryKey` | `POST /admin/backends/{id}/recovery-key/show`, `/confirm`, `/enter` |
 | `HealdanStorageService.keyEvents` | `GET /admin/backends/{id}/key-events` |
 | `HealdanStorageService.previewStoreSwitch` | `GET /admin/stores/{id}/backend?backendId=`'s `switchPreview` |

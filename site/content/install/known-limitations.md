@@ -197,9 +197,8 @@ weight: 13
   Stores with a page for each, and the storage backends. Users and groups, the permissions of documents, Healdan
   Settings, scheduled tasks, search and indexing and the server's log are all in the Classic Interface, which the
   Admin app's left pane and its links open. A Store's **Who Can See It** adds groups, not people: to let one person
-  see a Store, add a group they're in. Its
-  find opens a client's or a matter's page in the Admin app, but the Classic Interface for a person, not the person
-  it found. See [The Admin App](../../admin/the-admin-app/).
+  see a Store, add a group they're in. The Admin app's find opens a client's or a matter's page in the Admin app, but
+  the Classic Interface for a person, not the person it found. See [The Admin App](../../admin/the-admin-app/).
 - **For the `admin` group only.** A group given Administration screens through the Classic Interface's menus doesn't
   get the Admin app, and keeps using those screens there.
 - **As the User app,** it needs a [secure address](#the-user-app) and a host name of its own, is made for current
