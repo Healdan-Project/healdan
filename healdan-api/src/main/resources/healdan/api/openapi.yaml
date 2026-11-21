@@ -2443,20 +2443,29 @@ paths:
           in: query
           required: false
           description: |
-            `name` (ignoring case), `deleted` (when it was deleted) or
-            `removed` (when it was removed, for the `removed` view). By
-            default `removed` in the `removed` view and `deleted` in the
-            others. Ties go by the item's age. Doc # and where it was deleted
-            from don't sort.
+            `name` (ignoring case), `docNumber` (as a number), `deletedFrom`
+            (the path recorded at the delete, folder by folder, ignoring
+            case, a folder before what it holds; a place renamed or moved
+            since shows its path as it is now, but sorts by the old one),
+            `deletedBy` (the name recorded at the delete, ignoring case),
+            `deleted` (when it was deleted), `removedBy` (the name recorded
+            at the removal, ignoring case), `removed` (when it was removed,
+            for the `removed` view) or `destroyed` (as `removed`: the night
+            it's destroyed follows its removal). By default `removed` in the
+            `removed` view and `deleted` in the others. An item with no
+            value comes last either way, as a folder does by `docNumber`
+            and an item outside the Stores by `deletedFrom`. Ties go by the
+            item's age.
           schema:
             type: string
-            enum: [name, deleted, removed]
+            enum: [name, docNumber, deletedFrom, deletedBy, deleted, removedBy, removed, destroyed]
         - name: order
           in: query
           required: false
           description: |
-            `asc` or `desc`. By default `asc` by name, and `desc` by a time,
-            so the newest come first.
+            `asc` or `desc`. By default `desc` by a time (`deleted`,
+            `removed` and `destroyed`), so the newest come first, and `asc`
+            by anything else.
           schema:
             type: string
             enum: [asc, desc]

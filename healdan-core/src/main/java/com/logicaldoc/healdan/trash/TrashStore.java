@@ -32,6 +32,7 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.logicaldoc.healdan.listing.ListingSql;
 import com.logicaldoc.util.CollectionUtil;
 import com.logicaldoc.util.spring.Context;
 
@@ -44,9 +45,23 @@ public class TrashStore {
 
 	private static final ObjectMapper JSON = new ObjectMapper();
 
-	/** What the page's sort names stand for; the text sent is never put in the SQL */
-	private static final Map<String, String> SORTS = Map.of("name", "lower(t.hd_name)", "deleted", "t.hd_deletedat",
-			"removed", "m.hd_removedat");
+	/** The most digits a recorded doc # has, as {@code TrashRecorder.docNumber} records one */
+	private static final int DOC_NUMBER_DIGITS = 18;
+
+	/** The doc # as a number; null for a folder, which records none */
+	private static final String DOC_NUMBER = "case when %s then cast(t.hd_docnumber as decimal(%d,0)) end"
+			.formatted(ListingSql.digits("t.hd_docnumber", DOC_NUMBER_DIGITS), DOC_NUMBER_DIGITS);
+
+	/** Where it was deleted from: the path recorded at the delete, step by step ({@link #pathOrder}) */
+	private static final String FROM_PATH = pathOrder("t.hd_frompath");
+
+	/**
+	 * What the page's sort names stand for; the text sent is never put in the SQL. Deleted By and Removed By are the
+	 * names recorded at the time, and Destroyed sorts as Removed, as the night it's destroyed follows its removal.
+	 */
+	private static final Map<String, String> SORTS = Map.of("name", "lower(t.hd_name)", "docNumber", DOC_NUMBER,
+			"deletedFrom", FROM_PATH, "deletedBy", "lower(t.hd_deletedbyname)", "deleted", "t.hd_deletedat",
+			"removedBy", "lower(m.hd_removedbyname)", "removed", "m.hd_removedat", "destroyed", "m.hd_removedat");
 
 	/** An item's top member is the folder or document the person deleted */
 	private static final String TOP = " from hd_trash t join hd_trash_member m on m.hd_trashid = t.hd_id"
@@ -317,17 +332,53 @@ public class TrashStore {
 
 	/**
 	 * @param query which items, in which order, and which page
-	 * @return the page of items
+	 * @return the page of items: an item with no value for the sort last
+	 *         either way, and ties by the item's age, in the sort's direction
 	 */
 	public List<TrashItemRow> page(TrashQuery query) {
 		List<Object> args = new ArrayList<>();
 		String where = where(query, args);
-		String column = SORTS.getOrDefault(query.sort(), SORTS.get("deleted"));
+		String key = SORTS.getOrDefault(query.sort(), SORTS.get("deleted"));
 		String direction = query.descending() ? " desc" : " asc";
 		args.add(query.limit());
 		args.add(query.offset());
-		return jdbc.query("select " + ITEM_COLUMNS + TOP + where + " order by " + column + direction + ", t.hd_id"
-				+ direction + " limit ? offset ?", this::itemRow, args.toArray());
+		return jdbc.query("select " + ITEM_COLUMNS + TOP + where + " order by " + ListingSql.nullsLast(key) + ", " + key
+				+ direction + ", t.hd_id" + direction + " limit ? offset ?", this::itemRow, args.toArray());
+	}
+
+	/**
+	 * A recorded path to sort by, so that items order by its steps, ignoring
+	 * case, a folder before what it holds: {@code ["A"]}, {@code ["A","B"]},
+	 * {@code ["a","c"]}, {@code ["A B"]}. The path is the JSON array of names
+	 * {@link #path} writes, which as text wouldn't sort so ({@code ","} sorts
+	 * below {@code "]}). So the array's brackets and outer quotes are taken off
+	 * and the names joined by {@code chr(1)}, which sorts below every
+	 * character the text holds, as Jackson writes a control character as an
+	 * escape. An escaped backslash and an escaped quote are set aside as
+	 * {@code chr(2)} and {@code chr(3)} first, so that what parts two names, a
+	 * quote, a comma and a quote, is found only between names, and are put back
+	 * as themselves after; any other escape, a control character's, sorts as
+	 * its text. An empty path, outside the Stores, shows no place, so it is
+	 * null, as one not recorded is.
+	 * <p>
+	 * It's text functions alone, which no value fails. The database's
+	 * collation sorts by code point, as Healdan makes it.
+	 *
+	 * @param path the column holding the path
+	 * @return the order's expression
+	 */
+	private static String pathOrder(String path) {
+		// The shortest array of a name, [""], has four characters, and a shorter one would give substring a negative
+		// length
+		String names = "substring(%1$s from 3 for length(%1$s) - 4)".formatted(path);
+		String setAside = replace(replace(names, "concat(chr(92), chr(92))", "chr(2)"), "concat(chr(92), '\"')", "chr(3)");
+		String joined = replace(setAside, "'\",\"'", "chr(1)");
+		String putBack = replace(replace(joined, "chr(3)", "'\"'"), "chr(2)", "chr(92)");
+		return "case when length(%s) >= 4 then lower(%s) end".formatted(path, putBack);
+	}
+
+	private static String replace(String text, String from, String to) {
+		return "replace(%s, %s, %s)".formatted(text, from, to);
 	}
 
 	/**

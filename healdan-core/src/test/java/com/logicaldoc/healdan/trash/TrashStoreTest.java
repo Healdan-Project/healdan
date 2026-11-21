@@ -251,6 +251,84 @@ public class TrashStoreTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testEveryColumnSorts() {
+		// Inserted in an order that is no column's
+		long a = insertItem(100, "10", List.of("A", "B"), "bob");
+		long b = insertItem(200, "9", List.of("A B"), "Alice");
+		long c = insertItem(300, null, List.of("A"), "carol");
+		long d = insertItem(400, "100", null, null);
+		long e = insertItem(500, "2", List.of("a", "c"), "Dave");
+		removeItem(a, "Zed", 300);
+		removeItem(b, null, 100);
+		removeItem(c, "amy", 200);
+		removeItem(d, "Bea", 400);
+		removeItem(e, "cy", 500);
+
+		// Doc #s as numbers, a folder's none last either way
+		assertEquals(List.of(e, b, a, d, c), ids(query("removed", 3, "docNumber", false, 0, 50)));
+		assertEquals(List.of(d, a, b, e, c), ids(query("removed", 3, "docNumber", true, 0, 50)));
+		// The recorded path's steps, ignoring case, a folder before what it holds; no path last
+		assertEquals(List.of(c, a, e, b, d), ids(query("removed", 3, "deletedFrom", false, 0, 50)));
+		assertEquals(List.of(b, e, a, c, d), ids(query("removed", 3, "deletedFrom", true, 0, 50)));
+		// The names recorded, ignoring case; none last
+		assertEquals(List.of(b, a, c, e, d), ids(query("removed", 3, "deletedBy", false, 0, 50)));
+		assertEquals(List.of(e, c, a, b, d), ids(query("removed", 3, "deletedBy", true, 0, 50)));
+		assertEquals(List.of(c, d, e, a, b), ids(query("removed", 3, "removedBy", false, 0, 50)));
+		assertEquals(List.of(a, e, d, c, b), ids(query("removed", 3, "removedBy", true, 0, 50)));
+		// The night it's destroyed follows its removal
+		assertEquals(List.of(b, c, a, d, e), ids(query("removed", 3, "destroyed", false, 0, 50)));
+		assertEquals(List.of(e, d, a, c, b), ids(query("removed", 3, "destroyed", true, 0, 50)));
+	}
+
+	@Test
+	public void testDeletedFromReadsTheNamesInThePath() {
+		// A quote or a backslash in a name sorts as itself, and only the commas between the names part them. An empty
+		// path, outside the Stores, shows no place, so it comes last either way.
+		long quoteComma = insertItem(1, "1", List.of("x\",", "y"), "x");
+		long hash = insertItem(2, "2", List.of("a#b"), "x");
+		long backslashB = insertItem(3, "3", List.of("a\\b"), "x");
+		long empty = insertItem(4, "4", List.of(), "x");
+		long quote = insertItem(5, "5", List.of("a\"b"), "x");
+		long quoteThenZ = insertItem(6, "6", List.of("x\"", "z"), "x");
+		long bang = insertItem(7, "7", List.of("a!b"), "x");
+		long backslashThenB = insertItem(8, "8", List.of("a\\", "b"), "x");
+		long quoteEnd = insertItem(9, "9", List.of("x\""), "x");
+		long backslash = insertItem(10, "10", List.of("a\\"), "x");
+
+		assertEquals(List.of(bang, quote, hash, backslash, backslashThenB, backslashB, quoteEnd, quoteThenZ, quoteComma,
+				empty), ids(query("everyone", 3, "deletedFrom", false, 0, 50)));
+		assertEquals(List.of(quoteComma, quoteThenZ, quoteEnd, backslashB, backslashThenB, backslash, hash, quote, bang,
+				empty), ids(query("everyone", 3, "deletedFrom", true, 0, 50)));
+	}
+
+	/**
+	 * Inserts a delete's item with the values the Trash's columns show, its
+	 * top member deleted
+	 *
+	 * @param docNumber the doc #; null for a folder
+	 * @param path the path recorded; null for none, which the column allows
+	 *        though the store always writes one
+	 */
+	private long insertItem(long objectId, String docNumber, List<String> path, String deletedBy) {
+		boolean isFolder = docNumber == null;
+		TrashItemRow row = new TrashItemRow(0, 1, isFolder ? "folder" : "document", objectId, "Item " + objectId,
+				docNumber, 50L, path, 7L, 0, 0, 3L, deletedBy, T0);
+		long id = store.insert(row, List.of(isFolder ? folder(objectId) : doc(objectId)));
+		if (path == null)
+			new JdbcTemplate(Context.get(DataSource.class))
+					.update("update hd_trash set hd_frompath = null where hd_id = ?", id);
+		return id;
+	}
+
+	/** Moves the item's top member to Removed, by the name given, the seconds given after {@link #T0} */
+	private void removeItem(long id, String by, long seconds) {
+		TrashItemRow row = store.item(id).orElseThrow();
+		TrashMember top = "folder".equals(row.kind()) ? folder(row.objectId()) : doc(row.objectId());
+		assertEquals(1,
+				store.change(id, List.of(top), TrashState.DELETED, TrashState.REMOVED, 9L, by, T0.plusSeconds(seconds)));
+	}
+
+	@Test
 	public void testRemovedBeforePagesOnFromTheLastItem() {
 		long a = insertFolder("A", 100, 3L, T0);
 		long b = insertFolder("B", 200, 3L, T0);
