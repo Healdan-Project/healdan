@@ -12,9 +12,3 @@
 # the configuration volume, so backups take both; the read cache is a volume of its own, which they leave out.
 CATALINA_OPTS="${CATALINA_OPTS:-} -Dfile.encoding=UTF-8 -Dhealdan.trustedProxies=$(cat /opt/logicaldoc/run/trusted-proxies 2>/dev/null) -Dhealdan.secretKey=/opt/logicaldoc/conf/healdan-secret.key"
 CATALINA_OPTS="$CATALINA_OPTS -Dhealdan.storageStaging=/opt/logicaldoc/repository/staging -Dhealdan.storageCache=/opt/logicaldoc/cache -Dhealdan.storageKeys=/opt/logicaldoc/conf/healdan-storage-keys"
-# -XX:-UseBASE64Intrinsics: CVE-2026-114938 ("Java4Shell"), a heap overflow in the JVM's AVX-512 Base64 decoder on
-# x86-64, which a request can reach before signing in. Off, Base64 is decoded by plain Java code. It comes last, so
-# CATALINA_OPTS, and so .env, can't turn the decoder back on. Only _JAVA_OPTIONS outranks it, which compose.yaml doesn't
-# pass. Remove it only in the change that moves TOMCAT_IMAGE to an exact tag with Java 25.0.5.1 or later, as servers
-# keep a cached base image (Docker spec §17, issue #273).
-CATALINA_OPTS="$CATALINA_OPTS -XX:-UseBASE64Intrinsics"
