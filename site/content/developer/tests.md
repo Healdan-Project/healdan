@@ -754,7 +754,10 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
   and builds that fail, the Admin app's code in a User app's file or PDF.js in an Admin app's build among them, and
   `scripts/workspace.test.mjs` checks the workspace's settings: that `.npmrc` sets `ignore-scripts` and
   `save-exact`, that `.nvmrc` names the Node that `healdan-web/pom.xml` downloads, that every app has its own type
-  check, and that ESLint refuses an app's import of another's code. CI runs them in the `Web` check.
+  check, and that ESLint refuses an app's import of another's code. `scripts/file-kinds.test.mjs` reads
+  `healdan-core`'s `FileKinds.java` and the string catalogue, and fails unless `FileKinds.BY_NAME`, the order the
+  server sorts File Type by, is the File Type filter's names A to Z, which is the order the browser sorts a one-page
+  list by. CI runs them in the `Web` check.
 - **Browser tests,** Playwright's specs in `healdan-web/web/e2e/`, in Chromium and WebKit. `docker/tests/test-web.sh`
   runs them in Playwright's Docker image, `mcr.microsoft.com/playwright:v<version>-noble`, where `<version>` is the
   `@playwright/test` version in `package-lock.json`, so the image's browsers are the ones that version expects.

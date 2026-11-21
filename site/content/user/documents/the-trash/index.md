@@ -54,8 +54,8 @@ deletions are in their own Trash.
 - **The columns** are **Name**, **Doc #**, **Deleted From** and **Deleted**. **Deleted From** gives the matter number
   and the folder path. Click any column's header to sort by it, and again for the other way: a date, such as
   **Deleted**, sorts newest first at its first click, the others A to Z or smallest first. **Deleted From** sorts by
-  the path as it was when the item was deleted, by the Store, then the folders' names, so an item whose folder was
-  renamed or moved since sorts by its old path.
+  the matter's number, so 998.9 comes before 998.10, then by the folders' names, as they were when the item was
+  deleted, so an item whose folder was renamed or moved since sorts by its old place.
 - **The count** at the top of the list says how many items you have.
 - **Select an item** and its details open at the right: its kind, its size or, for a folder, what it **Holds**, such
   as "3 folders, 11 documents", **Deleted From** in full, and **Deleted**, with **Restore** and **Remove…**.

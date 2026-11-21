@@ -209,8 +209,9 @@ public final class ApiViews {
 		long docNumber = Long.parseLong(d.getCustomId());
 		String kind = FileKinds.of(FilenameUtils.getExtension(d.getFileName()));
 		Extras extras = rows.extras().getOrDefault(d.getId(), NO_EXTRAS);
-		// Only an email's: CE's screens can give any document the email properties
-		EmailView email = FileKinds.EMAIL.equals(kind)
+		// Only an email's: CE's screens can give any document the email properties. By its type, as the sorts by From,
+		// To and Sent and the File Type filter decide (FolderListing), not by its name, which can lose its extension
+		EmailView email = FileKinds.EMAIL.equals(FileKinds.of(d.getType()))
 				? new EmailView(extras.emailFrom(), extras.emailTo(), extras.emailSent())
 				: null;
 		return new DocumentView("document", docNumber, d.getFileName(), kind, d.getFileSize(), d.getVersion(),

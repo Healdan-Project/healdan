@@ -34,8 +34,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * @param docClass the document's Class, or null when it has none
  * @param docSubclass the document's Subclass, or null when it has none
  * @param typist the document's Typist, or null when it has none
- * @param email an email's From, To and Sent; null when the document's kind
- *        isn't {@code email}
+ * @param email an email's From, To and Sent; null when the document isn't
+ *        an email, by its type
  * @param lastUsed when the caller last used the document; only in Recent's
  *        list, and left out of every other answer
  */

@@ -861,12 +861,14 @@ paths:
         page with fewer than `limit` items is the last one, and pages are
         filled from the hits that follow the ones skipped. Their `sort` is one
         of the columns their lists show: `folders` takes `title` (the
-        folder's name, ignoring case, then as `matter`) or `matter` (the
-        client's number, then the matter's, each as a number; a Store, in no
-        matter, comes last either way), `matters` takes `matter` or `client`
-        (the client's name, ignoring case), and `clients` takes `client`. Any
-        other `sort` is `400`. Ties go by the folder's or matter's `id`, in
-        the sort's direction. Sorted, they read the first 10,000 hits and sort
+        folder's name, ignoring case, then its matter) or `matter` (the
+        client's number, then the matter's, each as a number, then the
+        folder's name; a Store, in no matter, comes last either way),
+        `matters` takes `matter` or `client` (the client's name, ignoring
+        case, then the matter, so one client's matters go by number), and
+        `clients` takes `client`. Any other `sort` is `400`. What is still
+        equal goes by the folder's or matter's `id`, in the sort's
+        direction. Sorted, they read the first 10,000 hits and sort
         the ones the caller can see: `total` is their count when the search
         found every hit; when it stopped before the last, `total` is `null`
         and `totalAtLeast` says how many it found.
@@ -2454,8 +2456,12 @@ paths:
           required: false
           description: |
             `name` (ignoring case), `docNumber` (as a number), `deletedFrom`
-            (the path recorded at the delete, folder by folder, ignoring
-            case, a folder before what it holds; a place renamed or moved
+            (as a list shows it: the client's and the matter's numbers of
+            the matter recorded at the delete, each as a number, then the
+            folders inside the matter on the path recorded then, folder by
+            folder, ignoring case, a folder before what it holds; an item
+            deleted from outside a matter, as a matter's own folder is,
+            comes after those, by its whole path; a place renamed or moved
             since shows its path as it is now, but sorts by the old one),
             `deletedBy` (the name recorded at the delete, ignoring case),
             `deleted` (when it was deleted), `removedBy` (the name recorded
@@ -3415,8 +3421,11 @@ components:
             - $ref: '#/components/schemas/EmailView'
             - type: 'null'
           description: |
-            An email's From, To and Sent properties; null when `kind` isn't
-            `email`, whatever the document's properties hold
+            An email's From, To and Sent properties; null for a document
+            that isn't an email, whatever its properties hold. An email is
+            one by its type, as the `from`, `to` and `sent` sorts and the
+            File Type filter decide, which `kind`, read from the file's
+            name, follows unless the name has lost its extension
         dateFiled:
           type: string
           format: date-time

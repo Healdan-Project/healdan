@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import javax.sql.DataSource;
 
@@ -95,6 +97,13 @@ public class FolderListing {
 
 	/** The most digits of a client's number or a matter's that sort as a number, as the filters take them */
 	private static final int NUMBER_DIGITS = 18;
+
+	/**
+	 * Every character Java counts as whitespace ({@link Character#isWhitespace}), as SQL text: what
+	 * {@code StringUtils.isBlank} looks for, where a plain {@code btrim} takes off spaces alone
+	 */
+	private static final String WHITESPACE = "concat(%s)".formatted(IntStream.rangeClosed(1, Character.MAX_VALUE)
+			.filter(Character::isWhitespace).mapToObj(c -> "chr(" + c + ")").collect(Collectors.joining(", ")));
 
 	/** An ACL row {@code a} is one of the user's groups' */
 	private static final String USER_GROUPS = "a.ld_groupid in (select g.ld_groupid from ld_usergroup g where g.ld_userid = :user)";
@@ -658,10 +667,11 @@ public class FolderListing {
 	}
 
 	/**
-	 * @return the value, or null when it's blank: empty, or spaces alone
+	 * @return the value, or null when it's blank, as a row shows it
+	 *         ({@code StringUtils.isBlank}): empty, or whitespace alone
 	 */
 	private static String unlessBlank(String value) {
-		return "case when btrim(%1$s) <> '' then %1$s end".formatted(value);
+		return "case when btrim(%1$s, %2$s) <> '' then %1$s end".formatted(value, WHITESPACE);
 	}
 
 	/**

@@ -249,7 +249,8 @@ public class SearchResource {
 	 * What a sort compares for a hit
 	 *
 	 * @param found the hit
-	 * @param text the folder's or client's name in lower case, or null
+	 * @param text the name in lower case, or null: the client's by
+	 *        {@code CLIENT}, else the folder's, which a matter hit has none of
 	 * @param clientNumber the number of the matter's client, or null for no
 	 *        matter
 	 * @param matterNumber the matter's number, or null for no matter
@@ -259,13 +260,15 @@ public class SearchResource {
 
 	/**
 	 * @return the hits in the sort's order, by each key's column (list columns
-	 *         spec section 4.7): {@code TITLE} by the folder's name, then as
-	 *         {@code MATTER}; {@code MATTER} by the client's number, then the
-	 *         matter's; {@code CLIENT} by the client's name. Names are compared
-	 *         ignoring case as the browser compares them: lower-cased
-	 *         ({@link Locale#ROOT}), by UTF-16 code unit. A hit with no value, a
-	 *         folder in no matter or a matter by {@code TITLE}, comes last
-	 *         either way; ties go by id, in the sort's direction.
+	 *         spec section 4.7): {@code TITLE} by the folder's name, then by
+	 *         the matter; {@code MATTER} by the client's number, then the
+	 *         matter's, then a folder's name, so one matter's folders go A to
+	 *         Z; {@code CLIENT} by the client's name, then by the matter, so one
+	 *         client's matters go by number. Names are compared ignoring case as
+	 *         the browser compares them: lower-cased ({@link Locale#ROOT}), by
+	 *         UTF-16 code unit. A hit with no value, a folder in no matter or a
+	 *         matter by {@code TITLE}, comes last either way; ties go by id, in
+	 *         the sort's direction.
 	 */
 	private static List<Found> sorted(List<Found> shown, Sort sort, boolean descending)
 			throws PersistenceException {
@@ -277,8 +280,8 @@ public class SearchResource {
 		// A sort no scope takes is refused before anything is read
 		Comparator<Keyed> order = switch (sort) {
 		case TITLE -> byText.thenComparing(byMatter);
-		case MATTER -> byMatter;
-		case CLIENT -> byText;
+		case MATTER -> byMatter.thenComparing(byText);
+		case CLIENT -> byText.thenComparing(byMatter);
 		default -> throw new IllegalArgumentException("Only a document search sorts by " + sort);
 		};
 
@@ -294,12 +297,9 @@ public class SearchResource {
 					clients.put(clientId, ClientDAO.get().findById(clientId));
 				client = clients.get(clientId);
 			}
-			String text = switch (sort) {
 			// Only the folders scope's hits are folders; the resource refuses a Title sort in the others
-			case TITLE -> found.folder() != null ? found.folder().getName() : null;
-			case CLIENT -> client != null ? client.getName() : null;
-			default -> null;
-			};
+			String text = sort == Sort.CLIENT ? (client != null ? client.getName() : null)
+					: (found.folder() != null ? found.folder().getName() : null);
 			keyed.add(new Keyed(found, text != null ? text.toLowerCase(Locale.ROOT) : null,
 					client != null ? client.getNumber() : null, matter != null ? matter.getNumber() : null));
 		}

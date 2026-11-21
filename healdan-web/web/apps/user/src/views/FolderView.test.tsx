@@ -280,6 +280,18 @@ describe('FolderView', () => {
     expect(api.callsTo('GET /v1/folders/7/children')[0]?.query).toEqual({ sort: 'matter', order: 'desc', zone, offset: 0, limit: 100 })
   })
 
+  it("takes a column's first sort for an address with no order: a date newest first, as a click does", async () => {
+    const dated = await renderApp('/folders/7?sort=edited', routes())
+    await findRow(/Drafts/)
+    expect(dated.api.callsTo('GET /v1/folders/7/children')[0]?.query).toEqual({ sort: 'edited', order: 'desc', zone, offset: 0, limit: 100 })
+    expect(header('Edit Date').getAttribute('aria-sort')).toBe('descending')
+    dated.view.unmount()
+    const numbered = await renderApp('/folders/7?sort=docNumber', routes())
+    await findRow(/Drafts/)
+    expect(numbered.api.callsTo('GET /v1/folders/7/children')[0]?.query).toEqual({ sort: 'docNumber', order: 'asc', zone, offset: 0, limit: 100 })
+    expect(header('Doc #').getAttribute('aria-sort')).toBe('ascending')
+  })
+
   it('a refetch while the Columns panel is open keeps it open and its focus', async () => {
     let release: (value: unknown) => void = () => {}
     let calls = 0

@@ -36,7 +36,7 @@ import { documentsOf, usePreviewKey } from '../preview/usePreviewKey'
 import { NotFound } from './NotFound'
 import { Toolbar, type ListCount } from './Toolbar'
 import { rowOf } from './listColumns'
-import { useDocumentListColumns } from './useListColumns'
+import { addressDirection, useDocumentListColumns } from './useListColumns'
 import { useRowSelection } from './useRowSelection'
 import { childKey, isSortColumn, useListing, type ListingOrder, type SortColumn } from './useListing'
 import styles from './views.module.css'
@@ -53,7 +53,7 @@ export function FolderView({ folderId, sort, order }: FolderViewProps) {
   const folder = useFolder(folderId)
   const view = folder.data
   const store = view?.kind === 'store'
-  const asked = sort && { column: sort, direction: order === 'desc' ? ('descending' as const) : ('ascending' as const) }
+  const asked = sort && { column: sort, direction: addressDirection(sort, order) }
   // The folder and its list are asked for at once: the list doesn't wait for the folder.
   const { filters, active, change, remove, clear } = useFilters()
   const listing = useListing({ folderId, sort: asked, filters, enabled: !store, searchFolder: view?.kind === 'searchFolder' })

@@ -52,16 +52,40 @@ public class TrashStore {
 	private static final String DOC_NUMBER = "case when %s then cast(t.hd_docnumber as decimal(%d,0)) end".formatted(
 			ListingSql.digits("t.hd_docnumber", ListingSql.DOC_NUMBER_DIGITS), ListingSql.DOC_NUMBER_DIGITS);
 
-	/** Where it was deleted from: the path recorded at the delete, step by step ({@link #pathOrder}) */
+	/** The path recorded at the delete, step by step ({@link #pathOrder}) */
 	private static final String FROM_PATH = pathOrder("t.hd_frompath");
 
 	/**
-	 * What the page's sort names stand for; the text sent is never put in the SQL. Deleted By and Removed By are the
-	 * names recorded at the time, and Destroyed sorts as Removed, as the night it's destroyed follows its removal.
+	 * The item was deleted from inside a matter: its recorded matter is there, and its path has the two steps a list
+	 * shows the matter's number for, the Store and the matter's own folder. A matter's own folder, deleted from its
+	 * Store, has the Store alone.
 	 */
-	private static final Map<String, String> SORTS = Map.of("name", "lower(t.hd_name)", "docNumber", DOC_NUMBER,
-			"deletedFrom", FROM_PATH, "deletedBy", "lower(t.hd_deletedbyname)", "deleted", "t.hd_deletedat",
-			"removedBy", "lower(m.hd_removedbyname)", "removed", "m.hd_removedat", "destroyed", "m.hd_removedat");
+	private static final String IN_MATTER = "(position(chr(1) in %s) > 0 and exists (select 1 from hd_matter x where x.ld_id = t.hd_matterid))"
+			.formatted(FROM_PATH);
+
+	/**
+	 * Where it was deleted from, as a list shows it: the recorded matter's client's number and its own, each as a
+	 * number, then the path's steps inside the matter; outside a matter, the whole path, after every matter's. So
+	 * 998.9 comes before 998.10, whichever Store each is in, and whatever the matters' names.
+	 */
+	private static final List<String> DELETED_FROM = List.of(
+			"case when %s then (select c.hd_number from hd_matter x join hd_client c on c.ld_id = x.hd_clientid where x.ld_id = t.hd_matterid) end"
+					.formatted(IN_MATTER),
+			"case when %s then (select x.hd_number from hd_matter x where x.ld_id = t.hd_matterid) end"
+					.formatted(IN_MATTER),
+			// The first two steps and the chr(1) after each are left off; a path of those two alone leaves ''
+			"case when %1$s then substring(%2$s from length(split_part(%2$s, chr(1), 1)) + length(split_part(%2$s, chr(1), 2)) + 3) else %2$s end"
+					.formatted(IN_MATTER, FROM_PATH));
+
+	/**
+	 * What the page's sort names stand for, each the parts of its key in order; the text sent is never put in the SQL.
+	 * Deleted By and Removed By are the names recorded at the time, and Destroyed sorts as Removed, as the night it's
+	 * destroyed follows its removal.
+	 */
+	private static final Map<String, List<String>> SORTS = Map.of("name", List.of("lower(t.hd_name)"), "docNumber",
+			List.of(DOC_NUMBER), "deletedFrom", DELETED_FROM, "deletedBy", List.of("lower(t.hd_deletedbyname)"),
+			"deleted", List.of("t.hd_deletedat"), "removedBy", List.of("lower(m.hd_removedbyname)"), "removed",
+			List.of("m.hd_removedat"), "destroyed", List.of("m.hd_removedat"));
 
 	/** An item's top member is the folder or document the person deleted */
 	private static final String TOP = " from hd_trash t join hd_trash_member m on m.hd_trashid = t.hd_id"
@@ -332,27 +356,32 @@ public class TrashStore {
 
 	/**
 	 * @param query which items, in which order, and which page
-	 * @return the page of items: an item with no value for the sort last
-	 *         either way, and ties by the item's age, in the sort's direction
+	 * @return the page of items: an item with no value for a part of the
+	 *         sort's key last either way, and ties by the item's age, in the
+	 *         sort's direction
 	 * @throws IllegalArgumentException for a sort it doesn't know, which the
 	 *         caller refuses first
 	 */
 	public List<TrashItemRow> page(TrashQuery query) {
 		List<Object> args = new ArrayList<>();
 		String where = where(query, args);
-		String key = SORTS.get(query.sort());
-		if (key == null)
+		List<String> keys = SORTS.get(query.sort());
+		if (keys == null)
 			throw new IllegalArgumentException("No sort by " + query.sort());
 		String direction = query.descending() ? " desc" : " asc";
+		StringBuilder order = new StringBuilder();
+		for (String key : keys)
+			order.append(ListingSql.nullsLast(key)).append(", ").append(key).append(direction).append(", ");
 		args.add(query.limit());
 		args.add(query.offset());
-		return jdbc.query("select " + ITEM_COLUMNS + TOP + where + " order by " + ListingSql.nullsLast(key) + ", " + key
-				+ direction + ", t.hd_id" + direction + " limit ? offset ?", this::itemRow, args.toArray());
+		return jdbc.query("select " + ITEM_COLUMNS + TOP + where + " order by " + order + "t.hd_id" + direction
+				+ " limit ? offset ?", this::itemRow, args.toArray());
 	}
 
 	/**
-	 * A recorded path to sort by, so that items order by its steps, ignoring
-	 * case, a folder before what it holds: {@code ["A"]}, {@code ["A","B"]},
+	 * A recorded path to sort by, its names in lower case and joined by
+	 * {@code chr(1)}, so that items order by its steps, ignoring case, a folder
+	 * before what it holds: {@code ["A"]}, {@code ["A","B"]},
 	 * {@code ["a","c"]}, {@code ["A B"]}. The path is the JSON array of names
 	 * {@link #path} writes, which as text wouldn't sort so ({@code ","} sorts
 	 * below {@code "]}). So the array's brackets and outer quotes are taken off

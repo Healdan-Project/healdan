@@ -23,7 +23,7 @@ import { isScopeSort, searchesDocuments, type SearchScope } from '../search/scop
 import { useSearchFacets, useSearchResults } from '../search/useSearchResults'
 import { Toolbar, type ListCount } from './Toolbar'
 import { hitColumns, rowOf, type ListRow } from './listColumns'
-import { useDocumentListColumns, useListWidths, type DocumentListColumns, type ListWidths } from './useListColumns'
+import { addressDirection, useDocumentListColumns, useListWidths, type DocumentListColumns, type ListWidths } from './useListColumns'
 import type { ListingOrder, SortColumn } from './useListing'
 import { useRowSelection } from './useRowSelection'
 import styles from './views.module.css'
@@ -50,7 +50,7 @@ export function SearchView({ scope, q, sort, order }: SearchViewProps) {
   const headingId = useId()
   const navigate = useNavigate()
   const { filters, active, change, remove, clear } = useFilters()
-  const asked = isScopeSort(scope, sort) ? { column: sort, direction: order === 'desc' ? ('descending' as const) : ('ascending' as const) } : undefined
+  const asked = isScopeSort(scope, sort) ? { column: sort, direction: addressDirection(sort, order) } : undefined
   const results = useSearchResults({ scope, q: text, sort: asked, filters })
   const region = useRightRegion()
   const funnel = useRef<HTMLButtonElement>(null)

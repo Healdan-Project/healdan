@@ -380,17 +380,27 @@ public class EmailFiling {
 				hook.accept(email);
 
 			List<Document> filed = new ArrayList<>();
-			List<FiledEmail.Skipped> skipped = new ArrayList<>();
+			// The attachments the matter holds already, each with the copy it holds
+			List<Ticked> held = new ArrayList<>();
 			for (Ticked attachment : ticked) {
 				if (attachment.copy.isEmpty())
 					attachment.copy = fileAttachment(attachment, folderId, request.properties(), caller, stored,
 							filed);
-				if (attachment.copy.isPresent()) {
-					// A copy from before Healdan, with no doc #, is one the API doesn't show
-					Document copy = attachment.copy.get();
-					skipped.add(new FiledEmail.Skipped(attachment.part.index(), ALREADY_FILED,
-							ApiViews.shows(copy) ? ApiViews.document(copy, user) : null));
-				}
+				if (attachment.copy.isPresent())
+					held.add(attachment);
+			}
+			// A copy from before Healdan, with no doc #, is one the API doesn't show. What the others' rows show is
+			// read in one go, not a query a copy
+			List<Document> shown = new ArrayList<>();
+			for (Ticked attachment : held)
+				if (ApiViews.shows(attachment.copy.get()))
+					shown.add(attachment.copy.get());
+			ApiViews.RowReads rows = ApiViews.rows(shown);
+			List<FiledEmail.Skipped> skipped = new ArrayList<>();
+			for (Ticked attachment : held) {
+				Document copy = attachment.copy.get();
+				skipped.add(new FiledEmail.Skipped(attachment.part.index(), ALREADY_FILED,
+						shown.contains(copy) ? ApiViews.document(copy, user, rows) : null));
 			}
 
 			Document first = DocumentDAO.get().findById(email.getId());

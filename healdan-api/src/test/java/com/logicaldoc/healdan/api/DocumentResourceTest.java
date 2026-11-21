@@ -594,6 +594,20 @@ public class DocumentResourceTest extends ApiTestCase {
 				assertEquals(field, alone.path(field), item.path(field));
 		}
 
+		// An email by its type, as the sorts by From, To and Sent take it, whatever its name: renamed without its
+		// extension, it keeps its type and its fields, though its kind is now other
+		assertEquals(1, jdbc().update("update ld_document set ld_filename = 'note' where ld_id = ?", mail.getId()));
+		DocumentDAO.get().evict(Document.class, mail.getId());
+		JsonNode renamed = get("/api/v1/documents/" + number(mail)).token(token).send().json();
+		assertEquals("other", renamed.path("kind").textValue());
+		assertEquals(message.path("email"), renamed.path("email"));
+		// And a document named as an email, whose type isn't one, has none
+		assertEquals(1, jdbc().update("update ld_document set ld_filename = 'a.eml' where ld_id = ?", letter.getId()));
+		DocumentDAO.get().evict(Document.class, letter.getId());
+		JsonNode named = get("/api/v1/documents/" + number(letter)).token(token).send().json();
+		assertEquals("email", named.path("kind").textValue());
+		assertTrue(named.toString(), named.has("email") && named.path("email").isNull());
+
 		// An email with nothing stored still says it's one, with each field null
 		Document blank = file("blank.eml", "not a message");
 		JsonNode email = get("/api/v1/documents/" + number(blank)).token(token).send().json().path("email");

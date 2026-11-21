@@ -128,9 +128,11 @@ public class DocumentResource {
 					found.add(document.get());
 			}
 			found.sort(Comparator.comparingLong(d -> Long.parseLong(d.getCustomId())));
+			// What the rows show in one go, not a query a row
+			ApiViews.RowReads rows = ApiViews.rows(found);
 			List<DocumentView> views = new ArrayList<>();
 			for (Document document : found)
-				views.add(ApiViews.document(document, caller));
+				views.add(ApiViews.document(document, caller, rows));
 			return Page.whole(views);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't find documents by legacy doc #", e);

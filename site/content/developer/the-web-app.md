@@ -323,7 +323,8 @@ Matters or Clients search by each of its columns but the Clients search's Matter
 and Checked Out are only the one-page lists', which the browser sorts.
 
 Class, Subclass, Typist, From, To and Sent are blank on a folder's row, as Doc # is, and From, To and Sent on a
-document whose `email` is `null`. Author, Class, Subclass, Typist, From and To are drawn on one line (`TextCell` in
+document whose `email` is `null`. An address that names a sort without an order takes the column's first sort, as a
+click does, a date's newest first (`addressDirection` in `views/useListColumns.tsx`), in every list. Author, Class, Subclass, Typist, From and To are drawn on one line (`TextCell` in
 `views/listColumns.tsx`), which ends in an ellipsis, with the whole text as the cell's `title`, so a long To can be
 read by pointing at it.
 

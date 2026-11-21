@@ -187,6 +187,18 @@ describe('SearchView', () => {
     expect(within(main()).getByText('in Docs & Emails')).toBeTruthy()
   })
 
+  it("takes a column's first sort for an address with no order: a date newest first, as a click does", async () => {
+    const dated = await renderApp('/search?scope=documents&q=charter&sort=edited', routes())
+    await rows()
+    expect(dated.api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'documents', q: 'charter', sort: 'edited', order: 'desc', zone, offset: 0, limit: 100 })
+    expect(within(grid2()).getByRole('columnheader', { name: /Edit Date/ }).getAttribute('aria-sort')).toBe('descending')
+    dated.view.unmount()
+    const titled = await renderApp('/search?scope=documents&q=charter&sort=title', routes())
+    await rows()
+    expect(titled.api.callsTo('GET /v1/search')[0]?.query).toEqual({ scope: 'documents', q: 'charter', sort: 'title', order: 'asc', zone, offset: 0, limit: 100 })
+    expect(within(grid2()).getByRole('columnheader', { name: /Title/ }).getAttribute('aria-sort')).toBe('ascending')
+  })
+
   it("sends the person's time zone with a document search, so Today and the days of a range are theirs", async () => {
     const { api } = await renderApp('/search?scope=documents&q=charter&from=2026-11-01&to=2026-11-02', routes())
     await rows()

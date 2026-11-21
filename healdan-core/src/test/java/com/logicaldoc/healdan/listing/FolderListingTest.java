@@ -322,7 +322,8 @@ public class FolderListingTest extends AbstractHealdanTestCase {
 		text(k6, HealdanConstants.ATTR_EMAILFROM, "bob@example.com");
 
 		text(k1, HealdanConstants.ATTR_EMAILTO, "team@example.com");
-		text(k2, HealdanConstants.ATTR_EMAILTO, "  ");
+		// Blank as a row reads it (StringUtils.isBlank): a space, a tab and a newline, where btrim alone takes off spaces
+		text(k2, HealdanConstants.ATTR_EMAILTO, " \t\n");
 		text(k3, HealdanConstants.ATTR_EMAILTO, "Board@example.com");
 		text(k4, HealdanConstants.ATTR_EMAILTO, "alice@example.com");
 		text(k5, HealdanConstants.ATTR_EMAILTO, "board@example.com");

@@ -299,10 +299,11 @@ public class SearchResourceTest extends ApiTestCase {
 
 	/**
 	 * Each key sorts by its column's rule (spec section 4.7), in each scope
-	 * that takes it: Title by the folder's name ignoring case, then as Matter;
-	 * Matter by the client's number, then the matter's, as numbers; Client by
-	 * the client's name ignoring case. A folder in no matter (a Store) comes
-	 * last either way, and ties go by id in the sort's direction.
+	 * that takes it: Title by the folder's name ignoring case, then by the
+	 * matter; Matter by the client's number, then the matter's, as numbers,
+	 * then a folder's name; Client by the client's name ignoring case, then by
+	 * the matter. A folder in no matter (a Store) comes last either way, and
+	 * ties go by id in the sort's direction.
 	 */
 	@Test
 	public void testFoldersMattersAndClientsSort() throws Exception {
@@ -328,18 +329,18 @@ public class SearchResourceTest extends ApiTestCase {
 		assertEquals(byTitle, sortedIds("scope=folders&q=brief&sort=title", token, 6));
 		assertEquals(reversed(byTitle), sortedIds("scope=folders&q=brief&sort=title&order=desc", token, 6));
 
-		// The two in matter 5.9 tie, and go by id; the Store has no matter
-		assertEquals(List.of(courtNine.getId(), alpha.getId(), courtTen.getId(), zeta.getId(), courtBeacon.getId(),
+		// The two in matter 5.9 go by their names, not by which was made first; the Store has no matter
+		assertEquals(List.of(alpha.getId(), courtNine.getId(), courtTen.getId(), zeta.getId(), courtBeacon.getId(),
 				briefs.getId()), sortedIds("scope=folders&q=brief&sort=matter", token, 6));
-		assertEquals(List.of(courtBeacon.getId(), zeta.getId(), courtTen.getId(), alpha.getId(), courtNine.getId(),
+		assertEquals(List.of(courtBeacon.getId(), zeta.getId(), courtTen.getId(), courtNine.getId(), alpha.getId(),
 				briefs.getId()), sortedIds("scope=folders&q=brief&sort=matter&order=desc", token, 6));
 
 		List<Long> byMatter = List.of(nine.getId(), ten.getId(), acme.getId(), beacon.getId());
 		assertEquals(byMatter, sortedIds("scope=matters&q=lease&sort=matter", token, 4));
 		assertEquals(reversed(byMatter), sortedIds("scope=matters&q=lease&sort=matter&order=desc", token, 4));
 
-		// Zenith's two matters tie, and go by id
-		List<Long> byClient = List.of(acme.getId(), beacon.getId(), ten.getId(), nine.getId());
+		// Zenith's two matters go by number, 5.9 before 5.10, not by which was made first
+		List<Long> byClient = List.of(acme.getId(), beacon.getId(), nine.getId(), ten.getId());
 		for (String scope : new String[] { "scope=matters&q=lease", "scope=clients&q=partners" }) {
 			assertEquals(scope, byClient, sortedIds(scope + "&sort=client", token, 4));
 			assertEquals(scope, reversed(byClient), sortedIds(scope + "&sort=client&order=desc", token, 4));
@@ -448,7 +449,8 @@ public class SearchResourceTest extends ApiTestCase {
 
 	/**
 	 * Two folders of one name, ignoring case, in subfolders of one matter: equal
-	 * by Title and by Matter, they go by id in the sort's direction
+	 * by Title and by Matter, whose keys are their name and their matter, they
+	 * go by id in the sort's direction
 	 */
 	@Test
 	public void testAFoldersSortTiesByIdLast() throws Exception {

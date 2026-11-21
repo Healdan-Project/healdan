@@ -268,7 +268,8 @@ public class TrashStoreTest extends AbstractHealdanTestCase {
 		// Doc #s as numbers, a folder's none last either way
 		assertEquals(List.of(e, b, a, d, c), ids(query("removed", 3, "docNumber", false, 0, 50)));
 		assertEquals(List.of(d, a, b, e, c), ids(query("removed", 3, "docNumber", true, 0, 50)));
-		// The recorded path's steps, ignoring case, a folder before what it holds; no path last
+		// The recorded path's steps, ignoring case, a folder before what it holds, as the items' matter isn't there; no
+		// path last
 		assertEquals(List.of(c, a, e, b, d), ids(query("removed", 3, "deletedFrom", false, 0, 50)));
 		assertEquals(List.of(b, e, a, c, d), ids(query("removed", 3, "deletedFrom", true, 0, 50)));
 		// The names recorded, ignoring case; none last
@@ -322,6 +323,43 @@ public class TrashStoreTest extends AbstractHealdanTestCase {
 				empty), ids(query("everyone", 3, "deletedFrom", false, 0, 50)));
 		assertEquals(List.of(quoteComma, quoteThenZ, quoteEnd, backslashB, backslashThenB, backslash, hash, quote, bang,
 				empty), ids(query("everyone", 3, "deletedFrom", true, 0, 50)));
+	}
+
+	@Test
+	public void testDeletedFromGoesByTheMatterThenThePathInsideIt() {
+		// As a list shows it: the matter's number, then the folders inside the matter. Client 99801's matters 9 and 10,
+		// and client 99700's matter 1, in Stores whose names and matters' names would order them otherwise.
+		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
+		for (long[] client : new long[][] { { 9001, 99801 }, { 9002, 99700 } })
+			jdbc.update("insert into hd_client (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted,"
+					+ " ld_tenantid, hd_number, hd_name) values (?, now(), now(), 1, 0, 1, ?, ?)", client[0], client[1],
+					"Client " + client[1]);
+		for (long[] matter : new long[][] { { 9101, 9001, 9 }, { 9102, 9001, 10 }, { 9103, 9002, 1 } })
+			jdbc.update("insert into hd_matter (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted,"
+					+ " ld_tenantid, hd_clientid, hd_number, hd_name, hd_folderid, hd_ownerid)"
+					+ " values (?, now(), now(), 1, 0, 1, ?, ?, ?, ?, 1)", matter[0], matter[1], matter[2],
+					"Matter " + matter[0], matter[0]);
+
+		long ten = insertIn(1, 9102L, List.of("Alpha", "99801.10 - B", "Drafts"));
+		long nine = insertIn(2, 9101L, List.of("Zeta", "99801.9 - A", "Drafts"));
+		long nineItself = insertIn(3, 9101L, List.of("Zeta", "99801.9 - A"));
+		long nineDeep = insertIn(4, 9101L, List.of("Zeta", "99801.9 - A", "drafts", "Old"));
+		long other = insertIn(5, 9103L, List.of("Zeta", "99700.1 - C", "A"));
+		// A matter's own folder, deleted from its Store, shows the Store alone: after every matter's, by its path
+		long ownFolder = insertIn(6, 9103L, List.of("Alpha"));
+		// So does a path whose matter isn't there
+		long noMatter = insertIn(7, 7L, List.of("Alpha", "X"));
+
+		assertEquals(List.of(other, nineItself, nine, nineDeep, ten, ownFolder, noMatter),
+				ids(query("everyone", 3, "deletedFrom", false, 0, 50)));
+		assertEquals(List.of(ten, nineDeep, nine, nineItself, other, noMatter, ownFolder),
+				ids(query("everyone", 3, "deletedFrom", true, 0, 50)));
+	}
+
+	/** Inserts a folder's item deleted from the path, in the matter */
+	private long insertIn(long objectId, Long matterId, List<String> path) {
+		return store.insert(new TrashItemRow(0, 1, "folder", objectId, "Item " + objectId, null, 50L, path, matterId,
+				0, 0, 3L, "x", T0), List.of(folder(objectId)));
 	}
 
 	/**
