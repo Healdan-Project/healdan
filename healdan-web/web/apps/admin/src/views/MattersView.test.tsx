@@ -8,6 +8,7 @@ import { formatDate, formatDateTime, formatSize, setLabels } from '@healdan/ui'
 import { expectNoAxeViolations } from '../test/axe'
 import { clientList, clientOf, findPeople, matterList, matterRow, matterRows, problem, sally, saltmarsh, tom } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
+import { setListSize } from '../test/listSize'
 import { renderApp } from '../test/renderApp'
 import { TYPING_DELAY_MS } from '../pickers/typing'
 
@@ -252,6 +253,8 @@ describe('The Matters list', () => {
   })
 
   it('loads 100 rows at a time as the end of the list comes into view, to the end of what the server counted', async () => {
+    // Sized, the list draws the rows in view, as in a browser: with none it would draw all 201, and each again at every page
+    setListSize(1280, 680)
     const many = Array.from({ length: 201 }, (_, i) => matterRow({ id: 1000 + i, number: `2000.${i + 1}`, name: `Matter ${String(i + 1).padStart(3, '0')}` }))
     const { api } = await renderApp('/matters', {
       'GET /v1/admin/matters': ({ query }: { query?: Record<string, unknown> }) => {
@@ -260,12 +263,17 @@ describe('The Matters list', () => {
       },
     })
     const table = await grid()
+    // How many rows the list holds, drawn or not: its heading row and the matters loaded
+    const held = () => Number(table.getAttribute('aria-rowcount'))
     expect(await within(table).findByRole('row', { name: '2000.1 Matter 001' })).toBeTruthy()
     expect(within(main()).getByText('201 Matters')).toBeTruthy()
+    expect(held()).toBe(1 + 100)
+    // It draws the rows in view, not all 100
+    expect(within(table).queryByRole('row', { name: '2000.100 Matter 100' })).toBeNull()
     act(() => bringObservedIntoView())
-    expect(await within(table).findByRole('row', { name: '2000.150 Matter 150' })).toBeTruthy()
+    await waitFor(() => expect(held()).toBe(1 + 200))
     act(() => bringObservedIntoView())
-    expect(await within(table).findByRole('row', { name: '2000.201 Matter 201' })).toBeTruthy()
+    await waitFor(() => expect(held()).toBe(1 + 201))
     act(() => bringObservedIntoView())
     await new Promise((resolve) => setTimeout(resolve, 100))
     expect(api.callsTo('GET /v1/admin/matters').map((call) => [call.query?.offset, call.query?.limit])).toEqual([
@@ -273,6 +281,11 @@ describe('The Matters list', () => {
       [100, 100],
       [200, 100],
     ])
+    // Scrolled to its end (202 rows of 34 pixels, the heading's among them), it draws the last matter the server counted
+    expect(within(table).queryByRole('row', { name: '2000.201 Matter 201' })).toBeNull()
+    table.scrollTop = 202 * 34
+    fireEvent.scroll(table)
+    expect(await within(table).findByRole('row', { name: '2000.201 Matter 201' })).toBeTruthy()
   })
 
   it("opens a matter's page when its row is clicked, or Enter is pressed on it", async () => {

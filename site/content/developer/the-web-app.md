@@ -274,6 +274,11 @@ text's colour too.
 The virtualiser places the rows itself, so the Table needs a height: it fills a flex column, as the folder view's is.
 jsdom has no IntersectionObserver, which notices the end of a list, so the tests' setup installs one that sees
 nothing until a test calls `bringObservedIntoView()` from `test/intersection.ts`, as scrolling to the end would.
+jsdom lays nothing out either, and with no size to go by React Aria's virtualiser draws every row a list holds, and
+every cell of them again each time a row is added, so a test that pages a few hundred rows takes seconds. In the Admin
+app's tests, `setListSize(1280, 680)` from `test/listSize.ts`, called before the render, gives the list a size: it then
+draws only the rows in view, as in a browser, and the grid's `aria-rowcount` says how many it holds, its heading row
+included. The setup takes the size away after each test.
 
 ### Columns and Sorting
 
