@@ -47,7 +47,7 @@ import com.logicaldoc.healdan.admin.dashboard.Usage.BusyMatter;
 import com.logicaldoc.healdan.admin.dashboard.Usage.Day;
 import com.logicaldoc.healdan.admin.dashboard.Usage.StoreUsage;
 import com.logicaldoc.healdan.admin.dashboard.Usage.Total;
-import com.logicaldoc.healdan.admin.storage.StorageAdministration;
+import com.logicaldoc.healdan.admin.storage.OverviewPort;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageSettingsInfo;
@@ -246,7 +246,7 @@ public class UsageSummaryTest extends AbstractHealdanTestCase {
 				List.of(new StoreBackendInfo(firm.clientWork.getId(), "Client Work", 7, "Wasabi EU", 0, 0, 5, 999),
 						new StoreBackendInfo(firm.firm.getId(), "Firm", 1, "Original", 0, 0, 2, 99)),
 				new StorageSettingsInfo(30, 10, 4), 0, 0, 0);
-		summary.ports = () -> List.of(() -> overview);
+		summary.ports = () -> List.of(OverviewPort.of(() -> overview));
 
 		summary.refreshNow();
 		List<StoreUsage> stores = summary.current().stores();
@@ -259,7 +259,7 @@ public class UsageSummaryTest extends AbstractHealdanTestCase {
 		// Storage backends off: no backend
 		StorageOverview off = new StorageOverview(false, List.of(), List.of(), new StorageSettingsInfo(30, 10, 4), 0,
 				0, 0);
-		summary.ports = () -> List.of(() -> off);
+		summary.ports = () -> List.of(OverviewPort.of(() -> off));
 		summary.refreshNow();
 		assertNull(summary.current().stores().get(0).backend());
 	}
@@ -268,7 +268,7 @@ public class UsageSummaryTest extends AbstractHealdanTestCase {
 	@Test
 	public void testAFailingStoragePortLeavesTheRest() throws Exception {
 		new Firm();
-		StorageAdministration failing = () -> {
+		OverviewPort failing = () -> {
 			throw new PersistenceException("The storage tables can't be read");
 		};
 		summary.ports = () -> List.of(failing);

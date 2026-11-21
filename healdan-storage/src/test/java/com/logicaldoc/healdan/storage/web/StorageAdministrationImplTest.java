@@ -3,32 +3,56 @@
 
 package com.logicaldoc.healdan.storage.web;
 
+import static com.logicaldoc.healdan.storage.StorageFixtures.freshFolder;
 import static com.logicaldoc.healdan.storage.StorageFixtures.jdbc;
+import static com.logicaldoc.healdan.storage.StorageFixtures.row;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.logging.log4j.Level;
+import org.junit.Assume;
 import org.junit.Test;
+import org.junit.function.ThrowingRunnable;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageBackend;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageOverview;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStoreBackend;
+import com.logicaldoc.healdan.HealdanRuleException;
+import com.logicaldoc.healdan.admin.AdminEvents;
+import com.logicaldoc.healdan.admin.storage.SecretKeyMissingProblem;
 import com.logicaldoc.healdan.admin.storage.StorageAdministration;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.AddedBackend;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDetail;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDraft;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendInfo;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.KeyEvent;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageLimits;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageSettingsInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StoreBackendInfo;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.StuckFile;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.SwitchPreview;
 import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.storage.AbstractStorageTestCase;
 import com.logicaldoc.healdan.storage.BackendHealth;
@@ -37,22 +61,44 @@ import com.logicaldoc.healdan.storage.StorageBackend;
 import com.logicaldoc.healdan.storage.StorageBackendDAO;
 import com.logicaldoc.healdan.storage.StorageFixtures;
 import com.logicaldoc.healdan.storage.StorageFixtures.Side;
+import com.logicaldoc.healdan.storage.StorageSettings;
 import com.logicaldoc.healdan.storage.StoreTracking;
+import com.logicaldoc.healdan.storage.StoredFile;
+import com.logicaldoc.healdan.storage.StoredFiles;
+import com.logicaldoc.healdan.storage.backend.FakeS3;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend;
+import com.logicaldoc.healdan.storage.crypto.RecoveryKey;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.spring.Context;
 
 /**
- * The storage port's reading side (Admin app spec section 9.7): {@code healdan-core} finds it by type, and it answers
- * what {@link StorageAdmin#overview()} answers the Storage tab, field for field, with nothing secret in it.
+ * The storage port (Admin app spec section 9.7): {@code healdan-core} finds it by type; its reading side answers what
+ * {@link StorageAdmin#overview()} answers the Storage tab, field for field, with nothing secret in it; and its writing
+ * side does what the tab does, through {@link StorageAdmin}, recording each change that succeeded, once, in the
+ * administration record straight after it ({@link AdminEvents#recordAfter}), with no value of a secret, an access key
+ * or a recovery key.
  */
 public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 
 	/** The S3 secret, sealed in the cloud backend's row */
 	private static final String SECRET = "s3-secret-for-the-port-test";
 
+	/** A second S3 secret, for a save */
+	private static final String NEW_SECRET = "s3-second-secret-for-the-port";
+
+	/** A second access key ID, which the fake S3 refuses, for a save */
+	private static final String NEW_ACCESS_KEY = "GKportNewAccessKey0123";
+
 	/** The user name and password an endpoint written past the endpoint rule holds */
 	private static final String USER_INFO = "keyid:hunter2";
+
+	private static final String BUCKET = "healdan-tests";
+
+	private static final ObjectMapper JSON = new ObjectMapper();
+
+	/** What the expected detail of a record has for a secret's change */
+	private static final String[] SECRET_CHANGE = {};
 
 	private final StorageFixtures sf = new StorageFixtures();
 
@@ -194,6 +240,604 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 		assertEquals(0, off.otherStuck());
 		assertEquals(new StorageSettingsInfo(12, 7, 3), off.settings());
 		assertNoSecret(off.toString(), sealed, recoveryKey);
+	}
+
+	/** P3-R20: an S3 row with no bucket shows its prefix and endpoint, never "null/" */
+	@Test
+	public void testWhereWithoutABucket() {
+		GUIStorageBackend gui = new GUIStorageBackend();
+		gui.setKind(GUIStorageBackend.S3);
+		gui.setEndpoint("https://s3.example.test:9000");
+		gui.setPrefix("odd/");
+		assertEquals("odd/ at https://s3.example.test:9000", StorageAdministrationImpl.where(gui));
+		gui.setPrefix("");
+		assertEquals("https://s3.example.test:9000", StorageAdministrationImpl.where(gui));
+		gui.setEndpoint(null);
+		gui.setPrefix(null);
+		assertEquals("", StorageAdministrationImpl.where(gui));
+	}
+
+	/** P3-R6: the port's problem says what the Storage tab's says, with the count */
+	@Test
+	public void testSecretKeyMissingProblemSaysWhatTheTabSays() {
+		for (long sealed : new long[] { 1, 3 }) {
+			SecretKeyMissingProblem problem = new SecretKeyMissingProblem(sealed);
+			assertEquals(new StorageAdmin.SecretKeyMissing(sealed, null).getMessage(), problem.getMessage());
+			assertEquals(sealed, problem.sealed());
+			assertTrue(problem instanceof HealdanRuleException);
+		}
+	}
+
+	/** A local folder through Test, add, Test again, edits and removal, each change recorded once */
+	@Test
+	public void testLocalBackendThroughThePort() throws Exception {
+		User boss = sf.fx.user("boss", "admin");
+		StorageAdministration port = port();
+		StorageAdmin admin = StorageAdmin.get();
+		Path root = freshFolder("port-archive");
+		BackendDraft draft = local("Archive", root, false);
+
+		// Test before saving, and the limits: reads, which record nothing
+		assertEquals(List.of(), port.testNew(0, draft, null));
+		assertEquals(new StorageLimits(StorageSettings.MAX_HOLD_DAYS, StorageSettings.MAX_CACHE_GB,
+				StorageSettings.MAX_TRANSFERS), port.limits());
+		assertEquals(List.of(), events());
+
+		AddedBackend added = port.add(draft, null, false, boss);
+		assertNull("only an encrypted backend has a recovery key", added.recoveryKey());
+		BackendDetail detail = added.backend();
+		long id = detail.id();
+		assertEquals("Archive", detail.name());
+		assertEquals(StorageBackend.LOCAL, detail.kind());
+		assertFalse(detail.original());
+		assertEquals(root.toString(), detail.path());
+		assertNull(detail.endpoint());
+		assertNull(detail.bucket());
+		assertNull(detail.accessKey());
+		assertFalse(detail.hasSecret());
+		assertFalse(detail.encrypted());
+		assertTrue(detail.offered());
+		assertFalse(detail.inUse());
+		assertEquals(0, detail.files());
+		assertEquals(BackendInfo.OK, detail.status());
+		assertNull(detail.keyLastShown());
+		assertEquals(List.of(), detail.stores());
+
+		List<Event> events = events();
+		assertEquals(events.toString(), 1, events.size());
+		assertEvent(events.get(0), "backend.added", "backend", id, "Archive", boss);
+		assertDetail(Map.of("name", change(null, "Archive"), "kind", change(null, "local"), "path",
+				change(null, root.toString()), "encrypted", change(null, "false")), events.get(0));
+
+		// Test of the saved backend, and what its edit form shows: reads
+		assertEquals(List.of(), port.test(id));
+		assertEquals(List.of(), port.testNew(id, draft, null));
+		BackendDetail read = port.backend(id).orElseThrow();
+		assertEquals(detail.name(), read.name());
+		assertEquals(detail.path(), read.path());
+		assertEquals(BackendInfo.OK, read.status());
+		assertMatches(HealdanStorageServiceTest.find(admin.overview(), id), read);
+		assertTrue(port.backend(999_999L).isEmpty());
+		assertEquals(1, events().size());
+
+		// A Store on it is named in its detail
+		Folder store = sf.fx.store("Archive Store");
+		port.setStoreBackend(store.getId(), id, boss);
+		assertEquals(List.of("Archive Store"), port.backend(id).orElseThrow().stores());
+		port.setStoreBackend(store.getId(), StorageBackend.ORIGINAL, boss);
+		assertEquals(List.of(), port.backend(id).orElseThrow().stores());
+		assertEquals(3, events().size());
+
+		// A rename: the name alone, before and after
+		BackendDetail saved = port.save(id, local("Archive Two", root, false), null, false, boss);
+		assertEquals("Archive Two", saved.name());
+		events = events();
+		assertEquals(events.toString(), 4, events.size());
+		assertEvent(events.get(3), "backend.changed", "backend", id, "Archive Two", boss);
+		assertDetail(Map.of("name", change("Archive", "Archive Two")), events.get(3));
+
+		// Saved as it is, nothing changes, and nothing is recorded; a refusal records nothing
+		port.save(id, local("Archive Two", root, null), null, false, boss);
+		refused("encryption is chosen at the add", "encryption is chosen",
+				() -> port.save(id, local("Archive Two", root, true), null, false, boss));
+		assertEquals(4, events().size());
+
+		// Original takes its name alone, and its path is never recorded
+		port.save(StorageBackend.ORIGINAL, local("Home", root, false), null, false, boss);
+		port.save(StorageBackend.ORIGINAL, local("Original", root, false), null, false, boss);
+		events = events();
+		assertEquals(events.toString(), 6, events.size());
+		assertEvent(events.get(4), "backend.changed", "backend", StorageBackend.ORIGINAL, "Home", boss);
+		assertDetail(Map.of("name", change("Original", "Home")), events.get(4));
+		assertDetail(Map.of("name", change("Home", "Original")), events.get(5));
+		BackendDetail original = port.backend(StorageBackend.ORIGINAL).orElseThrow();
+		assertTrue(original.original());
+		assertEquals(Staging.original().toString(), original.path());
+
+		// Removed, recorded with its name
+		port.remove(id, boss);
+		assertTrue(port.backend(id).isEmpty());
+		refused("Original", "Original", () -> port.remove(StorageBackend.ORIGINAL, boss));
+		events = events();
+		assertEquals(events.toString(), 7, events.size());
+		assertEvent(events.get(6), "backend.removed", "backend", id, "Archive Two", boss);
+		assertNull(events.get(6).detail());
+
+		// With storage backends off, there is no backend to show, and every change is refused
+		admin.on = () -> false;
+		try {
+			assertTrue(port.backend(StorageBackend.ORIGINAL).isEmpty());
+			refused("off", "Storage backends are off", () -> port.add(local("Spare", root, false), null, false, boss));
+			refused("off", "Storage backends are off",
+					() -> port.saveSettings(new StorageSettingsInfo(9, 9, 2), boss));
+		} finally {
+			admin.on = StoreTracking::active;
+		}
+		assertEquals(7, events().size());
+	}
+
+	/** A recovery key shown at the add, confirmed, shown again and entered, with its history */
+	@Test
+	public void testRecoveryKeyThroughThePort() throws Exception {
+		User boss = sf.fx.user("boss", "admin");
+		StorageAdministration port = port();
+		Path root = freshFolder("port-vault");
+
+		AddedBackend added = port.add(local("Vault", root, true), null, false, boss);
+		String key = added.recoveryKey();
+		assertNotNull("the add shows an encrypted backend's recovery key", key);
+		long id = added.backend().id();
+		assertTrue(added.backend().encrypted());
+		assertFalse(added.backend().keyConfirmed());
+		assertFalse("not offered before its key is confirmed", added.backend().offered());
+		assertNotNull(added.backend().keyLastShown());
+		assertEquals("boss", added.backend().keyLastShownBy());
+		assertFalse(added.toString(), added.toString().contains(key));
+
+		// The add's showing is recorded beside the add
+		List<Event> events = events();
+		assertEquals(events.toString(), 2, events.size());
+		assertEvent(events.get(0), "backend.added", "backend", id, "Vault", boss);
+		assertDetail(Map.of("name", change(null, "Vault"), "kind", change(null, "local"), "path",
+				change(null, root.toString()), "encrypted", change(null, "true")), events.get(0));
+		assertEvent(events.get(1), "backend.recovery-key-shown", "backend", id, "Vault", boss);
+		assertNull(events.get(1).detail());
+
+		// No Store may have it yet
+		Folder store = sf.fx.store("Vault Store");
+		refused("not confirmed", "isn't confirmed", () -> port.setStoreBackend(store.getId(), id, boss));
+
+		// A wrong last group, then the right one, then again: recorded once
+		String last = key.substring(key.length() - 4);
+		refused("a wrong group", "isn't the last group",
+				() -> port.confirmRecoveryKey(id, last.equals("2222") ? "3333" : "2222", boss));
+		assertEquals(2, events().size());
+		port.confirmRecoveryKey(id, last, boss);
+		port.confirmRecoveryKey(id, last, boss);
+		events = events();
+		assertEquals(events.toString(), 3, events.size());
+		assertEvent(events.get(2), "backend.recovery-key-confirmed", "backend", id, "Vault", boss);
+		BackendDetail confirmed = port.backend(id).orElseThrow();
+		assertTrue(confirmed.keyConfirmed());
+		assertTrue(confirmed.offered());
+
+		// Shown again, and entered; another key is refused
+		assertEquals(key, port.showRecoveryKey(id, boss));
+		byte[] other = new byte[32];
+		new SecureRandom().nextBytes(other);
+		refused("another backend's key", "isn't this backend's",
+				() -> port.enterRecoveryKey(id, RecoveryKey.format(other), boss));
+		port.enterRecoveryKey(id, key, boss);
+		events = events();
+		assertEquals(events.toString(), 5, events.size());
+		assertEvent(events.get(3), "backend.recovery-key-shown", "backend", id, "Vault", boss);
+		assertEvent(events.get(4), "backend.recovery-key-entered", "backend", id, "Vault", boss);
+		assertNull(events.get(4).detail());
+
+		// Its history, newest first: a read
+		List<KeyEvent> history = port.keyEvents(id);
+		assertEquals(List.of(KeyEvent.ENTERED, KeyEvent.SHOWN, KeyEvent.SHOWN),
+				history.stream().map(KeyEvent::event).toList());
+		for (KeyEvent event : history) {
+			assertEquals(boss.getId(), event.userId());
+			assertEquals("boss", event.userName());
+			assertNotNull(event.at());
+		}
+		assertFalse(history.get(0).at().isBefore(history.get(1).at()));
+		assertEquals(5, events().size());
+
+		assertNoSecretRecorded(List.of(key, key.replace(" ", "")));
+	}
+
+	/**
+	 * Review Focus 3: an S3 backend's secret, access key and recovery key reach no record, log line or message; a
+	 * change of the secret or the access key is recorded as changed, with no value
+	 */
+	@Test
+	public void testS3SecretsThroughThePort() throws Exception {
+		User boss = sf.fx.user("boss", "admin");
+		StorageAdministration port = port();
+		try (FakeS3 fake = FakeS3.start().createBucket(BUCKET);
+				LogCapture portLog = LogCapture.of(StorageAdministrationImpl.class, Level.DEBUG);
+				LogCapture recordLog = LogCapture.of(AdminEvents.class, Level.DEBUG);
+				LogCapture tabLog = LogCapture.of(StorageAdmin.class)) {
+			String endpoint = fake.endpoint().toString();
+			BackendDraft draft = s3(fake, "Cloud", FakeS3.ACCESS_KEY, true);
+			assertEquals(List.of(), port.testNew(0, draft, SECRET));
+			assertEquals(List.of(), events());
+
+			AddedBackend added = port.add(draft, SECRET, false, boss);
+			String key = added.recoveryKey();
+			assertNotNull(key);
+			BackendDetail detail = added.backend();
+			long id = detail.id();
+			assertEquals(StorageBackend.S3, detail.kind());
+			assertEquals(endpoint, detail.endpoint());
+			assertEquals(FakeS3.REGION, detail.region());
+			assertEquals(BUCKET, detail.bucket());
+			assertEquals("cloud/", detail.prefix());
+			assertTrue(detail.pathStyle());
+			assertEquals("the edit form shows the access key ID", FakeS3.ACCESS_KEY, detail.accessKey());
+			assertTrue(detail.hasSecret());
+			assertTrue(detail.encrypted());
+			assertNull(detail.path());
+
+			List<Event> events = events();
+			assertEquals(events.toString(), 2, events.size());
+			assertEvent(events.get(0), "backend.added", "backend", id, "Cloud", boss);
+			Map<String, String[]> settings = new LinkedHashMap<>();
+			settings.put("name", change(null, "Cloud"));
+			settings.put("kind", change(null, "s3"));
+			settings.put("endpoint", change(null, endpoint));
+			settings.put("region", change(null, FakeS3.REGION));
+			settings.put("bucket", change(null, BUCKET));
+			settings.put("prefix", change(null, "cloud/"));
+			settings.put("pathStyle", change(null, "true"));
+			settings.put("accessKey", SECRET_CHANGE);
+			settings.put("secret", SECRET_CHANGE);
+			settings.put("encrypted", change(null, "true"));
+			assertDetail(settings, events.get(0));
+			assertEvent(events.get(1), "backend.recovery-key-shown", "backend", id, "Cloud", boss);
+
+			// Test of the saved backend with its stored secret: a read
+			assertEquals(List.of(), port.testNew(id, draft, ""));
+			assertEquals(List.of(), port.test(id));
+			assertEquals(2, events().size());
+
+			// A new secret and access key: both recorded as changed, with no value
+			BackendDetail saved = port.save(id, s3(fake, "Cloud", NEW_ACCESS_KEY, true), NEW_SECRET, false, boss);
+			assertEquals(NEW_ACCESS_KEY, saved.accessKey());
+			assertEquals(NEW_SECRET, SecretBox.get().open(StorageBackendDAO.get().findById(id).getSecret()));
+			events = events();
+			assertEquals(events.toString(), 3, events.size());
+			assertEvent(events.get(2), "backend.changed", "backend", id, "Cloud", boss);
+			assertDetail(Map.of("accessKey", SECRET_CHANGE, "secret", SECRET_CHANGE), events.get(2));
+
+			// The same secret typed again, nothing else changed: nothing recorded
+			port.save(id, s3(fake, "Cloud", NEW_ACCESS_KEY, null), NEW_SECRET, false, boss);
+			assertEquals(3, events().size());
+
+			// The access key back and a new name, the secret kept
+			port.save(id, s3(fake, "Cloud Two", FakeS3.ACCESS_KEY, true), "", false, boss);
+			events = events();
+			assertEquals(events.toString(), 4, events.size());
+			assertEvent(events.get(3), "backend.changed", "backend", id, "Cloud Two", boss);
+			assertDetail(Map.of("name", change("Cloud", "Cloud Two"), "accessKey", SECRET_CHANGE), events.get(3));
+			assertEquals(NEW_SECRET, SecretBox.get().open(StorageBackendDAO.get().findById(id).getSecret()));
+
+			BackendDetail read = port.backend(id).orElseThrow();
+			String sealed = StorageBackendDAO.get().findById(id).getSecret();
+			List<String> secrets = List.of(SECRET, NEW_SECRET, sealed, key, key.replace(" ", ""));
+			List<String> keys = List.of(FakeS3.ACCESS_KEY, NEW_ACCESS_KEY);
+			assertNoSecretRecorded(concat(secrets, keys));
+			for (String secret : secrets)
+				for (Object answer : List.of(read, added.backend(), saved))
+					assertFalse(answer.toString(), answer.toString().contains(secret));
+			for (String value : concat(secrets, keys)) {
+				assertFalse(read.toString(), read.toString().contains(value));
+				assertFalse(added.toString(), added.toString().contains(value));
+				assertFalse(draft.toString(), draft.toString().contains(value));
+				for (List<String> lines : List.of(portLog.lines(), recordLog.lines(), tabLog.lines()))
+					assertFalse(lines.toString(), lines.toString().contains(value));
+			}
+		}
+	}
+
+	/**
+	 * P3-R6: with Healdan's secret key file missing while values are sealed with it, a typed secret is refused with
+	 * the port's problem, saving and recording nothing, until the administrator asks for a new key
+	 */
+	@Test
+	public void testSecretKeyMissingThroughThePort() throws Exception {
+		String property = System.getProperty(SecretBox.KEY_PROPERTY);
+		// Only the build's own key file, never the one in the home folder of whoever runs it
+		Assume.assumeNotNull(property);
+		Path keyFile = Path.of(property.trim());
+		User boss = sf.fx.user("boss", "admin");
+		StorageAdministration port = port();
+		try (FakeS3 fake = FakeS3.start().createBucket(BUCKET)) {
+			long id = port.add(s3(fake, "Sealed", FakeS3.ACCESS_KEY, false), "first-secret", false, boss).backend()
+					.id();
+			int recorded = events().size();
+			long backends = jdbc().queryForObject("select count(*) from hd_storage_backend", Long.class);
+			byte[] key = Files.readAllBytes(keyFile);
+			Files.delete(keyFile);
+			try {
+				BackendDraft renamed = s3(fake, "Renamed", FakeS3.ACCESS_KEY, false);
+				SecretKeyMissingProblem e = assertThrows(SecretKeyMissingProblem.class,
+						() -> port.save(id, renamed, "second-secret", false, boss));
+				assertEquals(1L, e.sealed());
+				assertEquals(new StorageAdmin.SecretKeyMissing(1, null).getMessage(), e.getMessage());
+				assertFalse(e.getMessage(), e.getMessage().contains("second-secret"));
+				assertEquals("Sealed", StorageBackendDAO.get().findById(id).getName());
+				BackendDraft other = new BackendDraft("s3", "Other", null, fake.endpoint().toString(), FakeS3.REGION,
+						BUCKET, "other/", true, FakeS3.ACCESS_KEY, false);
+				assertThrows(SecretKeyMissingProblem.class, () -> port.add(other, "third", false, boss));
+				assertEquals(backends,
+						(long) jdbc().queryForObject("select count(*) from hd_storage_backend", Long.class));
+				assertEquals(recorded, events().size());
+				assertFalse(Files.exists(keyFile));
+
+				// The administrator makes a new key
+				BackendDetail saved = port.save(id, renamed, "second-secret", true, boss);
+				assertTrue(saved.hasSecret());
+				assertEquals("Renamed", saved.name());
+				assertTrue(Files.exists(keyFile));
+				List<Event> events = events();
+				assertEquals(events.toString(), recorded + 1, events.size());
+				assertDetail(Map.of("name", change("Sealed", "Renamed"), "secret", SECRET_CHANGE),
+						events.get(recorded));
+				assertNoSecretRecorded(List.of("first-secret", "second-secret", FakeS3.ACCESS_KEY));
+			} finally {
+				// The build's key, for the tests after this one
+				Files.write(keyFile, key);
+			}
+		}
+	}
+
+	/** A Store's switch: its count first, then the switch both ways, each recorded with the backends' names */
+	@Test
+	public void testStoreSwitchThroughThePort() throws Exception {
+		User boss = sf.fx.user("boss", "admin");
+		StorageAdministration port = port();
+		MemoryBackend cloud = sf.s3Backend("switch cloud", false);
+		Side alpha = sf.side("Alpha", StorageBackend.ORIGINAL, Staging.original(), null);
+		Document a1 = sf.fx.upload(alpha.folder(), "a1.txt", "alpha one", sf.fx.admin());
+		Document a2 = sf.fx.upload(alpha.folder(), "a2.txt", "alpha number two", sf.fx.admin());
+		long storeId = alpha.store().getId();
+		List<StoredFile> rows = new ArrayList<>(StoredFiles.get().list(a1.getId()));
+		rows.addAll(StoredFiles.get().list(a2.getId()));
+		long bytes = rows.stream().mapToLong(StoredFile::size).sum();
+
+		assertEquals(new SwitchPreview(rows.size(), bytes), port.previewSwitch(storeId, cloud.id()));
+		assertEquals(new SwitchPreview(0, 0), port.previewSwitch(storeId, StorageBackend.ORIGINAL));
+		assertEquals(List.of(), events());
+
+		port.setStoreBackend(storeId, cloud.id(), boss);
+		assertEquals(cloud.id(), StoredFiles.get().storeBackend(storeId));
+		// Its own backend changes nothing
+		port.setStoreBackend(storeId, cloud.id(), boss);
+		List<Event> events = events();
+		assertEquals(events.toString(), 1, events.size());
+		assertEvent(events.get(0), "store.backend-changed", "store", storeId, "Alpha", boss);
+		assertDetail(Map.of("backend", change("Original", "switch cloud")), events.get(0));
+
+		// An encrypted backend whose recovery key isn't confirmed is refused, and nothing recorded
+		long locked = sf.localBackend("locked", true);
+		StorageBackend lockedRow = StorageBackendDAO.get().findById(locked);
+		lockedRow.setKeyConfirmedOn(false);
+		StorageBackendDAO.get().store(lockedRow);
+		refused("not confirmed", "isn't confirmed", () -> port.setStoreBackend(storeId, locked, boss));
+		assertEquals(1, events().size());
+
+		port.setStoreBackend(storeId, StorageBackend.ORIGINAL, boss);
+		events = events();
+		assertEquals(events.toString(), 2, events.size());
+		assertDetail(Map.of("backend", change("switch cloud", "Original")), events.get(1));
+	}
+
+	/** Stuck files listed and retried, a Store's and those with no Store, each retry recorded once */
+	@Test
+	public void testStuckFilesThroughThePort() throws Exception {
+		User boss = sf.fx.user("boss", "admin");
+		StorageAdministration port = port();
+		Side cloud = sf.s3Side("Stuck Cloud", false);
+		Document doc = sf.fx.upload(cloud.folder(), "refused.txt", "refused ten times", sf.fx.admin());
+		jdbc().update("update hd_storage_file set hd_stuck = 1, hd_attempts = 10, hd_lasterror = 'refused' "
+				+ "where hd_docid = ?", doc.getId());
+		recordWaiting(999_301L, null, 4, true);
+		long storeId = cloud.store().getId();
+
+		assertEquals(List.of(new StuckFile(doc.getId(), "refused.txt", "1.0", 10, "refused")), port.stuck(storeId));
+		assertEquals(List.of(new StuckFile(999_301L, null, "1.0", 10, null)), port.stuck(0));
+		assertEquals(List.of(), events());
+
+		port.retry(storeId, boss);
+		assertFalse(row(doc.getId(), "1.0").stuck());
+		assertTrue(row(999_301L, "1.0").stuck());
+		// Nothing stuck there now: nothing changes, and nothing is recorded
+		port.retry(storeId, boss);
+		port.retry(0, boss);
+		assertFalse(row(999_301L, "1.0").stuck());
+		port.retry(0, boss);
+
+		List<Event> events = events();
+		assertEquals(events.toString(), 2, events.size());
+		assertEvent(events.get(0), "storage.stuck-retried", "store", storeId, "Stuck Cloud", boss);
+		assertNull(events.get(0).detail());
+		assertEvent(events.get(1), "storage.stuck-retried", "storage", null, null, boss);
+		assertEquals(List.of(), port.stuck(storeId));
+	}
+
+	/** The settings and their limits; each changed setting recorded, an unchanged save recording nothing */
+	@Test
+	public void testSettingsThroughThePort() throws Exception {
+		User boss = sf.fx.user("boss", "admin");
+		StorageAdministration port = port();
+		StorageSettingsInfo was = port.overview().settings();
+		StorageLimits limits = port.limits();
+
+		port.saveSettings(new StorageSettingsInfo(10, 5, 2), boss);
+		assertEquals(new StorageSettingsInfo(10, 5, 2), port.overview().settings());
+		port.saveSettings(new StorageSettingsInfo(10, 5, 2), boss);
+		port.saveSettings(new StorageSettingsInfo(10, 6, 2), boss);
+
+		// Out of range, each refused before any is written
+		refused("no holding period", "365", () -> port.saveSettings(new StorageSettingsInfo(0, 6, 2), boss));
+		refused("too long a holding period", "365",
+				() -> port.saveSettings(new StorageSettingsInfo(limits.maxHoldDays() + 1, 6, 2), boss));
+		refused("too large a cache", String.valueOf(limits.maxCacheGb()),
+				() -> port.saveSettings(new StorageSettingsInfo(10, limits.maxCacheGb() + 1, 2), boss));
+		refused("too many transfers", "16",
+				() -> port.saveSettings(new StorageSettingsInfo(10, 6, limits.maxTransfers() + 1), boss));
+		assertEquals(new StorageSettingsInfo(10, 6, 2), port.overview().settings());
+
+		List<Event> events = events();
+		assertEquals(events.toString(), 2, events.size());
+		assertEvent(events.get(0), "storage.settings-changed", "storage", null, null, boss);
+		Map<String, String[]> first = new LinkedHashMap<>();
+		if (was.holdDays() != 10)
+			first.put("holdDays", change(String.valueOf(was.holdDays()), "10"));
+		if (was.cacheGb() != 5)
+			first.put("cacheGb", change(String.valueOf(was.cacheGb()), "5"));
+		if (was.transfers() != 2)
+			first.put("transfers", change(String.valueOf(was.transfers()), "2"));
+		assertFalse("the test changes a setting", first.isEmpty());
+		assertDetail(first, events.get(0));
+		assertDetail(Map.of("cacheGb", change("5", "6")), events.get(1));
+	}
+
+	/** Recorded after the change: a record that fails leaves the change as made, and is logged at error */
+	@Test
+	public void testAFailedRecordLeavesTheChange() throws Exception {
+		User boss = sf.fx.user("boss", "admin");
+		StorageAdministration port = port();
+		jdbc().execute("create function hd_test_refuse() returns trigger language plpgsql as "
+				+ "$$ begin raise exception 'refused by the test' using errcode = '45000'; end $$");
+		jdbc().execute("create trigger hd_test_refuse_record before insert on hd_admin_event "
+				+ "for each row execute function hd_test_refuse()");
+		try (LogCapture log = LogCapture.of(AdminEvents.class)) {
+			port.saveSettings(new StorageSettingsInfo(11, 7, 3), boss);
+			assertEquals(new StorageSettingsInfo(11, 7, 3), port.overview().settings());
+			assertTrue(log.lines().toString(), log.lines().stream()
+					.anyMatch(line -> line.startsWith("ERROR") && line.contains("storage.settings-changed")));
+		} finally {
+			jdbc().execute("drop trigger hd_test_refuse_record on hd_admin_event");
+			jdbc().execute("drop function hd_test_refuse()");
+		}
+		assertEquals(List.of(), events());
+	}
+
+	/** A row of the administration record, the storage area's */
+	private record Event(String area, String action, String targetKind, Long targetId, String targetName,
+			String detail, long userId, String username) {
+	}
+
+	/** @return the storage area's rows of the administration record, oldest first */
+	private static List<Event> events() {
+		return jdbc().query("select hd_area, hd_action, hd_targetkind, hd_targetid, hd_targetname, hd_detail, "
+				+ "hd_userid, hd_username from hd_admin_event where hd_area = 'STORAGE' order by hd_id", (rs, i) -> {
+					long targetId = rs.getLong(4);
+					Long target = rs.wasNull() ? null : targetId;
+					return new Event(rs.getString(1), rs.getString(2), rs.getString(3), target, rs.getString(5),
+							rs.getString(6), rs.getLong(7), rs.getString(8));
+				});
+	}
+
+	private static void assertEvent(Event event, String action, String targetKind, Long targetId,
+			String targetName, User by) {
+		assertEquals(event.toString(), "STORAGE", event.area());
+		assertEquals(event.toString(), action, event.action());
+		assertEquals(event.toString(), targetKind, event.targetKind());
+		assertEquals(event.toString(), targetId, event.targetId());
+		assertEquals(event.toString(), targetName, event.targetName());
+		assertEquals(event.toString(), by.getId(), event.userId());
+		assertEquals(event.toString(), by.getUsername(), event.username());
+	}
+
+	private static String[] change(String before, String after) {
+		return new String[] { before, after };
+	}
+
+	/** Asserts a record's detail is these fields, each with its value before and after, or a secret's change */
+	private static void assertDetail(Map<String, String[]> expected, Event event) throws Exception {
+		ObjectNode node = JSON.createObjectNode();
+		expected.forEach((name, change) -> {
+			ObjectNode field = node.putObject(name);
+			if (change == SECRET_CHANGE) {
+				field.put("secret", true);
+			} else {
+				field.put("before", change[0]);
+				field.put("after", change[1]);
+			}
+		});
+		assertNotNull(event.toString(), event.detail());
+		assertEquals(event.toString(), node, JSON.readTree(event.detail()));
+	}
+
+	/** Asserts that no row of the administration record holds any of the values, in its detail or its target's name */
+	private static void assertNoSecretRecorded(List<String> values) {
+		List<String> written = jdbc().queryForList(
+				"select coalesce(hd_detail, '') || ' ' || coalesce(hd_targetname, '') from hd_admin_event",
+				String.class);
+		assertFalse("something is recorded", written.isEmpty());
+		for (String value : values)
+			for (String row : written)
+				assertFalse("holds " + value + ": " + row, row.contains(value));
+	}
+
+	private static List<String> concat(List<String> one, List<String> two) {
+		List<String> all = new ArrayList<>(one);
+		all.addAll(two);
+		return all;
+	}
+
+	private static StorageAdministration port() {
+		return Context.get(StorageAdministration.class);
+	}
+
+	private static BackendDraft local(String name, Path root, Boolean encrypted) {
+		return new BackendDraft(StorageBackend.LOCAL, name, root.toString(), null, null, null, null, false, null,
+				encrypted);
+	}
+
+	/** An S3 backend on the fake, under the prefix {@code cloud/} */
+	private static BackendDraft s3(FakeS3 fake, String name, String accessKey, Boolean encrypted) {
+		return new BackendDraft(StorageBackend.S3, name, null, fake.endpoint().toString(), FakeS3.REGION, BUCKET,
+				"cloud/", true, accessKey, encrypted);
+	}
+
+	private static void refused(String message, String text, ThrowingRunnable run) {
+		HealdanRuleException e = assertThrows(message, HealdanRuleException.class, run);
+		assertTrue(message + ": " + e.getMessage(), e.getMessage().contains(text));
+	}
+
+	/** The detail's fields as the tab's backend has them */
+	private static void assertMatches(GUIStorageBackend gui, BackendDetail detail) {
+		String at = "backend " + gui.getId();
+		assertEquals(at, gui.getId(), detail.id());
+		assertEquals(at, gui.getName(), detail.name());
+		assertEquals(at, gui.getKind(), detail.kind());
+		assertEquals(at, gui.isOriginal(), detail.original());
+		assertEquals(at, gui.getPath(), detail.path());
+		assertEquals(at, gui.getRegion(), detail.region());
+		assertEquals(at, gui.getBucket(), detail.bucket());
+		assertEquals(at, gui.getPrefix(), detail.prefix());
+		assertEquals(at, gui.isPathStyle(), detail.pathStyle());
+		assertEquals(at, gui.getAccessKey(), detail.accessKey());
+		assertEquals(at, gui.isHasSecret(), detail.hasSecret());
+		assertEquals(at, gui.getEncrypted(), detail.encrypted());
+		assertEquals(at, gui.isKeyConfirmed(), detail.keyConfirmed());
+		assertEquals(at, gui.isOffered(), detail.offered());
+		assertEquals(at, gui.isInUse(), detail.inUse());
+		assertEquals(at, gui.getFiles(), detail.files());
+		assertEquals(at, gui.getSize(), detail.bytes());
+		assertEquals(at, StorageAdministrationImpl.status(gui), detail.status());
+		assertEquals(at, gui.getError(), detail.error());
+		assertEquals(at, instant(gui.getSince()), detail.since());
+		assertEquals(at, instant(gui.getKeyShown()), detail.keyLastShown());
+		assertEquals(at, gui.getKeyShownBy(), detail.keyLastShownBy());
+		assertNotNull(at, detail.stores());
 	}
 
 	private static void assertMatches(GUIStorageBackend gui, BackendInfo info) {
