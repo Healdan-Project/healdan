@@ -4,6 +4,7 @@
 // Only the icons the screens use, so the bundle holds only those (tabler's barrel is tree-shaken by name).
 import { createElement, type SVGAttributes } from 'react'
 import {
+  IconArchive,
   IconArrowDown,
   IconArrowRight,
   IconArrowUp,
@@ -63,6 +64,7 @@ import {
 import styles from './icons.module.css'
 
 export const icons = {
+  archive: IconArchive,
   arrowDown: IconArrowDown,
   arrowRight: IconArrowRight,
   arrowUp: IconArrowUp,

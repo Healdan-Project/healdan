@@ -69,6 +69,24 @@
   background: var(--hd-accent-on-fill);
 }
 
+/* A choice that can't be made: greyed out, and its box with it */
+.choice[data-disabled] {
+  color: var(--hd-text-secondary);
+}
+
+.choice[data-disabled] .box {
+  border-color: var(--hd-line);
+  background: var(--hd-window);
+}
+
+/* What a choice says of itself, under its name, in line with its words */
+.description {
+  margin: 0 0 var(--hd-space-1);
+  padding-inline-start: calc(16px + var(--hd-space-3));
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
 .text {
   flex: 1;
   min-width: 0;

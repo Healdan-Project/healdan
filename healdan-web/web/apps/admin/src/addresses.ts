@@ -44,6 +44,11 @@ export function matterHref(id: number): string {
   return `${ADMIN_BASE}/matters/${encodeURIComponent(String(id))}`
 }
 
+/** A Store's page, with ADMIN_BASE: the Store's id, which is its folder's, as one segment */
+export function storeHref(id: number): string {
+  return `${ADMIN_BASE}/stores/${encodeURIComponent(String(id))}`
+}
+
 /** A workspace template's page, with ADMIN_BASE: the template's id, which is its folder's, as one segment */
 export function templateHref(id: number): string {
   return `${ADMIN_BASE}/templates/${encodeURIComponent(String(id))}`

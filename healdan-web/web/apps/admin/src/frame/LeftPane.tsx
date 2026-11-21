@@ -49,8 +49,14 @@ export const NAV: readonly NavGroup[] = [
   },
   // Users and Groups, in Phase 4
   { group: 'admin.nav.people', items: [] },
-  // Stores, with Backends, in Phase 3: a backend that can't be reached, or is failing, needs attention
-  { group: 'admin.nav.storage', items: [{ label: 'admin.nav.backends', route: routes.backends, icon: 'database', count: ['backend-unreachable'] }] },
+  // Stores and Backends, in Phase 3: a backend that can't be reached, or is failing, needs attention
+  {
+    group: 'admin.nav.storage',
+    items: [
+      { label: 'admin.nav.stores', route: routes.stores, icon: 'archive' },
+      { label: 'admin.nav.backends', route: routes.backends, icon: 'database', count: ['backend-unreachable'] },
+    ],
+  },
   // Search Index, in Phase 6
   { group: 'admin.nav.search', items: [] },
   // Errors, Server Log, Audit Trail and Background Jobs, in Phase 5
