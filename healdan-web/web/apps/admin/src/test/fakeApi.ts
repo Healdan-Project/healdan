@@ -111,8 +111,11 @@ export const ashcombe: A['ClientBrief'] = { id: 9, number: 998, name: 'Ashcombe 
 export const brightwell: A['ClientBrief'] = { id: 2, number: 1002, name: 'Brightwell Bakeries Ltd' }
 export const kestrel: A['ClientBrief'] = { id: 3, number: 1003, name: 'Kestrel Software Ltd' }
 
-export const firmStore: A['Store'] = { id: 3, name: 'Firm' }
-export const clientWork: A['Store'] = { id: 4, name: 'Client Work' }
+/** A Store as it's named: its id and name */
+type StoreName = Pick<A['Store'], 'id' | 'name'>
+
+export const firmStore: StoreName = { id: 3, name: 'Firm' }
+export const clientWork: StoreName = { id: 4, name: 'Client Work' }
 
 /** The backends the Stores keep their files on, as a Store names one */
 export const originalOnStore: A['StoreBackend'] = { id: 1, name: 'Original', kind: 'local', encrypted: false }
@@ -122,8 +125,8 @@ export const wasabiOnStore: A['StoreBackend'] = { id: 2, name: 'Wasabi EU', kind
 export const nothingPending: A['PendingFiles'] = { waiting: 0, waitingBytes: 0, stuck: 0 }
 
 /** A Store as the Stores list and its page give it: on Original, with nothing in it, unless `over` says otherwise */
-export function storeInfoOf(store: A['Store'], over: Partial<A['StoreInfo']> = {}): A['StoreInfo'] {
-  return { ...store, matters: 0, documents: 0, bytes: 0, figuresAt: '2026-11-19T10:41:00Z', readers: [], backend: originalOnStore, pending: nothingPending, ...over }
+export function storeInfoOf(store: StoreName, over: Partial<A['StoreInfo']> = {}): A['StoreInfo'] {
+  return { id: store.id, name: store.name, matters: 0, documents: 0, bytes: 0, figuresAt: '2026-11-19T10:41:00Z', readers: [], backend: originalOnStore, pending: nothingPending, ...over }
 }
 
 /** Client Work: six matters on Wasabi EU, encrypted, that Everyone can see, with three files stuck */
@@ -274,8 +277,8 @@ export function matterOf(over: Partial<A['Matter']> = {}): A['Matter'] {
   }
 }
 
-/** A Store no group the templates let in can read yet */
-export const regionalOffice: A['Store'] = { id: 5, name: 'Regional Office' }
+/** A Store no group the templates let in can read yet, as its create answers it: on Original */
+export const regionalOffice: A['Store'] = { id: 5, name: 'Regional Office', backendId: 1 }
 
 /** GET /v1/admin/templates: by name, each with its folders and the matters made from it */
 export const templates: A['TemplateInfo'][] = [

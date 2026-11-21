@@ -346,12 +346,17 @@ public class AdminBackendsResourceTest extends ApiTestCase {
 		long wasabi = port.s3("Wasabi EU", true, true, BackendInfo.OK);
 		String one = BACKENDS + "/" + wasabi;
 
-		// What's left out stays; the port is sent the whole draft
+		// What's left out stays; the port is sent the whole draft, but for the endpoint, which it keeps from its row,
+		// as the answer holds only a part of it
 		ApiResponse renamed = patch(one).webSession(web).json(new Body().with("name", " Wasabi ")).send();
 		assertEquals(renamed.toString(), 200, renamed.status());
 		assertEquals("Wasabi", renamed.json().path("name").textValue());
-		assertEquals(new BackendDraft("s3", "Wasabi", null, "https://s3.example.test", "eu-west-1", "firm-files",
-				"healdan/", true, "AKEXAMPLE", true), port.lastDraft);
+		assertEquals("https://s3.example.test", renamed.json().path("endpoint").textValue());
+		assertEquals(new BackendDraft("s3", "Wasabi", null, null, "eu-west-1", "firm-files", "healdan/", true,
+				"AKEXAMPLE", true), port.lastDraft);
+		// One sent is the port's to save
+		patch(one).webSession(web).json(new Body().with("endpoint", " https://s3.example.test ")).send();
+		assertEquals("https://s3.example.test", port.lastDraft.endpoint());
 		assertNull(port.lastSecret);
 
 		// A new secret, a blank one keeping the stored; prefix null for none

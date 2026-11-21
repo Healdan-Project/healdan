@@ -32,7 +32,8 @@ export interface NewStoreDialogProps {
  * search for a firm that has many; one added leaves the list, and Remove puts it back. With none, only administrators can
  * see the Store. Backend is a menu of the backends a Store can be given, Original first and chosen, and isn't asked on a
  * server that doesn't use storage backends; when the backends can't be read, it says the Store is made on Original and can
- * be given another backend later. What the form can see is wrong with the name is said before its button; the
+ * be given another backend later; a Store made that couldn't then be given the backend chosen is on Original, and the
+ * toast says so. What the form can see is wrong with the name is said before its button; the
  * server's refusal is said in the dialog, and a field it names beside it. Once made, every Store menu and the Stores list
  * ask for the Stores again, as the create answers only the new one's id and name (P3-R23).
  */
@@ -106,7 +107,10 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
       const store = await api.send<A['Store']>('POST', '/v1/admin/stores', body)
       // The list's rows carry far more than the answer, so none is made up from it: the menus and the list ask again
       storesChanged(queryClient)
-      toast(t('admin.newStore.created', { name: store.name }))
+      // Made, but the backend chosen couldn't be given it, as when it was removed meanwhile: it's on Original, where its
+      // files would go, so that's said
+      const elsewhere = backend !== undefined && body.backendId !== undefined && store.backendId !== body.backendId
+      toast(elsewhere ? t('admin.newStore.createdOnOriginal', { name: store.name, backend: backend.name }) : t('admin.newStore.created', { name: store.name }))
       onSaved?.(store)
       // Not through the dialog's own close, which is held while busy
       onClose()

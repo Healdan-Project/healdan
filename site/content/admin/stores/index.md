@@ -57,8 +57,9 @@ chooses it. Both ask for:
   changed later, on the Store's page."
 
 Anything Healdan refuses when you press **Create Store** shows in the dialog, in Healdan's own words, such as a
-backend someone removed meanwhile. While the Store is being made, **Cancel** is greyed out and Esc does nothing; once
-it's made, Healdan says "Created" with its name.
+backend someone removed meanwhile. If the backend goes just as the Store is made, the Store is made on Original, and
+New Store says so: give it another backend on its page. While the Store is being made, **Cancel** is greyed out and
+Esc does nothing; once it's made, Healdan says "Created" with its name.
 
 ## A Store's Page
 

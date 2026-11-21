@@ -245,7 +245,8 @@ public class AdminBackendsResource {
 
 	/**
 	 * Saves a backend's settings, as the Storage tab's Edit does. A member left out stays as it is; the port is sent
-	 * the whole draft, the stored settings with the change. Checks, in order: the body's types; the storage module;
+	 * the whole draft, the stored settings with the change, but for an endpoint left out, which the port keeps from
+	 * its row, as the answer this reads holds only its scheme, host and port. Checks, in order: the body's types; the storage module;
 	 * the backend; then each member ({@code 422}): {@code kind} and {@code encrypted}, which never change, sent with a
 	 * value; for Original, every member but {@code name} sent with a value; a member of the other kind sent with a
 	 * value; the name, or a setting the kind needs, sent as null or blank. Then the port's refusals.
@@ -308,7 +309,8 @@ public class AdminBackendsResource {
 		else if (s3) {
 			String prefix = body.prefix() == null ? stored.prefix()
 					: body.prefix().isNull() ? "" : StringUtils.strip(body.prefix().textValue());
-			draft = new BackendDraft(stored.kind(), name, null, text(body.endpoint(), stored.endpoint()),
+			// The stored endpoint is answered only in part, so one left out is left to the port, which keeps the row's
+			draft = new BackendDraft(stored.kind(), name, null, text(body.endpoint(), null),
 					text(body.region(), stored.region()), text(body.bucket(), stored.bucket()),
 					StringUtils.defaultString(prefix),
 					sent(body.pathStyle()) ? body.pathStyle().booleanValue() : stored.pathStyle(),

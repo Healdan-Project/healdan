@@ -73,14 +73,17 @@ export function useSwitchPreview(id: number, backendId: number | undefined) {
 /**
  * After a Store changed (made, renamed, its access or backend changed, deleted or restored): the list and every Store menu,
  * the Store's own page and the Stores in the Trash, and the Dashboard, whose Usage names the Stores and whose Needs
- * Attention counts their stuck files, are asked again. Who can see it, which a save puts in place itself, is left alone.
- * With `matters`, the lists of matters and the clients' pages too, which name a Store, or lose or regain its matters.
+ * Attention counts their stuck files, and the backends, which name the Stores on each, live and in the Trash, are asked
+ * again. Who can see it, which a save puts in place itself, is left alone. With `pages`, every Store's page too, as after a
+ * matter's change, which the Store it's in, or was in, counts. With `matters`, the lists of matters and the clients' pages
+ * too, which name a Store, or lose or regain its matters.
  */
-export function storesChanged(queryClient: QueryClient, id?: number, { matters = false }: { matters?: boolean } = {}) {
+export function storesChanged(queryClient: QueryClient, id?: number, { matters = false, pages = false }: { matters?: boolean; pages?: boolean } = {}) {
   void queryClient.invalidateQueries({
     queryKey: adminKeys.stores,
-    predicate: ({ queryKey }) => queryKey.length === 2 || queryKey[2] === 'deleted' || (id !== undefined && queryKey[2] === id && queryKey.length === 3),
+    predicate: ({ queryKey }) => queryKey.length === 2 || queryKey[2] === 'deleted' || (queryKey.length === 3 && (pages ? typeof queryKey[2] === 'number' : id !== undefined && queryKey[2] === id)),
   })
+  void queryClient.invalidateQueries({ queryKey: storageKeys.backends })
   void queryClient.invalidateQueries({ queryKey: adminKeys.dashboard })
   if (!matters) return
   void queryClient.invalidateQueries({ queryKey: adminKeys.matters })
@@ -95,6 +98,6 @@ export function storesChanged(queryClient: QueryClient, id?: number, { matters =
 export function storeFilesChanged(queryClient: QueryClient, id: number, { stuck = true }: { stuck?: boolean } = {}) {
   void queryClient.invalidateQueries({ queryKey: storeKeys.storage(id) })
   if (stuck) void queryClient.invalidateQueries({ queryKey: stuckKey(storeStuckRoutes(id).list) })
-  void queryClient.invalidateQueries({ queryKey: storageKeys.backends })
+  // The backends' files with it
   storesChanged(queryClient, id)
 }

@@ -95,7 +95,10 @@ export function NewMatterDialog({ client: preset, storeId: presetStore, onClose 
   const [busy, setBusy] = useState(false)
 
   const suggested = useNextMatterNumber(client?.id)
-  const stores = useStores().data ?? []
+  // A Store just made with New Store, until the Stores list, asked again, has it: the menu names it at once
+  const [madeStore, setMadeStore] = useState<Pick<A['Store'], 'id' | 'name'>>()
+  const listed = useStores().data ?? []
+  const stores: Pick<A['Store'], 'id' | 'name'>[] = madeStore !== undefined && !listed.some((store) => store.id === madeStore.id) ? [...listed, madeStore] : listed
   const templates = useTemplates()
 
   const numberText = typedNumber ?? (suggested.data ? String(suggested.data.number) : '')
@@ -322,6 +325,7 @@ export function NewMatterDialog({ client: preset, storeId: presetStore, onClose 
           {making === 'store' && (
             <NewStoreDialog
               onSaved={(made) => {
+                setMadeStore({ id: made.id, name: made.name })
                 setStoreId(made.id)
                 changed()
               }}

@@ -219,6 +219,8 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     rename and restore hold the root's folder lock, through `FolderChanges.withFolderLocks`, taken in the resource
     around the service's transaction, as the folder routes hold the folder a name goes into, so two of them at once
     can't give one name twice under the root (`AdminStoresResourceTest#testTwoCreatesOfOneName`, `#testTheRootsLock`).
+    A Store's delete holds the Store's own lock, as a matter's move into it and New Matter do, so no matter is put in
+    a Store on its way to the Trash.
   - **The storage routes** are three classes, all `STORAGE`, over `StoragePort`, so each route's area is its record's:
     `AdminStoreStorageResource`, rooted at exactly `/v1/admin/stores` beside `AdminStoresResource` (CXF looks for a
     method only in the root classes whose path is the best match's), with a Store's backend, its switch and its stuck
@@ -226,7 +228,8 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     settings and the files with no Store. Each checks what a form sends (`400`, `422`) before it asks the port, and
     records nothing itself, as the port records every storage change. A new Store's `backendId` is checked through the
     port before the create, and given after it (`setStoreBackend`, a transaction of its own, which needs the Store
-    committed); a switch that fails in between, only in a race, leaves the Store on Original, logged at warn.
+    committed); a switch that fails in between, only in a race, leaves the Store on Original, logged at warn, and
+    the answer's `backendId` is then Original's, so New Store says it was made on Original.
   - **`StoragePort`** (a `@Component`) finds the port by type, through a seam tests set to a fake and put back
     (`volatile Supplier<List<StorageAdministration>> ports`), as `DashboardService` and `UsageSummary` have. With none
     it answers `503 storage-unavailable` (`require()`). Its `run` turns the port's `SecretKeyMissingProblem` into
@@ -751,7 +754,9 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     Admin app's addresses that is the Classic Interface's, `/frontend.jsp`, until each screen ships. Phase 2 gave
     Clients, Matters and Workspace Templates theirs, and Phase 3 Stores and Backends (`DashboardScreensTest`):
     `files-stuck` links to Stores, or to Backends when only files with no Store are stuck (the item's own screen, in
-    `Found`), and `backend-unreachable`, `disk-low`, the Storage Backends tile and the Disk tile to Backends. Tests
+    `Found`), and `backend-unreachable`, `disk-low`, the Storage Backends tile and the Disk tile to Backends; where
+    storage backends are off, `disk-low` and the Disk tile link to the Classic Interface, as Backends has nothing
+    there. Tests
     call `read()` after `forget()`, which drops what's kept.
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a

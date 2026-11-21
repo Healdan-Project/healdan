@@ -443,6 +443,18 @@ describe('New Matter', () => {
     expect(select(outer, 'Store').selectedOptions[0]?.textContent).toBe('Regional Office')
   })
 
+  it("names a Store just made in the Store menu while the Stores list doesn't have it yet", async () => {
+    // The list asked again never has it here, as while it's still on its way, or when it can't be read
+    const { dialog } = await openNewMatter({ 'POST /v1/admin/stores': () => regionalOffice, 'GET /v1/admin/stores': [clientWork, firmStore] })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'New Store…' }))
+    const inner = await screen.findByRole('dialog', { name: 'New Store' })
+    await userEvent.type(field(inner, 'Name'), 'Regional Office')
+    await userEvent.click(within(inner).getByRole('button', { name: 'Create Store' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New Store' })).toBeNull())
+    const outer = screen.getByRole('dialog', { name: 'New Matter' })
+    expect(select(outer, 'Store').selectedOptions[0]?.textContent).toBe('Regional Office')
+  })
+
   it("says a template is needed when there's none yet", async () => {
     const { dialog } = await openNewMatter({ 'GET /v1/admin/templates': [] })
     expect(await within(dialog).findByText("There's no workspace template yet. A matter is made from one, so one is needed first.")).toBeTruthy()

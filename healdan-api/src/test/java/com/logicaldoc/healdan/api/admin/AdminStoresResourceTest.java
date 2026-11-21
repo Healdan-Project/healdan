@@ -226,8 +226,10 @@ public class AdminStoresResourceTest extends ApiTestCase {
 		JsonNode store = response.json();
 		long id = store.path("id").asLong();
 		assertEquals("Client Work", store.path("name").textValue());
-		// The Store alone: its page has the rest
-		assertEquals(Set.of("id", "name"), names(store));
+		// The Store alone, with the backend it keeps its files on, Original when none was asked for: its page has the
+		// rest
+		assertEquals(Set.of("id", "name", "backendId"), names(store));
+		assertEquals(1, store.path("backendId").asLong());
 		Folder folder = FolderDAO.get().findById(id);
 		assertEquals(Folder.TYPE_WORKSPACE, folder.getType());
 		assertEquals(Map.of(partners.getId(), READ, clerks.getId(), READ, carolsGroup, READ), AclMath.rows(id));
@@ -257,6 +259,7 @@ public class AdminStoresResourceTest extends ApiTestCase {
 
 		assertEquals(response.toString(), 201, response.status());
 		long id = response.json().path("id").asLong();
+		assertEquals(wasabi, response.json().path("backendId").asLong());
 		assertEquals(List.of("setStoreBackend " + id + " " + wasabi), port.calls);
 		assertEquals(wasabi, get(one(id)).webSession(web).send().json().path("backend").path("id").asLong());
 		assertEquals(List.of("store.created"), actions());
@@ -306,6 +309,8 @@ public class AdminStoresResourceTest extends ApiTestCase {
 
 		assertEquals(response.toString(), 201, response.status());
 		long id = response.json().path("id").asLong();
+		// The answer says where it ended, so the app can
+		assertEquals(1, response.json().path("backendId").asLong());
 		assertEquals(1, get(one(id)).webSession(web).send().json().path("backend").path("id").asLong());
 		assertEquals(List.of(), port.calls);
 	}

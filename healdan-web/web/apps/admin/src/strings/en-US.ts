@@ -220,6 +220,8 @@ export const adminEnUS = {
   'admin.newStore.backendsUnread': "The backends couldn't be read, so the Store will be made on Original. Its backend can be changed later, on the Store's page.",
   'admin.newStore.create': 'Create Store',
   'admin.newStore.created': 'Created {name}',
+  // Made, but the backend chosen couldn't be given it (removed, or changed, as it was made)
+  'admin.newStore.createdOnOriginal': "Created {name} on Original, as it couldn't be given {backend}. Its backend can be changed on the Store's page.",
 
   // A matter's page (spec 8.3, P2-R5): its title and actions, its tabs, and what it says when there's no such matter
   'admin.matter.title': '{number} {name}',

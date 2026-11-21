@@ -338,11 +338,12 @@ public class StorageAdministrationImpl implements StorageAdministration {
 	}
 
 	@Override
-	public BackendDetail save(long id, BackendDraft draft, String secret, boolean newKey, User by)
+	public BackendDetail save(long id, BackendDraft given, String secret, boolean newKey, User by)
 			throws PersistenceException {
 		requireAdmin(by);
 		requireOn();
 		StorageBackend row = backends.findById(id);
+		BackendDraft draft = whole(given, row);
 		if (row != null && row.getDeleted() == 0)
 			refuseMoveWhileInTrash(row, draft, secret, newKey);
 		// A snapshot: the row may be the instance the save goes on to change
@@ -360,6 +361,17 @@ public class StorageAdministrationImpl implements StorageAdministration {
 		}
 		// The tab's answer is the backend as saved, its own files counted: no overview of every backend's
 		return detail(saved, storesOn(id), storesInTrash(id));
+	}
+
+	/**
+	 * @return the draft with an S3 endpoint left out taken from the row, as it is stored: the port's answers give an
+	 *         endpoint as its scheme, host and port alone, so a caller can't send back the one stored
+	 */
+	private static BackendDraft whole(BackendDraft draft, StorageBackend row) {
+		if (draft == null || row == null || draft.endpoint() != null || !StorageBackend.S3.equals(row.getKind()))
+			return draft;
+		return new BackendDraft(draft.kind(), draft.name(), draft.path(), row.getEndpoint(), draft.region(),
+				draft.bucket(), draft.prefix(), draft.pathStyle(), draft.accessKey(), draft.encrypted());
 	}
 
 	/**

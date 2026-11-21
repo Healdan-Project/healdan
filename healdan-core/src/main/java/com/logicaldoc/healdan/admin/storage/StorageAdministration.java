@@ -133,7 +133,8 @@ public interface StorageAdministration {
 	 * alone is taken.
 	 *
 	 * @param id the backend
-	 * @param draft the settings
+	 * @param draft the settings; an S3 backend's endpoint left null keeps the stored one, as {@link #backend} answers
+	 *        it only in part
 	 * @param secret a new S3 secret; null or blank keeps the stored one
 	 * @param newKey as for {@link #add}
 	 * @param by the administrator

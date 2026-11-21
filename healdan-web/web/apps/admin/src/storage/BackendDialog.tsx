@@ -213,7 +213,8 @@ export function BackendDialog({ backend, onAdded, onClose }: BackendDialogProps)
   const name = draft.name.trim()
   const nameTooLong = name.length > NAME_MAX
   // What the kind needs, typed: all of it to add one, and on an edit what's stored, which can't be emptied (a member left
-  // out stays, so an endpoint the server can't read needn't be typed again to rename the backend)
+  // out stays as it's stored; an endpoint the server can't read isn't asked for here, and the save, which checks the one
+  // stored, says what's wrong with it in the rule's words until another is typed)
   const kindNeeds: (keyof Draft)[] = original ? [] : s3 ? ['endpoint', 'region', 'accessKey', ...(placeFixed === undefined ? (['bucket'] as const) : []), ...(isNew ? (['secret'] as const) : [])] : placeFixed === undefined ? ['path'] : []
   const needed = isNew ? kindNeeds : kindNeeds.filter((field) => field !== 'secret' && (backend[field as keyof A['Backend']] ?? null) !== null)
   const complete = name !== '' && !nameTooLong && needed.every((field) => String(draft[field]).trim() !== '')

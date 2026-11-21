@@ -271,7 +271,9 @@ final class FakeStoragePort implements StorageAdministration {
 		lastSecret = given(secret);
 		lastNewKey = newKey;
 		BackendDetail saved = new BackendDetail(id, draft.name(), row.kind(), row.original(),
-				row.original() ? row.path() : draft.path(), draft.endpoint(), draft.region(), draft.bucket(),
+				row.original() ? row.path() : draft.path(),
+				// As the real port's save: an endpoint left out keeps the stored one
+				draft.endpoint() != null ? draft.endpoint() : row.endpoint(), draft.region(), draft.bucket(),
 				draft.prefix(), draft.pathStyle(), draft.accessKey(), row.hasSecret() || secret != null,
 				row.encrypted(), row.keyConfirmed(), row.offered(), row.inUse(), row.files(), row.bytes(),
 				row.status(), row.error(), row.since(), row.keyLastShown(), row.keyLastShownBy(), List.of(),

@@ -470,11 +470,14 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		HealthTile off = tile(noPort, HealthTile.STORAGE_BACKENDS);
 		assertEquals(HealthTile.OFF, off.status());
 		assertEquals("Not in use on this server", off.detail());
+		// With no backend to give a Store, a full disk leads to the Classic Interface, not to the Backends
+		assertEquals(CLASSIC, tile(noPort, HealthTile.DISK).link());
 
 		set("store", DashboardService.HEALDAN_STORAGE);
 		Dashboard missing = read();
 		assertEquals(List.of(AttentionItem.FILES_STUCK, AttentionItem.BACKEND_UNREACHABLE), missing.unchecked());
 		assertEquals(DashboardService.UNREADABLE, tile(missing, HealthTile.STORAGE_BACKENDS).problem());
+		assertEquals(BACKENDS, tile(missing, HealthTile.DISK).link());
 
 		// The port says they're off, as on an FSStore server
 		StorageOverview offOverview = new StorageOverview(false, List.of(), List.of(), new StorageSettingsInfo(30, 10, 4),
@@ -483,6 +486,10 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		Dashboard portOff = read();
 		assertEquals(List.of(), portOff.unchecked());
 		assertEquals(HealthTile.OFF, tile(portOff, HealthTile.STORAGE_BACKENDS).status());
+		assertEquals(CLASSIC, tile(portOff, HealthTile.DISK).link());
+		// And the item of a disk that's low
+		spaces.put("store.1.dir", new Space("repository disk", 1000, 100));
+		assertEquals(CLASSIC, item(read(), AttentionItem.DISK_LOW).link());
 	}
 
 	@Test

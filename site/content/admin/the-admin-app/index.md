@@ -95,8 +95,9 @@ work.
 Needs Attention comes first: what an administrator should act on, each with how many, a line that says more, such as
 which Store or since when, and a link to where it's fixed. Stuck files link to **Stores**, where each Store's stuck
 files are, or to **Backends** when only files with no Store are stuck, as those are listed there; a storage backend
-that can't be reached, or a disk more than 85% full, links to **Backends** too. The others link to **Classic
-Interface** until their place is in the Admin app. With nothing to report, it says "Nothing needs your attention."
+that can't be reached, or a disk more than 85% full, links to **Backends** too (the disk to the Classic Interface on a
+server that doesn't use storage backends). The others link to **Classic Interface** until their place is in the Admin
+app. With nothing to report, it says "Nothing needs your attention."
 
 | It says, for example | What it means |
 |---|---|
@@ -115,7 +116,8 @@ Stuck Files, Errors.", and never says that nothing needs your attention while it
 ### Server Health
 
 Ten tiles, each with its status in words and a line of detail. A tile opens the screen behind it: **Storage
-Backends** and **Disk** open **Backends**, and the others, for now, the Classic Interface. The status is:
+Backends** and **Disk** open **Backends** (**Disk** the Classic Interface on a server that doesn't use storage
+backends), and the others, for now, the Classic Interface. The status is:
 
 - **OK** when all is well;
 - **Needs Attention** when something needs acting on;

@@ -1278,11 +1278,11 @@ as a name taken, `409 refused` with the same sentence.
   menu still works.
 - **`POST /v1/admin/stores`** with `{ "name", "groupIds", "backendId" }` makes the Store, and gives each group in
   `groupIds`, a person's own group among them, Read, the Store's one level, **Can See**, all in one transaction, so a
-  matter can be made in it at once. It answers `201` with `{ "id", "name" }` and no `Location`. An empty `groupIds`
+  matter can be made in it at once. It answers `201` with `{ "id", "name", "backendId" }` and no `Location`. An empty `groupIds`
   leaves the Store to administrators. The Store keeps its files on the backend `backendId` names, Original when it's
   null or left out: the backend is checked before anything is made, the Store made, then given the backend as
   `PUT /v1/admin/stores/{id}/backend` gives one. Should the backend stop being offered in between, the Store stays on
-  Original, the answer is still `201`, and the server logs it. A `groupIds` that names a group twice or holds a null
+  Original, the answer is still `201`, with Original's id, 1, as its `backendId`, and the server logs it. A `groupIds` that names a group twice or holds a null
   is `400`; the name is checked as a folder's is (`422`), and a missing `groupIds` is `422` `required`. It's
   `409 refused` for a name another live folder directly under the root has, compared without regard to case, a group
   that no longer exists, and a `backendId` that names no backend, one not offered to Stores (an encrypted backend whose

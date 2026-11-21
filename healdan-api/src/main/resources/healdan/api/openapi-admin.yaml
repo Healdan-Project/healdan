@@ -1840,15 +1840,17 @@ paths:
         at once (Admin app spec section 8.6). Answers `201` with it. The
         name has the whitespace at either end taken off. A group in
         `groupIds` may be a person's own. It answers the Store's id and name
-        alone: `GET /v1/admin/stores/{id}` gives the rest.
+        and the backend it keeps its files on: `GET /v1/admin/stores/{id}`
+        gives the rest.
 
         The new Store keeps its files on the backend `backendId` names,
         Original, the server's own folder, when it's null or left out. The
         backend is checked first; the Store is made, in one transaction, then
         given its backend, as `PUT /v1/admin/stores/{id}/backend` does. Should
         that backend stop being offered to Stores in between, as when another
-        administrator removes it, the Store stays on Original and the answer
-        is still `201`; the server logs it.
+        administrator removes it, or should giving it fail, the Store stays
+        on Original and the answer is still `201`, with Original as its
+        `backendId`, so a client can say so; the server logs it.
 
         - `400 bad-request` for a `groupIds` that names a group twice or
           holds a null.
@@ -4679,7 +4681,7 @@ components:
       type: object
       description: A Store, as its create answers it; `StoreInfo` has the rest
       additionalProperties: false
-      required: [id, name]
+      required: [id, name, backendId]
       properties:
         id:
           type: integer
@@ -4687,6 +4689,13 @@ components:
           description: Its id, which is its folder's
         name:
           type: string
+        backendId:
+          type: integer
+          format: int64
+          description: |
+            The backend it keeps its files on: the one asked for, or Original,
+            1, when none was asked for or it couldn't be given the one asked
+            for
     NewStore:
       type: object
       description: A new Store, who can see it, and the storage backend it keeps its files on
@@ -4837,9 +4846,10 @@ components:
         state:
           type: string
           description: |
-            `deleted`, in its Trash; `removed`, taken out of the Trash and
-            destroyed for good after `destroyAfter`, until when an
-            administrator can still restore it
+            `deleted`, in its Trash; `removed`, taken out of the Trash:
+            what's in it is destroyed for good after `destroyAfter`, while
+            the Store itself and its matters' own folders never are, so it
+            stays listed and an administrator can still restore it, empty
           enum: [deleted, removed]
         matters:
           type: integer
@@ -4864,9 +4874,9 @@ components:
           type: [string, 'null']
           format: date-time
           description: |
-            The night the server destroys it for good, once it has been
-            removed for the days the administrators set; null unless
-            `removed`
+            The night the server destroys what's in it for good, once it has
+            been removed for the days the administrators set, never the Store
+            itself; null unless `removed`
     StoreBackendChange:
       type: object
       description: The storage backend a Store keeps its files on from then on

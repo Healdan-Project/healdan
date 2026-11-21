@@ -371,6 +371,10 @@ public class DashboardService {
 		Outcome<Mail> mailNow = await(mailAsked, deadline);
 		Instant now = clock.instant();
 
+		// A full disk leads to the Backends, where giving a Store another backend frees it; where storage backends are
+		// off there's none to give and that screen says nothing applies, so it leads to the Classic Interface
+		Screen disk = storageNow.ok() && !storageNow.value().on() ? Screen.SETTINGS : Screen.BACKENDS;
+
 		List<AttentionItem> attention = new ArrayList<>();
 		List<String> unchecked = new ArrayList<>();
 		attend(AttentionItem.FILES_STUCK, Screen.STORES, storageNow, DashboardService::filesStuck, attention,
@@ -390,13 +394,13 @@ public class DashboardService {
 				unchecked);
 		attend(AttentionItem.JOB_OVERDUE, Screen.BACKGROUND_JOBS, jobsNow, all -> named(overdue(all, now)),
 				attention, unchecked);
-		attend(AttentionItem.DISK_LOW, Screen.BACKENDS, volumesNow, DashboardService::disksLow, attention, unchecked);
+		attend(AttentionItem.DISK_LOW, disk, volumesNow, DashboardService::disksLow, attention, unchecked);
 
 		List<HealthTile> health = new ArrayList<>();
 		health.add(tile(HealthTile.SERVER, Screen.SERVER_LOG, null, DashboardService::serverTile));
 		health.add(tile(HealthTile.DATABASE, Screen.SERVER_LOG, databaseNow,
 				() -> databaseTile(databaseNow.value())));
-		health.add(tile(HealthTile.DISK, Screen.BACKENDS, volumesNow, () -> diskTile(volumesNow.value())));
+		health.add(tile(HealthTile.DISK, disk, volumesNow, () -> diskTile(volumesNow.value())));
 		health.add(tile(HealthTile.MEMORY, Screen.SERVER_LOG, null, DashboardService::memoryTile));
 		health.add(tile(HealthTile.SIGN_IN, Screen.SIGN_IN_PROVIDERS, signInNow,
 				() -> signInTile(signInNow.value())));

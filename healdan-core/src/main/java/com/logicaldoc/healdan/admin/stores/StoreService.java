@@ -379,9 +379,6 @@ public class StoreService {
 		// The cache isn't transactional: a rollback, such as a record that fails, mustn't leave the new name cached
 		evictor.evictFoldersOnRollback(List.of(storeId));
 		folders.store(current, history);
-		// LogicalDOC makes a name unique with a number when another change has taken it meanwhile
-		if (!clean.equals(current.getName()))
-			throw new HealdanRuleException(TAKEN_BY_STORE.formatted(clean));
 
 		events.record(new AdminEvent(AdminArea.STORES, "store.renamed", STORE, storeId, clean,
 				Map.of("name", new Change(old, clean))), actor);

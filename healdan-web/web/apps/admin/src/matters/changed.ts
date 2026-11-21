@@ -17,7 +17,7 @@ function othersChanged(queryClient: QueryClient, id: number) {
   void queryClient.invalidateQueries({ queryKey: adminKeys.matters, predicate: ({ queryKey }) => queryKey[2] !== id })
   void queryClient.invalidateQueries({ queryKey: adminKeys.clients })
   void queryClient.invalidateQueries({ queryKey: adminKey('/v1/admin/find') })
-  storesChanged(queryClient)
+  storesChanged(queryClient, undefined, { pages: true })
 }
 
 /** A matter as the server answered a change: its page has the answer at once, and every list that shows it is asked again */

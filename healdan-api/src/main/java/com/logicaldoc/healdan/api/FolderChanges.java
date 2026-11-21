@@ -264,9 +264,13 @@ public final class FolderChanges {
 			String fixed = stores.fixedFolder(id, "deleted");
 			if (fixed != null)
 				throw ApiProblem.conflict("refused", fixed);
-			if (stores.store(id) == null)
-				throw ApiProblem.notFound("There's no Store %d.".formatted(id));
-			return deleteForAdmin(id, caller);
+			// Holding the Store's lock, as a matter's move into it and New Matter do, so neither puts a matter in it
+			// while it goes: each reads the Store again inside the lock, once the other has committed
+			return withFolderLocks("Can't delete Store #" + id, () -> {
+				if (stores.store(id) == null)
+					throw ApiProblem.notFound("There's no Store %d.".formatted(id));
+				return deleteForAdmin(id, caller);
+			}, id);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't delete Store #" + id, e);
 		}

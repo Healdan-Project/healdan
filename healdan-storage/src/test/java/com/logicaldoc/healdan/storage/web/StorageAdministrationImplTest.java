@@ -573,6 +573,12 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 			port.save(id, s3(fake, "Cloud", NEW_ACCESS_KEY, null), NEW_SECRET, false, boss);
 			assertEquals(3, events().size());
 
+			// An endpoint left out keeps the row's, as the port's answers give it only in part: nothing changed
+			port.save(id, new BackendDraft(StorageBackend.S3, "Cloud", null, null, FakeS3.REGION, BUCKET, "cloud/",
+					true, NEW_ACCESS_KEY, true), "", false, boss);
+			assertEquals(fake.endpoint().toString(), StorageBackendDAO.get().findById(id).getEndpoint());
+			assertEquals(3, events().size());
+
 			// The access key back and a new name, the secret kept
 			port.save(id, s3(fake, "Cloud Two", FakeS3.ACCESS_KEY, true), "", false, boss);
 			events = events();

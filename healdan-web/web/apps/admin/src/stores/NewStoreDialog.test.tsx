@@ -134,7 +134,7 @@ describe('New Store', () => {
     const { view } = renderDialog({
       'POST /v1/admin/stores': ({ body }: Sent) => {
         sent = body
-        return regionalOffice
+        return { ...regionalOffice, backendId: wasabiBackend.id } satisfies A['Store']
       },
     })
     await waitFor(() => expect(backendChoices()).toEqual(['Original', 'Wasabi EU (Encrypted)', 'Archive']))
@@ -145,6 +145,18 @@ describe('New Store', () => {
     await expectNoAxeViolations(view.baseElement)
     await userEvent.click(create())
     await waitFor(() => expect(sent).toEqual({ name: 'Regional Office', groupIds: [], backendId: wasabiBackend.id } satisfies A['NewStore']))
+    expect(await screen.findByText('Created Regional Office')).toBeTruthy()
+  })
+
+  it("says the Store was made on Original when it couldn't be given the backend chosen", async () => {
+    // The answer names the backend it ended on: Original, as the one chosen was removed as the Store was made
+    const { onSaved } = renderDialog({ 'POST /v1/admin/stores': () => regionalOffice })
+    await waitFor(() => expect(backendChoices()).toEqual(['Original', 'Wasabi EU (Encrypted)', 'Archive']))
+    await userEvent.selectOptions(backend(), 'Wasabi EU (Encrypted)')
+    await userEvent.type(name(), 'Regional Office')
+    await userEvent.click(create())
+    expect(await screen.findByText("Created Regional Office on Original, as it couldn't be given Wasabi EU. Its backend can be changed on the Store's page.")).toBeTruthy()
+    expect(onSaved).toHaveBeenCalledWith(regionalOffice)
   })
 
   it("asks for no backend on a server that doesn't use storage backends, or doesn't have Healdan's storage module", async () => {

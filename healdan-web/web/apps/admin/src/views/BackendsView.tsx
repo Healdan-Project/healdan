@@ -86,46 +86,75 @@ function Note({ children }: { children: ReactNode }) {
  * its kind, where it is, whether it's encrypted, the files recorded on it, its status and when its recovery key was last
  * shown, Original first; Add Backend; Refresh; a row opens its page. Under it, the files with no Store, waiting and
  * stuck, with Stuck Files and Retry, and the storage settings. On a server that keeps its files in LogicalDOC's own
- * store, it says so and shows no controls; on one without Healdan's storage module, it says it can't be shown.
+ * store, it says so and shows no controls; on one without Healdan's storage module, it says it can't be shown. The
+ * recovery key of an encrypted backend just added is held here, above what the list's answer draws, so its window stays
+ * when the list, asked again as it opens and at each return to the window, can't be read.
  */
 export function BackendsView() {
+  const navigate = useNavigate()
   const overview = useBackends()
+  // An encrypted backend just added and its recovery key, held only while the key's dialog is open
+  const [added, setAdded] = useState<AddedKey>()
+
+  function open(id: number) {
+    void navigate({ to: routes.backend, params: { id: String(id) } })
+  }
+
+  let page: ReactNode
   if (overview.isError) {
-    if (isStorageUnavailable(overview.error)) return <Note>{t('admin.backends.unavailable')}</Note>
-    return (
+    page = isStorageUnavailable(overview.error) ? (
+      <Note>{t('admin.backends.unavailable')}</Note>
+    ) : (
       <div className={styles.page}>
         <h1 className={clientStyles.title}>{t('admin.backends.title')}</h1>
         <ErrorPanel error={overview.error} onRetry={() => void overview.refetch()} />
       </div>
     )
-  }
-  if (overview.data === undefined) {
-    return (
+  } else if (overview.data === undefined) {
+    page = (
       <div className={styles.page}>
         <h1 className={clientStyles.title}>{t('admin.backends.title')}</h1>
         <p className={styles.muted}>{t('common.loading')}</p>
       </div>
     )
+  } else if (!overview.data.on) {
+    page = <Note>{t('admin.backends.off')}</Note>
+  } else {
+    page = <Backends overview={overview.data} open={open} onKey={setAdded} />
   }
-  if (!overview.data.on) return <Note>{t('admin.backends.off')}</Note>
-  return <Backends overview={overview.data} />
+  return (
+    <>
+      {page}
+      {added !== undefined && (
+        <RecoveryKeyDialog
+          mode="added"
+          backend={added.backend}
+          recoveryKey={added.recoveryKey}
+          onClose={() => {
+            const id = added.backend.id
+            setAdded(undefined)
+            open(id)
+          }}
+        />
+      )}
+    </>
+  )
 }
 
-function Backends({ overview }: { overview: A['BackendOverview'] }) {
-  const navigate = useNavigate()
+/** An encrypted backend just added, and the recovery key its add answered */
+interface AddedKey {
+  backend: A['Backend']
+  recoveryKey: string
+}
+
+function Backends({ overview, open, onKey }: { overview: A['BackendOverview']; open: (id: number) => void; onKey: (added: AddedKey) => void }) {
   const queryClient = useQueryClient()
   const headingId = useId()
   const [adding, setAdding] = useState(false)
-  // An encrypted backend just added and its recovery key, held only while the key's dialog is open
-  const [added, setAdded] = useState<{ backend: A['Backend']; recoveryKey: string }>()
 
   const columns = useMemo(() => backendColumns(), [])
   const rows = useMemo(() => overview.backends.map((backend): BackendRow => ({ id: String(backend.id), textValue: backend.name, backend })), [overview.backends])
   const height = (Math.min(Math.max(rows.length, 1), ROWS_SHOWN) + 1) * ROW + 2
-
-  function open(id: number) {
-    void navigate({ to: routes.backend, params: { id: String(id) } })
-  }
 
   return (
     <div className={styles.page}>
@@ -167,21 +196,9 @@ function Backends({ overview }: { overview: A['BackendOverview'] }) {
         <BackendDialog
           onAdded={(answer) => {
             if (answer.recoveryKey === null) open(answer.backend.id)
-            else setAdded({ backend: answer.backend, recoveryKey: answer.recoveryKey })
+            else onKey({ backend: answer.backend, recoveryKey: answer.recoveryKey })
           }}
           onClose={() => setAdding(false)}
-        />
-      )}
-      {added !== undefined && (
-        <RecoveryKeyDialog
-          mode="added"
-          backend={added.backend}
-          recoveryKey={added.recoveryKey}
-          onClose={() => {
-            const id = added.backend.id
-            setAdded(undefined)
-            open(id)
-          }}
         />
       )}
     </div>

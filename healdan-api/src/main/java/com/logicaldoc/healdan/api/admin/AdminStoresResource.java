@@ -91,11 +91,13 @@ public class AdminStoresResource {
 	 *
 	 * @param id its id, its folder's
 	 * @param name its name
+	 * @param backendId the backend it keeps its files on: the one asked for, or Original when none was, or when it
+	 *        couldn't be given the one asked for
 	 */
-	public record StoreView(long id, String name) {
+	public record StoreView(long id, String name, long backendId) {
 
-		static StoreView of(Folder store) {
-			return new StoreView(store.getId(), store.getName());
+		static StoreView of(Folder store, long backendId) {
+			return new StoreView(store.getId(), store.getName(), backendId);
 		}
 	}
 
@@ -146,10 +148,11 @@ public class AdminStoresResource {
 	/**
 	 * Creates a Store, and gives each group listed Read, in one transaction, then gives it the backend asked for. The
 	 * checks come in the contract's order: the body, the fields, then what Healdan's rules refuse, as
-	 * {@code 409 refused}, the backend first, so nothing is made for a backend that can't be given.
+	 * {@code 409 refused}, the backend first, so nothing is made for a backend that can't be given. A Store made that
+	 * couldn't then be given its backend stays on Original, and the answer's {@code backendId} says so.
 	 *
 	 * @param body the new Store
-	 * @return {@code 201} with the Store
+	 * @return {@code 201} with the Store, and the backend it keeps its files on
 	 */
 	@POST
 	@Consumes(MediaType.APPLICATION_JSON)
@@ -170,16 +173,19 @@ public class AdminStoresResource {
 		// A refusal of the service's is a veto, which the ProblemMapper answers 409 refused, wrapped or not
 		Folder store = withRootLock("Can't create a Store",
 				() -> StoreService.get().create(name, body.groupIds(), actor));
+		// Where it keeps its files, which the answer says: Original until it's given the backend asked for
+		long given = ORIGINAL;
 		if (port != null)
 			try {
 				port.setStoreBackend(store.getId(), backendId, actor);
+				given = backendId;
 			} catch (PersistenceException | RuntimeException e) {
 				// The backend was offered when the create began: it was removed, or changed, since
 				log.warn("Store {} was made on Original, as it couldn't be given backend {} after its create: {}",
 						store.getId(), backendId, e.getClass().getSimpleName());
 				log.debug("Store {} couldn't be given backend {}", store.getId(), backendId, e);
 			}
-		return Response.status(Response.Status.CREATED).entity(StoreView.of(store)).build();
+		return Response.status(Response.Status.CREATED).entity(StoreView.of(store, given)).build();
 	}
 
 	/**
