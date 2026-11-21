@@ -8,6 +8,7 @@ import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Highlight, Icon, SearchPicker, toast } from '@healdan/ui'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
+import { useEditState } from '../workspace/edits'
 import workspace from '../workspace/Workspace.module.css'
 import { storeKeys, storesChanged, useStoreAccess } from './queries'
 import { useGroupPicker } from './useGroupPicker'
@@ -43,7 +44,9 @@ const ADD = 'add'
  * Custom for a row with more, which Save keeps. Groups are added from a search, as in New Store, and anyone is removed;
  * Save sends who can see it from then on (`PUT /stores/{id}/access`), and Discard Changes puts back what the server has.
  * The server refuses to shut out a group that can read one of the Store's matters (P2), and its refusal is said beside
- * Save in the rule's words, the change kept to put right. While the save is on its way the list is held.
+ * Save in the rule's words, the change kept to put right. While the save is on its way the list is held. Only groups are
+ * added (P3-R30): a person's row already there is kept, and can be removed. It tells the page where it stands
+ * (useEditState), so leaving the page over a change asks first.
  */
 export function StoreAccessPanel({ store }: { store: Pick<A['StoreInfo'], 'id' | 'name'> }) {
   const headingId = useId()
@@ -82,6 +85,8 @@ function AccessEditor({ store, access }: { store: Pick<A['StoreInfo'], 'id' | 'n
   const readers = draft ?? original
   const dirty = draft !== null && !sameReaders(draft, original)
   const taken = new Set(readers.map((reader) => reader.groupId))
+  // The page asks before it's left over a change unsaved, or a save on its way
+  useEditState('access', dirty, busy)
 
   // Once the list is drawn without the one removed
   useEffect(() => {

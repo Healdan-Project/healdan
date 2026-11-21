@@ -3,7 +3,7 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom, useApi } from '@healdan/shell'
 import { Button, formatDateTime, formatSize, Icon, StatusDot, Table, Tabs, toast, type TableSort } from '@healdan/ui'
@@ -21,6 +21,8 @@ import { StoreStoragePanel } from '../stores/StoreStoragePanel'
 import { backendLabel, filesState, mattersInSentence, readersOf } from '../stores/text'
 import { plural, t } from '../strings'
 import type { AdminStringKey } from '../strings/en-US'
+import { EditsContext, type EditState } from '../workspace/edits'
+import { LeavePageQuestion } from '../workspace/LeavePageQuestion'
 import clientStyles from '../clients/Clients.module.css'
 import page from '../matters/MatterPage.module.css'
 import styles from '../storage/Storage.module.css'
@@ -58,8 +60,9 @@ export function storeSearch(search: Record<string, unknown>): StoreSearch {
  * A Store's page, at /admin/stores/{id} (spec 8.6): its name, its facts (its backend and the state of its files, its
  * matters, documents and size, who can read it), Rename, Change Backend, Delete and New Matter set to it, and its tabs:
  * its matters, as the Matters list shows them without the Store column; Who Can See It; and its storage, with its stuck
- * files and Retry. An address that names no live Store, LogicalDOC's Default workspace, the Templates Store or the root
- * among them, says so in the app's words.
+ * files and Retry. Leaving the page over a change to who can see it, unsaved or being saved, asks first, as the
+ * Workspace Editor does (P3-R31). An address that names no live Store, LogicalDOC's Default workspace, the Templates
+ * Store or the root among them, says so in the app's words.
  */
 export function StoreView({ id, search }: { id: string; search: StoreSearch }) {
   const storeId = idFrom(id)
@@ -114,6 +117,16 @@ function Store({ store, search }: { store: A['StoreInfo']; search: StoreSearch }
   if (tab === 'access' && !accessOpened) setAccessOpened(true)
   // The figures come from the summary, which hasn't been worked out since the server started while they're null
   const pending = store.documents === null
+  // Where Who Can See It stands (edits.ts), so leaving the page over a change unsaved, or a save on its way, asks first
+  const parts = useRef(new Map<string, EditState>())
+  const [standing, setStanding] = useState<EditState>('clean')
+  const report = useCallback((part: string, state: EditState) => {
+    if (state === 'clean') parts.current.delete(part)
+    else parts.current.set(part, state)
+    const all = [...parts.current.values()]
+    setStanding(all.includes('saving') ? 'saving' : all.length > 0 ? 'dirty' : 'clean')
+  }, [])
+  const changing = useCallback(() => parts.current.size > 0, [])
 
   function choose(next: string) {
     // A tab isn't a step of its own, as an order isn't
@@ -123,8 +136,8 @@ function Store({ store, search }: { store: A['StoreInfo']; search: StoreSearch }
   async function remove() {
     await api.send<A['DeletedFolder']>('DELETE', apiPath`/v1/admin/stores/${store.id}`)
     toast(t('admin.deleteStore.done', { name: store.name }))
-    // Off its page first, so nothing asks for it again
-    await navigate({ to: routes.stores })
+    // Off its page first, so nothing asks for it again; a change left in who could see it went with it, so without asking
+    await navigate({ to: routes.stores, ignoreBlocker: true })
     queryClient.removeQueries({ queryKey: storeKeys.store(store.id) })
     storesChanged(queryClient, undefined, { matters: true })
   }
@@ -192,7 +205,10 @@ function Store({ store, search }: { store: A['StoreInfo']; search: StoreSearch }
         <Fact term="admin.store.readers">{readersOf(store)}</Fact>
       </dl>
       {store.figuresAt !== null && <p className={clientStyles.figures}>{t('admin.stores.figuresAt', { when: formatDateTime(store.figuresAt) })}</p>}
-      <Tabs label={t('admin.store.tabs')} selected={tab} onSelect={choose} tabs={tabs} />
+      <EditsContext.Provider value={report}>
+        <Tabs label={t('admin.store.tabs')} selected={tab} onSelect={choose} tabs={tabs} />
+      </EditsContext.Provider>
+      <LeavePageQuestion standing={standing} name={store.name} changing={changing} />
       {dialog === 'rename' && <RenameStoreDialog store={store} onClose={close} />}
       {dialog === 'backend' && store.backend !== null && <SwitchBackendDialog store={store} current={store.backend} onClose={close} />}
       {dialog === 'delete' && (
