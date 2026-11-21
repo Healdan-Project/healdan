@@ -60,8 +60,8 @@ Neither holds:
 Healdan never deletes a file from a backend at once. It holds every deleted file for the **holding period**, 30 days
 to begin with: in the bucket, or in a local backend's `.held` folder, where Healdan looks for a file that's missing
 from its place. So a database restored from a backup younger than the holding period finds every file it names, on
-every backend. **Keep the holding period at least as long as the oldest backup you'd restore,** on the **Storage**
-tab: see [Held Deletes and the Holding Period](../../admin/storage-backends/held-deletes/).
+every backend. **Keep the holding period at least as long as the oldest backup you'd restore,** under **Settings**
+on the Admin app's **Backends**: see [Held Deletes and the Holding Period](../../admin/storage-backends/held-deletes/).
 
 One kind of file comes back newer than the backup: a file LogicalDOC rewrote in place since, such as a version whose
 file was replaced with **Replace file**. It comes back with its newest bytes, as it would on a server without storage
@@ -91,13 +91,14 @@ Once secrets are sealed, Healdan never makes another key on its own: a new key w
 the old one unreadable for good, even after the file came back. While the file is missing or empty, each provider
 counts as off, as its client secret can't be read, and the log, `repository/logs/dms.log`, says what to do.
 Helpers already signed in keep working, and so do S3 storage backends until Healdan restarts or a backend is saved
-or tested on the Storage tab: then a backend whose secret can't be read is failing, and the tab says to enter its
-secret again. If someone types a provider's client secret on the Sign-In tab, or a backend's secret on the Storage
-tab, meanwhile, Healdan says the key file is missing and asks before it makes a new key: say no, and restore the
-file.
+or tested: then a backend whose secret can't be read is failing, and its status says to enter its secret again. If
+someone types a provider's client secret on the Sign-In tab, or a backend's secret in the Admin app's **Add Backend**
+or **Edit** (or on the Storage tab), meanwhile, Healdan says the key file is missing and asks before it makes a new
+key: say no, and restore the file.
 
 Restore the file from the backup, and everything works again with no restart: providers at once, and an S3 storage
-backend that was failing at its next check, within a minute or two, or when you press Test on the Storage tab:
+backend that was failing at its next check, within a minute or two, or when you press **Test** on its page in the
+Admin app:
 
 ```bash
 docker run --rm -v logicaldoc_logicaldoc-conf:/conf -v "$PWD":/backup busybox \
@@ -111,12 +112,14 @@ as unset and nothing else is lost:
 
 - a provider whose client secret can't be read stays off until you enter the secret again on the Sign-In tab of
   Healdan Settings;
-- an S3 storage backend whose secret can't be read is failing until you enter its secret again on the Storage tab.
-  Meanwhile, saves into its Stores wait in staging, and a file that is only in its bucket can't be opened;
+- an S3 storage backend whose secret can't be read is failing until you enter its secret again with **Edit**, on its
+  page in the Admin app. Meanwhile, saves into its Stores wait in staging, and a file that is only in its bucket
+  can't be opened;
 - each Healdan Helper that signed in through a provider is asked to sign in again.
 
-When you save the first secret, on either tab, Healdan says the key file is missing and asks whether to make a new
-key: make one, then enter each other provider's client secret and each other S3 backend's secret.
+When you save the first secret, a provider's or a backend's, Healdan says the key file is missing and asks whether
+to make a new key: make one (**Make a New Key**, for a backend), then enter each other provider's client secret and
+each other S3 backend's secret.
 
 Accounts, documents, the files in S3 buckets and the links between accounts and providers are not affected, and
 `admin` still signs in with its password.
@@ -196,8 +199,8 @@ Compose may warn that the app's two volumes already exist. That's expected: it u
 
 ### Test the Storage Backends
 
-Once it has started, sign in as an administrator, open the **Storage** tab of **Administration → Healdan →
-Settings**, and press **Test** on each backend. A backend that fails says why: a key file that's missing or isn't its
+Once it has started, sign in as an administrator, open the Admin app's **Backends**, under **Storage** in its left
+pane, and press **Test** on each backend's page. A backend that fails says why: a key file that's missing or isn't its
 own wants its recovery key (see
 [Encryption and Recovery Keys](../../admin/storage-backends/encryption-and-recovery-keys/#putting-a-lost-key-file-back)),
 and a secret that can't be read, as after a restore without the key that sealed it, wants the secret typed again

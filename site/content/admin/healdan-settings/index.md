@@ -7,8 +7,8 @@ Healdan's own settings are under **Administration → Healdan → Settings**. Cl
 The client list there saves each client from its own window, without Save, though clients are made and renamed in
 the Admin app now (see [Clients and Matters](../clients-and-matters/#clients)). Two tabs sit beside the settings:
 **Sign-In**, which sets up signing in through a provider, such as Microsoft Entra ID (see
-[Sign-In Providers](#sign-in-providers)), and **Storage**, which sets up where each Store keeps its files (see
-[The Storage Tab](#the-storage-tab)).
+[Sign-In Providers](#sign-in-providers)), and **Storage**, which sets up where each Store keeps its files, as the
+Admin app's storage screens do (see [The Storage Tab](#the-storage-tab)).
 
 ![The Healdan settings panel, with the Sign-In and Storage tabs beside it: matter labels, numbering, default Class, the Recent Matters window, the next doc #, Start In set to User App, the two device sign-in limits, Removed Items Kept, API origins allowed (CORS), and the client list with Add client and Edit, holding seven clients from 998 Ashcombe Reeve LLP to 1006 Oliver and Grace Pemberton](healdan-settings.png)
 
@@ -384,13 +384,8 @@ also loses their helper. Web page sessions aren't checked again: see
 ## The Storage Tab
 
 The **Storage** tab sets up the storage backends, the places where Healdan keeps documents' files: a folder on the
-server, or a bucket at an S3 service such as Wasabi. It has three parts:
-
-- **Backends,** with **Add Backend**, **Edit**, **Test**, **Show Recovery Key**, **Enter Recovery Key**, **Remove**
-  and **Refresh**: each backend, where it is, whether it's encrypted, what it holds and whether it works.
-- **Stores,** each with its backend, which you change there, and its files waiting to move or stuck.
-- **Settings:** the **Holding Period**, the **Read Cache**'s size and **Parallel Transfers**, with their own
-  **Save**.
-
-Changes take effect at once, with no restart. [Storage Backends](../storage-backends/) describes the tab and what each
-part does.
+server, or a bucket at an S3 service such as Wasabi. The Admin app does the same, and is where
+[Storage Backends](../storage-backends/) describes it: **Backends**, under **Storage** in its left pane, adds, tests,
+changes and removes backends, shows and confirms their recovery keys, and holds the storage settings, and each
+Store's page in **Storage → Stores** gives the Store its backend. <!-- P3 docs pass 2: the Stores screens --> The tab stays for now,
+with the same rules: see [The Storage Tab in the Classic Interface](../storage-backends/#the-storage-tab-in-the-classic-interface).

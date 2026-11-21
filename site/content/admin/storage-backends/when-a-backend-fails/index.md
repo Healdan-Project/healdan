@@ -3,15 +3,17 @@ title: When a Backend Fails
 weight: 7
 ---
 
-A backend is **failing** when Healdan can't use it. Its **Status**, on the **Storage** tab, says since when and why:
-
-![The Backends list with Original OK and Cloud Storage Failing since 08/11/2026 22:08:55: This backend can't be reached: The endpoint's host garage can't be found, after the demo stack's stand-in S3 server was stopped](backends-failing.png)
+A backend is **failing** when Healdan can't use it. Its **Status**, on the [Backends list](../#the-backends-list) and
+the backend's page, says since when and why: **Can't Be Reached** for an outage, and **Failing** for any other reason,
+as in "Can't Be Reached since 8 Nov 2026, 22:08: This backend can't be reached: The endpoint's host garage can't be
+found", the date and time in your browser's own form. **Backends**, in the left pane, shows how many are failing
+either way, and so does the Dashboard's Needs Attention, as "1 storage backend can't be reached".
 
 | Why | What the status says, in part | What to do |
 |---|---|---|
-| An S3 service, or the network to it, is down, or a folder can't be read | "can't be reached", or for a local folder "can't be read" | wait, or put the network right. Saves and cached files carry on meanwhile (below) |
+| An S3 service, or the network to it, is down, or a folder can't be read | **Can't Be Reached**, and "can't be reached", or for a local folder "can't be read" | wait, or put the network right. Saves and cached files carry on meanwhile (below) |
 | The bucket is gone | "bucket not found". A bucket deleted while the server runs shows first as "can't be reached", and as "bucket not found" after the next check | make the bucket again, or give the backend's Stores another backend |
-| The S3 service refuses the access key | "check its access key and secret" | put them right with **Edit** |
+| The S3 service refuses the access key | "check its access key and secret" | put them right with **Edit**, on the backend's page |
 | The S3 secret can't be read, as after Healdan's secret key was made again | "enter the secret again in Edit" | type the secret again with **Edit** |
 | A folder's marker is missing, as when its share didn't mount | "is missing from its folder: the folder may not be mounted" | mount the share again |
 | A bucket's marker is missing, as when the bucket was emptied | "has no marker" | check that the endpoint, bucket and prefix are the backend's own, and that nobody emptied it |
@@ -26,8 +28,8 @@ into a Store on S3 don't notice, as they land on the server first.
 - **When the server starts,** Healdan checks every backend before it moves any file.
 - **A backend that isn't OK** is checked again every minute until it passes. Then its moves carry on.
 - **A backend that's OK isn't checked on a timer.** It shows Failing once a save, a read, a move or **Test** meets
-  the problem, not before. So while a bucket is down, the tab can still say OK until someone needs a file from it.
-- **Test** checks a backend at once.
+  the problem, not before. So while a bucket is down, its status can still say OK until someone needs a file from it.
+- **Test**, on the backend's page, checks it at once.
 
 ## During an Outage of an S3 Backend
 
@@ -66,11 +68,13 @@ minute, finds the backend.
 
 If a file has waited more than 24 hours to reach its Store's backend, or a backend has been failing for more than 24
 hours, Healdan emails the members of the `admin` group that have an email address. The email says that storage needs
-attention and sends them to the **Storage** tab. It names no file or backend.
+attention and sends them to the Classic Interface's **Storage** tab. It names no file or backend. The Admin app's
+**Backends** shows which backend is failing, and a Store's page its files waiting to move.
 
 - **It goes at most once a day,** and every day until the cause clears. Healdan looks every hour, so the first email
   comes within 25 hours.
 - **A file's 24 hours start** when its place stopped matching its Store's backend: a Store given another backend an
   hour ago raises nothing, however old its files are.
 - **It needs [outgoing email](../../system/outgoing-email/#when-email-counts-as-set-up).** Without it nothing is
-  sent, and nothing takes its place in Healdan, but the tab still shows what's waiting and what's failing.
+  sent, and nothing takes its place in Healdan, but the Admin app's storage screens, its Dashboard and the Storage
+  tab still show what's waiting and what's failing.
