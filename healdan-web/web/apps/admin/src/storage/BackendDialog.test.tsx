@@ -197,6 +197,30 @@ describe('Add Backend, for an S3 bucket', () => {
     expect(await screen.findByText('Added Wasabi US')).toBeTruthy()
   })
 
+  it('ties the Path-Style and Encrypt notes to their boxes, as a screen reader reads them after the name', async () => {
+    const { dialog } = await openAdd(adding().routes)
+    const describedBy = (box: HTMLElement) => (box.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent)
+    expect(describedBy(within(dialog).getByRole('checkbox', { name: 'Path-Style Addressing' }))).toEqual(["The bucket in the address's path, not its host name, as some services need."])
+    expect(describedBy(within(dialog).getByRole('checkbox', { name: 'Encrypt' }))).toEqual([
+      "It can't change once the backend is added. An encrypted backend's recovery key is shown as soon as it's added.",
+    ])
+  })
+
+  it('holds its settings while Test is on its way, so its answer is about the settings shown', async () => {
+    const slow = slowAnswer<A['BackendTestResult']>()
+    const { dialog, api } = await openAdd({ ...adding().routes, 'POST /v1/admin/backends/test': () => slow.answered })
+    await typeS3(dialog)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Test' }))
+    await waitFor(() => expect(api.callsTo('POST /v1/admin/backends/test')).toHaveLength(1))
+    const held = (element: HTMLElement) => element.closest('fieldset[disabled]') !== null
+    expect(held(text(dialog, 'Bucket'))).toBe(true)
+    expect(held(secretIn(dialog))).toBe(true)
+    expect(held(within(dialog).getByRole('checkbox', { name: 'Encrypt' }))).toBe(true)
+    await act(async () => slow.answer({ problems: [] }))
+    await waitFor(() => expect(within(dialog).getByRole('status').textContent).toBe('Test passed.'))
+    expect(held(text(dialog, 'Bucket'))).toBe(false)
+  })
+
   it("can't be cancelled while the add is on its way, by Cancel or by Esc", async () => {
     const slow = slowAnswer<A['AddedBackend']>()
     const { dialog, api, router } = await openAdd({ ...adding().routes, 'POST /v1/admin/backends': () => slow.answered })
@@ -401,5 +425,12 @@ describe("Editing a backend, from its page", () => {
     const { dialog } = await openEdit(3, { 'GET /v1/admin/backends/3': { ...archiveBackend, stores: ['Firm'] } })
     expect(within(dialog).queryByRole('textbox', { name: 'Path' })).toBeNull()
     expect(within(dialog).getByText("Can't change while a Store keeps its files here.")).toBeTruthy()
+  })
+
+  it('keeps the bucket and prefix of one a Store in the Trash keeps its files on', async () => {
+    const { dialog } = await openEdit(2, { 'GET /v1/admin/backends/2': { ...wasabiBackend, inUse: false, stores: [], storesInTrash: ['Old Branch'] } })
+    expect(within(dialog).queryByRole('textbox', { name: 'Bucket' })).toBeNull()
+    expect(within(dialog).queryByRole('textbox', { name: 'Prefix' })).toBeNull()
+    expect(within(dialog).getAllByText("Can't change while a Store in the Trash keeps its files here.")).toHaveLength(2)
   })
 })

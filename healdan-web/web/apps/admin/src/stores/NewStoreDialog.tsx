@@ -6,7 +6,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { fieldErrors, useApi } from '@healdan/shell'
 import { Button, Dialog, Highlight, Icon, SearchPicker, SelectField, TextField, toast } from '@healdan/ui'
-import { useBackends } from '../storage/queries'
+import { isStorageUnavailable, useBackends } from '../storage/queries'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 // A Store's name is a folder's: the same rule, and the same words, as every other folder name the app takes
@@ -31,7 +31,8 @@ export interface NewStoreDialogProps {
  * matter can be made in it at once, and the backend it keeps its files on. The groups are a list to pick from, with a
  * search for a firm that has many; one added leaves the list, and Remove puts it back. With none, only administrators can
  * see the Store. Backend is a menu of the backends a Store can be given, Original first and chosen, and isn't asked on a
- * server that doesn't use storage backends. What the form can see is wrong with the name is said before its button; the
+ * server that doesn't use storage backends; when the backends can't be read, it says the Store is made on Original and can
+ * be given another backend later. What the form can see is wrong with the name is said before its button; the
  * server's refusal is said in the dialog, and a field it names beside it. Once made, every Store menu and the Stores list
  * ask for the Stores again, as the create answers only the new one's id and name (P3-R23).
  */
@@ -50,8 +51,10 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
   const refocus = useRef<number | 'add' | undefined>(undefined)
 
   // The backends a Store can be given, Original first; none to choose from while storage backends are off, or the server
-  // has no storage module (its 503 is said nowhere here: the Store is made on Original)
+  // has no storage module (its 503 is said nowhere here: the Store is made on Original), or the backends couldn't be read
+  // (which is said, as the Store is made on Original then too, and can be moved)
   const overview = useBackends()
+  const unread = overview.data === undefined && overview.isError && !isStorageUnavailable(overview.error)
   const offered = overview.data?.on === true ? overview.data.backends.filter((backend) => backend.offered) : []
   const original = offered.find((backend) => backend.original) ?? offered[0]
   const [backendId, setBackendId] = useState<number>()
@@ -203,6 +206,7 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
               <p className={formStyles.note}>{t('admin.newStore.backendNote')}</p>
             </div>
           )}
+          {unread && <p className={formStyles.note}>{t('admin.newStore.backendsUnread')}</p>}
           {refusal !== undefined && (
             <p className={formStyles.refusal} role="alert">
               {refusal}

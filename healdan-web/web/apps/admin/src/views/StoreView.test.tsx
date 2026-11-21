@@ -203,6 +203,8 @@ describe("A Store's Delete", () => {
     const question = await screen.findByRole('alertdialog', { name: 'Move Client Work to the Trash?' })
     expect(within(question).getByText('Client Work goes to the Trash with everything in it: its 6 matters, and everything in them. Their numbers stay taken.')).toBeTruthy()
     expect(within(question).getByText('It can be restored, with everything it took, from Deleted Stores on the Stores page.')).toBeTruthy()
+    // Its backend isn't Original, which its files stay on in the Trash
+    expect(within(question).getByText("Its files stay on Wasabi EU while it's in the Trash, so Wasabi EU can't be removed until the Store is restored and given another backend.")).toBeTruthy()
     expect(api.callsTo('DELETE /v1/admin/stores/4')).toEqual([])
     await expectNoAxeViolations(view.baseElement)
     await userEvent.click(within(question).getByRole('button', { name: 'Move to Trash' }))
@@ -212,11 +214,19 @@ describe("A Store's Delete", () => {
     await waitFor(() => expect(api.callsTo('GET /v1/admin/stores/deleted').length).toBeGreaterThanOrEqual(1))
   })
 
-  it('says a Store with no matter holds none', async () => {
+  it('says a Store with no matter holds none, and nothing of a backend for one on Original', async () => {
     await openStore('/stores/4', { 'GET /v1/admin/stores/4': storeInfoOf({ id: 4, name: 'Client Work' }) })
     await userEvent.click(within(main()).getByRole('button', { name: 'Delete' }))
     const question = await screen.findByRole('alertdialog', { name: 'Move Client Work to the Trash?' })
     expect(within(question).getByText('Client Work goes to the Trash. It holds no matter.')).toBeTruthy()
+    expect(within(question).queryByText(/Its files stay on/)).toBeNull()
+  })
+
+  it("says nothing of a backend on a server that doesn't use storage backends", async () => {
+    await openStore('/stores/4', { 'GET /v1/admin/stores/4': { ...clientWorkInfo, backend: null, pending: null } })
+    await userEvent.click(within(main()).getByRole('button', { name: 'Delete' }))
+    const question = await screen.findByRole('alertdialog', { name: 'Move Client Work to the Trash?' })
+    expect(within(question).queryByText(/Its files stay on/)).toBeNull()
   })
 
   it("says a refusal, a document checked out inside, in the rule's words, and stays", async () => {
@@ -284,10 +294,12 @@ describe('Who can see a Store', () => {
     // What was changed stays, to put right
     expect(listed()).toEqual(['Partners Custom', 'Helen Ashcombe'])
     await expectNoAxeViolations(view.container)
-    // Discard Changes puts back what the server has
+    // Discard Changes puts back what the server has, and goes as it does, so the focus goes to Add a Group
     await userEvent.click(within(panel()).getByRole('button', { name: 'Discard Changes' }))
     expect(listed()).toEqual(['Everyone', 'Partners Custom', 'Helen Ashcombe'])
     expect(within(panel()).queryByRole('alert')).toBeNull()
+    expect(within(panel()).queryByRole('button', { name: 'Discard Changes' })).toBeNull()
+    await waitFor(() => expect(document.activeElement).toBe(within(panel()).getByRole('textbox', { name: 'Add a Group' })))
   })
 
   it('holds its list while the save is on its way', async () => {
@@ -300,6 +312,30 @@ describe('Who can see a Store', () => {
     expect(isDisabled(within(panel()).getByRole('textbox', { name: 'Add a Group' }))).toBe(true)
     await act(async () => answer.answer({ storeId: 4, rows: readers.slice(1) }))
     await waitFor(() => expect(isDisabled(within(panel()).getByRole('button', { name: 'Remove Partners' }))).toBe(false))
+  })
+
+  it("names those with permissions on it but not Read, which it doesn't list, as Save removes them", async () => {
+    const { view } = await openStore('/stores/4?tab=access', {
+      'GET /v1/admin/stores/4/access': { storeId: 4, rows: [...readers, accessRow(7, 'Litigation', ['write'])] } satisfies A['StoreAccess'],
+    })
+    await waitFor(() => expect(listed()).toEqual(['Everyone', 'Partners Custom', 'Helen Ashcombe']))
+    expect(within(panel()).getByText("Litigation isn't listed, as it can't see the Store, but it has other permissions on it, which Save removes.")).toBeTruthy()
+    await expectNoAxeViolations(view.container)
+  })
+
+  it('names them all, when more than one has permissions on it but not Read, and leaves out one added back', async () => {
+    await openStore('/stores/4?tab=access', {
+      'GET /v1/admin/stores/4/access': { storeId: 4, rows: [readers[0]!, accessRow(7, 'Litigation', ['write']), accessRow(4, 'Trainees', ['download', 'print'])] } satisfies A['StoreAccess'],
+    })
+    await waitFor(() => expect(listed()).toEqual(['Everyone']))
+    expect(within(panel()).getByText("Litigation and Trainees aren't listed, as they can't see the Store, but they have other permissions on it, which Save removes.")).toBeTruthy()
+    // Added back, Trainees is given Read and keeps the rest, so Save no longer removes its row
+    await userEvent.type(within(panel()).getByRole('textbox', { name: 'Add a Group' }), 'train')
+    await pause()
+    await within(panel()).findByRole('listbox', { name: '1 Result' })
+    await userEvent.keyboard('{ArrowDown}{Enter}')
+    expect(listed()).toEqual(['Everyone', 'Trainees'])
+    expect(within(panel()).getByText("Litigation isn't listed, as it can't see the Store, but it has other permissions on it, which Save removes.")).toBeTruthy()
   })
 
   it('says only administrators can see a Store nobody else can', async () => {
@@ -412,6 +448,27 @@ describe("A Store's storage", () => {
     expect(await screen.findByText('The stuck files of Client Work wait to move again')).toBeTruthy()
     await waitFor(() => expect(api.callsTo('GET /v1/admin/stores/4/stuck-files')).toHaveLength(2))
     await waitFor(() => expect(api.callsTo('GET /v1/admin/stores/4/backend').length).toBeGreaterThanOrEqual(2))
+  })
+
+  it('keeps its stuck files section, with the focus on its heading, once a Retry leaves none stuck', async () => {
+    let retried = false
+    const { view } = await openStore('/stores/4?tab=storage', {
+      'GET /v1/admin/stores/4/backend': () => (retried ? { ...storeStorage[4]!, pending: { waiting: 3, waitingBytes: 3000, stuck: 0 } } : storeStorage[4]!),
+      'GET /v1/admin/stores/4/stuck-files': () => (retried ? [] : [stuckFile()]),
+      'POST /v1/admin/stores/4/stuck-files/retry': () => {
+        retried = true
+        return undefined
+      },
+    })
+    const stuck = await within(panel()).findByRole('region', { name: 'Stuck Files' })
+    await userEvent.click(within(stuck).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(factsIn(panel())).toContainEqual(['Stuck', 'None']))
+    // Retry went with what it retried, so the focus is on the section's heading, which says none are stuck now
+    const heading = within(stuck).getByRole('heading', { level: 2, name: 'Stuck Files' })
+    await waitFor(() => expect(document.activeElement).toBe(heading))
+    expect(await within(stuck).findByText('No stuck files.')).toBeTruthy()
+    expect(within(stuck).queryByRole('button', { name: 'Retry' })).toBeNull()
+    await expectNoAxeViolations(view.container)
   })
 
   it("says a refusal of Retry in the rule's words", async () => {

@@ -4,14 +4,12 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ErrorPanel, useApi } from '@healdan/shell'
-import { Button, Dialog, toast } from '@healdan/ui'
+import { Button, Dialog, formatCount, toast } from '@healdan/ui'
 import { adminKeys } from '../queries'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 import { stuckKey, useStuckFiles } from './queries'
 import styles from './Storage.module.css'
-
-const counts = new Intl.NumberFormat('en-US')
 
 export interface StuckFilesProps {
   /** The list's route: `/v1/admin/storage/stuck-files` for the files with no Store, or a Store's `/v1/admin/stores/{id}/stuck-files` */
@@ -73,7 +71,7 @@ export function StuckFiles({ list, stuck }: Pick<StuckFilesProps, 'list' | 'stuc
   const shown = files.data
   return (
     <>
-      {shown.length < stuck && <p className={styles.note}>{t('admin.stuck.listed', { shown: counts.format(shown.length), stuck: counts.format(stuck) })}</p>}
+      {shown.length < stuck && <p className={styles.note}>{t('admin.stuck.listed', { shown: formatCount(shown.length), stuck: formatCount(stuck) })}</p>}
       <div className={styles.tableBox}>
         <table className={styles.table}>
           <thead>
@@ -95,7 +93,7 @@ export function StuckFiles({ list, stuck }: Pick<StuckFilesProps, 'list' | 'stuc
                 <td className={styles.number}>{file.docId}</td>
                 <td className={file.fileName === null ? `${styles.wrap} ${styles.muted}` : styles.wrap}>{file.fileName ?? t('admin.stuck.deleted')}</td>
                 <td className={styles.wrap}>{file.resource}</td>
-                <td className={styles.number}>{counts.format(file.attempts)}</td>
+                <td className={styles.number}>{formatCount(file.attempts)}</td>
                 <td className={styles.wrap}>{file.lastError ?? ''}</td>
               </tr>
             ))}

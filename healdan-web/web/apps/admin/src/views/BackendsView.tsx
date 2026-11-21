@@ -3,11 +3,13 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useId, useMemo, useState, type ReactNode } from 'react'
+import { useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom } from '@healdan/shell'
-import { Button, formatSize, Icon, StatusDot, Table, type TableColumn, type TableRow } from '@healdan/ui'
+import { Button, formatCount, formatSize, Icon, StatusDot, Table, type TableColumn, type TableRow } from '@healdan/ui'
 import { routes } from '../addresses'
+import { Fact } from '../facts/Fact'
+import { useFocusWhenGone } from '../focus'
 import { BackendDialog } from '../storage/BackendDialog'
 import { isStorageUnavailable, storageKeys, useBackends, useStorageSettings } from '../storage/queries'
 import { RecoveryKeyDialog } from '../storage/RecoveryKeyDialog'
@@ -15,7 +17,6 @@ import { StorageSettingsForm } from '../storage/StorageSettingsForm'
 import { StuckFilesDialog, useStuckRetry } from '../storage/StuckFiles'
 import { keyShownOf, kindOf, statusDot, statusLine, stuckOf, waitingOf, whereOf } from '../storage/text'
 import { t } from '../strings'
-import type { AdminStringKey } from '../strings/en-US'
 import { useRefusalFor } from '../strings/refusals'
 import clientStyles from '../clients/Clients.module.css'
 import styles from '../storage/Storage.module.css'
@@ -25,8 +26,6 @@ type A = adminComponents['schemas']
 interface BackendRow extends TableRow {
   backend: A['Backend']
 }
-
-const counts = new Intl.NumberFormat('en-US')
 
 /** --row-height in tokens.css, which the list's height is counted in: the virtualiser needs one of its own */
 const ROW = 34
@@ -55,7 +54,7 @@ function backendColumns(): TableColumn<BackendRow>[] {
     { id: 'kind', name: t('admin.backends.column.kind'), width: 110, cell: ({ backend }) => kindOf(backend) },
     { id: 'where', name: t('admin.backends.column.where'), width: '3fr', minWidth: 160, cell: ({ backend }) => whereOf(backend) },
     { id: 'encrypted', name: t('admin.backends.column.encrypted'), width: 100, cell: ({ backend }) => t(backend.encrypted ? 'admin.backends.yes' : 'admin.backends.no') },
-    { id: 'files', name: t('admin.backends.column.files'), align: 'end', width: 90, cell: ({ backend }) => counts.format(backend.files) },
+    { id: 'files', name: t('admin.backends.column.files'), align: 'end', width: 90, cell: ({ backend }) => formatCount(backend.files) },
     { id: 'size', name: t('admin.backends.column.size'), align: 'end', width: 90, cell: ({ backend }) => formatSize(backend.bytes) },
     {
       id: 'status',
@@ -189,28 +188,26 @@ function Backends({ overview }: { overview: A['BackendOverview'] }) {
   )
 }
 
-function Fact({ term, children }: { term: AdminStringKey; children: ReactNode }) {
-  return (
-    <div className={clientStyles.fact}>
-      <dt>{t(term)}</dt>
-      <dd>{children}</dd>
-    </div>
-  )
-}
-
-/** The files whose document isn't in a Store (the Storage tab's Other Files): waiting and stuck, with Stuck Files and Retry */
+/**
+ * The files whose document isn't in a Store (the Storage tab's Other Files): waiting and stuck, with Stuck Files and Retry.
+ * Once a Retry leaves none stuck, both buttons go, and the section's heading takes the focus they had.
+ */
 function OtherFiles({ files }: { files: A['PendingFiles'] }) {
   const queryClient = useQueryClient()
   const headingId = useId()
+  const heading = useRef<HTMLHeadingElement>(null)
   const refusalFor = useRefusalFor()
   const [listing, setListing] = useState(false)
   const counted = () => void queryClient.invalidateQueries({ queryKey: storageKeys.backends })
   const retried = t('admin.stuck.otherRetried')
   const retrying = useStuckRetry({ list: OTHER_LIST, retry: OTHER_RETRY, retried, onRetried: counted })
+  useFocusWhenGone(files.stuck === 0, heading)
 
   return (
     <section aria-labelledby={headingId} className={styles.section}>
-      <h2 id={headingId}>{t('admin.backends.other.title')}</h2>
+      <h2 id={headingId} ref={heading} tabIndex={-1}>
+        {t('admin.backends.other.title')}
+      </h2>
       <p className={styles.muted}>{t('admin.backends.other.about')}</p>
       <dl className={clientStyles.facts}>
         <Fact term="admin.backends.other.waiting">{waitingOf(files.waiting, files.waitingBytes)}</Fact>

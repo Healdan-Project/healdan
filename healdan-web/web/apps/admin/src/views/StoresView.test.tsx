@@ -176,6 +176,29 @@ describe('The deleted Stores', () => {
     expect(await within(main()).findByRole('row', { name: /Old Branch/ })).toBeTruthy()
   })
 
+  it('puts the focus on the next Restore once a Store is restored, and on the heading once none is left after it', async () => {
+    let left = [deletedStoreOf(), removed]
+    const restore = (id: number, name: string) => () => {
+      left = left.filter((one) => one.id !== id)
+      return storeInfoOf({ id, name }) satisfies A['StoreInfo']
+    }
+    await renderApp('/stores', {
+      'GET /v1/admin/stores/deleted': () => left,
+      'POST /v1/admin/stores/6/restore': restore(6, 'Old Branch'),
+      'POST /v1/admin/stores/7/restore': restore(7, 'Archive 2019'),
+    })
+    const section = await within(main()).findByRole('region', { name: 'Deleted Stores' })
+    await userEvent.click(await within(section).findByRole('button', { name: 'Restore Old Branch' }))
+    await userEvent.click(within(await screen.findByRole('alertdialog', { name: 'Restore Old Branch?' })).getByRole('button', { name: 'Restore' }))
+    await waitFor(() => expect(within(section).queryByRole('button', { name: 'Restore Old Branch' })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(within(section).getByRole('button', { name: 'Restore Archive 2019' })))
+
+    await userEvent.click(within(section).getByRole('button', { name: 'Restore Archive 2019' }))
+    await userEvent.click(within(await screen.findByRole('alertdialog', { name: 'Restore Archive 2019?' })).getByRole('button', { name: 'Restore' }))
+    expect(await within(section).findByText('No Store is in the Trash.')).toBeTruthy()
+    await waitFor(() => expect(document.activeElement).toBe(within(section).getByRole('heading', { level: 2, name: 'Deleted Stores' })))
+  })
+
   it("says what comes back with a Store that took no matter, and a removed one's restore", async () => {
     await renderApp('/stores', { 'GET /v1/admin/stores/deleted': [removed] })
     const section = await within(main()).findByRole('region', { name: 'Deleted Stores' })

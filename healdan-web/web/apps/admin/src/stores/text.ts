@@ -8,6 +8,9 @@ import { plural, t } from '../strings'
 
 type A = adminComponents['schemas']
 
+/** Original's id, the folder the server has always kept files in, as a Store names its backend (StoreBackend.id) */
+export const ORIGINAL_BACKEND_ID = 1
+
 /** "Wasabi EU (Encrypted)", or "Original": a backend, as a Store names it */
 export function backendLabel(backend: Pick<A['StoreBackend'], 'name' | 'encrypted'>): string {
   return backend.encrypted ? t('admin.stores.encrypted', { name: backend.name }) : backend.name

@@ -95,6 +95,15 @@ describe('The Backends list', () => {
     expect(cellsOf(all[1]!)[2]).toBe('ashcombe-reeve/healdan/')
   })
 
+  it('names the bucket alone, with no slash after it, for an S3 backend with no prefix', async () => {
+    await renderApp('/backends', {
+      'GET /v1/admin/backends': backendOverview({ backends: [originalBackend, { ...wasabiBackend, prefix: '' }, { ...wasabiBackend, id: 5, name: 'Wasabi US', prefix: '', endpoint: null }] }),
+    })
+    const all = await rows()
+    expect(cellsOf(all[1]!)[2]).toBe('ashcombe-reeve at https://s3.eu-central-1.wasabisys.com')
+    expect(cellsOf(all[2]!)[2]).toBe('ashcombe-reeve')
+  })
+
   it("opens a backend's page from its row", async () => {
     const { router } = await renderApp('/backends')
     const all = await rows()
@@ -197,6 +206,39 @@ describe('The files with no Store', () => {
     await userEvent.click(within(section).getByRole('button', { name: 'Retry' }))
     expect((await within(section).findByRole('alert')).textContent).toBe('Storage backends are off on this server.')
     expect(api.callsTo('POST /v1/admin/storage/stuck-files/retry')).toHaveLength(1)
+  })
+
+  /** The files with no Store, three stuck until a Retry puts them back to waiting */
+  function retriedRoutes() {
+    let retried = false
+    return {
+      'GET /v1/admin/backends': () => backendOverview({ otherFiles: retried ? { waiting: 3, waitingBytes: 3000, stuck: 0 } : { waiting: 0, waitingBytes: 0, stuck: 3 } }),
+      'GET /v1/admin/storage/stuck-files': () => (retried ? [] : [stuckFile()]),
+      'POST /v1/admin/storage/stuck-files/retry': () => {
+        retried = true
+        return undefined
+      },
+    }
+  }
+
+  it("puts the focus on the section's heading once a Retry from the page takes Retry away", async () => {
+    await renderApp('/backends', retriedRoutes())
+    const section = await within(main()).findByRole('region', { name: 'Files with No Store' })
+    await userEvent.click(within(section).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(within(section).queryByRole('button', { name: 'Retry' })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(within(section).getByRole('heading', { level: 2, name: 'Files with No Store' })))
+  })
+
+  it("puts the focus on the section's heading once a Retry from Stuck Files takes the button away", async () => {
+    await renderApp('/backends', retriedRoutes())
+    const section = await within(main()).findByRole('region', { name: 'Files with No Store' })
+    await userEvent.click(within(section).getByRole('button', { name: 'Stuck Files' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Stuck Files with No Store' })
+    await within(dialog).findByRole('table')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Retry' }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Stuck Files with No Store' })).toBeNull())
+    await waitFor(() => expect(within(section).queryByRole('button', { name: 'Stuck Files' })).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(within(section).getByRole('heading', { level: 2, name: 'Files with No Store' })))
   })
 })
 

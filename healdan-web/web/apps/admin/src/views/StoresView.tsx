@@ -3,12 +3,13 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom, useApi } from '@healdan/shell'
-import { Button, formatDate, formatDateTime, formatSize, Icon, StatusDot, Table, toast, VisuallyHidden, type TableColumn, type TableRow } from '@healdan/ui'
+import { Button, formatCount, formatDate, formatDateTime, formatSize, Icon, StatusDot, Table, toast, VisuallyHidden, type TableColumn, type TableRow } from '@healdan/ui'
 import { storeHref } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
+import { focusLost } from '../focus'
 import { useStores } from '../queries'
 import { NewStoreDialog } from '../stores/NewStoreDialog'
 import { storesChanged, useDeletedStores } from '../stores/queries'
@@ -23,8 +24,6 @@ type A = adminComponents['schemas']
 interface StoreRow extends TableRow {
   store: A['StoreInfo']
 }
-
-const counts = new Intl.NumberFormat('en-US')
 
 /** --row-height in tokens.css, which the list's height is counted in: the virtualiser needs one of its own */
 const ROW = 34
@@ -51,8 +50,8 @@ function storeColumns(storage: boolean): TableColumn<StoreRow>[] {
       ),
     },
     storage && { id: 'backend', name: t('admin.stores.column.backend'), width: '2fr', minWidth: 140, cell: ({ store }) => (store.backend === null ? '' : backendLabel(store.backend)) },
-    { id: 'matters', name: t('admin.stores.column.matters'), align: 'end', width: 96, cell: ({ store }) => counts.format(store.matters) },
-    { id: 'documents', name: t('admin.stores.column.documents'), align: 'end', width: 104, cell: ({ store }) => (store.documents === null ? '' : counts.format(store.documents)) },
+    { id: 'matters', name: t('admin.stores.column.matters'), align: 'end', width: 96, cell: ({ store }) => formatCount(store.matters) },
+    { id: 'documents', name: t('admin.stores.column.documents'), align: 'end', width: 104, cell: ({ store }) => (store.documents === null ? '' : formatCount(store.documents)) },
     { id: 'size', name: t('admin.stores.column.size'), align: 'end', width: 90, cell: ({ store }) => (store.bytes === null ? '' : formatSize(store.bytes)) },
     { id: 'readers', name: t('admin.stores.column.readers'), width: '2fr', minWidth: 140, cell: ({ store }) => <span className={clientStyles.muted}>{readersOf(store)}</span> },
     storage && {
@@ -149,20 +148,37 @@ function stateOf(store: A['DeletedStore']): string {
 /**
  * The Stores in the Trash (spec 8.6), deleted or removed from it and not destroyed yet, the most recently deleted first,
  * each with Restore. Restore asks first, naming what comes back; a refusal, as when another administrator restored it
- * first, is said in the question in the rule's words, and both lists are asked for again.
+ * first, is said in the question in the rule's words, and both lists are asked for again. Once the list is drawn without
+ * the Store restored, the focus its Restore had goes to the next one's Restore, or, with none after it, to the heading.
  */
 function DeletedStores() {
   const api = useApi()
   const queryClient = useQueryClient()
   const headingId = useId()
+  const heading = useRef<HTMLHeadingElement>(null)
   const deleted = useDeletedStores()
   const [restoring, setRestoring] = useState<A['DeletedStore']>()
+  const restoreButtons = useRef(new Map<number, HTMLButtonElement>())
+  // The Store just restored and where its row was, until the list is drawn without it
+  const refocus = useRef<{ id: number; index: number } | undefined>(undefined)
+
+  // Once the question has gone and the list is drawn without the Store restored, if its Restore took the focus with it
+  useEffect(() => {
+    const restored = refocus.current
+    const list = deleted.data
+    if (restored === undefined || restoring !== undefined || list === undefined || list.some((one) => one.id === restored.id)) return
+    refocus.current = undefined
+    if (!focusLost()) return
+    const next = list[restored.index]
+    ;(next === undefined ? heading.current : restoreButtons.current.get(next.id))?.focus()
+  })
 
   async function restore(store: A['DeletedStore']) {
     try {
       // By its folder's id, not its Trash item's
       await api.send<A['StoreInfo']>('POST', apiPath`/v1/admin/stores/${store.id}/restore`)
       toast(t('admin.restoreStore.done', { name: store.name }))
+      refocus.current = { id: store.id, index: Math.max(deleted.data?.findIndex((one) => one.id === store.id) ?? 0, 0) }
     } finally {
       // Refused or not, the lists may have changed: another administrator restored it, or the destroy took it
       storesChanged(queryClient, undefined, { matters: true })
@@ -171,7 +187,9 @@ function DeletedStores() {
 
   return (
     <section aria-labelledby={headingId} className={styles.section}>
-      <h2 id={headingId}>{t('admin.deletedStores.title')}</h2>
+      <h2 id={headingId} ref={heading} tabIndex={-1}>
+        {t('admin.deletedStores.title')}
+      </h2>
       {deleted.isError ? (
         <ErrorPanel error={deleted.error} onRetry={() => void deleted.refetch()} />
       ) : deleted.data === undefined ? (
@@ -203,10 +221,17 @@ function DeletedStores() {
                     <td className={styles.wrap}>{store.name}</td>
                     <td>{formatDateTime(store.deletedAt)}</td>
                     <td className={store.deletedBy === null ? styles.muted : undefined}>{store.deletedBy?.name ?? t('admin.deletedStores.byUnknown')}</td>
-                    <td className={styles.number}>{counts.format(store.matters)}</td>
+                    <td className={styles.number}>{formatCount(store.matters)}</td>
                     <td>{stateOf(store)}</td>
                     <td>
-                      <Button aria-label={t('admin.deletedStores.restoreName', { name: store.name })} onPress={() => setRestoring(store)}>
+                      <Button
+                        aria-label={t('admin.deletedStores.restoreName', { name: store.name })}
+                        ref={(button) => {
+                          if (button) restoreButtons.current.set(store.id, button)
+                          else restoreButtons.current.delete(store.id)
+                        }}
+                        onPress={() => setRestoring(store)}
+                      >
                         {t('admin.deletedStores.restore')}
                       </Button>
                     </td>

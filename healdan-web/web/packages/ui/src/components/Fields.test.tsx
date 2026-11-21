@@ -119,6 +119,21 @@ describe('Fields', () => {
     await expectNoAxeViolations(container)
   })
 
+  it("ties a yes or no's description to its box, as a screen reader reads it after the name", async () => {
+    const { container } = render(<CheckField label="Encrypt" checked onChange={() => {}} description="It can't change once the backend is added." />)
+    const box = screen.getByRole('checkbox', { name: 'Encrypt' })
+    const described = (box.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent)
+    expect(described).toEqual(["It can't change once the backend is added."])
+    await expectNoAxeViolations(container)
+  })
+
+  it('ties both a description and an error to a yes or no', () => {
+    render(<CheckField label="Encrypt" checked={false} onChange={() => {}} description="Recommended." error="It has to be answered." />)
+    const box = screen.getByRole('checkbox', { name: 'Encrypt' })
+    const described = (box.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent)
+    expect(described).toEqual(['Recommended.', 'It has to be answered.'])
+  })
+
   it('is a yes or no', async () => {
     const onChange = vi.fn()
     const { container } = render(<CheckField label="Signed" checked={false} onChange={onChange} />)

@@ -161,10 +161,29 @@ describe('New Store', () => {
       await userEvent.type(name(), 'Regional Office')
       expect(within(dialog()).queryByRole('combobox', { name: 'Backend' })).toBeNull()
       expect(within(dialog()).queryByText(/A backend is offered/)).toBeNull()
+      expect(within(dialog()).queryByText(/The backends couldn't be read/)).toBeNull()
       await userEvent.click(create())
       await waitFor(() => expect(sent).toEqual({ name: 'Regional Office', groupIds: [] }))
       view.unmount()
     }
+  })
+
+  it("says the Store will be made on Original when the backends couldn't be read, and can be moved after", async () => {
+    let sent: unknown
+    const { api, view } = renderDialog({
+      'GET /v1/admin/backends': () => problem(500, 'server-error'),
+      'POST /v1/admin/stores': ({ body }: Sent) => {
+        sent = body
+        return regionalOffice
+      },
+    })
+    await waitFor(() => expect(api.callsTo('GET /v1/admin/backends')).toHaveLength(1))
+    expect(await within(dialog()).findByText("The backends couldn't be read, so the Store will be made on Original. Its backend can be changed later, on the Store's page.")).toBeTruthy()
+    expect(within(dialog()).queryByRole('combobox', { name: 'Backend' })).toBeNull()
+    await expectNoAxeViolations(view.baseElement)
+    await userEvent.type(name(), 'Regional Office')
+    await userEvent.click(create())
+    await waitFor(() => expect(sent).toEqual({ name: 'Regional Office', groupIds: [] }))
   })
 
   it('finds a group by its name, once the typing pauses', async () => {

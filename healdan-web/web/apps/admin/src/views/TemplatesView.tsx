@@ -5,7 +5,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useId, useMemo, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom } from '@healdan/shell'
-import { Button, Icon, Table, type TableColumn, type TableRow } from '@healdan/ui'
+import { Button, formatCount, Icon, Table, type TableColumn, type TableRow } from '@healdan/ui'
 import { templateHref } from '../addresses'
 import { TemplateDialog } from '../templates/TemplateDialog'
 import { t } from '../strings'
@@ -17,8 +17,6 @@ type A = adminComponents['schemas']
 interface TemplateRow extends TableRow {
   template: A['TemplateInfo']
 }
-
-const counts = new Intl.NumberFormat('en-US')
 
 /** The list's columns, built when it first draws, so the firm's own word for a matter heads the last */
 function templateColumns(): TableColumn<TemplateRow>[] {
@@ -36,8 +34,8 @@ function templateColumns(): TableColumn<TemplateRow>[] {
         </span>
       ),
     },
-    { id: 'folders', name: t('admin.templates.column.folders'), align: 'end', width: 120, cell: ({ template }) => counts.format(template.folders) },
-    { id: 'matters', name: t('admin.templates.column.matters'), align: 'end', width: 200, cell: ({ template }) => counts.format(template.matters) },
+    { id: 'folders', name: t('admin.templates.column.folders'), align: 'end', width: 120, cell: ({ template }) => formatCount(template.folders) },
+    { id: 'matters', name: t('admin.templates.column.matters'), align: 'end', width: 200, cell: ({ template }) => formatCount(template.matters) },
   ]
 }
 

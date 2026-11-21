@@ -3,18 +3,18 @@
 
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { useState, type ReactNode } from 'react'
+import { useId, useState } from 'react'
 import { ApiError, apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom, useApi } from '@healdan/shell'
-import { Button, formatList, formatSize, Icon, StatusDot, toast } from '@healdan/ui'
+import { Button, Dialog, formatList, formatSize, Icon, StatusDot, toast } from '@healdan/ui'
 import { routes } from '../addresses'
 import { Confirm } from '../dialogs/Confirm'
+import { Fact } from '../facts/Fact'
 import { BackendDialog } from '../storage/BackendDialog'
 import { backendsChanged, isStorageUnavailable, storageKeys, useBackend } from '../storage/queries'
 import { RecoveryKeyDialog } from '../storage/RecoveryKeyDialog'
 import { filesOf, keyShownOf, kindOf, statusDot, statusWords, whereOf } from '../storage/text'
 import { plural, t } from '../strings'
-import type { AdminStringKey } from '../strings/en-US'
 import { useRefusalFor } from '../strings/refusals'
 import clientStyles from '../clients/Clients.module.css'
 import page from '../matters/MatterPage.module.css'
@@ -25,10 +25,12 @@ type A = adminComponents['schemas']
 
 /**
  * A backend's page, at /admin/backends/{id} (spec 8.6): its name and status, its facts (where it is, what it holds,
- * whether it's encrypted, its recovery key confirmed and last shown, the Stores on it) and the Storage tab's actions:
- * Test, Edit and Remove, and for an encrypted backend Show Recovery Key, Confirm Recovery Key (while it isn't),
- * Enter Recovery Key and Key History. An address that names no backend, as every one does while storage backends are
- * off, says so in the app's words.
+ * whether it's encrypted, its recovery key confirmed and last shown, the Stores on it, and those in the Trash on it) and
+ * the Storage tab's actions: Test, Edit and Remove, and for an encrypted backend Show Recovery Key, Confirm Recovery Key
+ * (while it isn't), Enter Recovery Key and Key History. Remove asks first; while something keeps the backend (a Store,
+ * live or in the Trash, or files recorded or held there), it says what and how to free it instead, with no Remove (spec
+ * 7.2, P3-R38). An address that names no backend, as every one does while storage backends are off, says so in the app's
+ * words.
  */
 export function BackendView({ id }: { id: string }) {
   const backendId = idFrom(id)
@@ -57,15 +59,6 @@ function BackendPage({ id }: { id: number }) {
 }
 
 type Open = 'edit' | 'remove' | 'show' | 'confirm' | 'enter' | 'history'
-
-function Fact({ term, children }: { term: AdminStringKey; children: ReactNode }) {
-  return (
-    <div className={clientStyles.fact}>
-      <dt>{t(term)}</dt>
-      <dd>{children}</dd>
-    </div>
-  )
-}
 
 function Backend({ backend }: { backend: A['Backend'] }) {
   const api = useApi()
@@ -150,7 +143,7 @@ function Backend({ backend }: { backend: A['Backend'] }) {
         {tested !== undefined &&
           'problems' in tested &&
           (tested.problems.length === 0 ? (
-            <p>{t('admin.backend.passed')}</p>
+            <p>{t('admin.storage.passed')}</p>
           ) : (
             <>
               <p>{plural('admin.storage.testFound', tested.problems.length)}</p>
@@ -179,10 +172,12 @@ function Backend({ backend }: { backend: A['Backend'] }) {
           </>
         )}
         <Fact term="admin.backend.stores">{backend.stores.length === 0 ? t('admin.backend.noStores') : formatList(backend.stores)}</Fact>
+        {backend.storesInTrash.length > 0 && <Fact term="admin.backend.storesInTrash">{formatList(backend.storesInTrash)}</Fact>}
       </dl>
       {backend.original && <p className={styles.about}>{t('admin.backend.original')}</p>}
       {open === 'edit' && <BackendDialog backend={backend} onClose={close} />}
-      {open === 'remove' && (
+      {open === 'remove' && kept(backend) && <RemoveKept backend={backend} onClose={close} />}
+      {open === 'remove' && !kept(backend) && (
         <Confirm title={t('admin.removeBackend.title', { name: backend.name })} confirm={t('admin.removeBackend.confirm')} run={remove} onClose={close}>
           <p className={styles.line}>{t('admin.removeBackend.only')}</p>
           <p className={styles.line}>{t('admin.removeBackend.place')}</p>
@@ -193,6 +188,53 @@ function Backend({ backend }: { backend: A['Backend'] }) {
       {open === 'confirm' && <RecoveryKeyDialog mode="confirm" backend={backend} onClose={close} />}
       {open === 'enter' && <RecoveryKeyDialog mode="enter" backend={backend} onClose={close} />}
       {open === 'history' && <RecoveryKeyDialog mode="history" backend={backend} onClose={close} />}
+    </div>
+  )
+}
+
+/**
+ * Whether something keeps the backend, so Remove would be refused: a Store that keeps its files on it, live or in the Trash
+ * (whose restore needs them), or a file recorded or a copy held there. The server's refusal still answers a race, and a
+ * backend still being added.
+ */
+function kept(backend: A['Backend']): boolean {
+  return backend.stores.length > 0 || backend.storesInTrash.length > 0 || backend.inUse
+}
+
+/** Remove, while something keeps the backend: each thing that does and the way to free it, with no Remove to press */
+function RemoveKept({ backend, onClose }: { backend: A['Backend']; onClose: () => void }) {
+  const describedBy = useId()
+  return (
+    <Dialog title={t('admin.removeBackend.keptTitle', { name: backend.name })} isOpen aria-describedby={describedBy} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      {(close) => (
+        <div className={clientStyles.form}>
+          <div id={describedBy} className={clientStyles.form}>
+            {backend.stores.length > 0 && <Names lead={plural('admin.removeBackend.stores', backend.stores.length)} names={backend.stores} />}
+            {backend.storesInTrash.length > 0 && <Names lead={plural('admin.removeBackend.storesInTrash', backend.storesInTrash.length)} names={backend.storesInTrash} />}
+            {backend.inUse && <p className={styles.line}>{t('admin.removeBackend.inUse')}</p>}
+          </div>
+          <div className={clientStyles.buttons}>
+            <Button variant="default" onPress={close}>
+              {t('admin.removeBackend.close')}
+            </Button>
+          </div>
+        </div>
+      )}
+    </Dialog>
+  )
+}
+
+/** A sentence, then the Stores it names, each drawn as text */
+function Names({ lead, names }: { lead: string; names: string[] }) {
+  return (
+    <div>
+      <p className={styles.line}>{lead}</p>
+      <ul className={styles.names}>
+        {/* Two Stores in the Trash can share a name, so by place */}
+        {names.map((name, index) => (
+          <li key={index}>{name}</li>
+        ))}
+      </ul>
     </div>
   )
 }

@@ -5,13 +5,13 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { useId, useState, type ReactNode } from 'react'
 import { ApiError, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom } from '@healdan/shell'
-import { Button, formatDateTime, formatSize, Icon, Tabs } from '@healdan/ui'
+import { Button, formatCount, formatDateTime, formatSize, Icon, Tabs } from '@healdan/ui'
 import { routes, userAppFolderHref } from '../addresses'
+import { Fact } from '../facts/Fact'
 import { DeleteMatterDialog } from '../matters/DeleteMatterDialog'
 import { EditMatterDialog } from '../matters/EditMatterDialog'
 import { MoveMatterDialog } from '../matters/MoveMatterDialog'
 import { plural, t } from '../strings'
-import type { AdminStringKey } from '../strings/en-US'
 import { useMatter } from '../workspace/queries'
 import { WorkspaceEditor } from '../workspace/WorkspaceEditor'
 import styles from '../clients/Clients.module.css'
@@ -149,17 +149,6 @@ function Matter({ matter, tab }: { matter: A['Matter']; tab: MatterTab }) {
   )
 }
 
-const counts = new Intl.NumberFormat('en-US')
-
-function Fact({ term, children }: { term: AdminStringKey; children: ReactNode }) {
-  return (
-    <div className={styles.fact}>
-      <dt>{t(term)}</dt>
-      <dd>{children}</dd>
-    </div>
-  )
-}
-
 function Section({ title, children }: { title: string; children: ReactNode }) {
   const id = useId()
   return (
@@ -193,7 +182,7 @@ function Overview({ matter }: { matter: A['Matter'] }) {
           <Fact term="admin.matter.store">{matter.store.name}</Fact>
           <Fact term="admin.matter.owner">{matter.owner?.name ?? t('admin.matter.ownerGone')}</Fact>
           <Fact term="admin.matter.template">{matter.template?.name ?? t('admin.matter.noTemplate')}</Fact>
-          <Fact term="admin.matter.documents">{pending ? t('admin.matter.pending') : counts.format(matter.documents ?? 0)}</Fact>
+          <Fact term="admin.matter.documents">{pending ? t('admin.matter.pending') : formatCount(matter.documents ?? 0)}</Fact>
           <Fact term="admin.matter.bytes">{pending || matter.bytes === null ? t('admin.matter.pending') : formatSize(matter.bytes)}</Fact>
           <Fact term="admin.matter.lastActivity">
             {pending ? t('admin.matter.pending') : matter.lastActivity === null ? t('admin.matter.noActivity') : formatDateTime(matter.lastActivity)}

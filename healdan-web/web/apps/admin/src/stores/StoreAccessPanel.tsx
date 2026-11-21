@@ -6,9 +6,10 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Highlight, Icon, SearchPicker, toast } from '@healdan/ui'
-import { t } from '../strings'
+import { plural, t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 import { useEditState } from '../workspace/edits'
+import { andList } from '../workspace/text'
 import workspace from '../workspace/Workspace.module.css'
 import { storeKeys, storesChanged, useStoreAccess } from './queries'
 import { useGroupPicker } from './useGroupPicker'
@@ -31,12 +32,20 @@ function readersOf(access: A['StoreAccess']): Reader[] {
     .map((row) => ({ groupId: row.groupId, name: row.name, person: row.person, custom: row.level === 'custom' }))
 }
 
+/**
+ * The rows that grant something on the Store but not Read: they can't see it, so the list doesn't show them, and Save,
+ * which keeps only the rows of those it sends, removes theirs, unless one is added back
+ */
+function unlistedOf(access: A['StoreAccess']): A['AccessRow'][] {
+  return access.rows.filter((row) => row.permissions.length > 0 && !row.permissions.includes('read'))
+}
+
 function sameReaders(one: readonly Reader[], other: readonly Reader[]): boolean {
   const ids = new Set(one.map((reader) => reader.groupId))
   return one.length === other.length && other.every((reader) => ids.has(reader.groupId))
 }
 
-/** Where the focus goes once the last reader is removed: Add a Group */
+/** Where the focus goes once the last reader is removed, or Discard Changes goes: Add a Group */
 const ADD = 'add'
 
 /**
@@ -45,7 +54,8 @@ const ADD = 'add'
  * Save sends who can see it from then on (`PUT /stores/{id}/access`), and Discard Changes puts back what the server has.
  * The server refuses to shut out a group that can read one of the Store's matters (P2), and its refusal is said beside
  * Save in the rule's words, the change kept to put right. While the save is on its way the list is held. Only groups are
- * added (P3-R30): a person's row already there is kept, and can be removed. It tells the page where it stands
+ * added (P3-R30): a person's row already there is kept, and can be removed. A row that grants something but not Read
+ * isn't listed, as it can't see the Store, so a line names each, as Save removes them. It tells the page where it stands
  * (useEditState), so leaving the page over a change asks first.
  */
 export function StoreAccessPanel({ store }: { store: Pick<A['StoreInfo'], 'id' | 'name'> }) {
@@ -82,13 +92,16 @@ function AccessEditor({ store, access }: { store: Pick<A['StoreInfo'], 'id' | 'n
   const refocus = useRef<number | typeof ADD | undefined>(undefined)
 
   const original = readersOf(access)
+  const unlisted = unlistedOf(access)
   const readers = draft ?? original
   const dirty = draft !== null && !sameReaders(draft, original)
   const taken = new Set(readers.map((reader) => reader.groupId))
+  // Those Save would remove: one added back is given Read, keeping what else it has
+  const removed = unlisted.filter((row) => !taken.has(row.groupId)).map((row) => row.name)
   // The page asks before it's left over a change unsaved, or a save on its way
   useEditState('access', dirty, busy)
 
-  // Once the list is drawn without the one removed
+  // Once the list is drawn without the one removed, or Discard Changes has gone
   useEffect(() => {
     const key = refocus.current
     if (key === undefined) return
@@ -165,6 +178,7 @@ function AccessEditor({ store, access }: { store: Pick<A['StoreInfo'], 'id' | 'n
           </ul>
         )}
         {readers.some((reader) => reader.custom) && <p className={workspace.note}>{t('admin.storeAccess.customNote')}</p>}
+        {removed.length > 0 && <p className={workspace.note}>{plural('admin.storeAccess.unlisted', removed.length, { names: andList(removed) })}</p>}
         <SearchPicker<A['Group']>
           label={t('admin.newStore.add')}
           placeholder={t('admin.newStore.find')}
@@ -201,6 +215,8 @@ function AccessEditor({ store, access }: { store: Pick<A['StoreInfo'], 'id' | 'n
               onPress={() => {
                 setDraft(null)
                 setFailure(undefined)
+                // It goes as the change does, and Save is greyed out with it
+                refocus.current = ADD
               }}
             >
               {t('admin.storeAccess.discard')}

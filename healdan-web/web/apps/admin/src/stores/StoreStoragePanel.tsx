@@ -2,15 +2,16 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useId, type ReactNode } from 'react'
+import { useId, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { ErrorPanel } from '@healdan/shell'
 import { Button, formatSize } from '@healdan/ui'
+import { Fact } from '../facts/Fact'
+import { useFocusWhenGone } from '../focus'
 import { isStorageUnavailable } from '../storage/queries'
 import { StuckFiles, useStuckRetry } from '../storage/StuckFiles'
 import { filesOf, stuckOf, waitingOf } from '../storage/text'
 import { t } from '../strings'
-import type { AdminStringKey } from '../strings/en-US'
 import { useRefusalFor } from '../strings/refusals'
 import clientStyles from '../clients/Clients.module.css'
 import styles from '../storage/Storage.module.css'
@@ -19,22 +20,16 @@ import { backendLabel } from './text'
 
 type A = adminComponents['schemas']
 
-function Fact({ term, children }: { term: AdminStringKey; children: ReactNode }) {
-  return (
-    <div className={clientStyles.fact}>
-      <dt>{t(term)}</dt>
-      <dd>{children}</dd>
-    </div>
-  )
-}
-
 /**
  * A Store's storage, on its page (spec 8.6): the backend it keeps its files on, what it holds there, what waits to move
  * there and what the mover gave up on, as the Storage tab's Stores list says them, and the stuck files listed, with Retry.
- * On a server that keeps its files in LogicalDOC's own store, or has no storage module, it says so.
+ * Once a Retry leaves none stuck, their section stays, saying so, and takes the focus Retry had. On a server that keeps
+ * its files in LogicalDOC's own store, or has no storage module, it says so.
  */
 export function StoreStoragePanel({ store }: { store: Pick<A['StoreInfo'], 'id' | 'name'> }) {
   const asked = useStoreStorage(store.id)
+  // Once a Retry here, the stuck files' section stays when none are left, so its heading can take the focus
+  const [retried, setRetried] = useState(false)
   if (asked.isError) {
     if (isStorageUnavailable(asked.error)) return <p className={styles.line}>{t('problems.storage-unavailable')}</p>
     return <ErrorPanel error={asked.error} onRetry={() => void asked.refetch()} />
@@ -51,29 +46,45 @@ export function StoreStoragePanel({ store }: { store: Pick<A['StoreInfo'], 'id' 
         <Fact term="admin.storeStorage.waiting">{waitingOf(storage.pending.waiting, storage.pending.waitingBytes)}</Fact>
         <Fact term="admin.storeStorage.stuck">{stuckOf(storage.pending.stuck)}</Fact>
       </dl>
-      {storage.pending.stuck > 0 && <Stuck store={store} stuck={storage.pending.stuck} />}
+      {(storage.pending.stuck > 0 || retried) && <Stuck store={store} stuck={storage.pending.stuck} onRetried={() => setRetried(true)} />}
     </div>
   )
 }
 
-/** The Store's stuck files, the newest documents' first, with Retry, which puts them all back to waiting */
-function Stuck({ store, stuck }: { store: Pick<A['StoreInfo'], 'id' | 'name'>; stuck: number }) {
+/**
+ * The Store's stuck files, the newest documents' first, with Retry, which puts them all back to waiting. With none stuck
+ * (after a Retry) it says so, with no Retry, and its heading takes the focus Retry had.
+ */
+function Stuck({ store, stuck, onRetried }: { store: Pick<A['StoreInfo'], 'id' | 'name'>; stuck: number; onRetried: () => void }) {
   const queryClient = useQueryClient()
   const headingId = useId()
+  const heading = useRef<HTMLHeadingElement>(null)
   const refusalFor = useRefusalFor()
   const routes = storeStuckRoutes(store.id)
-  const retrying = useStuckRetry({ ...routes, retried: t('admin.stuck.retried', { name: store.name }), onRetried: () => storeFilesChanged(queryClient, store.id, { stuck: false }) })
+  const retrying = useStuckRetry({
+    ...routes,
+    retried: t('admin.stuck.retried', { name: store.name }),
+    onRetried: () => {
+      onRetried()
+      storeFilesChanged(queryClient, store.id, { stuck: false })
+    },
+  })
+  useFocusWhenGone(stuck === 0, heading)
 
   return (
     <section aria-labelledby={headingId} className={styles.section}>
-      <h2 id={headingId}>{t('admin.storeStorage.stuckTitle')}</h2>
-      <p className={styles.muted}>{t('admin.stuck.about')}</p>
+      <h2 id={headingId} ref={heading} tabIndex={-1}>
+        {t('admin.storeStorage.stuckTitle')}
+      </h2>
+      {stuck > 0 && <p className={styles.muted}>{t('admin.stuck.about')}</p>}
       <StuckFiles list={routes.list} stuck={stuck} />
-      <div className={styles.row}>
-        <Button isPending={retrying.busy} onPress={() => void retrying.run()}>
-          {t('admin.storeStorage.retry')}
-        </Button>
-      </div>
+      {stuck > 0 && (
+        <div className={styles.row}>
+          <Button isPending={retrying.busy} onPress={() => void retrying.run()}>
+            {t('admin.storeStorage.retry')}
+          </Button>
+        </div>
+      )}
       {retrying.failure !== undefined && (
         <p className={styles.refusal} role="alert">
           {refusalFor(retrying.failure)}
