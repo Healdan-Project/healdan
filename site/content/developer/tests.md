@@ -922,13 +922,26 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     Workspace Editor. Then it signs in as `webuser` and checks in the User app that the matter's restricted folder
     isn't visible and the other folder is. Like every admin spec, it changes nothing global: it makes its own clients,
     matters, Stores and templates, and changes neither `webuser`, Everyone nor `Smoke Garage`.
+  - `admin-storage.spec.ts` walks Phase 3's Storage screens (Admin app spec §8.6). As `admin`, with names of its own
+    run, it finds `Smoke Garage` reachable on the Backends list, with its page and the storage settings and their
+    limits, which it only reads: none of its requests there writes, and a value outside a setting's limits is said
+    beside the field and never saved. Then it adds a local-folder backend of its own, encrypted, confirms its recovery
+    key from the window the add opens, tests it and removes it. A new backend's folder has to be there already, and a
+    spec can't make one in the app's container, so it uses `/var/tmp` in Chromium and `/tmp` in WebKit, which every
+    container of the image has, outside its volumes and apart from Original, staging, the read cache, the key files and
+    the conf folder; it first removes a backend an earlier run of it left there. Last, it makes a Store of its own on
+    Original with **New Store**, Everyone able to see it, opens its page and its tabs, renames it, deletes it, finds it
+    under **Deleted Stores** and restores it. It changes neither `Smoke Garage`, Smoke Cloud nor matters 1.2 and 1.3,
+    which steps 5f and 8 check.
   - `admin-a11y.spec.ts` runs axe on the Admin app as `admin`, in the light theme and again in the dark one, as
     `a11y.spec.ts` does: the Dashboard once its ten tiles and Usage's figures are drawn (it waits for Usage's chart, so
     a summary that failed fails it), the find's list for the smoke fixture's client and matter, the Help menu, the
     person menu, at 768 × 1024 the Dashboard (with no sideways scroll) and the left pane opened over it (Esc closes it,
     and the focus goes back to **☰**), Phase 2's screens (the Clients list, the Matters list, a matter's page on its
     Overview and Workspace tabs, and Workspace Templates, with the smoke fixture's client 1 and matter 1.1, which it
-    only reads, so it changes nothing and needs the smoke overlay), and last the signed-out screen. This is where the
+    only reads, so it changes nothing and needs the smoke overlay), Phase 3's (the Stores list, the smoke fixture's
+    Store `Smoke` on its three tabs, the Backends list with the storage settings, and `Smoke Garage`'s page, which it
+    only reads too, and the Stores and Backends lists at 768 × 1024), and last the signed-out screen. This is where the
     Dashboard's colour contrast is checked. The find's list is checked with the whole page around it, as the User app's
     search box's is: `@healdan/ui`'s `ComboBox` draws the list right after the box, inside the find's search landmark,
     and keeps the page around it shown to a screen reader while it's open (The Web App page's The Search Box and Search

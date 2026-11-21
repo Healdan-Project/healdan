@@ -5,13 +5,15 @@ import { expect, test, type BrowserContext, type Page } from '@playwright/test'
 import { expectNoViolations } from './axe'
 import { ADMIN_PASSWORD, ADMIN_USERNAME, expectListUnder, signIn } from './helpers'
 
-// An axe pass on Healdan Admin's Dashboard (admin spec 8.1 and 17.1), with its frame's find, Help and person menus, and on
-// Phase 2's screens (8.2 to 8.5: Clients, Matters, a matter's Overview and Workspace, and Workspace Templates), in the light
+// An axe pass on Healdan Admin's Dashboard (admin spec 8.1 and 17.1), with its frame's find, Help and person menus, on
+// Phase 2's screens (8.2 to 8.5: Clients, Matters, a matter's Overview and Workspace, and Workspace Templates) and on
+// Phase 3's (8.6: Stores, a Store's three tabs, Backends with the storage settings, and a backend's page), in the light
 // theme and in the dark one, which Playwright's `colorScheme` switches as the system's setting would, and in a tablet-wide
-// window with the left pane opened over the main area. A real browser draws the page, so this is where the screens' colour
-// contrast is checked: the app's Vitest checks run in jsdom, which has no colours. It signs in as the stack's admin and
-// only reads, so it changes nothing on the stack and depends on nothing an earlier step left. The find and Phase 2's
-// screens look at the smoke fixture's client and matter, which every smoke stack has.
+// window with the left pane opened over the main area, where the Stores and Backends lists are checked too. A real browser
+// draws the page, so this is where the screens' colour contrast is checked: the app's Vitest checks run in jsdom, which
+// has no colours. It signs in as the stack's admin and only reads, so it changes nothing on the stack and depends on
+// nothing an earlier step left. The find and Phase 2's screens look at the smoke fixture's client and matter, and Phase
+// 3's at its Store Smoke and the storage overlay's Smoke Garage, which every smoke stack has.
 
 for (const scheme of ['light', 'dark'] as const) {
   test.describe(`the Dashboard in the ${scheme} theme`, () => {
@@ -122,6 +124,48 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(main().getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
     })
 
+    // Phase 3's screens (admin spec 8.6), opened from the left pane: the smoke fixture's Store Smoke on each of its tabs, and
+    // the storage overlay's Smoke Garage, which they only read
+    test("Stores, a Store's tabs, Backends with the settings, and a backend's page", async () => {
+      const pane = page.getByRole('navigation', { name: 'Navigation' })
+      const list = (name: string) => main().getByRole('grid', { name })
+      // A list's row, by its first column: Smoke's row, not Smoke Cloud's
+      const row = (name: string, rowName: string) => list(name).getByRole('row').filter({ has: page.getByRole('rowheader', { name: rowName, exact: true }) })
+
+      await pane.getByRole('link', { name: 'Stores' }).click()
+      await expect(row('Stores', 'Smoke')).toBeVisible()
+      // With the Deleted Stores under the list, whether it holds any or not
+      await expect(main().getByRole('heading', { level: 2, name: 'Deleted Stores' })).toBeVisible()
+      await expect(main().getByText('Loading…')).toHaveCount(0)
+      await check('the Stores list')
+
+      await row('Stores', 'Smoke').click()
+      await expect(main().getByRole('heading', { level: 1, name: 'Smoke' })).toBeVisible()
+      await expect(main().getByRole('grid', { name: 'Matters in Smoke' }).getByRole('row', { name: /^1\.1 Smoke Matter/ })).toBeVisible()
+      await check("a Store's Matters")
+      await main().getByRole('tab', { name: 'Who Can See It' }).click()
+      await expect(main().getByRole('list', { name: 'Who Can See Smoke' }).getByRole('listitem').first()).toBeVisible()
+      await check("a Store's Who Can See It")
+      await main().getByRole('tab', { name: 'Storage' }).click()
+      await expect(main().getByRole('tabpanel').getByText('Waiting to Move', { exact: true })).toBeVisible()
+      await check("a Store's Storage")
+
+      await pane.getByRole('link', { name: 'Backends' }).click()
+      await expect(row('Backends', 'Smoke Garage')).toBeVisible()
+      // The settings are drawn once they've come
+      await expect(main().getByRole('region', { name: 'Settings' }).getByRole('textbox', { name: 'Parallel Transfers' })).toBeVisible()
+      await check('the Backends list, with the files with no Store and the settings')
+
+      await row('Backends', 'Smoke Garage').click()
+      await expect(main().getByRole('heading', { level: 1, name: 'Smoke Garage' })).toBeVisible()
+      await expect(main().getByText('Smoke Cloud', { exact: true })).toBeVisible()
+      await check("a backend's page")
+
+      // Back where the next test starts
+      await pane.getByRole('link', { name: 'Dashboard' }).click()
+      await expect(main().getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
+    })
+
     test('a tablet-wide window, with the left pane opened over the main area', async () => {
       await page.setViewportSize({ width: 768, height: 1024 })
       const navigation = banner().getByRole('button', { name: 'Navigation' })
@@ -137,6 +181,18 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.keyboard.press('Escape')
       await expect(page.getByRole('navigation', { name: 'Navigation' })).toHaveCount(0)
       await expect(navigation).toBeFocused()
+      // Phase 3's lists at the same width, each reached from the pane, which closes as its link is followed
+      for (const screen of ['Stores', 'Backends']) {
+        await navigation.click()
+        await page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: screen }).click()
+        await expect(page.getByRole('navigation', { name: 'Navigation' })).toHaveCount(0)
+        await expect(main().getByRole('grid', { name: screen }).getByRole('row').nth(1)).toBeVisible()
+        await expect(main().getByText('Loading…')).toHaveCount(0)
+        await check(`the ${screen} list at 768 pixels`)
+      }
+      await navigation.click()
+      await page.getByRole('navigation', { name: 'Navigation' }).getByRole('link', { name: 'Dashboard' }).click()
+      await expect(main().getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible()
       await page.setViewportSize({ width: 1280, height: 720 })
     })
 
