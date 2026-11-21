@@ -130,6 +130,8 @@ describe('Add Backend, for an S3 bucket', () => {
 
     const key = await screen.findByRole('dialog', { name: 'Recovery Key of Wasabi US' })
     expect(screen.queryByRole('dialog', { name: 'Add a Storage Backend' })).toBeNull()
+    // The add's window went as this one came: the focus is on the field it asks for
+    await waitFor(() => expect(document.activeElement).toBe(text(key, 'Last Group')))
     expect(within(key).getByText(/Wasabi US is encrypted\. This is its recovery key: save it now/)).toBeTruthy()
     expect(within(key).getByText(/Lose both, and its files are lost for good/)).toBeTruthy()
     expect(within(key).getByText(/isn't shown again unless an administrator asks/)).toBeTruthy()

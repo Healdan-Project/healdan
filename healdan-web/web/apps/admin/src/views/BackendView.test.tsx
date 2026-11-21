@@ -121,6 +121,8 @@ describe('Show Recovery Key', () => {
 
     await userEvent.click(within(ask).getByRole('button', { name: 'Show Recovery Key' }))
     const shown = await screen.findByRole('dialog', { name: 'Recovery Key of Wasabi EU' })
+    // The question's dialog went as this one came: the focus is on its heading, with no field to type in
+    await waitFor(() => expect(document.activeElement).toBe(within(shown).getByRole('heading', { name: 'Recovery Key of Wasabi EU' })))
     expect(within(shown).getByRole('group', { name: 'Recovery Key' }).textContent?.replace(/\s+/g, ' ').trim()).toBe(RECOVERY_KEY)
     // Confirmed already, so nothing is asked back
     expect(within(shown).queryByRole('textbox', { name: 'Last Group' })).toBeNull()
@@ -141,6 +143,8 @@ describe('Show Recovery Key', () => {
     await userEvent.click(within(main()).getByRole('button', { name: 'Show Recovery Key' }))
     await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Show Recovery Key' }))
     const shown = await screen.findByRole('dialog', { name: 'Recovery Key of Office NAS' })
+    // The question's dialog went as this one came: the focus is on the field it asks for
+    await waitFor(() => expect(document.activeElement).toBe(within(shown).getByRole('textbox', { name: 'Last Group' })))
     await userEvent.type(within(shown).getByRole('textbox', { name: 'Last Group' }), '4jp8')
     await userEvent.click(within(shown).getByRole('button', { name: 'Confirm' }))
     await waitFor(() => expect(api.callsTo('POST /v1/admin/backends/4/recovery-key/confirm')).toHaveLength(1))

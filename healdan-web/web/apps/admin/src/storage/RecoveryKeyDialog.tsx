@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState, type RefObject } from 'react'
 import { apiPath, type adminComponents } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Dialog, formatDateTime, Icon, TextField, toast } from '@healdan/ui'
@@ -107,15 +107,42 @@ function KeyText({ recoveryKey }: { recoveryKey: string }) {
   )
 }
 
+/**
+ * Where the focus goes as the shown key opens: the field it asks for, or, with none, its heading. It takes over from a
+ * dialog that goes as it comes (Show's question, or the add's window), whose focus would otherwise be left on the page
+ * or on the dialog as a whole. Again a frame later, as the dialog that went can take the focus as it leaves.
+ */
+function useFocusOnOpen(inside: RefObject<HTMLElement | null>, field: boolean) {
+  useEffect(() => {
+    function place() {
+      const dialog = inside.current?.closest('[role="dialog"]')
+      if (!(dialog instanceof HTMLElement)) return
+      const active = document.activeElement
+      // Something in the dialog was given the focus already, by the person or by the field's own autofocus
+      if (active !== dialog && active !== null && dialog.contains(active)) return
+      const target = field ? dialog.querySelector('input') : document.getElementById(dialog.getAttribute('aria-labelledby') ?? '')
+      if (!(target instanceof HTMLElement)) return
+      if (!field) target.tabIndex = -1
+      target.focus()
+    }
+    place()
+    const frame = requestAnimationFrame(place)
+    return () => cancelAnimationFrame(frame)
+  }, [inside, field])
+}
+
 /** The key shown, why it matters, and, while it isn't confirmed (`ask`), its last group asked for, with Later */
 function ShownKey({ backend, recoveryKey, ask, onClose }: { backend: A['Backend']; recoveryKey: string; ask: boolean; onClose: () => void }) {
   const [lastGroup, setLastGroup] = useState('')
   const confirming = useKeyChange(backend, 'confirm', t('admin.recoveryKey.confirmed', { name: backend.name }), onClose)
   const name = backend.name
+  const inside = useRef<HTMLFormElement>(null)
+  useFocusOnOpen(inside, ask)
   return (
     <Dialog title={t('admin.recoveryKey.title', { name })} isOpen onOpenChange={(open) => !open && !confirming.busy && onClose()}>
       {(close) => (
         <form
+          ref={inside}
           className={styles.form}
           onSubmit={(event) => {
             event.preventDefault()
@@ -323,8 +350,7 @@ function KeyHistory({ backend, onClose }: { backend: A['Backend']; onClose: () =
             {events.data.map((event, index) => (
               <tr key={index}>
                 <td>{formatDateTime(event.at)}</td>
-                {/* `shown` or `entered`; the contract's first draft named them `key-shown` and `key-entered` */}
-                <td>{t(String(event.event).endsWith('entered') ? 'admin.recoveryKey.history.entered' : 'admin.recoveryKey.history.shown')}</td>
+                <td>{t(event.event === 'entered' ? 'admin.recoveryKey.history.entered' : 'admin.recoveryKey.history.shown')}</td>
                 <td className={styles.wrap}>{event.username}</td>
               </tr>
             ))}

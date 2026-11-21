@@ -5,7 +5,7 @@ import { Link, useRouterState, type RegisteredRouter, type RouteIds } from '@tan
 import { useId, type ReactNode } from 'react'
 import { Icon, VisuallyHidden, type IconName } from '@healdan/ui'
 import { ADMIN_BASE, routes } from '../addresses'
-import { useDashboard, type AttentionCode } from '../queries'
+import { useDashboardCounts, type AttentionCode } from '../queries'
 import { plural, t } from '../strings'
 import type { AdminStringKey } from '../strings/en-US'
 import styles from './LeftPane.module.css'
@@ -114,9 +114,9 @@ function Group({ group, children }: { group: AdminStringKey; children: ReactNode
 export function LeftPane({ nav = NAV }: { nav?: readonly NavGroup[] }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const shown = nav.filter((group) => group.items.length > 0)
-  // The counts come from the Dashboard's list, asked for only when a screen shown has one
+  // The counts come from the Dashboard's list, asked for only when a screen shown has one, and on no timer of the pane's
   const counted = shown.some((group) => group.items.some((item) => item.count && item.count.length > 0))
-  const attention = useDashboard(counted).data?.attention ?? []
+  const attention = useDashboardCounts(counted).data?.attention ?? []
   const list = (items: readonly NavItem[]) => (
     <ul className={styles.list}>
       {items.map((item) => (

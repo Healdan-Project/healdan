@@ -90,6 +90,22 @@ export function useDashboard(enabled = true) {
   return useAdminQuery('/v1/admin/dashboard', { poll: true, enabled })
 }
 
+/**
+ * The Dashboard's answer for the left pane's counts, under the Dashboard's own key: asked as the frame loads and at each
+ * return to the window, with no timer of its own (P3-R25). Only while the Dashboard is open does the answer come every 30
+ * seconds, by the Dashboard's poll, which this follows (spec 7.2 keeps the 30-second asks to the Dashboard and running
+ * jobs). Nothing is asked while `enabled` is false.
+ */
+export function useDashboardCounts(enabled = true) {
+  const api = useApi()
+  return useQuery({
+    queryKey: adminKeys.dashboard,
+    queryFn: ({ signal }) => api.get<DashboardAnswer>('/v1/admin/dashboard', undefined, { signal }),
+    enabled,
+    meta: ASK_ON_RETURN,
+  })
+}
+
 /** The Dashboard's Usage, asked again as the rest of it is, its days cut in the browser's time zone, as the User app's are */
 export function useUsage() {
   return useAdminQuery('/v1/admin/dashboard/usage', { poll: true, query: { zone: Intl.DateTimeFormat().resolvedOptions().timeZone } })

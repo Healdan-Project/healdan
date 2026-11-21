@@ -589,9 +589,9 @@ export const RECOVERY_KEY = '7K3M 9QXR 2HTW 4PZB 8VJC 6NDF 1GSY 5EAR 3WKQ 0TMH 9
 
 /** GET /v1/admin/backends/2/key-events: newest first, the showing at its add last */
 export const wasabiKeyEvents: A['KeyEvent'][] = [
-  { event: 'key-shown', at: '2026-10-02T09:15:00Z', userId: sam.id, username: 'sam' },
-  { event: 'key-entered', at: '2026-09-30T16:40:00Z', userId: me.id, username: 'admin' },
-  { event: 'key-shown', at: '2026-09-01T11:00:00Z', userId: me.id, username: 'admin' },
+  { event: 'shown', at: '2026-10-02T09:15:00Z', userId: sam.id, username: 'sam' },
+  { event: 'entered', at: '2026-09-30T16:40:00Z', userId: me.id, username: 'admin' },
+  { event: 'shown', at: '2026-09-01T11:00:00Z', userId: me.id, username: 'admin' },
 ]
 
 /** A file the mover gave up on: version 1.2 of document 10388, unless `over` says otherwise */
