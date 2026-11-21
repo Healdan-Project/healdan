@@ -1,0 +1,263 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
+import { useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
+import { useId, useMemo, useState, type ReactNode } from 'react'
+import type { adminComponents } from '@healdan/api'
+import { ErrorPanel, idFrom } from '@healdan/shell'
+import { Button, formatSize, Icon, StatusDot, Table, type TableColumn, type TableRow } from '@healdan/ui'
+import { routes } from '../addresses'
+import { BackendDialog } from '../storage/BackendDialog'
+import { isStorageUnavailable, storageKeys, useBackends, useStorageSettings } from '../storage/queries'
+import { RecoveryKeyDialog } from '../storage/RecoveryKeyDialog'
+import { StorageSettingsForm } from '../storage/StorageSettingsForm'
+import { StuckFilesDialog, useStuckRetry } from '../storage/StuckFiles'
+import { keyShownOf, kindOf, statusDot, statusLine, stuckOf, waitingOf, whereOf } from '../storage/text'
+import { t } from '../strings'
+import type { AdminStringKey } from '../strings/en-US'
+import { useRefusalFor } from '../strings/refusals'
+import clientStyles from '../clients/Clients.module.css'
+import styles from '../storage/Storage.module.css'
+
+type A = adminComponents['schemas']
+
+interface BackendRow extends TableRow {
+  backend: A['Backend']
+}
+
+const counts = new Intl.NumberFormat('en-US')
+
+/** --row-height in tokens.css, which the list's height is counted in: the virtualiser needs one of its own */
+const ROW = 34
+/** The rows the list shows before it scrolls */
+const ROWS_SHOWN = 8
+
+const OTHER_LIST = '/v1/admin/storage/stuck-files'
+const OTHER_RETRY = '/v1/admin/storage/stuck-files/retry'
+
+/** The list's columns, as the Storage tab's: built when it first draws, and kept */
+function backendColumns(): TableColumn<BackendRow>[] {
+  return [
+    {
+      id: 'name',
+      name: t('admin.backends.column.name'),
+      isRowHeader: true,
+      width: '2fr',
+      minWidth: 140,
+      cell: ({ backend }) => (
+        <span className={styles.name}>
+          <Icon name={backend.kind === 's3' ? 'database' : 'folder'} />
+          <span className={clientStyles.muted}>{backend.name}</span>
+        </span>
+      ),
+    },
+    { id: 'kind', name: t('admin.backends.column.kind'), width: 110, cell: ({ backend }) => kindOf(backend) },
+    { id: 'where', name: t('admin.backends.column.where'), width: '3fr', minWidth: 160, cell: ({ backend }) => whereOf(backend) },
+    { id: 'encrypted', name: t('admin.backends.column.encrypted'), width: 100, cell: ({ backend }) => t(backend.encrypted ? 'admin.backends.yes' : 'admin.backends.no') },
+    { id: 'files', name: t('admin.backends.column.files'), align: 'end', width: 90, cell: ({ backend }) => counts.format(backend.files) },
+    { id: 'size', name: t('admin.backends.column.size'), align: 'end', width: 90, cell: ({ backend }) => formatSize(backend.bytes) },
+    {
+      id: 'status',
+      name: t('admin.backends.column.status'),
+      width: '3fr',
+      minWidth: 160,
+      cell: ({ backend }) => (
+        <span className={clientStyles.muted}>
+          <StatusDot status={statusDot(backend)}>{statusLine(backend)}</StatusDot>
+        </span>
+      ),
+    },
+    { id: 'keyShown', name: t('admin.backends.column.keyShown'), width: 190, cell: ({ backend }) => keyShownOf(backend) },
+  ]
+}
+
+/** A page that has nothing to show but what it says: storage backends off, or no storage module on the server */
+function Note({ children }: { children: ReactNode }) {
+  return (
+    <div className={styles.page}>
+      <h1 className={clientStyles.title}>{t('admin.backends.title')}</h1>
+      <p className={styles.about}>{children}</p>
+    </div>
+  )
+}
+
+/**
+ * The Backends list, at /admin/backends (spec 8.6): everything the Storage tab shows of the backends. Each backend with
+ * its kind, where it is, whether it's encrypted, the files recorded on it, its status and when its recovery key was last
+ * shown, Original first; Add Backend; Refresh; a row opens its page. Under it, the files with no Store, waiting and
+ * stuck, with Stuck Files and Retry, and the storage settings. On a server that keeps its files in LogicalDOC's own
+ * store, it says so and shows no controls; on one without Healdan's storage module, it says it can't be shown.
+ */
+export function BackendsView() {
+  const overview = useBackends()
+  if (overview.isError) {
+    if (isStorageUnavailable(overview.error)) return <Note>{t('admin.backends.unavailable')}</Note>
+    return (
+      <div className={styles.page}>
+        <h1 className={clientStyles.title}>{t('admin.backends.title')}</h1>
+        <ErrorPanel error={overview.error} onRetry={() => void overview.refetch()} />
+      </div>
+    )
+  }
+  if (overview.data === undefined) {
+    return (
+      <div className={styles.page}>
+        <h1 className={clientStyles.title}>{t('admin.backends.title')}</h1>
+        <p className={styles.muted}>{t('common.loading')}</p>
+      </div>
+    )
+  }
+  if (!overview.data.on) return <Note>{t('admin.backends.off')}</Note>
+  return <Backends overview={overview.data} />
+}
+
+function Backends({ overview }: { overview: A['BackendOverview'] }) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const headingId = useId()
+  const [adding, setAdding] = useState(false)
+  // An encrypted backend just added and its recovery key, held only while the key's dialog is open
+  const [added, setAdded] = useState<{ backend: A['Backend']; recoveryKey: string }>()
+
+  const columns = useMemo(() => backendColumns(), [])
+  const rows = useMemo(() => overview.backends.map((backend): BackendRow => ({ id: String(backend.id), textValue: backend.name, backend })), [overview.backends])
+  const height = (Math.min(Math.max(rows.length, 1), ROWS_SHOWN) + 1) * ROW + 2
+
+  function open(id: number) {
+    void navigate({ to: routes.backend, params: { id: String(id) } })
+  }
+
+  return (
+    <div className={styles.page}>
+      <div className={clientStyles.head}>
+        <h1 id={headingId} className={clientStyles.title}>
+          {t('admin.backends.title')}
+        </h1>
+        <div className={clientStyles.actions}>
+          <Button
+            onPress={() => {
+              void queryClient.invalidateQueries({ queryKey: storageKeys.backends })
+              void queryClient.invalidateQueries({ queryKey: storageKeys.storage })
+            }}
+          >
+            <Icon name="refresh" size={14} /> {t('admin.backends.refresh')}
+          </Button>
+          <Button variant="default" onPress={() => setAdding(true)}>
+            <Icon name="plus" size={14} /> {t('admin.backends.add')}
+          </Button>
+        </div>
+      </div>
+      <p className={styles.about}>{t('admin.backends.about')}</p>
+      <div className={styles.list} style={{ height }}>
+        <Table
+          aria-labelledby={headingId}
+          columns={columns}
+          rows={rows}
+          selectionMode="none"
+          onOpen={(key) => {
+            const id = idFrom(key)
+            if (id !== undefined) open(id)
+          }}
+          empty={<p className={styles.muted}>{t('admin.backends.none')}</p>}
+        />
+      </div>
+      <OtherFiles files={overview.otherFiles} />
+      <Settings />
+      {adding && (
+        <BackendDialog
+          onAdded={(answer) => {
+            if (answer.recoveryKey === null) open(answer.backend.id)
+            else setAdded({ backend: answer.backend, recoveryKey: answer.recoveryKey })
+          }}
+          onClose={() => setAdding(false)}
+        />
+      )}
+      {added !== undefined && (
+        <RecoveryKeyDialog
+          mode="added"
+          backend={added.backend}
+          recoveryKey={added.recoveryKey}
+          onClose={() => {
+            const id = added.backend.id
+            setAdded(undefined)
+            open(id)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function Fact({ term, children }: { term: AdminStringKey; children: ReactNode }) {
+  return (
+    <div className={clientStyles.fact}>
+      <dt>{t(term)}</dt>
+      <dd>{children}</dd>
+    </div>
+  )
+}
+
+/** The files whose document isn't in a Store (the Storage tab's Other Files): waiting and stuck, with Stuck Files and Retry */
+function OtherFiles({ files }: { files: A['PendingFiles'] }) {
+  const queryClient = useQueryClient()
+  const headingId = useId()
+  const refusalFor = useRefusalFor()
+  const [listing, setListing] = useState(false)
+  const counted = () => void queryClient.invalidateQueries({ queryKey: storageKeys.backends })
+  const retried = t('admin.stuck.otherRetried')
+  const retrying = useStuckRetry({ list: OTHER_LIST, retry: OTHER_RETRY, retried, onRetried: counted })
+
+  return (
+    <section aria-labelledby={headingId} className={styles.section}>
+      <h2 id={headingId}>{t('admin.backends.other.title')}</h2>
+      <p className={styles.muted}>{t('admin.backends.other.about')}</p>
+      <dl className={clientStyles.facts}>
+        <Fact term="admin.backends.other.waiting">{waitingOf(files.waiting, files.waitingBytes)}</Fact>
+        <Fact term="admin.backends.other.stuck">{stuckOf(files.stuck)}</Fact>
+      </dl>
+      {files.stuck > 0 && (
+        <div className={styles.row}>
+          <Button onPress={() => setListing(true)}>{t('admin.backends.other.stuckFiles')}</Button>
+          <Button isPending={retrying.busy} onPress={() => void retrying.run()}>
+            {t('admin.backends.other.retry')}
+          </Button>
+        </div>
+      )}
+      {retrying.failure !== undefined && (
+        <p className={styles.refusal} role="alert">
+          {refusalFor(retrying.failure)}
+        </p>
+      )}
+      {listing && (
+        <StuckFilesDialog
+          title={t('admin.stuck.otherTitle')}
+          list={OTHER_LIST}
+          retry={OTHER_RETRY}
+          stuck={files.stuck}
+          retried={retried}
+          onRetried={counted}
+          onClose={() => setListing(false)}
+        />
+      )}
+    </section>
+  )
+}
+
+/** The storage settings, once they've come; a failure to read them is said in their place */
+function Settings() {
+  const settings = useStorageSettings()
+  const headingId = useId()
+  if (settings.isError) {
+    // The page above says it already when the server has no storage module
+    if (isStorageUnavailable(settings.error)) return null
+    return (
+      <section aria-labelledby={headingId} className={styles.section}>
+        <h2 id={headingId}>{t('admin.storageSettings.title')}</h2>
+        <ErrorPanel error={settings.error} onRetry={() => void settings.refetch()} />
+      </section>
+    )
+  }
+  if (settings.data === undefined || !settings.data.on) return null
+  return <StorageSettingsForm settings={settings.data} />
+}
