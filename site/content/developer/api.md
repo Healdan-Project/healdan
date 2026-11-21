@@ -274,9 +274,9 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 { "items": [ … ], "offset": 0, "limit": 50, "total": 123 }
 ```
 
-- `total` is `null` for the `folders`, `matters` and `clients` searches, where counting would be slow. A page with
-  fewer than `limit` items is the last. The `documents`, `emails` and `all` searches count, up to a point: see
-  [Searching](#searching).
+- `total` is `null` for the `folders`, `matters` and `clients` searches, where counting would be slow, unless they're
+  sorted. A page with fewer than `limit` items is the last. The `documents`, `emails` and `all` searches count, up to
+  a point, and so does a sorted `folders`, `matters` or `clients` search: see [Searching](#searching).
 - Some lists, such as Recent Matters and your check-outs, come back whole, in the same shape, and take no paging
   parameters. The docs page says which.
 
@@ -300,6 +300,12 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
   name to show, and the username the `author` filter takes. An Author who is no longer a user shows by the username
   kept with the property, as the Author counts do. It's `null` for a document with no Author. A folder's list and
   the search results read their page's Authors in one query.
+- **A document's `docClass` and `docSubclass`** are its Class and Subclass properties as stored, and **`typist`** its
+  Typist, named as `author` is. **`email`** is `{ "from", "to", "sent" }`: an email's From and To properties as
+  stored, and its Sent property as a time. It's `null` for a document that isn't an email, whatever its properties
+  hold: one is an email by its type, as the `from`, `to` and `sent` sorts and the File Type filter decide, which
+  `kind`, read from the file's name, follows unless the name has lost its extension. Each of these, and each of `email`'s members, is `null` when the document has no value, and a blank
+  text counts as none. A list reads them for its page in one query, beside its Authors'.
 - **Field names are camelCase.** A field with no value is `null`, never left out, but for a list's `facets`,
   which is there only when asked for, and a search's `totalAtLeast`, there only when `total` isn't. Timestamps are ISO 8601 in UTC, such as `2026-10-23T14:05:00Z`.
 - **Text can hold any character but NUL,** emoji included, and a lone surrogate isn't a character. A query
@@ -388,9 +394,17 @@ The sections below say more about the parts a client needs to know before it sta
   first results. When fewer than 1,250 hits rank above the 2,500th, as when most hits score the same, they're taken
   over the readable hits among the first 2,500 the search read instead, and then can differ slightly from page to
   page.
-- **The other scopes,** `folders`, `matters` and `clients`, look at the first 10,000 hits, and their `total` is
-  always `null`: a page with fewer than `limit` items is the last. They take no filters, `sort` or `facets`; any
-  is `400 bad-request`.
+- **The other scopes,** `folders`, `matters` and `clients`, look at the first 10,000 hits. They take no filters or
+  `facets`; either is `400 bad-request`. Without `sort` they keep the search's own order, and their `total` is
+  `null`: a page with fewer than `limit` items is the last.
+- **Sorting the other scopes.** Each takes `sort` and `order` of its own, named after its columns: `folders` sorts
+  by `title` (the folder's name, ignoring case, then its matter) or `matter` (then the folder's name), `matters` by
+  `matter` or `client` (then the matter, so one client's matters go by number), and `clients` by `client`. `matter`
+  and `client` sort as a folder's list does (see [Listing a Folder](#listing-a-folder)), and what is still equal goes
+  by `id`. Any other `sort`, such as a document's `docNumber`, is `400`. As in a sorted document
+  search, a sorted search reads its hits until it has them all or 10,000, sorts those the caller can read and pages
+  them, so pages neither repeat nor skip, with `total` when it read them all and `totalAtLeast` when it stopped at
+  10,000.
 
 ```json
 {
@@ -415,13 +429,31 @@ the time the lists are ordered by, and no other answer has it.
 read. A search folder lists its own documents, at most 1,000. The server pages, sorts, filters and counts in the
 database, so a folder of thousands of documents answers as fast as a small one.
 
-- **Sorting.** `sort` is `title` (the file name, ignoring case; the default), `docNumber` (as a number, so #9 comes
-  before #10), `version` (the file version, `fileVersion`, as the list shows it: by its major, then its minor
-  number, so 2.9 comes before 2.10), `author` (by the
-  Author's name as `author.displayName` shows it, not the username) or `edited` (when its file last changed: filed, or a new version saved, as the view's `lastModified` says; a change to its
-  properties, a rename or a move doesn't count). `order` is `asc` (the default) or `desc`.
-  Documents with nothing to sort by, such as no Author, come last either way, and ties go by the document's age,
-  so no document shows on two pages. Subfolders always come first, by name. A search folder keeps its own order,
+- **Sorting.** `sort` takes one of these, each a column of the User app's lists of documents:
+
+  | `sort` | Sorts by |
+  |---|---|
+  | `title` | the file name, ignoring case; the default |
+  | `docNumber` | the doc #, as a number, so #9 comes before #10 |
+  | `version` | the file version, `fileVersion`, as the list shows it: by its major, then its minor number, so 2.9 comes before 2.10 |
+  | `author` | the Author's name as `author.displayName` shows it, not the username |
+  | `edited` | when its file last changed: filed, or a new version saved, as the view's `lastModified` says; a change to its properties, a rename or a move doesn't count |
+  | `matter` | the client's number, then the matter's, each as a number, so 998.9 comes before 998.10 |
+  | `client` | the client's name, ignoring case |
+  | `location` | the folder's name, ignoring case, then as `matter` |
+  | `filed` | `dateFiled` |
+  | `size` | `size`, in bytes |
+  | `type` | the name the File Type filter gives the document's kind, such as Word or PDF, A to Z, then the extension, ignoring case |
+  | `class`, `subclass` | `docClass`, `docSubclass`, ignoring case |
+  | `typist` | the Typist's name, as `author` sorts |
+  | `from`, `to` | an email's From and To, ignoring case |
+  | `sent` | when an email was sent |
+
+  `matter`, `client` and `location` take their matter from the client and matter numbers stamped on the document,
+  which Healdan stamps again on every move, so they agree with the `matter` it shows. A document that isn't an
+  email, by its type as the File Type filter decides, has no From, To or Sent to sort by, whatever properties it
+  holds. `order` is `asc` (the default) or `desc`. Documents with nothing to sort by, such as no Author, or a blank
+  value, come last either way, and ties go by the document's age, so no document shows on two pages. Subfolders always come first, by name. A search folder keeps its own order,
   newest change first, unless `sort` says otherwise.
 - **Filters.** `type` takes file kinds: `word`, `excel`, `powerpoint`, `pdf`, `email`, `opendocument`, `picture`
   and `other`, for any extension the others don't name. `author` takes usernames, `class` classes, `client` client
@@ -453,7 +485,7 @@ matter's `value` is its number, which `client` or `matter` takes, and `displayNa
 (`998 – Healdan`, `998.1 – Demo`). It's the number alone when the caller can't read the matter's own folder, or, for a
 client, the own folder of any of its matters, or when nothing has that number any more. That rule is the options':
 a document's own `matter` names its matter to anyone who can read the document. A value the
-filters don't take, such as `sort=size` or `type=docx`, is `400 bad-request`.
+filters don't take, such as `sort=colour` or `type=docx`, is `400 bad-request`.
 
 ## Creating a Folder
 
@@ -568,9 +600,20 @@ The calls:
 - **`GET /trash?view=mine|everyone|removed`** lists a page of items, with `removedDays` (the days an administrator can
   still restore a removed item) beside the usual page fields. `mine` is what the caller deleted that is still in the
   Trash, and the default. `everyone`, the items in the Trash, and `removed`, the items removed from it, are for
-  administrators: anyone else gets `403 admins-only`. `sort` is `name`, `deleted` or `removed`, `order` `asc` or `desc`.
-  By default it sorts by `removed` in the `removed` view and by `deleted` in the others, newest first. The page's
-  `total` counts the items.
+  administrators: anyone else gets `403 admins-only`. `sort` names one of the app's Trash columns: `name`,
+  `docNumber`, `deletedFrom`, `deleted`, `deletedBy`, `removedBy`, `removed` or `destroyed`; `order` is `asc` or
+  `desc`. Without `sort` it sorts by `removed` in the `removed` view and by `deleted` in the others. Without `order`,
+  names and numbers go A to Z or smallest first, and times newest first. The page's `total` counts the items.
+  - `name` sorts ignoring case, and `docNumber` as a number, with folders, which have none, last either way.
+  - `deletedBy` and `removedBy` sort by the names recorded when the item was deleted or removed, ignoring case.
+  - `deletedFrom` sorts as the app's column shows it: by the client's and the matter's numbers of the matter recorded
+    at the delete, each as a number, so 998.9 comes before 998.10 whichever Store each is in, then by the folders
+    inside the matter on the path recorded then, folder by folder, ignoring case. An item deleted from outside a
+    matter, as a matter's own folder is, comes after those, by its whole path. So an item whose folder was renamed
+    or moved since sorts by its old place, though `deletedFrom.path` gives the new one whenever `deletedFrom.folder`
+    is given. Sorting by the path shown would mean building every item's path before paging.
+  - `destroyed` sorts as `removed` does: the night an item is destroyed follows from when it was removed.
+  - An item with nothing to sort by comes last either way.
 - **`POST /trash/{id}/restore`** restores an item and what its delete took, and answers `200` with `{ place, item }`:
   where it went, as the folder's `FolderView`, and the item, restored. With no body, or no `folderId`, it goes back
   to the folder it was deleted from, and `409 place-gone` says that folder isn't there for it. Ask the person where, and

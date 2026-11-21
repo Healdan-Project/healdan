@@ -19,6 +19,8 @@ const time = (value: string | null | undefined): Part => {
   const at = value == null ? NaN : Date.parse(value)
   return Number.isNaN(at) ? null : at
 }
+// A text's key, ignoring case: no value at all when there's none, so the row sorts last both ways
+const textKey = (value: string | null | undefined): Key => (value == null ? null : [text(value)])
 // A date's key: no value at all when it can't be read, so the row sorts last both ways
 const timeKey = (value: string | null | undefined): Key => {
   const at = time(value)
@@ -52,14 +54,19 @@ const KEYS: Record<string, (row: ListRow) => Key> = {
   author: (row) => { const d = documentOf(row); return d?.author ? [text(d.author.displayName)] : null },
   edited: (row) => { const d = documentOf(row); return d && timeKey(d.lastModified) },
   matter: ({ item }) => (item.type === 'matter' ? null : matterKey(item.matter)),
-  client: ({ item }) => {
-    const name = item.type === 'matter' ? item.client.name : item.matter?.client.name
-    return name == null ? null : [text(name)]
-  },
+  client: ({ item }) => textKey(item.type === 'matter' ? item.client.name : item.matter?.client.name),
   location: (row) => { const d = documentOf(row); return d && [text(d.folder.name), ...(matterKey(d.matter) ?? [null, null])] },
   filed: (row) => { const d = documentOf(row); return d && timeKey(d.dateFiled) },
   size: (row) => { const d = documentOf(row); return d && [d.size] },
   type: (row) => { const d = documentOf(row); return d && [text(typeLabel(d.kind)), extension(d.name)] },
+  class: (row) => textKey(documentOf(row)?.docClass),
+  subclass: (row) => textKey(documentOf(row)?.docSubclass),
+  // By the name shown, as Author is
+  typist: (row) => textKey(documentOf(row)?.typist?.displayName),
+  // An email's own: a document that isn't an email has none
+  from: (row) => textKey(documentOf(row)?.email?.from),
+  to: (row) => textKey(documentOf(row)?.email?.to),
+  sent: (row) => timeKey(documentOf(row)?.email?.sent),
   lastUsed: ({ item }) => (item.type === 'matter' ? null : timeKey(item.lastUsed)),
   computer: (row) => { const d = documentOf(row); return d?.hold ? [text(computerLabel(d.hold).computer)] : null },
   checkedOut: (row) => { const d = documentOf(row); return d?.hold ? timeKey(d.hold.since) : null },

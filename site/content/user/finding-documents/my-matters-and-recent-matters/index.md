@@ -44,7 +44,7 @@ worked on lately and sets the scope picker beside the search box to its scope, s
 | Entry | Lists |
 |---|---|
 | **Documents** | the documents you filed, changed, checked in or out, or downloaded in the last 30 days, up to 50, with each one's matter. It's the page you start on |
-| **Emails** | the same, but only emails (`.eml` and `.msg` files), up to 50 of them |
+| **Emails** | the same, but only emails (`.eml` and `.msg` files), up to 50 of them, with each one's matter, sender and the date it was sent |
 | **Folders** | the folders in matters where you filed or changed a document in the last 30 days, with each one's matter, up to 20 |
 | **Clients** | the clients of your Recent Matters and My Matters, by name and number |
 

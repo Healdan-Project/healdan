@@ -31,6 +31,19 @@ describe('reading a layout', () => {
     forgetLayout('documents')
     expect(kept('documents')).toBeNull()
   })
+
+  it("reads a width kept for the Matters or Clients scope's first column under its old id, title, as matter's", () => {
+    for (const kind of ['matters', 'clients'] as const) {
+      window.localStorage.setItem(`healdan.columns.${kind}`, '{"v":1,"widths":{"title":420,"client":180}}')
+      expect(readLayout(kind)).toEqual({ widths: { matter: 420, client: 180 } })
+      // A width kept since, under the new id, wins
+      window.localStorage.setItem(`healdan.columns.${kind}`, '{"v":1,"widths":{"title":420,"matter":300}}')
+      expect(readLayout(kind)).toEqual({ widths: { matter: 300 } })
+    }
+    // Every other list's Title is still title
+    window.localStorage.setItem('healdan.columns.folders', '{"v":1,"widths":{"title":420}}')
+    expect(readLayout('folders')).toEqual({ widths: { title: 420 } })
+  })
 })
 
 describe('the columns shown', () => {

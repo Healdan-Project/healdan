@@ -36,6 +36,7 @@ import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.runtime.Aspect;
 import com.logicaldoc.core.runtime.RunLevel;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.listing.ListingSql;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
@@ -433,7 +434,7 @@ public class TrashRecorder {
 	 * @return the doc # a custom id is, when it is a number
 	 */
 	static String docNumber(String customId) {
-		boolean numbered = customId != null && !customId.isEmpty() && customId.length() <= 18
+		boolean numbered = customId != null && !customId.isEmpty() && customId.length() <= ListingSql.DOC_NUMBER_DIGITS
 				&& customId.chars().allMatch(c -> c >= '0' && c <= '9');
 		return numbered ? customId : null;
 	}

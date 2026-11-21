@@ -9,7 +9,7 @@ import { filterParams, noFilters, type Filters } from '../filters/useFilters'
 import { keys } from '../queries'
 import { useApi } from '../services'
 import { PAGE_SIZE, distinct, pagedState, type Hit, type SortColumn } from '../views/useListing'
-import { searchesDocuments, type SearchScope } from './scopes'
+import { isScopeSort, searchesDocuments, type SearchScope } from './scopes'
 
 type S = components['schemas']
 
@@ -23,16 +23,20 @@ export interface SearchOptions {
   scope: SearchScope
   /** The words, trimmed; nothing is asked while they're empty */
   q: string
+  /** One the scope's search takes (`scopeSorts`), as any other is left out; none keeps the search's own order */
   sort?: { column: SortColumn; direction: TableSort['direction'] }
   filters?: Filters
 }
 
-// Only the document scopes take filters and sorting: the API refuses them with 400 for the others, so an address that
-// holds some never sends them.
-function paramsOf({ scope, q, sort, filters = noFilters }: SearchOptions): Record<string, string | string[]> {
+/**
+ * A search's parameters. Only the document scopes take filters: the API refuses them with 400 for the others, so an address
+ * that holds some never sends them. Every scope takes a sort, each its own (`scopeSorts`), and the API refuses any other
+ * with 400 too, so a sort the scope doesn't take is left out here, whatever the caller asked.
+ */
+export function paramsOf({ scope, q, sort, filters = noFilters }: SearchOptions): Record<string, string | string[]> {
   const params: Record<string, string | string[]> = { scope, q }
+  if (sort && isScopeSort(scope, sort.column)) Object.assign(params, { sort: sort.column, order: sort.direction === 'descending' ? 'desc' : 'asc' })
   if (!searchesDocuments(scope)) return params
-  if (sort) Object.assign(params, { sort: sort.column, order: sort.direction === 'descending' ? 'desc' : 'asc' })
   return { ...params, ...filterParams(filters) }
 }
 

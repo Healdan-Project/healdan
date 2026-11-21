@@ -17,8 +17,11 @@ export type Child = S['FolderView'] | S['DocumentView']
 export type Hit = Child | S['MatterView']
 type ChildPage = Omit<S['FolderChildPage'], 'items'> & { items: Child[] }
 
-/** What the API sorts a folder's documents by (ruling R4) */
-export const sortColumns = ['title', 'docNumber', 'version', 'author', 'edited'] as const
+/**
+ * What the API sorts a folder's documents and a document search's hits by (ruling R4; list columns spec 5.2): every document
+ * column, each by its own name
+ */
+export const sortColumns = ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'class', 'subclass', 'typist', 'from', 'to', 'sent'] as const
 export type SortColumn = (typeof sortColumns)[number]
 export type ListingOrder = 'asc' | 'desc'
 

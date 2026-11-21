@@ -6,12 +6,13 @@ import { PASSWORD, apiContext, authorized, call, deviceToken, escape, fileDocume
 
 // The list's columns (list columns spec sections 4.2 to 4.9, 8.3): resized by an edge and by keys, chosen in the Columns panel,
 // moved by a heading's drag and by Move Left, a layout of its own beside the reading pane, Recent sorted in the browser, Reset
-// Columns, and a layout kept on a wide window opened in a narrow one. What only a browser shows is checked on the way: the
-// edge's 24 pixels centred on the heading's edge, its line and the drop line in the accent, the heading's hover colour off
-// while the pointer is on its edge (a `:has()` rule), and a heading's pointer drag that sorts nothing. Each test has a browser
-// context of its own, so its layouts start from the defaults, whatever another left. The documents are this run's own, in a
-// folder of its own inside the specs' E2E folder in matter 1.1's Documents folder (which the smoke fixture makes); Recent
-// Documents also lists what the other specs filed as webuser, so its order is checked against the whole list the API gives.
+// Columns, a layout kept on a wide window opened in a narrow one, and a folder shown with Class and sorted by it on the server.
+// What only a browser shows is checked on the way: the edge's 24 pixels centred on the heading's edge, its line and the drop
+// line in the accent, the heading's hover colour off while the pointer is on its edge (a `:has()` rule), and a heading's
+// pointer drag that sorts nothing. Each test has a browser context of its own, so its layouts start from the defaults,
+// whatever another left. The documents are this run's own, in folders of its own inside the specs' E2E folder in matter 1.1's
+// Documents folder (which the smoke fixture makes); Recent Documents also lists what the other specs filed as webuser, so its
+// order is checked against the whole list the API gives.
 const RUN = `col${Date.now().toString(36)}`
 const WORK = `Columns ${RUN}`
 // Filed in this order, so Recent's own order (Last Used, newest first) is the PDF, Bravo, Alpha, Charlie, and Title's isn't
@@ -24,6 +25,8 @@ const NAMES = {
 
 let api: APIRequestContext | undefined
 let token = ''
+/** The specs' E2E folder */
+let home = 0
 let workFolder = 0
 
 test.beforeAll(async ({ playwright }, testInfo) => {
@@ -31,7 +34,7 @@ test.beforeAll(async ({ playwright }, testInfo) => {
   api = await apiContext(playwright.request, testInfo.project.use.baseURL)
   token = await deviceToken(api, RUN)
   const where = await matterFolders(api, token)
-  const home = await specsFolder(api, token, where.documents)
+  home = await specsFolder(api, token, where.documents)
   workFolder = (await call<{ id: number }>(api.post('/api/v1/folders', { ...authorized(token), data: { parentId: home, name: WORK } }), `making ${WORK}`)).id
   for (const name of [NAMES.charlie, NAMES.alpha, NAMES.bravo]) await fileDocument(api, token, workFolder, name, 'text/plain', Buffer.from(`The text of ${name}`))
   await fileDocument(api, token, workFolder, NAMES.pdf, 'application/pdf', minimalPdf(`Pane ${RUN}`))
@@ -312,8 +315,8 @@ test('sorts Recent › Documents by Title and back by Last Used', async ({ page 
   }).map((one) => one.name)
   const lastUsed = heading(page, 'Last Used')
   await expect(lastUsed).toHaveAttribute('aria-sort', 'descending')
-  // This run's documents are among the newest, in the order they were filed, last first
-  expect(own.slice(0, 4)).toEqual([NAMES.pdf, NAMES.bravo, NAMES.alpha, NAMES.charlie])
+  // This run's documents, in the order they were filed, last first, whatever else was used since
+  expect(own.filter((name) => Object.values(NAMES).includes(name))).toEqual([NAMES.pdf, NAMES.bravo, NAMES.alpha, NAMES.charlie])
   const drawn = await drawnNames(page)
   expect(drawn).toEqual(own.slice(0, drawn.length))
 
@@ -407,4 +410,117 @@ test('a wide layout scrolls sideways in a narrow window', async ({ page }) => {
   expect(new Set(heights)).toEqual(new Set([34]))
   // Nothing kept changed
   expect(await kept(page, 'folder')).toEqual(layout)
+})
+
+// Class (list columns spec sections 4.7, 8.3): a folder of its own holds a document of each of three Classes, named so that the
+// folder's own order (by title) is neither Class's A to Z nor its Z to A. Class is picked from a list, the filing refuses a
+// value that isn't in it (`not-an-option`), and a fresh install's list holds only the default Class, Docs: on the smoke stack
+// the smoke-classes seed adds Correspondence and Pleadings. No document is without a Class: one with none of its own inherits
+// its folder's, or the default Class, so no row here sorts last for having none.
+const CLASSED = {
+  alpha: { name: `Alpha class ${RUN}.txt`, docClass: 'Pleadings' },
+  bravo: { name: `Bravo class ${RUN}.txt`, docClass: 'Correspondence' },
+  charlie: { name: `Charlie class ${RUN}.txt`, docClass: 'Docs' },
+}
+/** The Class options a folder's filing form offers, in their order */
+async function classOptions(folderId: number): Promise<string[]> {
+  const form = await call<{ items: { name: string; options: { value: string }[] | null }[] }>(api!.get(`/api/v1/folders/${folderId}/form`, authorized(token)), 'the filing form')
+  return form.items.find((field) => field.name === 'docclass')?.options?.map((option) => option.value) ?? []
+}
+
+/** Each drawn row's name, and the text of its cell under a column's heading (by where they're drawn) */
+async function cellsUnder(page: Page, key: string): Promise<Record<string, string>> {
+  const at = await grid(page).locator(`[role="columnheader"][data-column-key="${key}"]`).boundingBox()
+  expect(at, `the heading of ${key} is drawn`).not.toBeNull()
+  return grid(page)
+    .locator('[role="row"]:has([role="rowheader"])')
+    .evaluateAll(
+      (rows, column) =>
+        Object.fromEntries(
+          rows.map((row) => {
+            const cell = [...row.querySelectorAll<HTMLElement>('[role="gridcell"]')].find((one) => {
+              const box = one.getBoundingClientRect()
+              const middle = box.x + box.width / 2
+              return middle > column.left && middle < column.right
+            })
+            return [(row.querySelector('[role="rowheader"]') as HTMLElement).innerText.trim(), cell?.innerText.trim() ?? '']
+          }),
+        ),
+      { left: at!.x, right: at!.x + at!.width },
+    )
+}
+
+/**
+ * The names of the documents in the next answer for a folder's list sorted by `sort` in `order`, in the server's order. Called
+ * before the click that asks for it, which it then waits for.
+ */
+async function nextListing(page: Page, folderId: number, sort: string, order: 'asc' | 'desc'): Promise<string[]> {
+  const answer = await page.waitForResponse((response) => {
+    const url = new URL(response.url())
+    return url.pathname === `/api/v1/folders/${folderId}/children` && url.searchParams.get('sort') === sort && url.searchParams.get('order') === order
+  })
+  expect(answer.ok(), `the folder's list by ${sort}, ${order}: HTTP ${answer.status()}`).toBe(true)
+  const listed = (await answer.json()) as { items: { type: string; name: string }[] }
+  return listed.items.filter((item) => item.type === 'document').map((item) => item.name)
+}
+
+/** Whether the address sorts by `sort` in `order` */
+const sortedBy = (sort: string, order: 'asc' | 'desc') => (url: URL) => url.searchParams.get('sort') === sort && url.searchParams.get('order') === order
+
+test('shows Class and sorts a folder by it', async ({ page }) => {
+  const name = `Classes ${RUN}`
+  const folder = (await call<{ id: number }>(api!.post('/api/v1/folders', { ...authorized(token), data: { parentId: home, name } }), `making ${name}`)).id
+  const { alpha, bravo, charlie } = CLASSED
+  expect(await classOptions(folder), "the Class list holds the smoke-classes seed's Classes").toEqual(expect.arrayContaining([alpha.docClass, bravo.docClass, charlie.docClass]))
+  for (const one of [alpha, bravo, charlie]) await fileDocument(api!, token, folder, one.name, 'text/plain', Buffer.from(`The text of ${one.name}`), { docclass: one.docClass })
+
+  await signedIn(page)
+  await page.goto(`/app/folders/${folder}`)
+  await expect(grid(page).getByRole('row', { name: escape(alpha.name) })).toBeVisible()
+  // The folder's own order, by title, with its own columns, none of them Class
+  const full = ['title', 'docNumber', 'version', 'author', 'edited']
+  expect(await shown(page)).toEqual(full)
+  await expect.poll(() => drawnNames(page)).toEqual([alpha.name, bravo.name, charlie.name])
+
+  // Class, from the Columns panel's More Columns, goes at the end, and shows each document's Class as stored
+  await main(page).getByRole('button', { name: 'Columns', exact: true }).click()
+  const panel = page.getByRole('dialog', { name: 'Columns' })
+  await expect(panel.getByText('For Folders')).toBeVisible()
+  await panel.getByRole('group', { name: 'More Columns' }).getByText('Class', { exact: true }).click()
+  await expect(panel.getByRole('group', { name: 'Shown' }).getByRole('checkbox', { name: 'Class' })).toBeChecked()
+  await page.keyboard.press('Escape')
+  await expect(panel).toBeHidden()
+  const withClass = [...full, 'class']
+  await expect.poll(() => shown(page)).toEqual(withClass)
+  expect(await kept(page, 'folder')).toEqual({ v: 1, shown: withClass, widths: {} })
+  await expect.poll(() => cellsUnder(page, 'class')).toEqual({ [alpha.name]: alpha.docClass, [bravo.name]: bravo.docClass, [charlie.name]: charlie.docClass })
+
+  // A click on its heading sorts by it on the server, A to Z at first, as Class isn't a date: Correspondence, Docs, Pleadings
+  const title = heading(page, 'Title')
+  const docClass = heading(page, 'Class')
+  await expect(title).toHaveAttribute('aria-sort', 'ascending')
+  await expect(docClass).toHaveAttribute('aria-sort', 'none')
+  const aToZ = [bravo.name, charlie.name, alpha.name]
+  const ascending = nextListing(page, folder, 'class', 'asc')
+  await docClass.getByText('Class', { exact: true }).click()
+  expect(await ascending).toEqual(aToZ)
+  await expect(docClass).toHaveAttribute('aria-sort', 'ascending')
+  await expect(title).toHaveAttribute('aria-sort', 'none')
+  await expect(page).toHaveURL(sortedBy('class', 'asc'))
+  await expect.poll(() => drawnNames(page)).toEqual(aToZ)
+
+  // Again, Z to A
+  const zToA = [alpha.name, charlie.name, bravo.name]
+  const descending = nextListing(page, folder, 'class', 'desc')
+  await docClass.getByText('Class', { exact: true }).click()
+  expect(await descending).toEqual(zToA)
+  await expect(docClass).toHaveAttribute('aria-sort', 'descending')
+  await expect(page).toHaveURL(sortedBy('class', 'desc'))
+  await expect.poll(() => drawnNames(page)).toEqual(zToA)
+
+  // A reload keeps both: the sort is the address's, and the column the folder's layout
+  await page.reload()
+  await expect.poll(() => drawnNames(page)).toEqual(zToA)
+  expect(await shown(page)).toEqual(withClass)
+  await expect(docClass).toHaveAttribute('aria-sort', 'descending')
 })

@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import org.apache.commons.lang3.StringUtils;
@@ -30,8 +29,6 @@ import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.api.model.NewFavorite;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.UserView;
-import com.logicaldoc.healdan.listing.DocumentAuthors;
-import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.navigation.Favorites;
 import com.logicaldoc.healdan.navigation.MyMatters;
 import com.logicaldoc.healdan.security.AccessChecks;
@@ -83,11 +80,11 @@ public class MeResource {
 				if (AccessChecks.readableDocument(document, caller).isPresent() && ApiViews.shows(document))
 					documents.add(document);
 			}
-			// The Authors in one query, not one a row
-			Map<Long, Author> authors = ApiViews.authors(documents);
+			// What the rows show in one go, not a query a row
+			ApiViews.RowReads rows = ApiViews.rows(documents);
 			List<DocumentView> views = new ArrayList<>();
 			for (Document document : documents)
-				views.add(ApiViews.document(document, caller, authors));
+				views.add(ApiViews.document(document, caller, rows));
 			views.sort(Comparator.comparing(MeResource::since, Comparator.nullsLast(Comparator.reverseOrder()))
 					.thenComparing(Comparator.comparingLong(DocumentView::docNumber).reversed()));
 			return Page.whole(views);
@@ -120,12 +117,12 @@ public class MeResource {
 		User caller = Caller.current().user();
 		try {
 			List<Bookmark> bookmarks = Favorites.get().list(caller.getId());
-			// The documents' Authors in one query, not one a favorite
-			Map<Long, Author> authors = DocumentAuthors.get().of(bookmarks.stream()
+			// What the documents' rows show in one go, not a query a favorite
+			ApiViews.RowReads rows = ApiViews.RowReads.of(bookmarks.stream()
 					.filter(b -> b.getType() != Bookmark.Type.FOLDER).map(Bookmark::getTargetId).toList());
 			List<FavoriteView> views = new ArrayList<>();
 			for (Bookmark bookmark : bookmarks) {
-				FavoriteView view = view(bookmark, caller, authors);
+				FavoriteView view = view(bookmark, caller, rows);
 				if (view != null)
 					views.add(view);
 			}
@@ -166,9 +163,7 @@ public class MeResource {
 				Document document = DocumentResource.readable(body.docNumber(), caller);
 				bookmark = Favorites.get().addDocument(caller.getId(), document.getId());
 			}
-			FavoriteView view = view(bookmark, caller,
-					bookmark.getType() == Bookmark.Type.FOLDER ? Map.of()
-							: DocumentAuthors.get().of(List.of(bookmark.getTargetId())));
+			FavoriteView view = view(bookmark, caller, rows(bookmark));
 			if (view == null)
 				throw new IllegalStateException("The new favorite can't be shown");
 			return Response.status(Response.Status.CREATED).entity(view).build();
@@ -227,13 +222,12 @@ public class MeResource {
 			Bookmark bookmark = Favorites.get().find(caller.getId(), id);
 			if (bookmark == null)
 				throw ApiProblem.notFound("You have no favorite with this id.");
-			Map<Long, Author> authors = bookmark.getType() == Bookmark.Type.FOLDER ? Map.of()
-					: DocumentAuthors.get().of(List.of(bookmark.getTargetId()));
+			ApiViews.RowReads rows = rows(bookmark);
 			// What the list leaves out can't be renamed either
-			if (view(bookmark, caller, authors) == null)
+			if (view(bookmark, caller, rows) == null)
 				throw ApiProblem.notFound("You have no favorite with this id.");
 			Bookmark renamed = Favorites.get().rename(caller.getId(), id, favoriteName(requested));
-			FavoriteView view = view(renamed, caller, authors);
+			FavoriteView view = view(renamed, caller, rows);
 			if (view == null)
 				throw ApiProblem.notFound("You have no favorite with this id.");
 			return view;
@@ -307,10 +301,19 @@ public class MeResource {
 	}
 
 	/**
-	 * @param authors the Authors of the favorites' documents, by id, read at once
+	 * @return what a favorite's row shows, read for its document; nothing for
+	 *         a folder's
+	 */
+	private static ApiViews.RowReads rows(Bookmark bookmark) {
+		return ApiViews.RowReads
+				.of(bookmark.getType() == Bookmark.Type.FOLDER ? List.of() : List.of(bookmark.getTargetId()));
+	}
+
+	/**
+	 * @param rows what the favorites' documents' rows show, by id, read at once
 	 * @return the bookmark's view, or null if its target can't be read or isn't shown
 	 */
-	private static FavoriteView view(Bookmark bookmark, User caller, Map<Long, Author> authors)
+	private static FavoriteView view(Bookmark bookmark, User caller, ApiViews.RowReads rows)
 			throws PersistenceException {
 		if (bookmark.getType() == Bookmark.Type.FOLDER) {
 			Optional<Folder> folder = AccessChecks.readableFolder(bookmark.getTargetId(), caller);
@@ -323,7 +326,7 @@ public class MeResource {
 				caller);
 		if (document.isEmpty() || !ApiViews.shows(document.get()))
 			return null;
-		DocumentView item = ApiViews.document(document.get(), caller, authors);
+		DocumentView item = ApiViews.document(document.get(), caller, rows);
 		return new FavoriteView(bookmark.getId(), "document", name(bookmark, item.name()), item);
 	}
 

@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import javax.sql.DataSource;
 
@@ -48,8 +50,10 @@ import com.logicaldoc.util.spring.Context;
  * ({@link ListingSql#isDocNumber}). The tests compare it with
  * {@code readableDocuments}: a change to one is a change to the other.
  * <p>
- * Author, Class, Client and Matter are the document's own properties
- * ({@code ld_document_ext}), and File Type its extension.
+ * Author, Typist, Class, Subclass, Client, Matter, From, To and Sent are the
+ * document's own properties ({@code ld_document_ext}); Client sorts by the
+ * name of the client whose number it holds. File Type is the document's
+ * extension, and Location its folder's name.
  */
 @Component
 public class FolderListing {
@@ -69,8 +73,37 @@ public class FolderListing {
 
 	private static final String MATTER = "mx";
 
+	private static final String SUBCLASS = "scx";
+
+	private static final String TYPIST = "tx";
+
+	private static final String FROM = "fmx";
+
+	private static final String TO = "tox";
+
+	private static final String SENT = "snx";
+
 	/** The Author's user */
 	private static final String AUTHOR_USER = "au";
+
+	/** The Typist's user */
+	private static final String TYPIST_USER = "tu";
+
+	/** The client whose number the Client property holds */
+	private static final String CLIENT_ROW = "c";
+
+	/** The document's folder */
+	private static final String FOLDER = "f";
+
+	/** The most digits of a client's number or a matter's that sort as a number, as the filters take them */
+	private static final int NUMBER_DIGITS = 18;
+
+	/**
+	 * Every character Java counts as whitespace ({@link Character#isWhitespace}), as SQL text: what
+	 * {@code StringUtils.isBlank} looks for, where a plain {@code btrim} takes off spaces alone
+	 */
+	private static final String WHITESPACE = "concat(%s)".formatted(IntStream.rangeClosed(1, Character.MAX_VALUE)
+			.filter(Character::isWhitespace).mapToObj(c -> "chr(" + c + ")").collect(Collectors.joining(", ")));
 
 	/** An ACL row {@code a} is one of the user's groups' */
 	private static final String USER_GROUPS = "a.ld_groupid in (select g.ld_groupid from ld_usergroup g where g.ld_userid = :user)";
@@ -309,7 +342,7 @@ public class FolderListing {
 		if (Facets.AUTHOR.equals(facet)) {
 			// The user by the property's id, as the rows and the sort by Author name them, not by the kept username
 			select.join(AUTHOR, HealdanConstants.ATTR_AUTHOR);
-			select.joinAuthorUser();
+			select.joinUser(AUTHOR_USER, AUTHOR);
 			select.where.add(AUTHOR + ".ld_stringvalue is not null");
 			jdbc.query("select %1$s.ld_stringvalue, max(%2$s.ld_id), count(*)%3$s group by %1$s.ld_stringvalue"
 					.formatted(AUTHOR, AUTHOR_USER, select.from()), select.params, rs -> {
@@ -554,8 +587,9 @@ public class FolderListing {
 	}
 
 	/**
-	 * @return the {@code order by}: the key, with nulls last both ways, then
-	 *         the id, so that pages never overlap
+	 * @return the {@code order by}: the key's parts, each with nulls last both
+	 *         ways, then the id, so that pages never overlap (list columns spec
+	 *         section 4.7 for the columns' keys)
 	 */
 	private static String order(Select select, Sort sort, boolean descending) {
 		String direction = descending ? " desc" : "";
@@ -564,8 +598,25 @@ public class FolderListing {
 		case DOC_NUMBER -> List.of(ListingSql.docNumberOrder("d"));
 		// The file's version, which a list shows; CE's own version moves on every change of properties too
 		case VERSION -> List.of(ListingSql.versionMajor("d.ld_fileversion"), ListingSql.versionMinor("d.ld_fileversion"));
-		case AUTHOR -> List.of(authorName(select));
+		case AUTHOR -> List.of(personName(select, AUTHOR, HealdanConstants.ATTR_AUTHOR, AUTHOR_USER));
 		case EDITED -> List.of(EDIT_DATE);
+		case MATTER -> matterNumbers(select);
+		case CLIENT -> List.of("lower(%s.hd_name)".formatted(select.joinClient()));
+		case LOCATION -> {
+			List<String> location = new ArrayList<>();
+			location.add("lower(%s.ld_name)".formatted(select.joinFolder()));
+			location.addAll(matterNumbers(select));
+			yield location;
+		}
+		case FILED -> List.of("d.ld_creation");
+		case SIZE -> List.of("d.ld_filesize");
+		case TYPE -> List.of(typeRank(select), "lower(d.ld_type)");
+		case CLASS -> List.of(text(select.join(CLASS, HealdanConstants.ATTR_DOCCLASS)));
+		case SUBCLASS -> List.of(text(select.join(SUBCLASS, HealdanConstants.ATTR_DOCSUBCLASS)));
+		case TYPIST -> List.of(personName(select, TYPIST, HealdanConstants.ATTR_TYPIST, TYPIST_USER));
+		case FROM -> List.of(emailOnly(select, text(select.join(FROM, HealdanConstants.ATTR_EMAILFROM))));
+		case TO -> List.of(emailOnly(select, text(select.join(TO, HealdanConstants.ATTR_EMAILTO))));
+		case SENT -> List.of(emailOnly(select, select.join(SENT, HealdanConstants.ATTR_EMAILSENT) + ".ld_datevalue"));
 		};
 		List<String> order = new ArrayList<>();
 		for (String key : keys) {
@@ -577,22 +628,85 @@ public class FolderListing {
 	}
 
 	/**
-	 * @return the Author's name, as {@code User.getFullName} makes it, in
-	 *         lower case; the username kept with the property for an Author
-	 *         who is no longer a user, so the order is that of the names
-	 *         {@link DocumentAuthors} shows
+	 * @return the name of the person a user property holds, as
+	 *         {@link DocumentAuthors#named} makes it, in lower case, so the
+	 *         order is that of the names a list shows: the user's, as
+	 *         {@code User.getFullName} makes it, or the username kept with the
+	 *         property for one who is no longer a user; null for no one, as
+	 *         for a blank kept username
 	 */
-	private static String authorName(Select select) {
-		select.join(AUTHOR, HealdanConstants.ATTR_AUTHOR);
-		select.joinAuthorUser();
-		String u = AUTHOR_USER;
+	private static String personName(Select select, String property, String attribute, String user) {
+		select.join(property, attribute);
+		select.joinUser(user, property);
 		return """
-				lower(case when %1$s.ld_id is null then %2$s.ld_stringvalue
+				lower(case when %1$s.ld_id is null then %2$s
 				 when %1$s.ld_firstname is not null and %1$s.ld_name is not null
 				  then concat(concat(%1$s.ld_firstname, ' '), %1$s.ld_name)
 				 when %1$s.ld_name is not null then %1$s.ld_name
 				 when %1$s.ld_firstname is not null then %1$s.ld_firstname
-				 else %1$s.ld_username end)""".formatted(u, AUTHOR);
+				 else %1$s.ld_username end)""".formatted(user, unlessBlank(property + ".ld_stringvalue"));
+	}
+
+	/**
+	 * @return a text property's value in lower case; null for none, and for a
+	 *         blank one, which a list shows as none ({@link DocumentExtras})
+	 */
+	private static String text(String alias) {
+		return "lower(%s)".formatted(unlessBlank(alias + ".ld_stringvalue"));
+	}
+
+	/**
+	 * @return an email's value, and null for a document that isn't an email,
+	 *         by its type, as the File Type filter decides: CE's screens can
+	 *         give any document the email properties, and a list leaves its
+	 *         email cells blank
+	 */
+	private static String emailOnly(Select select, String value) {
+		select.params.addValue("emailtypes", new TreeSet<>(FileKinds.extensions(FileKinds.EMAIL)));
+		return "case when lower(d.ld_type) in (:emailtypes) then %s end".formatted(value);
+	}
+
+	/**
+	 * @return the value, or null when it's blank, as a row shows it
+	 *         ({@code StringUtils.isBlank}): empty, or whitespace alone
+	 */
+	private static String unlessBlank(String value) {
+		return "case when btrim(%1$s, %2$s) <> '' then %1$s end".formatted(value, WHITESPACE);
+	}
+
+	/**
+	 * @return the stamped client's number and the matter's own (the Client and
+	 *         Matter properties, such as {@code 998} and {@code 1}), each as a
+	 *         number; null for a stamp that isn't 1 to 18 digits, which never
+	 *         reaches the cast
+	 */
+	private static List<String> matterNumbers(Select select) {
+		return List.of(number(select.join(CLIENT, HealdanConstants.ATTR_CLIENT) + ".ld_stringvalue"),
+				number(select.join(MATTER, HealdanConstants.ATTR_MATTER) + ".ld_stringvalue"));
+	}
+
+	private static String number(String value) {
+		return "case when %s then cast(%s as decimal(%d,0)) end".formatted(ListingSql.digits(value, NUMBER_DIGITS),
+				value, NUMBER_DIGITS);
+	}
+
+	/**
+	 * @return the place of the document's kind in {@link FileKinds#BY_NAME},
+	 *         by its type, ignoring case; never null, as a type no kind names,
+	 *         and none, is Other's, as {@link FileKinds#of} decides. The
+	 *         extensions are bound, each kind's as a parameter of its own.
+	 */
+	private static String typeRank(Select select) {
+		StringBuilder rank = new StringBuilder("case");
+		for (int i = 0; i < FileKinds.BY_NAME.size(); i++) {
+			Set<String> extensions = FileKinds.extensions(FileKinds.BY_NAME.get(i));
+			// Other names none: it's every type the others don't
+			if (extensions.isEmpty())
+				continue;
+			rank.append(" when lower(d.ld_type) in (:typerank%d) then %d".formatted(i, i));
+			select.params.addValue("typerank" + i, new TreeSet<>(extensions));
+		}
+		return rank.append(" else %d end".formatted(FileKinds.BY_NAME.indexOf(FileKinds.OTHER))).toString();
 	}
 
 	/**
@@ -635,10 +749,41 @@ public class FolderListing {
 			return alias;
 		}
 
-		void joinAuthorUser() {
-			if (joined.add(AUTHOR_USER))
+		/**
+		 * Joins the user, not deleted, whose id a user property holds, once
+		 *
+		 * @param alias the user's alias
+		 * @param property the property's alias, joined already
+		 */
+		void joinUser(String alias, String property) {
+			if (joined.add(alias))
 				joins.append(" left join ld_user %1$s on %1$s.ld_id = %2$s.ld_intvalue and %1$s.ld_deleted = 0"
-						.formatted(AUTHOR_USER, AUTHOR));
+						.formatted(alias, property));
+		}
+
+		/**
+		 * Joins the client, not deleted, whose number the Client property
+		 * holds, once; a stamp that isn't 1 to 18 digits joins none
+		 *
+		 * @return the client's alias
+		 */
+		String joinClient() {
+			String stamp = join(CLIENT, HealdanConstants.ATTR_CLIENT) + ".ld_stringvalue";
+			if (joined.add(CLIENT_ROW))
+				joins.append(" left join hd_client %1$s on %1$s.hd_number = case when %2$s then cast(%3$s as bigint) end and %1$s.ld_deleted = 0"
+						.formatted(CLIENT_ROW, ListingSql.digits(stamp, NUMBER_DIGITS), stamp));
+			return CLIENT_ROW;
+		}
+
+		/**
+		 * Joins the document's folder, once
+		 *
+		 * @return the folder's alias
+		 */
+		String joinFolder() {
+			if (joined.add(FOLDER))
+				joins.append(" left join ld_folder %1$s on %1$s.ld_id = d.ld_folderid".formatted(FOLDER));
+			return FOLDER;
 		}
 
 		String from() {

@@ -31,9 +31,9 @@ export const DEFAULT_SHOWN: Record<DocumentListKind, string[]> = {
   folder: ['title', 'docNumber', 'version', 'author', 'edited'],
   documents: ['title', 'docNumber', 'version', 'matter', 'author', 'edited'],
   all: ['title', 'docNumber', 'version', 'matter', 'author', 'edited'],
-  emails: ['title', 'docNumber', 'matter', 'author', 'edited'],
+  emails: ['title', 'docNumber', 'matter', 'from', 'sent'],
   recentDocuments: ['title', 'docNumber', 'version', 'matter', 'author', 'edited', 'lastUsed'],
-  recentEmails: ['title', 'docNumber', 'matter', 'author', 'edited', 'lastUsed'],
+  recentEmails: ['title', 'docNumber', 'matter', 'from', 'sent', 'lastUsed'],
   checkedOut: ['title', 'docNumber', 'version', 'matter', 'computer', 'checkedOut', 'edited'],
   beside: ['title', 'docNumber', 'edited'],
 }
@@ -61,7 +61,14 @@ export function readLayout(kind: ListKind): ColumnLayout {
     const size = sizes[id]
     if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0) return none
   }
-  return shown === undefined || !isDocumentKind(kind) ? { widths: { ...(sizes as Record<string, number>) } } : { shown: [...(shown as string[])], widths: { ...(sizes as Record<string, number>) } }
+  const kept = { ...(sizes as Record<string, number>) }
+  // The Matters and Clients scopes' first column was `title` until it took its sort's name, `matter`: a width kept for it
+  // then is its width now, and the old entry goes at the next change
+  if ((kind === 'matters' || kind === 'clients') && kept.title !== undefined) {
+    kept.matter ??= kept.title
+    delete kept.title
+  }
+  return shown === undefined || !isDocumentKind(kind) ? { widths: kept } : { shown: [...(shown as string[])], widths: kept }
 }
 
 /** Keeps the layout for the kind, with `shown` only when it has one */

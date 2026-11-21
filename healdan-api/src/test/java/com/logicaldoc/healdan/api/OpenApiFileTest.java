@@ -304,6 +304,14 @@ public class OpenApiFileTest {
 		return texts;
 	}
 
+	// A document list's sort takes exactly the names Filters takes, in its order
+	@Test
+	public void testListSortNamesEverySortTheListsTake() {
+		JsonNode names = tree(Contract.openApi()).at("/components/parameters/ListSort/schema/enum");
+		assertTrue(names.isArray());
+		assertEquals(List.copyOf(Filters.SORTS.keySet()), texts(names));
+	}
+
 	// Every reference is to a component of the admin file itself
 	@Test
 	public void testAdminFileRefersOnlyToItself() {

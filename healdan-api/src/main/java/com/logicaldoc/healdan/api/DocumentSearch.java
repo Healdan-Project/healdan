@@ -19,7 +19,6 @@ import com.logicaldoc.core.searchengine.SearchOptions;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.api.model.FacetsView;
 import com.logicaldoc.healdan.api.model.SearchPage;
-import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
 import com.logicaldoc.healdan.listing.FolderListing;
 import com.logicaldoc.healdan.listing.ListedPage;
 import com.logicaldoc.healdan.listing.ListingQuery;
@@ -119,13 +118,13 @@ final class DocumentSearch {
 				complete ? null : listed.total(), counts);
 	}
 
-	/** The page's documents' views, their Authors read in one go */
+	/** The page's documents' views, what their rows show read in one go */
 	private static List<Object> views(List<Long> ids, HitChecks checks, User user) throws PersistenceException {
 		List<Document> documents = checks.documents(ids);
-		Map<Long, Author> authors = ApiViews.authors(documents);
+		ApiViews.RowReads rows = ApiViews.rows(documents);
 		List<Object> items = new ArrayList<>();
 		for (Document d : documents)
-			items.add(ApiViews.document(d, user, authors));
+			items.add(ApiViews.document(d, user, rows));
 		return items;
 	}
 
