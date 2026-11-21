@@ -454,7 +454,8 @@ public class TrashResourceTest extends ApiTestCase {
 
 	@Test
 	public void testAStoreIsRefusedBeforeAnythingIsWritten() throws Exception {
-		// A Store deleted in the Classic Interface, which CE puts back under the root whatever is asked
+		// A Store, deleted in the Admin app or the Classic Interface, which CE puts back under the root whatever is
+		// asked
 		Folder old = fx.store("Old Store");
 		FolderDAO.get().deleteTree(old.getId(), fx.folderHistory(boss));
 		long item = TrashStore.get().itemHolding(new TrashMember('F', old.getId()), TrashState.DELETED).orElseThrow();
@@ -462,8 +463,12 @@ public class TrashResourceTest extends ApiTestCase {
 		awaitAsyncWork();
 		DbSnapshot before = fx.snapshot();
 
-		// Refused, not place-gone, so a client doesn't ask where: no place it could choose would do
-		assertProblem(restore(item, bossToken), 409, "refused");
+		// Refused, not place-gone, so a client doesn't ask where: no place it could choose would do. The refusal says
+		// where it's restored
+		ApiResponse refused = restore(item, bossToken);
+		assertProblem(refused, 409, "refused");
+		assertEquals("A Store is restored from Deleted Stores on the Admin app's Stores page, or in the Classic "
+				+ "Interface.", refused.json().path("detail").textValue());
 		assertProblem(restore(item, documents.getId(), bossToken), 409, "refused");
 		before.assertUnchanged();
 		assertEquals(TrashState.DELETED, TrashStore.get().state(item));

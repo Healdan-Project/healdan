@@ -387,7 +387,7 @@ paths:
   /v1/documents:
     get:
       operationId: findDocumentsByLegacyDocNumber
-      summary: Documents by legacy doc #
+      summary: "Documents by legacy doc #"
       description: |
         The documents whose Legacy doc # equals `legacyDocNumber` exactly
         (same case, no wildcards) once the whitespace at either end of
@@ -401,7 +401,7 @@ paths:
         - name: legacyDocNumber
           in: query
           required: true
-          description: The legacy doc # to find.
+          description: "The legacy doc # to find."
           schema:
             type: string
             minLength: 1
@@ -945,7 +945,7 @@ paths:
   /v1/lookup:
     get:
       operationId: lookupDocNumber
-      summary: Resolve a typed doc #
+      summary: "Resolve a typed doc #"
       description: |
         Resolves `#1234`, `#1234.2`, `#1234v2` and `#1234.2.1` to the document
         and version. Input that isn't a doc # is `400`. A document that
@@ -2562,7 +2562,8 @@ paths:
         3. `403 forbidden` without the Delete permission on the item, unless
            the caller is an administrator.
         4. `409 refused` for a Store, with or without `folderId`: a Store
-           is restored in the Classic Interface.
+           is restored from Deleted Stores on the Admin app's Stores page,
+           or in the Classic Interface.
         5. Without `folderId`: `409 place-gone` when the folder it was
            deleted from isn't there for it: deleted, the caller can't read
            it, or Healdan's rules or the caller's permissions no longer let
@@ -2641,7 +2642,7 @@ components:
       name: docNumber
       in: path
       required: true
-      description: The document's doc #
+      description: "The document's doc #"
       schema:
         type: integer
         format: int64
@@ -3393,7 +3394,7 @@ components:
           examples: ['2.1']
         reference:
           type: string
-          description: The doc # and the file version, such as `1234.2.1`
+          description: "The doc # and the file version, such as `1234.2.1`"
         folder:
           $ref: '#/components/schemas/FolderRef'
         matter:
@@ -3872,7 +3873,7 @@ components:
         docNumber:
           type: [integer, 'null']
           format: int64
-          description: A document's doc #; null for a folder, and for a document that had none
+          description: "A document's doc #; null for a folder, and for a document that had none"
         kind:
           type: string
           enum: [word, excel, powerpoint, pdf, email, opendocument, picture, other, folder]

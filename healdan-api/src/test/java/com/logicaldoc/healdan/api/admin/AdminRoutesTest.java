@@ -35,6 +35,13 @@ import jakarta.ws.rs.Path;
  * {@code /v1/admin}. The classes are every one in the API's package, and
  * below it, with {@link Path} or {@link AdminRoute}, served or not, test-only
  * ones included.
+ * <p>
+ * Each class is judged by itself, by its own {@link AdminRoute}, as
+ * {@link AdminFilter} asks the area of the class a request matched: classes
+ * that share one root are each in their own area, such as
+ * {@code /v1/admin/stores}, whose {@code AdminStoresResource} is
+ * {@code STORES} and {@code AdminStoreStorageResource}, a Store's backend and
+ * stuck files, {@code STORAGE}.
  */
 public class AdminRoutesTest {
 

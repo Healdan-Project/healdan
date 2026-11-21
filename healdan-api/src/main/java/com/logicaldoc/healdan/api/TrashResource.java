@@ -68,10 +68,11 @@ import jakarta.ws.rs.core.Response;
  * restores from Removed. Any other item is {@code 404}, as one that doesn't
  * exist.</li>
  * <li>Restoring needs Delete on the item, as on every route (spec 4.4).</li>
- * <li>A Store, which only an administrator deletes, in the Classic Interface,
- * is restored there: CE puts it back under the root whatever place is asked,
- * so it's {@code 409 refused}, not {@code place-gone}, before anything is
- * written.</li>
+ * <li>A Store, which only an administrator deletes, in the Admin app or the
+ * Classic Interface, is restored from Deleted Stores on the Admin app's Stores
+ * page, or in the Classic Interface: CE puts it back under the root whatever
+ * place is asked, so it's {@code 409 refused}, not {@code place-gone}, before
+ * anything is written.</li>
  * <li>A restore back where it was that the place refuses, because it isn't
  * live, the caller can't read it, or the rules or the caller's permissions no
  * longer allow it there, is {@code 409 place-gone}, which a client answers by
@@ -108,6 +109,10 @@ public class TrashResource {
 
 	/** The sorts by a time, newest first unless asked; the others go A to Z, smallest first */
 	private static final Set<String> TIMES = Set.of(DELETED, REMOVED, DESTROYED);
+
+	/** The refusal of a Store's item, with the ways it is restored */
+	static final String STORE_RESTORED_ELSEWHERE = "A Store is restored from Deleted Stores on the Admin app's Stores "
+			+ "page, or in the Classic Interface.";
 
 	/** What a person may restore or remove: their own items in the Trash */
 	private static final Set<TrashState> IN_THE_TRASH = Set.of(TrashState.DELETED);
@@ -170,7 +175,8 @@ public class TrashResource {
 	 * body asks for. Checks, in order: a body that isn't the JSON expected
 	 * ({@code 400}, {@code 415}); an item the caller may not restore
 	 * ({@code 404}); no Delete on it ({@code 403 forbidden}); a Store, which is
-	 * restored in the Classic Interface ({@code 409 refused}); then, back where
+	 * restored from the Admin app's Stores page or in the Classic Interface
+	 * ({@code 409 refused}); then, back where
 	 * it was, a place that isn't there for it ({@code 409 place-gone}); or,
 	 * into a folder asked for, as a move there: a folder the caller can't read
 	 * ({@code 404}), one that can't hold it ({@code 409 filing-rule}), no Add
@@ -202,10 +208,10 @@ public class TrashResource {
 			if (!admin && !(folder ? rows.mayDelete(row.objectId(), user.getId())
 					: rows.mayDeleteDocument(row.objectId(), user.getId())))
 				throw ApiProblem.forbidden("You need the Delete permission on Trash item %d to restore it.".formatted(id));
-			// A Store deleted in the Classic Interface: CE puts one back under the root whatever is asked, which no
-			// place a client could choose would change, so it's refused before anything is written
+			// A Store, deleted in the Admin app or the Classic Interface: CE puts one back under the root whatever is
+			// asked, which no place a client could choose would change, so it's refused before anything is written
 			if (folder && isStore(row, rows))
-				throw ApiProblem.conflict("refused", "A Store is restored in the Classic Interface.");
+				throw ApiProblem.conflict("refused", STORE_RESTORED_ELSEWHERE);
 
 			long target = folderId != null ? folderAskedFor(row, folder, folderId, user, admin)
 					: placeOf(row, folder, user, admin);

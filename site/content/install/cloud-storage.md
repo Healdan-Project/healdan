@@ -84,7 +84,8 @@ access key and secret key: Wasabi shows the secret key once.
 
 ### Add the Backend in Healdan
 
-Under **Administration → Healdan → Settings**, open the **Storage** tab and press **Add Backend**:
+In [the Admin app](../../admin/the-admin-app/), open **Backends**, under **Storage** in the left pane, and press
+**Add Backend**:
 
 | Setting | What to enter |
 |---|---|
@@ -98,13 +99,14 @@ Under **Administration → Healdan → Settings**, open the **Storage** tab and 
 | Path-Style Addressing | ticked, as Healdan was tested with Wasabi |
 | Encrypt | ticked |
 
-Press **Test**, then **Add**. Save the recovery key in the firm's password manager, type its last group of four, and
-press **Confirm**. See [Adding a Backend](../../admin/storage-backends/adding-a-backend/).
+Press **Test**, then **Add**. Save the recovery key in the firm's password manager, type its last group of four in
+**Last Group**, and press **Confirm**. See [Adding a Backend](../../admin/storage-backends/adding-a-backend/).
 
 ### Give a Store the Backend
 
-In the **Stores** list on the same tab, choose the new backend as a Store's **Backend**, such as Client Work's. Its
-files move to Wasabi in the background, and new saves into it go there too. See
+On a Store's page, such as Client Work's, in **Storage → Stores**, press **Change Backend** and choose the new
+backend. Healdan says how many files will move before you press **Change Backend** in its window. Its files then move
+to Wasabi in the background, and new saves into it go there too. See
 [Choosing a Store's Backend](../../admin/storage-backends/choosing-a-stores-backend/).
 
 {{% /steps %}}

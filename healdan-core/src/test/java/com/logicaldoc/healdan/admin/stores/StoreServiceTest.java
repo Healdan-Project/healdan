@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.admin.stores;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
@@ -29,6 +30,7 @@ import org.junit.Test;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
@@ -56,6 +58,8 @@ import com.logicaldoc.healdan.security.AclMath;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.trash.TrashRemoval;
+import com.logicaldoc.healdan.trash.TrashState;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
@@ -71,7 +75,8 @@ public class StoreServiceTest extends AbstractHealdanTestCase {
 
 	private static final String NOT_A_STORE = "That folder isn't a Store.";
 
-	private static final String ONLY_ADMINS = "Only an administrator can create a Store or change who can see it.";
+	private static final String ONLY_ADMINS = "Only an administrator can create, rename or restore a Store, or change who "
+			+ "can see it.";
 
 	private static final String UNSAFE_NAME = "A Store's name can't contain '/', '\\' or HTML tags.";
 
@@ -501,6 +506,144 @@ public class StoreServiceTest extends AbstractHealdanTestCase {
 		service.setAccess(store.getId(), List.of(clerks.getId()), admin);
 
 		assertEquals(Map.of(clerks.getId(), READ), AclMath.rows(store.getId()));
+	}
+
+	// Rename
+
+	@Test
+	public void testRename() throws Exception {
+		AdminContext.set("192.0.2.7");
+		Folder store = fx.store("Client Work");
+		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store);
+		String matterName = name(matter);
+		jdbc.update("delete from hd_admin_event");
+
+		assertTrue(service.rename(store.getId(), "  Firm Work ", admin));
+
+		assertEquals("Firm Work", FolderDAO.get().findById(store.getId()).getName());
+		// Its matters keep their folders and their names
+		assertEquals(store.getId(), FolderDAO.get().findById(matter.getFolderId()).getParentId());
+		assertEquals(matterName, name(matter));
+		assertEquals(List.of("192.0.2.7 STORES store.renamed store %d Firm Work %s".formatted(store.getId(),
+				detail("name", "Client Work", "Firm Work"))), events());
+
+		// Its own name changes nothing; its case alone is a rename
+		assertFalse(service.rename(store.getId(), " Firm Work", admin));
+		assertEquals(1, events().size());
+		assertTrue(service.rename(store.getId(), "FIRM WORK", admin));
+		assertEquals("FIRM WORK", FolderDAO.get().findById(store.getId()).getName());
+		assertEquals(2, events().size());
+	}
+
+	@Test
+	public void testRenameRefusals() throws Exception {
+		Folder store = fx.store("Client Work");
+		fx.store("Archive");
+		User clerk = fx.user("clerk");
+		DbSnapshot db = fx.snapshot();
+
+		assertRefused(ONLY_ADMINS, () -> service.rename(store.getId(), "Firm Work", clerk));
+		assertRefused("Another Store is already called Archive.", () -> service.rename(store.getId(), "ARCHIVE", admin));
+		assertRefused("The Templates Store is already called Templates.",
+				() -> service.rename(store.getId(), "templates", admin));
+		assertRefused("LogicalDOC's Default workspace is already called Default.",
+				() -> service.rename(store.getId(), "Default", admin));
+		assertRefused(UNSAFE_NAME, () -> service.rename(store.getId(), "Client/Work", admin));
+		assertRefused("Give the Store a name.", () -> service.rename(store.getId(), " ", admin));
+		for (long id : List.of(Folder.DEFAULTWORKSPACEID, HealdanSettings.get().templatesStoreId(), root.getId(),
+				999999L))
+			assertRefused(NOT_A_STORE, () -> service.rename(id, "Firm Work", admin));
+		db.assertUnchanged();
+	}
+
+	// The Trash
+
+	@Test
+	public void testTheFoldersThatArentStores() {
+		assertEquals("LogicalDOC's Default workspace isn't a Store, so it isn't renamed here.",
+				service.fixedFolder(Folder.DEFAULTWORKSPACEID, "renamed"));
+		assertEquals("The Templates Store holds the workspace templates, so it isn't deleted here.",
+				service.fixedFolder(HealdanSettings.get().templatesStoreId(), "deleted"));
+		assertEquals("The root holds the Stores, so it isn't renamed here.",
+				service.fixedFolder(root.getId(), "renamed"));
+		assertNull(service.fixedFolder(999999L, "renamed"));
+	}
+
+	@Test
+	public void testRestore() throws Exception {
+		User carol = fx.user("carol", "admin");
+		Folder store = service.create("Client Work", List.of(partners.getId()), admin);
+		Matter matter = fx.matter(fx.client(1001, "Ashcombe"), 1, "Charter Dispute", store);
+		Folder letters = fx.folder(FolderDAO.get().findById(matter.getFolderId()), "Letters");
+		assertTrue(service.isStore(store.getId()));
+		assertTrue(service.trashItem(store.getId()).isEmpty());
+		deleteTree(store, carol);
+
+		// In the Trash: not a live Store, but a Store all the same
+		assertNull(service.store(store.getId()));
+		assertTrue(service.isStore(store.getId()));
+		long item = service.trashItem(store.getId()).orElseThrow();
+		List<StoreService.DeletedStore> deleted = service.deleted(Tenant.DEFAULT_ID);
+		assertEquals(1, deleted.size());
+		StoreService.DeletedStore found = deleted.get(0);
+		assertEquals(store.getId(), found.id());
+		assertEquals("Client Work", found.name());
+		assertEquals(item, found.trashItemId());
+		assertEquals(TrashState.DELETED, found.state());
+		assertEquals(1, found.matters());
+		assertEquals(new StoreService.Person(carol.getId(), "carol", "carol carol"), found.deletedBy());
+		assertNotNull(found.deletedAt());
+		assertNull(found.removedAt());
+
+		Folder restored = service.restore(store.getId(), admin, null);
+
+		// Back under the root, with its matter and what was in it, and its own rows
+		assertEquals(store.getId(), restored.getId());
+		assertEquals(root.getId(), FolderDAO.get().findById(store.getId()).getParentId());
+		assertEquals(Kind.STORE, MatterLocator.get().locate(store.getId()).kind());
+		assertEquals(0, FolderDAO.get().findById(matter.getFolderId()).getDeleted());
+		assertEquals(0, FolderDAO.get().findById(letters.getId()).getDeleted());
+		assertEquals(Map.of(partners.getId(), READ), AclMath.rows(store.getId()));
+		assertEquals(List.of(), service.deleted(Tenant.DEFAULT_ID));
+		assertTrue(service.trashItem(store.getId()).isEmpty());
+		assertRefused("That Store isn't in the Trash.", () -> service.restore(store.getId(), admin, null));
+
+		// Removed from the Trash, it's restored too, by an administrator
+		deleteTree(store, admin);
+		long second = service.trashItem(store.getId()).orElseThrow();
+		TrashRemoval.get().removeItem(second, admin);
+		found = service.deleted(Tenant.DEFAULT_ID).get(0);
+		assertEquals(TrashState.REMOVED, found.state());
+		assertEquals(second, found.trashItemId());
+		assertNotNull(found.removedAt());
+		assertEquals(store.getId(), service.restore(store.getId(), admin, null).getId());
+		assertEquals(0, FolderDAO.get().findById(matter.getFolderId()).getDeleted());
+	}
+
+	@Test
+	public void testRestoreRefusals() throws Exception {
+		Folder store = fx.store("Client Work");
+		deleteTree(store, admin);
+		// Another live folder under the root now has its name, in another case
+		fx.store("CLIENT WORK");
+		User clerk = fx.user("clerk");
+		DbSnapshot db = fx.snapshot();
+
+		assertRefused(ONLY_ADMINS, () -> service.restore(store.getId(), clerk, null));
+		assertRefused("Another Store is already called CLIENT WORK.",
+				() -> service.restore(store.getId(), admin, null));
+		for (long id : List.of(Folder.DEFAULTWORKSPACEID, HealdanSettings.get().templatesStoreId(), root.getId(),
+				999999L))
+			assertRefused("That Store isn't in the Trash.", () -> service.restore(id, admin, null));
+		db.assertUnchanged();
+		assertTrue(service.trashItem(store.getId()).isPresent());
+	}
+
+	/** Moves the folder and what's in it to the person's Trash, as a delete on every route does */
+	private void deleteTree(Folder folder, User as) throws Exception {
+		FolderHistory history = fx.folderHistory(as);
+		history.setEvent(FolderEvent.DELETED);
+		FolderDAO.get().deleteTree(folder.getId(), PersistentObject.DELETED_CODE_DEFAULT, history);
 	}
 
 	/** @return each record of a Store, oldest first, as its address, area, action, target and detail */

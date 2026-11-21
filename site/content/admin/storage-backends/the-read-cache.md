@@ -18,10 +18,10 @@ of a file costs no trip to the bucket, and an encrypted file is decrypted only o
 
 ## Its Size
 
-Set it under **Settings** on the **Storage** tab, as the **Read Cache**, in GB from 1 to 10,000, 20 to begin with,
-and press **Save**. When it's full, the files read least recently go first. A smaller size takes effect as files are
-next added to the cache. The bigger it is, the more of the files people use open from the server, and the more of
-them open during an outage.
+Set it under **Settings** on the [Backends list](../#the-backends-list), as **Read Cache (GB)**, from 1 to 10,000,
+20 to begin with, and press **Save**. When it's full, the files read least recently go first. A smaller size takes
+effect as files are next added to the cache. The bigger it is, the more of the files people use open from the
+server, and the more of them open during an outage.
 
 ## Large Files
 

@@ -3,21 +3,28 @@ title: Choosing a Store's Backend
 weight: 3
 ---
 
-Each Store keeps its files on one backend, Original to begin with. To give a Store another, click its **Backend** in
-the **Stores** list of the **Storage** tab, and choose one. The list offers the backends that aren't encrypted, and
-the encrypted ones whose recovery key is confirmed.
+Each Store keeps its files on one backend: Original to begin with, unless
+[New Store](../../stores/#creating-a-store) chose another. To give it another, press **Change Backend** on the
+Store's page, in the Admin app's **Storage → Stores**.
 
-Healdan asks first, saying how many files will move:
+**Change the Backend of Client Work** lists every backend, Original first. The one the Store is on says "Where its
+files are kept now.", and an encrypted backend whose recovery key isn't confirmed is greyed out, with "Its recovery
+key isn't confirmed, so no Store can use it yet." Choose another, and Healdan first counts the files that will move,
+and says so before anything changes:
 
-![The Change the Backend of Client Work question: 188 files (11.3 MB) will move to Cloud Storage in the background. Until each has moved, it's read from where it is now. Give Client Work this backend? With Yes and No](change-backend.png)
+> 188 files (11.3 MB) will move to Cloud Storage in the background. Until each has moved, it's read from where it is
+> now.
 
-Choose **Yes**, and the Store keeps its files on the new backend from then on. Its files move there in the
-background, and **Waiting to Move** shows how many are left, and their size:
+When none has to move, it says "No file has to move, so the change takes effect at once." **Change Backend**, in the
+window, waits for the count, then gives the Store the backend, and Healdan says "Client Work now keeps its files on
+Cloud Storage". While the change is on its way, **Cancel** is greyed out and Esc does nothing. Anything Healdan
+refuses, such as a backend removed meanwhile, shows in the window in Healdan's own words.
 
-![The Stores list just after the change: Client Work on Cloud Storage with 188 files (11.3 MB) waiting to move, and Firm and Templates on Original with nothing waiting and nothing stuck](stores-waiting.png)
-
-Press **Refresh** to see the number fall. When a Store has no files to move, the question says so, and the change
-takes effect at once.
+From then on the Store keeps its files on the new backend, and new saves into it go there. Its files move there in
+the background: the Store's **Files**, on its page and in the Stores list, and **Waiting to Move**, on its **Storage**
+tab, show how many are left, and their size. They don't update while you watch: press **Refresh** on the Stores
+list, or come back to the window, to see the number fall. Healdan records each change, with the backend before and
+after.
 
 ## How Files Move
 
@@ -37,8 +44,9 @@ from where it is: documents open as usual throughout.
 
 - **When:** at once, whenever something gives files a new place, and every 5 minutes besides.
 - **In what order:** files waiting on the server to be uploaded first, then the rest, newest documents first.
-- **How many at once:** **Parallel Transfers**, under **Settings**, 4 to begin with, from 1 to 16. More moves a
-  large Store sooner, if the server's connection has room. A new value applies as soon as it's saved.
+- **How many at once:** **Parallel Transfers**, under **Settings** on the [Backends list](../#the-backends-list), 4
+  to begin with, from 1 to 16. More moves a large Store sooner, if the server's connection has room. A new value
+  applies as soon as it's saved.
 - **When one fails:** it's tried again later, and after ten failures it's left where it is: see
   [Waiting and Stuck Files](../waiting-and-stuck-files/). A backend that can't be reached pauses its moves instead:
   see [When a Backend Fails](../when-a-backend-fails/).
@@ -66,6 +74,18 @@ file whose record says another Store, and logs each one it fixes, so no file sta
 
 ## Giving a Store Back to Original
 
-Choose **Original** for the Store. Its files come back to the server in the background, and their copies on the old
-backend are held for the holding period, then deleted. A matter moved from a Store in the cloud to one on the server
-does the same.
+Give the Store **Original**, with **Change Backend**. Its files come back to the server in the background, and their
+copies on the old backend are held for the holding period, then deleted. A matter moved from a Store in the cloud to one
+on the server does the same.
+
+## In the Classic Interface
+
+The Classic Interface's **Storage** tab does the same: click a Store's **Backend** in its **Stores** list, and choose
+one. It offers the same backends, and asks first, saying how many files will move:
+
+![The Storage tab's Change the Backend of Client Work question: 188 files (11.3 MB) will move to Cloud Storage in the background. Until each has moved, it's read from where it is now. Give Client Work this backend? With Yes and No](change-backend.png)
+
+Choose **Yes**, and its files move in the background, as above. **Waiting to Move**, in the tab's **Stores** list,
+shows how many are left, and their size. The tab doesn't update by itself: press **Refresh**.
+
+![The Storage tab's Stores list just after the change: Client Work on Cloud Storage with 188 files (11.3 MB) waiting to move, and Firm and Templates on Original with nothing waiting and nothing stuck](stores-waiting.png)

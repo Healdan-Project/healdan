@@ -2,19 +2,19 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { Link, useNavigate } from '@tanstack/react-router'
-import { useId, useMemo, useState, type ReactNode } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { ApiError, type adminComponents } from '@healdan/api'
 import { ErrorPanel, idFrom } from '@healdan/shell'
-import { Button, formatDateTime, Icon, Table, type TableSort } from '@healdan/ui'
+import { Button, formatCount, formatDateTime, Icon, Table, type TableSort } from '@healdan/ui'
 import { matterHref, routes } from '../addresses'
 import { ClientDialog } from '../clients/ClientDialog'
+import { Fact } from '../facts/Fact'
 import type { SortOrder } from '../lists/usePagedList'
 import { matterColumns, matterRowOf } from '../matters/columns'
 import { NewMatterDialog } from '../matters/NewMatterDialog'
 import { isMatterSort, useMatterList, type MatterSort } from '../matters/useMatterList'
 import { useClient } from '../queries'
 import { plural, t } from '../strings'
-import type { AdminStringKey } from '../strings/en-US'
 import styles from '../clients/Clients.module.css'
 import pageStyles from './views.module.css'
 
@@ -72,17 +72,6 @@ function ClientPage({ id, search }: { id: number; search: ClientSearch }) {
   return <Client key={asked.data.id} client={asked.data} search={search} />
 }
 
-const counts = new Intl.NumberFormat('en-US')
-
-function Fact({ term, children }: { term: AdminStringKey; children: ReactNode }) {
-  return (
-    <div className={styles.fact}>
-      <dt>{t(term)}</dt>
-      <dd>{children}</dd>
-    </div>
-  )
-}
-
 function Client({ client, search }: { client: A['Client']; search: ClientSearch }) {
   const navigate = useNavigate()
   const mattersId = useId()
@@ -132,8 +121,8 @@ function Client({ client, search }: { client: A['Client']; search: ClientSearch 
       </div>
       <dl className={styles.facts}>
         <Fact term="admin.client.number">{client.number}</Fact>
-        <Fact term="admin.client.matters">{counts.format(client.matters)}</Fact>
-        <Fact term="admin.client.documents">{pending ? t('admin.client.pending') : counts.format(client.documents ?? 0)}</Fact>
+        <Fact term="admin.client.matters">{formatCount(client.matters)}</Fact>
+        <Fact term="admin.client.documents">{pending ? t('admin.client.pending') : formatCount(client.documents ?? 0)}</Fact>
         <Fact term="admin.client.lastActivity">
           {pending ? t('admin.client.pending') : client.lastActivity === null ? t('admin.client.noActivity') : formatDateTime(client.lastActivity)}
         </Fact>

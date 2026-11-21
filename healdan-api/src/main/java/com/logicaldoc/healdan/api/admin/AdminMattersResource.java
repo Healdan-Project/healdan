@@ -373,17 +373,17 @@ public class AdminMattersResource {
 		User actor = Caller.current().user();
 		NewMatter request = new NewMatter(body.clientId(), body.number(), body.name(), body.description(),
 				body.storeId(), body.ownerId(), body.templateId());
-		try {
-			// A refusal of the service's is a veto, which the ProblemMapper answers 409 refused, wrapped or not
-			Matter matter = NumberRaces.create(() -> MatterService.get().create(request, actor),
-					() -> MatterNumbering.get().checkAvailable(body.clientId(), body.number()));
-			String location = UriBuilder.fromPath(uri.getBaseUri().getRawPath()).path("v1/admin/matters/{id}")
-					.build(matter.getId()).toString();
-			return Response.status(Response.Status.CREATED).header(HttpHeaders.LOCATION, location)
-					.entity(view(existing(matter.getId()))).build();
-		} catch (PersistenceException e) {
-			throw new IllegalStateException("Can't create a matter", e);
-		}
+		// A refusal of the service's is a veto, which the ProblemMapper answers 409 refused, wrapped or not. Holding
+		// the Store's lock, as its delete does, so the matter isn't made in a Store on its way to the Trash
+		long storeId = body.storeId();
+		Matter matter = WorkspaceRequests.changes().withFolderLocks("Can't create a matter",
+				() -> NumberRaces.create(() -> MatterService.get().create(request, actor),
+						() -> MatterNumbering.get().checkAvailable(body.clientId(), body.number())),
+				storeId);
+		String location = UriBuilder.fromPath(uri.getBaseUri().getRawPath()).path("v1/admin/matters/{id}")
+				.build(matter.getId()).toString();
+		return Response.status(Response.Status.CREATED).header(HttpHeaders.LOCATION, location)
+				.entity(view(existing(matter.getId()))).build();
 	}
 
 	/**

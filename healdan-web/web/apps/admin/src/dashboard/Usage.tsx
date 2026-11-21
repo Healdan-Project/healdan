@@ -4,7 +4,7 @@
 import type { UseQueryResult } from '@tanstack/react-query'
 import { useId, type ReactNode } from 'react'
 import type { adminComponents } from '@healdan/api'
-import { formatDateTime, formatSize, plural as sharedPlural } from '@healdan/ui'
+import { formatCount, formatDateTime, formatSize, plural as sharedPlural } from '@healdan/ui'
 import type { UsageAnswer } from '../queries'
 import { plural, t } from '../strings'
 import { BarChart } from './BarChart'
@@ -12,8 +12,6 @@ import { PartState } from './PartState'
 import styles from './Dashboard.module.css'
 
 type A = adminComponents['schemas']
-
-const counts = new Intl.NumberFormat('en-US')
 
 function Total({ value, label, change, also }: { value: string; label: string; change: string; also?: string }) {
   return (
@@ -31,13 +29,13 @@ function Totals({ usage }: { usage: UsageAnswer }) {
   const { documents, storage, matters, clients, people } = usage
   return (
     <ul className={styles.totals} aria-label={t('admin.usage.totals')}>
-      {documents && <Total value={counts.format(documents.total)} label={t('admin.usage.documents')} change={plural('admin.usage.last7', documents.last7Days)} />}
+      {documents && <Total value={formatCount(documents.total)} label={t('admin.usage.documents')} change={plural('admin.usage.last7', documents.last7Days)} />}
       {storage && <Total value={formatSize(storage.total)} label={t('admin.usage.storage')} change={t('admin.usage.sizeLast7', { size: formatSize(storage.last7Days) })} />}
-      {matters && <Total value={counts.format(matters.total)} label={t('admin.usage.matters')} change={plural('admin.usage.last30', matters.last30Days)} />}
-      {clients && <Total value={counts.format(clients.total)} label={t('admin.usage.clients')} change={plural('admin.usage.last30', clients.last30Days)} />}
+      {matters && <Total value={formatCount(matters.total)} label={t('admin.usage.matters')} change={plural('admin.usage.last30', matters.last30Days)} />}
+      {clients && <Total value={formatCount(clients.total)} label={t('admin.usage.clients')} change={plural('admin.usage.last30', clients.last30Days)} />}
       {people && (
         <Total
-          value={counts.format(people.total)}
+          value={formatCount(people.total)}
           label={t('admin.usage.people')}
           change={plural('admin.usage.last30', people.last30Days)}
           also={plural('admin.usage.signedIn', usage.signedIn)}
