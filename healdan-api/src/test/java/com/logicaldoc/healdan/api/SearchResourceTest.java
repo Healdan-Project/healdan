@@ -11,19 +11,24 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Predicate;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -40,6 +45,7 @@ import com.logicaldoc.core.searchengine.SearchOptions;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.HealdanConstants;
@@ -938,21 +944,44 @@ public class SearchResourceTest extends ApiTestCase {
 	public void testSortedAsAFolderIs() throws Exception {
 		List<Made> made = new ArrayList<>(filtersLayout());
 		made.removeIf(Made::privileged);
+		Map<Long, Columns> columns = columnsOf(made);
 		String token = signIn(clerk);
 
-		// As FolderListing sorts: the key, then the document's age (its doc # here), the same way
-		Map<String, Comparator<Made>> sorts = new LinkedHashMap<>();
-		sorts.put("title", Comparator.comparing(m -> m.name().toLowerCase()));
-		sorts.put("docNumber", Comparator.comparingLong(Made::docNumber));
-		sorts.put("version", Comparator.<Made>comparingInt(m -> Integer.parseInt(m.version().split("\\.")[0]))
-				.thenComparingInt(m -> Integer.parseInt(m.version().split("\\.")[1])));
-		sorts.put("author", Comparator.comparing(m -> (m.author() + " " + m.author()).toLowerCase()));
-		sorts.put("edited", Comparator.comparing(Made::edited));
-		for (Map.Entry<String, Comparator<Made>> sort : sorts.entrySet())
+		// Each sort's key by hand, as the list columns spec's section 4.7 says; each Made's client is 998, Healdan,
+		// and the fixture's users' first and last names are their usernames
+		Map<String, Function<Made, List<Object>>> keys = new LinkedHashMap<>();
+		keys.put("title", m -> parts(m.name().toLowerCase()));
+		keys.put("docNumber", m -> parts(m.docNumber()));
+		keys.put("version", m -> parts(Integer.parseInt(m.version().split("\\.")[0]),
+				Integer.parseInt(m.version().split("\\.")[1])));
+		keys.put("author", m -> parts((m.author() + " " + m.author()).toLowerCase()));
+		keys.put("edited", m -> parts(m.edited()));
+		keys.put("matter", m -> parts(998L, matterNumber(m)));
+		keys.put("client", m -> parts("healdan"));
+		keys.put("location",
+				m -> parts(columns.get(m.docNumber()).folder().toLowerCase(), 998L, matterNumber(m)));
+		keys.put("filed", m -> parts(columns.get(m.docNumber()).filed()));
+		keys.put("size", m -> parts(columns.get(m.docNumber()).size()));
+		// The File Type filter's names, A to Z, then the extension
+		List<String> typeNames = List.of("email", "excel", "opendocument", "other", "pdf", "picture", "powerpoint",
+				"word");
+		keys.put("type", m -> parts(typeNames.indexOf(m.kind()), m.name().substring(m.name().lastIndexOf('.') + 1)));
+		keys.put("class", m -> parts(lowerOrNone(m.docClass())));
+		keys.put("subclass", m -> parts(lowerOrNone(columns.get(m.docNumber()).subclass())));
+		keys.put("typist", m -> {
+			String typist = columns.get(m.docNumber()).typist();
+			return parts(typist == null ? null : (typist + " " + typist).toLowerCase());
+		});
+		keys.put("from", m -> parts(lowerOrNone(columns.get(m.docNumber()).from())));
+		keys.put("to", m -> parts(lowerOrNone(columns.get(m.docNumber()).to())));
+		keys.put("sent", m -> parts(columns.get(m.docNumber()).sent()));
+		// Every sort the API takes
+		assertEquals(Filters.SORTS.keySet(), keys.keySet());
+
+		for (Map.Entry<String, Function<Made, List<Object>>> sort : keys.entrySet())
 			for (String order : new String[] { "asc", "desc" }) {
-				Comparator<Made> byHand = sort.getValue().thenComparingLong(Made::docNumber);
-				List<Long> expected = made.stream().sorted("desc".equals(order) ? byHand.reversed() : byHand)
-						.map(Made::docNumber).toList();
+				Comparator<Made> byHand = byKey(sort.getValue(), "desc".equals(order));
+				List<Long> expected = made.stream().sorted(byHand).map(Made::docNumber).toList();
 				String query = "q=harrierapi&sort=" + sort.getKey() + "&order=" + order;
 				JsonNode page = page(query + "&limit=200", token);
 				assertEquals(query, expected, docNumbers(page.path("items")));
@@ -963,15 +992,108 @@ public class SearchResourceTest extends ApiTestCase {
 
 		// No order is ascending; a filter and a sort together
 		JsonNode titles = page("q=harrierapi&sort=title&type=pdf&limit=200", token);
-		assertEquals(made.stream().filter(m -> m.kind().equals("pdf"))
-				.sorted(sorts.get("title").thenComparingLong(Made::docNumber)).map(Made::docNumber).toList(),
-				docNumbers(titles.path("items")));
+		assertEquals(made.stream().filter(m -> m.kind().equals("pdf")).sorted(byKey(keys.get("title"), false))
+				.map(Made::docNumber).toList(), docNumbers(titles.path("items")));
 		assertEquals(15, titles.path("total").asLong());
 
 		// The relevance order without a sort, and counts with one
 		assertEquals(22, page("q=harrierapi&limit=200", token).path("total").asLong());
 		JsonNode counted = page("q=harrierapi&sort=edited&order=desc&limit=1&facets=type", token);
 		assertEquals(Map.of("pdf", 15L, "word", 4L, "excel", 3L), counts(counted.path("facets").path("type")));
+	}
+
+	/** A sort key's parts, any of which may be null */
+	private static List<Object> parts(Object... parts) {
+		return Arrays.asList(parts);
+	}
+
+	/** The text in lower case; null for none, and for a blank one, which a list shows as none */
+	private static String lowerOrNone(String text) {
+		return StringUtils.isBlank(text) ? null : text.toLowerCase();
+	}
+
+	private static long matterNumber(Made made) {
+		return Long.parseLong(made.matter().substring(made.matter().indexOf('.') + 1));
+	}
+
+	/**
+	 * As FolderListing orders: part by part, one with no value after one with
+	 * a value either way, the others in the direction given; then the doc #,
+	 * which follows the id here, in the same direction
+	 */
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	private static Comparator<Made> byKey(Function<Made, List<Object>> key, boolean descending) {
+		int sign = descending ? -1 : 1;
+		return (x, y) -> {
+			List<Object> a = key.apply(x);
+			List<Object> b = key.apply(y);
+			for (int i = 0; i < a.size(); i++) {
+				Object p = a.get(i);
+				Object q = b.get(i);
+				if (p == null || q == null) {
+					if (p != q)
+						return p == null ? 1 : -1;
+					continue;
+				}
+				int order = ((Comparable) p).compareTo(q);
+				if (order != 0)
+					return sign * order;
+			}
+			return sign * Long.compare(x.docNumber(), y.docNumber());
+		};
+	}
+
+	/** What a document of the filters' layout shows in the columns {@link Made} doesn't hold */
+	private record Columns(String folder, Timestamp filed, Long size, String subclass, String typist, String from,
+			String to, Timestamp sent) {
+	}
+
+	/**
+	 * Gives the filters' layout's documents a date filed, a size, a Subclass,
+	 * a Typist, a From, a To and a Sent, by their place in the list, so that
+	 * some tie and, but for the date filed and the size, some have none (no
+	 * value, or a blank one)
+	 *
+	 * @return what each now has, by doc #
+	 */
+	private Map<Long, Columns> columnsOf(List<Made> made) throws Exception {
+		List<User> typists = Arrays.asList(UserDAO.get().findByUsername("jclarke"),
+				UserDAO.get().findByUsername("treeve"), null);
+		List<String> subclasses = Arrays.asList("Memo", "advice", null, "memo", " ");
+		List<String> froms = Arrays.asList("Zed <zed@example.com>", "amy@example.com", null, "Amy@example.com");
+		List<String> tos = Arrays.asList(null, "board@example.com", "Board@example.com", "team@example.com",
+				"alice@example.com", "");
+		LocalDateTime start = LocalDateTime.of(2026, 1, 1, 9, 0);
+		BulkHits bulk = new BulkHits();
+		Map<Long, Columns> columns = new HashMap<>();
+		for (int i = 0; i < made.size(); i++) {
+			long number = made.get(i).docNumber();
+			long id = jdbc().queryForObject("select ld_id from ld_document where ld_customid = ?", Long.class,
+					Long.toString(number));
+			String folder = jdbc().queryForObject(
+					"select f.ld_name from ld_document d join ld_folder f on f.ld_id = d.ld_folderid where d.ld_id = ?",
+					String.class, id);
+			Timestamp filed = Timestamp.valueOf(start.plusDays(i % 5));
+			// Never none: CE's documents hold the size in a primitive, which a NULL can't be loaded into
+			Long size = 100L * (i % 3);
+			jdbc().update("update ld_document set ld_creation = ?, ld_filesize = ? where ld_id = ?", filed, size, id);
+			User typist = typists.get(i % typists.size());
+			Columns these = new Columns(folder, filed, size, subclasses.get(i % subclasses.size()),
+					typist == null ? null : typist.getUsername(), froms.get(i % froms.size()), tos.get(i % tos.size()),
+					i % 3 == 0 ? null : Timestamp.valueOf(start.plusHours(i % 4)));
+			List<Long> one = List.of(id);
+			bulk.set(one, HealdanConstants.ATTR_DOCSUBCLASS, Attribute.Type.STRING, these.subclass(), null);
+			bulk.set(one, HealdanConstants.ATTR_TYPIST, Attribute.Type.USER, these.typist(),
+					typist == null ? null : typist.getId());
+			bulk.set(one, HealdanConstants.ATTR_EMAILFROM, Attribute.Type.STRING, these.from(), null);
+			bulk.set(one, HealdanConstants.ATTR_EMAILTO, Attribute.Type.STRING, these.to(), null);
+			bulk.set(one, HealdanConstants.ATTR_EMAILSENT, Attribute.Type.DATE, null, null);
+			jdbc().update("update ld_document_ext set ld_datevalue = ? where ld_docid = ? and ld_name = ?",
+					these.sent(), id, HealdanConstants.ATTR_EMAILSENT);
+			bulk.evict(one);
+			columns.put(number, these);
+		}
+		return columns;
 	}
 
 	private static Map<String, Long> counts(JsonNode options) {
@@ -1022,7 +1144,7 @@ public class SearchResourceTest extends ApiTestCase {
 		for (String query : new String[] { "scope=folders&q=docu&author=jclarke", "scope=matters&q=998&facets=type",
 				"scope=clients&q=healdan&type=pdf", "q=x&type=folder", "q=x&type=spreadsheet", "q=x&matter=998",
 				"q=x&client=ABC", "q=x&facets=size", "q=x&edited=week", "q=x&edited=7d&from=2026-01-01",
-				"q=x&from=2026-02-01&to=2026-01-01", "q=x&author=", "q=x&order=desc", "q=x&sort=size",
+				"q=x&from=2026-02-01&to=2026-01-01", "q=x&author=", "q=x&order=desc", "q=x&sort=colour",
 				"q=x&sort=title&order=up", "scope=folders&q=docu&sort=title", "scope=matters&q=998&sort=docNumber",
 				"scope=clients&q=healdan&order=asc", "q=x&zone=Mars/Olympus", "q=x&from=2026-01-01&zone=%2B99:00",
 				"scope=folders&q=docu&zone=Nowhere" }) {

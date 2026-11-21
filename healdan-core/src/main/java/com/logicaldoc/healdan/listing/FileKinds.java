@@ -43,6 +43,16 @@ public final class FileKinds {
 	public static final List<String> KINDS = List.of(WORD, EXCEL, POWERPOINT, PDF, EMAIL, OPENDOCUMENT, PICTURE,
 			OTHER);
 
+	/**
+	 * Every kind in the order of the names the File Type filter shows them by,
+	 * A to Z in lower case: the app's {@code filters.type.*} strings
+	 * ({@code healdan-web/web/packages/ui/src/strings/en-US.ts}: Email, Excel,
+	 * OpenDocument, Other, PDF, Picture, PowerPoint, Word), as the browser's
+	 * {@code compareRows.ts} sorts its {@code type} key. The File Type sort
+	 * follows it; a name changed there changes it here.
+	 */
+	static final List<String> BY_NAME = List.of(EMAIL, EXCEL, OPENDOCUMENT, OTHER, PDF, PICTURE, POWERPOINT, WORD);
+
 	/** The kind of each extension a kind names */
 	private static final Map<String, String> BY_EXTENSION = EXTENSIONS.entrySet().stream()
 			.flatMap(kind -> kind.getValue().stream().map(ext -> Map.entry(ext, kind.getKey())))
