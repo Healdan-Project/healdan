@@ -2,13 +2,17 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { describe, expect, it } from 'vitest'
+import { strings } from '@healdan/ui'
 import { adminEnUS, adminPlurals } from './en-US'
 import { plural, t } from './index'
 
 describe("The Admin app's strings", () => {
-  it('are all its own, under admin.', () => {
-    const keys = [...Object.keys(adminEnUS), ...Object.keys(adminPlurals)]
-    expect(keys.filter((key) => !key.startsWith('admin.'))).toEqual([])
+  it('are all its own, under admin., but for the messages of problems only the admin API answers', () => {
+    const others = Object.keys(adminEnUS).filter((key) => !key.startsWith('admin.'))
+    expect(others.filter((key) => !key.startsWith('problems.'))).toEqual([])
+    // None says again, or differently, what the shared catalogue says
+    expect(others.filter((key) => Object.hasOwn(strings, key))).toEqual([])
+    expect(Object.keys(adminPlurals).filter((key) => !key.startsWith('admin.'))).toEqual([])
   })
 
   // scripts/check-dist.mjs looks for this key in the User app's build, which never holds the Admin app's code

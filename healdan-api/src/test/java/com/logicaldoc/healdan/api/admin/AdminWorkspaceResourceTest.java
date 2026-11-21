@@ -396,6 +396,33 @@ public class AdminWorkspaceResourceTest extends ApiTestCase {
 					"select ld_deleted from ld_folder where ld_id = ?", Integer.class, kept.getId()));
 	}
 
+	/**
+	 * The Admin app's moves and deletes refuse anyone but an administrator first, whoever calls them, as their routes
+	 * do before them (Admin app ruling P3-R39)
+	 */
+	@Test
+	public void testTheAdminChangesRefuseANonAdministrator() throws Exception {
+		FolderChanges changes = WorkspaceRequests.changes();
+		Caller clerk = new Caller(fx.user("clerk"), null, null);
+		Folder other = fx.store("Other Work");
+		int folders = count();
+		String only = "Only administrators can move or delete matters, Stores, workspace templates and their folders "
+				+ "here.";
+
+		assertProblem("a Store", () -> changes.deleteStore(store.getId(), clerk), 403, "admins-only", only);
+		assertProblem("a matter", () -> changes.deleteMatter(workspace.getId(), clerk), 403, "admins-only", only);
+		assertProblem("a matter's move", () -> changes.moveMatter(workspace.getId(), other.getId(), clerk,
+				(from, to) -> fail("moved")), 403, "admins-only", only);
+		assertProblem("a workspace's folder", () -> changes.deleteWorkspaceFolder(documents.getId(), clerk), 403,
+				"admins-only", only);
+		assertProblem("a template", () -> changes.deleteTemplate(standard.getId(), clerk), 403, "admins-only", only);
+		// Before anything else, a folder that's none of those too
+		assertProblem("the root", () -> changes.deleteStore(Folder.ROOTID, clerk), 403, "admins-only", only);
+
+		assertEquals(folders, count());
+		assertEquals(store.getId(), FolderDAO.get().findById(workspace.getId()).getParentId());
+	}
+
 	// The values a folder sets
 
 	@Test

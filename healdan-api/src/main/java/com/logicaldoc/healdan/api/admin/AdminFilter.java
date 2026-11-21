@@ -38,7 +38,10 @@ import jakarta.ws.rs.ext.Provider;
  * administer anything;</li>
  * <li>anyone {@link AdminAccess} doesn't allow the resource's area is
  * {@code 403 admins-only}, asked at every request, so someone taken out of
- * {@code admin} is refused at their next one.</li>
+ * {@code admin} is refused at their next one. The area is the matched
+ * class's own: classes that share one root, such as
+ * {@code /v1/admin/stores}'s {@code STORES} and {@code STORAGE} ones, are
+ * each judged by their own {@link AdminRoute}.</li>
  * </ul>
  * It fails closed: a route declared at {@code /v1/admin}, or under it, whose
  * class doesn't carry {@link AdminRoute} is a programming fault, logged, and

@@ -59,7 +59,10 @@ export const adminKeys = {
   nextMatterNumber: (clientId: number) => adminKey('/v1/admin/matters/next-number', { clientId }),
   /** New Matter's checks of its form, each by the form it checked, under `matters` too */
   matterCheck: [...adminKey('/v1/admin/matters'), 'check'] as const,
-  /** Every Store menu, and who can see each Store */
+  /**
+   * The Stores, for every Store menu and the Stores list, and, under it, each Store's page, who can see it, its backend and
+   * the Stores in the Trash (stores/queries.ts reads them)
+   */
   stores: adminKey('/v1/admin/stores'),
   storeAccess: (id: number) => [...adminKey('/v1/admin/stores'), id, 'access'] as const,
   // The templates' and the workspaces' keys, and their reads, are workspace/queries.ts's
@@ -90,14 +93,38 @@ export function useDashboard(enabled = true) {
   return useAdminQuery('/v1/admin/dashboard', { poll: true, enabled })
 }
 
+/**
+ * The Dashboard's answer for the left pane's counts, under the Dashboard's own key: asked as the frame loads and at each
+ * return to the window, with no timer of its own (P3-R25). Only while the Dashboard is open does the answer come every 30
+ * seconds, by the Dashboard's poll, which this follows (spec 7.2 keeps the 30-second asks to the Dashboard and running
+ * jobs). Nothing is asked while `enabled` is false.
+ */
+export function useDashboardCounts(enabled = true) {
+  const api = useApi()
+  return useQuery({
+    queryKey: adminKeys.dashboard,
+    queryFn: ({ signal }) => api.get<DashboardAnswer>('/v1/admin/dashboard', undefined, { signal }),
+    enabled,
+    meta: ASK_ON_RETURN,
+  })
+}
+
 /** The Dashboard's Usage, asked again as the rest of it is, its days cut in the browser's time zone, as the User app's are */
 export function useUsage() {
   return useAdminQuery('/v1/admin/dashboard/usage', { poll: true, query: { zone: Intl.DateTimeFormat().resolvedOptions().timeZone } })
 }
 
-/** Every Store, by name: a short list, for the Store menus (spec 7.2) */
+/**
+ * Every Store, by name: a short list (spec 7.2), for the Store menus, which read each one's id and name, and for the Stores
+ * list, which shows the rest. Each return to the window asks again however fresh it is, as the list's files change.
+ */
 export function useStores() {
-  return useAdminQuery('/v1/admin/stores')
+  const api = useApi()
+  return useQuery({
+    queryKey: adminKeys.stores,
+    queryFn: ({ signal }) => api.get<AdminAnswer<'/v1/admin/stores'>>('/v1/admin/stores', undefined, { signal }),
+    meta: ASK_ON_RETURN,
+  })
 }
 
 /**

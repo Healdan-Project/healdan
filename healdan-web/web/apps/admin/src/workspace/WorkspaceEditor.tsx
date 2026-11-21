@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useBlocker } from '@tanstack/react-router'
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useId, useRef, useState } from 'react'
 import { ApiError, apiPath, type adminComponents, type components } from '@healdan/api'
 import { ErrorPanel, useApi } from '@healdan/shell'
 import { Button, Icon, toast, toastWithAction, type ToastAction } from '@healdan/ui'
@@ -14,6 +13,7 @@ import { AccessPanel } from './AccessPanel'
 import { EditsContext, type EditState } from './edits'
 import { DeleteFolderDialog, FolderNameDialog, MoveFolderDialog, namesBeside } from './FolderDialogs'
 import { actionsOf, FolderTree, type FolderAction } from './FolderTree'
+import { LeavePageQuestion } from './LeavePageQuestion'
 import { PropertiesPanel } from './PropertiesPanel'
 import { useTemplateProblems, useWorkspaceTree, workspaceChanged } from './queries'
 import { SearchFolderPanel } from './SearchFolderPanel'
@@ -88,20 +88,8 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
     else setSelected(next)
   }, [])
 
-  // Leaving the page over a change, by a link, the find, the crumb or Back, asks first; changing the tab doesn't, as the
-  // editor stays where it is. A reload or closing the window over one is asked about by the browser, in its own words.
-  const changing = standing !== 'clean'
-  const shouldBlock = useCallback(({ current, next }: { current: { pathname: string }; next: { pathname: string } }) => current.pathname !== next.pathname && parts.current.size > 0, [])
-  const blocker = useBlocker({ shouldBlockFn: shouldBlock, enableBeforeUnload: false, disabled: !changing, withResolver: true })
-  useEffect(() => {
-    if (!changing) return
-    const ask = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ''
-    }
-    window.addEventListener('beforeunload', ask)
-    return () => window.removeEventListener('beforeunload', ask)
-  }, [changing])
+  // Leaving the page over a change asks first (LeavePageQuestion); changing the tab doesn't, as the editor stays where it is
+  const changing = useCallback(() => parts.current.size > 0, [])
 
   /** Another folder chosen: at once, after asking over an unsaved change, or once a save on its way is saved */
   function choose(id: number) {
@@ -321,16 +309,7 @@ function Editor({ root, kind, problems }: { root: WorkspaceNode; kind: 'matter' 
             <p className={page.line}>{t('admin.workspace.leaveLine', { name: node.name, next: findNode(root, leaving)?.name ?? '' })}</p>
           </Confirm>
         )}
-        {blocker.status === 'blocked' && (
-          <Confirm
-            title={t('admin.workspace.leaveTitle', { name: node.name })}
-            confirm={standing === 'saving' ? t('admin.workspace.leavePage') : t('admin.access.discard')}
-            run={async () => blocker.proceed()}
-            onClose={() => blocker.reset()}
-          >
-            <p className={page.line}>{t(standing === 'saving' ? 'admin.workspace.leaveSavingLine' : 'admin.workspace.leavePageLine', { name: node.name })}</p>
-          </Confirm>
-        )}
+        <LeavePageQuestion standing={standing} name={node.name} changing={changing} />
       </div>
     </EditsContext.Provider>
   )

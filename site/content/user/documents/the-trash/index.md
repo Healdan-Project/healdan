@@ -75,7 +75,7 @@ Drafts" to 1001.1 › Drafts", with **Open**, which takes you to that folder.
   document can only come back into a folder inside a matter's workspace, and a restore into another matter gives its
   documents that matter's client and matter. A matter that already holds a copy of an email refuses a second one.
 - **Some items can't be restored here.** Healdan says ""Lease.pdf" can't be restored from here." An administrator
-  restores a Store in the Classic Interface.
+  restores a Store from **Deleted Stores** on the Admin app's Stores page, or in the Classic Interface.
 
 ## Removing from the Trash
 
@@ -102,8 +102,8 @@ in the Admin Guide.
 ## In the Classic Interface
 
 The [Classic Interface](../../the-classic-interface/) has a Trash too, in the left pane's **Trash** section, which
-lists what **you** deleted, a deleted folder's documents and subfolders as rows of their own. It's the way to restore a
-Store.
+lists what **you** deleted, a deleted folder's documents and subfolders as rows of their own. An administrator can
+restore a Store there too.
 
 1. Open the **Trash** section, and open the folder to restore into in the **Browser** section. The Classic Interface
    restores into the folder that's open in its folder tree, which isn't always where the item was.

@@ -4,15 +4,20 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { adminComponents } from '@healdan/api'
 import { adminKey, adminKeys } from '../queries'
+import { storesChanged } from '../stores/queries'
 import { workspaceKeys } from '../workspace/queries'
 
 type A = adminComponents['schemas']
 
-/** What a matter's change reaches besides its page: the lists of matters, the clients' pages and the top bar's find */
+/**
+ * What a matter's change reaches besides its page: the lists of matters, the clients' pages, the top bar's find, and the
+ * Stores, which count their matters
+ */
 function othersChanged(queryClient: QueryClient, id: number) {
   void queryClient.invalidateQueries({ queryKey: adminKeys.matters, predicate: ({ queryKey }) => queryKey[2] !== id })
   void queryClient.invalidateQueries({ queryKey: adminKeys.clients })
   void queryClient.invalidateQueries({ queryKey: adminKey('/v1/admin/find') })
+  storesChanged(queryClient, undefined, { pages: true })
 }
 
 /** A matter as the server answered a change: its page has the answer at once, and every list that shows it is asked again */

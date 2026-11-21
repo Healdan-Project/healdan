@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import type { adminComponents } from '@healdan/api'
-import { formatDate, formatSize, Icon, type TableColumn, type TableRow } from '@healdan/ui'
+import { formatCount, formatDate, formatSize, Icon, type TableColumn, type TableRow } from '@healdan/ui'
 import { t } from '../strings'
 import type { MatterSort } from './useMatterList'
 import styles from './Matters.module.css'
@@ -17,8 +17,6 @@ export interface MatterTableRow extends TableRow {
 export function matterRowOf(matter: A['MatterRow']): MatterTableRow {
   return { id: String(matter.id), textValue: t('matter.label', { number: matter.number, name: matter.name }), matter }
 }
-
-const counts = new Intl.NumberFormat('en-US')
 
 /** Text that is secondary to the matter's own, muted, as the mockup's Client, Store, Owner, Template and Last Activity are */
 function Muted({ children }: { children: string }) {
@@ -54,7 +52,7 @@ export function matterColumns(leaveOut: readonly MatterSort[] = []): TableColumn
     { id: 'store', name: t('admin.matters.column.store'), width: '1fr', minWidth: 96, cell: ({ matter }) => <Muted>{matter.store.name}</Muted> },
     { id: 'owner', name: t('admin.matters.column.owner'), width: '1.2fr', minWidth: 104, cell: ({ matter }) => <Muted>{matter.owner?.name ?? ''}</Muted> },
     { id: 'template', name: t('admin.matters.column.template'), width: '1fr', minWidth: 96, cell: ({ matter }) => <Muted>{matter.template?.name ?? ''}</Muted> },
-    { id: 'documents', name: t('admin.matters.column.documents'), align: 'end', width: 96, cell: ({ matter }) => (matter.documents === null ? '' : counts.format(matter.documents)) },
+    { id: 'documents', name: t('admin.matters.column.documents'), align: 'end', width: 96, cell: ({ matter }) => (matter.documents === null ? '' : formatCount(matter.documents)) },
     { id: 'bytes', name: t('admin.matters.column.bytes'), align: 'end', width: 84, cell: ({ matter }) => (matter.bytes === null ? '' : formatSize(matter.bytes)) },
     { id: 'lastActivity', name: t('admin.matters.column.lastActivity'), width: 120, cell: ({ matter }) => <Muted>{matter.lastActivity === null ? '' : formatDate(matter.lastActivity)}</Muted> },
   ]

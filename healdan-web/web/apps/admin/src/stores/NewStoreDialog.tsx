@@ -2,29 +2,22 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { adminComponents } from '@healdan/api'
 import { fieldErrors, useApi } from '@healdan/shell'
-import { Button, Dialog, Highlight, Icon, SearchPicker, TextField, toast } from '@healdan/ui'
-import { adminKey, adminKeys, useAdminQuery } from '../queries'
+import { Button, Dialog, Highlight, Icon, SearchPicker, SelectField, TextField, toast } from '@healdan/ui'
+import { isStorageUnavailable, useBackends } from '../storage/queries'
 import { t } from '../strings'
 import { useRefusalFor } from '../strings/refusals'
 // A Store's name is a folder's: the same rule, and the same words, as every other folder name the app takes
 import { nameProblem } from '../workspace/text'
 import formStyles from '../forms/Form.module.css'
+import { storesChanged } from './queries'
+import { backendLabel } from './text'
+import { useGroupPicker } from './useGroupPicker'
 import styles from './Stores.module.css'
 
 type A = adminComponents['schemas']
-
-/** The groups offered while nothing is typed, the first by name: enough for most firms' every group */
-const GROUPS_SHOWN = 50
-/** The groups offered for what is typed */
-const GROUPS_FOUND = 20
-
-/** Stores as the menus list them, by name, in any case */
-function byName(one: A['Store'], other: A['Store']): number {
-  return one.name.localeCompare(other.name, 'en-US', { sensitivity: 'base' })
-}
 
 export interface NewStoreDialogProps {
   /** The Store as the server answered, just before the dialog closes; what to do with it is the caller's */
@@ -34,12 +27,15 @@ export interface NewStoreDialogProps {
 }
 
 /**
- * New Store (spec 8.6): its name, and who can see it, the groups each given Read, the one level a Store has (Can See), so
- * a matter can be made in it at once. The groups are a list to pick from, with a search for a firm that has many; one
- * added leaves the list, and Remove puts it back. With none, only administrators can see the Store. A new Store keeps its
- * files on Original until its storage backend is changed (the plan's Spec Correction 1: no backend field yet). What the
- * form can see is wrong with the name is said before its button; the server's refusal is said in the dialog, and a field
- * it names beside it. Once made, every Store menu has it at once.
+ * New Store (spec 8.6): its name, who can see it, the groups each given Read, the one level a Store has (Can See), so a
+ * matter can be made in it at once, and the backend it keeps its files on. The groups are a list to pick from, with a
+ * search for a firm that has many; one added leaves the list, and Remove puts it back. With none, only administrators can
+ * see the Store. Backend is a menu of the backends a Store can be given, Original first and chosen, and isn't asked on a
+ * server that doesn't use storage backends; when the backends can't be read, it says the Store is made on Original and can
+ * be given another backend later; a Store made that couldn't then be given the backend chosen is on Original, and the
+ * toast says so. What the form can see is wrong with the name is said before its button; the
+ * server's refusal is said in the dialog, and a field it names beside it. Once made, every Store menu and the Stores list
+ * ask for the Stores again, as the create answers only the new one's id and name (P3-R23).
  */
 export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
   const api = useApi()
@@ -55,20 +51,17 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
   const addField = useRef<HTMLInputElement>(null)
   const refocus = useRef<number | 'add' | undefined>(undefined)
 
-  const listed = useAdminQuery('/v1/admin/groups', { query: { limit: GROUPS_SHOWN } })
-  const search = useCallback(
-    async (q: string) => {
-      const query = { q, limit: GROUPS_FOUND }
-      const page = await queryClient.fetchQuery({
-        queryKey: adminKey('/v1/admin/groups', query),
-        queryFn: ({ signal }) => api.get<A['GroupList']>('/v1/admin/groups', query, { signal }),
-        // A key back and forth needn't ask twice
-        staleTime: 30_000,
-      })
-      return page.items ?? []
-    },
-    [api, queryClient],
-  )
+  // The backends a Store can be given, Original first; none to choose from while storage backends are off, or the server
+  // has no storage module (its 503 is said nowhere here: the Store is made on Original), or the backends couldn't be read
+  // (which is said, as the Store is made on Original then too, and can be moved)
+  const overview = useBackends()
+  const unread = overview.data === undefined && overview.isError && !isStorageUnavailable(overview.error)
+  const offered = overview.data?.on === true ? overview.data.backends.filter((backend) => backend.offered) : []
+  const original = offered.find((backend) => backend.original) ?? offered[0]
+  const [backendId, setBackendId] = useState<number>()
+  const backend = offered.find((one) => one.id === backendId) ?? original
+
+  const groups = useGroupPicker()
 
   // Once the list is drawn without the group removed
   useEffect(() => {
@@ -108,11 +101,16 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
     setBusy(true)
     setFailure(undefined)
     try {
-      const store = await api.send<A['Store']>('POST', '/v1/admin/stores', { name: trimmed, groupIds: chosen.map((group) => group.id) } satisfies A['NewStore'])
-      // Every Store menu has it at once, then asks the server again
-      queryClient.setQueryData<A['Store'][]>(adminKeys.stores, (stores) => stores && [...stores.filter((one) => one.id !== store.id), store].sort(byName))
-      void queryClient.invalidateQueries({ queryKey: adminKeys.stores })
-      toast(t('admin.newStore.created', { name: store.name }))
+      const body: A['NewStore'] = { name: trimmed, groupIds: chosen.map((group) => group.id) }
+      // Original needs no naming: it's where a Store keeps its files unless another is named
+      if (backend !== undefined && !backend.original) body.backendId = backend.id
+      const store = await api.send<A['Store']>('POST', '/v1/admin/stores', body)
+      // The list's rows carry far more than the answer, so none is made up from it: the menus and the list ask again
+      storesChanged(queryClient)
+      // Made, but the backend chosen couldn't be given it, as when it was removed meanwhile: it's on Original, where its
+      // files would go, so that's said
+      const elsewhere = backend !== undefined && body.backendId !== undefined && store.backendId !== body.backendId
+      toast(elsewhere ? t('admin.newStore.createdOnOriginal', { name: store.name, backend: backend.name }) : t('admin.newStore.created', { name: store.name }))
       onSaved?.(store)
       // Not through the dialog's own close, which is held while busy
       onClose()
@@ -177,8 +175,8 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
             placeholder={t('admin.newStore.find')}
             hint={t('admin.newStore.hint')}
             initialHeading={t('admin.newStore.groups')}
-            initial={listed.data?.items ?? []}
-            search={search}
+            initial={groups.initial}
+            search={groups.search}
             id={(group) => String(group.id)}
             render={(group, query) => (
               <span className={styles.option}>
@@ -197,7 +195,22 @@ export function NewStoreDialog({ onSaved, onClose }: NewStoreDialogProps) {
             leaveOut={(group) => chosenIds.has(group.id)}
             inputRef={addField}
           />
-          <p className={formStyles.note}>{t('admin.newStore.backend')}</p>
+          {backend !== undefined && (
+            <div className={formStyles.field}>
+              <SelectField
+                label={t('admin.newStore.backend')}
+                required
+                value={String(backend.id)}
+                options={offered.map((one) => ({ value: String(one.id), label: backendLabel(one) }))}
+                onChange={(value) => {
+                  setBackendId(Number(value))
+                  change()
+                }}
+              />
+              <p className={formStyles.note}>{t('admin.newStore.backendNote')}</p>
+            </div>
+          )}
+          {unread && <p className={formStyles.note}>{t('admin.newStore.backendsUnread')}</p>}
           {refusal !== undefined && (
             <p className={formStyles.refusal} role="alert">
               {refusal}

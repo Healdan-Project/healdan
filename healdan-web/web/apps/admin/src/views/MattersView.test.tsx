@@ -274,8 +274,10 @@ describe('The Matters list', () => {
     await waitFor(() => expect(held()).toBe(1 + 200))
     act(() => bringObservedIntoView())
     await waitFor(() => expect(held()).toBe(1 + 201))
+    // The last page has come and nothing is loading. Every row the server counted is here, so the list draws no row that
+    // asks for more; one it asked for anyway would be counted as the end comes into view, inside act
+    await waitFor(() => expect(within(table).queryByText('Loading…')).toBeNull())
     act(() => bringObservedIntoView())
-    await new Promise((resolve) => setTimeout(resolve, 100))
     expect(api.callsTo('GET /v1/admin/matters').map((call) => [call.query?.offset, call.query?.limit])).toEqual([
       [0, 100],
       [100, 100],

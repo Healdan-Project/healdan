@@ -7,6 +7,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.StringReader;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,6 +19,10 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import org.junit.Test;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.comments.CommentType;
+import org.yaml.snakeyaml.events.CommentEvent;
+import org.yaml.snakeyaml.events.Event;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,7 +44,8 @@ import io.swagger.v3.parser.core.models.SwaggerParseResult;
  * the admin API's (Admin app spec section 9.2), which describes only the web
  * session and repeats a few of the first file's components: {@code Page},
  * {@code FieldError} and the {@code Problem} response as they are, but for
- * their words, and {@code Problem} with fewer members.
+ * their words, and {@code Problem} with fewer members, and {@code sealed} of
+ * its own.
  */
 public class OpenApiFileTest {
 
@@ -49,6 +55,13 @@ public class OpenApiFileTest {
 
 	/** The keywords that only say things, which copies may word their own way */
 	private static final Set<String> WORDS = Set.of("description", "examples");
+
+	/**
+	 * The members the admin {@code Problem} may declare that the first file's lacks, by name: {@code sealed}, which
+	 * {@code secret-key-missing} adds (Admin app ruling P3-R6). Should the first file declare one too, the two must be
+	 * the same, as every shared member is.
+	 */
+	private static final Set<String> ADMIN_PROBLEM_ONLY = Set.of("sealed");
 
 	@Test
 	public void testParsesWithoutMessages() {
@@ -139,9 +152,10 @@ public class OpenApiFileTest {
 				.collect(Collectors.toCollection(TreeSet::new)));
 
 		JsonNode problem = admin.path("schemas").path("Problem");
-		assertEquals(List.of("code", "detail", "fields", "status", "title", "type"),
+		assertEquals(List.of("code", "detail", "fields", "sealed", "status", "title", "type"),
 				names(problem.path("properties")));
-		assertEquals(List.of("web-session-only", "admins-only", "not-found", "refused", "validation"),
+		assertEquals(List.of("web-session-only", "admins-only", "not-found", "refused", "validation",
+				"secret-key-missing", "storage-unavailable"),
 				texts(problem.path("properties").path("code").path("examples")));
 	}
 
@@ -171,6 +185,18 @@ public class OpenApiFileTest {
 		((ObjectNode) extra.at("/schemas/Problem/properties")).putObject("colour").put("type", "string");
 		assertEquals(List.of("schemas/Problem"), differences(first, extra));
 
+		// Only sealed may be the admin Problem's own, whatever it holds; once the first file declares it, the two must
+		// be the same
+		ObjectNode resealed = admin.deepCopy();
+		((ObjectNode) resealed.at("/schemas/Problem/properties/sealed")).put("type", "string");
+		assertEquals(List.of(), differences(first, resealed));
+		ObjectNode firstSealed = first.deepCopy();
+		((ObjectNode) firstSealed.at("/schemas/Problem/properties")).set("sealed",
+				admin.at("/schemas/Problem/properties/sealed").deepCopy());
+		assertEquals(List.of(), differences(firstSealed, admin));
+		((ObjectNode) firstSealed.at("/schemas/Problem/properties/sealed")).put("minimum", 0);
+		assertEquals(List.of("schemas/Problem"), differences(firstSealed, admin));
+
 		// The admin Problem's keywords, type and required among them, are the first file's
 		ObjectNode loosened = admin.deepCopy();
 		((ObjectNode) loosened.at("/schemas/Problem")).putArray("required").add("code");
@@ -180,11 +206,12 @@ public class OpenApiFileTest {
 		((ObjectNode) closed.at("/schemas/Problem")).put("additionalProperties", false);
 		assertEquals(List.of("schemas/Problem"), differences(first, closed));
 
-		// Fewer properties are allowed: the first file's Problem has more than the admin one
-		assertTrue(names(first.at("/schemas/Problem/properties"))
-				.containsAll(names(admin.at("/schemas/Problem/properties"))));
-		assertTrue(names(first.at("/schemas/Problem/properties")).size() > names(
-				admin.at("/schemas/Problem/properties")).size());
+		// Fewer properties are allowed: the first file's Problem has more than the admin one, which has only sealed of
+		// its own
+		List<String> shared = names(admin.at("/schemas/Problem/properties"));
+		shared.removeAll(ADMIN_PROBLEM_ONLY);
+		assertTrue(names(first.at("/schemas/Problem/properties")).containsAll(shared));
+		assertTrue(names(first.at("/schemas/Problem/properties")).size() > shared.size());
 	}
 
 	/**
@@ -195,7 +222,9 @@ public class OpenApiFileTest {
 	 *         {@code description} and {@code examples} are left out: equal,
 	 *         but for {@code schemas/Problem}, whose other keywords, such as
 	 *         {@code type} and {@code required}, must be the same, and every
-	 *         property it declares one of the first file's, the same
+	 *         property it declares one of the first file's, the same, but
+	 *         for {@link #ADMIN_PROBLEM_ONLY}'s while the first file lacks
+	 *         them
 	 */
 	static List<String> differences(JsonNode first, JsonNode admin) {
 		List<String> different = new ArrayList<>();
@@ -204,10 +233,12 @@ public class OpenApiFileTest {
 			JsonNode ours = withoutWords(admin.at("/" + component), null);
 			boolean same;
 			if (component.equals("schemas/Problem")) {
-				// Every keyword but its members the same, type and required among them; each member it has the same
+				// Every keyword but its members the same, type and required among them; each member it has the same,
+				// but one of its own the first file lacks
 				same = without(theirs, "properties").equals(without(ours, "properties"));
 				for (String name : names(ours.path("properties")))
-					same &= theirs.path("properties").path(name).equals(ours.path("properties").path(name));
+					if (!(ADMIN_PROBLEM_ONLY.contains(name) && !theirs.path("properties").has(name)))
+						same &= theirs.path("properties").path(name).equals(ours.path("properties").path(name));
 			} else {
 				same = theirs.equals(ours);
 			}
@@ -304,6 +335,72 @@ public class OpenApiFileTest {
 		Set<String> found = new TreeSet<>();
 		stringEnums(tree("schema:\n  type: string\n  enum: [ok, off]\n"), "test", found);
 		assertEquals(Set.of("test schema: false"), found);
+	}
+
+	/**
+	 * A bare {@code on} in a {@code required} list is read as {@code true}, as an enum's is, so a member named
+	 * {@code on}, such as the storage routes' {@code 'on'}, would never be required; every name a {@code required} list
+	 * gives, in both files, must be a string
+	 */
+	@Test
+	public void testRequiredNamesAreStrings() {
+		Set<String> wrong = new TreeSet<>();
+		requiredNames(tree(Contract.openApi()), "openapi.yaml", wrong);
+		requiredNames(tree(Contract.openApiAdmin()), "openapi-admin.yaml", wrong);
+		assertEquals(Set.of(), wrong);
+
+		// The check finds a bare on
+		Set<String> found = new TreeSet<>();
+		requiredNames(tree("schema:\n  type: object\n  required: [id, on]\n"), "test", found);
+		assertEquals(Set.of("test schema: true"), found);
+	}
+
+	/**
+	 * YAML ends a plain scalar where a {@code #} follows a space, reading the rest of the line as a comment, so a
+	 * description such as {@code not its doc #} loses its end without a word; a value that holds {@code " #"} is quoted
+	 * or a block, so neither file has a comment after a value on its line
+	 */
+	@Test
+	public void testNoValueIsCutShortByAHash() {
+		Set<String> cut = new TreeSet<>();
+		cutByAHash(Contract.openApi(), "openapi.yaml", cut);
+		cutByAHash(Contract.openApiAdmin(), "openapi-admin.yaml", cut);
+		assertEquals(Set.of(), cut);
+
+		// The check finds a plain value cut short, and leaves a quoted one, a block's and a comment's own line alone
+		Set<String> found = new TreeSet<>();
+		cutByAHash("""
+				a: not its doc #
+				b: "its doc #"
+				# a comment
+				c: |
+				  its doc # and more
+				d:
+				  - the doc # and the version
+				e: 'doc # two'
+				""", "test", found);
+		assertEquals(Set.of("test line 1", "test line 7"), found);
+	}
+
+	/** Adds the line of each comment that follows a value on its line */
+	private static void cutByAHash(String yaml, String where, Set<String> cut) {
+		LoaderOptions options = new LoaderOptions();
+		options.setProcessComments(true);
+		for (Event event : new org.yaml.snakeyaml.Yaml(options).parse(new StringReader(yaml)))
+			if (event instanceof CommentEvent comment && comment.getCommentType() == CommentType.IN_LINE)
+				cut.add(where + " line " + (comment.getStartMark().getLine() + 1));
+	}
+
+	private static void requiredNames(JsonNode node, String where, Set<String> wrong) {
+		if (node.isObject()) {
+			if (node.path("required").isArray())
+				for (JsonNode name : node.path("required"))
+					if (!name.isTextual())
+						wrong.add(where + ": " + name);
+			node.fields().forEachRemaining(field -> requiredNames(field.getValue(), where + " " + field.getKey(), wrong));
+		} else if (node.isArray()) {
+			node.forEach(element -> requiredNames(element, where, wrong));
+		}
 	}
 
 	private static void stringEnums(JsonNode node, String where, Set<String> wrong) {
