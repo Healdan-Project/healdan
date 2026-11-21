@@ -10,6 +10,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.AddedBackend;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDetail;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDraft;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendList;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.KeyEvent;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageLimits;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageSettingsInfo;
@@ -37,6 +38,16 @@ public interface OverviewPort extends StorageAdministration {
 
 	@Override
 	default Optional<BackendDetail> backend(long id) {
+		throw unexpected();
+	}
+
+	@Override
+	default BackendList backends() {
+		throw unexpected();
+	}
+
+	@Override
+	default boolean exists(long id) {
 		throw unexpected();
 	}
 

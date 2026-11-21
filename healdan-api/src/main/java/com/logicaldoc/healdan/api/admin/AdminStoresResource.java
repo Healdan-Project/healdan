@@ -24,6 +24,7 @@ import com.logicaldoc.healdan.admin.AdminEvent;
 import com.logicaldoc.healdan.admin.AdminEvents;
 import com.logicaldoc.healdan.admin.storage.StorageAdministration;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDetail;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendList;
 import com.logicaldoc.healdan.admin.stores.StoreAccess;
 import com.logicaldoc.healdan.admin.stores.StoreService;
 import com.logicaldoc.healdan.api.ApiProblem;
@@ -361,11 +362,15 @@ public class AdminStoresResource {
 	 */
 	private static StorageAdministration offered(long backendId) {
 		Optional<StorageAdministration> found = StoragePort.get().find();
-		if (found.isEmpty() || StoreInfos.overview() == null)
+		if (found.isEmpty())
 			throw ApiProblem.conflict("refused", NO_BACKENDS);
 		StorageAdministration port = found.get();
-		BackendDetail backend = StoragePort.run("Can't read storage backend #" + backendId,
-				() -> port.backend(backendId)).orElse(null);
+		// Whether storage backends are on, and the backend, read together
+		BackendList backends = StoragePort.run("Can't read the storage backends", port::backends);
+		if (!backends.on())
+			throw ApiProblem.conflict("refused", NO_BACKENDS);
+		BackendDetail backend = backends.backends().stream().filter(b -> b.id() == backendId).findFirst()
+				.orElse(null);
 		if (backend == null)
 			throw ApiProblem.conflict("refused", NO_BACKEND);
 		if (!backend.offered())

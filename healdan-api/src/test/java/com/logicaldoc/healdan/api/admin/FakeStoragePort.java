@@ -21,6 +21,7 @@ import com.logicaldoc.healdan.admin.storage.StorageRecords.AddedBackend;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDetail;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendDraft;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendInfo;
+import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendList;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.KeyEvent;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageLimits;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
@@ -85,6 +86,12 @@ final class FakeStoragePort implements StorageAdministration {
 	/** The next write's refusal, if any */
 	String refusal;
 
+	/**
+	 * How many times the backends' files were counted, as the real port's overview, its backend and its list of them
+	 * each count them
+	 */
+	int reads;
+
 	/** What each write was given, as {@code <operation> <what>}, never a secret or a recovery key */
 	final List<String> calls = new ArrayList<>();
 
@@ -133,6 +140,7 @@ final class FakeStoragePort implements StorageAdministration {
 
 	@Override
 	public StorageOverview overview() throws PersistenceException {
+		reads++;
 		if (!on)
 			return new StorageOverview(false, List.of(), List.of(), settings, 0, 0, 0);
 		List<BackendInfo> infos = backends.values().stream()
@@ -151,6 +159,28 @@ final class FakeStoragePort implements StorageAdministration {
 
 	@Override
 	public Optional<BackendDetail> backend(long id) {
+		reads++;
+		return detail(id);
+	}
+
+	@Override
+	public BackendList backends() {
+		reads++;
+		if (!on)
+			return new BackendList(false, List.of(), 0, 0, 0);
+		List<BackendDetail> details = new ArrayList<>();
+		for (long id : backends.keySet())
+			details.add(detail(id).orElseThrow());
+		return new BackendList(true, details, otherFiles[0], otherFiles[1], otherFiles[2]);
+	}
+
+	@Override
+	public boolean exists(long id) {
+		return on && backends.containsKey(id);
+	}
+
+	/** @return the backend with its Stores, counting nothing */
+	private Optional<BackendDetail> detail(long id) {
 		if (!on)
 			return Optional.empty();
 		BackendDetail backend = backends.get(id);
@@ -228,7 +258,8 @@ final class FakeStoragePort implements StorageAdministration {
 				row.encrypted(), row.keyConfirmed(), row.offered(), row.inUse(), row.files(), row.bytes(),
 				row.status(), row.error(), row.since(), row.keyLastShown(), row.keyLastShownBy(), List.of());
 		backends.put(id, saved);
-		return backend(id).orElseThrow();
+		// As the real port's save, which counts the backend's own files alone
+		return detail(id).orElseThrow();
 	}
 
 	@Override

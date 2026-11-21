@@ -47,6 +47,7 @@ import com.logicaldoc.healdan.api.ApiCall;
 import com.logicaldoc.healdan.api.ApiResponse;
 import com.logicaldoc.healdan.api.ApiTestCase;
 import com.logicaldoc.healdan.api.DocumentLocks;
+import com.logicaldoc.healdan.api.admin.AdminMattersResourceTest.Body;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.security.AclMath;
 import com.logicaldoc.healdan.setting.HealdanSettings;
@@ -835,17 +836,6 @@ public class AdminStoresResourceTest extends ApiTestCase {
 
 	private static Body newStore(String name) {
 		return new Body().with("name", name).with("groupIds", List.of());
-	}
-
-	/** A JSON object, in the order its members are added; null values included */
-	static final class Body extends java.util.LinkedHashMap<String, Object> {
-
-		private static final long serialVersionUID = 1L;
-
-		Body with(String name, Object value) {
-			put(name, value);
-			return this;
-		}
 	}
 
 	/** @return each reader as its name, and group or person */
