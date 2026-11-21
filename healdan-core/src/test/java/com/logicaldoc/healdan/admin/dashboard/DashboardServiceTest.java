@@ -47,7 +47,7 @@ import com.logicaldoc.healdan.admin.dashboard.DashboardService.Space;
 import com.logicaldoc.healdan.admin.errors.CapturedError;
 import com.logicaldoc.healdan.admin.errors.ErrorStore;
 import com.logicaldoc.healdan.admin.jobs.JobStatus;
-import com.logicaldoc.healdan.admin.storage.StorageAdministration;
+import com.logicaldoc.healdan.admin.storage.OverviewPort;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.BackendInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageSettingsInfo;
@@ -94,7 +94,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		service = DashboardService.get();
 		jdbc = new JdbcTemplate(Context.get(DataSource.class));
 		overview = overview(List.of(backend(1, "Original", BackendInfo.OK)), List.of(), 0);
-		service.ports = () -> List.of(() -> overview);
+		service.ports = () -> List.of(OverviewPort.of(() -> overview));
 		service.disks = folder -> {
 			ContextProperties config = Context.get().getConfig();
 			for (Map.Entry<String, Space> space : spaces.entrySet())
@@ -346,7 +346,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testAFailingPartDoesNotFailTheRest() throws Exception {
-		StorageAdministration failing = () -> {
+		OverviewPort failing = () -> {
 			throw new PersistenceException("hd_storage_file is gone");
 		};
 		service.ports = () -> List.of(failing);
@@ -410,7 +410,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 			}
-			return List.of(() -> overview);
+			return List.of(OverviewPort.of(() -> overview));
 		};
 		try {
 			long started = System.nanoTime();
@@ -457,7 +457,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		// The port says they're off, as on an FSStore server
 		StorageOverview offOverview = new StorageOverview(false, List.of(), List.of(), new StorageSettingsInfo(30, 10, 4),
 				0, 0, 0);
-		service.ports = () -> List.of(() -> offOverview);
+		service.ports = () -> List.of(OverviewPort.of(() -> offOverview));
 		Dashboard portOff = read();
 		assertEquals(List.of(), portOff.unchecked());
 		assertEquals(HealthTile.OFF, tile(portOff, HealthTile.STORAGE_BACKENDS).status());
@@ -539,7 +539,7 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		AtomicInteger asked = new AtomicInteger();
 		service.ports = () -> {
 			asked.incrementAndGet();
-			return List.of(() -> overview);
+			return List.of(OverviewPort.of(() -> overview));
 		};
 		assertEquals(List.of(), read().attention());
 		assertEquals(1, asked.get());
