@@ -109,8 +109,12 @@ tags:
         every other route, Test before saving included, is `409 refused`,
         with a sentence that says storage backends are off, in the check
         order's step 4.
-      - The refusals are the Storage tab's own, each `409 refused` with its
-        sentence in `detail`, which the app shows as it is.
+      - The refusals are the Storage tab's, each `409 refused` with its
+        sentence in `detail`, which the app shows as it is, and two of the
+        Admin app's own, each with a sentence of its own: storage backends
+        off, and a Store in the Trash that keeps its files on a backend
+        being removed, or whose bucket, prefix or path would change, which it
+        names, saying it's in the Trash and how to free the backend.
       - When Healdan's secret key file is missing while values are sealed
         with it, a change that types an S3 secret is `409 secret-key-missing`,
         with the sentence in `detail` and `sealed`, how many stored values
@@ -120,8 +124,9 @@ tags:
       - Nothing here answers an S3 secret, only whether one is stored. An
         encrypted backend's recovery key is answered only by the add of that
         backend and by `POST /v1/admin/backends/{id}/recovery-key/show`, each
-        recorded as a showing. A problem never holds what a request typed as
-        a secret, a recovery key or its last group.
+        recorded as a showing. Neither a problem nor a Test's `problems`
+        holds what a request typed as a secret, a recovery key or its last
+        group.
       - Each change is recorded in the Storage area, straight after it
         succeeds, as a storage change isn't one transaction with its record.
         A secret's and an access key's changes are recorded as changed, with
@@ -1970,9 +1975,8 @@ paths:
           another live folder directly under the root has, compared without
           regard to case, with the sentences of `POST /v1/admin/stores`
           (changing only the case of its own name works); and for what
-          Healdan's rules refuse. Of two creates,
-          renames or restores giving one name at the same moment, the second
-          is refused as a name taken.
+          Healdan's rules refuse. Of two creates, renames or restores giving
+          one name at the same moment, the second is refused as a name taken.
 
         Recorded as `store.renamed`, with the name before and after.
       tags: [Stores]
@@ -2618,6 +2622,11 @@ paths:
         - `409 secret-key-missing`, with `sealed`, for a new `secret` while
           Healdan's secret key file is missing and values are sealed with it,
           unless `newKey` is true; nothing is saved.
+        - `409 refused`, before the Storage tab's refusals, for a new bucket,
+          prefix or path while a Store in the Trash keeps its files there,
+          naming each such Store, as `storesInTrash` lists them: its files
+          stay there while it's in the Trash, so it's restored, given another
+          backend and deleted again.
         - `409 refused`, with the Storage tab's sentence: for a name another
           backend has, in any case, or a setting refused as the add refuses
           it; for a new bucket, prefix or path once a file is recorded or a
@@ -2668,17 +2677,22 @@ paths:
       summary: Remove a storage backend
       description: |
         Removes an empty backend, as the Storage tab's Remove does (Admin app
-        spec section 8.6): one no Store keeps its files on, with no file
-        recorded on it and no copy held there. Its settings leave the
-        database, its sealed S3 secret among them; an encrypted backend's key
-        file is deleted; and its marker and check object are deleted from its
-        place, so another backend can have it. It can't be undone. Answers
-        `204`.
+        spec section 8.6): one no Store keeps its files on, live or in the
+        Trash, with no file recorded on it and no copy held there. Its
+        settings leave the database, its sealed S3 secret among them; an
+        encrypted backend's key file is deleted; and its marker and check
+        object are deleted from its place, so another backend can have it.
+        It can't be undone. Answers `204`.
 
         - `503 storage-unavailable` on a server without Healdan's storage
           module.
         - `404 not-found` for a backend that doesn't exist or was removed,
           and for any while storage backends are off.
+        - `409 refused`, before the Storage tab's refusals but Original's,
+          while a Store in the Trash keeps its files on it, naming each such
+          Store, as `storesInTrash` lists them: its files stay there while
+          it's in the Trash, so it's restored, given another backend and
+          deleted again.
         - `409 refused`, with the Storage tab's sentence: for Original, which
           keeps the files of every Store with no other backend; while a Store
           keeps its files on it, until it's given another; while files are
@@ -2864,11 +2878,12 @@ paths:
         - `422 validation` for a missing or blank `recoveryKey`
           (`required`).
         - `409 refused`, with the Storage tab's sentence: for a backend that
-          isn't encrypted; for what isn't a recovery key, by its length or its
-          last character; for a key that isn't the backend's, so nothing was
-          written; for a backend that can't be used, or whose check object is
-          missing or can't be read, so the key can't be checked; for a key
-          file that couldn't be written; and for a backend still being added.
+          isn't encrypted; for what isn't a recovery key, by its length, its
+          last character or a character a recovery key can't hold; for a key
+          that isn't the backend's, so nothing was written; for a backend that
+          can't be used, or whose check object is missing or can't be read, so
+          the key can't be checked; for a key file that couldn't be written;
+          and for a backend still being added.
 
         Recorded as `backend.recovery-key-entered`.
       tags: [Storage]
@@ -4959,7 +4974,7 @@ components:
         docId:
           type: integer
           format: int64
-          description: LogicalDOC's internal id of the document, not its doc #
+          description: "LogicalDOC's internal id of the document, not its doc #"
         fileName:
           type: [string, 'null']
           description: The document's file name; null when the document can't be found
@@ -5010,7 +5025,7 @@ components:
       additionalProperties: false
       required: [id, name, kind, original, path, endpoint, region, bucket, prefix, pathStyle, accessKey, hasSecret,
         encrypted, keyConfirmed, offered, inUse, files, bytes, status, error, since, keyLastShown, keyLastShownBy,
-        stores]
+        stores, storesInTrash]
       properties:
         id:
           type: integer
@@ -5123,6 +5138,18 @@ components:
             The Templates Store isn't among them
           items:
             type: string
+        storesInTrash:
+          type: array
+          description: |
+            The names of the Stores in the Trash, deleted or removed and not
+            destroyed yet, that keep their files on it, by name, ignoring
+            case: for Original, every such Store with no other backend. Their
+            files stay on it while they're in the Trash, as a restore brings
+            them back, so it can't be removed, nor its bucket, prefix or path
+            changed, until each is restored, given another backend and deleted
+            again. The Templates Store is never among them
+          items:
+            type: string
     BackendStatus:
       type: string
       description: |
@@ -5188,11 +5215,11 @@ components:
             null or left out for the kind's own choice, true for S3 and false
             for a folder
         newKey:
-          type: boolean
+          type: [boolean, 'null']
           description: |
             True to make Healdan's secret key file anew, after
             `secret-key-missing`, which leaves the values sealed with the
-            missing one to be entered again; false or left out otherwise
+            missing one to be entered again; false, null or left out otherwise
     BackendTrial:
       type: object
       description: |
@@ -5239,33 +5266,53 @@ components:
       additionalProperties: false
       properties:
         name:
-          type: string
-          description: At most 100 characters
+          type: [string, 'null']
+          description: At most 100 characters; null or blank is `422 validation` (`required`)
         path:
-          type: string
-          description: A folder's new path, only while it's not `inUse` and no Store keeps its files there
+          type: [string, 'null']
+          description: |
+            A folder's new path, only while it's not `inUse` and no Store keeps
+            its files there, a Store in the Trash included. On a folder, null
+            or blank is `422 validation` (`required`); on S3 or Original, null
+            counts as left out
         endpoint:
-          type: string
+          type: [string, 'null']
+          description: |
+            S3's new endpoint. On S3, null or blank is `422 validation`
+            (`required`); on a folder or Original, null counts as left out
         region:
-          type: string
+          type: [string, 'null']
+          description: |
+            S3's new region. On S3, null or blank is `422 validation`
+            (`required`); on a folder or Original, null counts as left out
         bucket:
-          type: string
-          description: A new bucket, only while it's not `inUse` and no Store keeps its files there
+          type: [string, 'null']
+          description: |
+            A new bucket, only while it's not `inUse` and no Store keeps its
+            files there, a Store in the Trash included. On S3, null or blank
+            is `422 validation` (`required`); on a folder or Original, null
+            counts as left out
         prefix:
           type: [string, 'null']
           description: |
             A new prefix, only while it's not `inUse` and no Store keeps its
-            files there; null or blank for none
+            files there, a Store in the Trash included; null or blank for none
         pathStyle:
-          type: boolean
+          type: [boolean, 'null']
+          description: S3's path-style addressing; null or left out keeps it as it is
         accessKey:
-          type: string
+          type: [string, 'null']
+          description: |
+            S3's new access key ID. On S3, null or blank is `422 validation`
+            (`required`); on a folder or Original, null counts as left out
         secret:
           type: [string, 'null']
           description: A new S3 secret; null, blank or left out keeps the stored one
         newKey:
-          type: boolean
-          description: As `NewBackend.newKey`, with a new `secret`; nothing without one
+          type: [boolean, 'null']
+          description: |
+            As `NewBackend.newKey`, with a new `secret`; nothing without one,
+            and false when null or left out
     AddedBackend:
       type: object
       description: A backend just added, and an encrypted one's recovery key

@@ -7,6 +7,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.StringReader;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,6 +19,10 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import org.junit.Test;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.comments.CommentType;
+import org.yaml.snakeyaml.events.CommentEvent;
+import org.yaml.snakeyaml.events.Event;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -348,6 +353,42 @@ public class OpenApiFileTest {
 		Set<String> found = new TreeSet<>();
 		requiredNames(tree("schema:\n  type: object\n  required: [id, on]\n"), "test", found);
 		assertEquals(Set.of("test schema: true"), found);
+	}
+
+	/**
+	 * YAML ends a plain scalar where a {@code #} follows a space, reading the rest of the line as a comment, so a
+	 * description such as {@code not its doc #} loses its end without a word; a value that holds {@code " #"} is quoted
+	 * or a block, so neither file has a comment after a value on its line
+	 */
+	@Test
+	public void testNoValueIsCutShortByAHash() {
+		Set<String> cut = new TreeSet<>();
+		cutByAHash(Contract.openApi(), "openapi.yaml", cut);
+		cutByAHash(Contract.openApiAdmin(), "openapi-admin.yaml", cut);
+		assertEquals(Set.of(), cut);
+
+		// The check finds a plain value cut short, and leaves a quoted one, a block's and a comment's own line alone
+		Set<String> found = new TreeSet<>();
+		cutByAHash("""
+				a: not its doc #
+				b: "its doc #"
+				# a comment
+				c: |
+				  its doc # and more
+				d:
+				  - the doc # and the version
+				e: 'doc # two'
+				""", "test", found);
+		assertEquals(Set.of("test line 1", "test line 7"), found);
+	}
+
+	/** Adds the line of each comment that follows a value on its line */
+	private static void cutByAHash(String yaml, String where, Set<String> cut) {
+		LoaderOptions options = new LoaderOptions();
+		options.setProcessComments(true);
+		for (Event event : new org.yaml.snakeyaml.Yaml(options).parse(new StringReader(yaml)))
+			if (event instanceof CommentEvent comment && comment.getCommentType() == CommentType.IN_LINE)
+				cut.add(where + " line " + (comment.getStartMark().getLine() + 1));
 	}
 
 	private static void requiredNames(JsonNode node, String where, Set<String> wrong) {
