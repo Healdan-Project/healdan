@@ -5,7 +5,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { ColumnsPanel, t, type TableColumn, type TableColumnChoice, type TableResizing, type TableRow, type TableSort } from '@healdan/ui'
 import { useColumnLayout, type DocumentListKind, type ListKind } from './columnLayouts'
-import { columnsFor, offeredFor, type ListRow } from './listColumns'
+import { columnsFor, documentColumns, offeredFor, type ListRow } from './listColumns'
 import type { ListingOrder } from './useListing'
 
 /** A list of documents' own kind: `beside` is a layout every list of documents uses beside the reading pane, not a list */
@@ -51,9 +51,13 @@ export function useDocumentListColumns(kind: OwnDocumentListKind, { beside, serv
   // The same array while the same columns show: the layout works its list out afresh at every render
   const shownKey = layout.shown.join(' ')
   const shown = useMemo(() => shownKey.split(' '), [shownKey])
-  const columns = useMemo(() => columnsFor(kind, shown, serverSorted), [kind, shown, serverSorted])
+  // Matter's heading is the firm's word, which can come after the list first draws (setLabels): the columns are made again then
+  const matterWord = t('list.matter')
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- matterWord is read inside columnsFor, through Matter's name
+  const columns = useMemo(() => columnsFor(kind, shown, serverSorted), [kind, shown, serverSorted, matterWord])
   // The panel names every column the list offers by its heading
-  const names = useMemo(() => columnsFor(kind, offered, false).map(({ id, name }) => ({ id, name })), [kind, offered])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- as above
+  const names = useMemo(() => columnsFor(kind, offered, false).map(({ id, name }) => ({ id, name })), [kind, offered, matterWord])
 
   const resized = useCallback((widths: Record<string, number>) => latest.current.resized(widths), [])
   const resetWidth = useCallback((id: string) => latest.current.resetWidth(id), [])
@@ -119,7 +123,9 @@ export function useBrowserSort(ids: readonly string[], own: TableSort, address: 
   const navigate = useNavigate()
   const asked = address.sort !== undefined && ids.includes(address.sort) ? address.sort : undefined
   const column = asked ?? own.column
-  const direction: TableSort['direction'] = asked === undefined ? own.direction : address.order === 'desc' ? 'descending' : 'ascending'
+  // An address with no order takes the column's first sort, as a click does: a date's newest first
+  const first: TableSort['direction'] = asked !== undefined && Object.hasOwn(documentColumns, asked) && documentColumns[asked]!.newestFirst ? 'descending' : 'ascending'
+  const direction: TableSort['direction'] = asked === undefined ? own.direction : address.order === 'desc' ? 'descending' : address.order === 'asc' ? 'ascending' : first
   const sort = useMemo(() => ({ column, direction }), [column, direction])
   const { column: ownColumn, direction: ownDirection } = own
   const onSort = useCallback(

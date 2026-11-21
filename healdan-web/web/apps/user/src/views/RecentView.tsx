@@ -65,7 +65,10 @@ function RecentFolders({ address }: { address: AddressSort }) {
   const recent = useRecentFolders()
   const navigate = useNavigate()
   const items = recent.data?.items
-  const all = useMemo(() => columnsFor('recentFolders', FOLDER_COLUMNS, false), [])
+  // Made again when the firm's word for a matter, Matter's heading, comes after the list first draws (setLabels)
+  const matterWord = t('list.matter')
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- matterWord is read inside columnsFor, through Matter's name
+  const all = useMemo(() => columnsFor('recentFolders', FOLDER_COLUMNS, false), [matterWord])
   const { columns, ...widths } = useListWidths('recentFolders', all)
   const { sort, onSort } = useBrowserSort(FOLDER_COLUMNS, LAST_USED, address)
   const rows = useMemo(() => sortRows((items ?? []).map(rowOf), sort), [items, sort])

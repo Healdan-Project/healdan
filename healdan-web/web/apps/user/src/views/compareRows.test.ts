@@ -116,6 +116,13 @@ describe('sortRows', () => {
     expect(ids(sortRows(rows, { column: 'matter', direction: 'descending' }))).toEqual([1, 3, 4, 2, 5])
   })
 
+  it('puts a part of a key with no value last both ways, as the server does for each part: Location\'s matter', () => {
+    const documents = { id: 1, name: 'Documents', kind: 'folder' as const }
+    const rows = [doc(1, { folder: documents, matter: matterRef('No number') }), doc(2, { folder: documents, matter: matterRef('1001.2 – B', 1001) }), doc(3, { folder: documents, matter: matterRef('1001.1 – A', 1001) })]
+    expect(ids(sortRows(rows, { column: 'location', direction: 'ascending' }))).toEqual([3, 2, 1])
+    expect(ids(sortRows(rows, { column: 'location', direction: 'descending' }))).toEqual([2, 3, 1])
+  })
+
   it('puts missing values last both ways, in the list\'s order, and drops no row', () => {
     const rows = [doc(1, { author: null }), doc(2, { author: { username: 'u', displayName: 'Bob' } }), doc(3, { author: null }), doc(4, { author: { username: 'u', displayName: 'Ann' } })]
     expect(ids(sortRows(rows, { column: 'author', direction: 'ascending' }))).toEqual([4, 2, 1, 3])

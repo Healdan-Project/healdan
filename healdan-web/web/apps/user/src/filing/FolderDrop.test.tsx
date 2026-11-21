@@ -131,6 +131,22 @@ describe('Dropping files on a folder', () => {
     // Nor a list heading's drag, which moves a column of the list
     expect(fireEvent.dragOver(target, { dataTransfer: data([], [COLUMN_TYPE]) })).toBe(true)
   })
+
+  it('files nothing dropped while the Columns panel is open, whose layer covers the window: the page refuses it', async () => {
+    const { all } = routes()
+    const { api } = await renderApp('/folders/7', all)
+    await grid()
+    await userEvent.click(within(main()).getByRole('button', { name: 'Columns' }))
+    await screen.findByRole('dialog', { name: 'Columns' })
+    const layer = document.querySelector<HTMLElement>('[data-testid="underlay"]')!
+    const files = data([file('Report.pdf')])
+    fireEvent.dragEnter(layer, { dataTransfer: files })
+    fireEvent.dragOver(layer, { dataTransfer: files })
+    expect(document.querySelector('[data-dropping]')).toBeNull()
+    fireEvent.drop(layer, { dataTransfer: files })
+    expect(await screen.findByText("Drop files on a folder's list, or on a folder in the tree.")).toBeTruthy()
+    expect(posts(api)).toHaveLength(0)
+  })
 })
 
 describe('Dropping on a folder in the tree', () => {

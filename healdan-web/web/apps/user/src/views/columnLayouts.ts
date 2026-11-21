@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { forget, keepJson, readJson } from '../preferences'
 
 // A column layout for each kind of list, kept in this browser (spec 4.8): the ids of the columns shown, in order, and the
@@ -100,7 +100,8 @@ export function useColumnLayout(
   // Calls in one event see each other's changes, which the state alone wouldn't show them until the next render
   const latest = useRef(state)
   const offeredRef = useRef(offered)
-  useEffect(() => {
+  // As each render commits, before any later event: a change made just after the kind changed starts from the new kind's
+  useLayoutEffect(() => {
     latest.current = state
     offeredRef.current = offered
   })

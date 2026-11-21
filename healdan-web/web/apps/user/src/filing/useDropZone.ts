@@ -33,6 +33,12 @@ function rowKey(event: DragEvent): string | undefined {
 }
 
 /**
+ * A drag over the zone's own elements. React hands it a popover's drag events too (the Columns panel's, a menu's), whose
+ * layer covers the window, so a drop anywhere would file here: those are left to FilingProvider's refusal.
+ */
+const onZone = (event: DragEvent) => event.target instanceof Node && event.currentTarget.contains(event.target)
+
+/**
  * A folder's list as a place to drop files (spec 6.5, R69, R70): anywhere on it files into the folder; on a folder's row it
  * files into that folder, by the same rules as a folder in the tree; and on a document's row one file asks whether it's a
  * new version of it. `rowAt` says what a row stands for. The row under the drag lights up, not the whole list.
@@ -49,10 +55,10 @@ export function useDropZone(place: Place, rowAt: (key: string) => RowTarget | un
     overRow: over?.row,
     props: {
       onDragEnter: (event) => {
-        if (takesDrag(Array.from(event.dataTransfer.types))) inside.current++
+        if (onZone(event) && takesDrag(Array.from(event.dataTransfer.types))) inside.current++
       },
       onDragOver: (event) => {
-        if (!takesDrag(Array.from(event.dataTransfer.types))) return
+        if (!onZone(event) || !takesDrag(Array.from(event.dataTransfer.types))) return
         // Without a cancelled dragover the browser won't drop here
         event.preventDefault()
         const key = rowKey(event)
@@ -62,12 +68,13 @@ export function useDropZone(place: Place, rowAt: (key: string) => RowTarget | un
         const lit = target && ('place' in target || !items || items.length === 1) ? key : undefined
         setOver((now) => (now && now.row === lit ? now : { row: lit }))
       },
-      onDragLeave: () => {
-        if (inside.current === 0) return
+      onDragLeave: (event) => {
+        if (inside.current === 0 || !onZone(event)) return
         inside.current--
         if (inside.current === 0) setOver(undefined)
       },
       onDrop: (event) => {
+        if (!onZone(event)) return
         inside.current = 0
         setOver(undefined)
         const key = rowKey(event)

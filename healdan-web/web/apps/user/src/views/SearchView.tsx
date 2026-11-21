@@ -182,7 +182,10 @@ function useHitColumns(scope: SearchScope, beside: boolean): DocumentListColumns
   const documentScope = searchesDocuments(scope) ? scope : undefined
   const otherScope = searchesDocuments(scope) ? undefined : scope
   const chosen = useDocumentListColumns(documentScope ?? 'documents', { beside, serverSorted: true })
-  const own = useMemo(() => (otherScope ? hitColumns(otherScope) : []), [otherScope])
+  // Made again when the firm's word for a matter, a heading of these scopes, comes after the list first draws (setLabels)
+  const matterWord = t('list.matter')
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- matterWord is read inside hitColumns, through the headings
+  const own = useMemo(() => (otherScope ? hitColumns(otherScope) : []), [otherScope, matterWord])
   const widths = useListWidths(otherScope ?? 'folders', own)
   return documentScope ? chosen : widths
 }

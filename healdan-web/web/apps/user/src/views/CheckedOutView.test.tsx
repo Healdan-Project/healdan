@@ -107,9 +107,21 @@ describe('Checked Out to Me', () => {
     expect(within(main()).getByRole('columnheader', { name: /^Doc #/ }).getAttribute('aria-sort')).toBe('descending')
     view.unmount()
     // Last Used is Recent's
-    await renderApp('/checked-out?sort=lastUsed&order=asc', two)
+    const other = await renderApp('/checked-out?sort=lastUsed&order=asc', two)
     expect(await names()).toEqual(['Budget.xlsx', 'Letter.pdf'])
     expect(within(main()).getByRole('columnheader', { name: /^Checked Out/ }).getAttribute('aria-sort')).toBe('descending')
+    other.view.unmount()
+  })
+
+  it('takes a column\'s first sort for an address with no order: a date newest first, as a click does', async () => {
+    const dated = await renderApp('/checked-out?sort=checkedOut', two)
+    const names = async () => (await rows()).map((row) => within(row).getByRole('rowheader').textContent)
+    expect(await names()).toEqual(['Budget.xlsx', 'Letter.pdf'])
+    expect(within(main()).getByRole('columnheader', { name: /^Checked Out/ }).getAttribute('aria-sort')).toBe('descending')
+    dated.view.unmount()
+    await renderApp('/checked-out?sort=docNumber', two)
+    expect(await names()).toEqual(['Letter.pdf', 'Budget.xlsx'])
+    expect(within(main()).getByRole('columnheader', { name: /^Doc #/ }).getAttribute('aria-sort')).toBe('ascending')
   })
 
   it('chooses its columns, for Checked Out to Me', async () => {

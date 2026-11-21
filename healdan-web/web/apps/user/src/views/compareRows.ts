@@ -69,16 +69,18 @@ function keyOf(column: string, row: ListRow): Key {
   return Object.hasOwn(KEYS, column) ? KEYS[column]!(row) : null
 }
 
-function comparePart(a: Part, b: Part): number {
+// A part with no value goes after one with a value whichever the direction, as the server orders each part of a key nulls
+// last both ways (FolderListing.order); only the parts with values take the direction's sign
+function comparePart(a: Part, b: Part, sign: number): number {
   if (a === b) return 0
-  if (a === null) return -1
-  if (b === null) return 1
-  return a < b ? -1 : a > b ? 1 : 0
+  if (a === null) return 1
+  if (b === null) return -1
+  return sign * (a < b ? -1 : a > b ? 1 : 0)
 }
 
-function compareKeys(a: Part[], b: Part[]): number {
+function compareKeys(a: Part[], b: Part[], sign = 1): number {
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
-    const order = comparePart(a[i] ?? null, b[i] ?? null)
+    const order = comparePart(a[i] ?? null, b[i] ?? null, sign)
     if (order !== 0) return order
   }
   return 0
@@ -97,7 +99,7 @@ export function sortRows(rows: ListRow[], sort: TableSort): ListRow[] {
   const known = Object.hasOwn(KEYS, sort.column)
   const keyed = rows.map((row) => ({ row, key: known ? keyOf(sort.column, row) : [null] as Key }))
   const sign = sort.direction === 'descending' ? -1 : 1
-  const have = keyed.filter((one) => one.key !== null).sort((a, b) => sign * compareKeys(a.key!, b.key!))
+  const have = keyed.filter((one) => one.key !== null).sort((a, b) => compareKeys(a.key!, b.key!, sign))
   const lack = keyed.filter((one) => one.key === null)
   return [...have, ...lack].map((one) => one.row)
 }

@@ -10,7 +10,7 @@ import { typeLabel } from '../filters/FiltersPanel'
 import { itemIcon } from '../kindIcons'
 import { DocumentTitle, FolderName } from '../organising/RenameField'
 import type { DocumentListKind, ListKind } from './columnLayouts'
-import { childKey, selectable, type Hit } from './useListing'
+import { childKey, selectable, sortColumns, type Hit } from './useListing'
 import styles from './views.module.css'
 
 type S = components['schemas']
@@ -163,8 +163,11 @@ export function offeredFor(kind: DocumentListKind): string[] {
   return OFFERED_ORDER.filter((id) => !Object.hasOwn(OFFERED_BY, id) || OFFERED_BY[id]!.includes(kind))
 }
 
-/** What the server can sort a paged list by yet (spec 6); the other columns sort only a list the browser holds whole */
-export const SERVER_SORTS: ReadonlySet<string> = new Set(['title', 'docNumber', 'version', 'author', 'edited'])
+/**
+ * What the server can sort a paged list by yet (spec 6), the columns a folder's or a search's sort takes (`sortColumns`); the
+ * other columns sort only a list the browser holds whole
+ */
+export const SERVER_SORTS: ReadonlySet<string> = new Set(sortColumns)
 
 // A list's own default widths, over the folder list's (which `documentColumns` has). Every other list shares the search
 // results' narrower ones: Title shares the spare width with Matter and Author, and the rest end in an ellipsis.
