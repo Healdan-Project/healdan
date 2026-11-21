@@ -316,14 +316,16 @@ A list the server sends whole (Recent, Checked Out to Me) sorts in the browser, 
 and `sortRows` in `views/compareRows.ts` (titles by file name ignoring case, doc #s as numbers, versions by major then
 minor, Matter by client number then matter number, other text ignoring case, Author and Typist by the name shown, rows
 with no value last either way, ties in the list's own order). A paged list (a folder, a search, the Trash) sorts on the
-server, by every column it has: a folder and a document search by any document column, each column's id being the
-API's `sort` (`sortColumns` in `views/useListing.ts`, which `SERVER_SORTS` in `views/listColumns.tsx` holds), and the
-Trash by each of its columns (`trashSorts` in `actions/trash.ts`). Last Used, Computer and Checked Out are only the
-one-page lists', which the browser sorts.
+server, by its columns: a folder and a document search by any document column, each column's id being the API's
+`sort` (`sortColumns` in `views/useListing.ts`, which `SERVER_SORTS` in `views/listColumns.tsx` holds), a Folders,
+Matters or Clients search by each of its columns but the Clients search's Matter (`hitColumns`, from `scopeSorts` in
+`search/scopes.ts`), and the Trash by each of its columns (`trashSorts` in `actions/trash.ts`). Last Used, Computer
+and Checked Out are only the one-page lists', which the browser sorts.
 
 Class, Subclass, Typist, From, To and Sent are blank on a folder's row, as Doc # is, and From, To and Sent on a
-document whose `email` is `null`. The first five are drawn on one line (`TextCell` in `views/listColumns.tsx`), which
-ends in an ellipsis, with the whole text as the cell's `title`, so a long To can be read by pointing at it.
+document whose `email` is `null`. Author, Class, Subclass, Typist, From and To are drawn on one line (`TextCell` in
+`views/listColumns.tsx`), which ends in an ellipsis, with the whole text as the cell's `title`, so a long To can be
+read by pointing at it.
 
 A view takes its columns from `views/useListColumns.tsx`. `useDocumentListColumns(kind, { beside, serverSorted })` gives
 a list of documents its `columns` and the Table's `resizing`, `choice` (with the `ColumnsPanel`) and `onResetColumns`,

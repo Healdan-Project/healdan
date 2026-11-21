@@ -427,7 +427,7 @@ the time the lists are ordered by, and no other answer has it.
 read. A search folder lists its own documents, at most 1,000. The server pages, sorts, filters and counts in the
 database, so a folder of thousands of documents answers as fast as a small one.
 
-- **Sorting.** `sort` takes a name for each of the User app's document columns:
+- **Sorting.** `sort` takes one of these, each a column of the User app's lists of documents:
 
   | `sort` | Sorts by |
   |---|---|
@@ -447,10 +447,11 @@ database, so a folder of thousands of documents answers as fast as a small one.
   | `from`, `to` | an email's From and To, ignoring case |
   | `sent` | when an email was sent |
 
-  `matter`, `client` and `location` go by the client and matter numbers stamped on the document, which Healdan
-  stamps again on every move, so they agree with the `matter` it shows. `order` is `asc` (the default) or `desc`.
-  Documents with nothing to sort by, such as no Author, come last either way, and ties go by the document's age,
-  so no document shows on two pages. Subfolders always come first, by name. A search folder keeps its own order,
+  `matter`, `client` and `location` take their matter from the client and matter numbers stamped on the document,
+  which Healdan stamps again on every move, so they agree with the `matter` it shows. A document that isn't an
+  email, by its type as the File Type filter decides, has no From, To or Sent to sort by, whatever properties it
+  holds. `order` is `asc` (the default) or `desc`. Documents with nothing to sort by, such as no Author, or a blank
+  value, come last either way, and ties go by the document's age, so no document shows on two pages. Subfolders always come first, by name. A search folder keeps its own order,
   newest change first, unless `sort` says otherwise.
 - **Filters.** `type` takes file kinds: `word`, `excel`, `powerpoint`, `pdf`, `email`, `opendocument`, `picture`
   and `other`, for any extension the others don't name. `author` takes usernames, `class` classes, `client` client
