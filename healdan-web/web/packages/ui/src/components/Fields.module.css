@@ -59,3 +59,9 @@
   color: var(--hd-required);
   font-size: var(--hd-font-size-small);
 }
+
+/* What a field's description says of it, such as its limits */
+.description {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}

@@ -489,6 +489,128 @@ export function restoredFolder(trashItemId: number, name: string): S['RestoredIt
 
 const notFound = () => problem(404, 'not-found')
 
+// Storage (Phase 3): the firm's backends, as the Storage tab shows them, the files with no Store, and the settings.
+
+/** A backend, as GET /v1/admin/backends/{id} answers it: Archive, an empty local folder no Store uses, unless `over` says otherwise */
+export function backendOf(over: Partial<A['Backend']> = {}): A['Backend'] {
+  return {
+    id: 3,
+    name: 'Archive',
+    kind: 'local',
+    original: false,
+    path: '/mnt/archive',
+    endpoint: null,
+    region: null,
+    bucket: null,
+    prefix: null,
+    pathStyle: false,
+    accessKey: null,
+    hasSecret: false,
+    encrypted: false,
+    keyConfirmed: false,
+    offered: true,
+    inUse: false,
+    files: 0,
+    bytes: 0,
+    status: 'ok',
+    error: null,
+    since: '2026-11-19T08:00:00Z',
+    keyLastShown: null,
+    keyLastShownBy: null,
+    stores: [],
+    ...over,
+  }
+}
+
+/** Original, which keeps Firm's files, every Store with no other backend */
+export const originalBackend = backendOf({ id: 1, name: 'Original', original: true, path: '/opt/logicaldoc/repository/docs', inUse: true, files: 812, bytes: Math.round(2.4 * GB), stores: ['Firm'] })
+
+/** Wasabi EU, the encrypted S3 bucket Client Work keeps its files in, its recovery key confirmed and last shown to Sam */
+export const wasabiBackend = backendOf({
+  id: 2,
+  name: 'Wasabi EU',
+  kind: 's3',
+  path: null,
+  endpoint: 'https://s3.eu-central-1.wasabisys.com',
+  region: 'eu-central-1',
+  bucket: 'ashcombe-reeve',
+  prefix: 'healdan/',
+  pathStyle: true,
+  accessKey: 'WASABIACCESSKEY01',
+  hasSecret: true,
+  encrypted: true,
+  keyConfirmed: true,
+  inUse: true,
+  files: 3902,
+  bytes: Math.round(11.8 * GB),
+  keyLastShown: '2026-10-02T09:15:00Z',
+  keyLastShownBy: 'sam',
+  stores: ['Client Work'],
+})
+
+/** Archive, an empty folder not checked since the server started */
+export const archiveBackend = backendOf({ status: 'unchecked', since: null })
+
+/** The office's NAS, encrypted, whose recovery key nobody has confirmed, failing as its share didn't mount */
+export const nasBackend = backendOf({
+  id: 4,
+  name: 'Office NAS',
+  path: '/mnt/nas',
+  encrypted: true,
+  keyConfirmed: false,
+  offered: false,
+  status: 'failing',
+  error: 'The marker of this backend is missing.',
+  since: '2026-11-19T09:30:00Z',
+})
+
+/** GET /v1/admin/backends: Original first, then the others by id, and nothing waiting or stuck with no Store */
+export function backendOverview(over: Partial<A['BackendOverview']> = {}): A['BackendOverview'] {
+  return { on: true, backends: [originalBackend, wasabiBackend, archiveBackend, nasBackend], otherFiles: { waiting: 0, waitingBytes: 0, stuck: 0 }, ...over }
+}
+
+/** GET /v1/admin/backends on a server that keeps its files in LogicalDOC's own store */
+export const storageOff: A['BackendOverview'] = { on: false, backends: [], otherFiles: { waiting: 0, waitingBytes: 0, stuck: 0 } }
+
+/** GET /v1/admin/storage/settings: a 30-day holding period, a 20 GB read cache and 4 parallel transfers, with the server's limits */
+export function storageSettings(over: Partial<A['StorageSettings']> = {}): A['StorageSettings'] {
+  return {
+    on: true,
+    holdDays: 30,
+    cacheGb: 20,
+    transfers: 4,
+    limits: { holdDays: { min: 1, max: 365 }, cacheGb: { min: 1, max: 10000 }, transfers: { min: 1, max: 16 } },
+    ...over,
+  }
+}
+
+/** A recovery key as the server writes one out: 13 groups of four, from 0-9 and A-Z without I, L, O or U */
+export const RECOVERY_KEY = '7K3M 9QXR 2HTW 4PZB 8VJC 6NDF 1GSY 5EAR 3WKQ 0TMH 9BXZ 2CVN 4JP8'
+
+/** GET /v1/admin/backends/2/key-events: newest first, the showing at its add last */
+export const wasabiKeyEvents: A['KeyEvent'][] = [
+  { event: 'key-shown', at: '2026-10-02T09:15:00Z', userId: sam.id, username: 'sam' },
+  { event: 'key-entered', at: '2026-09-30T16:40:00Z', userId: me.id, username: 'admin' },
+  { event: 'key-shown', at: '2026-09-01T11:00:00Z', userId: me.id, username: 'admin' },
+]
+
+/** A file the mover gave up on: version 1.2 of document 10388, unless `over` says otherwise */
+export function stuckFile(over: Partial<A['StuckFile']> = {}): A['StuckFile'] {
+  return { docId: 10388, fileName: 'Heads of Terms.pdf', resource: '1.2', attempts: 10, lastError: 'Access denied by the S3 service.', ...over }
+}
+
+/** What the Backends page and a backend's page read, as the defaults answer them */
+export function storageRoutes(): Routes {
+  const all = backendOverview().backends
+  return {
+    'GET /v1/admin/backends': backendOverview(),
+    'GET /v1/admin/backends/*': ({ params }: { params: string[] }) => all.find((one) => one.id === Number(params[0])) ?? notFound(),
+    'GET /v1/admin/backends/*/key-events': ({ params }: { params: string[] }) => (Number(params[0]) === wasabiBackend.id ? wasabiKeyEvents : []),
+    'GET /v1/admin/storage/settings': storageSettings(),
+    'GET /v1/admin/storage/stuck-files': [],
+  }
+}
+
 /**
  * What a matter's page and a template's read, to spread over the defaults: matter 11 (1001.1), the templates, the
  * workspaces' trees, their folders' access and values, their search folders, the groups, and what a folder holds.
@@ -547,6 +669,7 @@ export function defaultRoutes(): Routes {
     'GET /v1/admin/workspaces/*/tree': ({ params }: { params: string[] }) => templateTrees[Number(params[0])] ?? problem(404, 'not-found'),
     'GET /v1/admin/groups': ({ query }: { query?: Record<string, unknown> }) => groups(query),
     'GET /v1/admin/stores/*/access': ({ params }: { params: string[] }) => ({ storeId: Number(params[0]), rows: [] }) satisfies A['StoreAccess'],
+    ...storageRoutes(),
   }
 }
 

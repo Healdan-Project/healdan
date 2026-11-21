@@ -6,6 +6,8 @@ import { createRootRoute, createRoute, createRouter, type ErrorComponentProps, t
 import { ErrorPanel, parseSearch, stringifySearch } from '@healdan/shell'
 import { ADMIN_BASE, routes } from './addresses'
 import { Frame } from './frame/Frame'
+import { BackendsView } from './views/BackendsView'
+import { BackendView } from './views/BackendView'
 import { ClientView, clientSearch } from './views/ClientView'
 import { ClientsView, clientsSearch } from './views/ClientsView'
 import { DashboardView } from './views/DashboardView'
@@ -72,7 +74,19 @@ const templateRoute = createRoute({
   },
 })
 
-const routeTree = rootRoute.addChildren([dashboardRoute, clientsRoute, clientRoute, mattersRoute, matterRoute, templatesRoute, templateRoute])
+// /backends: every storage backend, the files with no Store and the storage settings (BackendsView); /backends/$id, a
+// backend's page (BackendView), which says itself when the id names no backend
+const backendsRoute = createRoute({ getParentRoute: () => rootRoute, path: routes.backends, component: BackendsView })
+
+const backendRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: routes.backend,
+  component: function BackendRoute() {
+    return <BackendView id={backendRoute.useParams().id} />
+  },
+})
+
+const routeTree = rootRoute.addChildren([dashboardRoute, clientsRoute, clientRoute, mattersRoute, matterRoute, templatesRoute, templateRoute, backendsRoute, backendRoute])
 
 /**
  * A view that failed as it drew: the catalogue's short message and Try Again, which asks the server again for what the

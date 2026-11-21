@@ -406,11 +406,13 @@ describe('Asking again', () => {
     expect(api.callsTo('GET /v1/admin/dashboard/usage')).toHaveLength(2)
   })
 
-  it('stops when the Dashboard is left', async () => {
+  it("stops asking for its Usage when the Dashboard is left, while the left pane goes on asking for Backends' count", async () => {
     const { api, router } = await polling()
     act(() => router.history.push('/admin/no-such-page'))
     await screen.findByRole('heading', { level: 1, name: 'Page Not Found' })
     await waitSeconds(120)
-    expect(api.callsTo('GET /v1/admin/dashboard')).toHaveLength(1)
+    expect(api.callsTo('GET /v1/admin/dashboard/usage')).toHaveLength(1)
+    // Needs Attention holds the count of backends that need attention, which the pane shows beside Backends
+    expect(api.callsTo('GET /v1/admin/dashboard').length).toBeGreaterThan(1)
   })
 })

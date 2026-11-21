@@ -1,0 +1,238 @@
+/* SPDX-FileCopyrightText: 2026 The Healdan Project
+   SPDX-License-Identifier: LGPL-3.0-only */
+
+/* The Backends list, a backend's page and their dialogs. Unlike the Clients list, the Backends page scrolls as a whole:
+   its short list of backends has the files with no Store and the settings under it. */
+
+.page {
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: var(--hd-space-5) var(--hd-space-6) var(--hd-space-6);
+}
+
+/* What the page says of itself, under its title */
+.about {
+  max-width: 760px;
+  margin: 0 0 var(--hd-space-4);
+  color: var(--hd-text-secondary);
+}
+
+/* The backends' list, as high as its rows: the virtualiser needs a height of its own */
+.list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-bottom: var(--hd-space-6);
+}
+
+/* A backend's name in its row, with its kind's icon */
+.name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hd-space-2);
+  min-width: 0;
+  font-weight: var(--hd-weight-medium);
+}
+
+/* A section under the list, or of a page: its heading, then what it holds */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-3);
+  max-width: 760px;
+  margin-bottom: var(--hd-space-6);
+}
+
+.section h2 {
+  margin: 0;
+  font-size: var(--hd-font-size-title);
+  font-weight: var(--hd-weight-bold);
+}
+
+.line {
+  margin: 0;
+}
+
+.muted {
+  margin: 0;
+  color: var(--hd-text-secondary);
+}
+
+.note {
+  margin: 0;
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.refusal {
+  margin: 0;
+  color: var(--hd-required);
+}
+
+/* A dialog's buttons, at its end */
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--hd-space-3);
+  margin-top: var(--hd-space-2);
+}
+
+/* A row of buttons in a section, at its start */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hd-space-3);
+}
+
+/* What Test found: that it passed, or each problem */
+.result {
+  margin: 0 0 var(--hd-space-4);
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-window);
+}
+
+.result:empty {
+  display: none;
+}
+
+.result p,
+.alert p {
+  margin: 0;
+}
+
+.result ul,
+.alert ul {
+  margin: var(--hd-space-2) 0 0;
+  padding-inline-start: var(--hd-space-5);
+}
+
+/* A question or a refusal in a dialog, with what it found or what it costs, above the dialog's buttons */
+.alert {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-2);
+  margin: 0;
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-inline-start: 3px solid var(--hd-caution-text);
+  border-radius: var(--hd-radius);
+  background: var(--hd-window);
+}
+
+.alert .refusal {
+  color: var(--hd-text);
+}
+
+/* The settings: each field a narrow column, with what it says under it */
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-4);
+  max-width: 420px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* A setting shown as text in the backend's window, which can't change there, and why */
+.fixed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+  margin: 0;
+}
+
+.fixed dt {
+  color: var(--hd-text-secondary);
+  font-size: var(--hd-font-size-small);
+}
+
+.fixed dd {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A dialog's fields, one under another, and its kind's choice */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+/* A recovery key: its groups in two lines, in figures that can't be misread */
+.key {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hd-space-1);
+  margin: 0;
+  padding: var(--hd-space-3) var(--hd-space-4);
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+  background: var(--hd-window);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 17px;
+  letter-spacing: 1px;
+  line-height: 26px;
+}
+
+.keyLine {
+  white-space: nowrap;
+}
+
+/* A plain table in a dialog: the stuck files, and a key's history */
+.tableBox {
+  max-height: 50vh;
+  overflow: auto;
+  border: 1px solid var(--hd-line);
+  border-radius: var(--hd-radius);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--hd-font-size-small);
+}
+
+.table th,
+.table td {
+  padding: var(--hd-space-2) var(--hd-space-3);
+  border-bottom: 1px solid var(--hd-line);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  background: var(--hd-window);
+  color: var(--hd-text-secondary);
+  font-weight: var(--hd-weight-medium);
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+.number {
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.table .number {
+  text-align: end;
+}
+
+.wrap {
+  overflow-wrap: anywhere;
+}

@@ -35,7 +35,7 @@ async function renderPane(nav: readonly NavGroup[], routes: Routes = {}) {
 }
 
 describe('The left pane', () => {
-  it('shows only the screens that have shipped: the Dashboard, Clients, Matters and Workspace Templates under Firm, and the Classic Interface at its foot', async () => {
+  it('shows only the screens that have shipped: the Dashboard, Clients, Matters and Workspace Templates under Firm, Backends under Storage, and the Classic Interface at its foot', async () => {
     const { view } = await renderApp('/')
     const links = within(pane()).getAllByRole('link')
     expect(links.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
@@ -43,11 +43,13 @@ describe('The left pane', () => {
       ['Clients', '/admin/clients'],
       ['Matters', '/admin/matters'],
       ['Workspace Templates', '/admin/templates'],
+      ['Backends', '/admin/backends'],
       ['Classic Interface', '/frontend.jsp'],
     ])
-    // Only Firm has a shipped screen yet, so only its group is drawn
-    expect(within(pane()).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Firm'])
+    // Only Firm and Storage have a shipped screen yet, so only their groups are drawn
+    expect(within(pane()).getAllByRole('heading').map((heading) => heading.textContent)).toEqual(['Firm', 'Storage'])
     expect(within(pane()).getByRole('region', { name: 'Firm' })).toBeTruthy()
+    expect(within(pane()).getByRole('region', { name: 'Storage' })).toBeTruthy()
     await expectNoAxeViolations(view.container)
   })
 
@@ -58,7 +60,8 @@ describe('The left pane', () => {
   })
 
   it('asks nothing for counts while no screen it shows has one', async () => {
-    const { api } = await renderPane(NAV)
+    const uncounted = NAV.map((group) => ({ ...group, items: group.items.map((item) => ({ ...item, count: undefined })) }))
+    const { api } = await renderPane(uncounted)
     expect(within(pane()).getByRole('link', { name: 'Dashboard' })).toBeTruthy()
     expect(api.callsTo('GET /v1/admin/dashboard')).toEqual([])
   })
