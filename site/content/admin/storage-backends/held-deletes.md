@@ -28,8 +28,8 @@ starts. It leaves an S3 object that Healdan is using again, as when the same fil
 
 ## The Holding Period
 
-Set it under **Settings** on the **Storage** tab, as the **Holding Period**, in days from 1 to 365, and press
-**Save**. A change applies to the copies held from then on: those already held keep their date.
+Set it under **Settings** on the [Backends list](../#the-backends-list), as **Holding Period (Days)**, from 1 to 365,
+and press **Save**. A change applies to the copies held from then on: those already held keep their date.
 
 **Keep it at least as long as the oldest backup you'd restore.** A database restored from a backup younger than the
 holding period finds every file it names, on every backend: the Install manual's

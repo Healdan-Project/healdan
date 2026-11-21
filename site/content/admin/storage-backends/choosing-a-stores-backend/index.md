@@ -3,9 +3,10 @@ title: Choosing a Store's Backend
 weight: 3
 ---
 
-Each Store keeps its files on one backend, Original to begin with. To give a Store another, click its **Backend** in
-the **Stores** list of the **Storage** tab, and choose one. The list offers the backends that aren't encrypted, and
-the encrypted ones whose recovery key is confirmed.
+Each Store keeps its files on one backend, Original to begin with. In the Admin app, a Store's backend is chosen on
+the Store's page in **Storage → Stores**. <!-- P3 docs pass 2: the Store's page, its backend, the switch -->
+In the Classic Interface's **Storage** tab, click a Store's **Backend** in the **Stores** list, and choose one.
+Either offers the backends that aren't encrypted, and the encrypted ones whose recovery key is confirmed.
 
 Healdan asks first, saying how many files will move:
 
@@ -37,8 +38,9 @@ from where it is: documents open as usual throughout.
 
 - **When:** at once, whenever something gives files a new place, and every 5 minutes besides.
 - **In what order:** files waiting on the server to be uploaded first, then the rest, newest documents first.
-- **How many at once:** **Parallel Transfers**, under **Settings**, 4 to begin with, from 1 to 16. More moves a
-  large Store sooner, if the server's connection has room. A new value applies as soon as it's saved.
+- **How many at once:** **Parallel Transfers**, under **Settings** on the [Backends list](../#the-backends-list), 4
+  to begin with, from 1 to 16. More moves a large Store sooner, if the server's connection has room. A new value
+  applies as soon as it's saved.
 - **When one fails:** it's tried again later, and after ten failures it's left where it is: see
   [Waiting and Stuck Files](../waiting-and-stuck-files/). A backend that can't be reached pauses its moves instead:
   see [When a Backend Fails](../when-a-backend-fails/).

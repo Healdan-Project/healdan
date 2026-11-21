@@ -139,9 +139,9 @@ See [Office Previews](../what-runs/#office-previews) in What Runs.
 
 ## A Storage Backend Is Failing
 
-The **Storage** tab of **Administration → Healdan → Settings** shows each storage backend's status. A failing one
+The Admin app's **Backends**, under **Storage** in its left pane, shows each storage backend's status. A failing one
 says since when and why; the Admin Guide's [When a Backend Fails](../../admin/storage-backends/when-a-backend-fails/)
-lists the reasons. A backend that's OK isn't checked on a timer, so press **Test** to check one now.
+lists the reasons. A backend that's OK isn't checked on a timer, so press **Test**, on its page, to check one now.
 
 - **"Can't be reached".** The server can't reach the S3 service, or the service is down. To see whether the app's
   container reaches it, from the folder with Healdan's `compose.yaml`, with the backend's endpoint:
@@ -160,7 +160,7 @@ lists the reasons. A backend that's OK isn't checked on a timer, so press **Test
 - **"Bucket not found".** The bucket was deleted or renamed. A bucket deleted while the server runs shows first as
   "can't be reached", and as "bucket not found" after the next check, within a minute.
 - **"Access denied … check its access key and secret".** The S3 service refused the backend's keys: put the access
-  key and secret right with **Edit**, or the user's policy at the service (see
+  key and secret right with **Edit**, on the backend's page, or the user's policy at the service (see
   [Cloud Storage](../cloud-storage/#make-a-user-for-healdan)).
 - **"Enter the secret again in Edit".** The backend's S3 secret can't be read, as after Healdan's secret key was made
   again: see [If the Key Is Lost](../backup-and-restore/#if-the-key-is-lost).
@@ -173,22 +173,25 @@ lists the reasons. A backend that's OK isn't checked on a timer, so press **Test
 Every local storage backend holds a marker file, `.healdan-backend`, which Healdan wrote in its folder when it added
 it. A backend whose marker is missing fails, and refuses saves into its Stores, rather than write into what may be an
 empty mount point. Usually the share behind it didn't mount: mount it on the host, then press **Test** on the
-backend, or wait a minute for Healdan to check it again. If the marker itself was deleted, restore it from the
-folder's backup.
+backend's page, or wait a minute for Healdan to check it again. If the marker itself was deleted, restore it from
+the folder's backup.
 
 A marker that names another backend or install means two backends, or two servers, were given the same folder or
 bucket: give each its own.
 
 ## Files Are Stuck
 
-A file the mover failed to move ten times in a row, over about four hours, is stuck, and the Stores list on the
-**Storage** tab counts it. Click the count to see each stuck file's last error, put the cause right, and press
-**Retry**: see [Waiting and Stuck Files](../../admin/storage-backends/waiting-and-stuck-files/). An outage never makes
-a file stuck: the mover waits for the backend instead.
+A file the mover failed to move ten times in a row, over about four hours, is stuck. Its Store's page, in the Admin
+app's **Storage → Stores**, counts it, and the Dashboard's Needs Attention says how many are stuck in all. **Stuck
+Files** lists each one with its last error: put the cause right, and press **Retry**. <!-- P3 docs pass 2 --> A file
+whose document isn't in a Store is counted under **Files with No Store**, on **Backends**. See
+[Waiting and Stuck Files](../../admin/storage-backends/waiting-and-stuck-files/). An outage never makes a file stuck:
+the mover waits for the backend instead.
 
 ## An Email Says Storage Needs Attention
 
 Healdan emails the `admin` group once a day while a file has waited more than 24 hours to reach its Store's backend,
-or a backend has been failing for more than 24 hours. Open the **Storage** tab: a backend that says Failing, or a
-Store with files waiting, shows which. Put it right as above, and the emails stop. See
+or a backend has been failing for more than 24 hours. The email sends you to the Classic Interface's **Storage** tab;
+the Admin app's **Backends** shows which backend is failing, and a Store's page in **Storage → Stores** its files
+waiting. Put it right as above, and the emails stop. See
 [The 24-Hour Alert](../../admin/storage-backends/when-a-backend-fails/#the-24-hour-alert).

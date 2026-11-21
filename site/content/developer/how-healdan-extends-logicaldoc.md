@@ -226,7 +226,7 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `store=com.logicaldoc.healdan.storage.HealdanStorage` on every start, whatever the file holds, and `DockerInit`
     checks it was stored. So no LogicalDOC Java changes, and the image's defaults, which are upstream's, keep
     LogicalDOC's `FSStore`. Outside Docker the key is whatever the file says, and on `FSStore` the module's beans and
-    its download filter do nothing, and the Storage tab says storage backends are off.
+    its download filter do nothing, and the Storage tab and the Admin app's Backends say storage backends are off.
   - **`HealdanStorage` is never a Spring component.** Only LogicalDOC's bean definition makes it: a component would
     be a second instance, `healdanStorage`, made on `FSStore` servers too, which `Context.get(HealdanStorage.class)`
     finds before LogicalDOC's (`Store.get()` looks `store` up by name). Its `init()` reads no table, as Spring calls it
@@ -265,13 +265,38 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     held copy whose row reads it from `.held/`, rather than delete it: a rollback can bring back an older hold of the
     location. And a delete that finds a file missing from its place but under `.held/` holds that copy again, so the
     purge deletes it in its time.
-  - **The Admin app reads storage through a port.** `healdan-core` and `healdan-api` can't depend on
+  - **The Admin app reads and changes storage through a port.** `healdan-core` and `healdan-api` can't depend on
     `healdan-storage`, so `healdan-core` has an interface, `StorageAdministration`
     (`com.logicaldoc.healdan.admin.storage`), with plain records (`StorageRecords`), which `healdan-storage`'s
     `StorageAdministrationImpl` bean implements over the Storage tab's own service, `StorageAdmin`, unchanged. It's
     found by type (`Context.get().getBeansOfType`), as `HealdanStartListener`s are, so a server without the module has
-    none. Its answers hold nothing secret: no S3 access key or secret, no key and no recovery key, and an S3
-    backend's endpoint as its scheme, host and port alone.
+    none.
+    - **A method for each of `StorageAdmin`'s operations:** the overview; Test of the settings as typed and of a saved
+      backend; add, save and remove; a recovery key's show, confirm and enter, and its history; a Store's switch, and
+      the count of files it would move; the stuck files and their retry; and the settings. Besides them,
+      `backend(id)` answers what a backend's edit shows, and `limits()` the settings' maxima. Each maps the records to
+      the tab's beans and back, so the tab's rules, locks and sentences are the port's: a refusal is `StorageAdmin`'s
+      `HealdanRuleException`, with its sentence, and while storage backends are off every change is refused.
+    - **Nothing secret in an answer.** No S3 secret, only whether one is stored; the access key ID, which an edit
+      shows; a recovery key only in an encrypted backend's add (`AddedBackend`) and in `showRecoveryKey`'s answer,
+      each recorded as a showing; and an S3 endpoint as its scheme, host and port alone. The records that hold an
+      access key or a recovery key leave both out of their `toString()`.
+    - **A missing secret key file** is `SecretKeyMissingProblem`, a `HealdanRuleException` with the tab's sentence
+      and `sealed()`, how many stored values are sealed with the missing key. Nothing is written. The add and the save
+      take `newKey`, the tab's question answered, to make a new key.
+    - **It records each change** that succeeded straight after it, with `AdminEvents.recordAfter`, as none is one
+      database transaction, in the `STORAGE` area: `backend.added`, `backend.changed`, `backend.removed`,
+      `backend.recovery-key-shown`, `backend.recovery-key-confirmed`, `backend.recovery-key-entered`,
+      `store.backend-changed` (the backend before and after, by name), `storage.stuck-retried` and
+      `storage.settings-changed`. Each is aimed at its backend or Store by id and name, or, for the settings and the
+      files with no Store, at the kind `storage` with neither. What changed is read from the rows before and after
+      the change, so the values recorded are those stored. An access key or a secret that changed is
+      `Change.secret()`, with no value, and a secret typed again the same isn't a change. A recovery key is never
+      recorded: its showing, confirming and entering are actions with no detail, and an encrypted add records
+      `backend.added` and `backend.recovery-key-shown`. A read, and a change that changes nothing (a save of what's
+      there, a switch to the Store's own backend, a confirm of a confirmed key, a retry with nothing stuck), record
+      nothing. The rows before are read outside `StorageAdmin`'s lock, so two administrators changing one backend at
+      the same moment may each record the other's change.
   - **A delete may build a backend's S3 client inside LogicalDOC's transaction.** `Held.hold`, which holds a deleted
     file's copy while holding that file's lock, inside the transaction of LogicalDOC's delete, builds the backend's
     client if nothing has yet. For an `http://` endpoint that's a DNS lookup, as the endpoint rule checks the host's
@@ -464,6 +489,7 @@ see [Building from Source](../building-from-source/#running-the-war-outside-dock
     `1001.1 – Charter Dispute/Documents`. A Store's changes are the `STORES` area's: `store.created`, with its name and
     a change for each row it was given, and `store.access-changed`, with `follows` when it followed another folder's
     permissions and a change for each row that changed, both inside their transaction and named as a folder's rows are.
+    Storage's are the `STORAGE` area's, which the storage port records itself (see `healdan-storage` above).
     A workspace's folders and the templates record inside their transactions `folder.created` (its name and the folder
     it's in), `folder.renamed`, `folder.moved` (the folder it was in, before and after), `folder.properties-changed`
     (each value the folder sets of its own that changed, by the property's name, null for one it inherits),
