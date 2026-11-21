@@ -41,10 +41,34 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 
 	/**
 	 * Routes the admin file describes ahead of their implementation, so the Admin app can be built against them, as
-	 * Phase 3's Stores and Storage routes were (Admin app ruling P3-R2): none now. Each must be described and not
-	 * implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and leaves the list once it's implemented.
+	 * Phase 3's Stores and Storage routes were (Admin app ruling P3-R2): Phase 4's People routes (ruling P4-R2). Each
+	 * must be described and not implemented ({@link #testRoutesDescribedAheadAreNotImplementedYet}), and leaves the
+	 * list once it's implemented.
 	 */
-	static final Set<String> DESCRIBED_AHEAD = Set.of();
+	static final Set<String> DESCRIBED_AHEAD = Set.of(
+			// The people
+			"GET /v1/admin/users",
+			"POST /v1/admin/users",
+			"GET /v1/admin/users/options",
+			"GET /v1/admin/users/{id}",
+			"PATCH /v1/admin/users/{id}",
+			"POST /v1/admin/users/{id}/disable",
+			"POST /v1/admin/users/{id}/enable",
+			"POST /v1/admin/users/{id}/reset-password",
+			"POST /v1/admin/users/{id}/sign-out",
+			"POST /v1/admin/users/{id}/clear-block",
+			"PUT /v1/admin/users/{id}/groups",
+			"GET /v1/admin/users/{id}/devices",
+			"DELETE /v1/admin/users/{id}/devices/{tokenId}",
+			"GET /v1/admin/users/{id}/checkouts",
+			// The groups (GET /v1/admin/groups is Phase 2's, its rows grown)
+			"POST /v1/admin/groups",
+			"GET /v1/admin/groups/{id}",
+			"PATCH /v1/admin/groups/{id}",
+			"DELETE /v1/admin/groups/{id}",
+			"GET /v1/admin/groups/{id}/members",
+			"PUT /v1/admin/groups/{id}/members/{userId}",
+			"DELETE /v1/admin/groups/{id}/members/{userId}");
 
 	@Test
 	public void testEveryRouteIsDescribed() {
