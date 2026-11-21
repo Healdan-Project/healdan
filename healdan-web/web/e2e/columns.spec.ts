@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from '@playwright/test'
-import { ADMIN_PASSWORD, ADMIN_USERNAME, PASSWORD, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
+import { PASSWORD, apiContext, authorized, call, deviceToken, escape, fileDocument, matterFolders, minimalPdf, signIn, specsFolder } from './helpers'
 
 // The list's columns (list columns spec sections 4.2 to 4.9, 8.3): resized by an edge and by keys, chosen in the Columns panel,
 // moved by a heading's drag and by Move Left, a layout of its own beside the reading pane, Recent sorted in the browser, Reset
@@ -414,44 +414,18 @@ test('a wide layout scrolls sideways in a narrow window', async ({ page }) => {
 
 // Class (list columns spec sections 4.7, 8.3): a folder of its own holds a document of each of three Classes, named so that the
 // folder's own order (by title) is neither Class's A to Z nor its Z to A. Class is picked from a list, the filing refuses a
-// value that isn't in it (`not-an-option`), and a fresh stack's list holds only the default Class, Docs: so the test adds the
-// two others as an administrator would, through LogicalDOC's REST service for an attribute's options (the JSON API has no
-// route that changes the list), and only those the list lacks, as its values are unique: the other browser's run, or another
-// run on the same stack, adds nothing. They stay, as the documents do. No document is without a Class: one with none of its
-// own inherits its folder's, or the default Class, so no row here sorts last for having none.
+// value that isn't in it (`not-an-option`), and a fresh install's list holds only the default Class, Docs: on the smoke stack
+// the smoke-classes seed adds Correspondence and Pleadings. No document is without a Class: one with none of its own inherits
+// its folder's, or the default Class, so no row here sorts last for having none.
 const CLASSED = {
   alpha: { name: `Alpha class ${RUN}.txt`, docClass: 'Pleadings' },
   bravo: { name: `Bravo class ${RUN}.txt`, docClass: 'Correspondence' },
   charlie: { name: `Charlie class ${RUN}.txt`, docClass: 'Docs' },
 }
-// The attribute set that holds the Class list (healdan-core's ProfileSeed, HealdanConstants.PROFILE_TEMPLATE)
-const PROFILE_SET = 'Healdan profile'
-
-/** The headers for LogicalDOC's REST services as the stack's administrator, by Basic authentication, which /api never takes */
-const asAdmin = () => ({ Authorization: `Basic ${Buffer.from(`${ADMIN_USERNAME}:${ADMIN_PASSWORD}`).toString('base64')}`, Accept: 'application/json' })
-
 /** The Class options a folder's filing form offers, in their order */
 async function classOptions(folderId: number): Promise<string[]> {
   const form = await call<{ items: { name: string; options: { value: string }[] | null }[] }>(api!.get(`/api/v1/folders/${folderId}/form`, authorized(token)), 'the filing form')
   return form.items.find((field) => field.name === 'docclass')?.options?.map((option) => option.value) ?? []
-}
-
-/** Adds the Classes the list lacks of `wanted`, as an administrator, and checks the filing form then offers them all */
-async function offerClasses(folderId: number, wanted: string[]) {
-  const offered = await classOptions(folderId)
-  const missing = wanted.filter((value) => !offered.includes(value))
-  if (missing.length > 0) {
-    const set = await call<{ id?: number | string } | undefined>(
-      api!.get(`/services/rest/documentMetadata/getAttributeSet?name=${encodeURIComponent(PROFILE_SET)}`, { headers: asAdmin() }),
-      `the attribute set ${PROFILE_SET}`,
-    )
-    expect(set?.id, `the attribute set ${PROFILE_SET} has an id`).toBeTruthy()
-    for (const value of missing) {
-      const added = await api!.post('/services/rest/documentMetadata/addAttributeOption', { headers: asAdmin(), form: { setId: String(set!.id), attribute: 'docclass', option: value } })
-      expect(added.ok(), `adding the Class ${value}: HTTP ${added.status()}`).toBe(true)
-    }
-  }
-  expect(await classOptions(folderId)).toEqual(expect.arrayContaining(wanted))
 }
 
 /** Each drawn row's name, and the text of its cell under a column's heading (by where they're drawn) */
@@ -495,11 +469,10 @@ const sortedBy = (sort: string, order: 'asc' | 'desc') => (url: URL) => url.sear
 
 // Last, as its filing makes its documents the newest in Recent Documents, which the tests above look at
 test('shows Class and sorts a folder by it', async ({ page }) => {
-  expect(ADMIN_PASSWORD, 'ADMIN_PASSWORD is set by docker/tests/test-web.sh').not.toBe('')
   const name = `Classes ${RUN}`
   const folder = (await call<{ id: number }>(api!.post('/api/v1/folders', { ...authorized(token), data: { parentId: home, name } }), `making ${name}`)).id
   const { alpha, bravo, charlie } = CLASSED
-  await offerClasses(folder, [alpha.docClass, bravo.docClass, charlie.docClass])
+  expect(await classOptions(folder), "the Class list holds the smoke-classes seed's Classes").toEqual(expect.arrayContaining([alpha.docClass, bravo.docClass, charlie.docClass]))
   for (const one of [alpha, bravo, charlie]) await fileDocument(api!, token, folder, one.name, 'text/plain', Buffer.from(`The text of ${one.name}`), { docclass: one.docClass })
 
   await signedIn(page)
