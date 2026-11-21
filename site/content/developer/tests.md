@@ -448,6 +448,37 @@ file, for a search that finds them all.
 `docker/tests/test-db.sh` isn't a test either: it runs the PostgreSQL that Healdan's Java tests use (see
 [The Test Database](#the-test-database)).
 
+### Building Behind a Proxy That Re-Signs HTTPS
+
+Where a proxy re-signs HTTPS with a CA of its own, as in a Claude Code cloud session, whose containers reach the
+internet through an egress gateway, the image's build stops at its first download: the Maven image trusts only the
+public CAs, so Maven, the Node download and `npm ci` refuse the proxy's certificates. Name a file of the proxy's CA
+certificates (PEM), as an absolute path, in `HEALDAN_BUILD_CA`, and the scripts that build hand it to the build. In a
+cloud session it's `/root/.ccr/ca-bundle.crt`:
+
+```bash
+HEALDAN_BUILD_CA=/root/.ccr/ca-bundle.crt docker/smoke-test.sh
+```
+
+- **The scripts that build** are `docker/smoke-test.sh`, `test-image.sh`, `test-init.sh` and `test-overlays.sh`, and
+  `test-web.sh` gives the file to `npm ci` in the browsers' container, so the smoke test's step 9 gets its packages
+  too. Each refuses a path that isn't absolute, or a file it can't read, before it starts anything. `test-move.sh` and
+  the scripts that test a running stack build nothing, and need no file.
+- **The file is the build's secret `build_ca`.** `docker build` takes it as `--secret id=build_ca,src=<file>`, and
+  Compose from the overlay `docker/tests/compose.build-ca.yaml`, which the scripts add to the command that builds.
+  A stack of your own takes the overlay after its other files:
+  `HEALDAN_BUILD_CA=/root/.ccr/ca-bundle.crt docker compose -f compose.yaml -f compose.dev.yaml -f docker/tests/compose.build-ca.yaml up -d --build`.
+- **The Maven step trusts it.** The `Dockerfile` mounts `docker/with-build-ca.sh` into the step and runs Maven through
+  it. Given the secret, the script copies the JDK's trust store and adds the file's certificates that the JDK lacks,
+  with one JVM, as keytool would start one for each and a cloud session's file holds 120. Maven gets the copy
+  (`-Djavax.net.ssl.trustStore` in `MAVEN_OPTS`), which downloads the artifacts and Node, and npm gets the file
+  (`NODE_EXTRA_CA_CERTS`). The copy goes when Maven ends. Without the secret, the script runs Maven as it is.
+- **The image is the same either way.** A secret is neither in a layer nor in BuildKit's cache key, and nothing of it
+  stays, so CI, which passes none, builds as it did, and a build with it and one without share the Maven step's cache.
+  A change to `with-build-ca.sh` runs Maven again, as a change to the sources does.
+- **Nothing else needs it.** The runtime stage's `apt-get` uses Ubuntu's plain-HTTP mirrors, the `tools` stage fetches
+  nothing, and Docker pulls the images with the host's own trust store.
+
 ### The Stand-In Sign-In Provider
 
 The smoke stack signs in through a real OpenID Connect provider, a throwaway Keycloak, as well as with passwords.

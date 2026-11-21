@@ -30,7 +30,7 @@ cleanup() {
 trap cleanup EXIT
 cleanup
 
-docker build --target tools -t "$TOOLS" . >/dev/null
+docker_build --target tools -t "$TOOLS" . >/dev/null
 docker network create "$NET" >/dev/null
 docker volume create "$CONF" >/dev/null
 docker volume create "$REPO" >/dev/null

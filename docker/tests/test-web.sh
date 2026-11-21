@@ -34,6 +34,8 @@
 # no folder. Open a trace with npx playwright show-trace <folder>/trace.zip, or at trace.playwright.dev.
 # The browser tests may run 30 minutes at most, so a run that hangs fails, and keeps what it can, before CI's job limit
 # would cancel it with nothing kept.
+# On a machine whose HTTPS a proxy re-signs with a CA of its own, such as a Claude Code cloud session, npm ci in the
+# browsers' container trusts the CA certificates HEALDAN_BUILD_CA names, as the image's build does (docker/tests/lib.sh).
 set -euo pipefail
 # Before the cd, so a relative folder is the caller's
 WEB_RESULTS=${WEB_RESULTS:-}
@@ -41,6 +43,7 @@ case $WEB_RESULTS in '' | /*) ;; *) WEB_RESULTS=$PWD/$WEB_RESULTS ;; esac
 cd "$(dirname "$0")/../.."
 . docker/tests/lib.sh
 if [ -n "$WEB_RESULTS" ]; then results_folder WEB_RESULTS "$WEB_RESULTS" || exit 1; fi
+build_ca_usable || exit 1
 
 BASE=${BASE:-http://127.0.0.1:18080}
 WEB_NETWORK=${WEB_NETWORK:-host}
@@ -84,12 +87,16 @@ lock=healdan-web/web/package-lock.json
 version=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['packages']['node_modules/@playwright/test']['version'])" "$lock")
 
 browsers() {
-  local keep=() status=0
+  local keep=() ca=() status=0
   if [ -n "$WEB_RESULTS" ]; then
     # Made here, just before the container that writes to it, and not by Docker, which would make it as root
     [ "$RESULTS_MADE" = 0 ] || mkdir "$WEB_RESULTS" || return 1
     # Mounted for the failed tests' results. The container runs as root, so it hands them to this user.
     keep=(-v "$WEB_RESULTS:/results" -e "RESULTS_OWNER=$(id -u):$(id -g)")
+  fi
+  # For npm ci, where a proxy re-signs HTTPS (docker/tests/lib.sh): the one file, read-only
+  if [ -n "${HEALDAN_BUILD_CA:-}" ]; then
+    ca=(-v "$HEALDAN_BUILD_CA:/run/healdan-build-ca.crt:ro" -e NODE_EXTRA_CA_CERTS=/run/healdan-build-ca.crt)
   fi
   # The workspace is copied in, without node_modules, so npm ci's Linux packages never replace a host's own. The label
   # lets docker/smoke-test.sh's cleanup remove a container a stopped run left on its stack's network.
@@ -98,7 +105,7 @@ browsers() {
   # its tests and the results below are still copied; 124 is timeout's status for that.
   # The container's script is in single quotes from mkdir on: an apostrophe in it, in a comment too, ends them.
   docker run --rm --label healdan.web-browsers --network "$network" --ipc=host -e BASE="$WEB_BROWSER_BASE" -e WEBUSER_PASSWORD -e ADMIN_PASSWORD \
-    ${keep[@]+"${keep[@]}"} -v "$PWD/healdan-web/web:/src:ro" "mcr.microsoft.com/playwright:v${version}-noble" \
+    ${keep[@]+"${keep[@]}"} ${ca[@]+"${ca[@]}"} -v "$PWD/healdan-web/web:/src:ro" "mcr.microsoft.com/playwright:v${version}-noble" \
     bash -c "$PROXY "'mkdir /work && cd /src && tar cf - --exclude=node_modules --exclude=dist --exclude=e2e-results . | tar xf - -C /work \
       && cd /work && npm ci --ignore-scripts --no-audit --no-fund \
       && { timeout --signal=INT --kill-after=2m 30m npx playwright test --reporter=line || { status=$?

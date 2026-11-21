@@ -39,6 +39,44 @@ lacks() { ! grep -q "$1" <<<"$2"; }
 # http_code <url> [curl args...]: prints the HTTP status code only.
 http_code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
 
+# HEALDAN_BUILD_CA=<file>: CA certificates (PEM) the image's build trusts besides the JDK's and Node's own, for a machine
+# whose HTTPS a proxy re-signs with a CA of its own, such as a Claude Code cloud session (/root/.ccr/ca-bundle.crt). The
+# scripts that build pass it as the Dockerfile's secret build_ca (docker/with-build-ca.sh), which leaves nothing in the
+# image and isn't in BuildKit's cache key, and test-web.sh gives it to npm ci in the browsers' container. Unset, they
+# run as they always have.
+
+# build_ca_usable: refuses a HEALDAN_BUILD_CA that isn't an absolute path to a file this user can read, saying why on
+# stderr, before anything is built. Absolute, as the scripts run from the checkout's root, not from the caller's folder.
+build_ca_usable() {
+  [ -n "${HEALDAN_BUILD_CA:-}" ] || return 0
+  case $HEALDAN_BUILD_CA in
+    /*) ;;
+    *) echo "HEALDAN_BUILD_CA '$HEALDAN_BUILD_CA' isn't an absolute path: name the file from /" >&2; return 1 ;;
+  esac
+  if [ ! -f "$HEALDAN_BUILD_CA" ] || [ ! -r "$HEALDAN_BUILD_CA" ]; then
+    echo "HEALDAN_BUILD_CA '$HEALDAN_BUILD_CA' isn't a file this user can read: name the file of CA certificates" >&2
+    return 1
+  fi
+}
+
+# docker_build <docker build arguments...>: docker build, given HEALDAN_BUILD_CA's file as the secret build_ca when it's
+# set.
+docker_build() {
+  build_ca_usable || return 1
+  if [ -n "${HEALDAN_BUILD_CA:-}" ]; then
+    docker build --secret "id=build_ca,src=$HEALDAN_BUILD_CA" "$@"
+  else
+    docker build "$@"
+  fi
+}
+
+# build_ca_overlay: for a docker compose that builds the app, the overlay that gives its build the secret,
+# "-f docker/tests/compose.build-ca.yaml" when HEALDAN_BUILD_CA is set and nothing otherwise. Expand it unquoted, after
+# the command's other files: compose $(build_ca_overlay) build. Check build_ca_usable first.
+build_ca_overlay() {
+  if [ -n "${HEALDAN_BUILD_CA:-}" ]; then echo "-f docker/tests/compose.build-ca.yaml"; fi
+}
+
 # results_folder <setting> <absolute folder>: checks, before a run starts, the folder it keeps what it can't print in
 # (smoke-test.sh's SMOKE_RESULTS, test-web.sh's WEB_RESULTS). The folder has to be empty or not there yet, so nothing in
 # it is another run's, and in a folder that is there, so the one named is the only one a run makes, and which Docker

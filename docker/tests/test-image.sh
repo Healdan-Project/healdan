@@ -30,7 +30,7 @@ cleanup() {
 trap cleanup EXIT
 cleanup
 
-docker build -t "$IMAGE" .
+docker_build -t "$IMAGE" .
 docker network create "$NET" >/dev/null
 # As compose.yaml's db service: the built-in C.UTF-8 locale, passwords over TCP, and the role script, which makes the
 # app's role and its database

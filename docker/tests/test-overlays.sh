@@ -11,6 +11,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 . docker/tests/lib.sh
+# HEALDAN_BUILD_CA names a file of CA certificates the build trusts, for a machine whose HTTPS a proxy re-signs
+build_ca_usable
 
 PROJECT=${OVERLAYS_PROJECT:-logicaldoc-overlays}
 NET=${OVERLAYS_NETWORK:-ldtest-proxy}
@@ -49,7 +51,8 @@ check "proxy network is external and named from PROXY_NETWORK" test \
   "$(jq -c '[.networks.proxy.name, .networks.proxy.external]' <<<"$proxy")" = "[\"$NET\",true]"
 
 echo "== live: proxy overlay"
-compose -f compose.yaml -f compose.proxy.yaml up -d --build
+# shellcheck disable=SC2046 # the overlay's -f and file, or nothing
+compose -f compose.yaml -f compose.proxy.yaml $(build_ca_overlay) up -d --build
 check "app healthy" wait_healthy "$(compose -f compose.yaml ps -q app)" 900
 check "reachable as logicaldoc:8080 from the proxy network" test \
   "$(docker run --rm --network "$NET" curlimages/curl:8.11.1 -s -o /dev/null -w '%{http_code}' http://logicaldoc:8080/login.jsp)" = 200
