@@ -165,15 +165,19 @@ public final class StorageRecords {
 	 * @param keyLastShown when its recovery key was last shown; null if never
 	 * @param keyLastShownBy the username it was last shown to; null if never
 	 * @param stores the names of the Stores that keep their files on it, by name
+	 * @param storesInTrash the names of the Stores in the Trash, deleted or removed and not destroyed yet, that keep
+	 *        their files on it, by name: their files stay there until each is restored, so it can't be removed, nor its
+	 *        place changed, while one is there; never the Templates Store
 	 */
 	public record BackendDetail(long id, String name, String kind, boolean original, String path, String endpoint,
 			String region, String bucket, String prefix, boolean pathStyle, String accessKey, boolean hasSecret,
 			boolean encrypted, boolean keyConfirmed, boolean offered, boolean inUse, long files, long bytes,
 			String status, String error, Instant since, Instant keyLastShown, String keyLastShownBy,
-			List<String> stores) {
+			List<String> stores, List<String> storesInTrash) {
 
 		public BackendDetail {
 			stores = List.copyOf(stores);
+			storesInTrash = List.copyOf(storesInTrash);
 		}
 
 		/** @return its fields, but the access key's value */
@@ -185,7 +189,8 @@ public final class StorageRecords {
 					+ ", hasSecret=" + hasSecret + ", encrypted=" + encrypted + ", keyConfirmed=" + keyConfirmed
 					+ ", offered=" + offered + ", inUse=" + inUse + ", files=" + files + ", bytes=" + bytes
 					+ ", status=" + status + ", error=" + error + ", since=" + since + ", keyLastShown=" + keyLastShown
-					+ ", keyLastShownBy=" + keyLastShownBy + ", stores=" + stores + "]";
+					+ ", keyLastShownBy=" + keyLastShownBy + ", stores=" + stores + ", storesInTrash=" + storesInTrash
+					+ "]";
 		}
 	}
 

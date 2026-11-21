@@ -177,6 +177,27 @@ public class AdminStoresResourceTest extends ApiTestCase {
 		port.on = false;
 		assertTrue(get(one(work.getId())).webSession(web).send().json().path("backend").isNull());
 		assertTrue(get(STORES).webSession(web).send().json().get(1).path("pending").isNull());
+
+		// Its overview failing, as when the database does: the Stores all the same, as New Matter's Store menu needs
+		// them, without their storage parts, and a warning that names no Store
+		port.on = true;
+		port.overviewFails = true;
+		try (LogCapture log = LogCapture.of(StoreInfos.class)) {
+			ApiResponse failing = get(STORES).webSession(web).send();
+			assertEquals(failing.toString(), 200, failing.status());
+			assertEquals(List.of(alpha.getId() + " alpha", work.getId() + " Client Work", later.getId() + " Later"),
+					stores(failing.json()));
+			assertTrue(failing.json().get(1).path("backend").isNull());
+			assertTrue(failing.json().get(1).path("pending").isNull());
+			assertEquals(1, failing.json().get(1).path("matters").asLong());
+			JsonNode page = get(one(work.getId())).webSession(web).send().json();
+			assertTrue(page.path("backend").isNull());
+			assertEquals("Client Work", page.path("name").textValue());
+			List<String> warned = log.lines().stream().filter(line -> line.startsWith("WARN ")).toList();
+			assertEquals(log.lines().toString(), 2, warned.size());
+			assertTrue(warned.get(0), warned.get(0).startsWith("WARN The Stores are answered without their storage"));
+			assertFalse(warned.get(0), warned.get(0).contains("Client Work"));
+		}
 	}
 
 	@Test

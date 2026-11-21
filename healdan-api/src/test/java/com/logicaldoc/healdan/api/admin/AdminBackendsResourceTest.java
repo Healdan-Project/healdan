@@ -119,6 +119,7 @@ public class AdminBackendsResourceTest extends ApiTestCase {
 		long wasabi = port.s3("Wasabi EU", true, true, BackendInfo.UNREACHABLE);
 		long folder = port.local("Archive", "/srv/archive");
 		port.storeBackends.put(store.getId(), wasabi);
+		port.storesInTrash.put(wasabi, List.of("Old Work", "Spare Work"));
 		port.otherFiles = new long[] { 2, 300, 1 };
 
 		ApiResponse response = get(BACKENDS).webSession(web).send();
@@ -136,6 +137,7 @@ public class AdminBackendsResourceTest extends ApiTestCase {
 		assertTrue(original.path("error").isNull());
 		// Original keeps the files of every Store with no other backend; the Templates Store isn't one
 		assertEquals(List.of(), strings(original.path("stores")));
+		assertEquals(List.of(), strings(original.path("storesInTrash")));
 
 		JsonNode s3 = body.path("backends").get(1);
 		assertEquals("Wasabi EU", s3.path("name").textValue());
@@ -148,6 +150,10 @@ public class AdminBackendsResourceTest extends ApiTestCase {
 		assertEquals("2026-11-21T09:30:00Z", s3.path("since").textValue());
 		assertEquals("boss", s3.path("keyLastShownBy").textValue());
 		assertEquals(List.of("Client Work"), strings(s3.path("stores")));
+		// The Stores in the Trash that keep it, apart from the live ones
+		assertEquals(List.of("Old Work", "Spare Work"), strings(s3.path("storesInTrash")));
+		assertEquals(List.of("Old Work", "Spare Work"),
+				strings(get(BACKENDS + "/" + wasabi).webSession(web).send().json().path("storesInTrash")));
 
 		JsonNode local = get(BACKENDS + "/" + folder).webSession(web).send().json();
 		assertEquals("/srv/archive", local.path("path").textValue());
@@ -676,7 +682,9 @@ public class AdminBackendsResourceTest extends ApiTestCase {
 		assertReads(1, post(STORES).json(new Body().with("name", "Cloud Work").with("groupIds", List.of())
 				.with("backendId", wasabi)));
 		assertReads(1, get(STORES));
-		assertReads(1, get(SETTINGS));
+		// The settings are read without counting a file
+		assertReads(0, get(SETTINGS));
+		assertReads(0, put(SETTINGS).json(settings(10, 5, 2)));
 		assertReads(0, delete(BACKENDS + "/" + folder));
 	}
 

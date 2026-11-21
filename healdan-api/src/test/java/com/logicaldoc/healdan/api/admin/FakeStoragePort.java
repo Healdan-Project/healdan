@@ -58,6 +58,9 @@ final class FakeStoragePort implements StorageAdministration {
 
 	boolean on = true;
 
+	/** Whether the overview's read fails, as when the database does */
+	boolean overviewFails;
+
 	/** The backends, Original first */
 	final Map<Long, BackendDetail> backends = new LinkedHashMap<>();
 
@@ -69,6 +72,9 @@ final class FakeStoragePort implements StorageAdministration {
 
 	/** The files with no Store: waiting, their bytes, stuck */
 	long[] otherFiles = { 0, 0, 0 };
+
+	/** The names of the Stores in the Trash that keep their files on each backend, by backend */
+	final Map<Long, List<String>> storesInTrash = new HashMap<>();
 
 	/** The stuck files, by Store; 0 for those with no Store */
 	final Map<Long, List<StuckFile>> stuck = new HashMap<>();
@@ -108,7 +114,7 @@ final class FakeStoragePort implements StorageAdministration {
 	FakeStoragePort() {
 		backends.put(1L, new BackendDetail(1, "Original", "local", true, "/repository/docs", null, null, null, null,
 				false, null, false, false, false, true, true, 12, 3400, BackendInfo.OK, null,
-				Instant.parse("2026-11-20T08:00:00Z"), null, null, List.of()));
+				Instant.parse("2026-11-20T08:00:00Z"), null, null, List.of(), List.of()));
 	}
 
 	/**
@@ -122,7 +128,7 @@ final class FakeStoragePort implements StorageAdministration {
 				"firm-files", "healdan/", true, "AKEXAMPLE", true, encrypted, confirmed, !encrypted || confirmed, true,
 				5, 500, status, BackendInfo.OK.equals(status) ? null : "This backend can't be reached.",
 				Instant.parse("2026-11-21T09:30:00Z"), encrypted ? Instant.parse("2026-11-19T10:15:30Z") : null,
-				encrypted ? "boss" : null, List.of()));
+				encrypted ? "boss" : null, List.of(), List.of()));
 		return id;
 	}
 
@@ -134,13 +140,15 @@ final class FakeStoragePort implements StorageAdministration {
 	long local(String name, String path) {
 		long id = nextId++;
 		backends.put(id, new BackendDetail(id, name, "local", false, path, null, null, null, null, false, null, false,
-				false, false, true, false, 0, 0, BackendInfo.UNCHECKED, null, null, null, null, List.of()));
+				false, false, true, false, 0, 0, BackendInfo.UNCHECKED, null, null, null, null, List.of(), List.of()));
 		return id;
 	}
 
 	@Override
 	public StorageOverview overview() throws PersistenceException {
 		reads++;
+		if (overviewFails)
+			throw new PersistenceException("The storage overview can't be read in this test.");
 		if (!on)
 			return new StorageOverview(false, List.of(), List.of(), settings, 0, 0, 0);
 		List<BackendInfo> infos = backends.values().stream()
@@ -194,12 +202,22 @@ final class FakeStoragePort implements StorageAdministration {
 		} catch (PersistenceException e) {
 			throw new IllegalStateException(e);
 		}
-		return Optional.of(with(backend, stores));
+		return Optional.of(with(backend, stores, storesInTrash.getOrDefault(id, List.of())));
 	}
 
 	@Override
 	public StorageLimits limits() {
 		return LIMITS;
+	}
+
+	@Override
+	public boolean on() {
+		return on;
+	}
+
+	@Override
+	public StorageSettingsInfo settings() {
+		return settings;
 	}
 
 	@Override
@@ -232,7 +250,7 @@ final class FakeStoragePort implements StorageAdministration {
 				draft.pathStyle(), draft.accessKey(), s3 && secret != null, encrypted, false, !encrypted, false, 0, 0,
 				BackendInfo.OK, null, Instant.parse("2026-11-21T10:00:00Z"),
 				encrypted ? Instant.parse("2026-11-21T10:00:00Z") : null, encrypted ? by.getUsername() : null,
-				List.of());
+				List.of(), List.of());
 		backends.put(id, added);
 		if (encrypted)
 			keyEvents.add(0, new KeyEvent(KeyEvent.SHOWN, Instant.parse("2026-11-21T10:00:00Z"), by.getId(),
@@ -256,7 +274,8 @@ final class FakeStoragePort implements StorageAdministration {
 				row.original() ? row.path() : draft.path(), draft.endpoint(), draft.region(), draft.bucket(),
 				draft.prefix(), draft.pathStyle(), draft.accessKey(), row.hasSecret() || secret != null,
 				row.encrypted(), row.keyConfirmed(), row.offered(), row.inUse(), row.files(), row.bytes(),
-				row.status(), row.error(), row.since(), row.keyLastShown(), row.keyLastShownBy(), List.of());
+				row.status(), row.error(), row.since(), row.keyLastShown(), row.keyLastShownBy(), List.of(),
+				List.of());
 		backends.put(id, saved);
 		// As the real port's save, which counts the backend's own files alone
 		return detail(id).orElseThrow();
@@ -281,7 +300,7 @@ final class FakeStoragePort implements StorageAdministration {
 				row.region(), row.bucket(), row.prefix(), row.pathStyle(), row.accessKey(), row.hasSecret(),
 				row.encrypted(), row.keyConfirmed(), row.offered(), row.inUse(), row.files(), row.bytes(),
 				row.status(), row.error(), row.since(), Instant.parse("2026-11-21T11:00:00Z"), by.getUsername(),
-				List.of()));
+				List.of(), List.of()));
 		return RECOVERY_KEY;
 	}
 
@@ -295,7 +314,7 @@ final class FakeStoragePort implements StorageAdministration {
 		backends.put(id, new BackendDetail(id, row.name(), row.kind(), row.original(), row.path(), row.endpoint(),
 				row.region(), row.bucket(), row.prefix(), row.pathStyle(), row.accessKey(), row.hasSecret(),
 				row.encrypted(), true, true, row.inUse(), row.files(), row.bytes(), row.status(), row.error(),
-				row.since(), row.keyLastShown(), row.keyLastShownBy(), List.of()));
+				row.since(), row.keyLastShown(), row.keyLastShownBy(), List.of(), List.of()));
 	}
 
 	@Override
@@ -399,11 +418,11 @@ final class FakeStoragePort implements StorageAdministration {
 		return SECRET.equals(secret) ? "the secret" : "another secret";
 	}
 
-	/** @return the backend with its Stores */
-	private static BackendDetail with(BackendDetail b, List<String> stores) {
+	/** @return the backend with its Stores, live and in the Trash */
+	private static BackendDetail with(BackendDetail b, List<String> stores, List<String> storesInTrash) {
 		return new BackendDetail(b.id(), b.name(), b.kind(), b.original(), b.path(), b.endpoint(), b.region(),
 				b.bucket(), b.prefix(), b.pathStyle(), b.accessKey(), b.hasSecret(), b.encrypted(), b.keyConfirmed(),
 				b.offered(), b.inUse(), b.files(), b.bytes(), b.status(), b.error(), b.since(), b.keyLastShown(),
-				b.keyLastShownBy(), stores);
+				b.keyLastShownBy(), stores, storesInTrash);
 	}
 }

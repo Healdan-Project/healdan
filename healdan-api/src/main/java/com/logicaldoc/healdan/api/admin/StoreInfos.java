@@ -12,6 +12,9 @@ import java.util.Optional;
 
 import javax.sql.DataSource;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
@@ -35,9 +38,12 @@ import com.logicaldoc.util.spring.Context;
  * Makes the Stores' {@link StoreInfo}s: each Store's live matters, counted now, as the Matters list counts them; its
  * documents and their bytes, from the usage summary in memory, so a request never counts them; who can see it, as
  * {@link StoreService#access} lists them; and its backend and its files that haven't reached it, from the storage
- * port's overview, read once for all of them, or null without the port or while storage backends are off.
+ * port's overview, read once for all of them, or null without the port, while storage backends are off, or when the
+ * overview can't be read, so the Stores, and New Matter's Store menu, are still listed.
  */
 final class StoreInfos {
+
+	private static final Logger log = LoggerFactory.getLogger(StoreInfos.class);
 
 	/** Each Store's live matters: not deleted, their folders not in the Trash, their clients not deleted */
 	private static final String MATTERS = """
@@ -96,13 +102,22 @@ final class StoreInfos {
 	}
 
 	/**
-	 * @return the storage port's overview; null without the port or while storage backends are off
+	 * @return the storage port's overview; null without the port, while storage backends are off, or when it can't be
+	 *         read, which is logged at warn, as the Stores' other parts don't need it
 	 */
 	static StorageOverview overview() {
 		Optional<StorageAdministration> port = StoragePort.get().find();
 		if (port.isEmpty())
 			return null;
-		StorageOverview overview = StoragePort.run("Can't read the storage overview", () -> port.get().overview());
+		StorageOverview overview;
+		try {
+			overview = port.get().overview();
+		} catch (PersistenceException | DataAccessException e) {
+			log.warn("The Stores are answered without their storage backends, as the storage overview couldn't be "
+					+ "read: {}", e.getClass().getSimpleName());
+			log.debug("The storage overview couldn't be read", e);
+			return null;
+		}
 		return overview.on() ? overview : null;
 	}
 

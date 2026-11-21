@@ -29,8 +29,10 @@ import com.logicaldoc.util.spring.Context;
  * <p>
  * Its answers hold no S3 secret, only whether one is stored, and a recovery key only in {@link #add}'s answer for an
  * encrypted backend and in {@link #showRecoveryKey}'s, each a showing that is recorded. A refusal is a
- * {@link HealdanRuleException} whose message is the rule's sentence, written for the administrator; while storage
- * backends are off, on a server whose CE keeps its files in its own store, every change is refused. Every change,
+ * {@link HealdanRuleException} whose message is the rule's sentence, written for the administrator. Each method given
+ * the administrator ({@code by}), Show Recovery Key among them, refuses first anyone who isn't one, whatever called
+ * it; then, while storage backends are off, on a server whose CE keeps its files in its own store, every change is
+ * refused. Every change,
  * once it has succeeded, is recorded in the administration record (area {@code STORAGE}) straight after it, as it
  * isn't one database transaction; a change that changes nothing, and a read, record nothing. No value of a secret, an
  * access key or a recovery key is recorded, logged or put in a message.
@@ -81,6 +83,21 @@ public interface StorageAdministration {
 	StorageLimits limits();
 
 	/**
+	 * Whether storage backends are on, without counting any file: what the storage settings' page asks.
+	 *
+	 * @return true if CE keeps its files through Healdan's storage backends; false while they're off
+	 */
+	boolean on();
+
+	/**
+	 * The storage settings as stored, without counting any file, whether storage backends are on or off.
+	 *
+	 * @return the settings
+	 * @throws PersistenceException error at data layer
+	 */
+	StorageSettingsInfo settings() throws PersistenceException;
+
+	/**
 	 * Test before saving: a write, a read whole and by a range, a list (S3) and a delete of a test object, with the
 	 * settings as typed. Records nothing.
 	 *
@@ -111,8 +128,9 @@ public interface StorageAdministration {
 
 	/**
 	 * Saves a backend's settings: its name, and for S3 the endpoint, region, access key, secret and path style; its
-	 * bucket, prefix or path only while nothing is recorded or held on it and no Store keeps its files there. Its kind
-	 * and encryption never change, and Original's name alone is taken.
+	 * bucket, prefix or path only while nothing is recorded or held on it and no Store keeps its files there, live or in
+	 * the Trash, a Store in the Trash refused first, by name. Its kind and encryption never change, and Original's name
+	 * alone is taken.
 	 *
 	 * @param id the backend
 	 * @param draft the settings
@@ -179,7 +197,8 @@ public interface StorageAdministration {
 	List<KeyEvent> keyEvents(long id) throws PersistenceException;
 
 	/**
-	 * Removes a backend, once no Store uses it and no file is recorded or held on it. Never Original.
+	 * Removes a backend, once no Store uses it, live or in the Trash, and no file is recorded or held on it. Never
+	 * Original. A Store in the Trash on it is refused first, by name, as {@link BackendDetail#storesInTrash} lists it.
 	 *
 	 * @param id the backend
 	 * @param by the administrator

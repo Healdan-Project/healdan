@@ -70,7 +70,9 @@ import com.logicaldoc.util.spring.Context;
  * {@link #deleteStore}, likewise, each refusing a folder its route doesn't
  * delete, and the Admin app's renames and moves of them, and a Store's
  * create, rename and restore, hold this class's locks with
- * {@link #withFolderLocks}.
+ * {@link #withFolderLocks}. Each of those five refuses anyone but an
+ * administrator first ({@code 403 admins-only}), as their routes do before
+ * them, and as every admin service does for itself.
  */
 public final class FolderChanges {
 
@@ -84,6 +86,10 @@ public final class FolderChanges {
 
 	/** The refusal of a matter's move into a {@code storeId} that isn't a live Store */
 	static final String NO_STORE = "There's no Store %d to move the matter into.";
+
+	/** The refusal of anyone but an administrator by the Admin app's moves and deletes */
+	static final String ADMINS_ONLY = "Only administrators can move or delete matters, Stores, workspace templates "
+			+ "and their folders here.";
 
 	/**
 	 * {@link FolderRenames}' locks, one per parent folder: a move holds both
@@ -150,8 +156,9 @@ public final class FolderChanges {
 	 * Moves a matter's own folder and everything live in it to the caller's
 	 * Trash, as {@link #delete} does any other folder, for the Admin app. The
 	 * matter's row stays, so its number stays taken. Checks, in order: a
-	 * folder that isn't a matter's own, or is in the Trash already
-	 * ({@code 404}); something inside without Delete; a document inside
+	 * caller who isn't an administrator ({@code 403 admins-only}); a folder
+	 * that isn't a matter's own, or is in the Trash already ({@code 404});
+	 * something inside without Delete; a document inside
 	 * checked out, by anyone, the caller too; an immutable document inside.
 	 * Each of those is {@code 409 refused}, with the sentence {@link #delete}
 	 * gives, as is a veto of Healdan's rules.
@@ -162,6 +169,7 @@ public final class FolderChanges {
 	 */
 	public TrashItem deleteMatter(long id, Caller caller) {
 		try {
+			requireAdmin(caller.user());
 			matterFolder(id, caller.user());
 			return deleteForAdmin(id, caller);
 		} catch (PersistenceException e) {
@@ -173,12 +181,13 @@ public final class FolderChanges {
 	 * Moves a workspace's folder or search folder, below its top folder, and
 	 * everything live in it, to the caller's Trash, as {@link #deleteMatter}
 	 * does a matter's own folder, for the Admin app's workspace routes.
-	 * Checks, in order: a folder that isn't a workspace's
+	 * Checks, in order: a caller who isn't an administrator
+	 * ({@code 403 admins-only}); a folder that isn't a workspace's
 	 * ({@code WorkspaceAdmin.workspaceFolder}), such as a Store, the Templates
 	 * Store or the root ({@code 404}); the workspace's top folder, a matter's
 	 * own or a template's, which goes with its matter or template; something
 	 * inside without Delete; a document inside checked out, by anyone, the
-	 * caller too; an immutable document inside. Each but the first is
+	 * caller too; an immutable document inside. Each but the first two is
 	 * {@code 409 refused}, with the sentence {@link #delete} gives, as is a
 	 * veto of Healdan's rules.
 	 *
@@ -188,6 +197,7 @@ public final class FolderChanges {
 	 */
 	public TrashItem deleteWorkspaceFolder(long id, Caller caller) {
 		try {
+			requireAdmin(caller.user());
 			WorkspaceAdmin workspaces = WorkspaceAdmin.get();
 			Folder folder = workspaces.workspaceFolder(id);
 			if (folder == null)
@@ -206,8 +216,9 @@ public final class FolderChanges {
 	/**
 	 * Moves a workspace template's own folder, with its folders and search
 	 * folders, to the caller's Trash, for the Admin app's template route.
-	 * Checks, in order: a folder that isn't a template's own, directly in the
-	 * Templates Store ({@code 404}); something inside without Delete; a
+	 * Checks, in order: a caller who isn't an administrator
+	 * ({@code 403 admins-only}); a folder that isn't a template's own,
+	 * directly in the Templates Store ({@code 404}); something inside without Delete; a
 	 * document inside checked out, by anyone, the caller too; an immutable
 	 * document inside. Each of those is {@code 409 refused}, with the sentence
 	 * {@link #delete} gives, as is a veto of Healdan's rules.
@@ -218,6 +229,7 @@ public final class FolderChanges {
 	 */
 	public TrashItem deleteTemplate(long id, Caller caller) {
 		try {
+			requireAdmin(caller.user());
 			Folder folder = WorkspaceAdmin.get().workspaceFolder(id);
 			if (folder == null || !Long.valueOf(folder.getParentId()).equals(HealdanSettings.get().templatesStoreId()))
 				throw ApiProblem.notFound("There's no template %d.".formatted(id));
@@ -231,13 +243,15 @@ public final class FolderChanges {
 	 * Moves a Store, every matter in it and everything live in them, to the
 	 * caller's Trash as one item, as {@link #deleteMatter} does a matter's own
 	 * folder, for the Admin app's Store route. The matters' rows stay, so their
-	 * numbers stay taken. Checks, in order: LogicalDOC's Default workspace, the
-	 * Templates Store and the root, which aren't Stores ({@code 409 refused},
+	 * numbers stay taken. Checks, in order: a caller who isn't an
+	 * administrator ({@code 403 admins-only}); LogicalDOC's Default workspace,
+	 * the Templates Store and the root, which aren't Stores ({@code 409 refused},
 	 * each with its sentence); any other folder that isn't a live Store
 	 * ({@code 404}); something inside without Delete; a document inside
 	 * checked out, by anyone, the caller too; an immutable document inside.
-	 * Each of those but the {@code 404} is {@code 409 refused}, with the
-	 * sentence {@link #delete} gives, as is a veto of Healdan's rules.
+	 * Each of those but the {@code 403} and the {@code 404} is
+	 * {@code 409 refused}, with the sentence {@link #delete} gives, as is a
+	 * veto of Healdan's rules.
 	 *
 	 * @param id the Store
 	 * @param caller the signed-in caller, an administrator
@@ -245,6 +259,7 @@ public final class FolderChanges {
 	 */
 	public TrashItem deleteStore(long id, Caller caller) {
 		try {
+			requireAdmin(caller.user());
 			StoreService stores = StoreService.get();
 			String fixed = stores.fixedFolder(id, "deleted");
 			if (fixed != null)
@@ -255,6 +270,17 @@ public final class FolderChanges {
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't delete Store #" + id, e);
 		}
+	}
+
+	/**
+	 * Refuses anyone but an administrator, first in each of the Admin app's
+	 * moves and deletes
+	 *
+	 * @throws ApiProblem {@code 403 admins-only}
+	 */
+	private static void requireAdmin(User user) throws PersistenceException {
+		if (!AccessChecks.isAdmin(user))
+			throw new ApiProblem(403, "admins-only", ADMINS_ONLY);
 	}
 
 	/**
@@ -415,7 +441,8 @@ public final class FolderChanges {
 	 * through CE's {@code move}, holding both Stores' locks, as {@link #move}
 	 * moves any other folder, for the Admin app. The folder keeps its name: a
 	 * clash is refused, never settled with CE's {@code (1)}. Checks, in order:
-	 * a folder that isn't a matter's own, or is in the Trash ({@code 404}); a
+	 * a caller who isn't an administrator ({@code 403 admins-only}); a folder
+	 * that isn't a matter's own, or is in the Trash ({@code 404}); a
 	 * {@code storeId} that isn't a live Store; then, inside the locks,
 	 * something inside without Move; a document inside checked out, by anyone;
 	 * a folder in the Store with the matter's folder's name, without regard to
@@ -438,6 +465,7 @@ public final class FolderChanges {
 		User user = caller.user();
 		String failure = "Can't move matter folder #" + id;
 		try {
+			requireAdmin(user);
 			matterFolder(id, user);
 			if (MatterService.get().liveStore(storeId) == null)
 				throw ApiProblem.conflict("refused", NO_STORE.formatted(storeId));

@@ -57,6 +57,16 @@ public interface OverviewPort extends StorageAdministration {
 	}
 
 	@Override
+	default boolean on() {
+		throw unexpected();
+	}
+
+	@Override
+	default StorageSettingsInfo settings() {
+		throw unexpected();
+	}
+
+	@Override
 	default List<String> testNew(long id, BackendDraft draft, String secret) {
 		throw unexpected();
 	}

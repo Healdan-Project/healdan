@@ -266,6 +266,20 @@ public class DashboardServiceTest extends AbstractHealdanTestCase {
 		HealthTile backends = tile(dashboard, HealthTile.STORAGE_BACKENDS);
 		assertEquals(HealthTile.ATTENTION, backends.status());
 		assertEquals("1 of 4 reachable, 1 not checked yet, 6 files stuck", backends.detail());
+		// A Store's among them: they're retried on the Stores' pages
+		assertEquals("/admin/stores", stuck.link());
+	}
+
+	// Files with no Store alone are the Backends page's Other Files, retried there
+	@Test
+	public void testStuckFilesWithNoStoreLinkToTheBackends() {
+		overview = overview(List.of(backend(1, "Original", BackendInfo.OK)),
+				List.of(new StoreBackendInfo(12, "Quiet", 1, "Original", 0, 0, 0, 5, 500)), 2);
+
+		AttentionItem stuck = item(read(), AttentionItem.FILES_STUCK);
+		assertEquals(2, stuck.count());
+		assertEquals("Files with no Store", stuck.detail());
+		assertEquals(BACKENDS, stuck.link());
 	}
 
 	@Test

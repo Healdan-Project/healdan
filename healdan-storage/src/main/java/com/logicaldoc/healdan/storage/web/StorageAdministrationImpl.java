@@ -19,11 +19,15 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+import javax.sql.DataSource;
+
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Tenant;
@@ -33,6 +37,7 @@ import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageEvent;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStorageOverview;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStoreBackend;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIStuckFile;
+import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.admin.AdminArea;
 import com.logicaldoc.healdan.admin.AdminEvent;
 import com.logicaldoc.healdan.admin.AdminEvent.Change;
@@ -51,6 +56,7 @@ import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageSettingsInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StoreBackendInfo;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StuckFile;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.SwitchPreview;
+import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.storage.Staging;
@@ -61,12 +67,21 @@ import com.logicaldoc.healdan.storage.StorageSettings;
 import com.logicaldoc.healdan.storage.StoreBackend;
 import com.logicaldoc.healdan.storage.StoreBackendDAO;
 import com.logicaldoc.healdan.storage.StoredFiles;
+import com.logicaldoc.healdan.storage.web.BackendDrafts.Draft;
 
 /**
  * The storage port for the Admin app (spec section 9.7): {@link StorageAdmin}'s operations, the Storage tab's, with
  * {@code healdan-core}'s plain records. {@link StorageAdmin} doesn't change, so its rules, its locks and its
  * refusals, each a {@code HealdanRuleException} with the tab's sentence, are the port's; its missing secret key is
  * the port's {@link SecretKeyMissingProblem}, and the tab's question, a new key, is {@code newKey}.
+ * <p>
+ * Each method given the administrator ({@code by}), Show Recovery Key among them, refuses first anyone who isn't one,
+ * whatever called it (Admin app ruling P3-R39); then every change, Test included, refuses while storage backends are
+ * off, with a sentence of its own, as the Admin app has no Storage tab to name; and a Store in the Trash keeps its
+ * backend, as its files stay there for a restore, so a removal, or a save that moves the backend, is refused first
+ * while one is on it, with a sentence that names each such Store and says how to free the backend (Admin app ruling
+ * P3-R38). Each backend's detail lists them ({@link BackendDetail#storesInTrash}), read with the Stores' backends from
+ * {@code hd_storage_store} and the folder table, as {@link StorageAdmin} lists live Stores only.
  * <p>
  * Nothing secret is answered: no S3 secret, only whether one is stored, and a recovery key only in an encrypted
  * backend's add and in {@link #showRecoveryKey}, both recorded as showings by {@link StorageAdmin}. An S3 backend's
@@ -95,6 +110,25 @@ public class StorageAdministrationImpl implements StorageAdministration {
 	/** What it calls the storage as a whole: its settings, and the files with no Store */
 	static final String STORAGE = "storage";
 
+	/** The refusal of anyone but an administrator, whatever called the port */
+	static final String ONLY_ADMINS = "Only an administrator can change the storage backends, a Store's backend or the "
+			+ "storage settings, or see a recovery key.";
+
+	/** The refusal of every change while storage backends are off */
+	static final String OFF = "Storage backends are off: this server keeps its files in LogicalDOC's own store, so its "
+			+ "storage backends, its Stores' backends and its storage settings can't be changed.";
+
+	/**
+	 * The Stores in the Trash, deleted or removed and not destroyed yet, with the backend each keeps its files on, null
+	 * for Original: workspaces directly under the root, but the root itself, LogicalDOC's Default workspace and the
+	 * Templates Store
+	 */
+	private static final String IN_TRASH = """
+			select f.ld_name, s.hd_backendid from ld_folder f
+			  left join hd_storage_store s on s.hd_storeid = f.ld_id and s.ld_deleted = 0
+			 where f.ld_tenantid = ? and f.ld_type = ? and f.ld_parentid = ? and f.ld_deleted in (?, ?)
+			   and f.ld_id <> ? and f.ld_id <> ? and f.ld_id <> ?""";
+
 	private final StorageAdmin admin;
 
 	private final AdminEvents events;
@@ -109,9 +143,12 @@ public class StorageAdministrationImpl implements StorageAdministration {
 
 	private final StoreBackendDAO storeBackends;
 
+	private final JdbcTemplate jdbc;
+
 	@Autowired
 	public StorageAdministrationImpl(StorageAdmin admin, AdminEvents events, StorageBackendDAO backends,
-			StoredFiles files, StorageSettings storageSettings, SecretBox box, StoreBackendDAO storeBackends) {
+			StoredFiles files, StorageSettings storageSettings, SecretBox box, StoreBackendDAO storeBackends,
+			DataSource dataSource) {
 		this.admin = admin;
 		this.events = events;
 		this.backends = backends;
@@ -119,6 +156,7 @@ public class StorageAdministrationImpl implements StorageAdministration {
 		this.storageSettings = storageSettings;
 		this.box = box;
 		this.storeBackends = storeBackends;
+		this.jdbc = new JdbcTemplate(dataSource);
 	}
 
 	// Reading
@@ -156,7 +194,7 @@ public class StorageAdministrationImpl implements StorageAdministration {
 			return Optional.empty();
 		for (GUIStorageBackend backend : gui.getBackends())
 			if (backend.getId() == id)
-				return Optional.of(detail(backend, storesOn(gui, id)));
+				return Optional.of(detail(backend, storesOn(gui, id), storesInTrash(id)));
 		return Optional.empty();
 	}
 
@@ -166,8 +204,10 @@ public class StorageAdministrationImpl implements StorageAdministration {
 		if (!gui.isOn())
 			return new BackendList(false, List.of(), 0, 0, 0);
 		List<BackendDetail> details = new ArrayList<>();
+		Map<Long, List<String>> inTrash = storesInTrash();
 		for (GUIStorageBackend backend : gui.getBackends())
-			details.add(detail(backend, storesOn(gui, backend.getId())));
+			details.add(detail(backend, storesOn(gui, backend.getId()),
+					inTrash.getOrDefault(backend.getId(), List.of())));
 		return new BackendList(true, details, gui.getOtherWaiting(), gui.getOtherWaitingSize(), gui.getOtherStuck());
 	}
 
@@ -208,6 +248,29 @@ public class StorageAdministrationImpl implements StorageAdministration {
 		return names;
 	}
 
+	/**
+	 * @return the names of the Stores in the Trash, by the backend each keeps its files on, each list by name ignoring
+	 *         case: a Store with no backend of its own is on Original. Never the Templates Store
+	 */
+	private Map<Long, List<String>> storesInTrash() {
+		Long templates = HealdanSettings.get().templatesStoreId();
+		Map<Long, List<String>> names = new HashMap<>();
+		jdbc.query(IN_TRASH, rs -> {
+			long mapped = rs.getLong(2);
+			long backendId = rs.wasNull() ? StorageBackend.ORIGINAL : mapped;
+			names.computeIfAbsent(backendId, key -> new ArrayList<>()).add(rs.getString(1));
+		}, Tenant.DEFAULT_ID, Folder.TYPE_WORKSPACE, Folder.ROOTID, PersistentObject.DELETED_CODE_DEFAULT,
+				PersistentObject.DELETED_CODE_STRONG, Folder.ROOTID, Folder.DEFAULTWORKSPACEID,
+				templates != null ? templates : -1L);
+		names.values().forEach(list -> list.sort(String.CASE_INSENSITIVE_ORDER));
+		return names;
+	}
+
+	/** @return the names of the Stores in the Trash on the backend, by name */
+	private List<String> storesInTrash(long id) {
+		return storesInTrash().getOrDefault(id, List.of());
+	}
+
 	@Override
 	public StorageLimits limits() {
 		return new StorageLimits(StorageSettings.MAX_HOLD_DAYS, StorageSettings.MAX_CACHE_GB,
@@ -215,12 +278,19 @@ public class StorageAdministrationImpl implements StorageAdministration {
 	}
 
 	@Override
+	public boolean on() {
+		return admin.on.getAsBoolean();
+	}
+
+	@Override
 	public List<String> testNew(long id, BackendDraft draft, String secret) throws PersistenceException {
+		requireOn();
 		return admin.testNew(gui(id, draft, false), secret);
 	}
 
 	@Override
 	public List<String> test(long id) throws PersistenceException {
+		requireOn();
 		return admin.test(id);
 	}
 
@@ -252,6 +322,8 @@ public class StorageAdministrationImpl implements StorageAdministration {
 
 	@Override
 	public AddedBackend add(BackendDraft draft, String secret, boolean newKey, User by) throws PersistenceException {
+		requireAdmin(by);
+		requireOn();
 		GUIStorageBackend added = sealing(() -> admin.add(gui(0, draft, newKey), secret, by));
 		long id = added.getId();
 		events.recordAfter(new AdminEvent(AdminArea.STORAGE, "backend.added", BACKEND, id, added.getName(),
@@ -261,14 +333,18 @@ public class StorageAdministrationImpl implements StorageAdministration {
 		if (recoveryKey != null)
 			events.recordAfter(new AdminEvent(AdminArea.STORAGE, "backend.recovery-key-shown", BACKEND, id,
 					added.getName(), null), by);
-		// Just added, no Store keeps its files on it
-		return new AddedBackend(detail(added, List.of()), recoveryKey);
+		// Just added, no Store keeps its files on it, live or in the Trash
+		return new AddedBackend(detail(added, List.of(), List.of()), recoveryKey);
 	}
 
 	@Override
 	public BackendDetail save(long id, BackendDraft draft, String secret, boolean newKey, User by)
 			throws PersistenceException {
+		requireAdmin(by);
+		requireOn();
 		StorageBackend row = backends.findById(id);
+		if (row != null && row.getDeleted() == 0)
+			refuseMoveWhileInTrash(row, draft, secret, newKey);
 		// A snapshot: the row may be the instance the save goes on to change
 		Settings before = row != null ? Settings.of(row) : null;
 		GUIStorageBackend saved = sealing(() -> admin.save(gui(id, draft, newKey), secret, by));
@@ -283,11 +359,50 @@ public class StorageAdministrationImpl implements StorageAdministration {
 						by);
 		}
 		// The tab's answer is the backend as saved, its own files counted: no overview of every backend's
-		return detail(saved, storesOn(id));
+		return detail(saved, storesOn(id), storesInTrash(id));
+	}
+
+	/**
+	 * Refuses a save that would give a backend another bucket, prefix or path while a Store in the Trash keeps its
+	 * files there, as they stay for a restore. A draft the tab's checks refuse is left to the save, which refuses it
+	 * with its own sentence; Original's place never changes.
+	 */
+	private void refuseMoveWhileInTrash(StorageBackend row, BackendDraft draft, String secret, boolean newKey)
+			throws PersistenceException {
+		if (row.getId() == StorageBackend.ORIGINAL || draft == null)
+			return;
+		Draft typed;
+		try {
+			typed = BackendDrafts.draft(gui(row.getId(), draft, newKey), secret, row);
+		} catch (HealdanRuleException e) {
+			return;
+		}
+		if (BackendDrafts.samePlace(row, typed))
+			return;
+		List<String> inTrash = storesInTrash(row.getId());
+		if (inTrash.isEmpty())
+			return;
+		boolean one = inTrash.size() == 1;
+		throw new HealdanRuleException(("%s can't change while %s in the Trash, as %s files stay on this backend while "
+				+ "%s there: %s").formatted(BackendDrafts.moved(row, typed), inTrash(inTrash), one ? "its" : "their",
+						one ? "it's" : "they're", wayOut(one)));
+	}
+
+	/** @return "Store A is", or "Stores A, B are" */
+	private static String inTrash(List<String> stores) {
+		return stores.size() == 1 ? "Store " + stores.get(0) + " is" : "Stores " + String.join(", ", stores) + " are";
+	}
+
+	/** @return how to free a backend that Stores in the Trash keep */
+	private static String wayOut(boolean one) {
+		return one ? "restore the Store, give it another backend, then delete it again."
+				: "restore each, give it another backend, then delete it again.";
 	}
 
 	@Override
 	public String showRecoveryKey(long id, User by) throws PersistenceException {
+		requireAdmin(by);
+		requireOn();
 		String name = name(id);
 		String recoveryKey = admin.showRecoveryKey(id, by);
 		events.recordAfter(new AdminEvent(AdminArea.STORAGE, "backend.recovery-key-shown", BACKEND, id, name, null),
@@ -297,6 +412,8 @@ public class StorageAdministrationImpl implements StorageAdministration {
 
 	@Override
 	public void confirmRecoveryKey(long id, String lastGroup, User by) throws PersistenceException {
+		requireAdmin(by);
+		requireOn();
 		StorageBackend row = backends.findById(id);
 		boolean confirmed = row != null && row.isKeyConfirmedOn();
 		String name = row != null ? row.getName() : null;
@@ -309,6 +426,8 @@ public class StorageAdministrationImpl implements StorageAdministration {
 
 	@Override
 	public void enterRecoveryKey(long id, String recoveryKey, User by) throws PersistenceException {
+		requireAdmin(by);
+		requireOn();
 		String name = name(id);
 		admin.enterRecoveryKey(id, recoveryKey, by);
 		events.recordAfter(new AdminEvent(AdminArea.STORAGE, "backend.recovery-key-entered", BACKEND, id, name, null),
@@ -317,6 +436,18 @@ public class StorageAdministrationImpl implements StorageAdministration {
 
 	@Override
 	public void remove(long id, User by) throws PersistenceException {
+		requireAdmin(by);
+		requireOn();
+		// Original is refused by the tab's own sentence, whatever is in the Trash
+		if (id != StorageBackend.ORIGINAL) {
+			List<String> inTrash = storesInTrash(id);
+			if (!inTrash.isEmpty()) {
+				boolean one = inTrash.size() == 1;
+				throw new HealdanRuleException(("%s in the Trash, and %s files stay on this backend while %s there, so "
+						+ "the backend can't be removed: %s").formatted(inTrash(inTrash), one ? "its" : "their",
+								one ? "it's" : "they're", wayOut(one)));
+			}
+		}
 		String name = name(id);
 		admin.remove(id, by);
 		events.recordAfter(new AdminEvent(AdminArea.STORAGE, "backend.removed", BACKEND, id, name, null), by);
@@ -324,6 +455,8 @@ public class StorageAdministrationImpl implements StorageAdministration {
 
 	@Override
 	public void setStoreBackend(long storeId, long backendId, User by) throws PersistenceException {
+		requireAdmin(by);
+		requireOn();
 		long was = files.storeBackend(storeId);
 		admin.setStoreBackend(storeId, backendId, by);
 		long now = files.storeBackend(storeId);
@@ -335,6 +468,8 @@ public class StorageAdministrationImpl implements StorageAdministration {
 
 	@Override
 	public void retry(long storeId, User by) throws PersistenceException {
+		requireAdmin(by);
+		requireOn();
 		// With none stuck, a retry changes nothing
 		boolean stuck = !files.stuck(storeId == 0 ? null : storeId, 1).isEmpty();
 		admin.retry(storeId, by);
@@ -348,6 +483,8 @@ public class StorageAdministrationImpl implements StorageAdministration {
 
 	@Override
 	public void saveSettings(StorageSettingsInfo settings, User by) throws PersistenceException {
+		requireAdmin(by);
+		requireOn();
 		Objects.requireNonNull(settings, "settings");
 		StorageSettingsInfo was = settings();
 		admin.saveSettings(settings.holdDays(), settings.cacheGb(), settings.transfers(), by);
@@ -366,8 +503,9 @@ public class StorageAdministrationImpl implements StorageAdministration {
 			changes.put(name, new Change(String.valueOf(before), String.valueOf(after)));
 	}
 
-	/** @return the storage settings as stored */
-	private StorageSettingsInfo settings() {
+	/** @return the storage settings as stored, without counting any file */
+	@Override
+	public StorageSettingsInfo settings() {
 		return new StorageSettingsInfo(storageSettings.holdDays(), storageSettings.cacheGb(),
 				storageSettings.transfers());
 	}
@@ -391,6 +529,22 @@ public class StorageAdministrationImpl implements StorageAdministration {
 		String was = box.open(before.sealed());
 		String now = box.open(after.sealed());
 		return was == null || now == null || !was.equals(now);
+	}
+
+	/**
+	 * Refuses anyone but an administrator, whatever called the port: its routes refuse them first, and so does the
+	 * port, as every admin service does
+	 */
+	private static void requireAdmin(User by) throws PersistenceException {
+		Objects.requireNonNull(by, "by");
+		if (!FilingRules.get().isAdmin(by))
+			throw new HealdanRuleException(ONLY_ADMINS);
+	}
+
+	/** Refuses a change while storage backends are off, in the Admin app's words, before the tab's service is asked */
+	private void requireOn() throws HealdanRuleException {
+		if (!on())
+			throw new HealdanRuleException(OFF);
 	}
 
 	/** Runs an add or a save that seals a typed secret, a missing secret key file being the port's problem */
@@ -539,15 +693,17 @@ public class StorageAdministrationImpl implements StorageAdministration {
 
 	/**
 	 * @param stores the names of the Stores on it
+	 * @param storesInTrash the names of the Stores in the Trash on it
 	 * @return what the edit form shows of the tab's backend: never its recovery key, which the add answers beside it
 	 */
-	static BackendDetail detail(GUIStorageBackend backend, List<String> stores) {
+	static BackendDetail detail(GUIStorageBackend backend, List<String> stores, List<String> storesInTrash) {
 		return new BackendDetail(backend.getId(), backend.getName(), backend.getKind(), backend.isOriginal(),
 				backend.getPath(), backend.isS3() ? endpoint(backend.getEndpoint()) : null, backend.getRegion(),
 				backend.getBucket(), backend.getPrefix(), backend.isPathStyle(), backend.getAccessKey(),
 				backend.isHasSecret(), encrypted(backend), backend.isKeyConfirmed(), backend.isOffered(),
 				backend.isInUse(), backend.getFiles(), backend.getSize(), status(backend), backend.getError(),
-				instant(backend.getSince()), instant(backend.getKeyShown()), backend.getKeyShownBy(), stores);
+				instant(backend.getSince()), instant(backend.getKeyShown()), backend.getKeyShownBy(), stores,
+				storesInTrash);
 	}
 
 	/** @return the port's name for the tab's event: {@link KeyEvent#SHOWN} or {@link KeyEvent#ENTERED} */

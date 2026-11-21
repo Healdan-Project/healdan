@@ -458,8 +458,16 @@ public class DashboardService {
 		}
 	}
 
-	/** How many, and the line that says more, of something that needs attention */
-	private record Found(long count, String detail) {
+	/**
+	 * How many, and the line that says more, of something that needs attention
+	 *
+	 * @param screen where its item links to; null for its code's own screen
+	 */
+	record Found(long count, String detail, Screen screen) {
+
+		Found(long count, String detail) {
+			this(count, detail, null);
+		}
 	}
 
 	/** @return what was found, null if there's nothing */
@@ -481,7 +489,7 @@ public class DashboardService {
 			Found found = check.apply(source.value());
 			if (found != null)
 				attention.add(new AttentionItem(code, (int) Math.min(Integer.MAX_VALUE, found.count()),
-						found.detail(), screen.link));
+						found.detail(), (found.screen() != null ? found.screen() : screen).link));
 		} catch (RuntimeException e) {
 			log.warn("The Dashboard couldn't check {}: {}", code, e.getClass().getName());
 			log.debug("The Dashboard couldn't check {}", code, e);
@@ -666,7 +674,11 @@ public class DashboardService {
 
 	// Needs Attention
 
-	private static Found filesStuck(Storage s) {
+	/**
+	 * @return the stuck files, which a Store's page retries; only those with no Store, the Backends page's Other Files,
+	 *         link there
+	 */
+	static Found filesStuck(Storage s) {
 		if (!s.on())
 			return null;
 		StorageOverview overview = s.overview();
@@ -683,7 +695,7 @@ public class DashboardService {
 					store.storeName() + (store.backendName() != null ? ", moving to " + store.backendName() : ""));
 		}
 		if (stuck.isEmpty())
-			return new Found(count, "Files with no Store");
+			return new Found(count, "Files with no Store", Screen.BACKENDS);
 		List<String> places = new ArrayList<>();
 		for (StoreBackendInfo store : stuck)
 			places.add(store.storeName() + " (" + Words.number(store.stuck()) + ")");

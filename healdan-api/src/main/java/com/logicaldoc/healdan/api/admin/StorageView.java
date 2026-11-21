@@ -112,11 +112,16 @@ public final class StorageView {
 	/**
 	 * {@code openapi-admin.yaml}'s {@code Backend}: a backend as its page and its Edit window show it, with no S3
 	 * secret, only whether one is stored, and no recovery key.
+	 *
+	 * @param stores the live Stores that keep their files on it, by name
+	 * @param storesInTrash the Stores in the Trash that keep their files on it, by name, which keep the backend until
+	 *        each is restored and given another
 	 */
 	public record Backend(long id, String name, String kind, boolean original, String path, String endpoint,
 			String region, String bucket, String prefix, boolean pathStyle, String accessKey, boolean hasSecret,
 			boolean encrypted, boolean keyConfirmed, boolean offered, boolean inUse, long files, long bytes,
-			String status, String error, Date since, Date keyLastShown, String keyLastShownBy, List<String> stores) {
+			String status, String error, Date since, Date keyLastShown, String keyLastShownBy, List<String> stores,
+			List<String> storesInTrash) {
 
 		static Backend of(BackendDetail b) {
 			boolean failing = BackendInfo.UNREACHABLE.equals(b.status()) || BackendInfo.FAILING.equals(b.status());
@@ -124,7 +129,7 @@ public final class StorageView {
 					b.bucket(), b.prefix(), b.pathStyle(), b.accessKey(), b.hasSecret(), b.encrypted(),
 					b.keyConfirmed(), b.offered(), b.inUse(), b.files(), b.bytes(), b.status(),
 					failing ? b.error() : null, date(b.since()), date(b.keyLastShown()), b.keyLastShownBy(),
-					b.stores());
+					b.stores(), b.storesInTrash());
 		}
 	}
 

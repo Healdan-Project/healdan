@@ -422,8 +422,9 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 			assertTrue(port.backend(StorageBackend.ORIGINAL).isEmpty());
 			assertEquals(new BackendList(false, List.of(), 0, 0, 0), port.backends());
 			assertFalse(port.exists(StorageBackend.ORIGINAL));
-			refused("off", "Storage backends are off", () -> port.add(local("Spare", root, false), null, false, boss));
-			refused("off", "Storage backends are off",
+			refusedAs("off", StorageAdministrationImpl.OFF,
+					() -> port.add(local("Spare", root, false), null, false, boss));
+			refusedAs("off", StorageAdministrationImpl.OFF,
 					() -> port.saveSettings(new StorageSettingsInfo(9, 9, 2), boss));
 		} finally {
 			admin.on = StoreTracking::active;
@@ -771,6 +772,134 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 		assertDetail(Map.of("cacheGb", change("5", "6")), events.get(1));
 	}
 
+	/**
+	 * Admin app ruling P3-R38: a Store in the Trash keeps its files on its backend, for a restore, so its backend's
+	 * detail lists it, and the backend's removal, or a save that moves it, is refused first, naming it, with the way
+	 * out; a rename still saves, and nothing refused is recorded
+	 */
+	@Test
+	public void testStoresInTheTrashKeepTheirBackend() throws Exception {
+		HealdanFixtures fx = sf.fx;
+		User boss = fx.user("boss", "admin");
+		StorageAdministration port = port();
+		Path root = freshFolder("port-ledger");
+		long id = port.add(local("Ledger", root, false), null, false, boss).backend().id();
+		Folder ledger = fx.store("Ledger Store");
+		Folder bank = fx.store("bank Store");
+		Folder home = fx.store("Home Store");
+		for (Folder store : List.of(ledger, bank))
+			port.setStoreBackend(store.getId(), id, boss);
+		int recorded = events().size();
+
+		// Live, the Stores are its Stores, and none is in the Trash
+		BackendDetail live = port.backend(id).orElseThrow();
+		assertEquals(List.of("bank Store", "Ledger Store"), live.stores());
+		assertEquals(List.of(), live.storesInTrash());
+
+		FolderDAO.get().deleteTree(ledger.getId(), fx.folderHistory(fx.admin()));
+		BackendDetail one = port.backend(id).orElseThrow();
+		assertEquals(List.of("bank Store"), one.stores());
+		assertEquals(List.of("Ledger Store"), one.storesInTrash());
+		refusedAs("The backend can't be removed: Ledger Store is in the Trash",
+				"Store Ledger Store is in the Trash, and its files stay on this backend while it's there, so the "
+						+ "backend can't be removed: restore the Store, give it another backend, then delete it again.",
+				() -> port.remove(id, boss));
+		refusedAs("Its path can't change: Ledger Store is in the Trash",
+				"The path can't change while Store Ledger Store is in the Trash, as its files stay on this backend "
+						+ "while it's there: restore the Store, give it another backend, then delete it again.",
+				() -> port.save(id, local("Ledger", freshFolder("port-ledger-moved"), false), null, false, boss));
+
+		// Removed from the Trash and not destroyed yet, it's still there; the list and a save's answer say so, by name
+		FolderDAO.get().deleteTree(bank.getId(), fx.folderHistory(fx.admin()));
+		jdbc().update("update ld_folder set ld_deleted = 2 where ld_id = ?", bank.getId());
+		FolderDAO.get().deleteTree(home.getId(), fx.folderHistory(fx.admin()));
+		List<String> both = List.of("bank Store", "Ledger Store");
+		assertEquals(both, port.backend(id).orElseThrow().storesInTrash());
+		assertEquals(List.of(), port.backend(id).orElseThrow().stores());
+		BackendDetail listed = port.backends().backends().stream().filter(b -> b.id() == id).findFirst().orElseThrow();
+		assertEquals(both, listed.storesInTrash());
+		refusedAs("Two are named",
+				"Stores bank Store, Ledger Store are in the Trash, and their files stay on this backend while they're "
+						+ "there, so the backend can't be removed: restore each, give it another backend, then delete "
+						+ "it again.",
+				() -> port.remove(id, boss));
+		BackendDetail renamed = port.save(id, local("Ledger Two", root, false), null, false, boss);
+		assertEquals("Ledger Two", renamed.name());
+		assertEquals(both, renamed.storesInTrash());
+
+		// A Store in the Trash with no backend of its own is on Original, which is refused as Original always is
+		BackendDetail original = port.backend(StorageBackend.ORIGINAL).orElseThrow();
+		assertTrue(original.storesInTrash().toString(), original.storesInTrash().contains("Home Store"));
+		assertFalse(original.storesInTrash().toString(), original.storesInTrash().contains("Ledger Store"));
+		String templates = FolderDAO.get().findById(HealdanSettings.get().templatesStoreId()).getName();
+		assertFalse(original.storesInTrash().contains(templates));
+		refused("Original", "Original can be renamed, but not removed",
+				() -> port.remove(StorageBackend.ORIGINAL, boss));
+
+		// The rename alone is recorded; the backend is as it was
+		List<Event> events = events();
+		assertEquals(events.toString(), recorded + 1, events.size());
+		assertEvent(events.get(recorded), "backend.changed", "backend", id, "Ledger Two", boss);
+		assertEquals(root.toString(), port.backend(id).orElseThrow().path());
+	}
+
+	/**
+	 * Admin app ruling P3-R39: the port refuses anyone but an administrator first, whatever called it, and then, while
+	 * storage backends are off, every change, with sentences of its own; nothing refused is recorded
+	 */
+	@Test
+	public void testOnlyAnAdministratorAndOnlyWhileOn() throws Exception {
+		HealdanFixtures fx = sf.fx;
+		User boss = fx.user("boss", "admin");
+		User clerk = fx.user("clerk");
+		StorageAdministration port = port();
+		StorageAdmin admin = StorageAdmin.get();
+		Path root = freshFolder("port-refusals");
+		long id = port.add(local("Refusals", root, false), null, false, boss).backend().id();
+		long encrypted = sf.localBackend("refusals key", true);
+		Folder store = fx.store("Refusals Store");
+		int recorded = events().size();
+		StorageSettingsInfo settings = port.settings();
+
+		List<ThrowingRunnable> asClerk = List.of(() -> port.add(local("Spare", freshFolder("port-spare"), false), null,
+				false, clerk), () -> port.save(id, local("Renamed", root, false), null, false, clerk),
+				() -> port.showRecoveryKey(encrypted, clerk), () -> port.confirmRecoveryKey(encrypted, "ABCD", clerk),
+				() -> port.enterRecoveryKey(encrypted, "ABCD", clerk), () -> port.remove(id, clerk),
+				() -> port.setStoreBackend(store.getId(), id, clerk), () -> port.retry(0, clerk),
+				() -> port.saveSettings(new StorageSettingsInfo(9, 9, 2), clerk));
+		for (ThrowingRunnable call : asClerk)
+			refusedAs("a non-administrator", StorageAdministrationImpl.ONLY_ADMINS, call);
+		assertEquals("Refusals", port.backend(id).orElseThrow().name());
+		assertEquals(StorageBackend.ORIGINAL, StoredFiles.get().storeBackend(store.getId()));
+		assertEquals(settings, port.settings());
+
+		// The settings and whether storage backends are on, read without counting a file
+		assertTrue(port.on());
+		assertEquals(port.overview().settings(), port.settings());
+
+		admin.on = () -> false;
+		try {
+			assertFalse(port.on());
+			assertEquals(settings, port.settings());
+			// An administrator's first refusal still comes first
+			refusedAs("a non-administrator, while off", StorageAdministrationImpl.ONLY_ADMINS,
+					() -> port.remove(id, clerk));
+			List<ThrowingRunnable> whileOff = List.of(() -> port.testNew(0, local("Trial", root, false), null),
+					() -> port.test(id), () -> port.add(local("Spare", root, false), null, false, boss),
+					() -> port.save(id, local("Renamed", root, false), null, false, boss),
+					() -> port.showRecoveryKey(encrypted, boss), () -> port.confirmRecoveryKey(encrypted, "ABCD", boss),
+					() -> port.enterRecoveryKey(encrypted, "ABCD", boss), () -> port.remove(id, boss),
+					() -> port.setStoreBackend(store.getId(), id, boss), () -> port.retry(0, boss),
+					() -> port.saveSettings(new StorageSettingsInfo(9, 9, 2), boss));
+			for (ThrowingRunnable call : whileOff)
+				refusedAs("while storage backends are off", StorageAdministrationImpl.OFF, call);
+		} finally {
+			admin.on = StoreTracking::active;
+		}
+		assertEquals(recorded, events().size());
+		assertTrue(port.exists(id));
+	}
+
 	/** Recorded after the change: a record that fails leaves the change as made, and is logged at error */
 	@Test
 	public void testAFailedRecordLeavesTheChange() throws Exception {
@@ -874,6 +1003,11 @@ public class StorageAdministrationImplTest extends AbstractStorageTestCase {
 	private static void refused(String message, String text, ThrowingRunnable run) {
 		HealdanRuleException e = assertThrows(message, HealdanRuleException.class, run);
 		assertTrue(message + ": " + e.getMessage(), e.getMessage().contains(text));
+	}
+
+	/** Refused with exactly this sentence */
+	private static void refusedAs(String message, String sentence, ThrowingRunnable run) {
+		assertEquals(message, sentence, assertThrows(message, HealdanRuleException.class, run).getMessage());
 	}
 
 	/** The detail's fields as the tab's backend has them */

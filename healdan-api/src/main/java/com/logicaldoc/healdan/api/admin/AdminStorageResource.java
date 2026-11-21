@@ -12,7 +12,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.healdan.admin.AdminArea;
 import com.logicaldoc.healdan.admin.storage.StorageAdministration;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageLimits;
-import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageOverview;
 import com.logicaldoc.healdan.admin.storage.StorageRecords.StorageSettingsInfo;
 import com.logicaldoc.healdan.api.ApiProblem;
 import com.logicaldoc.healdan.api.Caller;
@@ -117,9 +116,10 @@ public class AdminStorageResource {
 		return Response.noContent().build();
 	}
 
+	/** @return the settings and whether storage backends are on, read without counting any file */
 	private static StorageSettings settings(StorageAdministration port) {
-		StorageOverview overview = StoragePort.run("Can't read the storage settings", port::overview);
-		return StorageSettings.of(overview.on(), overview.settings(), port.limits());
+		StorageSettingsInfo settings = StoragePort.run("Can't read the storage settings", port::settings);
+		return StorageSettings.of(port.on(), settings, port.limits());
 	}
 
 	/**
