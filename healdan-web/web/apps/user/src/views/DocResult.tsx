@@ -16,7 +16,8 @@ import { useOrganisingTable } from '../organising/useOrganisingTable'
 import { useDocument, useLookup } from '../queries'
 import { NotFound } from './NotFound'
 import { Toolbar } from './Toolbar'
-import { listColumns, narrowed, rowOf } from './listColumns'
+import { rowOf } from './listColumns'
+import { useDocumentListColumns } from './useListColumns'
 import styles from './views.module.css'
 
 export interface DocResultProps {
@@ -75,7 +76,10 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
   // Rename, Move To… and Delete, with F2 and Delete, as in every list of documents (R95); the one row is the selection, so its
   // menu acts on it
   const organising = useOrganisingTable(found, selection)
-  const columns = useRegionKind({ preview: true, details: true }) === 'preview' ? narrowed(listColumns) : listColumns
+  // A Documents search's layout, as it's found by number wherever it is (spec 4.8), or beside the reading pane that one's.
+  // One document has nothing to be ordered by, so nothing sorts.
+  const beside = useRegionKind({ preview: true, details: true }) === 'preview'
+  const columns = useDocumentListColumns('documents', { beside, serverSorted: false })
   if (document.isError) {
     // The document went away after the lookup found it: the same words as a lookup that found nothing
     if (document.error instanceof ApiError && document.error.status === 404) return <NotFoundNumber reference={String(docNumber)} />
@@ -94,7 +98,7 @@ function Found({ docNumber, version }: { docNumber: number; version?: string }) 
         </Toolbar>
         <Table
           aria-label={t('doc.heading', { n: docNumber })}
-          columns={columns}
+          {...columns}
           rows={rows}
           selectionMode="single"
           selection={selection}

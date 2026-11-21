@@ -1,7 +1,12 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { destroyAnnouncer } from 'react-aria/private/live-announcer/LiveAnnouncer'
+import { announce, destroyAnnouncer } from 'react-aria/private/live-announcer/LiveAnnouncer'
+
+/** Says what a change did to a screen reader, after whatever it is saying: for a change nothing focused says */
+export function announcePolitely(message: string): void {
+  announce(message, 'polite')
+}
 
 /**
  * Takes away React Aria's live region, for the tests' cleanup. React Aria makes the region at its first announcement

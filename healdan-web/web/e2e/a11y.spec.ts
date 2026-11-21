@@ -231,6 +231,41 @@ for (const scheme of ['light', 'dark'] as const) {
       await details.getByRole('tab', { name: 'Properties' }).click()
     })
 
+    test("a heading's menu, the Columns panel, and the Columns button drawn as the toolbar's buttons are", async () => {
+      await page.goto(`/app/folders/${workFolder}?sort=title&order=asc`)
+      // A document selected, so the toolbar's More acts on it
+      await main().getByRole('row', { name: escape(TEXT) }).getByRole('rowheader').click()
+      // The Columns button, at the end of the headings, has the face of the toolbar's icon button (More's) in this theme
+      const face = (button: Locator) =>
+        button.evaluate((one) => {
+          const style = getComputedStyle(one)
+          return { background: style.backgroundColor, border: `${style.borderTopWidth} ${style.borderTopStyle} ${style.borderTopColor}`, radius: style.borderTopLeftRadius, colour: style.color }
+        })
+      const columns = main().getByRole('button', { name: 'Columns', exact: true })
+      const more = main().getByRole('toolbar').first().getByRole('button', { name: 'More', exact: true })
+      await expect(more).toBeEnabled()
+      expect(await face(columns), 'the Columns button against More').toEqual(await face(more))
+      // The heading's menu, by a right-click on the heading
+      await main().getByRole('columnheader', { name: 'Doc #', exact: true }).click({ button: 'right' })
+      const menu = page.getByRole('menu', { name: 'Doc # Column' })
+      await expect(menu).toBeVisible()
+      await check("a heading's menu")
+      await page.keyboard.press('Escape')
+      await expect(menu).toBeHidden()
+      // The Columns panel, with a column of More Columns shown so both sections have their states
+      await columns.click()
+      const panel = page.getByRole('dialog', { name: 'Columns' })
+      await expect(panel).toBeVisible()
+      await panel.getByRole('group', { name: 'More Columns' }).getByText('Client', { exact: true }).click()
+      await expect(panel.getByRole('group', { name: 'Shown' }).getByRole('checkbox', { name: 'Client' })).toBeChecked()
+      await check('the Columns panel')
+      // Put back as it was, for the tests after this one
+      await panel.getByRole('button', { name: 'Reset to Default' }).click()
+      await page.keyboard.press('Escape')
+      await expect(panel).toBeHidden()
+      await expect(columns).toBeFocused()
+    })
+
     test('Filters, with one in use', async () => {
       await page.getByRole('button', { name: /^Filters/ }).click()
       const filters = page.getByRole('region', { name: 'Filters' })

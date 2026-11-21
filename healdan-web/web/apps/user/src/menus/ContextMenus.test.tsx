@@ -174,14 +174,18 @@ describe("a document row's menu", () => {
   })
 })
 
-describe('where the browser keeps its own menu', () => {
-  it('in the list outside its rows: the column headings', async () => {
+describe("a column heading's menu", () => {
+  it('is the column’s own, never a row’s', async () => {
     await renderApp('/folders/7', routes().all)
     await row(/Lease/)
-    expect(fireEvent.contextMenu(screen.getByRole('columnheader', { name: /Title/ }))).toBe(true)
-    expect(screen.queryByRole('menu')).toBeNull()
+    expect(fireEvent.contextMenu(screen.getByRole('columnheader', { name: /Title/ }))).toBe(false)
+    const menu = await screen.findByRole('menu', { name: 'Title Column' })
+    expect(within(menu).getAllByRole('menuitemradio').map((one) => one.textContent)).toEqual(['Sort Ascending', 'Sort Descending'])
+    expect(within(menu).queryByRole('menuitem', { name: 'Open' })).toBeNull()
   })
+})
 
+describe('where the browser keeps its own menu', () => {
   it('in the search box and on the folder’s heading', async () => {
     await renderApp('/folders/7', routes().all)
     await row(/Lease/)

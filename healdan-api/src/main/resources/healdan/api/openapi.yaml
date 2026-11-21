@@ -3356,6 +3356,10 @@ components:
             when it was filed or a new version was saved. A change to its
             properties, a rename or a move doesn't move it, and nor does the
             Indexer, though CE's own last-modified time moves with all of them.
+        lastUsed:
+          type: string
+          format: date-time
+          description: 'Only in Recent''s lists: when the caller last used it'
         hold:
           oneOf:
             - $ref: '#/components/schemas/HoldView'
@@ -3583,6 +3587,10 @@ components:
             Whether the folder itself lets the caller delete it with
             `deleteFolder`, on `canRename`'s terms with the Delete permission.
             What it holds isn't counted: a delete can still be refused for it.
+        lastUsed:
+          type: string
+          format: date-time
+          description: 'Only in Recent''s lists: when the caller last used it'
     MatterView:
       type: object
       additionalProperties: false

@@ -817,7 +817,12 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     - **Row 3:** `/` to the search box; a suggestion chosen with the arrow keys (typed again until the Indexer has read the
       document, as the box asks once for words that settle); a `#` and `#n.N`; a matter number in the
       Matters scope, picked from the scope menu; a word search and its results; the funnel, Filters and a tick.
-    - **Row 4:** Tab into the list, and each column sorted from its header by Enter, both ways.
+    - **Row 4:** Tab into the list, and each column sorted from its header by Enter, both ways (A to Z or smallest first
+      at the first press, but **Edit Date** newest first). Then the columns by keys: the arrow keys from a row to the
+      headings, whose focus is the heading's name; Shift+F10 for a heading's menu and its **Resize Column** (three
+      arrows widen the column 30 pixels, and Enter ends the resize with the focus back on the name); Tab from a row to
+      the **Columns** button, Enter for its panel, Tab into its columns, the arrows and Space to show **Client**, **Move
+      Up**, and Esc, with the focus back on the button; and **Reset Columns**, which End reaches in a heading's menu.
     - **Row 5:** Space, the arrow keys and Esc in Quick Look, and docking the reading pane.
     - **Row 6:** an email in Quick Look, **Show Pictures**, **Save to Matter**, and Enter on the saved attachment, with the
       notice asserted.
@@ -864,7 +869,9 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     API, and releases at the end, whose row shows its marker and is 34 pixels high, as a free row is), the properties
     form, alone and with Author's list of people open (Author emptied first, so the list opens when the people come;
     then, with someone picked, Esc closes the list and leaves the form open), that document's details with its **Check-Out Info** and the
-    **Versions** tab, Filters (with one in use, and
+    **Versions** tab, a heading's menu and the **Columns** panel, with a column of **More Columns** shown (and the
+    **Columns** button drawn as the toolbar's **More** is, its background, border, corners and colour, in each theme),
+    Filters (with one in use, and
     while the counts are held open with `page.route`, since busy states keep AA contrast and the last answer's counts
     must stay, never zeros), the list while it is asked for again, the filing tray and the File Documents form, alone
     and with Author's list open in it (Author emptied first; Esc then closes the list and leaves the dialog open), the
@@ -918,6 +925,20 @@ Tests](#the-web-modules-tests) are Maven's). [The Web App](../the-web-app/) says
     800 pixels wide has no divider and that the width comes back at 1280; and puts it back with Enter. It does the same
     for the details' divider, with End, Home and Enter. Each test has a browser context of its own, so its storage
     starts empty.
+  - `columns.spec.ts` checks the list's columns (list columns spec §8.3). It files three documents and a PDF into a
+    folder of its own inside `E2E`, and each test has a browser context of its own, so its layouts start from the
+    defaults. Through the page it resizes **Recent Documents**' Matter by a drag of its heading's edge and by **Resize
+    Column** and the arrows, and finds the widths kept after a reload; adds **Client** from the **Columns** panel, which
+    stays open with its focus when coming back to the window asks for the list again, moves it by a pointer's drag of
+    its heading and by **Move Left**, and finds the order kept; hides **Doc #** beside the docked reading pane and finds
+    the folder's own list unchanged; sorts **Recent Documents** by **Title** and back by **Last Used**, the rows drawn in
+    the order the server's rules give the whole list the API returns; puts the defaults back with the panel's **Reset to
+    Default** and the heading menu's **Reset Columns**; and keeps widths set in a window 1,920 pixels wide in one 1,280
+    wide, where the list scrolls sideways, every column keeps its width and rows stay 34 pixels high. On the way it
+    checks what only a browser shows: an edge is 24 pixels wide and centred on the heading's edge, its line and a
+    heading drag's drop line are the accent's, a heading doesn't brighten while the pointer is on its edge (a `:has()`
+    rule), and a heading's first press drags it, with no sort after. WebKit sends a drag's `dragover` on a timer, so the
+    spec moves the pointer a pixel each way while it waits for the drop line.
   - Each spec's own calls to the API (filing, checking, cleaning up) go through `apiContext` in `helpers.ts`, which
     sends every request on a connection of its own (`Connection: close`). Playwright's request context otherwise keeps
     connections for later requests, for as long as they stay open, and Tomcat closes one that has waited 20 seconds: a

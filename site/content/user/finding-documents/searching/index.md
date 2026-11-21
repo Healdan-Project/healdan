@@ -70,7 +70,8 @@ Enter on words opens the results at `/app/search`, with your words and the scope
 
 - **Documents come by relevance,** best first, until you click a column header. A header sorts the results by that
   column, the server doing the sorting, and a second click reverses it. **Title**, **Doc #**, **Version**, **Author**
-  and **Edit Date** sort; no header is marked while the order is relevance.
+  and **Edit Date** sort; no header is marked while the order is relevance. **Sort by Relevance**, in a header's menu,
+  puts a sorted search back in that order.
 - **The Matter column** shows the matter's number and name, for example `1001.1 – Charter Dispute`. A name too long for
   the column ends in an ellipsis, and a wider window gives the column more room. Point at it to see the whole name and
   the client, or select the document and see its details. A screen reader reads the client with the cell.
@@ -144,4 +145,4 @@ document saved late in the evening counts as that day's, wherever the server is.
   panel. The filters stay set, and the button brings the panel back.
 - **The filters are in the page's address,** so Back, bookmarks and a copied link keep them.
 
-![Search results for "lease" in Documents, by relevance, with Filters open at the right and the File Type filter set to Word and PDF: the chip "File Type: Word, PDF" above eight documents with their doc #s, versions, matter numbers 1002.1 and 1003.1, authors and Edit Dates, such as # 48 on 1 Nov 2026 and # 62 on 12 Nov 2026, where long titles and names end in an ellipsis; and the filters' groups, with File Type counts of Word 5 and PDF 3, then Author](results-filters.png)
+![Search results for "lease" in Documents, by relevance, with Filters open at the right and the File Type filter set to Word and PDF: the chip "File Type: Word, PDF" above eight documents with their doc #s, versions, matters, authors and Edit Dates, such as # 48 on 7 Nov 2026 and # 62 on 18 Nov 2026, where long titles, the matters 1002.1 – Commercial Lease and 1003.1 – Series A Investment and the authors' names end in an ellipsis, and the Columns button at the end of the headings; and the filters' groups, with File Type counts of Word 5 and PDF 3, then Author](results-filters.png)

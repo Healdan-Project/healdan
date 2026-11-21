@@ -49,6 +49,17 @@ function setup({ onAction = vi.fn(), onOpen = vi.fn() } = {}) {
 
 const item = (key: string) => document.querySelector<HTMLElement>(`[data-key="${key}"]`)!
 
+/** jsdom lays nothing out, so an element is given its box */
+const placeAt = (element: Element, left: number, top: number, width: number, height: number) => {
+  element.getBoundingClientRect = () => new DOMRect(left, top, width, height)
+}
+
+/** Where the open menu's popover is drawn: at the point it opened at, 2 pixels below it */
+const placeOf = (menu: HTMLElement) => {
+  const popover = menu.closest<HTMLElement>('.popover')!
+  return { left: popover.style.left, top: popover.style.top }
+}
+
 describe('ContextMenu', () => {
   it('opens on a right-click in place of the browser menu, for the item around what was clicked', async () => {
     const { onOpen, onAction } = setup()
@@ -73,9 +84,12 @@ describe('ContextMenu', () => {
   it('opens on Shift+F10 at the focused item, with its first item focused, and Esc gives the focus back', async () => {
     setup()
     const alpha = item('alpha')
+    placeAt(alpha, 40, 100, 300, 34)
     alpha.focus()
     fireEvent.keyDown(alpha, { key: 'F10', shiftKey: true })
     const menu = await screen.findByRole('menu', { name: 'Actions for alpha' })
+    // Below the focused element, at its start
+    expect(placeOf(menu)).toEqual({ left: '40px', top: '136px' })
     await waitFor(() => expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Open alpha' })))
     fireEvent.keyDown(document.activeElement!, { key: 'Escape' })
     fireEvent.keyUp(document.activeElement!, { key: 'Escape' })
@@ -115,6 +129,26 @@ describe('ContextMenu', () => {
     expect(fireEvent.keyDown(field, { key: 'F10', shiftKey: true })).toBe(true)
     expect(screen.queryByRole('menu')).toBeNull()
     expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('opens on Shift+F10 from a slider inside an item, which has no text of its own to copy, below the item', async () => {
+    render(
+      <ContextMenu<string> target="li" subjectOf={() => 'heading'} label={() => 'Heading'} items={() => <MenuItem id="sort">Sort</MenuItem>}>
+        <ul>
+          <li tabIndex={-1}>
+            Width <input type="range" aria-label="Resize" />
+          </li>
+        </ul>
+      </ContextMenu>,
+    )
+    const slider = screen.getByRole('slider', { name: 'Resize' })
+    // A resizable heading's: hidden, 1 pixel at the heading's end
+    placeAt(slider.closest('li')!, 100, 40, 200, 34)
+    placeAt(slider, 287, 40, 1, 1)
+    slider.focus()
+    expect(fireEvent.keyDown(slider, { key: 'F10', shiftKey: true })).toBe(false)
+    const menu = await screen.findByRole('menu', { name: 'Heading' })
+    expect(placeOf(menu)).toEqual({ left: '100px', top: '76px' })
   })
 
   it('takes F10 without Shift, and Shift+F10 with another modifier, as other keys', () => {

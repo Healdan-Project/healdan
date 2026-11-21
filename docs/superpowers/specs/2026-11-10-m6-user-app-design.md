@@ -96,7 +96,7 @@ The test for each feature was whether the owner would reach for it on an ordinar
 | | Making or editing a search folder's rule | new | later |
 | | CE's saved searches and tags | – | never (M1 turned saved searches off; search folders cover them) |
 | **Looking** | The document list: Title, Doc #, Version, Author and Edit Date, sorted by any column | exists | yes (roadmap) |
-| | Choosing and reordering columns | new | later: designed on 2026-11-19 with resizing, and sorting on every list ([list columns spec](2026-11-19-list-columns-design.md)) |
+| | Choosing and reordering columns | new | later: designed on 2026-11-19 with resizing, and sorting on every list ([list columns spec](2026-11-19-list-columns-design.md)); built in the browser on 2026-11-20, the spec's second pull request, with its new columns' server sorts to follow in its third |
 | | The breadcrumb, with the matter as `client.matter – name` | exists | yes (roadmap) |
 | | The details panel: properties and versions | exists | yes |
 | | A document's history | new | later |
@@ -179,7 +179,7 @@ The owner reviewed the layout in the browser, from mockups drawn with the demo f
 ### 6.4 Preview (owner: both)
 
 - **Space opens Quick Look:** a large preview over the app, as Finder's does, from every document list (R52). ‹ › and the arrow keys move through the list behind it, except while the focus is in the page, where they scroll it (changed in the build: R55, as a zoomed page must scroll by keyboard); Space or Esc closes it. Nothing behind it reflows.
-- **A button in Quick Look docks it** as a reading pane in the right region, which stays docked while you click or arrow down the list, until you close it. The list keeps Title, Doc # and Edit Date while it's narrow.
+- **A button in Quick Look docks it** as a reading pane in the right region, which stays docked while you click or arrow down the list, until you close it. The list keeps Title, Doc # and Edit Date while it's narrow (changed after M6: those three are the default of the `beside` column layout, which any document list takes while the reading pane is docked and which can be changed like any other; see the [list columns spec](2026-11-19-list-columns-design.md) §4.8).
 - **While it's docked, the reading pane takes the details' place:** clicking a row previews it. The funnel shows Filters there until you next click a row, as with the details (§6.2). Closing the reading pane brings the details back.
 - **What's shown:** M1.5's PDF, drawn in the page with PDF.js; a picture as itself; an email as a message (§6.6). A type with no preview says so, with Open and Download.
 
@@ -564,7 +564,7 @@ Later phases, each designed when its turn comes, move features off the old UI (o
 - sharing: shared links, emailing from the server, zip export;
 - your profile and password;
 - making and editing search folders;
-- choosing and reordering columns: designed on 2026-11-19, with resizing them and sorting every list by any column ([list columns spec](2026-11-19-list-columns-design.md));
+- choosing and reordering columns: designed on 2026-11-19, with resizing them and sorting every list by any column ([list columns spec](2026-11-19-list-columns-design.md)), and built in the browser on 2026-11-20 (the spec's second pull request: resizing, the heading menu, the Columns panel, moving by drag, a layout per kind of list, and the one-page lists sorted in the browser); the new columns' sorts on the server are its third;
 - setting properties on many documents;
 - ~~moving and deleting folders~~: built with the Trash, above (renaming them came forward on 2026-11-14, the [folder rename spec](2026-11-14-folder-rename-design.md));
 - copying and locking documents;

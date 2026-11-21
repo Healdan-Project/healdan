@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-import { useEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from 'react'
 import {
   Cell,
   Collection,
   Column,
+  ResizableTableContainer,
   Row,
   Table as AriaTable,
   TableBody,
@@ -17,10 +18,20 @@ import {
   type Selection,
   type SortDescriptor,
 } from 'react-aria-components'
+import { useFocusRing } from 'react-aria/useFocusRing'
 import { Icon } from '../icons'
 import { t } from '../strings'
-import { ItemContextMenu, type ItemMenu } from './ContextMenu'
+import { ColumnEdge } from './ColumnEdge'
+import { ColumnsButton, ColumnsPopover } from './ColumnsButton'
+import { ContextMenu, type ItemMenu } from './ContextMenu'
+import { focusHeading } from './headingFocus'
+import { headingMenu } from './headingMenu'
 import styles from './Table.module.css'
+import { useColumnResizing } from './useColumnResizing'
+import { useColumnsPanel } from './useColumnsPanel'
+import { useHeadingDrag } from './useHeadingDrag'
+
+export { COLUMN_TYPE } from './useHeadingDrag'
 
 /** One row: what the Table needs to know of it, besides the caller's own fields. */
 export interface TableRow {
@@ -47,13 +58,30 @@ export interface TableColumn<T extends TableRow> {
   /** The column that names each row for a screen reader */
   isRowHeader?: boolean
   allowsSorting?: boolean
+  /** A date: a click on its heading sorts it newest first, not oldest first (the heading menu's two sorts keep their directions) */
+  newestFirst?: boolean
   /** Numbers line up at the end */
   align?: 'start' | 'end'
-  /** A share of the width left (`'3fr'`) or pixels */
+  /** A share of the width left (`'3fr'`) or pixels: the column's default */
   width?: number | `${number}fr`
-  /** The least width in pixels, which the other columns give way for */
+  /** The least width in pixels, which the other columns give way for and a resize stops at (React Aria's 75 without one) */
   minWidth?: number
   cell: (row: T) => ReactNode
+}
+
+/**
+ * A heading's name. On a list whose columns resize it has the heading's keyboard focus (React Aria's documented way for a
+ * heading with a resizer): React Aria's heading focuses its first focusable child, and the name comes before the edge's
+ * slider, which takes the focus only while a resize lasts. Enter and Space on it sort, as on the heading, and the heading's
+ * own ring is drawn round the heading while it has the focus by the keys. It is the heading's name for a screen reader too.
+ */
+function HeadingName({ id, focusable, children }: { id: string | undefined; focusable: boolean; children: ReactNode }) {
+  const { focusProps, isFocusVisible } = useFocusRing()
+  return (
+    <span {...focusProps} id={id} tabIndex={focusable ? -1 : undefined} className={styles.heading} data-focus-visible={(focusable && isFocusVisible) || undefined}>
+      {children}
+    </span>
+  )
 }
 
 /** A cell that is only text goes in a box of its own: a flex cell clips its text with no ellipsis, a box with `text-overflow` doesn't. The whole text stays in it. */
@@ -66,6 +94,35 @@ export interface TableSort {
   direction: 'ascending' | 'descending'
 }
 
+/** Columns that resize by their headings' edges, with the widths the caller keeps. An empty list draws no edges. */
+export interface TableResizing {
+  /** Widths in pixels by column id, as kept: a column with none has its default */
+  widths: Record<string, number>
+  /**
+   * A resize has ended at a new width: the pixel widths of the column resized and of the columns to its left, which a resize
+   * fixes, to merge over those kept. The columns to its right keep what they had, so none of them is in it.
+   */
+  onResizeEnd: (widths: Record<string, number>) => void
+  /** A double-click on a heading's edge: the column's default width back */
+  onReset: (column: string) => void
+}
+
+/** A document list's columns, which the person moves, hides and chooses */
+export interface TableColumnChoice {
+  /**
+   * Move Left or Move Right, or the column's heading dropped along the heading row: the index the column ends at among the
+   * columns as given, never before Title's. Never called for a move that would leave the column where it is.
+   */
+  onMove: (column: string, to: number) => void
+  /** Hide <column> */
+  onHide: (column: string) => void
+  /**
+   * The Columns panel, which the Columns button at the heading row's end and Choose Columns… open, in a popover by the
+   * button: a dialog its `Heading slot="title"` names and its `Text slot="description"` describes (ColumnsPanel's)
+   */
+  panel: ReactNode
+}
+
 interface TableBaseProps<T extends TableRow> {
   'aria-label'?: string
   'aria-labelledby'?: string
@@ -74,6 +131,14 @@ interface TableBaseProps<T extends TableRow> {
   sort?: TableSort
   /** A header was clicked: sort by it, ascending, or the other way if it already sorts */
   onSort?: (sort: TableSort) => void
+  /** Columns resize by their edges; widths in pixels by column id, as kept */
+  resizing?: TableResizing
+  /** A document list's columns: moved, hidden, and chosen in `panel` */
+  choice?: TableColumnChoice
+  /** Reset Columns, in each heading's menu */
+  onResetColumns?: () => void
+  /** Sort by Relevance, in each heading's menu while `sort` is set */
+  relevance?: { onSelect: () => void }
   /** Enter or a double-click; a click on a row that can't be selected, or that opens on a click, and any click when nothing selects */
   onOpen?: (key: string) => void
   /** Space */
@@ -109,10 +174,15 @@ interface TableBaseProps<T extends TableRow> {
   busy?: boolean
   /**
    * A row's menu, in place of the browser's: a right-click on the row, or Shift+F10 or the menu key while it has the focus,
-   * opens it (ContextMenu). Everywhere else in the Table, and on a row whose `items` are undefined, the browser's own stays.
+   * opens it (ContextMenu). A heading has its own menu, of what `onSort`, `resizing`, `choice`, `onResetColumns` and
+   * `relevance` offer for its column. Everywhere else in the Table, on a row whose `items` are undefined, and on a heading
+   * whose menu would offer nothing, the browser's own stays.
    */
   contextMenu?: ItemMenu
 }
+
+/** What a menu of the Table is for: a row, or a column by its heading */
+type MenuSubject = { row: string } | { column: string }
 
 /**
  * The rows the person selects, which the caller keeps; or none, for a list that leads to a page, where a click or Enter
@@ -144,6 +214,10 @@ export function Table<T extends TableRow>({
   rows,
   sort,
   onSort,
+  resizing,
+  choice,
+  onResetColumns,
+  relevance,
   selectionMode = 'single',
   selection = NOTHING,
   onSelectionChange,
@@ -207,15 +281,21 @@ export function Table<T extends TableRow>({
     }
   }
 
+  const headingDrag = useHeadingDrag(columns, choice)
+
   // A drag that starts on a row carries the selection when the row is in it, and the row alone when it isn't. The browser's
   // own drag and drop, so React Aria's drag and drop code, which is some 140 kB, isn't loaded for it.
   function onDragStart(event: DragEvent<HTMLDivElement>) {
     const target = event.target instanceof Element ? event.target : null
+    // Nothing drags from the Columns button, which is no heading
+    if (target?.closest(`.${styles.columnsButton}`)) return event.preventDefault()
+    // A heading's drag moves its column, and is never a row's
+    if (headingDrag.start(event) || !drag) return
     // Text dragged out of a field in a row is the field's
     if (target?.closest('input, textarea')) return
     const key = target?.closest('[data-row-key]')?.getAttribute('data-row-key')
-    const data = drag && key ? drag.data(selection.has(key) ? [...selection] : [key]) : undefined
-    if (!drag || data === undefined) return event.preventDefault()
+    const data = key ? drag.data(selection.has(key) ? [...selection] : [key]) : undefined
+    if (data === undefined) return event.preventDefault()
     event.dataTransfer.setData(drag.type, data)
     event.dataTransfer.effectAllowed = 'move'
   }
@@ -244,6 +324,7 @@ export function Table<T extends TableRow>({
   }
 
   function onPointerDownCapture(event: PointerEvent<HTMLDivElement>) {
+    headingDrag.pressed(event)
     pressedBy.current = event.pointerType
     if (event.pointerType === 'mouse') press(event)
     else opening.current = undefined
@@ -280,71 +361,174 @@ export function Table<T extends TableRow>({
 
   const sortDescriptor: SortDescriptor | undefined = sort && { column: sort.column, direction: sort.direction }
 
-  return (
-    <ItemContextMenu attribute="data-row-key" menu={contextMenu}>
-      {/* The handler only reads keys the rows inside already take; the wrapper isn't a control of its own. */}
-      <div
-        ref={frame}
-        className={styles.frame}
-        onKeyDownCapture={onKeyDownCapture}
-        onPointerDownCapture={onPointerDownCapture}
-        onMouseDownCapture={onMouseDownCapture}
-        onClickCapture={onClickCapture}
-        onDoubleClickCapture={onDoubleClickCapture}
-        onDragStart={drag ? onDragStart : undefined}
-        aria-busy={busy || undefined}
+  const resize = useColumnResizing(columns, resizing)
+  const headingIds = useId()
+
+  // An empty list draws no edges. React Aria turns its keyboard navigation off while the list is empty, which its edges take
+  // as a resize going on: the hidden slider the focus first comes to would then keep Tab. The list takes the focus itself.
+  const edges = resizing !== undefined && rows.length > 0
+  const lastColumn = columns[columns.length - 1]?.id
+  // A document list has the Columns button, over the end of its last heading, which keeps clear of it
+  const hasButton = choice !== undefined
+  const besideButton = hasButton ? lastColumn : undefined
+  const clearOfButton = (column: TableColumn<T>) => (column.id === besideButton ? styles.beforeButton : '')
+
+  // The Columns panel, which the Columns button at the heading row's end and Choose Columns… open: one popover, by the button
+  const panel = useColumnsPanel(frame, { hasButton, resizable: resizing !== undefined, resizeLasts: resize.resized !== null })
+
+  // Hide in a heading's menu takes away the heading the menu would give the focus back to, and React Aria's grid would give
+  // it to a cell of the first row. The heading now in its place takes it, or the one before it when the last was hidden,
+  // as the list's own focus, on its name on a list whose columns resize. Only at the Table's next commit, which the caller's
+  // hide makes as the menu closes, and before React Aria gives the focus back in the frame after: a hide the caller doesn't
+  // make is forgotten there.
+  const afterHide = useRef<{ hidden: string; next: string } | undefined>(undefined)
+  useLayoutEffect(() => {
+    const pending = afterHide.current
+    afterHide.current = undefined
+    if (!pending || columns.some((column) => column.id === pending.hidden)) return
+    const headings = [...(frame.current?.querySelectorAll<HTMLElement>('[data-column-key]') ?? [])]
+    const next = headings.find((element) => element.getAttribute('data-column-key') === pending.next)
+    if (next) focusHeading(next)
+  })
+  const menuChoice = choice && {
+    ...choice,
+    onHide: (column: string) => {
+      const at = columns.findIndex((one) => one.id === column)
+      const next = columns[at + 1] ?? columns[at - 1]
+      afterHide.current = next && { hidden: column, next: next.id }
+      choice.onHide(column)
+    },
+  }
+
+  const menuOf = (column: string) =>
+    headingMenu(columns, column, {
+      sort,
+      onSort,
+      relevance,
+      startResize: edges ? resize.startResize : undefined,
+      choice: menuChoice,
+      onChoose: () => panel.open(column),
+      onResetColumns,
+    })
+  const grid = (
+    <Virtualizer layout={TableLayout} layoutOptions={{ rowHeight: ROW_HEIGHT, headingHeight: ROW_HEIGHT, loaderHeight: ROW_HEIGHT }}>
+      <AriaTable
+        {...labels}
+        className={styles.table}
+        selectionMode={selectionMode}
+        selectionBehavior="replace"
+        selectedKeys={selectedKeys}
+        onSelectionChange={changeSelection}
+        disabledKeys={disabledKeys}
+        disabledBehavior="selection"
+        sortDescriptor={sortDescriptor}
+        onSortChange={(next) => {
+          const id = String(next.column)
+          // React Aria starts a column ascending and flips the current one; a date's first click goes the other way
+          const first = sort?.column !== id && columns.find((column) => column.id === id)?.newestFirst
+          onSort?.({ column: id, direction: first ? 'descending' : next.direction })
+        }}
+        onRowAction={onOpen && ((key: Key) => onOpen(String(key)))}
       >
-        <Virtualizer layout={TableLayout} layoutOptions={{ rowHeight: ROW_HEIGHT, headingHeight: ROW_HEIGHT, loaderHeight: ROW_HEIGHT }}>
-          <AriaTable
-            {...labels}
-            className={styles.table}
-            selectionMode={selectionMode}
-            selectionBehavior="replace"
-            selectedKeys={selectedKeys}
-            onSelectionChange={changeSelection}
-            disabledKeys={disabledKeys}
-            disabledBehavior="selection"
-            sortDescriptor={sortDescriptor}
-            onSortChange={(next) => onSort?.({ column: String(next.column), direction: next.direction })}
-            onRowAction={onOpen && ((key: Key) => onOpen(String(key)))}
-          >
-            <TableHeader columns={columns}>
-              {(column) => (
-                <Column
-                  id={column.id}
-                  isRowHeader={column.isRowHeader}
-                  allowsSorting={column.allowsSorting && onSort !== undefined}
-                  width={column.width}
-                  minWidth={column.minWidth}
-                  textValue={column.name}
-                  className={`${styles.column} ${column.align === 'end' ? styles.end : ''}`}
-                >
-                  {({ sortDirection }) => (
-                    <span className={styles.heading}>
-                      {column.name}
-                      {sortDirection && <Icon name={sortDirection === 'ascending' ? 'arrowUp' : 'arrowDown'} size={12} />}
-                    </span>
+        {/* React Aria keeps each heading's element until a dependency changes, so what a heading draws from is one */}
+        <TableHeader columns={columns} dependencies={[columns, resizing === undefined, edges, resizing?.widths, resize.resized, choice === undefined, headingDrag.lineAfter]}>
+          {(column) => (
+            <Column
+              ref={headingDrag.headingRef(column)}
+              id={column.id}
+              data-column-key={column.id}
+              data-drop-line={headingDrag.lineAfter === column.id ? (column.id === lastColumn ? 'end' : 'edge') : undefined}
+              isRowHeader={column.isRowHeader}
+              allowsSorting={column.allowsSorting && onSort !== undefined}
+              width={resize.widthOf(column)}
+              minWidth={column.minWidth}
+              textValue={column.name}
+              className={`${styles.column} ${column.align === 'end' ? styles.end : ''} ${clearOfButton(column)}`}
+            >
+              {({ sortDirection, isResizing, startResize }) => (
+                <>
+                  <HeadingName id={edges ? `${headingIds}-${column.id}` : undefined} focusable={edges}>
+                    {column.name}
+                    {sortDirection && <Icon name={sortDirection === 'ascending' ? 'arrowUp' : 'arrowDown'} size={12} />}
+                  </HeadingName>
+                  {edges && (
+                    <ColumnEdge
+                      column={column.id}
+                      headingId={`${headingIds}-${column.id}`}
+                      last={column.id === lastColumn}
+                      isResizing={isResizing}
+                      startResize={startResize}
+                      events={resize.events}
+                    />
                   )}
-                </Column>
+                </>
               )}
-            </TableHeader>
-            <TableBody renderEmptyState={() => <div className={styles.empty}>{empty}</div>}>
-              <Collection items={rows} dependencies={[columns]}>
-                {(row) => (
-                  <Row ref={draggable(row)} id={row.id} textValue={row.textValue} columns={columns} dependencies={[columns]} className={styles.row} data-row-key={row.id} data-flash={row.flash || undefined} data-dropping={row.dropping || undefined}>
-                    {(column) => <Cell className={`${styles.cell} ${column.align === 'end' ? styles.end : ''}`}>{textual(column.cell(row))}</Cell>}
-                  </Row>
-                )}
-              </Collection>
-              {more && (
-                <TableLoadMoreItem className={styles.loader} onLoadMore={loadMore} isLoading={isLoadingMore}>
-                  {t('common.loading')}
-                </TableLoadMoreItem>
-              )}
-            </TableBody>
-          </AriaTable>
-        </Virtualizer>
-      </div>
-    </ItemContextMenu>
+            </Column>
+          )}
+        </TableHeader>
+        <TableBody renderEmptyState={() => <div className={styles.empty}>{empty}</div>}>
+          <Collection items={rows} dependencies={[columns, besideButton]}>
+            {(row) => (
+              <Row ref={draggable(row)} id={row.id} textValue={row.textValue} columns={columns} dependencies={[columns, besideButton]} className={styles.row} data-row-key={row.id} data-flash={row.flash || undefined} data-dropping={row.dropping || undefined}>
+                {(column) => <Cell className={`${styles.cell} ${column.align === 'end' ? styles.end : ''} ${clearOfButton(column)}`}>{textual(column.cell(row))}</Cell>}
+              </Row>
+            )}
+          </Collection>
+          {more && (
+            <TableLoadMoreItem className={styles.loader} onLoadMore={loadMore} isLoading={isLoadingMore}>
+              {t('common.loading')}
+            </TableLoadMoreItem>
+          )}
+        </TableBody>
+      </AriaTable>
+    </Virtualizer>
+  )
+
+  return (
+    <>
+      <ContextMenu<MenuSubject>
+        target="[data-row-key], [data-column-key]"
+        subjectOf={(element) => {
+          const row = element.getAttribute('data-row-key')
+          if (row !== null) return contextMenu?.items(row) === undefined ? undefined : { row }
+          const column = element.getAttribute('data-column-key')
+          return column !== null && menuOf(column) ? { column } : undefined
+        }}
+        label={(subject) => ('row' in subject ? (contextMenu?.label(subject.row) ?? '') : (menuOf(subject.column)?.label ?? ''))}
+        items={(subject) => ('row' in subject ? contextMenu?.items(subject.row) : menuOf(subject.column)?.items)}
+        onOpen={(subject) => {
+          if ('row' in subject) contextMenu?.onOpen?.(subject.row)
+        }}
+      >
+        {/* The handler only reads keys the rows inside already take; the wrapper isn't a control of its own. */}
+        <div
+          ref={frame}
+          className={styles.frame}
+          onKeyDownCapture={onKeyDownCapture}
+          onPointerDownCapture={onPointerDownCapture}
+          onMouseDownCapture={onMouseDownCapture}
+          onClickCapture={onClickCapture}
+          onDoubleClickCapture={onDoubleClickCapture}
+          onDragStart={drag || choice ? onDragStart : undefined}
+          {...headingDrag.frameProps}
+          aria-busy={busy || undefined}
+        >
+          {resizing ? (
+            <ResizableTableContainer className={styles.resizable} {...resize.handlers}>
+              {grid}
+            </ResizableTableContainer>
+          ) : (
+            grid
+          )}
+          {choice && <ColumnsButton placeRef={panel.placeRef} buttonRef={panel.buttonRef} isOpen={panel.isOpen} onPress={() => panel.open()} />}
+        </div>
+      </ContextMenu>
+      {/* Outside the list's menus and handlers, which the panel's events would otherwise reach through React's tree */}
+      {choice && (
+        <ColumnsPopover triggerRef={panel.buttonRef} isOpen={panel.isOpen} onOpenChange={panel.onOpenChange}>
+          {choice.panel}
+        </ColumnsPopover>
+      )}
+    </>
   )
 }

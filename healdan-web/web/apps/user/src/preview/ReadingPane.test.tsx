@@ -100,6 +100,27 @@ describe('ReadingPane', () => {
     await waitFor(() => expect(headers()).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date']))
   })
 
+  it("a search beside the pane takes the same layout as a folder beside it, and keeps its own for after", async () => {
+    const { router } = await renderApp('/folders/7?sel=10388', routes({ 'GET /v1/search': page(docs) }))
+    const headers = () => screen.getAllByRole('columnheader').map((header) => header.textContent)
+    await dock()
+    expect(headers()).toEqual(['Title', 'Doc #', 'Edit Date'])
+    fireEvent.contextMenu(screen.getByRole('columnheader', { name: /^Doc #/ }))
+    fireEvent.click(within(await screen.findByRole('menu', { name: 'Doc # Column' })).getByRole('menuitem', { name: 'Hide Doc #' }))
+    await waitFor(() => expect(headers()).toEqual(['Title', 'Edit Date']))
+
+    await router.navigate({ to: '/search', search: { scope: 'documents', q: 'alpha' } })
+    await screen.findByRole('row', { name: /Bravo\.pdf/ })
+    expect(screen.getByRole('region', { name: 'Preview' })).toBeTruthy()
+    expect(headers()).toEqual(['Title', 'Edit Date'])
+
+    fireEvent.click(within(screen.getByRole('region', { name: 'Preview' })).getByRole('button', { name: 'Close Preview' }))
+    await waitFor(() => expect(headers()).toEqual(['Title', 'Doc #', 'Version', 'Matter', 'Author', 'Edit Date']))
+    expect(JSON.parse(window.localStorage.getItem('healdan.columns.beside')!).shown).toEqual(['title', 'edited'])
+    expect(window.localStorage.getItem('healdan.columns.folder')).toBeNull()
+    expect(window.localStorage.getItem('healdan.columns.documents')).toBeNull()
+  })
+
   it('leaves the list at its full columns where the view has no pane, as in the Matters and Folders scopes', async () => {
     const { router } = await renderApp('/folders/7?sel=10388', routes({ 'GET /v1/search': page([matter()]) }))
     const headers = () => screen.getAllByRole('columnheader').map((header) => header.textContent)

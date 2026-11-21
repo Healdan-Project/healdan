@@ -220,20 +220,21 @@ test('row 4: Tab reaches the list, and each column sorts from its header by Ente
   }
   expect(reached, 'Tab reaches the list').toBe(true)
 
-  const sorted: [string, string][] = [
-    ['Title', 'title'],
-    ['Doc #', 'docNumber'],
-    ['Version', 'version'],
-    ['Author', 'author'],
-    ['Edit Date', 'edited'],
+  // Each column's first sort: A to Z or smallest first, but a date's newest first
+  const sorted: [string, string, 'asc' | 'desc'][] = [
+    ['Title', 'title', 'asc'],
+    ['Doc #', 'docNumber', 'asc'],
+    ['Version', 'version', 'asc'],
+    ['Author', 'author', 'asc'],
+    ['Edit Date', 'edited', 'desc'],
   ]
-  for (const [heading, column] of sorted) {
+  for (const [heading, column, order] of sorted) {
     const header = list().getByRole('columnheader', { name: escape(heading) })
     // Tab reached the list above; a header is a stop of its own that Shift+Tab and the arrow keys reach from a row
     await header.focus()
     await page.keyboard.press('Enter')
-    await expect(page).toHaveURL(new RegExp(`sort=${column}`))
-    await expect(header).toHaveAttribute('aria-sort', /ascending|descending/)
+    await expect(page).toHaveURL(new RegExp(`sort=${column}&order=${order}`))
+    await expect(header).toHaveAttribute('aria-sort', order === 'asc' ? 'ascending' : 'descending')
   }
   // The other way, from the same key
   const title = list().getByRole('columnheader', { name: /Title/ })
@@ -249,6 +250,84 @@ test('row 4: Tab reaches the list, and each column sorts from its header by Ente
       return names.filter((name) => name.endsWith(`${RUN}.txt`))
     })
     .toEqual(Object.values(NAMES).filter((name) => name.endsWith('.txt')).sort((a, b) => b.localeCompare(a)))
+})
+
+test("row 4, columns: a heading's menu by Shift+F10, Resize Column by the arrows, the Columns button after the list, its panel and Reset Columns are all keys", async () => {
+  await openFolder('title&order=asc')
+  const headingKeys = () =>
+    list()
+      .locator('[role="columnheader"]')
+      .evaluateAll((all) => all.map((one) => ({ key: one.getAttribute('data-column-key'), x: one.getBoundingClientRect().x })).sort((a, b) => a.x - b.x).map((one) => one.key))
+  const defaults = ['title', 'docNumber', 'version', 'author', 'edited']
+  expect(await headingKeys()).toEqual(defaults)
+  const inHeading = (name: string) => list().getByRole('columnheader', { name, exact: true }).evaluate((heading) => heading.contains(document.activeElement))
+  // The arrow keys reach the headings from the rows: up from the first row, then right to Doc #
+  await row(NAMES.alpha).focus() // a row, which Tab and the arrow keys reach (row 4)
+  for (let i = 0; i < 20 && !(await inHeading('Title')); i++) await page.keyboard.press('ArrowUp')
+  expect(await inHeading('Title'), 'the arrows reach the headings').toBe(true)
+  // A heading's focus is its name, where Enter and Space sort (row 4)
+  await expect(list().getByRole('columnheader', { name: 'Title', exact: true }).getByText('Title', { exact: true })).toBeFocused()
+  await page.keyboard.press('ArrowRight')
+  await expect(list().getByRole('columnheader', { name: 'Doc #', exact: true }).getByText('Doc #', { exact: true })).toBeFocused()
+
+  // Shift+F10 opens the heading's menu, its first item focused; its Resize Column, then three steps right and Enter
+  const docNumber = list().getByRole('columnheader', { name: 'Doc #', exact: true })
+  const before = Math.round((await docNumber.boundingBox())!.width)
+  await page.keyboard.press('Shift+F10')
+  const menu = page.getByRole('menu', { name: 'Doc # Column' })
+  await expect(menu.getByRole('menuitemradio', { name: 'Sort Ascending' })).toBeFocused()
+  const resize = menu.getByRole('menuitem', { name: 'Resize Column' })
+  for (let i = 0; i < 6 && !(await resize.evaluate((item) => item === document.activeElement)); i++) await page.keyboard.press('ArrowDown')
+  await expect(resize).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(menu).toBeHidden()
+  // The edge's slider has the focus while the resize lasts: 10 pixels an arrow, and Enter ends it with the focus back on the
+  // heading's name
+  await expect(docNumber.getByRole('slider', { name: 'Resize Doc #' })).toBeFocused()
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight')
+  await page.keyboard.press('Enter')
+  await expect(docNumber.getByText('Doc #', { exact: true })).toBeFocused()
+  const widened = before + 30
+  await expect.poll(async () => Math.round((await docNumber.boundingBox())!.width)).toBe(widened)
+
+  // The Columns button is the stop after the list: Tab from a row reaches it, Enter opens its panel, Tab reaches its columns,
+  // the arrow keys walk them and Space ticks one, Move Up moves it, and Esc closes the panel with the focus back on the button
+  await row(NAMES.alpha).focus() // a row, as above
+  await page.keyboard.press('Tab')
+  const button = main().getByRole('button', { name: 'Columns', exact: true })
+  await expect(button).toBeFocused()
+  await page.keyboard.press('Enter')
+  const panel = page.getByRole('dialog', { name: 'Columns' })
+  await expect(panel).toBeVisible()
+  await expect.poll(() => panel.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true)
+  await tabTo(page, panel.getByRole('checkbox', { name: 'Title' }), { limit: 3 })
+  const client = panel.getByRole('group', { name: 'More Columns' }).getByRole('checkbox', { name: 'Client' })
+  for (let i = 0; i < 12 && !(await client.evaluate((box) => box === document.activeElement)); i++) await page.keyboard.press('ArrowDown')
+  await expect(client).toBeFocused()
+  await page.keyboard.press('Space')
+  await expect.poll(headingKeys).toEqual([...defaults, 'client'])
+  await expect(panel.getByRole('group', { name: 'Shown' }).getByRole('checkbox', { name: 'Client' })).toBeFocused()
+  await tabTo(page, panel.getByRole('button', { name: 'Move Up' }), { limit: 5 })
+  await page.keyboard.press('Enter')
+  await expect.poll(headingKeys).toEqual(['title', 'docNumber', 'version', 'author', 'client', 'edited'])
+  await page.keyboard.press('Escape')
+  await expect(panel).toBeHidden()
+  await expect(button).toBeFocused()
+  expect(Math.round((await docNumber.boundingBox())!.width)).toBe(widened)
+
+  // Reset Columns, the heading menu's last item (End reaches it), puts the columns, their order and their widths back
+  await page.keyboard.press('Shift+Tab')
+  await expect.poll(() => list().evaluate((grid) => grid.contains(document.activeElement))).toBe(true)
+  for (let i = 0; i < 20 && !(await inHeading('Title')); i++) await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('Shift+F10')
+  const titleMenu = page.getByRole('menu', { name: 'Title Column' })
+  await expect(titleMenu).toBeVisible()
+  await page.keyboard.press('End')
+  await expect(titleMenu.getByRole('menuitem', { name: 'Reset Columns' })).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect.poll(headingKeys).toEqual(defaults)
+  await expect.poll(async () => Math.round((await docNumber.boundingBox())!.width)).toBe(before)
+  expect(await page.evaluate(() => localStorage.getItem('healdan.columns.folder'))).toBeNull()
 })
 
 test('row 5: Space opens Quick Look, the arrow keys walk the list, Esc closes it, and the pane docks by Enter', async () => {
