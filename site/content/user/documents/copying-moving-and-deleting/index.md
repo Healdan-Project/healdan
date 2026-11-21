@@ -24,6 +24,8 @@ The title in its row becomes a field with the name, not its extension, selected.
 - **A document keeps its extension.** Type `Lease` and the document, a `.docx`, is `Lease.docx`. Type another extension,
   such as `Lease.pdf`, and Healdan says "The name has to end in .docx, as the document's does." beside the field, which stays
   open for you to mend it.
+- **A name another document in the folder has gets a number,** as in the Classic Interface: `Lease.docx` there
+  already, the document is `Lease(1).docx`.
 - **You need the Rename permission,** and the document can't be locked or checked out by someone else, or checked out
   by you on a computer. The message says who has it and since when.
 - **Only one document at a time.** With several selected, **Rename** is greyed out, and **F2** says "Select one

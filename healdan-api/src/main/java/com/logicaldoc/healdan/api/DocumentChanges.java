@@ -56,8 +56,12 @@ final class DocumentChanges {
 	/** What a name's extension looks like, so that {@code Lease v1.2} doesn't count as one */
 	private static final Pattern EXTENSION = Pattern.compile("(?=.*[A-Za-z])[A-Za-z0-9]{1,8}");
 
-	/** How long a retry waits for CE's version record of the write it lost: CE stores it about a second after */
-	private static final long LOST_VERSION_WAIT_SECONDS = 10;
+	/**
+	 * How long a retry waits for CE's version record of the write it lost: CE
+	 * stores it about a second after, or later when other saves are queued
+	 * before it
+	 */
+	private static final long LOST_VERSION_WAIT_SECONDS = 60;
 
 	private final DocumentLocks locks;
 
@@ -68,8 +72,9 @@ final class DocumentChanges {
 	/**
 	 * Renames the document through CE's rename. A name that doesn't end in the
 	 * document's extension keeps it; one that ends in another is {@code 422
-	 * validation} with {@code extension}. The same name is answered as it is,
-	 * with no new version.
+	 * validation} with {@code extension}. A name another document in the
+	 * folder has is made unique as CE makes it ({@code Lease(1).docx}). The
+	 * same name is answered as it is, with no new version.
 	 *
 	 * @param docNumber the doc #
 	 * @param requested the name sent
@@ -211,7 +216,8 @@ final class DocumentChanges {
 	 * write by another thread in that moment, such as the Office preview
 	 * saving the document when a conversion ends, makes CE's write fail or be
 	 * lost unseen at the commit ({@link CheckoutResource#checkOut}). So the
-	 * document is read back, and CE asked again until it's as asked. A write
+	 * document is read back, and CE asked again until it's as asked, or at the
+	 * number CE's write gives it, which only a stored write does. A write
 	 * lost in its flush still has its version record stored by CE a moment
 	 * later, under the number the write gave the document, which the write
 	 * made again would take: that record goes first, as a check-in's does
@@ -244,6 +250,10 @@ final class DocumentChanges {
 			Document now = DocumentDAO.get().findById(docId, true);
 			if (stored.test(now))
 				return;
+			// At the number CE's write gives it, the document has the write as CE stored it: a rename onto a name another
+			// document in the folder has gets CE's unique name (Lease(1).docx), as the old UI's Rename does
+			if (number != null && now != null && number.equals(now.getVersion()))
+				return;
 			// The write didn't reach the document, so the version CE gave it is the lost write's
 			if (number != null && now != null && Objects.equals(before, now.getVersion()))
 				dropLostVersion(docId, number, versioned, event, user);
@@ -259,6 +269,8 @@ final class DocumentChanges {
 	 *
 	 * @param number the version number CE gave the write
 	 * @param versioned CE's store of the record, or null for a change that keeps none
+	 * @throws PersistenceException when the record isn't stored in time: the
+	 *         change asked again would take its number, so it isn't
 	 */
 	private static void dropLostVersion(long docId, String number, Future<?> versioned, DocumentEvent event,
 			User user) throws PersistenceException {
@@ -269,9 +281,12 @@ final class DocumentChanges {
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			return;
-		} catch (ExecutionException | TimeoutException e) {
-			log.info("Document {}'s version record of a lost write wasn't stored in time: {}", docId, e.getMessage());
+		} catch (ExecutionException e) {
+			log.info("Document {}'s version record of a lost write wasn't stored: {}", docId, e.getMessage());
 			return;
+		} catch (TimeoutException e) {
+			throw new PersistenceException(
+					"Document %d's version record of a lost write wasn't stored in time".formatted(docId), e);
 		}
 		VersionResource.dropLostVersion(docId, number, event, user);
 	}

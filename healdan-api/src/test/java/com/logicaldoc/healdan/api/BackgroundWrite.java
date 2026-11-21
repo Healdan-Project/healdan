@@ -26,14 +26,15 @@ import com.logicaldoc.util.spring.Context;
 
 /**
  * Saves a document from another thread just as CE is about to write its
- * check-out, its check-in, its release or a change of its properties, after
- * the document was read: as the Office preview does when a conversion ends
- * in that moment (CI, 2026-10-28), or the old web page when it takes the
- * document. The save is committed before CE's write goes on, so CE's copy is
- * a record version behind. It happens once, at the first of those writes
- * unless it's told which ({@link #overtaking}); the test database,
- * PostgreSQL, reads what's committed while a transaction is open, as MariaDB
- * does.
+ * check-out, its check-in, its release or a change of its properties (or,
+ * when told, its rename or its move), after the document was read: as the
+ * Indexer does once it has parsed the file, the Office preview when a
+ * conversion ends in that moment (CI, 2026-10-28), or the old web page when
+ * it takes the document. The save is committed before CE's write goes on, so
+ * CE's copy is a record version behind. It happens once, at the first of
+ * those writes unless it's told which ({@link #overtaking}); the test
+ * database, PostgreSQL, reads what's committed while a transaction is open,
+ * as MariaDB does.
  * <p>
  * {@link #atFlush} commits it later, in the flush of CE's write, after CE's
  * DAO read the document again and merged its copy, just before the
@@ -119,7 +120,8 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 	/**
 	 * @return this write, overtaking only CE's write with the event given, for
 	 *         a request that makes several, such as a save that checks the
-	 *         document in and then out again
+	 *         document in and then out again, or for a write outside
+	 *         {@link #OVERTAKEN}, such as a rename or a move
 	 */
 	BackgroundWrite overtaking(DocumentEvent write) {
 		overtaken = write.toKey();
@@ -159,8 +161,8 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 	@Override
 	public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
 		if (!listening || writes > 0 || (docId != 0 && document.getId() != docId) || transaction == null
-				|| !OVERTAKEN.contains(transaction.getEvent())
-				|| (overtaken != null && !overtaken.equals(transaction.getEvent())))
+				|| !(overtaken != null ? overtaken.equals(transaction.getEvent())
+						: OVERTAKEN.contains(transaction.getEvent())))
 			return;
 		if (atFlush) {
 			// CE's DAO is about to read the document again, merge this copy and flush
