@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.trash;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -278,6 +279,28 @@ public class TrashStoreTest extends AbstractHealdanTestCase {
 		// The night it's destroyed follows its removal
 		assertEquals(List.of(b, c, a, d, e), ids(query("removed", 3, "destroyed", false, 0, 50)));
 		assertEquals(List.of(e, d, a, c, b), ids(query("removed", 3, "destroyed", true, 0, 50)));
+	}
+
+	@Test
+	public void testASortWithNoValueKeepsTheItemsInIdOrder() {
+		// In the Trash, nothing is removed yet, so no item has a Removed By, Removed or Destroyed: each sort leaves the
+		// items in id order, in its own direction, whatever their deletes' order
+		long a = insertFolder("A", 100, 3L, T0.plusSeconds(20));
+		long b = insertFolder("B", 200, 3L, T0);
+		long c = insertFolder("C", 300, 3L, T0.plusSeconds(10));
+		for (String view : List.of("mine", "everyone")) {
+			for (String sort : List.of("removedBy", "removed", "destroyed")) {
+				assertEquals(view + " " + sort, List.of(a, b, c), ids(query(view, 3, sort, false, 0, 50)));
+				assertEquals(view + " " + sort, List.of(c, b, a), ids(query(view, 3, sort, true, 0, 50)));
+			}
+		}
+	}
+
+	@Test
+	public void testRefusesASortItDoesntKnow() {
+		insertFolder("A", 100, 3L, T0);
+		// The resource refuses one first, so this is a mistake, not a sort by Deleted
+		assertThrows(IllegalArgumentException.class, () -> store.page(query("mine", 3, "size", false, 0, 50)));
 	}
 
 	@Test

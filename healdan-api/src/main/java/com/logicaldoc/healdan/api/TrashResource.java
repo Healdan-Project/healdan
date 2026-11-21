@@ -96,9 +96,15 @@ public class TrashResource {
 
 	private static final Set<String> VIEWS = Set.of(MINE, "everyone", REMOVED);
 
-	/** One for each of the Trash's columns */
-	private static final Set<String> SORTS = Set.of("name", "docNumber", "deletedFrom", "deletedBy", DELETED,
+	/** One for each of the Trash's columns, in the order a refusal names them */
+	private static final List<String> SORT_NAMES = List.of("name", "docNumber", "deletedFrom", "deletedBy", DELETED,
 			"removedBy", REMOVED, DESTROYED);
+
+	private static final Set<String> SORTS = Set.copyOf(SORT_NAMES);
+
+	/** What a refusal names: {@code name, docNumber, ..., removed or destroyed} */
+	private static final String SORTS_NAMED = String.join(", ", SORT_NAMES.subList(0, SORT_NAMES.size() - 1)) + " or "
+			+ SORT_NAMES.getLast();
 
 	/** The sorts by a time, newest first unless asked; the others go A to Z, smallest first */
 	private static final Set<String> TIMES = Set.of(DELETED, REMOVED, DESTROYED);
@@ -132,8 +138,7 @@ public class TrashResource {
 			throw ApiProblem.badRequest("The view can be mine, everyone or removed, not %s.".formatted(view));
 		String by = StringUtils.isEmpty(sort) ? (REMOVED.equals(shown) ? REMOVED : DELETED) : sort;
 		if (!SORTS.contains(by))
-			throw ApiProblem.badRequest(("The sort can be name, docNumber, deletedFrom, deletedBy, deleted, removedBy,"
-					+ " removed or destroyed, not %s.").formatted(sort));
+			throw ApiProblem.badRequest("The sort can be %s, not %s.".formatted(SORTS_NAMED, sort));
 		if (order != null && !"asc".equals(order) && !"desc".equals(order))
 			throw ApiProblem.badRequest("The order can be asc or desc, not %s.".formatted(order));
 		boolean descending = order != null ? "desc".equals(order) : TIMES.contains(by);

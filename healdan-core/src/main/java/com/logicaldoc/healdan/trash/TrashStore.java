@@ -45,12 +45,12 @@ public class TrashStore {
 
 	private static final ObjectMapper JSON = new ObjectMapper();
 
-	/** The most digits a recorded doc # has, as {@code TrashRecorder.docNumber} records one */
-	private static final int DOC_NUMBER_DIGITS = 18;
-
-	/** The doc # as a number; null for a folder, which records none */
-	private static final String DOC_NUMBER = "case when %s then cast(t.hd_docnumber as decimal(%d,0)) end"
-			.formatted(ListingSql.digits("t.hd_docnumber", DOC_NUMBER_DIGITS), DOC_NUMBER_DIGITS);
+	/**
+	 * The doc # as a number; null for a folder, which records none. A recorded doc # has at most
+	 * {@link ListingSql#DOC_NUMBER_DIGITS}, as {@code TrashRecorder.docNumber} records one.
+	 */
+	private static final String DOC_NUMBER = "case when %s then cast(t.hd_docnumber as decimal(%d,0)) end".formatted(
+			ListingSql.digits("t.hd_docnumber", ListingSql.DOC_NUMBER_DIGITS), ListingSql.DOC_NUMBER_DIGITS);
 
 	/** Where it was deleted from: the path recorded at the delete, step by step ({@link #pathOrder}) */
 	private static final String FROM_PATH = pathOrder("t.hd_frompath");
@@ -334,11 +334,15 @@ public class TrashStore {
 	 * @param query which items, in which order, and which page
 	 * @return the page of items: an item with no value for the sort last
 	 *         either way, and ties by the item's age, in the sort's direction
+	 * @throws IllegalArgumentException for a sort it doesn't know, which the
+	 *         caller refuses first
 	 */
 	public List<TrashItemRow> page(TrashQuery query) {
 		List<Object> args = new ArrayList<>();
 		String where = where(query, args);
-		String key = SORTS.getOrDefault(query.sort(), SORTS.get("deleted"));
+		String key = SORTS.get(query.sort());
+		if (key == null)
+			throw new IllegalArgumentException("No sort by " + query.sort());
 		String direction = query.descending() ? " desc" : " asc";
 		args.add(query.limit());
 		args.add(query.offset());

@@ -2459,8 +2459,9 @@ paths:
             since shows its path as it is now, but sorts by the old one),
             `deletedBy` (the name recorded at the delete, ignoring case),
             `deleted` (when it was deleted), `removedBy` (the name recorded
-            at the removal, ignoring case), `removed` (when it was removed,
-            for the `removed` view) or `destroyed` (as `removed`: the night
+            at the removal, ignoring case, for the `removed` view),
+            `removed` (when it was removed, for the `removed` view) or
+            `destroyed` (as `removed`, for the `removed` view: the night
             it's destroyed follows its removal). By default `removed` in the
             `removed` view and `deleted` in the others. An item with no
             value comes last either way, as a folder does by `docNumber`
@@ -2691,8 +2692,7 @@ components:
         Type filter decides, has no From, To or Sent, whatever properties it
         holds. Ties go by the document's age, so pages never overlap,
         and documents with no value to sort by, or a blank one, come last
-        either way. Anything else is `400`. A search's `folders`, `matters`
-        and `clients` scopes take only the sorts its description names.
+        either way. Anything else is `400`.
       schema:
         type: string
         enum: [title, docNumber, version, author, edited, matter, client, location, filed, size, type, class,

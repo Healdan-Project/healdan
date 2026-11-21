@@ -41,6 +41,7 @@ import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.search.MatterSearch;
 import com.logicaldoc.healdan.security.AccessChecks;
 
 import jakarta.ws.rs.GET;
@@ -207,8 +208,9 @@ public class SearchResource {
 			options.setMaxHits((int) window);
 			List<Hit> hits = search.search();
 			shown = shown(hits, options.getType(), user, wanted, checked, within);
-			// Fewer hits than asked for: the search has no more
-			complete = hits.size() < window;
+			// Fewer hits than asked for: the search has no more. A matters or clients search also says whether it had
+			// more, so one that fills its window exactly is complete too; CE's folder search never says.
+			complete = hits.size() < window || search instanceof MatterSearch && !search.isMoreHitsPresent();
 			if (shown.size() >= wanted || complete || window >= MAX_WINDOW)
 				break;
 			window = Math.min(window * 2, MAX_WINDOW);
@@ -260,46 +262,47 @@ public class SearchResource {
 	 *         spec section 4.7): {@code TITLE} by the folder's name, then as
 	 *         {@code MATTER}; {@code MATTER} by the client's number, then the
 	 *         matter's; {@code CLIENT} by the client's name. Names are compared
-	 *         ignoring case as the server's SQL and the browser compare them:
-	 *         in lower case ({@link Locale#ROOT}), by UTF-16 code unit. A hit
-	 *         with no value, a folder in no matter, comes last either way;
-	 *         ties go by id, in the sort's direction.
+	 *         ignoring case as the browser compares them: lower-cased
+	 *         ({@link Locale#ROOT}), by UTF-16 code unit. A hit with no value, a
+	 *         folder in no matter or a matter by {@code TITLE}, comes last
+	 *         either way; ties go by id, in the sort's direction.
 	 */
 	private static List<Found> sorted(List<Found> shown, Sort sort, boolean descending)
 			throws PersistenceException {
-		// Read once per client, however many of its matters there are
-		Map<Long, Client> clients = new HashMap<>();
-		List<Keyed> keyed = new ArrayList<>(shown.size());
-		for (Found found : shown) {
-			Matter matter = found.matter();
-			Client client = null;
-			if (matter != null) {
-				client = clients.get(matter.getClientId());
-				if (client == null) {
-					client = ClientDAO.get().findById(matter.getClientId());
-					clients.put(matter.getClientId(), client);
-				}
-			}
-			String text = switch (sort) {
-			case TITLE -> found.folder().getName();
-			case CLIENT -> client != null ? client.getName() : null;
-			default -> null;
-			};
-			keyed.add(new Keyed(found, text != null ? text.toLowerCase(Locale.ROOT) : null,
-					client != null ? client.getNumber() : null, matter != null ? matter.getNumber() : null));
-		}
-
 		Comparator<String> texts = descending ? Comparator.reverseOrder() : Comparator.naturalOrder();
 		Comparator<Long> numbers = descending ? Comparator.reverseOrder() : Comparator.naturalOrder();
 		Comparator<Keyed> byText = Comparator.comparing(Keyed::text, Comparator.nullsLast(texts));
 		Comparator<Keyed> byMatter = Comparator.comparing(Keyed::clientNumber, Comparator.nullsLast(numbers))
 				.thenComparing(Keyed::matterNumber, Comparator.nullsLast(numbers));
+		// A sort no scope takes is refused before anything is read
 		Comparator<Keyed> order = switch (sort) {
 		case TITLE -> byText.thenComparing(byMatter);
 		case MATTER -> byMatter;
 		case CLIENT -> byText;
 		default -> throw new IllegalArgumentException("Only a document search sorts by " + sort);
 		};
+
+		// Read once per client, however many of its matters there are, a client that isn't found too
+		Map<Long, Client> clients = new HashMap<>();
+		List<Keyed> keyed = new ArrayList<>(shown.size());
+		for (Found found : shown) {
+			Matter matter = found.matter();
+			Client client = null;
+			if (matter != null) {
+				long clientId = matter.getClientId();
+				if (!clients.containsKey(clientId))
+					clients.put(clientId, ClientDAO.get().findById(clientId));
+				client = clients.get(clientId);
+			}
+			String text = switch (sort) {
+			// Only the folders scope's hits are folders; the resource refuses a Title sort in the others
+			case TITLE -> found.folder() != null ? found.folder().getName() : null;
+			case CLIENT -> client != null ? client.getName() : null;
+			default -> null;
+			};
+			keyed.add(new Keyed(found, text != null ? text.toLowerCase(Locale.ROOT) : null,
+					client != null ? client.getNumber() : null, matter != null ? matter.getNumber() : null));
+		}
 		keyed.sort(order.thenComparing(k -> k.found().id(), numbers));
 		return keyed.stream().map(Keyed::found).toList();
 	}

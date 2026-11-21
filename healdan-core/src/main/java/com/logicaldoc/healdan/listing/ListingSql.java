@@ -24,8 +24,11 @@ public final class ListingSql {
 	 */
 	public static final String LIKE_ESCAPE = "escape '!'";
 
-	/** The longest doc # the API takes, as {@code ApiViews.hasDocNumber} decides */
-	static final int DOC_NUMBER_DIGITS = 18;
+	/**
+	 * The longest doc # the API takes, as {@code ApiViews.hasDocNumber}
+	 * decides, and the Trash records
+	 */
+	public static final int DOC_NUMBER_DIGITS = 18;
 
 	/** The longest part of a version that sorts as a number */
 	private static final int VERSION_DIGITS = 9;

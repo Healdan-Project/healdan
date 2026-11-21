@@ -381,14 +381,57 @@ public class SearchResourceTest extends ApiTestCase {
 	 */
 	@Test
 	public void testAScopesSortOverTenThousandSaysAtLeast() throws Exception {
+		SearchOptions options = clientOptions();
+		ClientSearch more = filling(options, true);
+		long demo = MatterDAO.get().findByFolderId(workspace.getId()).getId();
+		long other = MatterDAO.get().findByFolderId(otherWorkspace.getId()).getId();
+
+		SearchPage first = SearchResource.others(more, options, clerk, new Paging(0, 1), null, Sort.CLIENT, false);
+		assertNull(first.total());
+		assertEquals(Long.valueOf(2), first.totalAtLeast());
+		assertEquals(List.of(demo), matterIds(first));
+		SearchPage last = SearchResource.others(more, options, clerk, new Paging(0, 1), null, Sort.CLIENT, true);
+		assertEquals(List.of(other), matterIds(last));
+		assertEquals(Long.valueOf(2), last.totalAtLeast());
+
+		// Without a sort, as before: no total and no floor
+		SearchPage unsorted = SearchResource.others(more, options, clerk, new Paging(0, 1), null, null, false);
+		assertNull(unsorted.total());
+		assertNull(unsorted.totalAtLeast());
+		assertEquals(List.of(demo), matterIds(unsorted));
+	}
+
+	/**
+	 * A matters or clients search of exactly 10,000 hits fills its window and
+	 * says it had no more: sorted, its page has the total
+	 */
+	@Test
+	public void testAScopesSortOfExactlyTenThousandHasItsTotal() throws Exception {
+		SearchOptions options = clientOptions();
+		SearchPage page = SearchResource.others(filling(options, false), options, clerk, new Paging(0, 1), null,
+				Sort.CLIENT, false);
+		assertEquals(Long.valueOf(2), page.total());
+		assertNull(page.totalAtLeast());
+	}
+
+	/** @return a clients search's options for Healdan's two matters, as the clerk */
+	private SearchOptions clientOptions() {
 		SearchOptions options = Search.newOptions(HealdanConstants.SEARCH_CLIENTS);
 		options.setExpression("healdan");
 		options.setUserId(clerk.getId());
 		options.setTenantId(Tenant.DEFAULT_ID);
-		ClientSearch never = new ClientSearch() {
+		return options;
+	}
+
+	/**
+	 * @param more whether the search says it had more hits than its window
+	 * @return a clients search that fills every window it's given: Healdan's
+	 *         two matters, then hits that are no matter, to the window's end
+	 */
+	private static ClientSearch filling(SearchOptions options, boolean more) {
+		ClientSearch search = new ClientSearch() {
 			@Override
 			protected void internalSearch() throws SearchException {
-				// Healdan's two matters, then hits that are no matter, to the window's end
 				super.internalSearch();
 				for (long id = -1; hits.size() < options.getMaxHits(); id--) {
 					Hit hit = new Hit();
@@ -396,25 +439,30 @@ public class SearchResourceTest extends ApiTestCase {
 					hit.setType("folder");
 					hits.add(hit);
 				}
+				moreHitsPresent = more;
 			}
 		};
-		never.setOptions(options);
-		long demo = MatterDAO.get().findByFolderId(workspace.getId()).getId();
-		long other = MatterDAO.get().findByFolderId(otherWorkspace.getId()).getId();
+		search.setOptions(options);
+		return search;
+	}
 
-		SearchPage first = SearchResource.others(never, options, clerk, new Paging(0, 1), null, Sort.CLIENT, false);
-		assertNull(first.total());
-		assertEquals(Long.valueOf(2), first.totalAtLeast());
-		assertEquals(List.of(demo), matterIds(first));
-		SearchPage last = SearchResource.others(never, options, clerk, new Paging(0, 1), null, Sort.CLIENT, true);
-		assertEquals(List.of(other), matterIds(last));
-		assertEquals(Long.valueOf(2), last.totalAtLeast());
+	/**
+	 * Two folders of one name, ignoring case, in subfolders of one matter: equal
+	 * by Title and by Matter, they go by id in the sort's direction
+	 */
+	@Test
+	public void testAFoldersSortTiesByIdLast() throws Exception {
+		Folder top = FolderDAO.get().findById(fx.matter(fx.client(7, "Tie Partners"), 1, "Tie", store).getFolderId());
+		// The first made sorts after the second by code point, so only the tie by id puts it first
+		Folder first = fx.folder(fx.folder(top, "Drafts"), "appeal brief");
+		Folder second = fx.folder(fx.folder(top, "Finals"), "Appeal Brief");
+		String token = signIn(clerk);
 
-		// Without a sort, as before: no total and no floor
-		SearchPage unsorted = SearchResource.others(never, options, clerk, new Paging(0, 1), null, null, false);
-		assertNull(unsorted.total());
-		assertNull(unsorted.totalAtLeast());
-		assertEquals(List.of(demo), matterIds(unsorted));
+		List<Long> byId = List.of(first.getId(), second.getId());
+		for (String sort : new String[] { "title", "matter" }) {
+			assertEquals(sort, byId, sortedIds("scope=folders&q=appeal&sort=" + sort, token, 2));
+			assertEquals(sort, reversed(byId), sortedIds("scope=folders&q=appeal&sort=" + sort + "&order=desc", token, 2));
+		}
 	}
 
 	private static List<Long> matterIds(SearchPage page) {
