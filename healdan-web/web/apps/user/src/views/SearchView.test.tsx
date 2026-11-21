@@ -106,17 +106,30 @@ describe('SearchView', () => {
     await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toMatchObject({ sort: 'docNumber', order: 'desc' }))
   })
 
-  it('every document column sorts on a search, asking the server: Date Filed newest first, the others A to Z', async () => {
+  it('every document column sorts on a search, asking the server: Date Filed and Sent newest first, the others A to Z', async () => {
     window.localStorage.setItem(
       'healdan.columns.documents',
-      JSON.stringify({ v: 1, shown: ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type'], widths: {} }),
+      JSON.stringify({ v: 1, shown: ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'class', 'subclass', 'typist', 'from', 'to', 'sent'], widths: {} }),
     )
     const { api, router } = await renderApp('/search?scope=documents&q=charter', routes())
     await rows()
-    expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date', 'Matter', 'Client', 'Location', 'Date Filed', 'Size', 'File Type'])
+    expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date', 'Matter', 'Client', 'Location', 'Date Filed', 'Size', 'File Type', 'Class', 'Subclass', 'Typist', 'From', 'To', 'Sent'])
     // By relevance, so none is the sort, and every one can be
-    expect(within(grid2()).getAllByRole('columnheader').map((one) => one.getAttribute('aria-sort'))).toEqual(Array(11).fill('none'))
-    const firsts = { Matter: ['matter', 'asc'], Client: ['client', 'asc'], Location: ['location', 'asc'], 'Date Filed': ['filed', 'desc'], Size: ['size', 'asc'], 'File Type': ['type', 'asc'] }
+    expect(within(grid2()).getAllByRole('columnheader').map((one) => one.getAttribute('aria-sort'))).toEqual(Array(17).fill('none'))
+    const firsts = {
+      Matter: ['matter', 'asc'],
+      Client: ['client', 'asc'],
+      Location: ['location', 'asc'],
+      'Date Filed': ['filed', 'desc'],
+      Size: ['size', 'asc'],
+      'File Type': ['type', 'asc'],
+      Class: ['class', 'asc'],
+      Subclass: ['subclass', 'asc'],
+      Typist: ['typist', 'asc'],
+      From: ['from', 'asc'],
+      To: ['to', 'asc'],
+      Sent: ['sent', 'desc'],
+    }
     for (const [name, [sort, order]] of Object.entries(firsts)) {
       fireEvent.click(header(name))
       await waitFor(() => expect(api.callsTo('GET /v1/search').at(-1)?.query).toEqual({ scope: 'documents', q: 'charter', sort, order, zone, offset: 0, limit: 100 }))
@@ -154,7 +167,7 @@ describe('SearchView', () => {
     expect(within(await headingMenu('Title')).queryByRole('menuitem', { name: 'Sort by Relevance' })).toBeNull()
   })
 
-  it('chooses the columns of each document scope apart: Emails starts without Version', async () => {
+  it('chooses the columns of each document scope apart: the Emails search starts with From and Sent', async () => {
     const { view } = await renderApp('/search?scope=documents&q=charter', routes())
     await rows()
     await userEvent.click(within(await headingMenu('Author')).getByRole('menuitem', { name: 'Hide Author' }))
@@ -164,7 +177,7 @@ describe('SearchView', () => {
 
     await renderApp('/search?scope=emails&q=charter', routes())
     await rows()
-    expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'Author', 'Edit Date'])
+    expect(headerNames()).toEqual(['Title', 'Doc #', 'Matter', 'From', 'Sent'])
     await userEvent.click(within(main()).getByRole('button', { name: 'Columns' }))
     expect(await screen.findByRole('dialog', { name: 'Columns', description: 'For Emails Search' })).toBeTruthy()
     await userEvent.keyboard('{Escape}')

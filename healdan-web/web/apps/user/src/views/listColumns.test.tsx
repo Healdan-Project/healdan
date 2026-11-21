@@ -78,6 +78,10 @@ const document = (over: Partial<S['DocumentView']> = {}): ListRow =>
     folder: { id: 4, name: 'Documents', kind: 'folder' },
     matter: matterRef,
     author: { username: 'u', displayName: 'Ann' },
+    docClass: null,
+    docSubclass: null,
+    typist: null,
+    email: null,
     dateFiled: '2026-01-05T10:00:00Z',
     lastModified: '2026-01-06T10:00:00Z',
     lastUsed: '2026-02-07T10:00:00Z',
@@ -95,7 +99,7 @@ const cellOf = (kind: DocumentListKind, id: string, row: ListRow) => {
 
 describe('every document column (spec 4.7)', () => {
   it('offers every document column, Last Used only on Recent and Computer and Checked Out only on Checked Out to Me', () => {
-    const common = ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type']
+    const common = ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'class', 'subclass', 'typist', 'from', 'to', 'sent']
     expect(offeredFor('documents')).toEqual(common)
     expect(offeredFor('folder')).toEqual(common)
     expect(offeredFor('emails')).toEqual(common)
@@ -123,9 +127,16 @@ describe('every document column (spec 4.7)', () => {
     expect(least).toBe(842)
   })
 
+  it("fits the Emails search's From and Sent beside the details, and lets Recent Emails' scroll sideways as Recent Documents' does", () => {
+    const least = (kind: DocumentListKind) => columnsFor(kind, DEFAULT_SHOWN[kind], false).reduce((sum, one) => sum + Math.max(75, typeof one.width === 'number' ? one.width : (one.minWidth ?? 0)), 0)
+    // From shares the spare width, as Author did there, and Sent is a date's width, as Edit Date's was
+    expect(least('emails')).toBeLessThanOrEqual(684)
+    expect(least('recentEmails')).toBe(767)
+  })
+
   it('shows nothing in a folder row for a document column, and its Matter and Last Used', () => {
     const row = folderRow()
-    for (const id of ['docNumber', 'version', 'author', 'edited', 'location', 'filed', 'size', 'type']) {
+    for (const id of ['docNumber', 'version', 'author', 'edited', 'location', 'filed', 'size', 'type', 'class', 'subclass', 'typist', 'from', 'to', 'sent']) {
       expect(cellOf('recentDocuments', id, row).textContent, id).toBe('')
     }
     expect(cellOf('recentDocuments', 'matter', row).textContent).toContain('1002.1 – Commercial Lease')
@@ -146,9 +157,56 @@ describe('every document column (spec 4.7)', () => {
     expect(cellOf('recentDocuments', 'location', document({ matter: null })).firstElementChild?.getAttribute('title')).toBe('Documents')
   })
 
+  it("shows Class, Subclass, Typist and an email's From, To and Sent, each on one line with the whole of it as its tooltip", () => {
+    const row = document({
+      kind: 'email',
+      name: 'Re Charter.eml',
+      docClass: 'Correspondence',
+      docSubclass: 'Incoming',
+      typist: { username: 'pm', displayName: 'Pat Moss' },
+      email: { from: 'Ann Smith <ann@example.com>', to: 'Bob Jones <bob@example.com>, carol@example.com', sent: '2026-03-04T10:00:00Z' },
+    })
+    const texts: [string, string][] = [
+      ['class', 'Correspondence'],
+      ['subclass', 'Incoming'],
+      ['typist', 'Pat Moss'],
+      ['from', 'Ann Smith <ann@example.com>'],
+      ['to', 'Bob Jones <bob@example.com>, carol@example.com'],
+    ]
+    for (const [id, text] of texts) {
+      const cell = cellOf('emails', id, row)
+      expect(cell.textContent, id).toBe(text)
+      expect(cell.firstElementChild?.getAttribute('title'), id).toBe(text)
+    }
+    // A date, as Edit Date's
+    expect(cellOf('emails', 'sent', row).textContent).toBe(formatDate('2026-03-04T10:00:00Z'))
+  })
+
+  it("leaves a document's Class, Subclass and Typist blank when it has none, and an email's columns blank on a document that isn't one", () => {
+    // The server sends `email` only for an email (spec 5.2)
+    const row = document({ kind: 'word', docClass: null, docSubclass: null, typist: null, email: null })
+    for (const id of ['class', 'subclass', 'typist', 'from', 'to', 'sent']) expect(cellOf('documents', id, row).textContent, id).toBe('')
+    // An email whose From, To or Sent is missing leaves that cell blank
+    const bare = document({ kind: 'email', name: 'Note.eml', email: { from: null, to: null, sent: null } })
+    for (const id of ['from', 'to', 'sent']) expect(cellOf('emails', id, bare).textContent, id).toBe('')
+  })
+
+  it('a long To ends in an ellipsis and its tooltip holds it all', () => {
+    const to = Array.from({ length: 40 }, (_, n) => `Recipient Number ${n + 1} <recipient${n + 1}@example.com>`).join(', ')
+    const cell = cellOf('emails', 'to', document({ kind: 'email', name: 'Round Robin.eml', email: { from: 'ann@example.com', to, sent: '2026-03-04T10:00:00Z' } }))
+    const text = cell.firstElementChild as HTMLElement
+    expect(text.getAttribute('title')).toBe(to)
+    expect(text.textContent).toBe(to)
+    // One line, which a Standard row's 34 pixels hold, cut short with an ellipsis
+    const style = getComputedStyle(text)
+    expect([style.whiteSpace, style.overflow, style.textOverflow]).toEqual(['nowrap', 'hidden', 'ellipsis'])
+  })
+
   it('every document column sorts on a folder and a search', () => {
     // What a folder's and a search's sort take (spec 5.2), the columns PR 3 adds included
     expect([...SERVER_SORTS]).toEqual(['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'class', 'subclass', 'typist', 'from', 'to', 'sent'])
+    // Every list offers each of them, Class, Subclass, Typist, From, To and Sent included
+    expect(offeredFor('folder')).toEqual([...SERVER_SORTS])
     for (const kind of ['folder', 'documents', 'all', 'emails'] as const) {
       const paged = columnsFor(kind, offeredFor(kind), true)
       expect(paged.map((one) => one.id)).toEqual(offeredFor(kind))
@@ -178,7 +236,7 @@ describe('every document column (spec 4.7)', () => {
 
   it('date columns sort newest first at their first click', () => {
     const all = columnsFor('checkedOut', [...offeredFor('checkedOut'), 'lastUsed'], false)
-    for (const one of all) expect(Boolean(one.newestFirst), one.id).toBe(['edited', 'filed', 'lastUsed', 'checkedOut'].includes(one.id))
+    for (const one of all) expect(Boolean(one.newestFirst), one.id).toBe(['edited', 'filed', 'sent', 'lastUsed', 'checkedOut'].includes(one.id))
   })
 
   it("with Client shown, Matter's cell doesn't repeat the client for a screen reader", () => {

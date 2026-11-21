@@ -7,7 +7,7 @@ import { apiPath, type components } from '@healdan/api'
 import { ComboBox, Icon, Menu, MenuItem, t, toast } from '@healdan/ui'
 import { messageFor } from '../frame/errors'
 import { useApi } from '../services'
-import { isRecentKind, isSearchScope, scopeIcons, searchScopes, type SearchScope } from './scopes'
+import { isRecentKind, scopeIcons, scopeOf, searchScopes, type SearchScope } from './scopes'
 import { SEARCH_ID, suggestable, suggestionSections, useSuggestions } from './Suggestions'
 import styles from './SearchBox.module.css'
 
@@ -36,7 +36,7 @@ function useRouteScope(): SearchScope | undefined {
   const { scope } = useSearch({ strict: false })
   if (pathname === '/') return 'documents'
   if (isRecentKind(kind)) return kind
-  return pathname === '/search' ? (isSearchScope(scope) ? scope : 'documents') : undefined
+  return pathname === '/search' ? scopeOf(scope) : undefined
 }
 
 /** The words of the search the address holds, so the box shows them on a reload and on Back. */

@@ -17,14 +17,12 @@ import { RECENT_SORTS, RecentView } from './views/RecentView'
 import { SearchView } from './views/SearchView'
 import { TrashView } from './views/TrashView'
 import { isTrashSort, isTrashView, type TrashSort, type TrashViewName } from './actions/trash'
-import { isScopeSort, isSearchScope, type SearchScope } from './search/scopes'
+import { isScopeSort, scopeOf } from './search/scopes'
 import { isSortColumn, type ListingOrder, type SortColumn } from './views/useListing'
 import { offeredFor } from './views/listColumns'
 import { sortSearch, type AddressSort } from './views/useListColumns'
 
 const text = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined)
-// A scope the API doesn't know is the default, Documents, as an address without one is
-const scopeOf = (value: string | undefined): SearchScope => (isSearchScope(value) ? value : 'documents')
 
 // The selected document's number is in every address (§10.1).
 const rootRoute = createRootRoute({

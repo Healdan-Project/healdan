@@ -12,6 +12,11 @@ export function isSearchScope(value: unknown): value is SearchScope {
   return searchScopes.some((scope) => scope === value)
 }
 
+/** The scope an address names: one the API doesn't know is the default, Documents, as an address without one is */
+export function scopeOf(value: unknown): SearchScope {
+  return isSearchScope(value) ? value : 'documents'
+}
+
 /** Each scope's icon, in its kind's colour; Documents and All take in every kind, so they have none (`<Icon {...scopeIcons[scope]} />`). */
 export const scopeIcons: Record<SearchScope, KindIcon> = {
   documents: documentIcon,

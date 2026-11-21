@@ -240,17 +240,30 @@ describe('FolderView', () => {
     expect(JSON.parse(window.localStorage.getItem('healdan.columns.folder')!).shown).toEqual(['title', 'docNumber', 'version', 'author', 'edited', 'client'])
   })
 
-  it('every document column sorts on a folder, asking the server: Date Filed newest first, the others A to Z', async () => {
+  it('every document column sorts on a folder, asking the server: Date Filed and Sent newest first, the others A to Z', async () => {
     window.localStorage.setItem(
       'healdan.columns.folder',
-      JSON.stringify({ v: 1, shown: ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type'], widths: {} }),
+      JSON.stringify({ v: 1, shown: ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'class', 'subclass', 'typist', 'from', 'to', 'sent'], widths: {} }),
     )
     const { api, router } = await renderApp('/folders/7', routes())
     await findRow(/Drafts/)
-    expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date', 'Matter', 'Client', 'Location', 'Date Filed', 'Size', 'File Type'])
+    expect(headerNames()).toEqual(['Title', 'Doc #', 'Version', 'Author', 'Edit Date', 'Matter', 'Client', 'Location', 'Date Filed', 'Size', 'File Type', 'Class', 'Subclass', 'Typist', 'From', 'To', 'Sent'])
     // Every heading sorts: an arrow on the one the list is in, and room for one on the others
-    expect(within(list()).getAllByRole('columnheader').map((one) => one.getAttribute('aria-sort'))).toEqual(['ascending', ...Array(10).fill('none')])
-    const firsts = { Matter: ['matter', 'asc'], Client: ['client', 'asc'], Location: ['location', 'asc'], 'Date Filed': ['filed', 'desc'], Size: ['size', 'asc'], 'File Type': ['type', 'asc'] }
+    expect(within(list()).getAllByRole('columnheader').map((one) => one.getAttribute('aria-sort'))).toEqual(['ascending', ...Array(16).fill('none')])
+    const firsts = {
+      Matter: ['matter', 'asc'],
+      Client: ['client', 'asc'],
+      Location: ['location', 'asc'],
+      'Date Filed': ['filed', 'desc'],
+      Size: ['size', 'asc'],
+      'File Type': ['type', 'asc'],
+      Class: ['class', 'asc'],
+      Subclass: ['subclass', 'asc'],
+      Typist: ['typist', 'asc'],
+      From: ['from', 'asc'],
+      To: ['to', 'asc'],
+      Sent: ['sent', 'desc'],
+    }
     for (const [name, [sort, order]] of Object.entries(firsts)) {
       fireEvent.click(header(name))
       await waitFor(() => expect(router.history.location.search).toBe(`?sort=${sort}&order=${order}`))

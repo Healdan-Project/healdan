@@ -81,6 +81,18 @@ function LocationCell({ document }: { document: S['DocumentView'] }) {
 }
 
 /**
+ * A property's text, as stored, on one line: a value the column cuts short ends in an ellipsis, and its tooltip is the whole
+ * of it, so a To of forty recipients can still be read by pointing at it. No value draws nothing.
+ */
+function TextCell({ text }: { text: string | null | undefined }) {
+  return text ? (
+    <span className={styles.oneLine} title={text}>
+      {text}
+    </span>
+  ) : null
+}
+
+/**
  * "MacBook · Word": the computer, then the app muted after a dot, on one line, as a Standard row's 34 pixels have room
  * for one. Each is an element of its own, whose text is just the computer or the app; the dot is drawn only, and the
  * spaces around it keep the two apart for a screen reader. The whole text is a tooltip too, as the Matter cell's whole
@@ -132,6 +144,14 @@ export const documentColumns: Record<string, TableColumn<ListRow>> = {
   filed: { id: 'filed', name: t('list.filed'), allowsSorting: true, newestFirst: true, width: 116, cell: ({ item }) => item.type === 'document' && formatDate(item.dateFiled) },
   size: { id: 'size', name: t('list.size'), allowsSorting: true, align: 'end', width: 84, cell: ({ item }) => item.type === 'document' && formatSize(item.size) },
   type: { id: 'type', name: t('list.type'), allowsSorting: true, width: 112, cell: ({ item }) => item.type === 'document' && typeLabel(item.kind) },
+  // The properties' text is a firm's own, of any length: each shares the spare width as Author does, and ends in an ellipsis
+  class: { id: 'class', name: t('list.class'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.type === 'document' && <TextCell text={item.docClass} /> },
+  subclass: { id: 'subclass', name: t('list.subclass'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.type === 'document' && <TextCell text={item.docSubclass} /> },
+  typist: { id: 'typist', name: t('list.typist'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.type === 'document' && <TextCell text={item.typist?.displayName} /> },
+  // An email's own, which the server sends only for an email (spec 5.2): any other document leaves them blank
+  from: { id: 'from', name: t('list.from'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.type === 'document' && <TextCell text={item.email?.from} /> },
+  to: { id: 'to', name: t('list.to'), allowsSorting: true, width: '1fr', cell: ({ item }) => item.type === 'document' && <TextCell text={item.email?.to} /> },
+  sent: { id: 'sent', name: t('list.sent'), allowsSorting: true, newestFirst: true, width: 116, cell: ({ item }) => item.type === 'document' && item.email?.sent ? formatDate(item.email.sent) : null },
   edited: { id: 'edited', name: t('list.edited'), allowsSorting: true, newestFirst: true, width: 132, cell: ({ item }) => item.type === 'document' && formatDate(item.lastModified) },
   // Wide enough for a date and a time with the cell's padding: US English's widest, "May 30, 2026, 10:48 AM", is 148 pixels
   // in macOS's system font at the list's 13 pixels, so it needs 173, and 176 leaves a margin
@@ -147,7 +167,7 @@ export const documentColumns: Record<string, TableColumn<ListRow>> = {
 }
 
 // Spec 4.7's table order: the columns every list offers, then Last Used (Recent) or Computer and Checked Out (Checked Out to Me)
-const OFFERED_ORDER = ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'lastUsed', 'computer', 'checkedOut']
+const OFFERED_ORDER = ['title', 'docNumber', 'version', 'author', 'edited', 'matter', 'client', 'location', 'filed', 'size', 'type', 'class', 'subclass', 'typist', 'from', 'to', 'sent', 'lastUsed', 'computer', 'checkedOut']
 /** The columns only some lists offer, and those lists; every other column of OFFERED_ORDER is every list's */
 const OFFERED_BY: Record<string, readonly DocumentListKind[]> = {
   lastUsed: ['recentDocuments', 'recentEmails'],
@@ -218,7 +238,7 @@ export function hitColumns(scope: OtherScope): TableColumn<ListRow>[] {
   const sorts: readonly string[] = scopeSorts(scope)
   const columns: TableColumn<ListRow>[] =
     scope === 'folders'
-      ? columnsFor('folders', ['title', 'matter'], false)
+      ? columnsFor('folders', ['title', 'matter'], true)
       : [
           // The matters' own column, the matter, which their Matter sort orders
           { ...title, id: 'matter', name: t('list.matter') },

@@ -278,6 +278,12 @@ export const enUS = {
   'list.filed': 'Date Filed',
   'list.size': 'Size',
   'list.type': 'File Type',
+  'list.class': 'Class',
+  'list.subclass': 'Subclass',
+  'list.typist': 'Typist',
+  'list.from': 'From',
+  'list.to': 'To',
+  'list.sent': 'Sent',
   'list.lastUsed': 'Last Used',
   // A heading's edge, which resizes its column. React Aria names it by this and the heading it's in: "Resize Doc #"
   'columns.resizer': 'Resize',

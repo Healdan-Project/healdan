@@ -31,9 +31,9 @@ export const DEFAULT_SHOWN: Record<DocumentListKind, string[]> = {
   folder: ['title', 'docNumber', 'version', 'author', 'edited'],
   documents: ['title', 'docNumber', 'version', 'matter', 'author', 'edited'],
   all: ['title', 'docNumber', 'version', 'matter', 'author', 'edited'],
-  emails: ['title', 'docNumber', 'matter', 'author', 'edited'],
+  emails: ['title', 'docNumber', 'matter', 'from', 'sent'],
   recentDocuments: ['title', 'docNumber', 'version', 'matter', 'author', 'edited', 'lastUsed'],
-  recentEmails: ['title', 'docNumber', 'matter', 'author', 'edited', 'lastUsed'],
+  recentEmails: ['title', 'docNumber', 'matter', 'from', 'sent', 'lastUsed'],
   checkedOut: ['title', 'docNumber', 'version', 'matter', 'computer', 'checkedOut', 'edited'],
   beside: ['title', 'docNumber', 'edited'],
 }
