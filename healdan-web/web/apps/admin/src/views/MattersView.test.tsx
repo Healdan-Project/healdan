@@ -281,11 +281,12 @@ describe('The Matters list', () => {
       [100, 100],
       [200, 100],
     ])
-    // Scrolled to its end (202 rows of 34 pixels, the heading's among them), it draws the last matter the server counted
+    // Scrolled past its end, where the list stops, it draws the last matter the server counted, and the second page's before it
     expect(within(table).queryByRole('row', { name: '2000.201 Matter 201' })).toBeNull()
-    table.scrollTop = 202 * 34
+    table.scrollTop = Number.MAX_SAFE_INTEGER
     fireEvent.scroll(table)
     expect(await within(table).findByRole('row', { name: '2000.201 Matter 201' })).toBeTruthy()
+    expect(within(table).getByRole('row', { name: '2000.190 Matter 190' })).toBeTruthy()
   })
 
   it("opens a matter's page when its row is clicked, or Enter is pressed on it", async () => {

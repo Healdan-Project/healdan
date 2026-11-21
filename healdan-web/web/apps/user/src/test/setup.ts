@@ -5,6 +5,7 @@ import { cleanup } from '@testing-library/react'
 import { clearToasts, resetAnnouncer, setLabels } from '@healdan/ui'
 import { afterEach, vi } from 'vitest'
 import { installIntersectionObserver } from './intersection'
+import { resetListSize } from './listSize'
 import { resetViewport } from './viewport'
 
 // The page follows an address (a healdan: link, a download) in one place, which jsdom can't do; a test that cares imports
@@ -22,6 +23,7 @@ afterEach(() => {
   resetAnnouncer()
   clearToasts()
   resetViewport()
+  resetListSize()
   // What a test kept as a preference (the panes' widths) isn't the next one's
   window.localStorage.clear()
   setLabels({ matter: 'Matter', matters: 'Matters' })

@@ -9,6 +9,7 @@ import { expectNoAxeViolations } from '../test/axe'
 import { comeBack } from '../test/comeBack'
 import { children, document, favorite, folder, page, problem, zone, type Routes } from '../test/fakeApi'
 import { bringObservedIntoView } from '../test/intersection'
+import { setListSize } from '../test/listSize'
 import { renderApp } from '../test/renderApp'
 import actionsCss from '../actions/actions.module.css?raw'
 
@@ -299,6 +300,8 @@ describe('FolderView', () => {
   })
 
   it('asks for the next 100 rows once as the end comes into view, and the count stays the total', async () => {
+    // Sized, the list draws the rows in view, as in a browser: with none it would draw all 200, and each again at every page
+    setListSize(1280, 680)
     const all = letters(250)
     const { api } = await renderApp(
       '/folders/7',
@@ -310,17 +313,22 @@ describe('FolderView', () => {
       }),
     )
     await findRow(/Letter 001/)
-    expect(dataRows()).toHaveLength(100)
+    // How many rows the list holds, drawn or not: its heading row and the documents loaded
+    const held = () => Number(list().getAttribute('aria-rowcount'))
+    expect(held()).toBe(1 + 100)
     expect(within(main()).getByText('250 documents')).toBeTruthy()
 
     act(() => {
       bringObservedIntoView()
       bringObservedIntoView()
     })
-    await findRow(/Letter 200/)
+    await waitFor(() => expect(held()).toBe(1 + 200))
     expect(api.callsTo('GET /v1/folders/7/children').map((call) => call.query?.offset)).toEqual([0, 100])
-    expect(dataRows()).toHaveLength(200)
     expect(within(main()).getByText('250 documents')).toBeTruthy()
+    // Scrolled past its end, where the list stops, it draws the last document loaded
+    list().scrollTop = Number.MAX_SAFE_INTEGER
+    fireEvent.scroll(list())
+    await findRow(/Letter 200/)
   })
 
   it('puts the selected document in the address', async () => {
