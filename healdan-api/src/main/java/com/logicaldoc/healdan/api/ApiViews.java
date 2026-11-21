@@ -33,6 +33,7 @@ import com.logicaldoc.healdan.api.model.AuthorRef;
 import com.logicaldoc.healdan.api.model.ClientRef;
 import com.logicaldoc.healdan.api.model.DeviceView;
 import com.logicaldoc.healdan.api.model.DocumentView;
+import com.logicaldoc.healdan.api.model.EmailView;
 import com.logicaldoc.healdan.api.model.FolderRef;
 import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.api.model.HeldOnView;
@@ -44,6 +45,8 @@ import com.logicaldoc.healdan.api.model.UserRef;
 import com.logicaldoc.healdan.api.model.UserView;
 import com.logicaldoc.healdan.listing.DocumentAuthors;
 import com.logicaldoc.healdan.listing.DocumentAuthors.Author;
+import com.logicaldoc.healdan.listing.DocumentExtras;
+import com.logicaldoc.healdan.listing.DocumentExtras.Extras;
 import com.logicaldoc.healdan.listing.FileKinds;
 import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.ClientDAO;
@@ -61,7 +64,30 @@ public final class ApiViews {
 
 	private static final Logger log = LoggerFactory.getLogger(ApiViews.class);
 
+	/** A document's fields when it has none of them */
+	private static final Extras NO_EXTRAS = new Extras(null, null, null, null, null, null);
+
 	private ApiViews() {
+	}
+
+	/**
+	 * What a list reads for its page's documents at once, so a row's view
+	 * asks the database for none of it
+	 *
+	 * @param authors the documents' Authors, by id
+	 * @param extras the documents' Class, Subclass, Typist and email fields,
+	 *        by id
+	 */
+	record RowReads(Map<Long, Author> authors, Map<Long, Extras> extras) {
+
+		/**
+		 * @param docIds documents' ids
+		 * @return what their rows show, read in one go; nothing is read for
+		 *         no ids
+		 */
+		static RowReads of(Collection<Long> docIds) {
+			return new RowReads(DocumentAuthors.get().of(docIds), DocumentExtras.get().of(docIds));
+		}
 	}
 
 	/**
@@ -130,30 +156,30 @@ public final class ApiViews {
 	 * @throws PersistenceException error at data layer
 	 */
 	public static DocumentView document(Document d, User caller) throws PersistenceException {
-		return document(d, caller, authors(List.of(d)));
+		return document(d, caller, rows(List.of(d)));
 	}
 
 	/**
-	 * As {@link #document(Document, User)}, for a list that read its
-	 * documents' Authors at once ({@link #authors})
+	 * As {@link #document(Document, User)}, for a list that read what its
+	 * documents' rows show at once ({@link #rows})
 	 *
 	 * @param d a document the caller may read
 	 * @param caller the signed-in user, with its groups
-	 * @param authors the Authors of the list's documents, by id
+	 * @param rows what the list's documents' rows show, by id
 	 * @return the document's view
 	 * @throws PersistenceException error at data layer
 	 */
-	static DocumentView document(Document d, User caller, Map<Long, Author> authors) throws PersistenceException {
+	static DocumentView document(Document d, User caller, RowReads rows) throws PersistenceException {
 		FolderPosition position = MatterLocator.get().locate(d.getFolder().getId());
-		return document(d, caller, folderKind(position), matterOf(position), authors);
+		return document(d, caller, folderKind(position), matterOf(position), rows);
 	}
 
 	/**
 	 * @param documents the documents of a list
-	 * @return their Authors, by id, read in one go
+	 * @return what their rows show, by id, read in one go
 	 */
-	static Map<Long, Author> authors(Collection<Document> documents) {
-		return DocumentAuthors.get().of(documents.stream().map(Document::getId).toList());
+	static RowReads rows(Collection<Document> documents) {
+		return RowReads.of(documents.stream().map(Document::getId).toList());
 	}
 
 	/**
@@ -161,12 +187,12 @@ public final class ApiViews {
 	 * @param caller the signed-in user, with its groups
 	 * @param folderKind the kind of the document's folder
 	 * @param matter the matter of the document's folder, or null
-	 * @param authors the Authors of the list's documents, by id
+	 * @param rows what the list's documents' rows show, by id
 	 * @return the document's view, for a listing that knows its folder
 	 * @throws PersistenceException error at data layer
 	 */
-	static DocumentView document(Document d, User caller, String folderKind, MatterRef matter,
-			Map<Long, Author> authors) throws PersistenceException {
+	static DocumentView document(Document d, User caller, String folderKind, MatterRef matter, RowReads rows)
+			throws PersistenceException {
 		long folderId = d.getFolder().getId();
 		HoldView hold = hold(d, caller);
 		Caller current = Caller.current();
@@ -181,14 +207,23 @@ public final class ApiViews {
 		// As the content and the thumbnail decide
 		boolean canOpen = allowed.contains(Permission.DOWNLOAD) && unprotected;
 		long docNumber = Long.parseLong(d.getCustomId());
-		Author author = authors.get(d.getId());
-		return new DocumentView("document", docNumber, d.getFileName(),
-				FileKinds.of(FilenameUtils.getExtension(d.getFileName())), d.getFileSize(), d.getVersion(),
+		String kind = FileKinds.of(FilenameUtils.getExtension(d.getFileName()));
+		Extras extras = rows.extras().getOrDefault(d.getId(), NO_EXTRAS);
+		// Only an email's: CE's screens can give any document the email properties
+		EmailView email = FileKinds.EMAIL.equals(kind)
+				? new EmailView(extras.emailFrom(), extras.emailTo(), extras.emailSent())
+				: null;
+		return new DocumentView("document", docNumber, d.getFileName(), kind, d.getFileSize(), d.getVersion(),
 				d.getFileVersion(), docNumber + "." + d.getFileVersion(),
 				new FolderRef(folderId, d.getFolder().getName(), folderKind), matter,
-				author == null ? null : new AuthorRef(author.username(), author.displayName()), d.getCreation(),
+				authorRef(rows.authors().get(d.getId())), d.getCreation(),
 				// When the file last changed (filed, or a new version saved), not CE's last-modified time, which the Indexer moves
-				d.getDate() != null ? d.getDate() : d.getCreation(), hold, canEdit, canOpen, null);
+				d.getDate() != null ? d.getDate() : d.getCreation(), hold, canEdit, canOpen, extras.docClass(),
+				extras.docSubclass(), authorRef(extras.typist()), email, null);
+	}
+
+	private static AuthorRef authorRef(Author person) {
+		return person == null ? null : new AuthorRef(person.username(), person.displayName());
 	}
 
 	/**

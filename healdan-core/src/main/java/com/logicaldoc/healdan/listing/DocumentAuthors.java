@@ -74,19 +74,30 @@ public class DocumentAuthors {
 					select x.ld_docid, x.ld_stringvalue, u.ld_username, u.ld_firstname, u.ld_name
 					 from ld_document_ext x left join ld_user u on u.ld_id = x.ld_intvalue and u.ld_deleted = 0
 					 where x.ld_name = :name and x.ld_docid in (:ids)""", params, rs -> {
-				String kept = StringUtils.defaultIfBlank(rs.getString(2), null);
-				String username = rs.getString(3);
-				Author author;
-				if (username != null)
-					author = new Author(kept != null ? kept : username,
-							fullName(rs.getString(4), rs.getString(5), username));
-				else
-					author = kept != null ? new Author(kept, kept) : null;
+				Author author = named(rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5));
 				if (author != null)
 					authors.put(rs.getLong(1), author);
 			});
 		}
 		return authors;
+	}
+
+	/**
+	 * Names the person a user field holds, as a list shows an Author, and
+	 * {@link DocumentExtras} a Typist
+	 *
+	 * @param kept the username kept with the field
+	 * @param username the user's username, or null when no user that isn't
+	 *        deleted has the field's id
+	 * @param firstName the user's first name
+	 * @param name the user's last name
+	 * @return the person, or null when the field holds no one
+	 */
+	static Author named(String kept, String username, String firstName, String name) {
+		String keptName = StringUtils.defaultIfBlank(kept, null);
+		if (username != null)
+			return new Author(keptName != null ? keptName : username, fullName(firstName, name, username));
+		return keptName != null ? new Author(keptName, keptName) : null;
 	}
 
 	/** As {@code User.getFullName} */
